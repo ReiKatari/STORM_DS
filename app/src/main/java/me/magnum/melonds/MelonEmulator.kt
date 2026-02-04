@@ -1,14 +1,13 @@
 package me.magnum.melonds
 
-import android.content.res.AssetManager
 import android.net.Uri
 import me.magnum.melonds.common.RetroAchievementsCallback
 import me.magnum.melonds.common.camera.DSiCameraSource
-import me.magnum.melonds.common.rumble.GbaRumbleManager
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.EmulatorConfiguration
 import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.retroachievements.RASimpleAchievement
+import me.magnum.melonds.domain.model.retroachievements.RASimpleLeaderboard
 import me.magnum.melonds.ui.emulator.render.FrameRenderCallback
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
 import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
@@ -42,23 +41,22 @@ object MelonEmulator {
     enum class GbaSlotType {
         NONE,
         GBA_ROM,
-        MEMORY_EXPANSION,
         RUMBLE_PAK,
+        MEMORY_EXPANSION,
     }
 
     external fun setupEmulator(
         emulatorConfiguration: EmulatorConfiguration,
         dsiCameraSource: DSiCameraSource?,
-        gbaRumbleManager: GbaRumbleManager,
         retroAchievementsCallback: RetroAchievementsCallback,
         screenshotBuffer: ByteBuffer,
     )
 
     external fun setupCheats(cheats: Array<Cheat>)
 
-    external fun setupAchievements(achievements: Array<RASimpleAchievement>, richPresenceScript: String?)
+    external fun setupAchievements(achievements: Array<RASimpleAchievement>, leaderboards: Array<RASimpleLeaderboard>, richPresenceScript: String?)
 
-    external fun unloadAchievements(achievements: Array<RASimpleAchievement>)
+    external fun unloadRetroAchievementsData()
 
     external fun getRichPresenceStatus(): String?
 

@@ -22,27 +22,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.os.ConfigurationCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isGone
@@ -60,10 +48,8 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.squareup.picasso.Picasso
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.launch
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
@@ -75,6 +61,7 @@ import me.magnum.melonds.domain.model.DualScreenPreset
 import me.magnum.melonds.domain.model.FpsCounterPosition
 import me.magnum.melonds.domain.model.Rect
 import me.magnum.melonds.domain.model.SaveStateSlot
+import me.magnum.melonds.domain.model.emulator.EmulatorEvent
 import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.domain.model.layout.ScreenFold
 import me.magnum.melonds.domain.model.rom.Rom
@@ -94,12 +81,13 @@ import me.magnum.melonds.ui.emulator.input.FrontendInputHandler
 import me.magnum.melonds.ui.emulator.input.INativeInputListener
 import me.magnum.melonds.ui.emulator.input.InputProcessor
 import me.magnum.melonds.ui.emulator.input.MelonTouchHandler
+import me.magnum.melonds.ui.emulator.input.EmulatorRumbleManager
 import me.magnum.melonds.ui.emulator.model.EmulatorOverlay
 import me.magnum.melonds.ui.emulator.model.EmulatorState
 import me.magnum.melonds.ui.emulator.model.EmulatorUiEvent
 import me.magnum.melonds.ui.emulator.model.LaunchArgs
 import me.magnum.melonds.ui.emulator.model.PauseMenu
-import me.magnum.melonds.ui.emulator.model.PopupEvent
+import me.magnum.melonds.ui.emulator.model.RAEventUi
 import me.magnum.melonds.ui.emulator.model.RuntimeInputLayoutConfiguration
 import me.magnum.melonds.ui.emulator.model.ToastEvent
 import me.magnum.melonds.ui.emulator.render.ExternalPresentation
@@ -109,9 +97,8 @@ import me.magnum.melonds.ui.emulator.rewind.RewindSaveStateAdapter
 import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
 import me.magnum.melonds.ui.emulator.rom.SaveStateAdapter
 import me.magnum.melonds.ui.emulator.ui.AchievementListDialog
-import me.magnum.melonds.ui.emulator.ui.AchievementPopupUi
 import me.magnum.melonds.ui.emulator.ui.DualScreenPresetsDialog
-import me.magnum.melonds.ui.emulator.ui.RAIntegrationEventUi
+import me.magnum.melonds.ui.emulator.ui.AchievementUpdatesUi
 import me.magnum.melonds.ui.layouteditor.model.LayoutTarget
 import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.theme.MelonTheme
@@ -142,7 +129,7 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
     }
 
     private lateinit var binding: ActivityEmulatorBinding
-    val viewModel: EmulatorViewModel by viewModels(
+    private val viewModel: EmulatorViewModel by viewModels(
         extrasProducer = {
             val extras = MutableCreationExtras(defaultViewModelCreationExtras)
             // Inject intent data into view-model creation extras to make it accessible through the SavedStateHandle
@@ -197,6 +184,7 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
     }
 
     private val connectedControllerManager = ConnectedControllerManager()
+    private lateinit var emulatorRumbleManager: EmulatorRumbleManager
     private lateinit var frameRenderCoordinator: FrameRenderCoordinator
     private lateinit var mainScreenRenderer: DSRenderer
     private lateinit var melonTouchHandler: MelonTouchHandler
@@ -299,9 +287,21 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
         setContentView(binding.root)
         setupFullscreen()
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(
+                insets.left,
+                insets.top,
+                insets.right,
+                insets.bottom,
+            )
+
+            WindowInsetsCompat.CONSUMED
+        }
 
         onBackPressedDispatcher.addCallback(backPressedCallback)
 
+        emulatorRumbleManager = EmulatorRumbleManager(this, lifecycleScope, connectedControllerManager)
         frameRenderCoordinator = FrameRenderCoordinator()
         melonTouchHandler = MelonTouchHandler()
         mainScreenRenderer = DSRenderer(this)
@@ -340,84 +340,24 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
                 viewModel.setUiSize(newWidth, newHeight)
             }
         }
-        binding.root.addOnLayoutChangeListener(layoutChangeListener)
+        binding.viewLayoutControls.addOnLayoutChangeListener(layoutChangeListener)
 
         updateOrientation(resources.configuration)
         disableScreenTimeOut()
 
         binding.layoutAchievement.setContent {
             MelonTheme {
-                var popupEvent by remember {
-                    mutableStateOf<PopupEvent?>(null)
-                }
-                var popupOffset by remember {
-                    mutableStateOf(-1f)
-                }
-                var popupHeight by remember {
-                    mutableStateOf<Int?>(null)
-                }
+                val achievementsViewModel = viewModels<EmulatorRetroAchievementsViewModel>().value
 
-                LaunchedEffect(null) {
-                    val achievementsFlow = viewModel.achievementTriggeredEvent.map { PopupEvent.AchievementUnlockPopup(it) }
-                    val integrationFlow = viewModel.integrationEvent.map { PopupEvent.RAIntegrationPopup(it) }
-
-                    merge(achievementsFlow, integrationFlow).collect {
-                        popupEvent = it
-                        animate(
-                            initialValue = -1f,
-                            targetValue = 0f,
-                            animationSpec = tween(easing = LinearEasing),
-                        ) { value, _ ->
-                            popupOffset = value
-                        }
-                        delay(5500)
-                        animate(
-                            initialValue = 0f,
-                            targetValue = -1f,
-                            animationSpec = tween(easing = LinearEasing),
-                        ) { value, _ ->
-                            popupOffset = value
-                        }
-                        popupEvent = null
+                LaunchedEffect(Unit) {
+                    viewModel.achievementsEvent.filterIsInstance<RAEventUi.Reset>().collect {
+                        achievementsViewModel.onSessionReset()
                     }
                 }
 
-                Box(Modifier.fillMaxWidth()) {
-                    val currentPopupEvent = popupEvent
-                    when (currentPopupEvent) {
-                        is PopupEvent.AchievementUnlockPopup -> {
-                            AchievementPopupUi(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .offset {
-                                        val y = (popupOffset * (popupHeight ?: Int.MAX_VALUE)).dp
-                                        IntOffset(0, y.roundToPx())
-                                    }
-                                    .onSizeChanged { popupHeight = it.height },
-                                achievement = currentPopupEvent.achievement,
-                            )
-                        }
-                        is PopupEvent.RAIntegrationPopup -> {
-                            RAIntegrationEventUi(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .offset {
-                                        val y = (popupOffset * (popupHeight ?: Int.MAX_VALUE)).dp
-                                        IntOffset(0, y.roundToPx())
-                                    }
-                                    .onSizeChanged { popupHeight = it.height },
-                                event = currentPopupEvent.event,
-                            )
-                        }
-                        null -> {
-                            // Do nothing
-                        }
-                    }
-                }
+                AchievementUpdatesUi(viewModel)
 
                 if (showAchievementList.value) {
-                    val achievementsViewModel = viewModels<EmulatorRetroAchievementsViewModel>().value
-
                     AchievementListDialog(
                         viewModel = achievementsViewModel,
                         onDismiss = {
@@ -616,6 +556,17 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
             }
         }
         lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.emulatorEvents.collect {
+                    when (it) {
+                        is EmulatorEvent.RumbleStart -> emulatorRumbleManager.startRumbling()
+                        EmulatorEvent.RumbleStop -> emulatorRumbleManager.stopRumbling()
+                        EmulatorEvent.Stop -> { /* TODO */ }
+                    }
+                }
+            }
+        }
+        lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 viewModel.emulatorState.collectLatest {
                     when (it) {
@@ -757,7 +708,6 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
 
         if (viewModel.emulatorState.value.isRunning()) {
             viewModel.pauseEmulator(false)
-            backPressedCallback.isEnabled = false
 
             activeOverlays.addActiveOverlay(EmulatorOverlay.SWITCH_NEW_ROM_DIALOG)
             AlertDialog.Builder(this)
@@ -774,7 +724,6 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
                         activeOverlays.removeActiveOverlay(EmulatorOverlay.SWITCH_NEW_ROM_DIALOG)
                     }
                     .setOnCancelListener {
-                        backPressedCallback.isEnabled = true
                         viewModel.resumeEmulator()
                     }
                     .show()

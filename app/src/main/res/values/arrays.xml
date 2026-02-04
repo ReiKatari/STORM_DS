@@ -68,7 +68,6 @@
         <item>bottom</item>
         <item>custom</item>
     </string-array>
-
     <string-array name="audio_interpolation_values">
         <item>none</item>
         <item>linear</item>

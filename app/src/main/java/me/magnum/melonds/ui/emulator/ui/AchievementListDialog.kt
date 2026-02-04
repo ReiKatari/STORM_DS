@@ -1,7 +1,6 @@
 package me.magnum.melonds.ui.emulator.ui
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
@@ -16,6 +15,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.net.toUri
 import kotlinx.coroutines.flow.collectLatest
 import me.magnum.melonds.ui.emulator.EmulatorRetroAchievementsViewModel
 import me.magnum.melonds.ui.theme.MelonTheme
@@ -33,13 +33,14 @@ fun AchievementListDialog(
 
         val context = LocalContext.current
         val achievementListState by viewModel.uiState.collectAsState()
+        val activeChallenges by viewModel.activeChallenges.collectAsState()
 
         LaunchedEffect(Unit) {
             // Perform a load immediately so that the last achievement data is discarded. This is to ensure that the latest up-to-date data is displayed and
             // that if the user has loaded a new ROM, then the achievements of the new ROM are loaded
             viewModel.retryLoadAchievements()
             viewModel.viewAchievementEvent.collectLatest {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
+                val intent = Intent(Intent.ACTION_VIEW, it.toUri())
                 context.startActivity(intent)
             }
         }
@@ -50,6 +51,7 @@ fun AchievementListDialog(
                 AchievementList(
                     modifier = Modifier.fillMaxSize(),
                     state = achievementListState,
+                    activeChallenges = activeChallenges,
                     onViewAchievement = viewModel::viewAchievement,
                     onRetry = viewModel::retryLoadAchievements,
                     onDismiss = onDismiss,

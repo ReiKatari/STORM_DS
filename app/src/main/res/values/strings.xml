@@ -20,6 +20,7 @@
     <string name="play">Play</string>
     <string name="save">Save</string>
     <string name="ellipsis">…</string>
+    <string name="navigate_back">Back</string>
 
     <string name="version_alpha">Alpha</string>
     <string name="version_beta">Beta</string>
@@ -281,7 +282,6 @@
     <string name="soft_input_behaviour">Soft input behaviour</string>
     <string name="vibrate_on_touch">Vibrate on touch</string>
     <string name="vibration_strength">Vibration strength</string>
-    <string name="gba_rumble_intensity">GBA rumble intensity</string>
     <string name="soft_input_opacity">Soft input opacity</string>
     <string name="retroachievements">RetroAchievements</string> <!-- Keep words together because this is the official name -->
     <string name="retroachievements_summary">Login &amp; manage RetroAchievements integration</string> <!-- Keep words together because this is the official name -->
@@ -289,6 +289,12 @@
     <string name="rich_presence_summary">Allows other RetroAchievement users to see what you are playing</string>
     <string name="hardcore_mode">Hardcore mode</string>
     <string name="hardcore_mode_summary">Earn double the amount of points but you cannot use save states, cheats or slow-motion while playing</string>
+    <string name="show_active_challenge_indicators">Show active challenge indicators</string>
+    <string name="show_active_challenge_indicators_summary">Shows on-screen indicators while certain achievements can be earned</string>
+    <string name="show_progress_indicators">Show progress indicators</string>
+    <string name="show_progress_indicators_summary">Shows on-screen indicators when progress is made towards an achievement</string>
+    <string name="show_leaderboard_indicators">Show leaderboard indicators</string>
+    <string name="show_leaderboard_indicators_summary">Shows on-screen indicators when a leaderboard attempt is in progress</string>
 
     <string name="cheats">Cheats</string>
     <string name="cheats_summary">Enable &amp; import cheat codes</string>
@@ -384,6 +390,8 @@
     <string name="use_global_layout">Use global layout</string>
     <string name="use_global_preference">Use global setting</string>
     <string name="layout_deleted">Layout deleted</string>
+    <string name="named_layout_deleted">Layout \"%1$s\" deleted</string>
+
     <string name="layout_editor">Layout editor</string>
     <string name="add_component">Add component</string>
     <string name="no_more_components">No more components to add</string>
@@ -466,6 +474,7 @@
     <string name="retro_achievements_load_error">There was a problem when trying to load the achievements for this game. Make sure you are connected to the internet and try again later</string>
     <string name="retro_achievements_no_achievements">No RetroAchievements were found for this game</string>
     <string name="retro_achievements_relaunch_to_apply_settings">Relaunch the ROM to apply the new RetroAchievements settings</string>
+    <string name="retro_achievements_active_challenges">Active Challenges</string>
     <string name="username">Username</string>
     <string name="password">Password</string>
     <string name="retry">Retry</string>
@@ -474,6 +483,7 @@
     <string name="completed">Completed</string>
     <string name="ra_mode_hardcore">Hardcore</string>
     <string name="ra_mode_softcore">Softcore</string>
+    <string name="ra_base_set">Base Set</string>
     <string name="view_achievement">View achievement</string>
     <string name="completed_achievements"><b>%1$d</b> of <b>%2$d</b> (%3$d%%)</string>
     <string name="submitting_achievements">Submitting RetroAchievements…</string>
@@ -485,6 +495,11 @@
     <string name="achievement_unlocked">Achievement unlocked!</string>
     <string name="achievement_missable">Missable</string>
     <string name="achievement_missable_description">This achievement can be missed during a playthrough</string>
+    <string name="challenge_started">Challenge started</string>
+    <string name="leaderboard_attempt_started">Leaderboard attempt started!</string>
+    <string name="leaderboard_submission_info">%1$s • Rank %2$d of %3$d</string> <!-- Eg.: 01:42.95 • Rank 73 of 145 -->
+    <string name="game_completed">Completed %1$s</string>
+    <string name="game_mastered">Mastered %1$s</string>
 
     <string-array name="fast_forward_speed_multiplier_options">
         <item>Unlimited</item>
@@ -525,8 +540,8 @@
     <string-array name="gba_slot_options">
         <item>None</item>
         <item>GBA ROM</item>
-        <item>Memory expansion</item>
         <item>Rumble Pak</item>
+        <item>Memory expansion</item>
     </string-array>
 
     <string-array name="console_type_options">
