@@ -7,6 +7,6 @@ data class RomGbaSlotConfigUiModel(
 ) {
 
     enum class Type {
-        None, GbaRom, MemoryExpansion, RumblePak
+        None, GbaRom, RumblePak, MemoryExpansion
     }
 }

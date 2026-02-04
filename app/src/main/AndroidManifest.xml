@@ -31,6 +31,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:appCategory="game"
+        android:enableOnBackInvokedCallback="true"
         android:isGame="true"
         android:theme="@style/AppTheme">
 
@@ -50,7 +51,6 @@
         </activity>
         <activity
             android:name=".ui.romdetails.RomDetailsActivity"
-            android:theme="@style/AppTheme.NoToolbar"
             android:parentActivityName=".ui.romlist.RomListActivity"
             android:exported="false">
         </activity>
@@ -67,11 +67,10 @@
             </intent-filter>
         </activity>
         <activity
-                android:name=".ui.dsiwaremanager.DSiWareManagerActivity"
-                android:label="@string/dsiware_manager"
-                android:parentActivityName=".ui.romlist.RomListActivity"
-                android:theme="@style/AppTheme.NoToolbar"
-                android:exported="false">
+            android:name=".ui.dsiwaremanager.DSiWareManagerActivity"
+            android:label="@string/dsiware_manager"
+            android:parentActivityName=".ui.romlist.RomListActivity"
+            android:exported="false">
         </activity>
         <activity
             android:name=".ui.settings.SettingsActivity"
@@ -86,8 +85,6 @@
             android:name=".ui.inputsetup.InputSetupActivity"
             android:label="@string/key_mapping"
             android:parentActivityName=".ui.settings.SettingsActivity"
-            android:theme="@style/AppTheme.NoToolbar"
-            android:enableOnBackInvokedCallback="true"
             android:exported="false" >
         </activity>
         <activity
@@ -122,8 +119,6 @@
         <activity
             android:name=".ui.cheats.CheatsActivity"
             android:label="@string/cheats"
-            android:theme="@style/AppTheme.NoToolbar"
-            android:enableOnBackInvokedCallback="true"
             android:exported="false" >
         </activity>
         <activity
@@ -141,11 +136,10 @@
             android:name=".ui.layouteditor.LayoutEditorActivity"
             android:theme="@style/EmulatorTheme"
             android:label="@string/layout_editor"
-            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode">
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode" >
         </activity>
         <activity
             android:name=".ui.backgrounds.BackgroundsActivity"
-            android:theme="@style/AppTheme.NoToolbar"
             android:label="@string/backgrounds">
         </activity>
 

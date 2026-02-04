@@ -16,11 +16,12 @@
             android:id="@+id/layoutFolderNavigator"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:paddingStart="16dp"
-            android:paddingEnd="16dp"
             android:paddingTop="12dp"
+            android:paddingEnd="16dp"
             android:paddingBottom="12dp"
-            android:gravity="center_vertical">
+            >
 
             <ImageButton
                 android:id="@+id/buttonNavigateUp"
@@ -35,15 +36,15 @@
 
             <TextView
                 android:id="@+id/textCurrentFolder"
+                style="?android:attr/textAppearanceMedium"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:singleLine="true"
-                android:text="@string/rom_browser_virtual_root"
-                style="?android:attr/textAppearanceMedium" />
-            </LinearLayout>
+                android:text="@string/rom_browser_virtual_root" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/textDirectoryCacheStatus"
@@ -67,6 +68,7 @@
                 android:id="@+id/listRoms"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipToPadding="false"
                 tools:listitem="@layout/item_rom_configurable" />
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     </LinearLayout>

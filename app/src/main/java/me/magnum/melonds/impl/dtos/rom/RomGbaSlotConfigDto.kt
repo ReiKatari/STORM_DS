@@ -1,6 +1,6 @@
 package me.magnum.melonds.impl.dtos.rom
 
-import android.net.Uri
+import androidx.core.net.toUri
 import com.google.gson.annotations.SerializedName
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
 
@@ -17,18 +17,18 @@ data class RomGbaSlotConfigDto(
 ) {
 
     enum class Type {
-        None, GbaRom, MemoryExpansion, RumblePak
+        None, GbaRom, RumblePak, MemoryExpansion
     }
 
     fun toModel(): RomGbaSlotConfig {
         return when (type) {
             Type.None -> RomGbaSlotConfig.None
             Type.GbaRom -> RomGbaSlotConfig.GbaRom(
-                romPath = gbaRomPath?.let { Uri.parse(it) },
-                savePath = gbaSavePath?.let { Uri.parse(it) },
+                romPath = gbaRomPath?.toUri(),
+                savePath = gbaSavePath?.toUri(),
             )
-            Type.MemoryExpansion -> RomGbaSlotConfig.MemoryExpansion
             Type.RumblePak -> RomGbaSlotConfig.RumblePak
+            Type.MemoryExpansion -> RomGbaSlotConfig.MemoryExpansion
         }
     }
 
@@ -43,10 +43,10 @@ data class RomGbaSlotConfigDto(
 
         private fun RomGbaSlotConfig.dtoType(): Type {
             return when (this) {
-                is RomGbaSlotConfig.None -> Type.None
+                RomGbaSlotConfig.None -> Type.None
                 is RomGbaSlotConfig.GbaRom -> Type.GbaRom
-                is RomGbaSlotConfig.MemoryExpansion -> Type.MemoryExpansion
-                is RomGbaSlotConfig.RumblePak -> Type.RumblePak
+                RomGbaSlotConfig.RumblePak -> Type.RumblePak
+                RomGbaSlotConfig.MemoryExpansion -> Type.MemoryExpansion
             }
         }
     }

@@ -4,16 +4,35 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component1
+import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component2
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -31,34 +50,40 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import me.magnum.melonds.R
-import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.ui.common.MelonPreviewSet
 import me.magnum.melonds.ui.common.melonTextButtonColors
 import me.magnum.melonds.ui.romdetails.ui.preview.mockRAAchievementPreview
 import me.magnum.melonds.ui.theme.MelonTheme
+import me.magnum.rcheevosapi.model.RAAchievement
 
 @Composable
 fun RomAchievementUi(
     modifier: Modifier,
-    userAchievement: RAUserAchievement,
+    achievement: RAAchievement,
+    showLocked: Boolean,
     onViewAchievement: () -> Unit,
     badgeSize: Dp = 52.dp,
 ) {
-    var expanded by remember(userAchievement) {
+    val (bodyFocusRequester, linkFocusRequester) = remember { FocusRequester.createRefs() }
+    var expanded by remember(achievement) {
         mutableStateOf(false)
     }
 
     Column(
         modifier = modifier
+            .focusRequester(bodyFocusRequester)
+            .focusProperties {
+                end = if (expanded) linkFocusRequester else FocusRequester.Default
+            }
             .clickable { expanded = !expanded }
-            .padding(8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .animateContentSize()
     ) {
         Row(Modifier.fillMaxWidth()) {
-            val image = if (userAchievement.isUnlocked) {
-                userAchievement.achievement.badgeUrlUnlocked
+            val image = if (showLocked) {
+                achievement.badgeUrlLocked
             } else {
-                userAchievement.achievement.badgeUrlLocked
+                achievement.badgeUrlUnlocked
             }
 
             if (LocalInspectionMode.current) {
@@ -84,8 +109,8 @@ fun RomAchievementUi(
                 val nameMaxLines = if (expanded) Int.MAX_VALUE else 1
                 Text(
                     text = buildAnnotatedString {
-                        append(userAchievement.achievement.getCleanTitle())
-                        if (userAchievement.achievement.isMissable()) {
+                        append(achievement.getCleanTitle())
+                        if (achievement.isMissable()) {
                             append(' ')
                             appendInlineContent(id = "icon-missable", alternateText = stringResource(id = R.string.achievement_missable))
                         }
@@ -107,7 +132,7 @@ fun RomAchievementUi(
 
                 val descriptionMaxLines = if (expanded) Int.MAX_VALUE else 2
                 Text(
-                    text = userAchievement.achievement.description,
+                    text = achievement.description,
                     style = MaterialTheme.typography.caption,
                     maxLines = descriptionMaxLines,
                     overflow = TextOverflow.Ellipsis,
@@ -122,7 +147,7 @@ fun RomAchievementUi(
             ) {
                 Text(
                     text = buildAnnotatedString {
-                        append(userAchievement.achievement.points.toString())
+                        append(achievement.points.toString())
                         appendInlineContent(id = "icon-points", alternateText = stringResource(id = R.string.points))
                     },
                     inlineContent = mapOf(
@@ -143,7 +168,7 @@ fun RomAchievementUi(
         if (expanded) {
             Spacer(Modifier.height(8.dp))
 
-            if (userAchievement.achievement.isMissable()) {
+            if (achievement.isMissable()) {
                 Text(
                     modifier = Modifier.align(Alignment.End),
                     text = buildAnnotatedString {
@@ -166,7 +191,11 @@ fun RomAchievementUi(
             }
 
             TextButton(
-                modifier = Modifier.align(Alignment.End),
+                modifier = Modifier.align(Alignment.End)
+                    .focusRequester(linkFocusRequester)
+                    .focusProperties {
+                        start = bodyFocusRequester
+                    },
                 onClick = onViewAchievement,
                 colors = melonTextButtonColors(),
             ) {
@@ -191,11 +220,8 @@ fun PreviewRomAchievementUi() {
     MelonTheme {
         RomAchievementUi(
             modifier = Modifier.fillMaxWidth(),
-            userAchievement = RAUserAchievement(
-                achievement = mockRAAchievementPreview(),
-                isUnlocked = true,
-                forHardcoreMode = false,
-            ),
+            achievement = mockRAAchievementPreview(),
+            showLocked = false,
             onViewAchievement = {},
         )
     }
