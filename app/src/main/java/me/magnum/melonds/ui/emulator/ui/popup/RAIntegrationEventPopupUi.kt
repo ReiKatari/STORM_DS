@@ -65,6 +65,22 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                         )
                     }
                 }
+                is RAIntegrationEvent.OfflineDisabledNoCache -> {
+                    Column {
+                        Text(
+                            text = stringResource(id = R.string.offline_ra_disabled_no_cache_title),
+                            style = MaterialTheme.typography.body2,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.error,
+                            maxLines = 2,
+                        )
+                        Text(
+                            text = stringResource(id = R.string.offline_ra_disabled_no_cache_message),
+                            style = MaterialTheme.typography.body2,
+                            maxLines = 2,
+                        )
+                    }
+                }
                 is RAIntegrationEvent.LoadedNoAchievements -> {
                     Text(
                         text = stringResource(id = R.string.game_has_no_achievements),

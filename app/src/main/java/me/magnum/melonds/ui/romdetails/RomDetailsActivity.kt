@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.romdetails
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -13,12 +14,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.net.toUri
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
+import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.common.rom.EmulatorLaunchValidatorDelegate
 import me.magnum.melonds.ui.emulator.EmulatorActivity
 import me.magnum.melonds.ui.romdetails.ui.RomDetailsScreen
 import me.magnum.melonds.ui.theme.MelonTheme
+import me.magnum.melonds.ui.romdetails.model.RomDetailsToastEvent
 
 @AndroidEntryPoint
 class RomDetailsActivity : AppCompatActivity() {
@@ -29,6 +33,11 @@ class RomDetailsActivity : AppCompatActivity() {
 
     private val romDetailsViewModel by viewModels<RomDetailsViewModel>()
     private val romRetroAchievementsViewModel by viewModels<RomDetailsRetroAchievementsViewModel>()
+
+    override fun onResume() {
+        super.onResume()
+        romRetroAchievementsViewModel.refreshOfflineAchievementsStatus()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -55,6 +64,7 @@ class RomDetailsActivity : AppCompatActivity() {
             val romConfig by romDetailsViewModel.romConfigUiState.collectAsState()
 
             val retroAchievementsUiState by romRetroAchievementsViewModel.uiState.collectAsState()
+            val offlineAchievementsUiState by romRetroAchievementsViewModel.offlineAchievementsUiState.collectAsState()
 
             LaunchedEffect(null) {
                 romRetroAchievementsViewModel.viewAchievementEvent.collect {
@@ -62,11 +72,36 @@ class RomDetailsActivity : AppCompatActivity() {
                 }
             }
 
+            LaunchedEffect(Unit) {
+                romRetroAchievementsViewModel.toastEvent.collectLatest { event ->
+                    val message = when (event) {
+                        is RomDetailsToastEvent.OfflineAchievementNotSynced -> {
+                            val messageRes = when (event.reason) {
+                                RomDetailsToastEvent.OfflineAchievementNotSyncedReason.MISSING_FROM_CURRENT_SET -> R.string.offline_ra_sync_skipped_missing_toast
+                                RomDetailsToastEvent.OfflineAchievementNotSyncedReason.DEFINITION_CHANGED -> R.string.offline_ra_sync_skipped_definition_changed_toast
+                                RomDetailsToastEvent.OfflineAchievementNotSyncedReason.NOT_IN_PREFETCH_CACHE -> R.string.offline_ra_sync_skipped_cache_mismatch_toast
+                            }
+                            getString(messageRes, event.title)
+                        }
+                        is RomDetailsToastEvent.OfflineAchievementsNotSyncedSummary -> {
+                            getString(R.string.offline_ra_sync_skipped_summary_toast, event.skippedCount)
+                        }
+                    }
+
+                    Toast.makeText(this@RomDetailsActivity, message, Toast.LENGTH_LONG).show()
+                }
+            }
+
+            LaunchedEffect(retroAchievementsUiState) {
+                romRetroAchievementsViewModel.refreshOfflineAchievementsStatus()
+            }
+
             MelonTheme {
                 RomDetailsScreen(
                     rom = rom,
                     romConfigUiState = romConfig,
                     retroAchievementsUiState = retroAchievementsUiState,
+                    offlineAchievementsUiState = offlineAchievementsUiState,
                     onNavigateBack = { onNavigateUp() },
                     onLaunchRom = {
                         emulatorLauncherValidatorDelegate.validateRom(it)
@@ -82,7 +117,10 @@ class RomDetailsActivity : AppCompatActivity() {
                     },
                     onViewAchievement = {
                         romRetroAchievementsViewModel.viewAchievement(it)
-                    }
+                    },
+                    onOfflineSyncNow = {
+                        romRetroAchievementsViewModel.syncOfflineAchievementsNow()
+                    },
                 )
             }
         }

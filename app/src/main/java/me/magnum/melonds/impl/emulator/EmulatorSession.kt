@@ -52,6 +52,10 @@ class EmulatorSession {
         sessionHasAchievements = integrationStatus == GameAchievementData.IntegrationStatus.ENABLED_FULL
     }
 
+    fun isRetroAchievementsEnabledForSession(): Boolean {
+        return areRetroAchievementsEnabled
+    }
+
     fun areRetroAchievementsEnabled(): Boolean {
         return areRetroAchievementsEnabled && sessionHasAchievements
     }

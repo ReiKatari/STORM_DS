@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -83,6 +84,8 @@ fun AchievementPopupUi(
                     .data(achievement.badgeUrlUnlocked.toString())
                     .crossfade(false)
                     .build(),
+                placeholder = painterResource(id = R.drawable.ic_trophy),
+                error = painterResource(id = R.drawable.ic_trophy),
                 contentDescription = null,
             )
 

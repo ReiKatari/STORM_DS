@@ -85,7 +85,9 @@ import me.magnum.melonds.ui.emulator.input.EmulatorRumbleManager
 import me.magnum.melonds.ui.emulator.model.EmulatorOverlay
 import me.magnum.melonds.ui.emulator.model.EmulatorState
 import me.magnum.melonds.ui.emulator.model.EmulatorUiEvent
+import me.magnum.melonds.ui.emulator.model.HardcorePendingExitChoice
 import me.magnum.melonds.ui.emulator.model.LaunchArgs
+import me.magnum.melonds.ui.emulator.model.OfflineAchievementsSyncChoice
 import me.magnum.melonds.ui.emulator.model.PauseMenu
 import me.magnum.melonds.ui.emulator.model.RAEventUi
 import me.magnum.melonds.ui.emulator.model.RuntimeInputLayoutConfiguration
@@ -260,6 +262,10 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
             handleBackPressed()
         }
     }
+
+    private var offlineSyncChoiceDialog: AlertDialog? = null
+    private var offlineSyncProgressDialog: AlertDialog? = null
+    private var hardcorePendingExitDialog: AlertDialog? = null
 
     private val rewindSaveStateAdapter = RewindSaveStateAdapter {
         viewModel.rewindToState(it)
@@ -494,18 +500,55 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.toastEvent.collectLatest {
                     val (message, duration) = when (it) {
-                        ToastEvent.GbaLoadFailed -> R.string.error_load_gba_rom to Toast.LENGTH_SHORT
-                        ToastEvent.QuickSaveSuccessful -> R.string.saved to Toast.LENGTH_SHORT
-                        ToastEvent.QuickLoadSuccessful -> R.string.loaded to Toast.LENGTH_SHORT
-                        ToastEvent.RewindNotEnabled -> R.string.rewind_not_enabled to Toast.LENGTH_SHORT
-                        ToastEvent.RewindNotAvailableWhileRAHardcoreModeEnabled -> R.string.rewind_unavailable_ra_hardcore_enabled to Toast.LENGTH_LONG
-                        ToastEvent.StateLoadFailed -> R.string.failed_load_state to Toast.LENGTH_SHORT
-                        ToastEvent.StateSaveFailed -> R.string.failed_save_state to Toast.LENGTH_SHORT
-                        ToastEvent.StateStateDoesNotExist -> R.string.cant_load_empty_slot to Toast.LENGTH_SHORT
-                        ToastEvent.CannotUseSaveStatesWhenRAHardcoreIsEnabled -> R.string.save_states_unavailable_ra_hardcore_enabled to Toast.LENGTH_LONG
+                        ToastEvent.GbaLoadFailed -> getString(R.string.error_load_gba_rom) to Toast.LENGTH_SHORT
+                        ToastEvent.QuickSaveSuccessful -> getString(R.string.saved) to Toast.LENGTH_SHORT
+                        ToastEvent.QuickLoadSuccessful -> getString(R.string.loaded) to Toast.LENGTH_SHORT
+                        ToastEvent.RewindNotEnabled -> getString(R.string.rewind_not_enabled) to Toast.LENGTH_SHORT
+                        ToastEvent.RewindNotAvailableWhileRAHardcoreModeEnabled -> getString(R.string.rewind_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
+                        ToastEvent.StateLoadFailed -> getString(R.string.failed_load_state) to Toast.LENGTH_SHORT
+                        ToastEvent.StateSaveFailed -> getString(R.string.failed_save_state) to Toast.LENGTH_SHORT
+                        ToastEvent.StateStateDoesNotExist -> getString(R.string.cant_load_empty_slot) to Toast.LENGTH_SHORT
+                        ToastEvent.CannotUseSaveStatesWhenRAHardcoreIsEnabled -> getString(R.string.save_states_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
                         ToastEvent.CannotLoadStateWhenRunningFirmware,
-                        ToastEvent.CannotSaveStateWhenRunningFirmware -> R.string.save_states_not_supported to Toast.LENGTH_LONG
-                        ToastEvent.CannotSwitchRetroAchievementsMode -> R.string.retro_achievements_relaunch_to_apply_settings to Toast.LENGTH_LONG
+                        ToastEvent.CannotSaveStateWhenRunningFirmware -> getString(R.string.save_states_not_supported) to Toast.LENGTH_LONG
+                        ToastEvent.CannotSwitchRetroAchievementsMode -> getString(R.string.retro_achievements_relaunch_to_apply_settings) to Toast.LENGTH_LONG
+                        ToastEvent.OfflineAchievementsLedgerTampered -> getString(R.string.offline_ra_ledger_tampered_toast) to Toast.LENGTH_LONG
+                        ToastEvent.OfflineAchievementsSyncFailed -> getString(R.string.offline_ra_sync_failed_toast) to Toast.LENGTH_LONG
+                        is ToastEvent.HardcoreOfflineUnsyncedWarning -> {
+                            getString(R.string.offline_ra_hardcore_unsynced_warning_toast, it.pendingHardcoreCount) to Toast.LENGTH_LONG
+                        }
+                        is ToastEvent.RetroAchievementsMode -> {
+                            val message = when (it.status) {
+                                ToastEvent.RetroAchievementsModeStatus.SOFTCORE -> {
+                                    getString(R.string.offline_ra_mode_softcore)
+                                }
+                                ToastEvent.RetroAchievementsModeStatus.HARDCORE -> {
+                                    getString(R.string.offline_ra_mode_hardcore)
+                                }
+                                ToastEvent.RetroAchievementsModeStatus.SOFTCORE_OFFLINE -> {
+                                    if (it.offlineNoInternetAtStart) {
+                                        getString(R.string.offline_ra_mode_softcore_offline_no_internet_start)
+                                    } else {
+                                        getString(R.string.offline_ra_mode_softcore_offline)
+                                    }
+                                }
+                            }
+                            message to Toast.LENGTH_LONG
+                        }
+                        is ToastEvent.OfflineSoftcorePendingNotice -> {
+                            getString(R.string.offline_ra_pending_softcore_notice, it.pendingSoftcoreCount) to Toast.LENGTH_LONG
+                        }
+                        is ToastEvent.OfflineAchievementNotSynced -> {
+                            val messageRes = when (it.reason) {
+                                ToastEvent.OfflineAchievementNotSyncedReason.MISSING_FROM_CURRENT_SET -> R.string.offline_ra_sync_skipped_missing_toast
+                                ToastEvent.OfflineAchievementNotSyncedReason.DEFINITION_CHANGED -> R.string.offline_ra_sync_skipped_definition_changed_toast
+                                ToastEvent.OfflineAchievementNotSyncedReason.NOT_IN_PREFETCH_CACHE -> R.string.offline_ra_sync_skipped_cache_mismatch_toast
+                            }
+                            getString(messageRes, it.title) to Toast.LENGTH_LONG
+                        }
+                        is ToastEvent.OfflineAchievementsNotSyncedSummary -> {
+                            getString(R.string.offline_ra_sync_skipped_summary_toast, it.skippedCount) to Toast.LENGTH_LONG
+                        }
                     }
 
                     Toast.makeText(this@EmulatorActivity, message, duration).show()
@@ -550,6 +593,19 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
                         EmulatorUiEvent.ShowDualScreenPresets -> {
                             activeOverlays.addActiveOverlay(EmulatorOverlay.PRESETS_DIALOG)
                             showDualScreenPresets.value = true
+                        }
+                        is EmulatorUiEvent.ShowOfflineAchievementsSyncChoice -> {
+                            showOfflineAchievementsSyncChoiceDialog(it.pendingUnlockCount)
+                        }
+                        is EmulatorUiEvent.ShowHardcorePendingExitWarning -> {
+                            showHardcorePendingExitWarningDialog(it.pendingHardcoreCount)
+                        }
+                        is EmulatorUiEvent.ShowOfflineAchievementsSyncProgress -> {
+                            showOfflineAchievementsSyncProgressDialog(it.totalUnlockCount)
+                        }
+                        EmulatorUiEvent.HideOfflineAchievementsSyncProgress -> {
+                            offlineSyncProgressDialog?.dismiss()
+                            offlineSyncProgressDialog = null
                         }
                     }
                 }
@@ -634,9 +690,51 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
                 appForegroundStateObserver.onAppMovedToBackgroundEvent.collect {
                     presentation?.dismiss()
                     presentation = null
+                    viewModel.onAppMovedToBackground()
                 }
             }
         }
+    }
+
+    private fun showOfflineAchievementsSyncChoiceDialog(pendingUnlockCount: Int) {
+        offlineSyncChoiceDialog?.dismiss()
+        offlineSyncChoiceDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.offline_ra_pending_title))
+            .setMessage(getString(R.string.offline_ra_pending_message, pendingUnlockCount))
+            .setCancelable(false)
+            .setPositiveButton(R.string.offline_ra_sync_now) { _, _ ->
+                viewModel.submitOfflineAchievementsSyncChoice(OfflineAchievementsSyncChoice.SYNC_NOW)
+            }
+            .setNegativeButton(R.string.offline_ra_continue_offline) { _, _ ->
+                viewModel.submitOfflineAchievementsSyncChoice(OfflineAchievementsSyncChoice.CONTINUE_OFFLINE)
+            }
+            .show()
+    }
+
+    private fun showHardcorePendingExitWarningDialog(pendingHardcoreCount: Int) {
+        hardcorePendingExitDialog?.dismiss()
+        hardcorePendingExitDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.offline_ra_hardcore_pending_exit_title))
+            .setMessage(getString(R.string.offline_ra_hardcore_pending_exit_message, pendingHardcoreCount))
+            .setCancelable(false)
+            .setPositiveButton(R.string.offline_ra_continue_playing_button) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.CONTINUE_PLAYING)
+            }
+            .setNegativeButton(R.string.offline_ra_exit_anyway_button) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.EXIT_ANYWAY)
+            }
+            .show()
+    }
+
+    private fun showOfflineAchievementsSyncProgressDialog(totalUnlockCount: Int) {
+        offlineSyncProgressDialog?.dismiss()
+        offlineSyncProgressDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.offline_ra_syncing_title))
+            .setMessage(getString(R.string.offline_ra_syncing_message, totalUnlockCount))
+            .setCancelable(false)
+            .create()
+
+        offlineSyncProgressDialog?.show()
     }
 
     override fun onStart() {
@@ -1081,6 +1179,9 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
 
     override fun onDestroy() {
         super.onDestroy()
+        offlineSyncChoiceDialog?.dismiss()
+        offlineSyncProgressDialog?.dismiss()
+        hardcorePendingExitDialog?.dismiss()
         frameRenderCoordinator.stop()
         presentation?.dismiss()
         displayManager.unregisterDisplayListener(displayListener)

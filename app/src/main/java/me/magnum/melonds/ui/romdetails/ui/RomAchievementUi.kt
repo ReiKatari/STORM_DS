@@ -61,6 +61,7 @@ fun RomAchievementUi(
     modifier: Modifier,
     achievement: RAAchievement,
     showLocked: Boolean,
+    isInOfflineLedger: Boolean = false,
     onViewAchievement: () -> Unit,
     badgeSize: Dp = 52.dp,
 ) {
@@ -99,6 +100,8 @@ fun RomAchievementUi(
                         .data(image.toString())
                         .crossfade(true)
                         .build(),
+                    placeholder = painterResource(id = R.drawable.ic_trophy),
+                    error = painterResource(id = R.drawable.ic_trophy),
                     contentDescription = null,
                 )
             }
@@ -137,6 +140,15 @@ fun RomAchievementUi(
                     maxLines = descriptionMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
+
+                if (isInOfflineLedger) {
+                    Text(
+                        text = stringResource(id = R.string.offline_ra_in_ledger_badge),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.secondary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
 
             Spacer(Modifier.width(16.dp))

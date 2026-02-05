@@ -34,6 +34,7 @@ retrofit = "3.0.0"
 room = "2.8.4"
 rxAndroid = "2.1.1"
 rxJava = "2.2.21"
+securityCrypto = "1.0.0"
 splashscreen = "1.2.0"
 startup = "1.2.0"
 swipeRefreshLayout = "1.2.0"
@@ -45,6 +46,8 @@ xz = "1.11"
 # Kotlin
 kotlin-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlin-serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization"}
+kotlin-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinxSerialization"}
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 
 # AndroidX
 androidx-activity = { module = "androidx.activity:activity-ktx", version.ref = "activity" }
@@ -68,6 +71,7 @@ androidx-room-rxjava = { module = "androidx.room:room-rxjava2", version.ref = "r
 androidx-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "splashscreen" }
 androidx-startup = { module = "androidx.startup:startup-runtime", version.ref = "startup" }
 androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version.ref = "swipeRefreshLayout" }
+androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
 androidx-window = { module = "androidx.window:window", version.ref = "window" }
 androidx-work = { module = "androidx.work:work-runtime", version.ref = "work" }
 android-material = { module = "com.google.android.material:material", version.ref = "material" }

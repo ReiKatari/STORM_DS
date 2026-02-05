@@ -20,4 +20,10 @@ sealed class EmulatorUiEvent {
     data object ShowAchievementList : EmulatorUiEvent()
     data object CloseEmulator : EmulatorUiEvent()
     data object ShowDualScreenPresets : EmulatorUiEvent()
+    data class ShowOfflineAchievementsSyncChoice(val pendingUnlockCount: Int) : EmulatorUiEvent()
+    data class ShowHardcorePendingExitWarning(
+        val pendingHardcoreCount: Int,
+    ) : EmulatorUiEvent()
+    data class ShowOfflineAchievementsSyncProgress(val totalUnlockCount: Int) : EmulatorUiEvent()
+    data object HideOfflineAchievementsSyncProgress : EmulatorUiEvent()
 }

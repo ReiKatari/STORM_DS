@@ -173,6 +173,7 @@ fun AchievementList(
                 Content(
                     modifier = Modifier.widthIn(max = 640.dp),
                     sets = state.sets,
+                    pendingLedgerAchievementIds = state.pendingLedgerAchievementIds,
                     activeChallenges = activeChallenges,
                     onViewAchievement = onViewAchievement,
                     lazyListState = lazyListState,
@@ -195,6 +196,7 @@ fun AchievementList(
 private fun Content(
     modifier: Modifier,
     sets: List<AchievementSetUiModel>,
+    pendingLedgerAchievementIds: Set<Long>,
     activeChallenges: List<RAAchievement>,
     onViewAchievement: (RAAchievement) -> Unit,
     lazyListState: LazyListState,
@@ -325,6 +327,7 @@ private fun Content(
                         modifier = Modifier.fillMaxWidth(),
                         achievement = it,
                         showLocked = false,
+                        isInOfflineLedger = pendingLedgerAchievementIds.contains(it.id),
                         onViewAchievement = { onViewAchievement(it) },
                         badgeSize = 52.dp,
                     )
@@ -343,6 +346,7 @@ private fun Content(
                     modifier = Modifier.fillMaxWidth(),
                     achievement = it.achievement,
                     showLocked = !it.isUnlocked,
+                    isInOfflineLedger = pendingLedgerAchievementIds.contains(it.achievement.id),
                     onViewAchievement = { onViewAchievement(it.achievement) },
                     badgeSize = 52.dp,
                 )
