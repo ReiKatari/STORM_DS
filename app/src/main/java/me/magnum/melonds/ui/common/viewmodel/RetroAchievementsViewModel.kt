@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
@@ -36,13 +38,15 @@ abstract class RetroAchievementsViewModel (
     private var achievementLoadJob: Job? = null
 
     protected abstract fun getRom(): Rom
+    protected open suspend fun getPendingLedgerAchievementIds(rom: Rom): Set<Long> = emptySet()
 
     private fun loadAchievements() {
         achievementLoadJob?.cancel()
         achievementLoadJob = viewModelScope.launch {
             if (retroAchievementsRepository.isUserAuthenticated()) {
+                val rom = getRom()
                 val forHardcoreMode = settingsRepository.isRetroAchievementsHardcoreEnabled()
-                retroAchievementsRepository.getUserGameData(getRom().retroAchievementsHash, forHardcoreMode).fold(
+                retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode).fold(
                     onSuccess = { userGameData ->
                         val sets = userGameData?.sets?.map { set ->
                             val sortedAchievements = set.achievements.sortedBy {
@@ -59,7 +63,13 @@ abstract class RetroAchievementsViewModel (
                                 achievements = sortedAchievements,
                             )
                         }
-                        _uiState.value = RomRetroAchievementsUiState.Ready(sets.orEmpty())
+                        val pendingLedgerAchievementIds = withContext(Dispatchers.IO) {
+                            getPendingLedgerAchievementIds(rom)
+                        }
+                        _uiState.value = RomRetroAchievementsUiState.Ready(
+                            sets = sets.orEmpty(),
+                            pendingLedgerAchievementIds = pendingLedgerAchievementIds,
+                        )
                     },
                     onFailure = {
                         ensureActive()

@@ -54,6 +54,7 @@ import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.ui.common.MelonPreviewSet
 import me.magnum.melonds.ui.common.melonButtonColors
 import me.magnum.melonds.ui.romdetails.model.AchievementSetUiModel
+import me.magnum.melonds.ui.romdetails.model.OfflineAchievementsUiState
 import me.magnum.melonds.ui.romdetails.model.RomAchievementsSummary
 import me.magnum.melonds.ui.romdetails.model.RomRetroAchievementsUiState
 import me.magnum.melonds.ui.romdetails.ui.preview.mockRAAchievementPreview
@@ -71,30 +72,98 @@ fun RomRetroAchievementsUi(
     modifier: Modifier,
     contentPadding: PaddingValues,
     retroAchievementsUiState: RomRetroAchievementsUiState,
+    offlineAchievementsUiState: OfflineAchievementsUiState,
     onLogin: (username: String, password: String) -> Unit,
     onRetryLoad: () -> Unit,
     onViewAchievement: (RAAchievement) -> Unit,
+    onSyncOfflineNow: () -> Unit,
 ) {
-    when (retroAchievementsUiState) {
-        is RomRetroAchievementsUiState.LoggedOut -> LoggedOut(
-            modifier = modifier.padding(contentPadding),
-            onLogin = onLogin,
+    Column(modifier = modifier.padding(contentPadding)) {
+        OfflineAchievementsStatusUi(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            state = offlineAchievementsUiState,
+            onSyncNow = onSyncOfflineNow,
         )
-        is RomRetroAchievementsUiState.Loading -> Loading(modifier.padding(contentPadding))
-        is RomRetroAchievementsUiState.Ready -> {
-            if (retroAchievementsUiState.sets.isEmpty()) {
-                NoAchievements(modifier.padding(contentPadding))
-            } else {
-                Ready(
-                    modifier = modifier,
-                    contentPadding = contentPadding,
-                    content = retroAchievementsUiState,
-                    onViewAchievement = onViewAchievement,
-                )
+
+        Divider(Modifier.fillMaxWidth())
+
+        when (retroAchievementsUiState) {
+            is RomRetroAchievementsUiState.LoggedOut -> LoggedOut(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                onLogin = onLogin,
+            )
+            is RomRetroAchievementsUiState.Loading -> Loading(Modifier.weight(1f).fillMaxWidth())
+            is RomRetroAchievementsUiState.Ready -> {
+                if (retroAchievementsUiState.sets.isEmpty()) {
+                    NoAchievements(Modifier.weight(1f).fillMaxWidth())
+                } else {
+                    Ready(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentPadding = PaddingValues(0.dp),
+                        content = retroAchievementsUiState,
+                        onViewAchievement = onViewAchievement,
+                    )
+                }
             }
+            is RomRetroAchievementsUiState.LoginError -> LoginError(modifier = Modifier.weight(1f).fillMaxWidth(), onLogin = onLogin)
+            is RomRetroAchievementsUiState.AchievementLoadError -> LoadError(modifier = Modifier.weight(1f).fillMaxWidth(), onRetry = onRetryLoad)
         }
-        is RomRetroAchievementsUiState.LoginError -> LoginError(modifier = modifier.padding(contentPadding), onLogin = onLogin)
-        is RomRetroAchievementsUiState.AchievementLoadError -> LoadError(modifier = modifier.padding(contentPadding), onRetry = onRetryLoad)
+    }
+}
+
+@Composable
+private fun OfflineAchievementsStatusUi(
+    modifier: Modifier,
+    state: OfflineAchievementsUiState,
+    onSyncNow: () -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = stringResource(id = R.string.offline_ra_settings_title),
+            style = MaterialTheme.typography.subtitle1,
+            fontWeight = FontWeight.Bold,
+        )
+
+        val availabilityText = when (state.availability) {
+            OfflineAchievementsUiState.Availability.ENABLED -> stringResource(id = R.string.offline_ra_status_enabled)
+            OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> stringResource(id = R.string.offline_ra_status_disabled_not_logged_in)
+            OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(id = R.string.offline_ra_status_disabled_no_cache)
+        }
+        Text(text = availabilityText, style = MaterialTheme.typography.body2)
+
+        Text(
+            text = stringResource(id = R.string.offline_ra_pending_softcore_unlocks, state.pendingSoftcoreUnlockCount),
+            style = MaterialTheme.typography.body2,
+        )
+        Text(
+            text = stringResource(id = R.string.offline_ra_pending_ledger_unlocks, state.pendingLedgerUnlockCount),
+            style = MaterialTheme.typography.body2,
+        )
+
+        val integrityText = if (state.isLedgerIntegrityOk) {
+            stringResource(id = R.string.offline_ra_ledger_integrity_ok)
+        } else {
+            stringResource(id = R.string.offline_ra_ledger_integrity_tampered)
+        }
+        Text(
+            text = stringResource(id = R.string.offline_ra_ledger_integrity, integrityText),
+            style = MaterialTheme.typography.body2,
+        )
+
+        if (state.isSyncing) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colors.secondary)
+        }
+
+        Button(
+            onClick = onSyncNow,
+            enabled = state.canSyncNow,
+            colors = melonButtonColors(),
+        ) {
+            Text(text = stringResource(id = R.string.offline_ra_sync_now_button).uppercase())
+        }
     }
 }
 
@@ -236,6 +305,7 @@ private fun Ready(
                 modifier = Modifier.fillMaxWidth(),
                 achievement = userAchievement.achievement,
                 showLocked = !userAchievement.isUnlocked,
+                isInOfflineLedger = content.pendingLedgerAchievementIds.contains(userAchievement.achievement.id),
                 onViewAchievement = { onViewAchievement(userAchievement.achievement) },
             )
         }

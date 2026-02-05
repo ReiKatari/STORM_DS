@@ -28,6 +28,7 @@ import me.magnum.melonds.ui.common.MelonPreviewSet
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiModel
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiState
 import me.magnum.melonds.ui.romdetails.model.RomConfigUpdateEvent
+import me.magnum.melonds.ui.romdetails.model.OfflineAchievementsUiState
 import me.magnum.melonds.ui.romdetails.model.RomDetailsTab
 import me.magnum.melonds.ui.romdetails.model.RomRetroAchievementsUiState
 import me.magnum.melonds.ui.theme.MelonTheme
@@ -39,12 +40,14 @@ fun RomDetailsScreen(
     rom: Rom,
     romConfigUiState: RomConfigUiState,
     retroAchievementsUiState: RomRetroAchievementsUiState,
+    offlineAchievementsUiState: OfflineAchievementsUiState,
     onNavigateBack: () -> Unit,
     onLaunchRom: (Rom) -> Unit,
     onRomConfigUpdate: (RomConfigUpdateEvent) -> Unit,
     onRetroAchievementsLogin: (username: String, password: String) -> Unit,
     onRetroAchievementsRetryLoad: () -> Unit,
     onViewAchievement: (RAAchievement) -> Unit,
+    onOfflineSyncNow: () -> Unit,
 ) {
     val systemUiController = rememberSystemUiController()
     val pagerState = rememberPagerState(
@@ -121,9 +124,11 @@ fun RomDetailsScreen(
                         modifier = Modifier.fillMaxSize().focusRequester(focusRequester),
                         contentPadding = padding,
                         retroAchievementsUiState = retroAchievementsUiState,
+                        offlineAchievementsUiState = offlineAchievementsUiState,
                         onLogin = onRetroAchievementsLogin,
                         onRetryLoad = onRetroAchievementsRetryLoad,
                         onViewAchievement = onViewAchievement,
+                        onSyncOfflineNow = onOfflineSyncNow,
                     )
                 }
             }
@@ -157,12 +162,14 @@ private fun PreviewRomScreen() {
                 ),
             ),
             retroAchievementsUiState = RomRetroAchievementsUiState.LoggedOut,
+            offlineAchievementsUiState = OfflineAchievementsUiState(),
             onNavigateBack = { },
             onLaunchRom = { },
             onRomConfigUpdate = { },
             onRetroAchievementsLogin = { _, _ -> },
             onRetroAchievementsRetryLoad = { },
             onViewAchievement = { },
+            onOfflineSyncNow = { },
         )
     }
 }

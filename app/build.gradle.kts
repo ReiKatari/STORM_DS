@@ -153,6 +153,8 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.hilt)
     implementation(libs.kotlin.serialization)
+    implementation(libs.kotlin.serialization.protobuf)
+    implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.rx)
     implementation(libs.picasso)
     implementation(libs.markwon)
@@ -171,6 +173,7 @@ dependencies {
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.core)

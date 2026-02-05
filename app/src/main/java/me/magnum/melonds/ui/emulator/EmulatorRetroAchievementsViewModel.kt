@@ -13,6 +13,8 @@ import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.extensions.removeFirst
 import me.magnum.melonds.impl.emulator.EmulatorSession
+import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerIntegrity
+import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerRepository
 import me.magnum.melonds.ui.common.viewmodel.RetroAchievementsViewModel
 import me.magnum.rcheevosapi.model.RAAchievement
 import javax.inject.Inject
@@ -21,6 +23,7 @@ import javax.inject.Inject
 class EmulatorRetroAchievementsViewModel @Inject constructor(
     settingsRepository: SettingsRepository,
     private val retroAchievementsRepository: RetroAchievementsRepository,
+    private val offlineLedgerRepository: OfflineLedgerRepository,
     private val emulatorSession: EmulatorSession,
     private val emulatorManager: EmulatorManager,
 ) : RetroAchievementsViewModel(retroAchievementsRepository, settingsRepository) {
@@ -67,5 +70,15 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
         }
 
         return romSession.rom
+    }
+
+    override suspend fun getPendingLedgerAchievementIds(rom: Rom): Set<Long> {
+        val userAuth = retroAchievementsRepository.getUserAuthentication() ?: return emptySet()
+        val status = offlineLedgerRepository.getStatus(userAuth.username, rom.retroAchievementsHash)
+        if (status.integrity != OfflineLedgerIntegrity.OK) {
+            return emptySet()
+        }
+
+        return status.pendingUnlocks.map { it.achievementId }.toSet()
     }
 }

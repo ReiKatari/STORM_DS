@@ -35,6 +35,15 @@ import me.magnum.melonds.impl.layout.DefaultLayoutProvider
 import me.magnum.melonds.impl.layout.UILayoutProvider
 import me.magnum.melonds.impl.layout.devicemapper.AynThorLayoutDisplayMapper
 import me.magnum.melonds.impl.layout.devicemapper.DefaultLayoutDisplayMapper
+import me.magnum.melonds.impl.retroachievements.offline.AndroidKeystoreOfflineLedgerSigner
+import me.magnum.melonds.impl.retroachievements.offline.AndroidOfflineLedgerStorage
+import me.magnum.melonds.impl.retroachievements.offline.AndroidOfflinePrefetchCacheStorage
+import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerRepository
+import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerSigner
+import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerStorage
+import me.magnum.melonds.impl.retroachievements.offline.OfflinePrefetchCacheRepository
+import me.magnum.melonds.impl.retroachievements.offline.OfflinePrefetchCacheStorage
+import me.magnum.melonds.impl.retroachievements.offline.SmartSyncEngine
 import me.magnum.melonds.impl.romprocessors.Api24RomFileProcessorFactory
 import me.magnum.melonds.ui.romdetails.RomDetailsUiMapper
 import me.magnum.rcheevosapi.RAApi
@@ -114,6 +123,50 @@ object MelonModule {
         @ApplicationContext context: Context,
     ): RetroAchievementsRepository {
         return AndroidRetroAchievementsRepository(raApi, retroAchievementsDao, raUserAuthStore, sharedPreferences, context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflineLedgerSigner(): OfflineLedgerSigner {
+        return AndroidKeystoreOfflineLedgerSigner()
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflineLedgerStorage(storage: AndroidOfflineLedgerStorage): OfflineLedgerStorage {
+        return storage
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflinePrefetchCacheStorage(storage: AndroidOfflinePrefetchCacheStorage): OfflinePrefetchCacheStorage {
+        return storage
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflinePrefetchCacheRepository(storage: OfflinePrefetchCacheStorage): OfflinePrefetchCacheRepository {
+        return OfflinePrefetchCacheRepository(storage)
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflineLedgerRepository(storage: OfflineLedgerStorage, signer: OfflineLedgerSigner): OfflineLedgerRepository {
+        return OfflineLedgerRepository(storage = storage, signer = signer)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSmartSyncEngine(
+        raApi: RAApi,
+        ledgerRepository: OfflineLedgerRepository,
+        prefetchCacheRepository: OfflinePrefetchCacheRepository,
+    ): SmartSyncEngine {
+        return SmartSyncEngine(
+            raApi = raApi,
+            ledgerRepository = ledgerRepository,
+            prefetchCacheRepository = prefetchCacheRepository,
+        )
     }
 
     @Provides

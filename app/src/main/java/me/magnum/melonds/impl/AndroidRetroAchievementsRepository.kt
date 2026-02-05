@@ -281,8 +281,8 @@ class AndroidRetroAchievementsRepository(
                     // Load DB data because we know that it was previously loaded
                     retroAchievementsDao.getGameWithSets(gameId.id)?.mapToModel()
                 } else {
-                    // The achievement data has never been downloaded for this game. Rethrow exception
-                    throw exception
+                    // Try to load whatever is cached locally anyway (may be present even if metadata was lost).
+                    retroAchievementsDao.getGameWithSets(gameId.id)?.mapToModel() ?: throw exception
                 }
             }
         } else {
@@ -314,8 +314,10 @@ class AndroidRetroAchievementsRepository(
                         it.achievementId
                     }
                 } else {
-                    // The user's achievement data has never been downloaded for this game. Rethrow exception
-                    throw exception
+                    // Try to load whatever is cached locally anyway (may be present even if metadata was lost).
+                    retroAchievementsDao.getGameUserUnlockedAchievements(gameId.id, forHardcoreMode).map {
+                        it.achievementId
+                    }
                 }
             }
         } else {
