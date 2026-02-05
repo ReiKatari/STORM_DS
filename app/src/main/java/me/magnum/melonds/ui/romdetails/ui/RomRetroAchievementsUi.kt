@@ -94,7 +94,7 @@ fun RomRetroAchievementsUi(
             )
             is RomRetroAchievementsUiState.Loading -> Loading(Modifier.weight(1f).fillMaxWidth())
             is RomRetroAchievementsUiState.Ready -> {
-                if (retroAchievementsUiState.sets.isEmpty()) {
+                if (!retroAchievementsUiState.hasAchievements()) {
                     NoAchievements(Modifier.weight(1f).fillMaxWidth())
                 } else {
                     Ready(
