@@ -9,7 +9,7 @@ sealed class RomRetroAchievementsUiState {
     ) : RomRetroAchievementsUiState() {
 
         fun hasAchievements(): Boolean {
-            return sets.any { it.achievements.isNotEmpty() }
+            return sets.any { it.buckets.isNotEmpty() }
         }
     }
     object LoginError : RomRetroAchievementsUiState()
