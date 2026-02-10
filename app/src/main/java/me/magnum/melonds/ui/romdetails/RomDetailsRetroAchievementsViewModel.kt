@@ -3,13 +3,14 @@ package me.magnum.melonds.ui.romdetails
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.CancellationException
+import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -20,7 +21,9 @@ import me.magnum.melonds.impl.retroachievements.offline.SmartSyncSkipReason
 import me.magnum.melonds.impl.retroachievements.offline.SmartSyncEngine
 import me.magnum.melonds.impl.system.NetworkStatusProvider
 import me.magnum.melonds.parcelables.RomParcelable
-import me.magnum.melonds.ui.common.viewmodel.RetroAchievementsViewModel
+import me.magnum.melonds.ui.common.achievements.ui.model.AchievementUiModel
+import me.magnum.melonds.ui.common.achievements.viewmodel.RetroAchievementsViewModel
+import me.magnum.melonds.ui.romdetails.model.AchievementBucketUiModel
 import me.magnum.melonds.ui.romdetails.model.OfflineAchievementsUiState
 import me.magnum.melonds.ui.romdetails.model.RomDetailsToastEvent
 import me.magnum.melonds.utils.EventSharedFlow
@@ -174,5 +177,24 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
         return status.pendingUnlocks
             .map { it.achievementId }
             .toSet()
+    }
+
+    override suspend fun buildAchievementBuckets(achievements: List<RAUserAchievement>): List<AchievementBucketUiModel> {
+        return achievements.groupingBy {
+            if (it.isUnlocked) {
+                AchievementBucketUiModel.Bucket.Unlocked
+            } else {
+                AchievementBucketUiModel.Bucket.Locked
+            }
+        }.aggregate { _, accumulator: MutableList<AchievementUiModel>?, element, _ ->
+            val achievementUiModel = AchievementUiModel.UserAchievementUiModel(element)
+            accumulator?.apply {
+                add(achievementUiModel)
+            } ?: mutableListOf(achievementUiModel)
+        }.map {
+            AchievementBucketUiModel(it.key, it.value)
+        }.sortedBy {
+            if (it.bucket == AchievementBucketUiModel.Bucket.Unlocked) 0 else 1
+        }
     }
 }
