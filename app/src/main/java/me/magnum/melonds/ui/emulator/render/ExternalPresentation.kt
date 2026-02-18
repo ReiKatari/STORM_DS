@@ -48,6 +48,7 @@ class ExternalPresentation(
         }
 
         container.addOnLayoutChangeListener(layoutChangeListener)
+        layoutView.addOnLayoutChangeListener(layoutChangeListener)
         emulatorRenderer = DSRenderer(context).also {
             surfaceView = createSurfaceView(it)
         }
@@ -124,6 +125,13 @@ class ExternalPresentation(
     fun updateRendererConfiguration(newRendererConfiguration: RuntimeRendererConfiguration?) {
         currentRendererConfiguration = newRendererConfiguration
         surfaceView.updateRendererConfiguration(newRendererConfiguration)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        layoutView.post {
+            updateRendererScreenAreas()
+        }
     }
 
     override fun onStop() {
