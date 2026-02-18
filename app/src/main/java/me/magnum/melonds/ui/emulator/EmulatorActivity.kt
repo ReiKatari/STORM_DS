@@ -389,6 +389,11 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
                         dualScreenPreset = preset,
                         onDualScreenPresetSelected = { selectedPreset ->
                             viewModel.setDualScreenPreset(selectedPreset)
+                            handler.post {
+                                applyDualScreenPresetSwapState(selectedPreset)
+                                updateRendererScreenAreas()
+                                presentation?.updateRendererScreenAreas()
+                            }
                         },
                         keepAspectRatio = keepAspectRatio,
                         onKeepAspectRatioChanged = { enabled ->
@@ -924,8 +929,7 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
         }
     }
 
-    private fun applyDualScreenPresetSwapState() {
-        val preset = viewModel.dualScreenPreset.value
+    private fun applyDualScreenPresetSwapState(preset: DualScreenPreset = viewModel.dualScreenPreset.value) {
         if (preset == DualScreenPreset.OFF) {
             return
         }
