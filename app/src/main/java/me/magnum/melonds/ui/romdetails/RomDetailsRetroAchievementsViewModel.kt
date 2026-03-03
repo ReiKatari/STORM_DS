@@ -194,6 +194,7 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
         }.map {
             AchievementBucketUiModel(it.key, it.value)
         }.sortedBy {
+            // Display unlocked achievements first
             if (it.bucket == AchievementBucketUiModel.Bucket.Unlocked) 0 else 1
         }
     }

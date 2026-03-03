@@ -2119,7 +2119,7 @@ class EmulatorViewModel @Inject constructor(
         sessionCoroutineScope.launch {
             while (isActive) {
                 delay(1.seconds)
-                _currentFps.value = emulatorManager.getFps()
+                _currentFps.value = emulatorManager.getFps().roundToInt()
             }
         }
     }

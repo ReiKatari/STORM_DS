@@ -159,7 +159,6 @@ fun RomAchievementUi(
                         fontWeight = FontWeight.Bold,
                     )
                 }
-
                 if (achievementModel is AchievementUiModel.RuntimeAchievementUiModel && achievementModel.hasProgress()) {
                     Spacer(Modifier.height(4.dp))
 

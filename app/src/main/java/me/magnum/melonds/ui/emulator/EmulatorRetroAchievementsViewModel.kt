@@ -85,14 +85,15 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
                 add(achievementUiModel)
             } ?: mutableListOf(achievementUiModel)
         }.map {
-            val achievementsByBucket = if (it.key == AchievementBucketUiModel.Bucket.RecentlyUnlocked) {
+            val achievements = if (it.key == AchievementBucketUiModel.Bucket.RecentlyUnlocked) {
+                // Sort recently unlocked achievements
                 it.value.sortedByDescending { achievement ->
-                    recentlyUnlockedAchievements.firstOrNull { timedAchievement -> timedAchievement.achievementId == achievement.actualAchievement().id }?.unlockedAt
+                    recentlyUnlockedAchievements.firstOrNull { it.achievementId == achievement.actualAchievement().id }?.unlockedAt
                 }
             } else {
                 it.value
             }
-            AchievementBucketUiModel(it.key, achievementsByBucket)
+            AchievementBucketUiModel(it.key, achievements)
         }.sortedBy {
             it.bucket.displayOrder
         }
