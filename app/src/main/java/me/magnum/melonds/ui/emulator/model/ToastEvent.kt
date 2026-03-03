@@ -48,4 +48,6 @@ sealed class ToastEvent {
     data class OfflineAchievementsNotSyncedSummary(
         val skippedCount: Int,
     ) : ToastEvent()
+    data object GbaModeNotSupported : ToastEvent()
+    data object InternalError : ToastEvent()
 }
