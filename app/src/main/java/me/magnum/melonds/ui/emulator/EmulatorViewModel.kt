@@ -55,6 +55,7 @@ import me.magnum.melonds.domain.model.SCREEN_WIDTH
 import me.magnum.melonds.domain.model.ScreenAlignment
 import me.magnum.melonds.domain.model.defaultExternalAlignment
 import me.magnum.melonds.domain.model.defaultInternalAlignment
+import me.magnum.melonds.domain.model.emulator.EmulatorEvent
 import me.magnum.melonds.domain.model.emulator.EmulatorSessionUpdateAction
 import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
@@ -98,6 +99,7 @@ import me.magnum.melonds.impl.retroachievements.offline.SmartSyncEngine
 import me.magnum.melonds.impl.layout.UILayoutProvider
 import me.magnum.melonds.impl.system.NetworkStatusProvider
 import me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption
+import me.magnum.melonds.ui.emulator.model.RumbleEvent
 import me.magnum.melonds.ui.emulator.model.EmulatorState
 import me.magnum.melonds.ui.emulator.model.EmulatorUiEvent
 import me.magnum.melonds.ui.emulator.model.HardcorePendingExitChoice
@@ -224,9 +226,10 @@ class EmulatorViewModel @Inject constructor(
     private val _secondaryScreenBackground = MutableStateFlow(RuntimeBackground.None)
     val secondaryScreenBackground = _secondaryScreenBackground.asStateFlow()
 
-    val emulatorEvents = emulatorManager.emulatorEvents
+    private val _rumbleEvent = MutableSharedFlow<RumbleEvent>(extraBufferCapacity = 100, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val rumbleEvent = _rumbleEvent.asSharedFlow()
 
-    private val _achievementsEvent = MutableSharedFlow<RAEventUi>(extraBufferCapacity = 5, onBufferOverflow = BufferOverflow.SUSPEND)
+    private val _achievementsEvent = MutableSharedFlow<RAEventUi>(extraBufferCapacity = 100, onBufferOverflow = BufferOverflow.SUSPEND)
     val achievementsEvent = _achievementsEvent.asSharedFlow()
 
     private val _currentFps = MutableStateFlow<Int?>(null)
@@ -276,7 +279,6 @@ class EmulatorViewModel @Inject constructor(
     val dualScreenExternalVerticalAlignmentOverride = _dualScreenExternalVerticalAlignmentOverride.asStateFlow()
 
     private var currentRom: Rom? = null
-
     init {
         viewModelScope.launch {
             _layout.filterNotNull().collect {
@@ -442,6 +444,7 @@ class EmulatorViewModel @Inject constructor(
         startObservingSecondaryScreenBackground()
         startObservingRuntimeInputLayoutConfiguration()
         startObservingRendererConfiguration()
+        startObservingEmulatorEvents()
         startObservingAchievementEvents()
         startObservingLayoutForRom(rom)
         startRetroAchievementsSession(rom, launchDecision)
@@ -657,6 +660,7 @@ class EmulatorViewModel @Inject constructor(
                 startObservingRuntimeInputLayoutConfiguration()
                 startObservingRendererConfiguration()
                 startObservingLayoutForFirmware()
+                startObservingEmulatorEvents()
 
                 val result = emulatorManager.loadFirmware(consoleType)
                 when (result) {
@@ -920,6 +924,11 @@ class EmulatorViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun stopEmulatorAndExit() {
+        stopEmulator()
+        _uiEvent.tryEmit(EmulatorUiEvent.CloseEmulator)
     }
 
     private fun startTrackingPlayTime(rom: Rom) {
@@ -1404,6 +1413,25 @@ class EmulatorViewModel @Inject constructor(
         isHardcoreEligibleAfterOnlineStart = false
         startedSessionOnlineLive = false
         isRetroAchievementsOnlineSessionStarted = false
+    }
+
+    private fun startObservingEmulatorEvents() {
+        sessionCoroutineScope.launch {
+            emulatorManager.emulatorEvents.collect {
+                when (it) {
+                    is EmulatorEvent.RumbleStart -> _rumbleEvent.tryEmit(RumbleEvent.RumbleStart(it.duration))
+                    EmulatorEvent.RumbleStop -> _rumbleEvent.tryEmit(RumbleEvent.RumbleStop)
+                    is EmulatorEvent.Stop -> {
+                        when (it.reason) {
+                            EmulatorEvent.Stop.Reason.GBAModeNotSupported -> _toastEvent.tryEmit(ToastEvent.GbaModeNotSupported)
+                            EmulatorEvent.Stop.Reason.BadExceptionRegion -> _toastEvent.tryEmit(ToastEvent.InternalError)
+                            EmulatorEvent.Stop.Reason.PowerOff -> { /* no-op */ }
+                        }
+                        stopEmulatorAndExit()
+                    }
+                }
+            }
+        }
     }
 
     private fun startObservingAchievementEvents() {
