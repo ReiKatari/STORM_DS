@@ -7,7 +7,7 @@ import okhttp3.Response
 class MelonOkHttpInterceptor(private val context: Context) : Interceptor {
     private companion object {
         const val USER_AGENT = "User-Agent"
-        const val MELON_USER_AGENT_PREFIX = "melonDS-android"
+        const val MELON_USER_AGENT_PREFIX = "MelonDualDS-android"
     }
 
     private val userAgentVersion by lazy {
