@@ -3,7 +3,6 @@ package me.magnum.melonds.ui.emulator
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.opengl.GLES30
-import android.opengl.GLES31
 import android.opengl.GLUtils
 import me.magnum.melonds.common.opengl.Shader
 import me.magnum.melonds.common.opengl.ShaderFactory
@@ -74,6 +73,8 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     private var historyReadFramebuffer = 0
     private var historyDrawFramebuffer = 0
     private var historyReady = false
+    private var lastScreenTextureId = 0
+    private var lastScreenTextureFiltering = Int.MIN_VALUE
 
     private var backgroundVbo = 0
     private var backgroundVao = 0
@@ -308,6 +309,7 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         val shaderSource = VideoFilterShaderProvider.getShaderSource(filtering, customShaderSource)
         screenShader = ShaderFactory.createShaderProgram(shaderSource)
         historyReady = false
+        lastScreenTextureFiltering = Int.MIN_VALUE
     }
 
     override fun onSurfaceChanged(width: Int, height: Int) {
@@ -345,7 +347,13 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
             val requiresHistory = shader.uniformPrevTex >= 0 || shader.uniformPrevWeight >= 0
             val requiresTexSize = shader.uniformTexSize >= 0
             val textureInfo = if ((requiresHistory || requiresTexSize) && textureId != 0) {
-                getTextureDimensions(textureId)
+                val textureWidth = presentFrameWrapper.textureWidth
+                val textureHeight = presentFrameWrapper.textureHeight
+                if (textureWidth > 0 && textureHeight > 0) {
+                    TextureSize(textureWidth, textureHeight)
+                } else {
+                    null
+                }
             } else {
                 null
             }
@@ -378,8 +386,12 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
 
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+            if (lastScreenTextureId != textureId || lastScreenTextureFiltering != shader.textureFiltering) {
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+                lastScreenTextureId = textureId
+                lastScreenTextureFiltering = shader.textureFiltering
+            }
 
             if (shader.attribPos >= 0) {
                 GLES30.glVertexAttribPointer(shader.attribPos, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 0)
@@ -425,6 +437,8 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
 
             if (requiresHistory && textureInfo != null) {
                 copyFrameToHistory(textureId, textureInfo)
+            } else if (requiresHistory) {
+                historyReady = false
             }
         }
     }
@@ -513,28 +527,6 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, 0)
 
         historyReady = true
-    }
-
-    private fun getTextureDimensions(textureId: Int): TextureSize? {
-        if (textureId == 0) {
-            return null
-        }
-
-        val previousBinding = IntArray(1)
-        GLES30.glGetIntegerv(GLES30.GL_TEXTURE_BINDING_2D, previousBinding, 0)
-
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-        val width = IntArray(1)
-        val height = IntArray(1)
-        GLES31.glGetTexLevelParameteriv(GLES30.GL_TEXTURE_2D, 0, GLES31.GL_TEXTURE_WIDTH, width, 0)
-        GLES31.glGetTexLevelParameteriv(GLES30.GL_TEXTURE_2D, 0, GLES31.GL_TEXTURE_HEIGHT, height, 0)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, previousBinding[0])
-
-        if (width[0] <= 0 || height[0] <= 0) {
-            return null
-        }
-
-        return TextureSize(width[0], height[0])
     }
 
     private fun renderBackground() {

@@ -23,6 +23,7 @@ import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.ui.common.MelonPreviewSet
+import me.magnum.melonds.ui.common.achievements.ui.AchievementFiltersRow
+import me.magnum.melonds.ui.common.achievements.ui.AchievementStateFilter
+import me.magnum.melonds.ui.common.achievements.ui.AchievementTypeFilter
 import me.magnum.melonds.ui.common.achievements.ui.model.AchievementUiModel
 import me.magnum.melonds.ui.common.melonButtonColors
 import me.magnum.melonds.ui.romdetails.model.AchievementBucketUiModel
@@ -67,6 +71,8 @@ import java.net.URL
 
 private const val SETS_TABS_ITEM_TYPE = "sets"
 private const val HEADER_ITEM_TYPE = "header"
+private const val FILTERS_ITEM_TYPE = "filters"
+private const val BUCKET_HEADER_ITEM_TYPE = "bucket_header"
 private const val ACHIEVEMENT_ITEM_TYPE = "achievement"
 
 @Composable
@@ -248,8 +254,44 @@ private fun Ready(
     var selectedSetId by rememberSaveable {
         mutableLongStateOf(content.sets.first().setId)
     }
+    var selectedTypeFilter by rememberSaveable {
+        mutableStateOf(AchievementTypeFilter.All)
+    }
+    var selectedStateFilter by rememberSaveable {
+        mutableStateOf(AchievementStateFilter.All)
+    }
     val selectedSet = remember(selectedSetId) {
         content.sets.first { it.setId == selectedSetId }
+    }
+    val availableStateFilters = remember(selectedSet) {
+        buildList {
+            add(AchievementStateFilter.All)
+            addAll(
+                selectedSet.buckets
+                    .map { AchievementStateFilter.fromBucket(it.bucket) }
+                    .distinct()
+                    .sortedBy { it.displayOrder },
+            )
+        }
+    }
+    LaunchedEffect(availableStateFilters) {
+        if (selectedStateFilter !in availableStateFilters) {
+            selectedStateFilter = AchievementStateFilter.All
+        }
+    }
+    val filteredBuckets = remember(selectedSet, selectedTypeFilter, selectedStateFilter) {
+        selectedSet.buckets
+            .asSequence()
+            .filter { selectedStateFilter.matches(it.bucket) }
+            .map { bucket ->
+                bucket.copy(
+                    achievements = bucket.achievements.filter {
+                        selectedTypeFilter.matches(it.actualAchievement().type)
+                    },
+                )
+            }
+            .filter { it.achievements.isNotEmpty() }
+            .toList()
     }
 
     val layoutDirection = LocalLayoutDirection.current
@@ -299,17 +341,67 @@ private fun Ready(
             Divider(Modifier.fillMaxWidth())
         }
 
-        items(
-            items = selectedSet.buckets.flatMap { it.achievements },
-            contentType = { ACHIEVEMENT_ITEM_TYPE },
-        ) { userAchievement ->
-            RomAchievementUi(
-                modifier = Modifier.fillMaxWidth(),
-                achievementModel = userAchievement,
-                isInOfflineLedger = content.pendingLedgerAchievementIds.contains(userAchievement.actualAchievement().id),
-                onViewAchievement = { onViewAchievement(userAchievement.actualAchievement()) },
+        item(contentType = FILTERS_ITEM_TYPE) {
+            AchievementFiltersRow(
+                typeFilter = selectedTypeFilter,
+                onTypeFilterChanged = { selectedTypeFilter = it },
+                stateFilter = selectedStateFilter,
+                availableStateFilters = availableStateFilters,
+                onStateFilterChanged = { selectedStateFilter = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             )
         }
+
+        if (filteredBuckets.isEmpty()) {
+            item(contentType = ACHIEVEMENT_ITEM_TYPE) {
+                Text(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
+                    text = stringResource(id = R.string.retro_achievements_filter_no_results),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.body2,
+                )
+            }
+        }
+
+        filteredBuckets.forEachIndexed { index, bucket ->
+            item(contentType = BUCKET_HEADER_ITEM_TYPE) {
+                Text(
+                    modifier = Modifier.padding(start = 16.dp, top = if (index == 0) 0.dp else 16.dp, end = 16.dp, bottom = 4.dp).fillMaxWidth(),
+                    text = getBucketTitle(bucket.bucket),
+                    style = MaterialTheme.typography.h6,
+                )
+                Divider(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    color = MaterialTheme.colors.onSurface,
+                )
+            }
+
+            items(
+                items = bucket.achievements,
+                contentType = { ACHIEVEMENT_ITEM_TYPE },
+            ) { userAchievement ->
+                RomAchievementUi(
+                    modifier = Modifier.fillMaxWidth(),
+                    achievementModel = userAchievement,
+                    isInOfflineLedger = content.pendingLedgerAchievementIds.contains(userAchievement.actualAchievement().id),
+                    onViewAchievement = { onViewAchievement(userAchievement.actualAchievement()) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun getBucketTitle(bucket: AchievementBucketUiModel.Bucket): String {
+    return when (bucket) {
+        AchievementBucketUiModel.Bucket.ActiveChallenges -> stringResource(R.string.retro_achievements_active_challenges)
+        AchievementBucketUiModel.Bucket.RecentlyUnlocked -> stringResource(R.string.retro_achievements_recently_unlokced)
+        AchievementBucketUiModel.Bucket.Unsynced -> stringResource(R.string.retro_achievements_unsynced)
+        AchievementBucketUiModel.Bucket.AlmostThere -> stringResource(R.string.retro_achievements_almost_there)
+        AchievementBucketUiModel.Bucket.Locked -> stringResource(R.string.retro_achievements_locked)
+        AchievementBucketUiModel.Bucket.Unsupported -> stringResource(R.string.retro_achievements_unsupported)
+        AchievementBucketUiModel.Bucket.Unofficial -> stringResource(R.string.retro_achievements_unofficial)
+        AchievementBucketUiModel.Bucket.Unlocked -> stringResource(R.string.retro_achievements_unlocked)
     }
 }
 

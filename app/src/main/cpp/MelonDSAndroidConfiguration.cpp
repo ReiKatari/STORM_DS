@@ -1,6 +1,40 @@
 #include <jni.h>
+#include <cstdlib>
+#include <cstring>
 #include "MelonDSAndroidConfiguration.h"
 #include "renderer/Renderer.h"
+
+namespace {
+
+char* duplicateCString(const char* value)
+{
+    if (value == nullptr)
+        return nullptr;
+
+    const size_t length = std::strlen(value);
+    char* copy = static_cast<char*>(std::malloc(length + 1));
+    if (copy == nullptr)
+        return nullptr;
+
+    std::memcpy(copy, value, length + 1);
+    return copy;
+}
+
+char* duplicateJavaString(JNIEnv* env, jstring javaString)
+{
+    if (javaString == nullptr)
+        return nullptr;
+
+    const char* value = env->GetStringUTFChars(javaString, nullptr);
+    if (value == nullptr)
+        return nullptr;
+
+    char* copy = duplicateCString(value);
+    env->ReleaseStringUTFChars(javaString, value);
+    return copy;
+}
+
+}
 
 MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulatorConfiguration(JNIEnv* env, jobject emulatorConfiguration) {
     jclass emulatorConfigurationClass = env->GetObjectClass(emulatorConfiguration);
@@ -46,7 +80,6 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jint micSource = env->GetIntField(micSourceEnum, env->GetFieldID(micSourceEnumClass, "sourceValue", "I"));
     jobject videoRendererEnum = env->GetObjectField(rendererConfigurationObject, env->GetFieldID(renderConfigurationClass, "renderer", "Lme/magnum/melonds/domain/model/VideoRenderer;"));
     MelonDSAndroid::Renderer videoRenderer = static_cast<MelonDSAndroid::Renderer>(env->GetIntField(videoRendererEnum, env->GetFieldID(videoRendererEnumClass, "renderer", "I")));
-    jboolean isCopy = JNI_FALSE;
     jstring dsBios7String = dsBios7Uri ? (jstring) env->CallObjectMethod(dsBios7Uri, uriToStringMethod) : nullptr;
     jstring dsBios9String = dsBios9Uri ? (jstring) env->CallObjectMethod(dsBios9Uri, uriToStringMethod) : nullptr;
     jstring dsFirmwareString = dsFirmwareUri ? (jstring) env->CallObjectMethod(dsFirmwareUri, uriToStringMethod) : nullptr;
@@ -54,25 +87,25 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jstring dsiBios9String = dsiBios9Uri ? (jstring) env->CallObjectMethod(dsiBios9Uri, uriToStringMethod) : nullptr;
     jstring dsiFirmwareString = dsiFirmwareUri ? (jstring) env->CallObjectMethod(dsiFirmwareUri, uriToStringMethod) : nullptr;
     jstring dsiNandString = dsiNandUri ? (jstring) env->CallObjectMethod(dsiNandUri, uriToStringMethod) : nullptr;
-    const char* dsBios7Path = dsBios7Uri ? env->GetStringUTFChars(dsBios7String, &isCopy) : nullptr;
-    const char* dsBios9Path = dsBios9Uri ? env->GetStringUTFChars(dsBios9String, &isCopy) : nullptr;
-    const char* dsFirmwarePath = dsFirmwareUri ? env->GetStringUTFChars(dsFirmwareString, &isCopy) : nullptr;
-    const char* dsiBios7Path = dsiBios7Uri ? env->GetStringUTFChars(dsiBios7String, &isCopy) : nullptr;
-    const char* dsiBios9Path = dsiBios9Uri ? env->GetStringUTFChars(dsiBios9String, &isCopy) : nullptr;
-    const char* dsiFirmwarePath = dsiFirmwareUri ? env->GetStringUTFChars(dsiFirmwareString, &isCopy) : nullptr;
-    const char* dsiNandPath = dsiNandUri ? env->GetStringUTFChars(dsiNandString, &isCopy) : nullptr;
-    const char* internalDir = env->GetStringUTFChars(internalFilesDir, nullptr);
+    char* dsBios7Path = duplicateJavaString(env, dsBios7String);
+    char* dsBios9Path = duplicateJavaString(env, dsBios9String);
+    char* dsFirmwarePath = duplicateJavaString(env, dsFirmwareString);
+    char* dsiBios7Path = duplicateJavaString(env, dsiBios7String);
+    char* dsiBios9Path = duplicateJavaString(env, dsiBios9String);
+    char* dsiFirmwarePath = duplicateJavaString(env, dsiFirmwareString);
+    char* dsiNandPath = duplicateJavaString(env, dsiNandString);
+    char* internalDir = duplicateJavaString(env, internalFilesDir);
 
     MelonDSAndroid::EmulatorConfiguration finalEmulatorConfiguration;
     finalEmulatorConfiguration.userInternalFirmwareAndBios = !useCustomBios;
-    finalEmulatorConfiguration.dsBios7Path = const_cast<char*>(dsBios7Path);
-    finalEmulatorConfiguration.dsBios9Path = const_cast<char*>(dsBios9Path);
-    finalEmulatorConfiguration.dsFirmwarePath = const_cast<char*>(dsFirmwarePath);
-    finalEmulatorConfiguration.dsiBios7Path = const_cast<char*>(dsiBios7Path);
-    finalEmulatorConfiguration.dsiBios9Path = const_cast<char*>(dsiBios9Path);
-    finalEmulatorConfiguration.dsiFirmwarePath = const_cast<char*>(dsiFirmwarePath);
-    finalEmulatorConfiguration.dsiNandPath = const_cast<char*>(dsiNandPath);
-    finalEmulatorConfiguration.internalFilesDir = const_cast<char*>(internalDir);
+    finalEmulatorConfiguration.dsBios7Path = dsBios7Path;
+    finalEmulatorConfiguration.dsBios9Path = dsBios9Path;
+    finalEmulatorConfiguration.dsFirmwarePath = dsFirmwarePath;
+    finalEmulatorConfiguration.dsiBios7Path = dsiBios7Path;
+    finalEmulatorConfiguration.dsiBios9Path = dsiBios9Path;
+    finalEmulatorConfiguration.dsiFirmwarePath = dsiFirmwarePath;
+    finalEmulatorConfiguration.dsiNandPath = dsiNandPath;
+    finalEmulatorConfiguration.internalFilesDir = internalDir;
     finalEmulatorConfiguration.fastForwardSpeedMultiplier = fastForwardMaxSpeed;
     finalEmulatorConfiguration.showBootScreen = showBootScreen;
     finalEmulatorConfiguration.useJit = useJit;
@@ -105,14 +138,16 @@ MelonDSAndroid::FirmwareConfiguration MelonDSAndroidConfiguration::buildFirmware
     bool randomizeMacAddress = env->GetBooleanField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "randomizeMacAddress", "Z"));
     jstring macAddressString = (jstring) env->GetObjectField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "internalMacAddress", "Ljava/lang/String;"));
 
-    jboolean isCopy = JNI_FALSE;
-    const char* nickname = env->GetStringUTFChars(nicknameString, &isCopy);
-    const char* message = env->GetStringUTFChars(messageString, &isCopy);
-    const char* macAddress = macAddressString ? env->GetStringUTFChars(macAddressString, &isCopy) : nullptr;
+    const char* nickname = nicknameString ? env->GetStringUTFChars(nicknameString, nullptr) : nullptr;
+    const char* message = messageString ? env->GetStringUTFChars(messageString, nullptr) : nullptr;
+    const char* macAddress = macAddressString ? env->GetStringUTFChars(macAddressString, nullptr) : nullptr;
+
+    const char* safeNickname = nickname ? nickname : "";
+    const char* safeMessage = message ? message : "";
 
     MelonDSAndroid::FirmwareConfiguration finalFirmwareConfiguration;
-    strncpy(finalFirmwareConfiguration.username, nickname, sizeof(finalFirmwareConfiguration.username) - 1);
-    strncpy(finalFirmwareConfiguration.message, message, sizeof(finalFirmwareConfiguration.message) - 1);
+    strncpy(finalFirmwareConfiguration.username, safeNickname, sizeof(finalFirmwareConfiguration.username) - 1);
+    strncpy(finalFirmwareConfiguration.message, safeMessage, sizeof(finalFirmwareConfiguration.message) - 1);
     finalFirmwareConfiguration.username[sizeof(finalFirmwareConfiguration.username) - 1] = '\0';
     finalFirmwareConfiguration.message[sizeof(finalFirmwareConfiguration.message) - 1] = '\0';
     finalFirmwareConfiguration.language = language;
@@ -130,11 +165,9 @@ MelonDSAndroid::FirmwareConfiguration MelonDSAndroidConfiguration::buildFirmware
         finalFirmwareConfiguration.macAddress[0] = '\0';
     }
 
-    if (isCopy) {
-        env->ReleaseStringUTFChars(nicknameString, nickname);
-        env->ReleaseStringUTFChars(messageString, message);
-        if (macAddress) env->ReleaseStringUTFChars(macAddressString, macAddress);
-    }
+    if (nicknameString && nickname) env->ReleaseStringUTFChars(nicknameString, nickname);
+    if (messageString && message) env->ReleaseStringUTFChars(messageString, message);
+    if (macAddress) env->ReleaseStringUTFChars(macAddressString, macAddress);
 
     return finalFirmwareConfiguration;
 }

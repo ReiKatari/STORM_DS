@@ -7,7 +7,6 @@ import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.exception.UnsuccessfulRequestException
 import me.magnum.rcheevosapi.exception.UserNotAuthenticatedException
 import me.magnum.rcheevosapi.model.RAGameId
-import me.magnum.rcheevosapi.model.RAAchievement
 import java.io.IOException
 import kotlin.math.min
 import kotlin.time.Duration.Companion.seconds
@@ -88,7 +87,6 @@ class SmartSyncEngine(
         val currentDefinitionById = currentGame.sets
             .asSequence()
             .flatMap { it.achievements.asSequence() }
-            .filter { it.type == RAAchievement.Type.CORE }
             .associate { it.id to it.memoryAddress }
 
         val startSessionResult = raApi.startSession(RAGameId(cache.gameId))

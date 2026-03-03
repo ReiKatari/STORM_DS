@@ -1,5 +1,7 @@
 #include "AndroidMelonEventMessenger.h"
 #include "EmulatorMessageQueueJNI.h"
+#include <algorithm>
+#include <cstring>
 
 void AndroidMelonEventMessenger::onRumbleStart(int durationMs)
 {
@@ -47,9 +49,10 @@ void AndroidMelonEventMessenger::onAchievementProgressUpdated(long achievementId
         .achievementId = (int64_t) achievementId,
         .current = (int32_t) current,
         .target = (int32_t) target,
-        .progressSize = (int32_t) progress.size(),
+        .progressSize = (int32_t) std::min(progress.size(), sizeof(data.progress)),
     };
-    strncpy(data.progress, progress.c_str(), sizeof(data.progress));
+    std::memset(data.progress, 0, sizeof(data.progress));
+    std::memcpy(data.progress, progress.c_str(), (size_t) data.progressSize);
 
     MelonDSAndroid::fireEmulatorEvent(EVENT_RA_ACHIEVEMENT_PROGRESS_UPDATED, sizeof(data), &data);
 }
@@ -68,9 +71,10 @@ void AndroidMelonEventMessenger::onLeaderboardAttemptUpdated(long leaderboardId,
         char formattedValue[32];
     } data = {
         .leaderboardId = (int64_t) leaderboardId,
-        .formattedValueSize = (int32_t) formattedValue.size(),
+        .formattedValueSize = (int32_t) std::min(formattedValue.size(), sizeof(data.formattedValue)),
     };
-    strncpy(data.formattedValue, formattedValue.c_str(), sizeof(data.formattedValue));
+    std::memset(data.formattedValue, 0, sizeof(data.formattedValue));
+    std::memcpy(data.formattedValue, formattedValue.c_str(), (size_t) data.formattedValueSize);
 
     MelonDSAndroid::fireEmulatorEvent(EVENT_RA_LBOARD_ATTEMPT_UPDATED, sizeof(data), &data);
 }

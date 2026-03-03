@@ -207,6 +207,9 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
         }
 
         override fun onFastForwardPressed() {
+            if (!viewModel.onFastForwardToggleRequested()) {
+                return
+            }
             fastForwardEnabled = !fastForwardEnabled
             binding.viewLayoutControls.setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, fastForwardEnabled)
             presentation?.layoutView?.setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, fastForwardEnabled)
@@ -510,10 +513,12 @@ class EmulatorActivity : AppCompatActivity(), Choreographer.FrameCallback {
                         ToastEvent.QuickLoadSuccessful -> getString(R.string.loaded) to Toast.LENGTH_SHORT
                         ToastEvent.RewindNotEnabled -> getString(R.string.rewind_not_enabled) to Toast.LENGTH_SHORT
                         ToastEvent.RewindNotAvailableWhileRAHardcoreModeEnabled -> getString(R.string.rewind_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
+                        ToastEvent.FastForwardNotAvailableWhileRAHardcoreModeEnabled -> getString(R.string.fast_forward_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
                         ToastEvent.StateLoadFailed -> getString(R.string.failed_load_state) to Toast.LENGTH_SHORT
                         ToastEvent.StateSaveFailed -> getString(R.string.failed_save_state) to Toast.LENGTH_SHORT
                         ToastEvent.StateStateDoesNotExist -> getString(R.string.cant_load_empty_slot) to Toast.LENGTH_SHORT
                         ToastEvent.CannotUseSaveStatesWhenRAHardcoreIsEnabled -> getString(R.string.save_states_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
+                        ToastEvent.CannotUseCheatsWhenRAHardcoreIsEnabled -> getString(R.string.cheats_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
                         ToastEvent.CannotLoadStateWhenRunningFirmware,
                         ToastEvent.CannotSaveStateWhenRunningFirmware -> getString(R.string.save_states_not_supported) to Toast.LENGTH_LONG
                         ToastEvent.CannotSwitchRetroAchievementsMode -> getString(R.string.retro_achievements_relaunch_to_apply_settings) to Toast.LENGTH_LONG

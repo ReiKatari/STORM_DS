@@ -3,6 +3,8 @@
 #include <jni.h>
 #include <string>
 #include <sstream>
+#include <vector>
+#include <mutex>
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -48,6 +50,66 @@ bool isFastForwardEnabled = false;
 
 jobject globalCameraManager;
 MelonDSAndroidCameraHandler* androidCameraHandler;
+jclass frameRenderCallbackClass = nullptr;
+jmethodID frameRenderMethodId = nullptr;
+std::mutex frameRenderCallbackLock;
+
+namespace
+{
+
+void clearPendingJniException(JNIEnv* env)
+{
+    if (env->ExceptionCheck())
+        env->ExceptionClear();
+}
+
+jclass findClassOrNull(JNIEnv* env, const char* className)
+{
+    jclass classRef = env->FindClass(className);
+    if (classRef == nullptr || env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return nullptr;
+    }
+
+    return classRef;
+}
+
+jmethodID getMethodIdOrNull(JNIEnv* env, jclass classRef, const char* methodName, const char* methodSignature)
+{
+    jmethodID methodId = env->GetMethodID(classRef, methodName, methodSignature);
+    if (methodId == nullptr || env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return nullptr;
+    }
+
+    return methodId;
+}
+
+jmethodID getOrInitFrameRenderMethodId(JNIEnv* env, jobject callbackObject)
+{
+    if (frameRenderMethodId != nullptr)
+        return frameRenderMethodId;
+
+    std::lock_guard<std::mutex> lock(frameRenderCallbackLock);
+    if (frameRenderMethodId != nullptr)
+        return frameRenderMethodId;
+
+    jclass localClass = env->GetObjectClass(callbackObject);
+    if (localClass == nullptr)
+        return nullptr;
+
+    frameRenderCallbackClass = reinterpret_cast<jclass>(env->NewGlobalRef(localClass));
+    env->DeleteLocalRef(localClass);
+    if (frameRenderCallbackClass == nullptr)
+        return nullptr;
+
+    frameRenderMethodId = env->GetMethodID(frameRenderCallbackClass, "renderFrame", "(ZIII)V");
+    return frameRenderMethodId;
+}
+
+}
 
 extern "C"
 {
@@ -77,7 +139,9 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
         return;
     }
 
-    jclass cheatClass = env->GetObjectClass(env->GetObjectArrayElement(cheats, 0));
+    jobject firstCheat = env->GetObjectArrayElement(cheats, 0);
+    jclass cheatClass = env->GetObjectClass(firstCheat);
+    env->DeleteLocalRef(firstCheat);
     jfieldID codeField = env->GetFieldID(cheatClass, "code", "Ljava/lang/String;");
 
     std::list<MelonDSAndroid::Cheat> internalCheats;
@@ -85,7 +149,13 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
     for (int i = 0; i < cheatCount; ++i) {
         jobject cheat = env->GetObjectArrayElement(cheats, i);
         jstring code = (jstring) env->GetObjectField(cheat, codeField);
-        const char* codeStringPtr = env->GetStringUTFChars(code, JNI_FALSE);
+        const char* codeStringPtr = env->GetStringUTFChars(code, nullptr);
+        if (codeStringPtr == nullptr)
+        {
+            env->DeleteLocalRef(code);
+            env->DeleteLocalRef(cheat);
+            continue;
+        }
         std::string codeString = codeStringPtr;
         // Since each part of a cheat code has 8 characters (4 bytes), we can add 1 to the length (to ensure that each part has a matching space separator) and divide by 9
         // (part length + space separator) to calculate the total number of parts in the cheat
@@ -132,6 +202,8 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
         }
 
         env->ReleaseStringUTFChars(code, codeStringPtr);
+        env->DeleteLocalRef(code);
+        env->DeleteLocalRef(cheat);
 
         if (isBad) {
             continue;
@@ -144,26 +216,40 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
 }
 
 JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_setupAchievements(JNIEnv* env, jobject thiz, jobjectArray achievements, jobjectArray leaderboards, jstring richPresenceScript)
+Java_me_magnum_melonds_MelonEmulator_setupAchievements(
+    JNIEnv* env,
+    jobject thiz,
+    jobjectArray achievements,
+    jobjectArray leaderboards,
+    jstring richPresenceScript,
+    jobject runtimeConfig
+)
 {
     std::list<MelonDSAndroid::RetroAchievements::RAAchievement> internalAchievements;
     std::list<MelonDSAndroid::RetroAchievements::RALeaderboard> internalLeaderboards;
     mapAchievementsFromJava(env, achievements, internalAchievements);
     mapLeaderboardsFromJava(env, leaderboards, internalLeaderboards);
+    auto internalRuntimeConfig = mapRuntimeBridgeConfigFromJava(env, runtimeConfig);
 
     std::optional<std::string> richPresence = std::nullopt;
 
     if (richPresenceScript != nullptr)
     {
-        jboolean isStringCopy;
-        const char* richPresenceString = env->GetStringUTFChars(richPresenceScript, &isStringCopy);
-        richPresence = richPresenceString;
-
-        if (isStringCopy)
+        const char* richPresenceString = env->GetStringUTFChars(richPresenceScript, nullptr);
+        if (richPresenceString != nullptr)
+        {
+            richPresence = richPresenceString;
             env->ReleaseStringUTFChars(richPresenceScript, richPresenceString);
+        }
+
     }
 
-    MelonDSAndroid::setupAchievements(internalAchievements, internalLeaderboards, richPresence);
+    MelonDSAndroid::setupAchievements(
+        internalAchievements,
+        internalLeaderboards,
+        richPresence,
+        internalRuntimeConfig
+    );
 }
 
 JNIEXPORT void JNICALL
@@ -185,42 +271,136 @@ Java_me_magnum_melonds_MelonEmulator_getRichPresenceStatus(JNIEnv* env, jobject 
 JNIEXPORT jobjectArray JNICALL
 Java_me_magnum_melonds_MelonEmulator_getRuntimeAchievements(JNIEnv* env, jobject thiz)
 {
-    jclass simpleRuntimeAchievementClass = env->FindClass("me/magnum/melonds/domain/model/retroachievements/RASimpleRuntimeAchievement");
-    jmethodID simpleRuntimeAchievementConstructor = env->GetMethodID(simpleRuntimeAchievementClass, "<init>", "(JII)V");
+    jclass simpleRuntimeAchievementClass = findClassOrNull(env, "me/magnum/melonds/domain/model/retroachievements/RASimpleRuntimeAchievement");
+    if (simpleRuntimeAchievementClass == nullptr)
+        return nullptr;
+
+    jmethodID simpleRuntimeAchievementConstructor = getMethodIdOrNull(env, simpleRuntimeAchievementClass, "<init>", "(JII)V");
+    if (simpleRuntimeAchievementConstructor == nullptr)
+    {
+        jobjectArray emptyAchievements = env->NewObjectArray(0, simpleRuntimeAchievementClass, nullptr);
+        env->DeleteLocalRef(simpleRuntimeAchievementClass);
+        return emptyAchievements;
+    }
 
     auto runtimeAchievements = MelonDSAndroid::getRuntimeAchievements();
-
     jobjectArray achievements = env->NewObjectArray(runtimeAchievements.size(), simpleRuntimeAchievementClass, nullptr);
+    if (achievements == nullptr || env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        env->DeleteLocalRef(simpleRuntimeAchievementClass);
+        return nullptr;
+    }
 
     int index = 0;
     for (const auto &item: runtimeAchievements)
     {
         jobject simpleRuntimeAchievement = env->NewObject(simpleRuntimeAchievementClass, simpleRuntimeAchievementConstructor, item.id, (jint) item.value, (jint) item.target);
+        if (simpleRuntimeAchievement == nullptr || env->ExceptionCheck())
+        {
+            clearPendingJniException(env);
+            continue;
+        }
+
         env->SetObjectArrayElement(achievements, index++, simpleRuntimeAchievement);
+        env->DeleteLocalRef(simpleRuntimeAchievement);
+        if (env->ExceptionCheck())
+        {
+            clearPendingJniException(env);
+            break;
+        }
     }
 
+    env->DeleteLocalRef(simpleRuntimeAchievementClass);
     return achievements;
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_me_magnum_melonds_MelonEmulator_getRuntimeAchievementBuckets(JNIEnv* env, jobject thiz)
+{
+    jclass runtimeBucketEntryClass = findClassOrNull(env, "me/magnum/melonds/domain/model/retroachievements/RASimpleRuntimeAchievementBucketEntry");
+    if (runtimeBucketEntryClass == nullptr)
+        return nullptr;
+
+    jmethodID runtimeBucketEntryConstructor = getMethodIdOrNull(env, runtimeBucketEntryClass, "<init>", "(JJI)V");
+    if (runtimeBucketEntryConstructor == nullptr)
+    {
+        jobjectArray emptyEntries = env->NewObjectArray(0, runtimeBucketEntryClass, nullptr);
+        env->DeleteLocalRef(runtimeBucketEntryClass);
+        return emptyEntries;
+    }
+
+    auto runtimeBuckets = MelonDSAndroid::getRuntimeAchievementBuckets();
+    jobjectArray bucketEntries = env->NewObjectArray(runtimeBuckets.size(), runtimeBucketEntryClass, nullptr);
+    if (bucketEntries == nullptr || env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        env->DeleteLocalRef(runtimeBucketEntryClass);
+        return nullptr;
+    }
+
+    int index = 0;
+    for (const auto& item : runtimeBuckets)
+    {
+        jobject runtimeBucketEntry = env->NewObject(
+            runtimeBucketEntryClass,
+            runtimeBucketEntryConstructor,
+            (jlong) item.achievementId,
+            (jlong) item.subsetId,
+            (jint) item.bucketType
+        );
+        if (runtimeBucketEntry == nullptr || env->ExceptionCheck())
+        {
+            clearPendingJniException(env);
+            continue;
+        }
+
+        env->SetObjectArrayElement(bucketEntries, index++, runtimeBucketEntry);
+        env->DeleteLocalRef(runtimeBucketEntry);
+        if (env->ExceptionCheck())
+        {
+            clearPendingJniException(env);
+            break;
+        }
+    }
+
+    env->DeleteLocalRef(runtimeBucketEntryClass);
+    return bucketEntries;
+}
+
+JNIEXPORT jlongArray JNICALL
+Java_me_magnum_melonds_MelonEmulator_getRuntimeSubsetIds(JNIEnv* env, jobject thiz)
+{
+    auto runtimeSubsetIds = MelonDSAndroid::getRuntimeSubsetIds();
+    jlongArray subsetIds = env->NewLongArray(runtimeSubsetIds.size());
+    if (runtimeSubsetIds.empty())
+        return subsetIds;
+
+    std::vector<jlong> values;
+    values.reserve(runtimeSubsetIds.size());
+    for (const auto subsetId : runtimeSubsetIds)
+        values.push_back((jlong) subsetId);
+
+    env->SetLongArrayRegion(subsetIds, 0, values.size(), values.data());
+    return subsetIds;
 }
 
 JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadRomInternal(JNIEnv* env, jobject thiz, jstring romPath, jstring sramPath, jint gbaSlotType, jstring gbaRomPath, jstring gbaSramPath)
 {
-    jboolean isCopy = JNI_FALSE;
-    const char* rom = romPath == nullptr ? nullptr : env->GetStringUTFChars(romPath, &isCopy);
-    const char* sram = sramPath == nullptr ? nullptr : env->GetStringUTFChars(sramPath, &isCopy);
-    const char* gbaRom = gbaRomPath == nullptr ? nullptr : env->GetStringUTFChars(gbaRomPath, &isCopy);
-    const char* gbaSram = gbaSramPath == nullptr ? nullptr : env->GetStringUTFChars(gbaSramPath, &isCopy);
+    const char* rom = romPath == nullptr ? nullptr : env->GetStringUTFChars(romPath, nullptr);
+    const char* sram = sramPath == nullptr ? nullptr : env->GetStringUTFChars(sramPath, nullptr);
+    const char* gbaRom = gbaRomPath == nullptr ? nullptr : env->GetStringUTFChars(gbaRomPath, nullptr);
+    const char* gbaSram = gbaSramPath == nullptr ? nullptr : env->GetStringUTFChars(gbaSramPath, nullptr);
 
     MelonDSAndroid::RomGbaSlotConfig* gbaSlotConfig = buildGbaSlotConfig((GbaSlotType) gbaSlotType, gbaRom, gbaSram);
     int result = MelonDSAndroid::loadRom(rom, sram, gbaSlotConfig);
     delete gbaSlotConfig;
 
-    if (isCopy == JNI_TRUE) {
-        if (romPath) env->ReleaseStringUTFChars(romPath, rom);
-        if (sramPath) env->ReleaseStringUTFChars(sramPath, sram);
-        if (gbaRomPath) env->ReleaseStringUTFChars(gbaRomPath, gbaRom);
-        if (gbaSramPath) env->ReleaseStringUTFChars(gbaSramPath, gbaSram);
-    }
+    if (romPath && rom) env->ReleaseStringUTFChars(romPath, rom);
+    if (sramPath && sram) env->ReleaseStringUTFChars(sramPath, sram);
+    if (gbaRomPath && gbaRom) env->ReleaseStringUTFChars(gbaRomPath, gbaRom);
+    if (gbaSramPath && gbaSram) env->ReleaseStringUTFChars(gbaSramPath, gbaSram);
 
     return result;
 }
@@ -250,8 +430,9 @@ Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz)
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jobject renderFrameCallback)
 {
-    jclass presentFrameWrapperClass = env->GetObjectClass(renderFrameCallback);
-    jmethodID renderFrameMethodId = env->GetMethodID(presentFrameWrapperClass, "renderFrame", "(ZI)V");
+    jmethodID renderMethod = getOrInitFrameRenderMethodId(env, renderFrameCallback);
+    if (renderMethod == nullptr)
+        return;
 
     Frame* presentationFrame = MelonDSAndroid::getPresentationFrame();
     EGLDisplay currentDisplay = eglGetCurrentDisplay();
@@ -265,13 +446,20 @@ Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, job
     if (presentationFrame != nullptr)
     {
         eglWaitSyncKHR(currentDisplay, presentationFrame->renderFence, 0);
-        env->CallVoidMethod(renderFrameCallback, renderFrameMethodId, true, (jint) presentationFrame->frameTexture);
+        env->CallVoidMethod(
+            renderFrameCallback,
+            renderMethod,
+            true,
+            (jint) presentationFrame->frameTexture,
+            (jint) presentationFrame->width,
+            (jint) presentationFrame->height
+        );
         EGLSyncKHR presentFence = eglCreateSyncKHR(currentDisplay, EGL_SYNC_FENCE_KHR, nullptr);
         presentationFrame->presentFence = presentFence;
     }
     else
     {
-        env->CallVoidMethod(renderFrameCallback, renderFrameMethodId, false, 0);
+        env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0, 0, 0);
     }
 }
 
@@ -344,15 +532,21 @@ Java_me_magnum_melonds_MelonEmulator_resetEmulation(JNIEnv* env, jobject thiz) {
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_saveStateInternal(JNIEnv* env, jobject thiz, jstring path)
 {
-    const char* saveStatePath = path == nullptr ? nullptr : env->GetStringUTFChars(path, JNI_FALSE);
-    return MelonDSAndroid::saveState(saveStatePath);
+    const char* saveStatePath = path == nullptr ? nullptr : env->GetStringUTFChars(path, nullptr);
+    const bool result = MelonDSAndroid::saveState(saveStatePath);
+    if (path != nullptr && saveStatePath != nullptr)
+        env->ReleaseStringUTFChars(path, saveStatePath);
+    return result;
 }
 
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadStateInternal(JNIEnv* env, jobject thiz, jstring path)
 {
-    const char* saveStatePath = path == nullptr ? nullptr : env->GetStringUTFChars(path, JNI_FALSE);
-    return MelonDSAndroid::loadState(saveStatePath);
+    const char* saveStatePath = path == nullptr ? nullptr : env->GetStringUTFChars(path, nullptr);
+    const bool result = MelonDSAndroid::loadState(saveStatePath);
+    if (path != nullptr && saveStatePath != nullptr)
+        env->ReleaseStringUTFChars(path, saveStatePath);
+    return result;
 }
 
 JNIEXPORT jboolean JNICALL
@@ -451,6 +645,12 @@ Java_me_magnum_melonds_MelonEmulator_stopEmulation(JNIEnv* env, jobject thiz)
     MelonDSAndroid::cleanup();
 
     env->DeleteGlobalRef(globalCameraManager);
+    if (frameRenderCallbackClass != nullptr)
+    {
+        env->DeleteGlobalRef(frameRenderCallbackClass);
+        frameRenderCallbackClass = nullptr;
+        frameRenderMethodId = nullptr;
+    }
 
     globalCameraManager = nullptr;
 

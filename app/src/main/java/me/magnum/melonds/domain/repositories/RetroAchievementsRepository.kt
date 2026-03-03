@@ -2,6 +2,7 @@ package me.magnum.melonds.domain.repositories
 
 import me.magnum.melonds.domain.model.retroachievements.RAAchievementSetSummary
 import me.magnum.melonds.domain.model.retroachievements.RAGameSummary
+import me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievementBucketEntry
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeUserAchievement
 import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.domain.model.retroachievements.RAUserGameData
@@ -18,8 +19,12 @@ interface RetroAchievementsRepository {
     suspend fun getUserAuthentication(): RAUserAuth?
     suspend fun login(username: String, password: String): Result<Unit>
     suspend fun logout()
+    suspend fun getCachedUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?>
     suspend fun getUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?>
+    suspend fun refreshUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?>
     suspend fun getRuntimeUserAchievements(achievements: List<RAUserAchievement>): List<RARuntimeUserAchievement>
+    suspend fun getRuntimeAchievementBuckets(): List<RASimpleRuntimeAchievementBucketEntry>
+    suspend fun getRuntimeSubsetIds(): List<Long>
     suspend fun getGameSummary(gameHash: String): RAGameSummary?
     suspend fun getGameSummary(gameId: RAGameId): RAGameSummary?
     suspend fun getAchievementSetSummary(setId: RASetId): RAAchievementSetSummary?

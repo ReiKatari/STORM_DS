@@ -65,9 +65,14 @@ class EmulatorSession {
         return isRetroAchievementsHardcoreModeEnabled
     }
 
+    fun areSaveStatesAllowed(): Boolean {
+        // Cannot use save-states when RA hardcore is enabled
+        return !isRetroAchievementsHardcoreModeEnabled || !areRetroAchievementsEnabled
+    }
+
     fun areSaveStateLoadsAllowed(): Boolean {
         // Cannot load save-states when RA hardcore is enabled
-        return !isRetroAchievementsHardcoreModeEnabled || !areRetroAchievementsEnabled
+        return areSaveStatesAllowed()
     }
 
     fun areCheatsEnabled(): Boolean {

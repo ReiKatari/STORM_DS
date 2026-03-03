@@ -23,6 +23,7 @@ import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
 import me.magnum.melonds.domain.model.retroachievements.GameAchievementData
 import me.magnum.melonds.domain.model.retroachievements.RAEvent
+import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
@@ -34,6 +35,7 @@ import me.magnum.melonds.impl.camera.DSiCameraSourceMultiplexer
 import me.magnum.melonds.ui.emulator.exceptions.RomLoadException
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
 import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
+import java.nio.ByteBuffer
 
 class AndroidEmulatorManager(
     private val context: Context,
@@ -44,6 +46,10 @@ class AndroidEmulatorManager(
     private val permissionHandler: PermissionHandler,
     private val cameraManager: DSiCameraSourceMultiplexer,
 ) : EmulatorManager {
+    private companion object {
+        const val MAX_EVENT_STRING_LENGTH = 128
+    }
+
 
     private val _emulatorEvents = MutableSharedFlow<EmulatorEvent>(extraBufferCapacity = Int.MAX_VALUE)
     override val emulatorEvents: Flow<EmulatorEvent> = _emulatorEvents.asSharedFlow()
@@ -63,7 +69,7 @@ class AndroidEmulatorManager(
                     achievementId = data.getLong(),
                     current = data.getInt(),
                     target = data.getInt(),
-                    progress = String(ByteArray(data.getInt()).apply { data.get(this) }),
+                    progress = data.readBoundedString(),
                 )
                 achievementsSharedFlow.tryEmit(event)
             }
@@ -71,7 +77,7 @@ class AndroidEmulatorManager(
             EmulatorEventType.EventRALeaderboardAttemptUpdated -> {
                 val event = RAEvent.OnLeaderboardAttemptUpdated(
                     leaderboardId = data.getLong(),
-                    formattedValue = String(ByteArray(data.getInt()).apply { data.get(this) }),
+                    formattedValue = data.readBoundedString(),
                 )
                 achievementsSharedFlow.tryEmit(event)
             }
@@ -173,18 +179,21 @@ class AndroidEmulatorManager(
         MelonEmulator.setupCheats(cheats.toTypedArray())
     }
 
-    override suspend fun setupRetroAchievements(achievementData: GameAchievementData) {
+    override suspend fun setupRetroAchievements(achievementData: GameAchievementData, runtimeConfig: RARuntimeBridgeConfig?) {
         val richPresencePath = if (settingsRepository.isRetroAchievementsRichPresenceEnabled()) {
             achievementData.richPresencePatch
         } else {
             null
         }
 
-        MelonEmulator.setupAchievements(
-            achievements = achievementData.lockedAchievements.toTypedArray(),
-            leaderboards = achievementData.leaderboards.toTypedArray(),
-            richPresenceScript = richPresencePath,
-        )
+        withContext(Dispatchers.Default) {
+            MelonEmulator.setupAchievements(
+                achievements = achievementData.lockedAchievements.toTypedArray(),
+                leaderboards = achievementData.leaderboards.toTypedArray(),
+                richPresenceScript = richPresencePath,
+                runtimeConfig = runtimeConfig,
+            )
+        }
     }
 
     override fun unloadRetroAchievementsData() {
@@ -261,5 +270,23 @@ class AndroidEmulatorManager(
         }
 
         return originalConfiguration
+    }
+
+    private fun ByteBuffer.readBoundedString(): String {
+        val declaredLength = int
+        if (declaredLength <= 0) {
+            return ""
+        }
+
+        val safeLength = declaredLength
+            .coerceAtMost(remaining())
+            .coerceAtMost(MAX_EVENT_STRING_LENGTH)
+        if (safeLength <= 0) {
+            return ""
+        }
+
+        val payload = ByteArray(safeLength)
+        get(payload)
+        return String(payload)
     }
 }

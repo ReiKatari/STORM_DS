@@ -36,6 +36,8 @@
 -keep class me.magnum.melonds.domain.model.retroachievements.RASimpleAchievement { *; }
 -keep class me.magnum.melonds.domain.model.retroachievements.RASimpleLeaderboard { *; }
 -keep class me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievement { *; }
+-keep class me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievementBucketEntry { *; }
+-keep class me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig { *; }
 -keep class me.magnum.melonds.ui.emulator.render.FrameRenderCallback { *; }
 -keep class me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState { *; }
 -keep class me.magnum.melonds.ui.emulator.rewind.model.RewindWindow { *; }

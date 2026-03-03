@@ -52,10 +52,17 @@ class FrameRenderCoordinator {
         @Volatile private var running = true
 
         private val frameRenderCallback = object : FrameRenderCallback {
-            override fun renderFrame(isValidFrame: Boolean, frameTextureId: Int) {
+            override fun renderFrame(
+                isValidFrame: Boolean,
+                frameTextureId: Int,
+                frameTextureWidth: Int,
+                frameTextureHeight: Int,
+            ) {
                 presentFrameWrapper.apply {
                     this.isValidFrame = isValidFrame
                     this.textureId = frameTextureId
+                    this.textureWidth = frameTextureWidth
+                    this.textureHeight = frameTextureHeight
                 }
 
                 managedSurfaces.forEach {

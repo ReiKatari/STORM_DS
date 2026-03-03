@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.opengl.GLES30
-import android.opengl.GLES31
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import me.magnum.melonds.common.opengl.Shader
@@ -99,6 +98,8 @@ class ExternalLayoutRender(
     private var historyReadFramebuffer = 0
     private var historyDrawFramebuffer = 0
     private var historyReady = false
+    private var lastScreenTextureId = 0
+    private var lastScreenTextureFiltering = Int.MIN_VALUE
 
     fun updateLayout(
         top: Rect?,
@@ -245,6 +246,7 @@ class ExternalLayoutRender(
         shader = ShaderFactory.createShaderProgram(
             VideoFilterShaderProvider.getShaderSource(videoFiltering, customShader)
         )
+        lastScreenTextureFiltering = Int.MIN_VALUE
 
         val textures = IntArray(1)
         GLES30.glGenTextures(1, textures, 0)
@@ -316,7 +318,15 @@ class ExternalLayoutRender(
         val requiresHistory = shader.uniformPrevTex >= 0 || shader.uniformPrevWeight >= 0
         val requiresTexSize = shader.uniformTexSize >= 0
         val textureInfo = if ((requiresHistory || requiresTexSize) && textureId != 0) {
-            ensureHistoryResources(textureId)
+            val textureWidth = presentFrameWrapper.textureWidth
+            val textureHeight = presentFrameWrapper.textureHeight
+            if (textureWidth > 0 && textureHeight > 0) {
+                val info = TextureSize(textureWidth, textureHeight)
+                ensureHistoryResources(info)
+                info
+            } else {
+                null
+            }
         } else {
             null
         }
@@ -346,8 +356,12 @@ class ExternalLayoutRender(
             uvTop.position(0)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+            if (lastScreenTextureId != textureId || lastScreenTextureFiltering != shader.textureFiltering) {
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+                lastScreenTextureId = textureId
+                lastScreenTextureFiltering = shader.textureFiltering
+            }
             if (shader.attribPos >= 0) {
                 GLES30.glVertexAttribPointer(shader.attribPos, 2, GLES30.GL_FLOAT, false, 0, buf)
             }
@@ -391,8 +405,12 @@ class ExternalLayoutRender(
             uvBottom.position(0)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+            if (lastScreenTextureId != textureId || lastScreenTextureFiltering != shader.textureFiltering) {
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+                lastScreenTextureId = textureId
+                lastScreenTextureFiltering = shader.textureFiltering
+            }
             if (shader.attribPos >= 0) {
                 GLES30.glVertexAttribPointer(shader.attribPos, 2, GLES30.GL_FLOAT, false, 0, buf)
             }
@@ -463,12 +481,11 @@ class ExternalLayoutRender(
                 VideoFilterShaderProvider.getShaderSource(videoFiltering, customShader)
             )
             historyReady = false
+            lastScreenTextureFiltering = Int.MIN_VALUE
         }
     }
 
-    private fun ensureHistoryResources(sourceTextureId: Int): TextureSize? {
-        val size = getTextureDimensions(sourceTextureId) ?: return null
-
+    private fun ensureHistoryResources(size: TextureSize) {
         if (historyTexture == 0 || size.width != historyWidth || size.height != historyHeight) {
             if (historyTexture != 0) {
                 val textures = intArrayOf(historyTexture)
@@ -509,8 +526,6 @@ class ExternalLayoutRender(
             historyReadFramebuffer = framebuffers[0]
             historyDrawFramebuffer = framebuffers[1]
         }
-
-        return size
     }
 
     private fun copyFrameToHistory(sourceTextureId: Int, size: TextureSize) {
@@ -554,28 +569,6 @@ class ExternalLayoutRender(
         GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, 0)
 
         historyReady = true
-    }
-
-    private fun getTextureDimensions(textureId: Int): TextureSize? {
-        if (textureId == 0) {
-            return null
-        }
-
-        val previousBinding = IntArray(1)
-        GLES30.glGetIntegerv(GLES30.GL_TEXTURE_BINDING_2D, previousBinding, 0)
-
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-        val width = IntArray(1)
-        val height = IntArray(1)
-        GLES31.glGetTexLevelParameteriv(GLES30.GL_TEXTURE_2D, 0, GLES31.GL_TEXTURE_WIDTH, width, 0)
-        GLES31.glGetTexLevelParameteriv(GLES30.GL_TEXTURE_2D, 0, GLES31.GL_TEXTURE_HEIGHT, height, 0)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, previousBinding[0])
-
-        if (width[0] <= 0 || height[0] <= 0) {
-            return null
-        }
-
-        return TextureSize(width[0], height[0])
     }
 
     private fun renderBackground() {
