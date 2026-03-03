@@ -13,8 +13,11 @@ data class AchievementBucketUiModel(
     enum class Bucket(val displayOrder: Int) {
         ActiveChallenges(0),
         RecentlyUnlocked(1),
-        AlmostThere(2),
-        Locked(3),
-        Unlocked(4),
+        Unsynced(2),
+        AlmostThere(3),
+        Locked(4),
+        Unsupported(5),
+        Unofficial(6),
+        Unlocked(7),
     }
 }

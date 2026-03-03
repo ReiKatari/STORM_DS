@@ -29,10 +29,12 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,6 +67,9 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
+import me.magnum.melonds.ui.common.achievements.ui.AchievementFiltersRow
+import me.magnum.melonds.ui.common.achievements.ui.AchievementStateFilter
+import me.magnum.melonds.ui.common.achievements.ui.AchievementTypeFilter
 import me.magnum.melonds.ui.common.melonButtonColors
 import me.magnum.melonds.ui.romdetails.model.AchievementBucketUiModel
 import me.magnum.melonds.ui.romdetails.model.AchievementSetUiModel
@@ -82,6 +87,7 @@ private val LIST_CONTENT_PADDING = 40.dp
 
 private val CONTENT_TYPE_ACHIEVEMENT = "achievement"
 private val CONTENT_TYPE_BUCKET_HEADER = "bucket-header"
+private val CONTENT_TYPE_FILTERS = "filters"
 
 @Composable
 fun AchievementList(
@@ -205,8 +211,44 @@ private fun Content(
     var selectedSetId by rememberSaveable {
         mutableLongStateOf(sets.first().setId)
     }
+    var selectedTypeFilter by rememberSaveable {
+        mutableStateOf(AchievementTypeFilter.All)
+    }
+    var selectedStateFilter by rememberSaveable {
+        mutableStateOf(AchievementStateFilter.All)
+    }
     val selectedSet = remember(selectedSetId) {
         sets.first { it.setId == selectedSetId }
+    }
+    val availableStateFilters = remember(selectedSet) {
+        buildList {
+            add(AchievementStateFilter.All)
+            addAll(
+                selectedSet.buckets
+                    .map { AchievementStateFilter.fromBucket(it.bucket) }
+                    .distinct()
+                    .sortedBy { it.displayOrder },
+            )
+        }
+    }
+    LaunchedEffect(availableStateFilters) {
+        if (selectedStateFilter !in availableStateFilters) {
+            selectedStateFilter = AchievementStateFilter.All
+        }
+    }
+    val filteredBuckets = remember(selectedSet, selectedTypeFilter, selectedStateFilter) {
+        selectedSet.buckets
+            .asSequence()
+            .filter { selectedStateFilter.matches(it.bucket) }
+            .map { bucket ->
+                bucket.copy(
+                    achievements = bucket.achievements.filter {
+                        selectedTypeFilter.matches(it.actualAchievement().type)
+                    },
+                )
+            }
+            .filter { it.achievements.isNotEmpty() }
+            .toList()
     }
     val backgroundColor = MaterialTheme.colors.background
     val density = LocalDensity.current
@@ -312,7 +354,30 @@ private fun Content(
                 }
             }
 
-            selectedSet.buckets.forEachIndexed { index, bucket ->
+            item(contentType = CONTENT_TYPE_FILTERS) {
+                AchievementFiltersRow(
+                    typeFilter = selectedTypeFilter,
+                    onTypeFilterChanged = { selectedTypeFilter = it },
+                    stateFilter = selectedStateFilter,
+                    availableStateFilters = availableStateFilters,
+                    onStateFilterChanged = { selectedStateFilter = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (filteredBuckets.isEmpty()) {
+                item(contentType = CONTENT_TYPE_ACHIEVEMENT) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
+                        text = stringResource(id = R.string.retro_achievements_filter_no_results),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.body2,
+                    )
+                }
+            }
+
+            filteredBuckets.forEachIndexed { index, bucket ->
                 item(contentType = CONTENT_TYPE_BUCKET_HEADER) {
                     Text(
                         modifier = Modifier.padding(start = 16.dp, top = if (index == 0) 0.dp else 16.dp, end = 16.dp, bottom = 4.dp).fillMaxWidth(),
@@ -347,8 +412,11 @@ private fun getBucketTitle(bucket: AchievementBucketUiModel.Bucket): String {
     return when (bucket) {
         AchievementBucketUiModel.Bucket.ActiveChallenges -> stringResource(R.string.retro_achievements_active_challenges)
         AchievementBucketUiModel.Bucket.RecentlyUnlocked -> stringResource(R.string.retro_achievements_recently_unlokced)
+        AchievementBucketUiModel.Bucket.Unsynced -> stringResource(R.string.retro_achievements_unsynced)
         AchievementBucketUiModel.Bucket.AlmostThere -> stringResource(R.string.retro_achievements_almost_there)
         AchievementBucketUiModel.Bucket.Locked -> stringResource(R.string.retro_achievements_locked)
+        AchievementBucketUiModel.Bucket.Unsupported -> stringResource(R.string.retro_achievements_unsupported)
+        AchievementBucketUiModel.Bucket.Unofficial -> stringResource(R.string.retro_achievements_unofficial)
         AchievementBucketUiModel.Bucket.Unlocked -> stringResource(R.string.retro_achievements_unlocked)
     }
 }

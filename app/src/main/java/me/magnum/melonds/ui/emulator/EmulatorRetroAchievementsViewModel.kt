@@ -29,6 +29,17 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
     private val emulatorManager: EmulatorManager,
 ) : RetroAchievementsViewModel(retroAchievementsRepository, settingsRepository) {
 
+    private companion object {
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_LOCKED = 1
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_UNLOCKED = 2
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_UNSUPPORTED = 3
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_UNOFFICIAL = 4
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_RECENTLY_UNLOCKED = 5
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_ACTIVE_CHALLENGE = 6
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_ALMOST_THERE = 7
+        private const val RC_CLIENT_ACHIEVEMENT_BUCKET_UNSYNCED = 8
+    }
+
     private class TimedUnlockedAchievement(
         val achievementId: Long,
         val unlockedAt: Instant,
@@ -63,10 +74,24 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
         return romSession.rom
     }
 
-    override suspend fun buildAchievementBuckets(achievements: List<RAUserAchievement>): List<AchievementBucketUiModel> {
+    override suspend fun getRuntimeBucketByAchievementId(rom: Rom): Map<Long, AchievementBucketUiModel.Bucket> {
+        return retroAchievementsRepository.getRuntimeAchievementBuckets()
+            .associate { it.achievementId to mapRuntimeBucketType(it.bucketType) }
+    }
+
+    override suspend fun getRuntimeSubsetOrder(rom: Rom): Map<Long, Int> {
+        return retroAchievementsRepository.getRuntimeSubsetIds()
+            .withIndex()
+            .associate { it.value to it.index }
+    }
+
+    override suspend fun buildAchievementBuckets(
+        achievements: List<RAUserAchievement>,
+        runtimeBucketByAchievementId: Map<Long, AchievementBucketUiModel.Bucket>,
+    ): List<AchievementBucketUiModel> {
         val now = Clock.System.now()
         return retroAchievementsRepository.getRuntimeUserAchievements(achievements).groupingBy { runtimeAchievement ->
-            when {
+            runtimeBucketByAchievementId[runtimeAchievement.userAchievement.achievement.id] ?: when {
                 runtimeAchievement.userAchievement.isUnlocked -> {
                     val recentlyUnlockedAchievement = recentlyUnlockedAchievements.firstOrNull { it.achievementId == runtimeAchievement.userAchievement.achievement.id }
                     if (recentlyUnlockedAchievement != null && (now - recentlyUnlockedAchievement.unlockedAt) < 10.minutes) {
@@ -107,5 +132,19 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
         }
 
         return status.pendingUnlocks.map { it.achievementId }.toSet()
+    }
+
+    private fun mapRuntimeBucketType(runtimeBucketType: Int): AchievementBucketUiModel.Bucket {
+        return when (runtimeBucketType) {
+            RC_CLIENT_ACHIEVEMENT_BUCKET_LOCKED -> AchievementBucketUiModel.Bucket.Locked
+            RC_CLIENT_ACHIEVEMENT_BUCKET_UNLOCKED -> AchievementBucketUiModel.Bucket.Unlocked
+            RC_CLIENT_ACHIEVEMENT_BUCKET_UNSUPPORTED -> AchievementBucketUiModel.Bucket.Unsupported
+            RC_CLIENT_ACHIEVEMENT_BUCKET_UNOFFICIAL -> AchievementBucketUiModel.Bucket.Unofficial
+            RC_CLIENT_ACHIEVEMENT_BUCKET_RECENTLY_UNLOCKED -> AchievementBucketUiModel.Bucket.RecentlyUnlocked
+            RC_CLIENT_ACHIEVEMENT_BUCKET_ACTIVE_CHALLENGE -> AchievementBucketUiModel.Bucket.ActiveChallenges
+            RC_CLIENT_ACHIEVEMENT_BUCKET_ALMOST_THERE -> AchievementBucketUiModel.Bucket.AlmostThere
+            RC_CLIENT_ACHIEVEMENT_BUCKET_UNSYNCED -> AchievementBucketUiModel.Bucket.Unsynced
+            else -> AchievementBucketUiModel.Bucket.Locked
+        }
     }
 }

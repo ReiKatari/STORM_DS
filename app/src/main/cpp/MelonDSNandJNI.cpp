@@ -151,12 +151,11 @@ Java_me_magnum_melonds_MelonDSiNand_deleteTitle(JNIEnv* env, jobject thiz, jint 
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_importTitleFile(JNIEnv* env, jobject thiz, jint titleId, jint fileType, jstring fileUri)
 {
-    jboolean isFilePathCopy;
-    const char* filePath = env->GetStringUTFChars(fileUri, &isFilePathCopy);
+    const char* filePath = env->GetStringUTFChars(fileUri, nullptr);
 
     bool result = nandMount->ImportTitleData(DSI_NAND_FILE_CATEGORY, (u32) titleId, fileType, filePath);
 
-    if (isFilePathCopy)
+    if (filePath != nullptr)
         env->ReleaseStringUTFChars(fileUri, filePath);
 
     return result;
@@ -165,12 +164,11 @@ Java_me_magnum_melonds_MelonDSiNand_importTitleFile(JNIEnv* env, jobject thiz, j
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_exportTitleFile(JNIEnv* env, jobject thiz, jint titleId, jint fileType, jstring fileUri)
 {
-    jboolean isFilePathCopy;
-    const char* filePath = env->GetStringUTFChars(fileUri, &isFilePathCopy);
+    const char* filePath = env->GetStringUTFChars(fileUri, nullptr);
 
     bool result = nandMount->ExportTitleData(DSI_NAND_FILE_CATEGORY, (u32) titleId, fileType, filePath);
 
-    if (isFilePathCopy)
+    if (filePath != nullptr)
         env->ReleaseStringUTFChars(fileUri, filePath);
 
     return result;

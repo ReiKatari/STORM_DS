@@ -118,6 +118,9 @@ abstract class RetroAchievementsDao {
     @Query("SELECT * FROM ra_game_hash_library WHERE game_hash = :gameHash")
     abstract suspend fun getGameHashEntity(gameHash: String): RAGameHashEntity?
 
+    @Query("SELECT game_hash FROM ra_game_hash_library WHERE game_id = :gameId LIMIT 1")
+    abstract suspend fun getAnyGameHashForGameId(gameId: Long): String?
+
     @Transaction
     open suspend fun updateGameHashLibrary(hashLibrary: List<RAGameHashEntity>) {
         deleteGameHashLibrary()

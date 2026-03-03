@@ -143,21 +143,29 @@ class RAApi(
         )
     }
 
-    suspend fun awardAchievement(achievementId: Long, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {
+    suspend fun awardAchievement(
+        achievementId: Long,
+        forHardcoreMode: Boolean,
+        gameHash: String? = null,
+    ): Result<RAAwardAchievementResponse> {
         val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
 
         val signature = signatureProvider.provideAchievementSignature(achievementId, userAuth, forHardcoreMode)
 
+        val parameters = mutableMapOf(
+            PARAMETER_REQUEST to REQUEST_AWARD_ACHIEVEMENT,
+            PARAMETER_USER to userAuth.username,
+            PARAMETER_TOKEN to userAuth.token,
+            PARAMETER_ACHIEVEMENT_ID to achievementId.toString(),
+            PARAMETER_IS_HARDMODE to if (forHardcoreMode) VALUE_HARDMODE_ENABLED else VALUE_HARDMODE_DISABLED,
+            PARAMETER_SIGNATURE to signature,
+        )
+        if (!gameHash.isNullOrBlank()) {
+            parameters[PARAMETER_GAME_HASH] = gameHash
+        }
+
         return get<AwardAchievementResponseDto>(
-            mapOf(
-                PARAMETER_REQUEST to REQUEST_AWARD_ACHIEVEMENT,
-                PARAMETER_USER to userAuth.username,
-                PARAMETER_TOKEN to userAuth.token,
-                PARAMETER_ACHIEVEMENT_ID to achievementId.toString(),
-                // TODO: Maybe send game hash?
-                PARAMETER_IS_HARDMODE to if (forHardcoreMode) VALUE_HARDMODE_ENABLED else VALUE_HARDMODE_DISABLED,
-                PARAMETER_SIGNATURE to signature,
-            ),
+            parameters,
             errorHandler = {
                 // Ignore errors if the achievement has already been awarded to the user
                 if (it?.startsWith("User already has") != true) {
@@ -172,21 +180,29 @@ class RAApi(
         }
     }
 
-    suspend fun submitLeaderboardEntry(leaderboardId: Long, value: Int): Result<RASubmitLeaderboardEntryResponse> {
+    suspend fun submitLeaderboardEntry(
+        leaderboardId: Long,
+        value: Int,
+        gameHash: String? = null,
+    ): Result<RASubmitLeaderboardEntryResponse> {
         val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
 
         val signature = signatureProvider.provideLeaderboardSignature(leaderboardId, value, userAuth)
 
+        val parameters = mutableMapOf(
+            PARAMETER_REQUEST to REQUEST_SUBMIT_LEADERBOARD_ENTRY,
+            PARAMETER_USER to userAuth.username,
+            PARAMETER_TOKEN to userAuth.token,
+            PARAMETER_LEADERBOARD_ID to leaderboardId.toString(),
+            PARAMETER_SCORE to value.toString(),
+            PARAMETER_SIGNATURE to signature,
+        )
+        if (!gameHash.isNullOrBlank()) {
+            parameters[PARAMETER_GAME_HASH] = gameHash
+        }
+
         return get<RASubmitLeaderboardEntryResponseDto>(
-            mapOf(
-                PARAMETER_REQUEST to REQUEST_SUBMIT_LEADERBOARD_ENTRY,
-                PARAMETER_USER to userAuth.username,
-                PARAMETER_TOKEN to userAuth.token,
-                PARAMETER_LEADERBOARD_ID to leaderboardId.toString(),
-                PARAMETER_SCORE to value.toString(),
-                // TODO: Maybe send game hash?
-                PARAMETER_SIGNATURE to signature,
-            ),
+            parameters,
         ).map {
             RASubmitLeaderboardEntryResponse(
                 gameId = RAGameId(it.response.leaderboardData.gameId),

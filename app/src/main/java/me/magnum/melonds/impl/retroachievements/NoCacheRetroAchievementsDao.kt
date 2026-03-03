@@ -15,8 +15,8 @@ import me.magnum.melonds.database.entities.retroachievements.RAUserAchievementEn
  * An [RetroAchievementsDao] implementation that disables most functionality related to data caching that should not be stored to guarantee the best integration with the
  * RetroAchievements platform. This implementation allows the caching implementation to be maintained but not used. If in the future that implementation proves useful, this
  * DAO usage can be replaced with the actual DAO that interacts with the database.
- * The only data that is actually not allowed to be cached is game set metadata and pending achievement submissions. All other data is maintained so that it can be used in an
- * ongoing session.
+ * The only data that is actually not allowed to be cached is game set metadata. Other data (including pending submissions)
+ * is persisted so runtime and retry flows can survive transient network failures.
  *
  * @param actualAchievementsDao The DAO that should be used for operations that are actually supported and actually stores and fetches the data
  */
@@ -111,16 +111,19 @@ class NoCacheRetroAchievementsDao(private val actualAchievementsDao: RetroAchiev
     }
 
     override suspend fun addPendingAchievementSubmission(pendingAchievementSubmission: RAPendingAchievementSubmissionEntity) {
+        actualAchievementsDao.addPendingAchievementSubmission(pendingAchievementSubmission)
     }
 
     override suspend fun getPendingAchievementSubmissions(): List<RAPendingAchievementSubmissionEntity> {
-        return emptyList()
+        return actualAchievementsDao.getPendingAchievementSubmissions()
     }
 
     override suspend fun removePendingAchievementSubmission(pendingAchievementSubmission: RAPendingAchievementSubmissionEntity) {
+        actualAchievementsDao.removePendingAchievementSubmission(pendingAchievementSubmission)
     }
 
     override suspend fun deleteAllPendingAchievementSubmissions() {
+        // not called directly in production paths; bulk cleanup is delegated by deleteAllAchievementUserData()
     }
 
     override suspend fun deleteGameHashLibrary() {
@@ -132,6 +135,10 @@ class NoCacheRetroAchievementsDao(private val actualAchievementsDao: RetroAchiev
 
     override suspend fun getGameHashEntity(gameHash: String): RAGameHashEntity? {
         return actualAchievementsDao.getGameHashEntity(gameHash)
+    }
+
+    override suspend fun getAnyGameHashForGameId(gameId: Long): String? {
+        return actualAchievementsDao.getAnyGameHashForGameId(gameId)
     }
 
     override suspend fun updateGameHashLibrary(hashLibrary: List<RAGameHashEntity>) {

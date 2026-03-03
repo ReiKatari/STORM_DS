@@ -40,8 +40,13 @@ abstract class RetroAchievementsViewModel (
 
     protected abstract fun getRom(): Rom
     protected open suspend fun getPendingLedgerAchievementIds(rom: Rom): Set<Long> = emptySet()
+    protected open suspend fun getRuntimeBucketByAchievementId(rom: Rom): Map<Long, AchievementBucketUiModel.Bucket> = emptyMap()
+    protected open suspend fun getRuntimeSubsetOrder(rom: Rom): Map<Long, Int> = emptyMap()
 
-    protected abstract suspend fun buildAchievementBuckets(achievements: List<RAUserAchievement>): List<AchievementBucketUiModel>
+    protected abstract suspend fun buildAchievementBuckets(
+        achievements: List<RAUserAchievement>,
+        runtimeBucketByAchievementId: Map<Long, AchievementBucketUiModel.Bucket>,
+    ): List<AchievementBucketUiModel>
 
     private fun loadAchievements() {
         achievementLoadJob?.cancel()
@@ -49,6 +54,12 @@ abstract class RetroAchievementsViewModel (
             if (retroAchievementsRepository.isUserAuthenticated()) {
                 val rom = getRom()
                 val forHardcoreMode = settingsRepository.isRetroAchievementsHardcoreEnabled()
+                val runtimeBucketByAchievementId = withContext(Dispatchers.Default) {
+                    getRuntimeBucketByAchievementId(rom)
+                }
+                val runtimeSubsetOrder = withContext(Dispatchers.Default) {
+                    getRuntimeSubsetOrder(rom)
+                }
                 retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode).fold(
                     onSuccess = { userGameData ->
                         val sets = userGameData?.sets?.map { set ->
@@ -58,14 +69,22 @@ abstract class RetroAchievementsViewModel (
                                 setType = set.type,
                                 setIcon = set.iconUrl,
                                 setSummary = buildAchievementsSummary(forHardcoreMode, set.achievements),
-                                buckets = buildAchievementBuckets(set.achievements),
+                                buckets = buildAchievementBuckets(set.achievements, runtimeBucketByAchievementId),
                             )
+                        }.orEmpty()
+                        val orderedSets = if (runtimeSubsetOrder.isNotEmpty()) {
+                            sets.sortedWith(
+                                compareBy<AchievementSetUiModel> { runtimeSubsetOrder[it.setId] ?: Int.MAX_VALUE }
+                                    .thenBy { it.setId }
+                            )
+                        } else {
+                            sets
                         }
                         val pendingLedgerAchievementIds = withContext(Dispatchers.IO) {
                             getPendingLedgerAchievementIds(rom)
                         }
                         _uiState.value = RomRetroAchievementsUiState.Ready(
-                            sets = sets.orEmpty(),
+                            sets = orderedSets,
                             pendingLedgerAchievementIds = pendingLedgerAchievementIds,
                         )
                     },
