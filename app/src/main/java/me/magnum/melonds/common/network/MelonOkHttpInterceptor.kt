@@ -4,23 +4,28 @@ import android.content.Context
 import okhttp3.Interceptor
 import okhttp3.Response
 
-class MelonOkHttpInterceptor(private val context: Context) : Interceptor {
+class MelonOkHttpInterceptor(
+    context: Context,
+) : Interceptor {
     private companion object {
         const val USER_AGENT = "User-Agent"
-        const val MELON_USER_AGENT_PREFIX = "MelonDualDS-android"
+        const val MELON_USER_AGENT_PREFIX = "melonDualDS-android/"
+        const val UNKNOWN_VERSION = "unknown"
     }
 
-    private val userAgentVersion by lazy {
-        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        val appVersion = packageInfo.versionName!!
-        val userAgentSuffix = appVersion.lowercase().replace(' ', '-').replace("(", "").replace(")", "")
-        "$MELON_USER_AGENT_PREFIX/$userAgentSuffix"
+    private val melonUserAgent: String = buildString {
+        append(MELON_USER_AGENT_PREFIX)
+        append(
+            runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrNull().orEmpty().ifBlank { UNKNOWN_VERSION }
+        )
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val newRequest = chain.request()
             .newBuilder()
-            .addHeader(USER_AGENT, userAgentVersion)
+            .addHeader(USER_AGENT, melonUserAgent)
             .build()
 
         return chain.proceed(newRequest)
