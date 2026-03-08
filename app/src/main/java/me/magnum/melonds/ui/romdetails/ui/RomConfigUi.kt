@@ -39,6 +39,7 @@ import me.magnum.melonds.ui.common.component.dialog.TextInputDialog
 import me.magnum.melonds.ui.common.component.dialog.rememberTextInputDialogState
 import me.magnum.melonds.ui.common.preference.ActionLauncherItem
 import me.magnum.melonds.ui.common.preference.SingleChoiceItem
+import me.magnum.melonds.ui.common.preference.SwitchItem
 import me.magnum.melonds.ui.layouts.LayoutSelectorActivity
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiModel
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiState
@@ -86,6 +87,8 @@ private fun Content(
     romConfig: RomConfigUiModel,
     onConfigUpdate: (RomConfigUpdateEvent) -> Unit,
 ) {
+    val context = LocalContext.current
+
     Column(
         modifier = modifier.verticalScroll(rememberScrollState())
             .padding(
@@ -135,7 +138,14 @@ private fun Content(
             }
         )
 
-        val context = LocalContext.current
+        SwitchItem(
+            name = stringResource(id = R.string.label_rom_config_hg_engine_fix),
+            isOn = romConfig.useHgEngineFix,
+            onToggle = {
+                onConfigUpdate(RomConfigUpdateEvent.UseHgEngineFixUpdate(it))
+            }
+        )
+
         val layoutSelectorLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
                 val layoutId = result.data?.getStringExtra(LayoutSelectorActivity.KEY_SELECTED_LAYOUT_ID)?.let { UUID.fromString(it) }

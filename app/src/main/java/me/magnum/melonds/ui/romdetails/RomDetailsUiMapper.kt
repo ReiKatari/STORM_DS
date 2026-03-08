@@ -21,6 +21,7 @@ class RomDetailsUiMapper(
             layoutName = romConfig.layoutId?.let { layoutsRepository.getLayout(it)?.name } ?: layoutsRepository.getGlobalLayoutPlaceholder().name,
             gbaSlotConfig = mapGbaSlotConfigToUi(romConfig.gbaSlotConfig),
             customName = romConfig.customName,
+            useHgEngineFix = romConfig.useHgEngineFix,
         )
     }
 

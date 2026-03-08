@@ -8,6 +8,7 @@ data class RomConfig(
     val layoutId: UUID? = null,
     val gbaSlotConfig: RomGbaSlotConfig = RomGbaSlotConfig.None,
     val customName: String? = null,
+    val useHgEngineFix: Boolean = false,
 ) {
 
     companion object {
@@ -20,6 +21,7 @@ data class RomConfig(
                 layoutId = null,
                 gbaSlotConfig = RomGbaSlotConfig.None,
                 customName = null,
+                useHgEngineFix = false,
             )
         }
     }

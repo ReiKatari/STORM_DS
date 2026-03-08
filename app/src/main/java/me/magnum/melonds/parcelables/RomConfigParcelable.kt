@@ -22,6 +22,7 @@ class RomConfigParcelable : Parcelable {
             layoutId = parcel.readString()?.let { UUID.fromString(it) },
             gbaSlotConfig = parcel.parcelable<RomGbaSlotConfigParcelable>()!!.gbaSlotConfig,
             customName = parcel.readString(),
+            useHgEngineFix = parcel.readByte().toInt() != 0,
         )
     }
 
@@ -31,6 +32,7 @@ class RomConfigParcelable : Parcelable {
         dest.writeString(romConfig.layoutId?.toString())
         dest.writeParcelable(RomGbaSlotConfigParcelable(romConfig.gbaSlotConfig), 0)
         dest.writeString(romConfig.customName)
+        dest.writeByte((if (romConfig.useHgEngineFix) 1 else 0).toByte())
     }
 
     override fun describeContents(): Int {
