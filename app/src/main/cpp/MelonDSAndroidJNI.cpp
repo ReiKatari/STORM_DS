@@ -56,7 +56,6 @@ std::mutex frameRenderCallbackLock;
 
 namespace
 {
-
 void clearPendingJniException(JNIEnv* env)
 {
     if (env->ExceptionCheck())

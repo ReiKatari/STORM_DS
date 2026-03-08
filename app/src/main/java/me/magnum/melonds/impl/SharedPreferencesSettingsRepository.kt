@@ -238,6 +238,7 @@ class SharedPreferencesSettingsRepository(
             getRewindPeriod(),
             getRewindWindow(),
             isJitEnabled(),
+            false,
             consoleType,
             isSoundEnabled(),
             getAudioInterpolation(),

@@ -17,6 +17,8 @@ data class RomConfigDto(
     val gbaSlotConfig: RomGbaSlotConfigDto,
     @SerializedName("customName")
     val customName: String? = null,
+    @SerializedName(value = "useHgEngineFix", alternate = ["useHgInputWorkaround"])
+    val useHgEngineFix: Boolean? = null,
 ) {
 
     companion object {
@@ -27,6 +29,7 @@ data class RomConfigDto(
                 romConfig.layoutId?.toString(),
                 RomGbaSlotConfigDto.fromModel(romConfig.gbaSlotConfig),
                 romConfig.customName,
+                romConfig.useHgEngineFix,
             )
         }
     }
@@ -38,6 +41,7 @@ data class RomConfigDto(
             layoutId?.let { UUID.fromString(it) },
             gbaSlotConfig.toModel(),
             customName = customName,
+            useHgEngineFix = useHgEngineFix ?: false,
         )
     }
 }

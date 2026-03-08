@@ -57,6 +57,7 @@ class RomDetailsViewModel @Inject constructor(
         val newRomConfig = when(event) {
             is RomConfigUpdateEvent.RuntimeConsoleUpdate -> currentRomConfig.copy(runtimeConsoleType = event.newRuntimeConsole)
             is RomConfigUpdateEvent.RuntimeMicSourceUpdate -> currentRomConfig.copy(runtimeMicSource = event.newRuntimeMicSource)
+            is RomConfigUpdateEvent.UseHgEngineFixUpdate -> currentRomConfig.copy(useHgEngineFix = event.enabled)
             is RomConfigUpdateEvent.LayoutUpdate -> currentRomConfig.copy(layoutId = event.newLayoutId)
             is RomConfigUpdateEvent.GbaSlotTypeUpdated -> currentRomConfig.let {
                 val newGbaSlotConfig = when (event.type) {
@@ -64,7 +65,6 @@ class RomDetailsViewModel @Inject constructor(
                     RomGbaSlotConfigUiModel.Type.GbaRom -> RomGbaSlotConfig.GbaRom(null, null)
                     RomGbaSlotConfigUiModel.Type.RumblePak -> RomGbaSlotConfig.RumblePak
                     RomGbaSlotConfigUiModel.Type.MemoryExpansion -> RomGbaSlotConfig.MemoryExpansion
-                    RomGbaSlotConfigUiModel.Type.RumblePak -> RomGbaSlotConfig.RumblePak
                 }
                 it.copy(gbaSlotConfig = newGbaSlotConfig)
             }

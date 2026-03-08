@@ -8,6 +8,7 @@ import java.util.UUID
 sealed class RomConfigUpdateEvent {
     data class RuntimeConsoleUpdate(val newRuntimeConsole: RuntimeConsoleType) : RomConfigUpdateEvent()
     data class RuntimeMicSourceUpdate(val newRuntimeMicSource: RuntimeMicSource) : RomConfigUpdateEvent()
+    data class UseHgEngineFixUpdate(val enabled: Boolean) : RomConfigUpdateEvent()
     data class LayoutUpdate(val newLayoutId: UUID?) : RomConfigUpdateEvent()
     data class GbaSlotTypeUpdated(val type: RomGbaSlotConfigUiModel.Type) : RomConfigUpdateEvent()
     data class GbaRomPathUpdate(val gbaRomPath: Uri?) : RomConfigUpdateEvent()
