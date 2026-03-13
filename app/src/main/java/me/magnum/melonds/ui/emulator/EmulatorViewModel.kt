@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -232,7 +234,18 @@ class EmulatorViewModel @Inject constructor(
     private val _runtimeLayout = MutableStateFlow<RuntimeInputLayoutConfiguration?>(null)
     val runtimeLayout = _runtimeLayout.asStateFlow()
 
-    val controllerConfiguration = settingsRepository.observeControllerConfiguration()
+    private val activeRomConfig = MutableStateFlow<Rom?>(null)
+
+    val controllerConfiguration = combine(
+        settingsRepository.observeControllerConfiguration(),
+        activeRomConfig,
+    ) { globalConfiguration, rom ->
+        rom?.config?.getEffectiveControllerConfiguration(globalConfiguration) ?: globalConfiguration
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = settingsRepository.getControllerConfiguration(),
+    )
 
     private val _runtimeRendererConfiguration = MutableStateFlow<RuntimeRendererConfiguration?>(null)
     val runtimeRendererConfiguration = _runtimeRendererConfiguration.asStateFlow()
@@ -449,6 +462,7 @@ class EmulatorViewModel @Inject constructor(
 
     private suspend fun launchRom(rom: Rom) = coroutineScope {
         currentRom = rom
+        activeRomConfig.value = rom
         val launchDecision = decideRetroAchievementsLaunchDecision(rom)
 
         retroAchievementsNetworkMode = launchDecision.networkMode
@@ -1407,6 +1421,7 @@ class EmulatorViewModel @Inject constructor(
         _secondaryScreenBackground.value = RuntimeBackground.None
         _layout.value = null
         currentRom = null
+        activeRomConfig.value = null
         currentRetroAchievementsGameId = null
         offlineSyncChoiceDeferred?.cancel()
         offlineSyncChoiceDeferred = null

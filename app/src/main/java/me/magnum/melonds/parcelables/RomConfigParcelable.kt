@@ -3,6 +3,7 @@ package me.magnum.melonds.parcelables
 import android.os.Parcel
 import android.os.Parcelable
 import me.magnum.melonds.domain.model.rom.config.RomConfig
+import me.magnum.melonds.domain.model.rom.config.RomInputMode
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.extensions.parcelable
@@ -23,6 +24,8 @@ class RomConfigParcelable : Parcelable {
             gbaSlotConfig = parcel.parcelable<RomGbaSlotConfigParcelable>()!!.gbaSlotConfig,
             customName = parcel.readString(),
             useHgEngineFix = parcel.readByte().toInt() != 0,
+            inputMode = RomInputMode.entries[parcel.readInt()],
+            customControllerConfiguration = parcel.parcelable<ControllerConfigurationParcelable>()?.controllerConfiguration,
         )
     }
 
@@ -33,6 +36,8 @@ class RomConfigParcelable : Parcelable {
         dest.writeParcelable(RomGbaSlotConfigParcelable(romConfig.gbaSlotConfig), 0)
         dest.writeString(romConfig.customName)
         dest.writeByte((if (romConfig.useHgEngineFix) 1 else 0).toByte())
+        dest.writeInt(romConfig.inputMode.ordinal)
+        dest.writeParcelable(romConfig.customControllerConfiguration?.let { ControllerConfigurationParcelable(it) }, 0)
     }
 
     override fun describeContents(): Int {

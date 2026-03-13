@@ -43,7 +43,7 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
         keyMappingPreference.setOnPreferenceClickListener {
-            val intent = Intent(requireContext(), InputSetupActivity::class.java)
+            val intent = InputSetupActivity.getGlobalIntent(requireContext())
             startActivity(intent)
             true
         }

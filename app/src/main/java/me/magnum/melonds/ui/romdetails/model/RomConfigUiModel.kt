@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.romdetails.model
 
+import me.magnum.melonds.domain.model.rom.config.RomInputMode
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import java.util.UUID
@@ -12,4 +13,5 @@ data class RomConfigUiModel(
     val gbaSlotConfig: RomGbaSlotConfigUiModel = RomGbaSlotConfigUiModel(),
     val customName: String? = null,
     val useHgEngineFix: Boolean = false,
+    val inputMode: RomInputMode = RomInputMode.GLOBAL,
 )

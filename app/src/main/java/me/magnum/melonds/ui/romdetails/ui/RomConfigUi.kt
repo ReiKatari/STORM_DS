@@ -32,6 +32,7 @@ import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.contracts.FilePickerContract
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
+import me.magnum.melonds.domain.model.rom.config.RomInputMode
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.ui.common.MelonPreviewSet
@@ -40,6 +41,7 @@ import me.magnum.melonds.ui.common.component.dialog.rememberTextInputDialogState
 import me.magnum.melonds.ui.common.preference.ActionLauncherItem
 import me.magnum.melonds.ui.common.preference.SingleChoiceItem
 import me.magnum.melonds.ui.common.preference.SwitchItem
+import me.magnum.melonds.ui.inputsetup.InputSetupActivity
 import me.magnum.melonds.ui.layouts.LayoutSelectorActivity
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiModel
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiState
@@ -56,6 +58,7 @@ fun RomConfigUi(
     rom: Rom,
     romConfigUiState: RomConfigUiState,
     onConfigUpdate: (RomConfigUpdateEvent) -> Unit,
+    onCustomInputConfigEdited: () -> Unit,
 ) {
     when (romConfigUiState) {
         is RomConfigUiState.Loading -> Loading(modifier.padding(contentPadding))
@@ -65,6 +68,7 @@ fun RomConfigUi(
             rom = rom,
             romConfig = romConfigUiState.romConfigUiModel,
             onConfigUpdate = onConfigUpdate,
+            onCustomInputConfigEdited = onCustomInputConfigEdited,
         )
     }
 }
@@ -86,6 +90,7 @@ private fun Content(
     rom: Rom,
     romConfig: RomConfigUiModel,
     onConfigUpdate: (RomConfigUpdateEvent) -> Unit,
+    onCustomInputConfigEdited: () -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -145,6 +150,30 @@ private fun Content(
                 onConfigUpdate(RomConfigUpdateEvent.UseHgEngineFixUpdate(it))
             }
         )
+
+        val inputModeOptions = stringArrayResource(id = R.array.rom_input_mode_options)
+        SingleChoiceItem(
+            name = stringResource(id = R.string.label_rom_config_input_mode),
+            value = inputModeOptions[romConfig.inputMode.ordinal],
+            items = inputModeOptions.toList(),
+            selectedItemIndex = romConfig.inputMode.ordinal,
+            onItemSelected = {
+                onConfigUpdate(RomConfigUpdateEvent.InputModeUpdate(RomInputMode.entries[it]))
+            }
+        )
+
+        val customInputSetupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            onCustomInputConfigEdited()
+        }
+        AnimatedVisibility(visible = romConfig.inputMode == RomInputMode.CUSTOM) {
+            ActionLauncherItem(
+                name = stringResource(id = R.string.label_rom_config_custom_input_mapping),
+                value = stringResource(id = R.string.edit),
+                onLaunchAction = {
+                    customInputSetupLauncher.launch(InputSetupActivity.getRomCustomIntent(context, rom))
+                }
+            )
+        }
 
         val layoutSelectorLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
@@ -236,6 +265,7 @@ private fun PreviewRomConfigUi() {
                 ),
             ),
             onConfigUpdate = { },
+            onCustomInputConfigEdited = { },
         )
     }
 }

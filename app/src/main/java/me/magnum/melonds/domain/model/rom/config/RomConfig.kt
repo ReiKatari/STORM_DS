@@ -1,5 +1,6 @@
 package me.magnum.melonds.domain.model.rom.config
 
+import me.magnum.melonds.domain.model.ControllerConfiguration
 import java.util.*
 
 data class RomConfig(
@@ -9,7 +10,17 @@ data class RomConfig(
     val gbaSlotConfig: RomGbaSlotConfig = RomGbaSlotConfig.None,
     val customName: String? = null,
     val useHgEngineFix: Boolean = false,
+    val inputMode: RomInputMode = RomInputMode.GLOBAL,
+    val customControllerConfiguration: ControllerConfiguration? = null,
 ) {
+
+    fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
+        return if (inputMode == RomInputMode.CUSTOM) {
+            customControllerConfiguration ?: globalConfiguration
+        } else {
+            globalConfiguration
+        }
+    }
 
     companion object {
         fun default() = RomConfig()
@@ -22,6 +33,8 @@ data class RomConfig(
                 gbaSlotConfig = RomGbaSlotConfig.None,
                 customName = null,
                 useHgEngineFix = false,
+                inputMode = RomInputMode.GLOBAL,
+                customControllerConfiguration = null,
             )
         }
     }

@@ -1,6 +1,8 @@
 package me.magnum.melonds.ui.inputsetup
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.InputDevice
@@ -17,12 +19,28 @@ import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.model.InputConfig
+import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.parcelables.RomParcelable
 import me.magnum.melonds.ui.inputsetup.ui.InputSetupScreen
 import me.magnum.melonds.ui.theme.MelonTheme
 import kotlin.math.absoluteValue
 
 @AndroidEntryPoint
 class InputSetupActivity : AppCompatActivity() {
+
+    companion object {
+        const val KEY_ROM = "rom"
+
+        fun getGlobalIntent(context: Context): Intent {
+            return Intent(context, InputSetupActivity::class.java)
+        }
+
+        fun getRomCustomIntent(context: Context, rom: Rom): Intent {
+            return Intent(context, InputSetupActivity::class.java).apply {
+                putExtra(KEY_ROM, RomParcelable(rom))
+            }
+        }
+    }
 
     private val viewModel: InputSetupViewModel by viewModels()
 

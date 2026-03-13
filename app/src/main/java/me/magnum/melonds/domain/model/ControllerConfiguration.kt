@@ -65,4 +65,8 @@ class ControllerConfiguration(configList: List<InputConfig>) {
             }
         }?.input
     }
+
+    fun copy(): ControllerConfiguration {
+        return ControllerConfiguration(inputMapper.map { it.copy() })
+    }
 }

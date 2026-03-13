@@ -109,6 +109,9 @@ class RomDetailsActivity : AppCompatActivity() {
                     onRomConfigUpdate = {
                         romDetailsViewModel.onRomConfigUpdateEvent(it)
                     },
+                    onCustomInputConfigEdited = {
+                        romDetailsViewModel.refreshRom()
+                    },
                     onRetroAchievementsLogin = { username, password ->
                         romRetroAchievementsViewModel.login(username, password)
                     },
