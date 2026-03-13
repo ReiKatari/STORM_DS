@@ -22,6 +22,7 @@ class RomDetailsUiMapper(
             gbaSlotConfig = mapGbaSlotConfigToUi(romConfig.gbaSlotConfig),
             customName = romConfig.customName,
             useHgEngineFix = romConfig.useHgEngineFix,
+            inputMode = romConfig.inputMode,
         )
     }
 

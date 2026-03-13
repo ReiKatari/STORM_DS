@@ -347,6 +347,8 @@
     <string name="label_rom_config_console">Boot system</string>
     <string name="label_rom_config_custom_name">ROM display name</string>
     <string name="label_rom_config_hg_engine_fix">Use hg-engine fix</string>
+    <string name="label_rom_config_input_mode">Controller mapping</string>
+    <string name="label_rom_config_custom_input_mapping">Custom key mapping</string>
     <string name="label_rom_config_gba_slot">GBA slot</string>
     <string name="label_rom_config_gba_rom_path">GBA ROM path</string>
     <string name="label_rom_config_gba_save_path">GBA save path</string>
@@ -601,6 +603,10 @@
         <item>None</item>
         <item>Blow</item>
         <item>Device microphone</item>
+    </string-array>
+    <string-array name="rom_input_mode_options">
+        <item>@string/use_global_preference</item>
+        <item>Custom</item>
     </string-array>
     <string-array name="gba_slot_options">
         <item>None</item>

@@ -13,6 +13,7 @@ import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
+import me.magnum.melonds.domain.model.rom.config.RomInputMode
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
 import me.magnum.melonds.domain.repositories.RomsRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -58,6 +59,14 @@ class RomDetailsViewModel @Inject constructor(
             is RomConfigUpdateEvent.RuntimeConsoleUpdate -> currentRomConfig.copy(runtimeConsoleType = event.newRuntimeConsole)
             is RomConfigUpdateEvent.RuntimeMicSourceUpdate -> currentRomConfig.copy(runtimeMicSource = event.newRuntimeMicSource)
             is RomConfigUpdateEvent.UseHgEngineFixUpdate -> currentRomConfig.copy(useHgEngineFix = event.enabled)
+            is RomConfigUpdateEvent.InputModeUpdate -> currentRomConfig.copy(
+                inputMode = event.inputMode,
+                customControllerConfiguration = when {
+                    event.inputMode != RomInputMode.CUSTOM -> currentRomConfig.customControllerConfiguration
+                    currentRomConfig.customControllerConfiguration != null -> currentRomConfig.customControllerConfiguration
+                    else -> settingsRepository.getControllerConfiguration().copy()
+                },
+            )
             is RomConfigUpdateEvent.LayoutUpdate -> currentRomConfig.copy(layoutId = event.newLayoutId)
             is RomConfigUpdateEvent.GbaSlotTypeUpdated -> currentRomConfig.let {
                 val newGbaSlotConfig = when (event.type) {
@@ -85,6 +94,14 @@ class RomDetailsViewModel @Inject constructor(
             _romConfig.value = newConfig
             _rom.update { it.copy(config = newConfig) }
             saveRomConfig(newConfig)
+        }
+    }
+
+    fun refreshRom() {
+        viewModelScope.launch {
+            val refreshedRom = romsRepository.getRomAtUri(_rom.value.uri) ?: return@launch
+            _rom.value = refreshedRom
+            _romConfig.value = refreshedRom.config
         }
     }
 
