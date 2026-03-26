@@ -258,38 +258,42 @@ class AndroidRetroAchievementsRepository(
         }
     }
 
-    override suspend fun startSession(gameHash: String): Result<Unit> {
+    override suspend fun startSession(gameHash: String, forHardcoreMode: Boolean): Result<Unit> {
         val gameId = getGameIdFromGameHash(gameHash).getOrNull() ?: return Result.failure(RAGameNotExist(gameHash))
         logRaTrace(
             "session_start_attempt",
             "game_hash" to gameHash,
             "game_id" to gameId.id,
+            "hardcore" to forHardcoreMode,
         )
-        return raApi.startSession(gameId).onSuccess {
+        return raApi.startSession(gameId, gameHash, forHardcoreMode).onSuccess {
             logRaTrace(
                 "session_start_success",
                 "game_hash" to gameHash,
                 "game_id" to gameId.id,
+                "hardcore" to forHardcoreMode,
             )
         }.onFailure { error ->
             logRaTrace(
                 "session_start_failed",
                 "game_hash" to gameHash,
                 "game_id" to gameId.id,
+                "hardcore" to forHardcoreMode,
                 "error" to (error::class.simpleName ?: "Unknown"),
             )
         }
     }
 
-    override suspend fun sendSessionHeartbeat(gameHash: String, richPresenceDescription: String?) {
+    override suspend fun sendSessionHeartbeat(gameHash: String, forHardcoreMode: Boolean, richPresenceDescription: String?) {
         val gameId = getGameIdFromGameHash(gameHash).getOrNull() ?: return
         logRaTrace(
             "session_ping",
             "game_hash" to gameHash,
             "game_id" to gameId.id,
+            "hardcore" to forHardcoreMode,
             "rich_presence" to (!richPresenceDescription.isNullOrBlank()),
         )
-        raApi.sendPing(gameId, richPresenceDescription)
+        raApi.sendPing(gameId, gameHash, forHardcoreMode, richPresenceDescription)
     }
 
     private suspend fun submitAchievementAward(achievementId: Long, gameId: RAGameId, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {

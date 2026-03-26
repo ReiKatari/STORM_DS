@@ -2786,8 +2786,9 @@ class EmulatorViewModel @Inject constructor(
                             }
 
                             if (!isRetroAchievementsOnlineSessionStarted) {
+                                val isHardcoreModeEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE
                                 val startResult = withContext(Dispatchers.IO) {
-                                    retroAchievementsRepository.startSession(rom.retroAchievementsHash)
+                                    retroAchievementsRepository.startSession(rom.retroAchievementsHash, isHardcoreModeEnabled)
                                 }
                                 if (startResult.isFailure) {
                                     delay(15.seconds)
@@ -2800,8 +2801,13 @@ class EmulatorViewModel @Inject constructor(
                             // TODO: Should we pause the session if the app goes to background? If so, how?
                             delay(2.minutes)
                             val richPresenceDescription = MelonEmulator.getRichPresenceStatus()
+                            val isHardcoreModeEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE
                             withContext(Dispatchers.IO) {
-                                retroAchievementsRepository.sendSessionHeartbeat(rom.retroAchievementsHash, richPresenceDescription)
+                                retroAchievementsRepository.sendSessionHeartbeat(
+                                    rom.retroAchievementsHash,
+                                    isHardcoreModeEnabled,
+                                    richPresenceDescription,
+                                )
                             }
                         }
                     }
