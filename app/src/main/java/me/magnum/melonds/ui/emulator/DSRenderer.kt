@@ -63,7 +63,6 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         val width: Float,
         val height: Float,
     )
-
     private val configurationLock = Any()
     private var rendererConfiguration: RuntimeRendererConfiguration? = null
     private var mustUpdateConfiguration = false
@@ -186,7 +185,9 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         // Create background shader
         backgroundShader = ShaderFactory.createShaderProgram(ShaderProgramSource.BackgroundShader)
 
-        applyRendererConfiguration()
+        synchronized(configurationLock) {
+            mustUpdateConfiguration = true
+        }
     }
 
     private fun applyRendererConfiguration() {
@@ -373,117 +374,117 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
                 applyRendererConfiguration()
                 mustUpdateConfiguration = false
             }
+        }
 
-            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
 
-            if (!presentFrameWrapper.isValidFrame) {
-                return
-            }
+        if (!presentFrameWrapper.isValidFrame) {
+            return
+        }
 
-            renderBackground()
+        renderBackground()
 
-            screenShader?.let { shader ->
-                GLES30.glDisable(GLES30.GL_DEPTH_TEST)
-                GLES30.glEnable(GLES30.GL_BLEND)
-                GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        screenShader?.let { shader ->
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
 
-                val textureId = presentFrameWrapper.textureId
-                val requiresHistory = shader.uniformPrevTex >= 0 || shader.uniformPrevWeight >= 0
-                val requiresTexSize = shader.uniformTexSize >= 0
-                val textureInfo = if ((requiresHistory || requiresTexSize) && textureId != 0) {
-                    val textureWidth = presentFrameWrapper.textureWidth
-                    val textureHeight = presentFrameWrapper.textureHeight
-                    if (textureWidth > 0 && textureHeight > 0) {
-                        TextureSize(textureWidth, textureHeight)
-                    } else {
-                        null
-                    }
+            val textureId = presentFrameWrapper.textureId
+            val requiresHistory = shader.uniformPrevTex >= 0 || shader.uniformPrevWeight >= 0
+            val requiresTexSize = shader.uniformTexSize >= 0
+            val textureInfo = if ((requiresHistory || requiresTexSize) && textureId != 0) {
+                val textureWidth = presentFrameWrapper.textureWidth
+                val textureHeight = presentFrameWrapper.textureHeight
+                if (textureWidth > 0 && textureHeight > 0) {
+                    TextureSize(textureWidth, textureHeight)
                 } else {
                     null
                 }
+            } else {
+                null
+            }
 
-                GLES30.glBindVertexArray(screensVao)
-                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, screensVbo)
-                shader.use()
+            GLES30.glBindVertexArray(screensVao)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, screensVbo)
+            shader.use()
 
-                textureInfo?.let { info ->
-                    if (shader.uniformTexSize >= 0) {
-                        GLES30.glUniform2f(shader.uniformTexSize, info.width.toFloat(), info.height.toFloat())
-                    }
+            textureInfo?.let { info ->
+                if (shader.uniformTexSize >= 0) {
+                    GLES30.glUniform2f(shader.uniformTexSize, info.width.toFloat(), info.height.toFloat())
                 }
+            }
 
-                if (requiresHistory && textureInfo != null) {
-                    ensureHistoryResources(textureInfo)
-                    historyReady = historyReady && historyTexture != 0
-                    if (shader.uniformPrevWeight >= 0) {
-                        val weight = if (historyReady) RESPONSE_WEIGHT else 0f
-                        GLES30.glUniform1f(shader.uniformPrevWeight, weight)
-                    }
-                    if (shader.uniformPrevTex >= 0 && historyTexture != 0) {
-                        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
-                        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, historyTexture)
-                        GLES30.glUniform1i(shader.uniformPrevTex, 1)
-                    }
-                } else if (requiresHistory) {
-                    historyReady = false
+            if (requiresHistory && textureInfo != null) {
+                ensureHistoryResources(textureInfo)
+                historyReady = historyReady && historyTexture != 0
+                if (shader.uniformPrevWeight >= 0) {
+                    val weight = if (historyReady) RESPONSE_WEIGHT else 0f
+                    GLES30.glUniform1f(shader.uniformPrevWeight, weight)
                 }
-
-                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-                if (lastScreenTextureId != textureId || lastScreenTextureFiltering != shader.textureFiltering) {
-                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
-                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
-                    lastScreenTextureId = textureId
-                    lastScreenTextureFiltering = shader.textureFiltering
-                }
-
-                if (shader.attribPos >= 0) {
-                    GLES30.glVertexAttribPointer(shader.attribPos, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 0)
-                }
-                if (shader.attribUv >= 0) {
-                    GLES30.glVertexAttribPointer(shader.attribUv, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 2 * Float.SIZE_BYTES)
-                }
-                if (shader.attribAlpha >= 0) {
-                    GLES30.glVertexAttribPointer(shader.attribAlpha, 1, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 4 * Float.SIZE_BYTES)
-                }
-                if (shader.uniformTex >= 0) {
-                    GLES30.glUniform1i(shader.uniformTex, 0)
-                }
-
-                screenDrawCalls.forEach { drawCall ->
-                    if (shader.uniformViewportSize >= 0) {
-                        GLES30.glUniform2f(
-                            shader.uniformViewportSize,
-                            drawCall.viewportWidth,
-                            drawCall.viewportHeight,
-                        )
-                    }
-                    if (shader.uniformUvBounds >= 0) {
-                        GLES30.glUniform4f(
-                            shader.uniformUvBounds,
-                            drawCall.uvMinX,
-                            drawCall.uvMinY,
-                            drawCall.uvMaxX,
-                            drawCall.uvMaxY,
-                        )
-                    }
-                    GLES30.glDrawArrays(GLES30.GL_TRIANGLES, drawCall.firstVertex, drawCall.vertexCount)
-                }
-
-                if (requiresHistory) {
+                if (shader.uniformPrevTex >= 0 && historyTexture != 0) {
                     GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
-                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
-                    GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, historyTexture)
+                    GLES30.glUniform1i(shader.uniformPrevTex, 1)
                 }
+            } else if (requiresHistory) {
+                historyReady = false
+            }
 
-                GLES30.glBindVertexArray(0)
-                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
+            if (lastScreenTextureId != textureId || lastScreenTextureFiltering != shader.textureFiltering) {
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+                lastScreenTextureId = textureId
+                lastScreenTextureFiltering = shader.textureFiltering
+            }
 
-                if (requiresHistory && textureInfo != null) {
-                    copyFrameToHistory(textureId, textureInfo)
-                } else if (requiresHistory) {
-                    historyReady = false
+            if (shader.attribPos >= 0) {
+                GLES30.glVertexAttribPointer(shader.attribPos, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 0)
+            }
+            if (shader.attribUv >= 0) {
+                GLES30.glVertexAttribPointer(shader.attribUv, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 2 * Float.SIZE_BYTES)
+            }
+            if (shader.attribAlpha >= 0) {
+                GLES30.glVertexAttribPointer(shader.attribAlpha, 1, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 4 * Float.SIZE_BYTES)
+            }
+            if (shader.uniformTex >= 0) {
+                GLES30.glUniform1i(shader.uniformTex, 0)
+            }
+
+            screenDrawCalls.forEach { drawCall ->
+                if (shader.uniformViewportSize >= 0) {
+                    GLES30.glUniform2f(
+                        shader.uniformViewportSize,
+                        drawCall.viewportWidth,
+                        drawCall.viewportHeight,
+                    )
                 }
+                if (shader.uniformUvBounds >= 0) {
+                    GLES30.glUniform4f(
+                        shader.uniformUvBounds,
+                        drawCall.uvMinX,
+                        drawCall.uvMinY,
+                        drawCall.uvMaxX,
+                        drawCall.uvMaxY,
+                    )
+                }
+                GLES30.glDrawArrays(GLES30.GL_TRIANGLES, drawCall.firstVertex, drawCall.vertexCount)
+            }
+
+            if (requiresHistory) {
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            }
+
+            GLES30.glBindVertexArray(0)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+
+            if (requiresHistory && textureInfo != null) {
+                copyFrameToHistory(textureId, textureInfo)
+            } else if (requiresHistory) {
+                historyReady = false
             }
         }
     }
