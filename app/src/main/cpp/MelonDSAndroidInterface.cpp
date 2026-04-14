@@ -30,12 +30,12 @@ constexpr const char* kRequiredInstanceExtensions[] = {
 
 constexpr const char* kRequiredDeviceExtensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-    VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME,
 };
 
 constexpr const char* kTimelineSemaphoreExtension = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME;
 constexpr const char* kDescriptorIndexingExtension = VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME;
+constexpr const char* kOptionalExternalMemoryExtension = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME;
+constexpr const char* kOptionalAndroidHardwareBufferExtension = VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME;
 
 bool hasExtension(const char* extensionName, const std::vector<VkExtensionProperties>& extensions)
 {
@@ -59,16 +59,35 @@ bool hasRequiredInstanceExtensions()
 {
     uint32_t extensionCount = 0;
     if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr) != VK_SUCCESS)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Error,
+            "MelonDSAndroidInterface: failed to enumerate Vulkan instance extensions"
+        );
         return false;
+    }
 
     std::vector<VkExtensionProperties> extensions(extensionCount);
     if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data()) != VK_SUCCESS)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Error,
+            "MelonDSAndroidInterface: failed to read Vulkan instance extensions"
+        );
         return false;
+    }
 
     for (const char* requiredExtension : kRequiredInstanceExtensions)
     {
         if (!hasExtension(requiredExtension, extensions))
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "MelonDSAndroidInterface: missing required Vulkan instance extension %s",
+                requiredExtension
+            );
             return false;
+        }
     }
 
     return true;
@@ -76,16 +95,31 @@ bool hasRequiredInstanceExtensions()
 
 bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalDevice)
 {
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+
     uint32_t extensionCount = 0;
     if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr) != VK_SUCCESS)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: failed to enumerate device extensions for '%s'",
+            properties.deviceName
+        );
         return false;
+    }
 
     std::vector<VkExtensionProperties> extensions(extensionCount);
     if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, extensions.data()) != VK_SUCCESS)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: failed to read device extensions for '%s'",
+            properties.deviceName
+        );
         return false;
+    }
 
-    VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
     const bool apiAtLeast12 = isApiAtLeast(properties.apiVersion, 1, 2);
 
     for (const char* requiredExtension : kRequiredDeviceExtensions)
@@ -114,6 +148,28 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
             );
             return false;
         }
+    }
+
+    const bool hasExternalMemoryExtension = hasExtension(kOptionalExternalMemoryExtension, extensions);
+    const bool hasAndroidHardwareBufferExtension = hasExtension(kOptionalAndroidHardwareBufferExtension, extensions);
+    if (hasAndroidHardwareBufferExtension && !hasExternalMemoryExtension)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: device '%s' reports %s without %s; AndroidHardwareBuffer interop disabled for preflight",
+            properties.deviceName,
+            kOptionalAndroidHardwareBufferExtension,
+            kOptionalExternalMemoryExtension
+        );
+    }
+    else if (!hasAndroidHardwareBufferExtension)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: device '%s' missing optional extension %s; continuing with generic Vulkan path",
+            properties.deviceName,
+            kOptionalAndroidHardwareBufferExtension
+        );
     }
 
     VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures{};
@@ -187,7 +243,13 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
 bool createVulkanInstance(VkInstance* instance)
 {
     if (!hasRequiredInstanceExtensions())
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: Vulkan support check failed (missing required instance extension)"
+        );
         return false;
+    }
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -203,8 +265,16 @@ bool createVulkanInstance(VkInstance* instance)
     createInfo.enabledExtensionCount = sizeof(kRequiredInstanceExtensions) / sizeof(kRequiredInstanceExtensions[0]);
     createInfo.ppEnabledExtensionNames = kRequiredInstanceExtensions;
 
-    if (vkCreateInstance(&createInfo, nullptr, instance) != VK_SUCCESS)
+    const VkResult createResult = vkCreateInstance(&createInfo, nullptr, instance);
+    if (createResult != VK_SUCCESS)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: vkCreateInstance failed during support check (%d)",
+            static_cast<int>(createResult)
+        );
         return false;
+    }
 
     return true;
 }
@@ -215,6 +285,12 @@ bool pickGraphicsDevice(VkInstance instance, VkPhysicalDevice* physicalDevice, u
     const VkResult enumerateResult = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
     if (enumerateResult != VK_SUCCESS || physicalDeviceCount == 0)
     {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: failed to enumerate physical devices (%d, count=%u)",
+            static_cast<int>(enumerateResult),
+            physicalDeviceCount
+        );
         return false;
     }
 
@@ -250,6 +326,14 @@ bool pickGraphicsDevice(VkInstance instance, VkPhysicalDevice* physicalDevice, u
             break;
     }
 
+    if (!hasGraphicsQueue)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: no Vulkan device satisfied required renderer capabilities"
+        );
+    }
+
     return hasGraphicsQueue;
 }
 
@@ -268,9 +352,15 @@ bool isVulkanRendererSupported()
 
 bool canInitializeVulkanRenderer()
 {
-    constexpr u64 kQuickValidationWaitTimeoutNs = 250'000'000ull;
+    constexpr u64 kQuickValidationWaitTimeoutNs = 1'000'000'000ull;
     if (!isVulkanRendererSupported())
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Error,
+            "canInitializeVulkanRenderer: support check failed before VulkanOutput init"
+        );
         return false;
+    }
 
     MelonDSAndroid::VulkanOutput vulkanOutput;
     if (!vulkanOutput.init())
