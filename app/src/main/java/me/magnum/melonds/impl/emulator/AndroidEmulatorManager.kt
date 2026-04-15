@@ -2,6 +2,7 @@ package me.magnum.melonds.impl.emulator
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -49,6 +50,7 @@ class AndroidEmulatorManager(
     private val cameraManager: DSiCameraSourceMultiplexer,
 ) : EmulatorManager {
     private companion object {
+        private const val TAG = "AndroidEmulatorManager"
         const val MAX_EVENT_STRING_LENGTH = 128
         private const val GBAModeNotSupported = 2
         private const val BadExceptionRegion = 3
@@ -142,6 +144,7 @@ class AndroidEmulatorManager(
                 RomGbaSlotConfig.RumblePak -> MelonEmulator.GbaSlotType.RUMBLE_PAK
                 RomGbaSlotConfig.AnalogInput -> MelonEmulator.GbaSlotType.ANALOG_INPUT
             }
+            Log.w(TAG, "loadRom: rom='${rom.name}' gbaSlotType=${gbaSlotType.name}")
 
             val loadResult = MelonEmulator.loadRom(
                 romUri = romUri,

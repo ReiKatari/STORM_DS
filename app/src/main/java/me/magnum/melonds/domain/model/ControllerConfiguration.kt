@@ -1,6 +1,9 @@
 package me.magnum.melonds.domain.model
 
-class ControllerConfiguration(configList: List<InputConfig>) {
+class ControllerConfiguration(
+    configList: List<InputConfig>,
+    val slot2AnalogMapping: Slot2AnalogMapping = Slot2AnalogMapping(),
+) {
     companion object {
         private val configurableInput = listOf(
             Input.A,
@@ -67,6 +70,9 @@ class ControllerConfiguration(configList: List<InputConfig>) {
     }
 
     fun copy(): ControllerConfiguration {
-        return ControllerConfiguration(inputMapper.map { it.copy() })
+        return ControllerConfiguration(
+            configList = inputMapper.map { it.copy() },
+            slot2AnalogMapping = slot2AnalogMapping.copy(),
+        )
     }
 }

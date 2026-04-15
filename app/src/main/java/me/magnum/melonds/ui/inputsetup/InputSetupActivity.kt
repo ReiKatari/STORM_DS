@@ -17,6 +17,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.model.InputConfig
 import me.magnum.melonds.domain.model.rom.Rom
@@ -44,7 +45,19 @@ class InputSetupActivity : AppCompatActivity() {
 
     private val viewModel: InputSetupViewModel by viewModels()
 
-    private val referenceAxisValues = mutableMapOf<Int, Float>()
+    private val referenceAxisValues = mutableMapOf<Pair<Int, Int>, Float>()
+
+    private fun MotionEvent.isControllerMotionEvent(): Boolean {
+        return isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)
+            || isFromSource(InputDevice.SOURCE_JOYSTICK)
+            || isFromSource(InputDevice.SOURCE_GAMEPAD)
+    }
+
+    private fun InputDevice.MotionRange.isJoystickOrGamepadRange(): Boolean {
+        return isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)
+            || isFromSource(InputDevice.SOURCE_JOYSTICK)
+            || isFromSource(InputDevice.SOURCE_GAMEPAD)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -63,14 +76,16 @@ class InputSetupActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.inputUnderAssignment.collect {
-                    if (it != null) {
+                combine(viewModel.inputUnderAssignment, viewModel.slot2AxisUnderAssignment) { inputAssignment, slot2Assignment ->
+                    inputAssignment != null || slot2Assignment != null
+                }.collect { hasPendingAssignment ->
+                    if (hasPendingAssignment) {
                         // A new assignment has started. Reset reference values
                         referenceAxisValues.clear()
                         InputDevice.getDeviceIds().forEach { deviceId ->
                             InputDevice.getDevice(deviceId)?.motionRanges?.forEach { range ->
-                                if (range.isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)) {
-                                    referenceAxisValues[range.axis] = 0f
+                                if (range.isJoystickOrGamepadRange()) {
+                                    referenceAxisValues[deviceId to range.axis] = 0f
                                 }
                             }
                         }
@@ -81,28 +96,41 @@ class InputSetupActivity : AppCompatActivity() {
     }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (viewModel.inputUnderAssignment.value != null && event.isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)) {
+        val inputAssignment = viewModel.inputUnderAssignment.value
+        val slot2Assignment = viewModel.slot2AxisUnderAssignment.value
+        if ((inputAssignment != null || slot2Assignment != null) && event.isControllerMotionEvent()) {
             if (event.action == MotionEvent.ACTION_MOVE) {
-                val detectedAxis = referenceAxisValues.firstNotNullOfOrNull {
-                    val currentValue = event.getAxisValue(it.key)
-                    val delta = (currentValue - it.value).absoluteValue
-                    if (delta >= 0.5f) {
-                        it.key
-                    } else {
-                        null
-                    }
+                val joystickAxes = event.device?.motionRanges
+                    ?.asSequence()
+                    ?.filter { it.isJoystickOrGamepadRange() }
+                    ?.map { it.axis }
+                    ?.distinct()
+                    ?.toList()
+                    ?: emptyList()
+                val detectedAxis = joystickAxes.firstOrNull { axis ->
+                    val key = event.deviceId to axis
+                    val baseline = referenceAxisValues[key] ?: 0f
+                    val currentValue = event.getAxisValue(axis)
+                    (currentValue - baseline).absoluteValue >= 0.5f
                 }
 
                 if (detectedAxis != null) {
-                    val initialValue = referenceAxisValues[detectedAxis]!!
+                    val initialValue = referenceAxisValues[event.deviceId to detectedAxis] ?: 0f
                     val currentValue = event.getAxisValue(detectedAxis)
                     val delta = currentValue - initialValue
-                    val direction = if (delta > 0f) {
-                        InputConfig.Assignment.Axis.Direction.POSITIVE
+                    if (inputAssignment != null) {
+                        val direction = if (delta > 0f) {
+                            InputConfig.Assignment.Axis.Direction.POSITIVE
+                        } else {
+                            InputConfig.Assignment.Axis.Direction.NEGATIVE
+                        }
+                        viewModel.updateInputAssignedAxis(detectedAxis, direction)
                     } else {
-                        InputConfig.Assignment.Axis.Direction.NEGATIVE
+                        viewModel.updateSlot2AxisAssignment(
+                            axisCode = detectedAxis,
+                            deviceId = event.deviceId,
+                        )
                     }
-                    viewModel.updateInputAssignedAxis(detectedAxis, direction)
                 }
                 return true
             }
