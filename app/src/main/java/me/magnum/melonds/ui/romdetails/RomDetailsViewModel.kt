@@ -74,6 +74,7 @@ class RomDetailsViewModel @Inject constructor(
                     RomGbaSlotConfigUiModel.Type.GbaRom -> RomGbaSlotConfig.GbaRom(null, null)
                     RomGbaSlotConfigUiModel.Type.RumblePak -> RomGbaSlotConfig.RumblePak
                     RomGbaSlotConfigUiModel.Type.MemoryExpansion -> RomGbaSlotConfig.MemoryExpansion
+                    RomGbaSlotConfigUiModel.Type.AnalogInput -> RomGbaSlotConfig.AnalogInput
                 }
                 it.copy(gbaSlotConfig = newGbaSlotConfig)
             }

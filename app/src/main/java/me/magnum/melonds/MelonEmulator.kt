@@ -48,6 +48,7 @@ object MelonEmulator {
         GBA_ROM,
         RUMBLE_PAK,
         MEMORY_EXPANSION,
+        ANALOG_INPUT,
     }
 
     external fun setupEmulator(
@@ -148,6 +149,8 @@ object MelonEmulator {
     private external fun onKeyPress(key: Int)
 
     private external fun onKeyRelease(key: Int)
+
+    external fun setSlot2AnalogInput(x: Float, y: Float)
 
     external fun setFastForwardEnabled(enabled: Boolean)
 

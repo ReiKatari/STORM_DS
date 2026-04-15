@@ -69,6 +69,9 @@ interface SettingsRepository {
     fun getRomSortingMode(): SortingMode
     fun getRomSortingOrder(): SortingOrder
     fun saveNextToRomFile(): Boolean
+    fun useSrmExtensionForSaveFiles(): Boolean
+    fun isAutoSaveStateOnExitEnabled(): Boolean
+    fun isAutoLoadStateOnLaunchEnabled(): Boolean
     fun getSaveFileDirectory(): Uri?
     fun getSaveFileDirectory(rom: Rom): Uri
     fun getSaveStateLocation(rom: Rom): SaveStateLocation

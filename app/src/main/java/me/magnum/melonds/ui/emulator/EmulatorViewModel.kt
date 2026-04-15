@@ -138,6 +138,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val RA_TRACE_TAG = "RATrace"
 private const val RA_IDENTITY_TAG = "RAIdentity"
+private const val AUTO_STATE_TAG = "AutoState"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -418,6 +419,9 @@ class EmulatorViewModel @Inject constructor(
                 }
             }
 
+            runningRom?.let {
+                maybeAutoSaveStateOnExit(it.rom)
+            }
             stopEmulator()
             launchEmulator(args)
         }
@@ -505,6 +509,7 @@ class EmulatorViewModel @Inject constructor(
                     _toastEvent.tryEmit(ToastEvent.GbaLoadFailed)
                 }
                 _emulatorState.value = EmulatorState.RunningRom(rom)
+                maybeAutoLoadStateOnLaunch(rom)
                 startTrackingFps()
                 startTrackingPlayTime(rom)
             }
@@ -932,6 +937,7 @@ class EmulatorViewModel @Inject constructor(
 
             val userAuth = retroAchievementsRepository.getUserAuthentication()
             if (userAuth == null) {
+                maybeAutoSaveStateOnExit(runningRom.rom)
                 stopEmulator()
                 _uiEvent.emit(EmulatorUiEvent.CloseEmulator)
                 return@launch
@@ -960,6 +966,7 @@ class EmulatorViewModel @Inject constructor(
                 }
             }
 
+            maybeAutoSaveStateOnExit(runningRom.rom)
             stopEmulator()
             _uiEvent.emit(EmulatorUiEvent.CloseEmulator)
         }
@@ -1241,6 +1248,64 @@ class EmulatorViewModel @Inject constructor(
         }
 
         return success
+    }
+
+    private suspend fun maybeAutoLoadStateOnLaunch(rom: Rom) {
+        if (!settingsRepository.isAutoLoadStateOnLaunchEnabled()) {
+            Log.i(AUTO_STATE_TAG, "auto-load skipped: setting disabled")
+            return
+        }
+
+        if (!emulatorSession.areSaveStateLoadsAllowed()) {
+            Log.i(AUTO_STATE_TAG, "auto-load skipped: save-state loads not allowed")
+            return
+        }
+
+        val quickSlot = saveStatesRepository.getRomQuickSaveStateSlot(rom)
+        if (!quickSlot.exists) {
+            Log.i(AUTO_STATE_TAG, "auto-load skipped: quick slot missing")
+            return
+        }
+
+        Log.i(AUTO_STATE_TAG, "auto-load start: slot=${quickSlot.slot} rom=${rom.name}")
+        emulatorManager.pauseEmulator()
+        val didLoad = loadRomState(rom, quickSlot)
+        emulatorManager.resumeEmulator()
+        if (didLoad) {
+            _toastEvent.tryEmit(ToastEvent.QuickLoadSuccessful)
+            Log.i(AUTO_STATE_TAG, "auto-load success: slot=${quickSlot.slot} rom=${rom.name}")
+        } else {
+            Log.w(AUTO_STATE_TAG, "auto-load failed: slot=${quickSlot.slot} rom=${rom.name}")
+        }
+    }
+
+    private suspend fun maybeAutoSaveStateOnExit(rom: Rom) {
+        if (!settingsRepository.isAutoSaveStateOnExitEnabled()) {
+            Log.i(AUTO_STATE_TAG, "auto-save skipped: setting disabled")
+            return
+        }
+
+        if (emulatorSession.isRetroAchievementsHardcoreModeEnabled && emulatorSession.isRetroAchievementsEnabledForSession()) {
+            Log.i(AUTO_STATE_TAG, "auto-save skipped: RA hardcore active")
+            return
+        }
+
+        if (!emulatorSession.areSaveStatesAllowed()) {
+            Log.i(AUTO_STATE_TAG, "auto-save skipped: save-states not allowed")
+            return
+        }
+
+        emulatorManager.pauseEmulator()
+        val quickSlot = saveStatesRepository.getRomQuickSaveStateSlot(rom)
+        Log.i(AUTO_STATE_TAG, "auto-save start: slot=${quickSlot.slot} rom=${rom.name}")
+        val didSave = saveRomState(rom, quickSlot)
+        if (didSave) {
+            _toastEvent.tryEmit(ToastEvent.QuickSaveSuccessful)
+            Log.i(AUTO_STATE_TAG, "auto-save success: slot=${quickSlot.slot} rom=${rom.name}")
+        } else {
+            _toastEvent.tryEmit(ToastEvent.StateSaveFailed)
+            Log.w(AUTO_STATE_TAG, "auto-save failed: slot=${quickSlot.slot} rom=${rom.name}")
+        }
     }
 
     private fun startObservingRuntimeInputLayoutConfiguration() {

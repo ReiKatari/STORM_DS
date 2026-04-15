@@ -3,11 +3,15 @@ package me.magnum.melonds.ui.emulator.input
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.ControllerConfiguration
 import me.magnum.melonds.domain.model.InputConfig
 import kotlin.math.absoluteValue
 
 class InputProcessor(private val controllerConfiguration: ControllerConfiguration, private val systemInputListener: IInputListener, private val frontendInputListener: IInputListener) : INativeInputListener {
+    private companion object {
+        private const val SLOT2_ANALOG_DEADZONE = 0.1f
+    }
 
     private val axisStates: Map<Axis, AxisState>
 
@@ -53,6 +57,12 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
 
     override fun onMotionEvent(motionEvent: MotionEvent): Boolean {
         if (motionEvent.isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)) {
+            val rawAnalogX = motionEvent.getAxisValue(MotionEvent.AXIS_X).coerceIn(-1f, 1f)
+            val rawAnalogY = motionEvent.getAxisValue(MotionEvent.AXIS_Y).coerceIn(-1f, 1f)
+            val analogX = if (rawAnalogX.absoluteValue < SLOT2_ANALOG_DEADZONE) 0f else rawAnalogX
+            val analogY = if (rawAnalogY.absoluteValue < SLOT2_ANALOG_DEADZONE) 0f else rawAnalogY
+            MelonEmulator.setSlot2AnalogInput(analogX, analogY)
+
             val deviceAxis = axisStates.filterKeys { it.deviceId == null || it.deviceId == motionEvent.deviceId }
             deviceAxis.forEach {
                 val axis = it.key

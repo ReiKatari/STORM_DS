@@ -35,6 +35,7 @@ enum GbaSlotType {
     GBA_ROM = 1,
     RUMBLE_PAK = 2,
     MEMORY_EXPANSION = 3,
+    ANALOG_INPUT = 4,
 };
 
 void* emulate(void*);
@@ -1255,6 +1256,12 @@ Java_me_magnum_melonds_MelonEmulator_onKeyRelease(JNIEnv* env, jobject thiz, jin
 }
 
 JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setSlot2AnalogInput(JNIEnv* env, jobject thiz, jfloat x, jfloat y)
+{
+    MelonDSAndroid::setSlot2AnalogInput(x, y);
+}
+
+JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
 {
     const bool wasFastForwardEnabled = isFastForwardEnabled;
@@ -1313,6 +1320,10 @@ MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const
     else if (slotType == GbaSlotType::MEMORY_EXPANSION)
     {
         return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigMemoryExpansion;
+    }
+    else if (slotType == GbaSlotType::ANALOG_INPUT)
+    {
+        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigAnalogInput;
     }
     else
     {

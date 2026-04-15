@@ -39,6 +39,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX) -> handleSetRenderer(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_JIT_SUFFIX) -> handleSetJit(entryPoint, intent)
+            context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_SUFFIX) -> handleSetSlot2Analog(intent)
             context.debugCommandAction(ACTION_SET_VULKAN_FALLBACKS_SUFFIX) -> handleSetVulkanFallbacks(intent)
             context.debugCommandAction(ACTION_LOAD_STATE_SUFFIX) -> handleLoadState(context, entryPoint, intent)
             context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX) -> handleDumpRendererCapture(context, entryPoint, intent)
@@ -76,6 +77,17 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         }
         val refreshed = DebugCommandStateStore.requestSettingsRefresh()
         Log.w(TAG, "action=set_jit enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}")
+    }
+
+    private fun handleSetSlot2Analog(intent: Intent) {
+        val x = intent.firstFloatExtra(EXTRA_X, EXTRA_VALUE_X, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing x/value extra")
+        val y = intent.firstFloatExtra(EXTRA_Y, EXTRA_VALUE_Y, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing y/value extra")
+        val clampedX = x.coerceIn(-1f, 1f)
+        val clampedY = y.coerceIn(-1f, 1f)
+        MelonEmulator.setSlot2AnalogInput(clampedX, clampedY)
+        Log.w(TAG, "action=set_slot2_analog x=$clampedX y=$clampedY")
     }
 
     private fun handleSetVulkanFallbacks(intent: Intent) {
@@ -248,6 +260,24 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         return null
     }
 
+    private fun Intent.firstFloatExtra(vararg keys: String): Float? {
+        keys.forEach { key ->
+            if (!hasExtra(key)) {
+                return@forEach
+            }
+
+            val raw = extras?.get(key)
+            when (raw) {
+                is Float -> return raw
+                is Double -> return raw.toFloat()
+                is Int -> return raw.toFloat()
+                is String -> raw.toFloatOrNull()?.let { return it }
+            }
+        }
+
+        return null
+    }
+
     private companion object {
         private const val TAG = "DebugCommand"
         private const val KEY_VIDEO_RENDERER = "video_renderer"
@@ -259,6 +289,10 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_SCALE = "scale"
         private const val EXTRA_IR = "ir"
         private const val EXTRA_ENABLED = "enabled"
+        private const val EXTRA_X = "x"
+        private const val EXTRA_Y = "y"
+        private const val EXTRA_VALUE_X = "value_x"
+        private const val EXTRA_VALUE_Y = "value_y"
         private const val EXTRA_TIMELINE = "timeline"
         private const val EXTRA_TIMELINE_OFF = "timeline_off"
         private const val EXTRA_DYNAMIC_INDEXING = "dynamic_indexing"
@@ -277,6 +311,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_RENDERER_SUFFIX = "SET_RENDERER"
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_JIT_SUFFIX = "SET_JIT"
+        private const val ACTION_SET_SLOT2_ANALOG_SUFFIX = "SET_SLOT2_ANALOG"
         private const val ACTION_SET_VULKAN_FALLBACKS_SUFFIX = "SET_VULKAN_FALLBACKS"
         private const val ACTION_LOAD_STATE_SUFFIX = "LOAD_STATE"
         private const val ACTION_DUMP_RENDERER_CAPTURE_SUFFIX = "DUMP_RENDERER_CAPTURE"

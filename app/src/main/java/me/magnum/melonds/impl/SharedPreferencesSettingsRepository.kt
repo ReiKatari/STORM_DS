@@ -652,6 +652,18 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("use_rom_dir", true)
     }
 
+    override fun useSrmExtensionForSaveFiles(): Boolean {
+        return preferences.getBoolean("save_file_use_srm_extension", false)
+    }
+
+    override fun isAutoSaveStateOnExitEnabled(): Boolean {
+        return preferences.getBoolean("auto_save_state_on_exit", false)
+    }
+
+    override fun isAutoLoadStateOnLaunchEnabled(): Boolean {
+        return preferences.getBoolean("auto_load_state_on_launch", false)
+    }
+
     override fun getSaveFileDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("sram_dir", null)?.firstOrNull()
         return dirPreference?.toUri()

@@ -30,6 +30,7 @@ android {
         targetSdk = AppConfig.targetSdkVersion
         versionCode = AppConfig.versionCode
         versionName = AppConfig.versionName
+        manifestPlaceholders["appName"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86_64"))
@@ -89,6 +90,14 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+    }
+}
+
+androidComponents {
+    onVariants(selector().withName("gitHubProdDebug")) { variant ->
+        // Keep prod-debug distinct from other debug/release variants.
+        variant.manifestPlaceholders.put("appName", "debug melonDualDS")
+        variant.sources.res?.addStaticSourceDirectory("src/nightly/res")
     }
 }
 
