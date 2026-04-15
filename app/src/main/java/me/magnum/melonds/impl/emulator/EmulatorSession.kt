@@ -66,6 +66,7 @@ class EmulatorSession {
     }
 
     fun areSaveStatesAllowed(): Boolean {
+        // Saving save-states is allowed; only save-state loading is blocked in RA hardcore mode.
         return true
     }
 

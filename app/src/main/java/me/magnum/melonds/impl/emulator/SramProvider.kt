@@ -1,6 +1,7 @@
 package me.magnum.melonds.impl.emulator
 
 import android.net.Uri
+import android.util.Log
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -18,7 +19,9 @@ class SramProvider(
         val romDocument = uriHandler.getUriDocument(rom.uri)
 
         val romFileName = romDocument?.name ?: throw SramLoadException("Cannot determine SRAM file name: ${romDocument?.uri}")
-        val sramFileName = romFileName.replaceAfterLast('.', "sav", "$romFileName.sav")
+        val saveExtension = if (settingsRepository.useSrmExtensionForSaveFiles()) "srm" else "sav"
+        val sramFileName = romFileName.replaceAfterLast('.', saveExtension, "$romFileName.$saveExtension")
+        Log.i("SramProvider", "resolved save file '$sramFileName' for rom='${rom.name}'")
 
         val sramDocument = rootDocument.findFile(sramFileName)
         return if (sramDocument != null) {

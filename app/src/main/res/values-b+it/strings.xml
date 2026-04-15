@@ -407,6 +407,7 @@
         <item>ROM GBA</item>
         <item>Rumble Pak</item>
         <item>Espansione di memoria</item>
+        <item>Input analogico</item>
     </string-array>
 
     <string-array name="console_type_options">

@@ -291,7 +291,13 @@
     <string name="category_save_files_summary">Save file &amp; save state locations</string>
     <string name="save_next_rom">Save next to ROM file</string>
     <string name="save_file_directory">Save file directory</string>
+    <string name="save_file_use_srm_extension">Use .srm save extension</string>
+    <string name="save_file_use_srm_extension_summary">Saves game save files as .srm instead of .sav</string>
     <string name="save_state_location">Save state location</string>
+    <string name="auto_save_state_on_exit">Auto save state on exit</string>
+    <string name="auto_save_state_on_exit_summary">Automatically saves quick slot when exiting a ROM</string>
+    <string name="auto_load_state_on_launch">Auto load state on launch</string>
+    <string name="auto_load_state_on_launch_summary">Automatically loads quick slot when launching a ROM</string>
     <string name="input">Input</string>
     <string name="input_summary">Key mapping, layouts, haptic feedback</string>
     <string name="key_mapping">Key mapping</string>
@@ -643,6 +649,7 @@
         <item>GBA ROM</item>
         <item>Rumble Pak</item>
         <item>Memory expansion</item>
+        <item>Analog Input</item>
     </string-array>
 
     <string-array name="console_type_options">

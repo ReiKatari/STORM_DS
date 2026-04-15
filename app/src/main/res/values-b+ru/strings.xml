@@ -407,6 +407,7 @@
         <item>Ром GBA</item>
         <item>Rumble Pak</item>
         <item>Расширение памяти</item>
+        <item>Аналоговый ввод</item>
     </string-array>
     
     <string-array name="console_type_options">
