@@ -68,6 +68,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         rendererDebugPreferences.apply {
             add(findPreference("video_hacks_category")!!)
             add(findPreference("video_renderer_debug_tools_enabled")!!)
+            add(findPreference("video_renderer_debug_bgobj_enabled")!!)
         }
 
         coverageFixPreferences.apply {

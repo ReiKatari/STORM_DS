@@ -38,6 +38,7 @@ interface SettingsRepository {
     fun getVideoFiltering(): Flow<VideoFiltering>
     fun isThreadedRenderingEnabled(): Flow<Boolean>
     fun isRendererDebugToolsEnabled(): Flow<Boolean>
+    fun isRendererDebugBgObjEnabled(): Flow<Boolean>
     fun getFpsCounterPosition(): FpsCounterPosition
 
     fun isExternalDisplayKeepAspectRationEnabled(): Boolean

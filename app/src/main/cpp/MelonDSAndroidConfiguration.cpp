@@ -181,6 +181,7 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
     jmethodID getResolutionScalingMethod = env->GetMethodID(renderSettingsClass, "getResolutionScaling", "()I");
     jboolean threadedRendering = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "threadedRendering", "Z"));
     jboolean rendererDebugToolsEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugToolsEnabled", "Z"));
+    jboolean rendererDebugBgObjEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugBgObjEnabled", "Z"));
     jboolean conservativeCoverageEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageEnabled", "Z"));
     jfloat conservativeCoveragePx = env->GetFloatField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoveragePx", "F"));
     jfloat conservativeCoverageDepthBias = env->GetFloatField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageDepthBias", "F"));
@@ -197,6 +198,7 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
                 .betterPolygons = false,
                 .scale = internalResolutionScaling,
                 .rendererDebugToolsEnabled = rendererDebugToolsEnabled != 0,
+                .rendererDebugBgObjEnabled = rendererDebugBgObjEnabled != 0,
                 .conservativeCoverageEnabled = conservativeCoverageEnabled != 0,
                 .conservativeCoveragePx = (float)conservativeCoveragePx,
                 .conservativeCoverageDepthBias = (float)conservativeCoverageDepthBias,
@@ -214,6 +216,7 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
                 .betterPolygons = true,
                 .scale = internalResolutionScaling,
                 .rendererDebugToolsEnabled = rendererDebugToolsEnabled != 0,
+                .rendererDebugBgObjEnabled = rendererDebugBgObjEnabled != 0,
                 .conservativeCoverageEnabled = conservativeCoverageEnabled != 0,
                 .conservativeCoveragePx = (float)conservativeCoveragePx,
                 .conservativeCoverageDepthBias = (float)conservativeCoverageDepthBias,
@@ -237,7 +240,8 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
         settings = std::make_unique<MelonDSAndroid::SoftwareRenderSettings>(
             MelonDSAndroid::SoftwareRenderSettings {
                 .threadedRendering = (bool) threadedRendering,
-                .rendererDebugToolsEnabled = rendererDebugToolsEnabled != 0
+                .rendererDebugToolsEnabled = rendererDebugToolsEnabled != 0,
+                .rendererDebugBgObjEnabled = rendererDebugBgObjEnabled != 0,
             }
         );
     }
