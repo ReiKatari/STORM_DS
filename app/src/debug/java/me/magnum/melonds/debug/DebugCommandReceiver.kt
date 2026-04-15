@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
+import me.magnum.melonds.domain.model.ControllerConfiguration
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
@@ -41,6 +42,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_JIT_SUFFIX) -> handleSetJit(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> handleSetBgObjLog(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_SUFFIX) -> handleSetSlot2Analog(intent)
+            context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX) -> handleSetSlot2AnalogMapping(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_VULKAN_FALLBACKS_SUFFIX) -> handleSetVulkanFallbacks(intent)
             context.debugCommandAction(ACTION_LOAD_STATE_SUFFIX) -> handleLoadState(context, entryPoint, intent)
             context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX) -> handleDumpRendererCapture(context, entryPoint, intent)
@@ -99,6 +101,36 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         val clampedY = y.coerceIn(-1f, 1f)
         MelonEmulator.setSlot2AnalogInput(clampedX, clampedY)
         Log.w(TAG, "action=set_slot2_analog x=$clampedX y=$clampedY")
+    }
+
+    private fun handleSetSlot2AnalogMapping(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val settingsRepository = entryPoint.settingsRepository()
+        val currentConfiguration = settingsRepository.getControllerConfiguration()
+        val currentMapping = currentConfiguration.slot2AnalogMapping
+
+        val nextMapping = currentMapping.copy(
+            axisXCode = intent.firstNullableIntExtra(EXTRA_AXIS_X, EXTRA_AXIS, EXTRA_X) ?: currentMapping.axisXCode,
+            axisYCode = intent.firstNullableIntExtra(EXTRA_AXIS_Y, EXTRA_AXIS, EXTRA_Y) ?: currentMapping.axisYCode,
+            invertX = intent.firstBooleanExtra(EXTRA_INVERT_X) ?: currentMapping.invertX,
+            invertY = intent.firstBooleanExtra(EXTRA_INVERT_Y) ?: currentMapping.invertY,
+            deadzone = (intent.firstFloatExtra(EXTRA_DEADZONE) ?: currentMapping.deadzone).coerceIn(0f, 1f),
+            deviceId = if (intent.hasExtra(EXTRA_DEVICE_ID)) {
+                intent.firstNullableIntExtra(EXTRA_DEVICE_ID)?.takeIf { it >= 0 }
+            } else {
+                currentMapping.deviceId
+            },
+        )
+
+        val updatedConfiguration = ControllerConfiguration(
+            configList = currentConfiguration.inputMapper.map { it.copy() },
+            slot2AnalogMapping = nextMapping,
+        )
+        settingsRepository.setControllerConfiguration(updatedConfiguration)
+        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
+        Log.w(
+            TAG,
+            "action=set_slot2_analog_mapping axisX=${nextMapping.axisXCode} axisY=${nextMapping.axisYCode} invertX=${if (nextMapping.invertX) 1 else 0} invertY=${if (nextMapping.invertY) 1 else 0} deadzone=${"%.3f".format(Locale.US, nextMapping.deadzone)} deviceId=${nextMapping.deviceId ?: -1} refreshed=${if (refreshed) 1 else 0}",
+        )
     }
 
     private fun handleSetVulkanFallbacks(intent: Intent) {
@@ -305,6 +337,13 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_Y = "y"
         private const val EXTRA_VALUE_X = "value_x"
         private const val EXTRA_VALUE_Y = "value_y"
+        private const val EXTRA_AXIS = "axis"
+        private const val EXTRA_AXIS_X = "axis_x"
+        private const val EXTRA_AXIS_Y = "axis_y"
+        private const val EXTRA_INVERT_X = "invert_x"
+        private const val EXTRA_INVERT_Y = "invert_y"
+        private const val EXTRA_DEADZONE = "deadzone"
+        private const val EXTRA_DEVICE_ID = "device_id"
         private const val EXTRA_TIMELINE = "timeline"
         private const val EXTRA_TIMELINE_OFF = "timeline_off"
         private const val EXTRA_DYNAMIC_INDEXING = "dynamic_indexing"
@@ -325,6 +364,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_JIT_SUFFIX = "SET_JIT"
         private const val ACTION_SET_BGOBJ_LOG_SUFFIX = "SET_BGOBJ_LOG"
         private const val ACTION_SET_SLOT2_ANALOG_SUFFIX = "SET_SLOT2_ANALOG"
+        private const val ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX = "SET_SLOT2_ANALOG_MAPPING"
         private const val ACTION_SET_VULKAN_FALLBACKS_SUFFIX = "SET_VULKAN_FALLBACKS"
         private const val ACTION_LOAD_STATE_SUFFIX = "LOAD_STATE"
         private const val ACTION_DUMP_RENDERER_CAPTURE_SUFFIX = "DUMP_RENDERER_CAPTURE"

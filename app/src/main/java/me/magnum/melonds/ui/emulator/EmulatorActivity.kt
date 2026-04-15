@@ -1297,7 +1297,12 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        if (!activeOverlays.hasActiveOverlays() && nativeInputListener.onMotionEvent(event))
+        if (activeOverlays.hasActiveOverlays()) {
+            nativeInputListener.onMotionEventSlot2(event)
+            return super.dispatchGenericMotionEvent(event)
+        }
+
+        if (nativeInputListener.onMotionEvent(event))
             return true
 
         return super.dispatchGenericMotionEvent(event)
