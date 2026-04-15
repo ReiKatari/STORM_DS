@@ -108,6 +108,7 @@ class SharedPreferencesSettingsRepository(
         val threadedRenderingEnabled: Boolean,
         val resolutionScaling: Int,
         val rendererDebugToolsEnabled: Boolean,
+        val rendererDebugBgObjEnabled: Boolean,
     )
     private data class CoverageFixConfigurationInputs(
         val enabled: Boolean,
@@ -128,19 +129,25 @@ class SharedPreferencesSettingsRepository(
         setDefaultMacAddressIfRequired()
 
         val coreRenderInputsFlow = combine(
-            getVideoRenderer(),
-            getVideoFiltering(),
-            isThreadedRenderingEnabled(),
-            getVideoInternalResolutionScaling(),
-            isRendererDebugToolsEnabled(),
-        ) { renderer, filtering, threadedRenderingEnabled, resolutionScaling, rendererDebugToolsEnabled ->
-            CoreRenderConfigurationInputs(
-                renderer,
-                filtering,
-                threadedRenderingEnabled,
-                resolutionScaling,
-                rendererDebugToolsEnabled,
-            )
+            combine(
+                getVideoRenderer(),
+                getVideoFiltering(),
+                isThreadedRenderingEnabled(),
+                getVideoInternalResolutionScaling(),
+                isRendererDebugToolsEnabled(),
+            ) { renderer, filtering, threadedRenderingEnabled, resolutionScaling, rendererDebugToolsEnabled ->
+                CoreRenderConfigurationInputs(
+                    renderer,
+                    filtering,
+                    threadedRenderingEnabled,
+                    resolutionScaling,
+                    rendererDebugToolsEnabled,
+                    rendererDebugBgObjEnabled = false,
+                )
+            },
+            isRendererDebugBgObjEnabled(),
+        ) { coreInputs, rendererDebugBgObjEnabled ->
+            coreInputs.copy(rendererDebugBgObjEnabled = rendererDebugBgObjEnabled)
         }
 
         val coverageFixInputsFlow = combine(
@@ -186,6 +193,7 @@ class SharedPreferencesSettingsRepository(
                 effectiveThreadedRendering,
                 renderInputs.core.resolutionScaling,
                 renderInputs.core.rendererDebugToolsEnabled,
+                renderInputs.core.rendererDebugBgObjEnabled,
                 renderInputs.coverageFix.enabled,
                 renderInputs.coverageFix.coveragePx,
                 renderInputs.coverageFix.depthBias,
@@ -452,6 +460,12 @@ class SharedPreferencesSettingsRepository(
     override fun isRendererDebugToolsEnabled(): Flow<Boolean> {
         return getOrCreatePreferenceSharedFlow("video_renderer_debug_tools_enabled") {
             preferences.getBoolean("video_renderer_debug_tools_enabled", false)
+        }
+    }
+
+    override fun isRendererDebugBgObjEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("video_renderer_debug_bgobj_enabled") {
+            preferences.getBoolean("video_renderer_debug_bgobj_enabled", false)
         }
     }
 

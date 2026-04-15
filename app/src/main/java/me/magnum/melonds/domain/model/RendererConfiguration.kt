@@ -8,6 +8,7 @@ data class RendererConfiguration(
     val threadedRendering: Boolean,
     private val internalResolutionScaling: Int,
     val rendererDebugToolsEnabled: Boolean,
+    val rendererDebugBgObjEnabled: Boolean,
     val conservativeCoverageEnabled: Boolean,
     val conservativeCoveragePx: Float,
     val conservativeCoverageDepthBias: Float,
