@@ -3,6 +3,7 @@ package me.magnum.melonds.debug
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.edit
 import me.magnum.melonds.ui.emulator.EmulatorActivity
 import me.magnum.melonds.ui.emulator.EmulatorViewModel
 import java.lang.ref.WeakReference
@@ -22,10 +23,9 @@ internal object DebugCommandStateStore {
     fun onEmulatorActivitySeen(context: Context, activity: EmulatorActivity) {
         currentEmulatorActivity = WeakReference(activity)
         val romUri = activity.intent?.data ?: return
-        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_ROM_URI, romUri.toString())
-            .apply()
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE).edit(commit = true) {
+            putString(KEY_LAST_ROM_URI, romUri.toString())
+        }
     }
 
     fun onEmulatorActivityDestroyed(activity: EmulatorActivity) {

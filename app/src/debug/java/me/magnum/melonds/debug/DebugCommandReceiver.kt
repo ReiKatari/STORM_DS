@@ -19,6 +19,7 @@ import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
 import me.magnum.melonds.impl.emulator.debug.RendererDebugBridge
 import java.io.File
+import java.util.LinkedHashSet
 import java.util.Locale
 
 internal class DebugCommandReceiver : BroadcastReceiver() {
@@ -42,6 +43,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_JIT_SUFFIX) -> handleSetJit(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> handleSetBgObjLog(entryPoint, intent)
+            context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
             context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_SUFFIX) -> handleSetSlot2Analog(intent)
             context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX) -> handleSetSlot2AnalogMapping(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_VULKAN_FALLBACKS_SUFFIX) -> handleSetVulkanFallbacks(intent)
@@ -92,6 +94,13 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         }
         val refreshed = DebugCommandStateStore.requestSettingsRefresh()
         Log.w(TAG, "action=set_bgobj_log enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}")
+    }
+
+    private fun handleSetFastForward(intent: Intent) {
+        val enabled = intent.firstBooleanExtra(EXTRA_ENABLED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing enabled extra")
+        MelonEmulator.setFastForwardEnabled(enabled)
+        Log.w(TAG, "action=set_fast_forward enabled=${if (enabled) 1 else 0}")
     }
 
     private fun handleSetSlot2Analog(intent: Intent) {
@@ -158,7 +167,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         entryPoint: DebugCommandEntryPoint,
         intent: Intent,
     ) {
-        val stateUri = resolveStateUri(context, entryPoint, intent)
+        val stateUri = resolveStateUri(context, entryPoint, intent, preferExistingSlotFallback = true)
             ?: throw IllegalArgumentException("Missing load target. Provide slot or path.")
         val pauseAfterLoad = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
         MelonEmulator.pauseEmulation()
@@ -183,7 +192,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         entryPoint: DebugCommandEntryPoint,
         intent: Intent,
     ) {
-        val stateUri = resolveStateUri(context, entryPoint, intent)
+        val stateUri = resolveStateUri(context, entryPoint, intent, preferExistingSlotFallback = false)
             ?: throw IllegalArgumentException("Missing save target. Provide slot or path.")
         val pauseAfterSave = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
         MelonEmulator.pauseEmulation()
@@ -254,6 +263,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         context: Context,
         entryPoint: DebugCommandEntryPoint,
         intent: Intent,
+        preferExistingSlotFallback: Boolean,
     ): Uri? {
         intent.firstStringExtra(EXTRA_PATH, EXTRA_URI)?.let { pathOrUri ->
             return parseUri(pathOrUri)
@@ -262,14 +272,89 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         val slot = intent.firstNullableIntExtra(EXTRA_SLOT, EXTRA_VALUE) ?: return null
         require(slot in 0..8) { "Unsupported save state slot=$slot" }
 
-        val romUri = intent.firstStringExtra(EXTRA_ROM_URI)?.let(Uri::parse)
-            ?: DebugCommandStateStore.getLastRomUri(context)
-            ?: return null
+        val romUri = resolveRomUriForSlot(context, intent) ?: return null
         val rom = entryPoint.romsRepository().getRomAtUri(romUri) ?: return null
-        return entryPoint.saveStatesRepository().getRomSaveStateUri(
+        val resolvedUri = entryPoint.saveStatesRepository().getRomSaveStateUri(
             rom,
             SaveStateSlot(slot, exists = true, lastUsedDate = null, screenshot = null),
         )
+        if (!preferExistingSlotFallback) {
+            return resolvedUri
+        }
+
+        val fallbackUri = resolveExistingSlotFallbackUri(
+            preferredUri = resolvedUri,
+            romFileName = rom.fileName,
+            slot = slot,
+        ) ?: return resolvedUri
+        Log.w(TAG, "action=slot_fallback slot=$slot preferred=$resolvedUri fallback=$fallbackUri")
+        return fallbackUri
+    }
+
+    private suspend fun resolveRomUriForSlot(context: Context, intent: Intent): Uri? {
+        intent.firstStringExtra(EXTRA_ROM_URI)?.let { return Uri.parse(it) }
+
+        var romUri = DebugCommandStateStore.getLastRomUri(context)
+        if (romUri != null) {
+            return romUri
+        }
+
+        val deadlineAt = System.nanoTime() + ROM_URI_RESOLVE_TIMEOUT_MS * 1_000_000L
+        while (romUri == null && System.nanoTime() < deadlineAt) {
+            delay(ROM_URI_RESOLVE_STEP_MS)
+            romUri = DebugCommandStateStore.getLastRomUri(context)
+        }
+        return romUri
+    }
+
+    private fun resolveExistingSlotFallbackUri(
+        preferredUri: Uri,
+        romFileName: String,
+        slot: Int,
+    ): Uri? {
+        if (preferredUri.scheme != "file") {
+            return null
+        }
+        val preferredPath = preferredUri.path ?: return null
+        val preferredFile = File(preferredPath)
+        if (preferredFile.exists() && preferredFile.length() > 0L) {
+            return null
+        }
+        val parentDirectory = preferredFile.parentFile
+            ?.takeIf { it.exists() && it.isDirectory }
+            ?: return null
+
+        val romName = romFileName.substringBeforeLast('.', romFileName).trim()
+        if (romName.isEmpty()) {
+            return null
+        }
+        val candidateFile = buildAlternativeSaveStateNames(romName).asSequence()
+            .map { candidateName -> File(parentDirectory, "$candidateName.ml$slot") }
+            .firstOrNull { file -> file.exists() && file.length() > 0L }
+            ?: return null
+        return Uri.fromFile(candidateFile)
+    }
+
+    private fun buildAlternativeSaveStateNames(romName: String): List<String> {
+        val normalized = romName.trim()
+        if (normalized.isEmpty()) {
+            return emptyList()
+        }
+
+        val names = LinkedHashSet<String>()
+        val analogSuffixes = listOf(" Analog", " (Analog)", " [Analog]", "[Analog]")
+        analogSuffixes.forEach { suffix ->
+            if (normalized.endsWith(suffix, ignoreCase = true)) {
+                val stripped = normalized.dropLast(suffix.length).trimEnd()
+                if (stripped.isNotEmpty()) {
+                    names.add(stripped)
+                }
+            }
+        }
+        if (!normalized.endsWith(" Analog", ignoreCase = true)) {
+            names.add("$normalized Analog")
+        }
+        return names.toList()
     }
 
     private fun parseRenderer(value: String): VideoRenderer? {
@@ -425,6 +510,8 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_DURATION_MS = "duration_ms"
         private const val EXTRA_FRAMES = "frames"
         private const val EXTRA_VALUE = "value"
+        private const val ROM_URI_RESOLVE_TIMEOUT_MS = 4_000L
+        private const val ROM_URI_RESOLVE_STEP_MS = 100L
 
         private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -432,6 +519,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_JIT_SUFFIX = "SET_JIT"
         private const val ACTION_SET_BGOBJ_LOG_SUFFIX = "SET_BGOBJ_LOG"
+        private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
         private const val ACTION_SET_SLOT2_ANALOG_SUFFIX = "SET_SLOT2_ANALOG"
         private const val ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX = "SET_SLOT2_ANALOG_MAPPING"
         private const val ACTION_SET_VULKAN_FALLBACKS_SUFFIX = "SET_VULKAN_FALLBACKS"
