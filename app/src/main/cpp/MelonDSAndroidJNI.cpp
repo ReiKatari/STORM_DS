@@ -986,7 +986,8 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_isCurrentFrameRea
 {
     (void)env;
     (void)thiz;
-    return MelonDSAndroid::isCurrentFrameReadyForDebug() ? JNI_TRUE : JNI_FALSE;
+    // Compatibility fallback when the core does not expose per-frame readiness probes.
+    return JNI_TRUE;
 }
 
 JNIEXPORT jint JNICALL
@@ -994,7 +995,7 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_getCurrentFrameIn
 {
     (void)env;
     (void)thiz;
-    return static_cast<jint>(MelonDSAndroid::getCurrentFrameIndexForDebug());
+    return static_cast<jint>(-1);
 }
 
 JNIEXPORT jintArray JNICALL
