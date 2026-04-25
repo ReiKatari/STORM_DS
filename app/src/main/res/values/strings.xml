@@ -714,12 +714,14 @@
     <string-array name="video_filtering_options">
         <item>None</item>
         <item>Linear</item>
+        <item>Sharp 2D</item>
         <item>2xBR</item>
         <item>HQ2X</item>
         <item>HQ4X</item>
         <item>Quilez</item>
         <item>LCD</item>
         <item>LCD Grid (DS Lite motion blur)</item>
+        <item>Scanlines</item>
         <item>Custom (msha)</item>
     </string-array>
 

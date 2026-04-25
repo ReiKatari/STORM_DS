@@ -49,12 +49,14 @@
     <string-array name="video_filtering_values">
         <item>none</item>
         <item>linear</item>
+        <item>sharp_2d</item>
         <item>xbr2</item>
         <item>hq2x</item>
         <item>hq4x</item>
         <item>quilez</item>
         <item>lcd</item>
         <item>lcd_grid_dslite</item>
+        <item>scanlines</item>
         <item>custom</item>
     </string-array>
 

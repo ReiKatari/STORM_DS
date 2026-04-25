@@ -188,6 +188,7 @@ class SharedPreferencesSettingsRepository(
         renderConfigurationFlow = combine(renderInputsFlow, observeVideoCustomShader()) { renderInputs, customShaderUri ->
             val effectiveFiltering = when {
                 renderInputs.core.renderer == VideoRenderer.VULKAN && !renderInputs.core.filtering.isSupportedByVulkan() -> VideoFiltering.NONE
+                renderInputs.core.renderer != VideoRenderer.VULKAN && !renderInputs.core.filtering.isSupportedByOpenGlSurface() -> VideoFiltering.NONE
                 else -> renderInputs.core.filtering
             }
             val customShader = when {

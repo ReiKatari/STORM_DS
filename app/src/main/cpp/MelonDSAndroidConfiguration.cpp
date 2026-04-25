@@ -34,6 +34,38 @@ char* duplicateJavaString(JNIEnv* env, jstring javaString)
     return copy;
 }
 
+bool getEnumOrdinal(JNIEnv* env, jobject enumObject, jint* ordinalOut)
+{
+    if (enumObject == nullptr || ordinalOut == nullptr)
+        return false;
+
+    jclass enumClass = env->GetObjectClass(enumObject);
+    jmethodID ordinalMethod = env->GetMethodID(enumClass, "ordinal", "()I");
+    if (ordinalMethod == nullptr)
+        return false;
+
+    *ordinalOut = env->CallIntMethod(enumObject, ordinalMethod);
+    return !env->ExceptionCheck();
+}
+
+MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
+{
+    switch (ordinal)
+    {
+        case 1: return MelonDSAndroid::VulkanFilterMode::Linear;
+        case 2: return MelonDSAndroid::VulkanFilterMode::Sharp2D;
+        case 3: return MelonDSAndroid::VulkanFilterMode::Xbr2;
+        case 4: return MelonDSAndroid::VulkanFilterMode::Hq2x;
+        case 5: return MelonDSAndroid::VulkanFilterMode::Hq4x;
+        case 6: return MelonDSAndroid::VulkanFilterMode::Quilez;
+        case 7: return MelonDSAndroid::VulkanFilterMode::Lcd;
+        case 8: return MelonDSAndroid::VulkanFilterMode::LcdGridDsLite;
+        case 9: return MelonDSAndroid::VulkanFilterMode::Scanlines;
+        case 0:
+        default: return MelonDSAndroid::VulkanFilterMode::Nearest;
+    }
+}
+
 }
 
 MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulatorConfiguration(JNIEnv* env, jobject emulatorConfiguration) {
@@ -189,6 +221,11 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
     jboolean conservativeCoverageApplyRepeat = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageApplyRepeat", "Z"));
     jboolean conservativeCoverageApplyClamp = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageApplyClamp", "Z"));
     jboolean debug3dClearMagenta = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "debug3dClearMagenta", "Z"));
+    jobject videoFilteringObject = env->GetObjectField(renderSettings, env->GetFieldID(renderSettingsClass, "videoFiltering", "Lme/magnum/melonds/domain/model/VideoFiltering;"));
+    jint videoFilteringOrdinal = 0;
+    (void)getEnumOrdinal(env, videoFilteringObject, &videoFilteringOrdinal);
+    if (videoFilteringObject != nullptr)
+        env->DeleteLocalRef(videoFilteringObject);
     jint internalResolutionScaling = env->CallIntMethod(renderSettings, getResolutionScalingMethod);
 
     std::unique_ptr<MelonDSAndroid::RenderSettings> settings;
@@ -225,6 +262,7 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
                 .conservativeCoverageApplyRepeat = conservativeCoverageApplyRepeat != 0,
                 .conservativeCoverageApplyClamp = conservativeCoverageApplyClamp != 0,
                 .debug3dClearMagenta = debug3dClearMagenta != 0,
+                .videoFiltering = mapVulkanFilterMode(videoFilteringOrdinal),
             }
         );
     }
