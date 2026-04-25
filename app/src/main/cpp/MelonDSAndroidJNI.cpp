@@ -27,6 +27,7 @@
 #include "MelonDSAndroidConfiguration.h"
 #include "MelonDSAndroidCameraHandler.h"
 #include "RetroAchievementsMapper.h"
+#include "renderer/VulkanFilterMode.h"
 
 #include "Platform.h"
 
@@ -72,6 +73,24 @@ namespace
 bool rendererDebugControlsAvailable()
 {
     return MELONDS_ANDROID_DEBUG_BUILD != 0;
+}
+
+MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
+{
+    switch (ordinal)
+    {
+        case 1: return MelonDSAndroid::VulkanFilterMode::Linear;
+        case 2: return MelonDSAndroid::VulkanFilterMode::Sharp2D;
+        case 3: return MelonDSAndroid::VulkanFilterMode::Xbr2;
+        case 4: return MelonDSAndroid::VulkanFilterMode::Hq2x;
+        case 5: return MelonDSAndroid::VulkanFilterMode::Hq4x;
+        case 6: return MelonDSAndroid::VulkanFilterMode::Quilez;
+        case 7: return MelonDSAndroid::VulkanFilterMode::Lcd;
+        case 8: return MelonDSAndroid::VulkanFilterMode::LcdGridDsLite;
+        case 9: return MelonDSAndroid::VulkanFilterMode::Scanlines;
+        case 0:
+        default: return MelonDSAndroid::VulkanFilterMode::Nearest;
+    }
 }
 
 void clearPendingJniException(JNIEnv* env)
@@ -569,9 +588,7 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
             break;
     }
 
-    configOut->filtering = filteringOrdinal == 1
-        ? MelonDSAndroid::VulkanPresenterFilter::Linear
-        : MelonDSAndroid::VulkanPresenterFilter::Nearest;
+    configOut->filtering = mapVulkanFilterMode(filteringOrdinal);
 
     if (topRectObject != nullptr)
         env->DeleteLocalRef(topRectObject);

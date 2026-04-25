@@ -6,6 +6,7 @@ import androidx.annotation.Keep
 enum class VideoFiltering {
     NONE,
     LINEAR,
+    SHARP_2D,
     XBR2,
     HQ2X,
     HQ4X,
@@ -16,6 +17,10 @@ enum class VideoFiltering {
     CUSTOM;
 
     fun isSupportedByVulkan(): Boolean {
-        return this == NONE || this == LINEAR
+        return this != CUSTOM
+    }
+
+    fun isSupportedByOpenGlSurface(): Boolean {
+        return this != SHARP_2D
     }
 }

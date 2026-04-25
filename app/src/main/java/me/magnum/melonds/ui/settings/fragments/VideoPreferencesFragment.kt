@@ -248,22 +248,24 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         allFilteringValues: Array<String>,
         allFilteringEntries: Array<String>,
     ) {
-        val filteredPairs = if (renderer == VideoRenderer.VULKAN) {
-            allFilteringValues.zip(allFilteringEntries).filter { (value, _) ->
-                enumValueOfIgnoreCase<VideoFiltering>(value).isSupportedByVulkan()
+        val filteredPairs = allFilteringValues.zip(allFilteringEntries).filter { (value, _) ->
+            val filtering = enumValueOfIgnoreCase<VideoFiltering>(value)
+            when (renderer) {
+                VideoRenderer.VULKAN -> filtering.isSupportedByVulkan()
+                else -> filtering.isSupportedByOpenGlSurface()
             }
-        } else {
-            allFilteringValues.zip(allFilteringEntries)
         }
 
         videoFilteringPreference.entryValues = filteredPairs.map { it.first }.toTypedArray()
         videoFilteringPreference.entries = filteredPairs.map { it.second }.toTypedArray()
 
-        if (renderer == VideoRenderer.VULKAN) {
-            val currentFiltering = enumValueOfIgnoreCase<VideoFiltering>(videoFilteringPreference.value)
-            if (!currentFiltering.isSupportedByVulkan()) {
-                videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
-            }
+        val currentFiltering = enumValueOfIgnoreCase<VideoFiltering>(videoFilteringPreference.value)
+        val currentFilteringSupported = when (renderer) {
+            VideoRenderer.VULKAN -> currentFiltering.isSupportedByVulkan()
+            else -> currentFiltering.isSupportedByOpenGlSurface()
+        }
+        if (!currentFilteringSupported) {
+            videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
         }
 
         customShaderPreference.isEnabled =
