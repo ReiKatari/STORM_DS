@@ -84,7 +84,6 @@
     <string name="cant_load_empty_slot">No se puede cargar un espacio vacío</string>
     <string name="failed_reset_emulation">No se pudo restablecer la emulación</string>
     <string name="save_states_not_supported">Los estados de guardado no son compatibles mientras se ejecuta el firmware</string>
-    <string name="load_states_unavailable_ra_hardcore_enabled">Cargar save states no está disponible en modo Hardcore</string>
     <string name="rewind_time_seconds">%1$ss</string> <!-- Ej: 43,56s -->
     <string name="rewind_time_minutes_seconds">%1$dmin2$ss</string> <!-- Ej: 2min37,93s -->
     <string name="rewind_not_enabled">El rebobinado no está habilitado</string>
@@ -308,7 +307,6 @@
     <string name="properties">Propiedades</string>
     <string name="revert_changes">Revertir cambios</string>
     <string name="reset_default">Restablecer los valores predeterminados</string>
-    <string name="save_as_new">Guardar como nuevo</string>
     <string name="exit_without_saving">Salir sin guardar</string>
     <string name="save_and_exit">Guardar y salir</string>
     <string name="layout_name">Nombre de diseño</string>
@@ -316,8 +314,6 @@
     <string name="layout_use_default_opacity">Usar opacidad predeterminada</string>
     <string name="layout_opacity">Opacidad de diseño</string>
     <string name="layout_background_load_failed">Error al cargar el fondo</string>
-    <string name="layout_component_position_title">Posición de %1$s</string>
-    <string name="layout_position_allowed_range">Rango permitido: %1$d a %2$d</string>
 
     <string name="backgrounds">Fondos</string>
     <string name="action_backgrounds_new">Nuevo fondo</string>
@@ -410,16 +406,11 @@
     <string-array name="video_filtering_options">
         <item>Ninguno</item>
         <item>Lineal</item>
-        <item>Sharp 2D</item>
         <item>2xBR</item>
         <item>HQ2X</item>
         <item>HQ4X</item>
         <item>Quilez</item>
         <item>LCD</item>
-        <item>LCD Grid (DS Lite motion blur)</item>
-        <item>Scanlines</item>
-        <item>RetroArch (.slangp)</item>
-        <item>Personalizado (msha)</item>
     </string-array>
 
     <string-array name="dsi_camera_source_options">

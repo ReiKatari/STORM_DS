@@ -14,7 +14,7 @@ abstract class DeviceLayoutDisplayMapper(private val context: Context) {
     abstract fun mapDisplaysToLayoutDisplays(currentDisplay: Display, secondaryDisplay: Display?): LayoutDisplayPair
 
     protected fun mapDisplayToLayoutDisplay(display: Display, displayType: LayoutDisplay.Type): LayoutDisplay {
-        val (width, height) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val (width, height) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val typePresentation = 2037 // This is equal to WindowManager.LayoutParams.TYPE_PRESENTATION, but the constant can't be used for some reason
             val displayContextType = if ((display.flags and Display.FLAG_PRIVATE) != 0) WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION else typePresentation
             val displayWindowContext = context.createDisplayContext(display).createWindowContext(displayContextType, null)

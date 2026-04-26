@@ -85,7 +85,6 @@
     <string name="cant_load_empty_slot">Impossible de charger un emplacement de sauvegarde d\'état vide</string>
     <string name="failed_reset_emulation">Impossible de réinitialiser l\'émulation</string>
     <string name="save_states_not_supported">Les sauvegardes d\'état ne sont pas prises en charge pendant l\'exécution du firmware</string>
-    <string name="load_states_unavailable_ra_hardcore_enabled">Le chargement des sauvegardes d\'état est indisponible lorsque le mode Hardcore est activé</string>
     <string name="rewind_time_seconds">%1$s s</string>
     <string name="rewind_time_minutes_seconds">%1$d min%2$s s</string>
     <string name="rewind_not_enabled">Le rembobinage n\'est pas activé</string>
@@ -387,16 +386,11 @@
     <string-array name="video_filtering_options">
         <item>Aucun</item>
         <item>Linéaire</item>
-        <item>Sharp 2D</item>
         <item>2xBR</item>
         <item>HQ2X</item>
         <item>HQ4X</item>
         <item>Quilez</item>
         <item>LCD</item>
-        <item>LCD Grid (DS Lite motion blur)</item>
-        <item>Scanlines</item>
-        <item>RetroArch (.slangp)</item>
-        <item>Personnalisé (msha)</item>
     </string-array>
 
     <string-array name="dsi_camera_source_options">
