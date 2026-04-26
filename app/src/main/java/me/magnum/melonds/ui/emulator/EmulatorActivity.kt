@@ -86,6 +86,7 @@ import me.magnum.melonds.impl.system.AppForegroundStateObserver
 import me.magnum.melonds.parcelables.RomInfoParcelable
 import me.magnum.melonds.parcelables.RomParcelable
 import me.magnum.melonds.ui.cheats.CheatsActivity
+import me.magnum.melonds.ui.common.rom.EmulatorLaunchValidatorDelegate
 import me.magnum.melonds.ui.emulator.component.EmulatorOverlayTracker
 import me.magnum.melonds.ui.emulator.input.ConnectedControllerManager
 import me.magnum.melonds.ui.emulator.input.EmulatorRumbleManager
@@ -208,6 +209,7 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private val connectedControllerManager = ConnectedControllerManager()
+    private lateinit var emulatorLaunchValidatorDelegate: EmulatorLaunchValidatorDelegate
     private lateinit var emulatorRumbleManager: EmulatorRumbleManager
     private lateinit var frameRenderCoordinator: FrameRenderCoordinator
     private lateinit var choreographerFrameRenderer: ChoreographerFrameRenderer
@@ -345,6 +347,19 @@ class EmulatorActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(backPressedCallback)
 
+        emulatorLaunchValidatorDelegate = EmulatorLaunchValidatorDelegate(this, object : EmulatorLaunchValidatorDelegate.Callback {
+            override fun onRomValidated(rom: Rom) {
+                viewModel.onRomLaunchValidated(rom)
+            }
+
+            override fun onFirmwareValidated(consoleType: ConsoleType) {
+                viewModel.onFirmwareLaunchValidated(consoleType)
+            }
+
+            override fun onValidationAborted() {
+                finish()
+            }
+        })
         emulatorRumbleManager = EmulatorRumbleManager(this, lifecycleScope, connectedControllerManager)
         currentPresentationBackend = viewModel.getConfiguredVideoRenderer().toPresentationBackend()
         frameRenderCoordinator = createFrameRenderCoordinator(currentPresentationBackend)
@@ -723,11 +738,17 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
                         }
+                        is EmulatorState.ValidatingFirmware -> {
+                            showLoadingState()
+                            emulatorLaunchValidatorDelegate.validateFirmware(it.consoleType)
+                        }
+                        is EmulatorState.ValidatingRom -> {
+                            showLoadingState()
+                            emulatorLaunchValidatorDelegate.validateRom(it.rom)
+                        }
                         is EmulatorState.LoadingFirmware,
                         is EmulatorState.LoadingRom -> {
-                            binding.viewLayoutControls.isInvisible = true
-                            binding.textFps.isGone = true
-                            binding.textLoading.isVisible = true
+                            showLoadingState()
                             val compileProgress = when (it) {
                                 is EmulatorState.LoadingRom -> it.vulkanCompileProgress
                                 is EmulatorState.LoadingFirmware -> it.vulkanCompileProgress
@@ -803,6 +824,12 @@ class EmulatorActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun showLoadingState() {
+        binding.viewLayoutControls.isInvisible = true
+        binding.textFps.isGone = true
+        binding.textLoading.isVisible = true
     }
 
     private fun renderLoadingState(progress: VulkanCompileProgress?) {
