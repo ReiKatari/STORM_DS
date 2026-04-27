@@ -212,6 +212,19 @@ class FileSystemRomsRepository(
         onRomsChanged()
     }
 
+    override fun setRomFavorite(rom: Rom, favorite: Boolean) {
+        val romIndex = roms.indexOfFirst { it.hasSameFileAsRom(rom) }
+        if (romIndex < 0)
+            return
+
+        val romInList = roms[romIndex]
+        if (romInList.isFavorite == favorite)
+            return
+
+        roms[romIndex] = romInList.copy(isFavorite = favorite)
+        onRomsChanged()
+    }
+
     override fun rescanRoms() {
         coroutineScope.launch {
             scanningStatusSubject.emit(RomScanningStatus.SCANNING)
@@ -254,7 +267,6 @@ class FileSystemRomsRepository(
         }
 
         if (existingRom != null) {
-            // ROM has different metadata. Update it
             val updatedRom = existingRom.copy(
                 name = rom.name,
                 developerName = rom.developerName,
@@ -312,12 +324,21 @@ class FileSystemRomsRepository(
     private suspend fun loadCachedRoms() {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
 
-        val cachedRoms = getCachedRoms().filter {
-            DocumentFile.fromSingleUri(context, it.uri)?.exists() == true
+        val cachedRoms = getCachedRoms()
+
+        if (cachedRoms.isEmpty() && settingsRepository.getRomSearchDirectories().isNotEmpty()) {
+            Log.w(TAG, "ROM cache is empty but search directories exist; forcing full rescan")
+            synchronized(directoryStatesLock) {
+                directoryStates.clear()
+                directoryScanStatuses.clear()
+                emitDirectoryScanStatusesLocked()
+            }
+            saveDirectoryStates()
         }
 
         roms.addAll(cachedRoms)
         onRomsChanged()
+
         scanForNewRoms().collect {
             addRom(it)
         }
@@ -369,7 +390,9 @@ class FileSystemRomsRepository(
 
         for (fileState in updatedFiles) {
             romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)?.let { fileRomProcessor ->
-                fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)?.let { collector.emit(it) }
+                fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)?.let { rom ->
+                    collector.emit(rom)
+                }
             }
         }
 
@@ -551,6 +574,8 @@ class FileSystemRomsRepository(
             gson.fromJson<List<RomDto>>(FileReader(cacheFile), romListType).map {
                 it.toModel()
             }
+        }.onFailure {
+            Log.w(TAG, "Failed to parse cached ROM data; cache will be rebuilt", it)
         }.getOrElse { emptyList() }
     }
 

@@ -45,6 +45,7 @@ import me.magnum.melonds.domain.model.RendererConfiguration
 import me.magnum.melonds.domain.model.RetroArchShaderConfiguration
 import me.magnum.melonds.domain.model.RetroArchShaderSourceResolution
 import me.magnum.melonds.domain.model.RomIconFiltering
+import me.magnum.melonds.domain.model.RomViewMode
 import me.magnum.melonds.domain.model.SaveStateLocation
 import me.magnum.melonds.domain.model.ScreenAlignment
 import me.magnum.melonds.domain.model.SizeUnit
@@ -347,6 +348,36 @@ class SharedPreferencesSettingsRepository(
         // Cache size is 128MB * (cacheSizeStepPreference ^ 2)
         return SizeUnit.MB(128) * 2.toDouble().pow(cacheSizeStepPreference).toLong()
     }
+
+    override fun getRomViewMode(): RomViewMode {
+        val viewModePreference = preferences.getString("rom_view_mode", "grid") ?: "grid"
+        return runCatching { enumValueOfIgnoreCase<RomViewMode>(viewModePreference) }
+            .getOrDefault(RomViewMode.GRID)
+    }
+
+    override fun setRomViewMode(viewMode: RomViewMode) {
+        preferences.edit {
+            putString("rom_view_mode", viewMode.name.lowercase())
+        }
+    }
+
+    override fun observeRomViewMode(): Flow<RomViewMode> {
+        return getOrCreatePreferenceSharedFlow("rom_view_mode") {
+            getRomViewMode()
+        }
+    }
+
+    override fun isRaCoverEnabled(): Boolean {
+        return preferences.getBoolean("rom_ra_covers_enabled", true)
+    }
+
+    override fun observeRaCoverEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("rom_ra_covers_enabled") {
+            isRaCoverEnabled()
+        }
+    }
+
+
     override fun getDefaultConsoleType(): ConsoleType {
         val consoleTypePreference = preferences.getString("console_type", "ds")!!
         return enumValueOfIgnoreCase(consoleTypePreference)
@@ -958,16 +989,19 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getRomSortingMode(): SortingMode {
-        val sortingMode = preferences.getString("rom_sorting_mode", "alphabetically")!!
-        return SortingMode.valueOf(sortingMode.uppercase())
+        val sortingMode = preferences.getString("rom_sorting_mode", "alphabetically") ?: "alphabetically"
+        return runCatching { SortingMode.valueOf(sortingMode.uppercase()) }
+            .getOrDefault(SortingMode.ALPHABETICALLY)
     }
 
     override fun getRomSortingOrder(): SortingOrder {
         val sortingOrder = preferences.getString("rom_sorting_order", null)
-        return if (sortingOrder == null)
+        return if (sortingOrder == null) {
             getRomSortingMode().defaultOrder
-        else
-            SortingOrder.valueOf(sortingOrder.uppercase())
+        } else {
+            runCatching { SortingOrder.valueOf(sortingOrder.uppercase()) }
+                .getOrDefault(getRomSortingMode().defaultOrder)
+        }
     }
 
     override fun saveNextToRomFile(): Boolean {

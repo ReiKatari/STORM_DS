@@ -133,6 +133,14 @@ fun RomDetailsScreen(
                         onSyncOfflineNow = onOfflineSyncNow,
                     )
                 }
+                RomDetailsTab.OFFLINE_ACHIEVEMENTS.tabIndex -> {
+                    RomOfflineAchievementsUi(
+                        modifier = Modifier.fillMaxSize().focusRequester(focusRequester),
+                        contentPadding = padding,
+                        offlineAchievementsUiState = offlineAchievementsUiState,
+                        onSyncOfflineNow = onOfflineSyncNow,
+                    )
+                }
             }
         }
 

@@ -135,6 +135,16 @@ fun RomHeaderUi(
                             )
                         }
                     )
+                    Tab(
+                        selected = pagerState.currentPage == RomDetailsTab.OFFLINE_ACHIEVEMENTS.tabIndex,
+                        onClick = { onTabClicked(RomDetailsTab.OFFLINE_ACHIEVEMENTS) },
+                        text = {
+                            Text(
+                                text = stringResource(id = R.string.rom_details_offline_achievements_tab).uppercase(),
+                                color = MaterialTheme.colors.onSurface
+                            )
+                        }
+                    )
                 }
             }
         }

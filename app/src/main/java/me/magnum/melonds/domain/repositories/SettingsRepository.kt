@@ -23,6 +23,14 @@ interface SettingsRepository {
     fun getRomIconFiltering(): RomIconFiltering
     fun getRomCacheMaxSize(): SizeUnit
 
+    fun getRomViewMode(): RomViewMode
+    fun setRomViewMode(viewMode: RomViewMode)
+    fun observeRomViewMode(): Flow<RomViewMode>
+
+    fun isRaCoverEnabled(): Boolean
+    fun observeRaCoverEnabled(): Flow<Boolean>
+
+
     fun getDefaultConsoleType(): ConsoleType
     fun getFirmwareConfiguration(): FirmwareConfiguration
     fun useCustomBios(): Boolean

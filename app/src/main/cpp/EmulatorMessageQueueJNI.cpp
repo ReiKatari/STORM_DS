@@ -1,11 +1,17 @@
 #include <jni.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <cerrno>
+#include <cstring>
+#include <mutex>
+#include <vector>
 #include <Platform.h>
 
 // messagePipes[0] -> read
 // messagePipes[1] -> write
 static int messagePipes[2] = { -1, -1 };
+
+static std::mutex writeMutex;
 
 extern "C"
 {
@@ -32,6 +38,7 @@ Java_me_magnum_melonds_impl_emulator_EmulatorMessageQueue_initMessagePipe(JNIEnv
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_impl_emulator_EmulatorMessageQueue_closeMessagePipe(JNIEnv* env, jobject thiz)
 {
+    std::lock_guard guard(writeMutex);
     if (messagePipes[0] != -1) {
         close(messagePipes[0]);
         messagePipes[0] = -1;
@@ -46,17 +53,36 @@ Java_me_magnum_melonds_impl_emulator_EmulatorMessageQueue_closeMessagePipe(JNIEn
 
 namespace MelonDSAndroid {
     void fireEmulatorEvent(int type, int dataLength, void* data) {
+        std::lock_guard guard(writeMutex);
         if (messagePipes[1] == -1) {
             return;
         }
 
-        struct {
-            int type;
-            int dataLength;
-        } event = { type, dataLength };
+        const size_t headerSize = sizeof(int) * 2;
+        const size_t payloadSize = (data != nullptr && dataLength > 0) ? (size_t) dataLength : 0;
+        const size_t totalSize = headerSize + payloadSize;
 
-        write(messagePipes[1], &event, sizeof(event));
-        if (data != nullptr)
-            write(messagePipes[1], data, dataLength);
+        std::vector<char> buffer(totalSize);
+        const int header[2] = { type, dataLength };
+        std::memcpy(buffer.data(), header, headerSize);
+        if (payloadSize > 0) {
+            std::memcpy(buffer.data() + headerSize, data, payloadSize);
+        }
+
+        ssize_t written = 0;
+        while (written < (ssize_t) totalSize) {
+            ssize_t result = write(messagePipes[1], buffer.data() + written, totalSize - written);
+            if (result < 0) {
+                if (errno == EINTR) continue;
+                melonDS::Platform::Log(
+                    melonDS::Platform::LogLevel::Warn,
+                    "[RAClient] runtime_event_dropped reason=pipe_write_failed errno=%d type=%d\n",
+                    errno,
+                    type
+                );
+                return;
+            }
+            written += result;
+        }
     }
 }

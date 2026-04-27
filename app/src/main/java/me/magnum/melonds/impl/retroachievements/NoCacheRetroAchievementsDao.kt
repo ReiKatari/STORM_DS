@@ -141,6 +141,14 @@ class NoCacheRetroAchievementsDao(private val actualAchievementsDao: RetroAchiev
         return actualAchievementsDao.getAnyGameHashForGameId(gameId)
     }
 
+    override fun observeAllGameHashes(): kotlinx.coroutines.flow.Flow<List<String>> {
+        return actualAchievementsDao.observeAllGameHashes()
+    }
+
+    override fun observeRomCoverIcons(): kotlinx.coroutines.flow.Flow<List<me.magnum.melonds.database.entities.retroachievements.HashIconRow>> {
+        return actualAchievementsDao.observeRomCoverIcons()
+    }
+
     override suspend fun updateGameHashLibrary(hashLibrary: List<RAGameHashEntity>) {
         actualAchievementsDao.updateGameHashLibrary(hashLibrary)
     }

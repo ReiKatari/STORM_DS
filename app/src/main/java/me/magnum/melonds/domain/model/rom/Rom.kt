@@ -16,6 +16,7 @@ data class Rom(
     val isDsiWareTitle: Boolean,
     val retroAchievementsHash: String,
     val totalPlayTime: Duration = Duration.ZERO,
+    val isFavorite: Boolean = false,
 ) {
 
     fun hasSameFileAsRom(other: Rom): Boolean {

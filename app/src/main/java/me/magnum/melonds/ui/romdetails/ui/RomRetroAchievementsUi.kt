@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.romdetails.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,14 +88,6 @@ fun RomRetroAchievementsUi(
     onSyncOfflineNow: () -> Unit,
 ) {
     Column(modifier = modifier.padding(contentPadding)) {
-        OfflineAchievementsStatusUi(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            state = offlineAchievementsUiState,
-            onSyncNow = onSyncOfflineNow,
-        )
-
-        Divider(Modifier.fillMaxWidth())
-
         when (retroAchievementsUiState) {
             is RomRetroAchievementsUiState.LoggedOut -> LoggedOut(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -120,59 +113,60 @@ fun RomRetroAchievementsUi(
 }
 
 @Composable
-private fun OfflineAchievementsStatusUi(
+fun OfflineAchievementsStatusUi(
     modifier: Modifier,
     state: OfflineAchievementsUiState,
     onSyncNow: () -> Unit,
 ) {
-    Column(
+    ConfigSection(
+        title = stringResource(id = R.string.offline_ra_settings_title),
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = stringResource(id = R.string.offline_ra_settings_title),
-            style = MaterialTheme.typography.subtitle1,
-            fontWeight = FontWeight.Bold,
-        )
-
         val availabilityText = when (state.availability) {
             OfflineAchievementsUiState.Availability.ENABLED -> stringResource(id = R.string.offline_ra_status_enabled)
             OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> stringResource(id = R.string.offline_ra_status_disabled_not_logged_in)
             OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(id = R.string.offline_ra_status_disabled_no_cache)
         }
-        Text(text = availabilityText, style = MaterialTheme.typography.body2)
-
-        Text(
-            text = stringResource(id = R.string.offline_ra_pending_softcore_unlocks, state.pendingSoftcoreUnlockCount),
-            style = MaterialTheme.typography.body2,
-        )
-        Text(
-            text = stringResource(id = R.string.offline_ra_pending_ledger_unlocks, state.pendingLedgerUnlockCount),
-            style = MaterialTheme.typography.body2,
-        )
-
+        StatusLine(text = availabilityText)
+        StatusLine(text = stringResource(id = R.string.offline_ra_pending_softcore_unlocks, state.pendingSoftcoreUnlockCount))
+        StatusLine(text = stringResource(id = R.string.offline_ra_pending_ledger_unlocks, state.pendingLedgerUnlockCount))
         val integrityText = if (state.isLedgerIntegrityOk) {
             stringResource(id = R.string.offline_ra_ledger_integrity_ok)
         } else {
             stringResource(id = R.string.offline_ra_ledger_integrity_tampered)
         }
-        Text(
+        StatusLine(
             text = stringResource(id = R.string.offline_ra_ledger_integrity, integrityText),
-            style = MaterialTheme.typography.body2,
+            highlight = !state.isLedgerIntegrityOk,
         )
 
         if (state.isSyncing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colors.secondary)
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                color = MaterialTheme.colors.secondary,
+            )
         }
 
         Button(
             onClick = onSyncNow,
             enabled = state.canSyncNow,
             colors = melonButtonColors(),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Text(text = stringResource(id = R.string.offline_ra_sync_now_button).uppercase())
         }
     }
+}
+
+@Composable
+private fun StatusLine(text: String, highlight: Boolean = false) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        style = MaterialTheme.typography.body2,
+        color = if (highlight) MaterialTheme.colors.secondary else MaterialTheme.colors.onSurface.copy(alpha = 0.85f),
+        fontWeight = if (highlight) FontWeight.SemiBold else FontWeight.Normal,
+    )
 }
 
 @Composable
@@ -338,7 +332,6 @@ private fun Ready(
                 modifier = Modifier.fillMaxWidth().focusable(),
                 achievementsSummary = selectedSet.setSummary,
             )
-            Divider(Modifier.fillMaxWidth())
         }
 
         item(contentType = FILTERS_ITEM_TYPE) {
@@ -366,13 +359,18 @@ private fun Ready(
         filteredBuckets.forEachIndexed { index, bucket ->
             item(contentType = BUCKET_HEADER_ITEM_TYPE) {
                 Text(
-                    modifier = Modifier.padding(start = 16.dp, top = if (index == 0) 0.dp else 16.dp, end = 16.dp, bottom = 4.dp).fillMaxWidth(),
-                    text = getBucketTitle(bucket.bucket),
-                    style = MaterialTheme.typography.h6,
-                )
-                Divider(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                    color = MaterialTheme.colors.onSurface,
+                    modifier = Modifier
+                        .padding(
+                            start = 20.dp,
+                            top = if (index == 0) 8.dp else 20.dp,
+                            end = 16.dp,
+                            bottom = 8.dp,
+                        )
+                        .fillMaxWidth(),
+                    text = getBucketTitle(bucket.bucket).uppercase(),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.secondary,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
 
@@ -412,28 +410,65 @@ private fun Header(
     achievementsSummary: RomAchievementsSummary,
 ) {
     Column(
-        modifier = modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = "${achievementsSummary.completedAchievements}",
+                style = MaterialTheme.typography.h3,
+                color = MaterialTheme.colors.secondary,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = " / ${achievementsSummary.totalAchievements}",
+                style = MaterialTheme.typography.h5,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            Text(
+                text = if (achievementsSummary.forHardcoreMode) {
+                    stringResource(id = R.string.ra_mode_hardcore).uppercase()
+                } else {
+                    stringResource(id = R.string.ra_mode_softcore).uppercase()
+                },
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.secondary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colors.secondary.copy(alpha = 0.15f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
+
+        LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(50)),
+            progress = achievementsSummary.completedAchievements / achievementsSummary.totalAchievements.toFloat(),
+            color = MaterialTheme.colors.secondary,
+            backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.10f),
+        )
+
         Text(
             text = buildAnnotatedString {
                 appendInlineContent("icon-points")
-                append(' ')
-                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                append("  ")
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
                     append(achievementsSummary.totalPoints.toString())
                 }
                 append(' ')
                 append(stringResource(id = R.string.points_abbreviated))
-                append(" (")
-                if (achievementsSummary.forHardcoreMode) {
-                    append(stringResource(id = R.string.ra_mode_hardcore))
-                } else {
-                    append(stringResource(id = R.string.ra_mode_softcore))
-                }
-                append(')')
+                append(" • ${achievementsSummary.completedPercentage}%")
             },
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.85f),
             inlineContent = mapOf(
-                "icon-points" to InlineTextContent(Placeholder(MaterialTheme.typography.body1.fontSize, MaterialTheme.typography.body1.fontSize, PlaceholderVerticalAlign.Center)) {
+                "icon-points" to InlineTextContent(Placeholder(MaterialTheme.typography.body2.fontSize, MaterialTheme.typography.body2.fontSize, PlaceholderVerticalAlign.Center)) {
                     Image(
                         modifier = Modifier.fillMaxSize(),
                         painter = painterResource(id = R.drawable.ic_points),
@@ -441,32 +476,6 @@ private fun Header(
                     )
                 }
             )
-        )
-
-        Text(
-            text = buildAnnotatedString {
-                appendInlineContent(id = "icon-completed", alternateText = stringResource(id = R.string.completed))
-                append(' ')
-                append(stringResource(id = R.string.completed_achievements, achievementsSummary.completedAchievements, achievementsSummary.totalAchievements, achievementsSummary.completedPercentage))
-            },
-            inlineContent = mapOf(
-                "icon-completed" to InlineTextContent(Placeholder(MaterialTheme.typography.body1.fontSize, MaterialTheme.typography.body1.fontSize, PlaceholderVerticalAlign.Center)) {
-                    Image(
-                        modifier = Modifier.fillMaxSize(),
-                        painter = painterResource(id = R.drawable.ic_completed),
-                        contentDescription = null,
-                    )
-                }
-            )
-        )
-
-        LinearProgressIndicator(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(50)),
-            progress = achievementsSummary.completedAchievements / achievementsSummary.totalAchievements.toFloat(),
-            color = MaterialTheme.colors.secondary,
         )
     }
 }

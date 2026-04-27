@@ -4,8 +4,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.InternalSerializationApi
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.serializer
@@ -253,16 +257,9 @@ class RAApi(
             executeRequest(request)
         }.suspendMapCatching { response ->
             if (response.isSuccessful) {
-                val body = response.body.charStream().use {
-                    it.readText()
-                }
-                val responseJson = Json.parseToJsonElement(body).jsonObject
-                val isSuccessful = responseJson["Success"]!!.jsonPrimitive.boolean
-                if (!isSuccessful) {
-                    val reason = responseJson["Error"]!!.jsonPrimitive.toString()
-                    // The error handler may choose to ignore the error
-                    errorHandler.invoke(reason)
-                }
+                val body = response.body.charStream().use { it.readText() }
+                val responseJson = parseRaResponse(body)
+                validateRaResponseSuccess(responseJson, errorHandler)
 
                 if (responseClass == Unit::class) {
                     // Ignore response. Don't parse anything
@@ -294,16 +291,9 @@ class RAApi(
             executeRequest(request)
         }.suspendMapCatching { response ->
             if (response.isSuccessful) {
-                val body = response.body.charStream().use {
-                    it.readText()
-                }
-                val responseJson = Json.parseToJsonElement(body).jsonObject
-                val isSuccessful = responseJson["Success"]!!.jsonPrimitive.boolean
-                if (!isSuccessful) {
-                    val reason = responseJson["Error"]!!.jsonPrimitive.toString()
-                    // The error handler may choose to ignore the error
-                    errorHandler.invoke(reason)
-                }
+                val body = response.body.charStream().use { it.readText() }
+                val responseJson = parseRaResponse(body)
+                validateRaResponseSuccess(responseJson, errorHandler)
 
                 if (responseClass == Unit::class) {
                     // Ignore response. Don't parse anything
@@ -356,5 +346,51 @@ class RAApi(
         continuation.invokeOnCancellation {
             call.cancel()
         }
+    }
+
+    private fun parseRaResponse(body: String): JsonObject {
+        if (body.isBlank()) {
+            throw UnsuccessfulRequestException("RA response body is empty")
+        }
+
+        return try {
+            Json.parseToJsonElement(body).jsonObject
+        } catch (exception: SerializationException) {
+            throw UnsuccessfulRequestException("RA response is not valid JSON: ${body.take(200)}")
+        } catch (exception: IllegalArgumentException) {
+            throw UnsuccessfulRequestException("RA response is not a JSON object: ${body.take(200)}")
+        }
+    }
+
+    private fun validateRaResponseSuccess(responseJson: JsonObject, errorHandler: (String?) -> Unit) {
+        val successElement = responseJson["Success"]
+        if (successElement == null) {
+            val explicitError = responseJson["Error"]?.jsonPrimitive?.contentOrNull
+            val fallbackMessage = explicitError ?: "RA response missing field: Success"
+            errorHandler.invoke(fallbackMessage)
+            return
+        }
+
+        val isSuccess = parseRaBoolean(successElement)
+        if (!isSuccess) {
+            val reason = responseJson["Error"]?.jsonPrimitive?.contentOrNull
+            // The error handler may choose to ignore the error
+            errorHandler.invoke(reason ?: "Unknown reason")
+        }
+    }
+
+    private fun parseRaBoolean(value: JsonElement): Boolean {
+        val primitive = value.jsonPrimitive
+        primitive.booleanOrNull?.let { return it }
+
+        val content = primitive.contentOrNull?.trim()?.lowercase() ?: throw UnsuccessfulRequestException("RA response value is empty")
+        if (content == "1" || content == "true" || content == "yes" || content == "on") {
+            return true
+        }
+        if (content == "0" || content == "false" || content == "no" || content == "off") {
+            return false
+        }
+
+        throw UnsuccessfulRequestException("RA response has invalid Success value: $content")
     }
 }

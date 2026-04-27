@@ -42,13 +42,13 @@ class RetroAchievementsSettingsViewModel @Inject constructor(
     fun login(username: String, password: String) {
         viewModelScope.launch {
             _loggingIn.value = true
-            retroAchievementsRepository.login(username, password)
-                .onSuccess {
-                    updateLoggedInState()
-                }
-                .onFailure {
-                    _loginErrorEvent.tryEmit(Unit)
-                }
+            val result = retroAchievementsRepository.login(username, password)
+            if (result.isSuccess) {
+                updateLoggedInState()
+            } else {
+                _accountState.value = RetroAchievementsAccountState.LoggedOut
+                _loginErrorEvent.tryEmit(Unit)
+            }
             _loggingIn.value = false
         }
     }

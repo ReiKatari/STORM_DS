@@ -1,5 +1,6 @@
 package me.magnum.melonds.impl.retroachievements.offline
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -36,6 +37,10 @@ class SmartSyncEngine(
     private val prefetchCacheRepository: OfflinePrefetchCacheRepository,
 ) {
 
+    private companion object {
+        const val RA_TRACE_TAG = "RATrace"
+    }
+
     suspend fun syncNow(userId: String, contentId: String): Result<SmartSyncResult> {
         return syncFiltered(userId = userId, contentId = contentId, modeFilter = null)
     }
@@ -53,8 +58,16 @@ class SmartSyncEngine(
         contentId: String,
         modeFilter: Set<OfflineUnlockMode>?,
     ): Result<SmartSyncResult> = withContext(Dispatchers.IO) {
+        val filterTag = modeFilter?.joinToString(",") { it.name } ?: "ALL"
+        logRaTrace("smart_sync_started", "filter" to filterTag, "content_id" to contentId)
+
         val ledgerStatus = ledgerRepository.getStatus(userId, contentId)
         if (ledgerStatus.integrity != OfflineLedgerIntegrity.OK) {
+            logRaTrace(
+                "smart_sync_failed",
+                "filter" to filterTag,
+                "reason" to "ledger_integrity_${ledgerStatus.integrity.name.lowercase()}",
+            )
             return@withContext Result.failure(IllegalStateException("Ledger integrity is ${ledgerStatus.integrity}"))
         }
 
@@ -62,6 +75,7 @@ class SmartSyncEngine(
             modeFilter?.contains(unlock.unlockMode) ?: true
         }
         if (pending.isEmpty()) {
+            logRaTrace("smart_sync_no_pending", "filter" to filterTag)
             return@withContext Result.success(
                 SmartSyncResult(
                     submittedCount = 0,
@@ -72,15 +86,36 @@ class SmartSyncEngine(
         }
 
         val cache = prefetchCacheRepository.readValid(userId, contentId)
-            ?: return@withContext Result.failure(IllegalStateException("Prefetch cache missing"))
+        if (cache == null) {
+            logRaTrace(
+                "smart_sync_failed",
+                "filter" to filterTag,
+                "reason" to "prefetch_cache_missing",
+                "pending" to pending.size,
+            )
+            return@withContext Result.failure(IllegalStateException("Prefetch cache missing"))
+        }
 
         val cachedDefinitionById = cache.achievements.associate { it.id to it.memoryAddress }
 
-        val currentGame = raApi.getGameAchievementSets(contentId).getOrElse { e ->
-            return@withContext Result.failure(e)
+        val currentGame = raApi.getGameAchievementSets(contentId).getOrElse { error ->
+            logRaTrace(
+                "smart_sync_failed",
+                "filter" to filterTag,
+                "reason" to "fetch_current_set_failed",
+                "error" to (error.message ?: error.javaClass.simpleName),
+            )
+            return@withContext Result.failure(error)
         }
 
         if (currentGame.id.id != cache.gameId) {
+            logRaTrace(
+                "smart_sync_failed",
+                "filter" to filterTag,
+                "reason" to "game_id_mismatch",
+                "expected" to cache.gameId,
+                "actual" to currentGame.id.id,
+            )
             return@withContext Result.failure(IllegalStateException("Game ID mismatch"))
         }
 
@@ -95,7 +130,14 @@ class SmartSyncEngine(
             forHardcoreMode = pending.any { it.unlockMode == OfflineUnlockMode.HARDCORE },
         )
         if (startSessionResult.isFailure) {
-            return@withContext Result.failure(startSessionResult.exceptionOrNull() ?: IllegalStateException("Failed to start RA session"))
+            val error = startSessionResult.exceptionOrNull()
+            logRaTrace(
+                "smart_sync_failed",
+                "filter" to filterTag,
+                "reason" to "start_session_failed",
+                "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+            )
+            return@withContext Result.failure(error ?: IllegalStateException("Failed to start RA session"))
         }
 
         val plan = SmartSyncPlanner.plan(
@@ -120,6 +162,12 @@ class SmartSyncEngine(
             }
 
             if (skipReason != null) {
+                logRaTrace(
+                    "smart_sync_unlock_skipped",
+                    "achievement_id" to unlock.achievementId,
+                    "reason" to skipReason.name,
+                    "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
+                )
                 skipped += SmartSyncSkippedAchievement(achievementId = unlock.achievementId, reason = skipReason)
             } else {
                 val awardResult = retryingAward(
@@ -127,8 +175,22 @@ class SmartSyncEngine(
                     isHardcore = unlock.unlockMode == OfflineUnlockMode.HARDCORE,
                 )
                 if (awardResult.isFailure) {
-                    return@withContext Result.failure(awardResult.exceptionOrNull()!!)
+                    val error = awardResult.exceptionOrNull()
+                    logRaTrace(
+                        "smart_sync_failed",
+                        "filter" to filterTag,
+                        "reason" to "award_failed",
+                        "achievement_id" to unlock.achievementId,
+                        "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+                        "submitted_so_far" to submitted,
+                    )
+                    return@withContext Result.failure(error ?: IllegalStateException("Award failed"))
                 }
+                logRaTrace(
+                    "smart_sync_unlock_submitted",
+                    "achievement_id" to unlock.achievementId,
+                    "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
+                )
                 submitted++
             }
 
@@ -142,9 +204,24 @@ class SmartSyncEngine(
                 unlockMode = unlock.unlockMode,
                 offlineType = unlock.offlineType,
             ).getOrElse { e ->
+                logRaTrace(
+                    "smart_sync_failed",
+                    "filter" to filterTag,
+                    "reason" to "ledger_ack_failed",
+                    "achievement_id" to unlock.achievementId,
+                    "error" to (e.message ?: e.javaClass.simpleName),
+                )
                 return@withContext Result.failure(e)
             }
         }
+
+        logRaTrace(
+            "smart_sync_completed",
+            "filter" to filterTag,
+            "submitted" to submitted,
+            "skipped" to skipped.size,
+            "total" to pending.size,
+        )
 
         Result.success(
             SmartSyncResult(
@@ -174,19 +251,58 @@ class SmartSyncEngine(
             }
 
             if (exception is UserNotAuthenticatedException) {
+                logRaTrace(
+                    "smart_sync_award_unauthenticated",
+                    "achievement_id" to achievementId,
+                    "hardcore" to isHardcore,
+                )
                 return Result.failure(exception)
             }
 
             if (exception is IOException || exception.cause is IOException) {
                 if (attempt >= 5) {
+                    logRaTrace(
+                        "smart_sync_award_io_exhausted",
+                        "achievement_id" to achievementId,
+                        "hardcore" to isHardcore,
+                        "attempts" to attempt,
+                    )
                     return Result.failure(exception)
                 }
+                logRaTrace(
+                    "smart_sync_award_io_retry",
+                    "achievement_id" to achievementId,
+                    "attempt" to attempt,
+                    "backoff_ms" to backoffMs,
+                )
                 delay(backoffMs)
                 backoffMs = min(backoffMs * 2, 60.seconds.inWholeMilliseconds)
                 continue
             }
 
+            logRaTrace(
+                "smart_sync_award_failed",
+                "achievement_id" to achievementId,
+                "hardcore" to isHardcore,
+                "error" to (exception.message ?: exception.javaClass.simpleName),
+            )
             return Result.failure(exception)
         }
+    }
+
+    private fun logRaTrace(eventType: String, vararg fields: Pair<String, Any?>) {
+        val message = buildString {
+            append("event_type=").append(eventType)
+            append(" submit_path=").append("smart_sync_engine")
+            fields.forEach { (key, value) ->
+                if (value != null) {
+                    append(' ')
+                    append(key)
+                    append('=')
+                    append(value.toString().replace(' ', '_'))
+                }
+            }
+        }
+        Log.i(RA_TRACE_TAG, message)
     }
 }

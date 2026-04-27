@@ -196,11 +196,13 @@ private class AchievementUpdatesListState {
             is RAEventUi.AchievementUnPrimed -> handleAchievementUnPrimed(event)
             is RAEventUi.AchievementTriggerError -> handleAchievementTriggerError(event)
             is RAEventUi.AchievementProgressUpdated -> handleProgressUpdated(event)
+            is RAEventUi.AchievementProgressHidden -> handleAchievementProgressHidden(event)
             is RAEventUi.LeaderboardAttemptStarted -> handleLeaderboardAttemptStarted(event)
             is RAEventUi.LeaderboardAttemptUpdated -> handleLeaderboardAttemptUpdated(event)
             is RAEventUi.LeaderboardEntrySubmitted -> handleLeaderboardEntrySubmitted(event)
             is RAEventUi.LeaderboardEntrySubmitError -> handleLeaderboardEntrySubmitError(event)
             is RAEventUi.LeaderboardAttemptCancelled -> handleLeaderboardAttemptCancelled(event)
+            is RAEventUi.LeaderboardTrackerHidden -> handleLeaderboardTrackerHidden(event)
             RAEventUi.PendingDataSubmitted -> handlePendingDataSubmitted()
             is RAEventUi.AchievementTriggered -> { /* no-op */ }
             is RAEventUi.GameMastered -> { /* no-op */ }
@@ -329,6 +331,20 @@ private class AchievementUpdatesListState {
             (it as? AchievementInfo.LeaderboardAttempt)?.leaderboard?.id == event.leaderboardId
         }
         attempt?.state?.dismiss()
+    }
+
+    private fun handleLeaderboardTrackerHidden(event: RAEventUi.LeaderboardTrackerHidden) {
+        val attempt = visibleInfos.firstOrNull {
+            (it as? AchievementInfo.LeaderboardAttempt)?.leaderboard?.id == event.leaderboardId
+        }
+        attempt?.state?.dismiss()
+    }
+
+    private fun handleAchievementProgressHidden(event: RAEventUi.AchievementProgressHidden) {
+        val progress = visibleInfos.firstOrNull {
+            (it as? AchievementProgress)?.achievement?.id == event.achievementId
+        }
+        progress?.state?.dismiss()
     }
 
     private fun handlePendingDataSubmitted() {

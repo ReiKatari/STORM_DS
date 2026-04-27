@@ -27,6 +27,8 @@ data class RomDto(
     val retroAchievementsHash: String,
     @SerializedName("totalPlayTime")
     val totalPlayTime: Long = 0,
+    @SerializedName("isFavorite")
+    val isFavorite: Boolean = false,
 ) {
 
     companion object {
@@ -42,6 +44,7 @@ data class RomDto(
                 rom.isDsiWareTitle,
                 rom.retroAchievementsHash,
                 rom.totalPlayTime.inWholeMilliseconds,
+                rom.isFavorite,
             )
         }
     }
@@ -58,6 +61,7 @@ data class RomDto(
             isDsiWareTitle,
             retroAchievementsHash,
             totalPlayTime.milliseconds,
+            isFavorite,
         )
     }
 }

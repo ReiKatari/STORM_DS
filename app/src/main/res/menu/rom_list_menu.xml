@@ -11,6 +11,13 @@
         app:actionViewClass="androidx.appcompat.widget.SearchView" />
 
     <item
+        android:id="@+id/action_view_toggle"
+        android:title="@string/rom_view_toggle"
+        android:icon="@drawable/ic_view_list"
+        android:orderInCategory="2"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_sort"
         android:title="@string/action_sort_roms"
         android:icon="@drawable/ic_sort"
@@ -30,6 +37,14 @@
                 android:icon="@drawable/ic_clock"
                 app:iconTint="@color/buttonContrasted"
                 android:orderInCategory="1" />
+
+            <item
+                android:id="@+id/action_sort_most_played"
+                android:title="@string/rom_sorting_most_played"
+                android:icon="@drawable/ic_clock"
+                app:iconTint="@color/buttonContrasted"
+                android:orderInCategory="2" />
+
         </menu>
     </item>
 

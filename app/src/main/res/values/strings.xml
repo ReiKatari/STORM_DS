@@ -97,6 +97,8 @@
     <string name="info_play_time_hours_minutes">Play time: %1$dh %2$dm</string> <!-- Ex: 4h 28m -->
     <string name="info_play_time_minutes">Play time: %1$dm</string> <!-- Ex: 28m -->
     <string name="info_loading">LOADING…</string>
+    <string name="info_refreshing_retroachievements_title">Refreshing RetroAchievements…</string>
+    <string name="info_refreshing_retroachievements_detail">Fetching the latest achievement set</string>
     <string name="info_vulkan_compiling_title">Building Vulkan shaders…</string>
     <string name="info_retroarch_compiling_title">Building RetroArch shaders…</string>
     <string name="info_vulkan_compiling_progress">%1$s (%2$d/%3$d)</string>
@@ -204,6 +206,28 @@
     <string name="check_for_updates">Check for updates</string>
     <string name="check_for_updates_summary">When enabled, the app will periodically check for available updates</string>
     <string name="rom_icon_filtering">Icon filtering</string>
+    <string name="rom_view_mode">Default ROM list view</string>
+    <string name="rom_ra_cover_enabled">Use RetroAchievements badge as cover</string>
+    <string name="rom_ra_cover_enabled_summary">Show the official RetroAchievements game badge as the ROM cover. The badge appears once you\'ve opened the ROM at least once with a RetroAchievements session active.</string>
+    <string name="rom_view_mode_grid">Grid</string>
+    <string name="rom_view_mode_list">List</string>
+    <string name="rom_filter_all">All</string>
+    <string name="rom_filter_favorites">Favorites</string>
+    <string name="rom_filter_ds">DS</string>
+    <string name="rom_filter_dsiware">DSiWare</string>
+    <string name="rom_filter_retro_achievements">RA</string>
+    <string name="rom_continue_playing">Continue playing</string>
+    <string name="rom_no_results_filter">No ROMs match this filter</string>
+  <string name="rom_no_favorites">No favorites yet long-press a ROM to mark one</string>
+    <string name="rom_action_favorite">Add to favorites</string>
+    <string name="rom_action_unfavorite">Remove from favorites</string>
+    <string name="rom_action_details">Details</string>
+    <string name="rom_action_share">Share ROM</string>
+    <string name="rom_view_toggle">Toggle grid/list</string>
+    <string name="rom_config">ROM configuration</string>
+    <string name="rom_sorting_most_played">Most played</string>
+    <string name="rom_total_play_time_format">Played %1$s</string>
+    <string name="rom_last_played_format">Last played %1$s</string>
     <string name="max_rom_cache_size">Max. ROM cache size</string>
     <string name="clear_extracted_rom_cache">Clear extracted ROM cache</string>
     <string name="cache_size">Cache size: %s</string>
@@ -401,6 +425,7 @@
     <string name="label_rom_config_gba_save_path">GBA save path</string>
     <string name="rom_details_configuration_tab">Configuration</string>
     <string name="retro_achievements_tab">Retro&#8203;Achievements</string> <!-- Keep zero-width space to allow line breaks in the middle of the word -->
+    <string name="rom_details_offline_achievements_tab">Offline</string>
 
     <string name="theme_option_light">Light</string>
     <string name="theme_option_dark">Dark</string>
@@ -592,6 +617,11 @@
     <string name="offline_ra_hardcore_pending_exit_title">Hardcore sync required</string>
     <string name="offline_ra_hardcore_pending_exit_message">You have %1$d hardcore achievements pending sync. If you close now without syncing, they will be lost.</string>
     <string name="offline_ra_hardcore_unsynced_warning_toast">%1$d hardcore unlock(s) are queued locally. Reconnect and keep playing to sync, or they may be lost on close.</string>
+    <string name="offline_ra_hardcore_try_sync_button">Try sync now</string>
+    <string name="offline_ra_hardcore_discard_exit_button">Discard and exit</string>
+    <string name="offline_ra_hardcore_sync_result_all">Synced %1$d hardcore unlock(s). You can exit now.</string>
+    <string name="offline_ra_hardcore_sync_result_partial">Synced %1$d, %2$d still pending. Try again before exiting.</string>
+    <string name="offline_ra_hardcore_sync_result_none">Could not sync %1$d hardcore unlock(s). Try again or discard on exit.</string>
     <string name="offline_ra_hardcore_loss_notification_title">Hardcore offline unlocks lost</string>
     <string name="offline_ra_hardcore_loss_notification_message">%1$d hardcore unlock(s) from %2$s were lost because the app closed before reconnecting online.</string>
     <string name="offline_ra_mode_softcore">RetroAchievements mode: Softcore</string>
@@ -646,6 +676,16 @@
     <string-array name="rom_icon_filtering_options">
         <item>None (Pixelated)</item>
         <item>Linear (Smooth)</item>
+    </string-array>
+
+    <string-array name="rom_view_mode_options">
+        <item>@string/rom_view_mode_grid</item>
+        <item>@string/rom_view_mode_list</item>
+    </string-array>
+
+    <string-array name="rom_view_mode_values">
+        <item>grid</item>
+        <item>list</item>
     </string-array>
 
     <string-array name="game_runtime_console_type_options">

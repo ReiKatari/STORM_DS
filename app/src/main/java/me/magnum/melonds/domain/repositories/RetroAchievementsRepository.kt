@@ -1,5 +1,6 @@
 package me.magnum.melonds.domain.repositories
 
+import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.domain.model.retroachievements.RAAchievementSetSummary
 import me.magnum.melonds.domain.model.retroachievements.RAGameSummary
 import me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievementBucketEntry
@@ -15,6 +16,10 @@ import me.magnum.rcheevosapi.model.RASubmitLeaderboardEntryResponse
 import me.magnum.rcheevosapi.model.RAUserAuth
 
 interface RetroAchievementsRepository {
+    fun observeKnownAchievementHashes(): Flow<List<String>>
+
+    fun observeRomCoverIcons(): Flow<Map<String, String>>
+
     suspend fun isUserAuthenticated(): Boolean
     suspend fun getUserAuthentication(): RAUserAuth?
     suspend fun login(username: String, password: String): Result<Unit>
@@ -29,6 +34,7 @@ interface RetroAchievementsRepository {
     suspend fun getGameSummary(gameId: RAGameId): RAGameSummary?
     suspend fun getAchievementSetSummary(setId: RASetId): RAAchievementSetSummary?
     suspend fun getAchievement(achievementId: Long): Result<RAAchievement?>
+    suspend fun isAchievementUnlocked(gameId: Long, achievementId: Long, forHardcoreMode: Boolean): Boolean
     suspend fun awardAchievement(achievement: RAAchievement, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse>
     suspend fun submitPendingAchievements(): Result<Unit>
     suspend fun getLeaderboard(leaderboardId: Long): RALeaderboard?

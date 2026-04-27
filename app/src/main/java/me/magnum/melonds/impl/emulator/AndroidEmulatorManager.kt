@@ -119,6 +119,8 @@ class AndroidEmulatorManager(
                 )
                 achievementsSharedFlow.tryEmit(event)
             }
+            EmulatorEventType.EventRAAchievementProgressIndicatorHidden -> achievementsSharedFlow.tryEmit(RAEvent.OnAchievementProgressHidden(data.getLong()))
+            EmulatorEventType.EventRALeaderboardTrackerHidden -> achievementsSharedFlow.tryEmit(RAEvent.OnLeaderboardTrackerHidden(data.getLong()))
         }
     }
 

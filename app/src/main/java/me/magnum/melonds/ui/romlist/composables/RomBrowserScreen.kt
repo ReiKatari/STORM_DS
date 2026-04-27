@@ -1,0 +1,370 @@
+package me.magnum.melonds.ui.romlist.composables
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import me.magnum.melonds.R
+import me.magnum.melonds.domain.model.RomFilter
+import me.magnum.melonds.domain.model.RomScanningStatus
+import me.magnum.melonds.domain.model.RomViewMode
+import me.magnum.melonds.domain.model.SortingMode
+import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.ui.romlist.RomBrowserEntry
+import me.magnum.melonds.ui.romlist.RomBrowserUiState
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun RomBrowserScreen(
+    state: RomBrowserUiState,
+    coverByHash: Map<String, String>,
+    allowConfiguration: Boolean,
+    scanningStatus: RomScanningStatus,
+    confirmedAchievementHashes: Set<String>,
+    onFolderClick: (RomBrowserEntry.Folder) -> Unit,
+    onRomClick: (Rom) -> Unit,
+    onRomLongPress: (Rom) -> Unit,
+    onRomConfigClick: (Rom) -> Unit,
+    onFilterSelected: (RomFilter) -> Unit,
+    onNavigateUp: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    val refreshState = rememberPullRefreshState(
+        refreshing = scanningStatus == RomScanningStatus.SCANNING,
+        onRefresh = onRefresh,
+    )
+    val coroutineScope = rememberCoroutineScope()
+    val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
+
+    val folderCount = remember(state.entries) { state.entries.takeWhile { it is RomBrowserEntry.Folder }.size }
+    val hasFolders = folderCount > 0
+    val showAlphabetBar = (state.alphabetIndex.isNotEmpty() || hasFolders) && state.sortingMode == SortingMode.ALPHABETICALLY
+
+    Surface(color = MaterialTheme.colors.surface, modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                BreadcrumbBar(
+                    breadcrumbs = state.breadcrumbs,
+                    canNavigateUp = state.canNavigateUp,
+                    isAtVirtualRoot = state.isAtVirtualRoot,
+                    isSearchActive = state.isSearchActive,
+                    onNavigateUp = onNavigateUp,
+                )
+
+                if (scanningStatus == RomScanningStatus.SCANNING) {
+                    LinearProgressIndicator(
+                        color = MaterialTheme.colors.secondary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                AnimatedVisibility(visible = state.isAtVirtualRoot && !state.isSearchActive && state.continuePlaying.isNotEmpty()) {
+                    ContinuePlayingShelf(
+                        roms = state.continuePlaying,
+                        coverByHash = coverByHash,
+                        onRomClicked = onRomClick,
+                        onRomLongPressed = onRomLongPress,
+                    )
+                }
+
+                FilterChipsRow(
+                    selected = state.filter,
+                    onFilterSelected = onFilterSelected,
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .pullRefresh(refreshState),
+                ) {
+                    if (state.entries.isEmpty()) {
+                        EmptyState(filter = state.filter)
+                    } else {
+                        Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
+                            when (mode) {
+                                RomViewMode.GRID -> GridContent(
+                                    state = state,
+                                    gridState = gridState,
+                                    coverByHash = coverByHash,
+                                    confirmedAchievementHashes = confirmedAchievementHashes,
+                                    showAlphabetBar = showAlphabetBar,
+                                    onFolderClick = onFolderClick,
+                                    onRomClick = onRomClick,
+                                    onRomLongPress = onRomLongPress,
+                                )
+                                RomViewMode.LIST -> ListContent(
+                                    state = state,
+                                    listState = listState,
+                                    coverByHash = coverByHash,
+                                    allowConfiguration = allowConfiguration,
+                                    confirmedAchievementHashes = confirmedAchievementHashes,
+                                    showAlphabetBar = showAlphabetBar,
+                                    onFolderClick = onFolderClick,
+                                    onRomClick = onRomClick,
+                                    onRomLongPress = onRomLongPress,
+                                    onRomConfigClick = onRomConfigClick,
+                                )
+                            }
+                        }
+                    }
+                    PullRefreshIndicator(
+                        refreshing = scanningStatus == RomScanningStatus.SCANNING,
+                        state = refreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        backgroundColor = MaterialTheme.colors.surface,
+                        contentColor = MaterialTheme.colors.secondary,
+                    )
+                }
+            }
+
+            if (showAlphabetBar) {
+                val activeFirstVis by remember(state.viewMode) {
+                    derivedStateOf {
+                        when (state.viewMode) {
+                            RomViewMode.GRID -> gridState.firstVisibleItemIndex
+                            RomViewMode.LIST -> listState.firstVisibleItemIndex
+                        }
+                    }
+                }
+                val activeLetter by remember(state.alphabetIndex, state.viewMode) {
+                    derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
+                }
+                val isInFolderSection by remember(folderCount, state.viewMode) {
+                    derivedStateOf { hasFolders && activeFirstVis < folderCount }
+                }
+                AlphabetIndexBar(
+                    alphabetIndex = state.alphabetIndex,
+                    activeLetter = activeLetter,
+                    hasFolders = hasFolders,
+                    isInFolderSection = isInFolderSection,
+                    onFoldersClicked = {
+                        coroutineScope.launch {
+                            when (state.viewMode) {
+                                RomViewMode.GRID -> gridState.scrollToItem(0)
+                                RomViewMode.LIST -> listState.scrollToItem(0)
+                            }
+                        }
+                    },
+                    onLetterTouched = { idx, letter ->
+                        coroutineScope.launch {
+                            when (state.viewMode) {
+                                RomViewMode.GRID -> smartScrollGrid(gridState, idx, letter, state.alphabetIndex)
+                                RomViewMode.LIST -> smartScrollList(listState, idx, letter, state.alphabetIndex)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GridContent(
+    state: RomBrowserUiState,
+    gridState: LazyGridState,
+    coverByHash: Map<String, String>,
+    confirmedAchievementHashes: Set<String>,
+    showAlphabetBar: Boolean,
+    onFolderClick: (RomBrowserEntry.Folder) -> Unit,
+    onRomClick: (Rom) -> Unit,
+    onRomLongPress: (Rom) -> Unit,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 120.dp),
+        state = gridState,
+        contentPadding = PaddingValues(
+            start = 12.dp,
+            end = if (showAlphabetBar) 36.dp else 12.dp,
+            top = 8.dp,
+            bottom = 8.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(
+            items = state.entries,
+            key = { entry ->
+                when (entry) {
+                    is RomBrowserEntry.Folder -> "folder:${entry.docId}"
+                    is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                }
+            },
+        ) { entry ->
+            when (entry) {
+                is RomBrowserEntry.Folder -> FolderGridCard(
+                    name = entry.name,
+                    relativePath = entry.relativePath,
+                    onClick = { onFolderClick(entry) },
+                )
+                is RomBrowserEntry.RomItem -> RomGridCard(
+                    rom = entry.rom,
+                    coverUrl = coverByHash[entry.rom.retroAchievementsHash],
+                    showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                    onClick = { onRomClick(entry.rom) },
+                    onLongPress = { onRomLongPress(entry.rom) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListContent(
+    state: RomBrowserUiState,
+    listState: LazyListState,
+    coverByHash: Map<String, String>,
+    allowConfiguration: Boolean,
+    confirmedAchievementHashes: Set<String>,
+    showAlphabetBar: Boolean,
+    onFolderClick: (RomBrowserEntry.Folder) -> Unit,
+    onRomClick: (Rom) -> Unit,
+    onRomLongPress: (Rom) -> Unit,
+    onRomConfigClick: (Rom) -> Unit,
+) {
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 0.dp,
+            end = if (showAlphabetBar) 36.dp else 0.dp,
+            top = 4.dp,
+            bottom = 4.dp,
+        ),
+    ) {
+        items(
+            items = state.entries,
+            key = { entry ->
+                when (entry) {
+                    is RomBrowserEntry.Folder -> "folder:${entry.docId}"
+                    is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                }
+            },
+        ) { entry ->
+            when (entry) {
+                is RomBrowserEntry.Folder -> FolderListRow(
+                    name = entry.name,
+                    relativePath = entry.relativePath,
+                    onClick = { onFolderClick(entry) },
+                )
+                is RomBrowserEntry.RomItem -> RomListRow(
+                    rom = entry.rom,
+                    coverUrl = coverByHash[entry.rom.retroAchievementsHash],
+                    allowConfiguration = allowConfiguration,
+                    showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                    onClick = { onRomClick(entry.rom) },
+                    onLongPress = { onRomLongPress(entry.rom) },
+                    onConfigClick = { onRomConfigClick(entry.rom) },
+                )
+            }
+        }
+    }
+}
+
+private suspend fun smartScrollGrid(
+    state: LazyGridState,
+    idx: Int,
+    @Suppress("UNUSED_PARAMETER") letter: Char,
+    @Suppress("UNUSED_PARAMETER") alphabetIndex: Map<Char, Int>,
+) {
+    val visibleItems = state.layoutInfo.visibleItemsInfo
+    val total = state.layoutInfo.totalItemsCount
+    val cols = ((visibleItems.maxOfOrNull { it.column } ?: 0) + 1).coerceAtLeast(1)
+    val visibleRows = visibleItems.distinctBy { it.row }.size.coerceAtLeast(1)
+    val targetRow = idx / cols
+    val totalRows = (total + cols - 1) / cols
+    val rowsAfterTarget = (totalRows - 1) - targetRow
+
+    if (rowsAfterTarget >= visibleRows) {
+        state.scrollToItem(idx)
+    } else {
+        val firstRow = (targetRow - visibleRows + 1).coerceAtLeast(0)
+        state.scrollToItem(firstRow * cols)
+    }
+}
+
+private suspend fun smartScrollList(
+    state: LazyListState,
+    idx: Int,
+    @Suppress("UNUSED_PARAMETER") letter: Char,
+    @Suppress("UNUSED_PARAMETER") alphabetIndex: Map<Char, Int>,
+) {
+    val visibleCount = state.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+    val total = state.layoutInfo.totalItemsCount
+    val itemsAfterTarget = (total - 1) - idx
+
+    if (itemsAfterTarget >= visibleCount) {
+        state.scrollToItem(idx)
+    } else {
+        val firstVis = (idx - visibleCount + 1).coerceAtLeast(0)
+        state.scrollToItem(firstVis)
+    }
+}
+
+private fun letterForIndex(alphabetIndex: Map<Char, Int>, currentIndex: Int): Char? {
+    if (alphabetIndex.isEmpty()) return null
+    var match: Char? = null
+    var matchIndex = -1
+    alphabetIndex.forEach { (letter, startIndex) ->
+        if (startIndex <= currentIndex && startIndex > matchIndex) {
+            match = letter
+            matchIndex = startIndex
+        }
+    }
+    return match
+}
+
+@Composable
+private fun EmptyState(filter: RomFilter) {
+    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+        val msg = when (filter) {
+            RomFilter.ALL -> stringResource(R.string.no_roms_found)
+            RomFilter.FAVORITES -> stringResource(R.string.rom_no_favorites)
+            else -> stringResource(R.string.rom_no_results_filter)
+        }
+        Text(
+            text = msg,
+            style = MaterialTheme.typography.body1,
+            color = MaterialTheme.colors.onSurface,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
