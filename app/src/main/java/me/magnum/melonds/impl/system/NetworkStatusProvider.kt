@@ -13,11 +13,19 @@ class NetworkStatusProvider @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     fun isOnline(): Boolean {
-        val connectivityManager = context.getSystemService<ConnectivityManager>() ?: return false
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        val capabilities = currentCapabilities() ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
-}
 
+    fun isLikelyOnline(): Boolean {
+        val capabilities = currentCapabilities() ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun currentCapabilities(): NetworkCapabilities? {
+        val connectivityManager = context.getSystemService<ConnectivityManager>() ?: return null
+        val network = connectivityManager.activeNetwork ?: return null
+        return connectivityManager.getNetworkCapabilities(network)
+    }
+}

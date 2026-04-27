@@ -21,6 +21,10 @@ sealed class ToastEvent {
     data class HardcoreOfflineUnsyncedWarning(
         val pendingHardcoreCount: Int,
     ) : ToastEvent()
+    data class HardcoreQueueSyncResult(
+        val submittedCount: Int,
+        val remainingCount: Int,
+    ) : ToastEvent()
     data class RetroAchievementsMode(
         val status: RetroAchievementsModeStatus,
         val offlineNoInternetAtStart: Boolean = false,

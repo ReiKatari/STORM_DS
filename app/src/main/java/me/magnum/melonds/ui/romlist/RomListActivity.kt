@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.romlist
 import android.app.SearchManager
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
@@ -32,6 +33,7 @@ import me.magnum.melonds.R
 import me.magnum.melonds.databinding.ActivityRomListBinding
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.DownloadProgress
+import me.magnum.melonds.domain.model.RomViewMode
 import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
@@ -140,6 +142,41 @@ class RomListActivity : AppCompatActivity() {
                 }
             }
         }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.viewMode.collectLatest {
+                    invalidateOptionsMenu()
+                }
+            }
+        }
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val toggleItem = menu.findItem(R.id.action_view_toggle)
+        toggleItem?.setIcon(
+            when (viewModel.viewMode.value) {
+                RomViewMode.GRID -> R.drawable.ic_view_list
+                RomViewMode.LIST -> R.drawable.ic_view_grid
+            }
+        )
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_PAGE_UP -> {
+                    viewModel.cycleFilter(forward = false)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_PAGE_DOWN -> {
+                    viewModel.cycleFilter(forward = true)
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -181,12 +218,20 @@ class RomListActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.action_view_toggle -> {
+                viewModel.toggleViewMode()
+                return true
+            }
             R.id.action_sort_alphabetically -> {
                 viewModel.setRomSorting(SortingMode.ALPHABETICALLY)
                 return true
             }
             R.id.action_sort_recent -> {
                 viewModel.setRomSorting(SortingMode.RECENTLY_PLAYED)
+                return true
+            }
+            R.id.action_sort_most_played -> {
+                viewModel.setRomSorting(SortingMode.MOST_PLAYED)
                 return true
             }
             R.id.action_boot_firmware_ds -> {

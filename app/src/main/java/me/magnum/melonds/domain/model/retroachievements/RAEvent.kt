@@ -24,4 +24,6 @@ sealed class RAEvent {
     data class OnLeaderboardAttemptUpdated(val leaderboardId: Long, val formattedValue: String) : RAEvent()
     data class OnLeaderboardAttemptCompleted(val leaderboardId: Long, val value: Int, val formattedValue: String) : RAEvent()
     data class OnLeaderboardAttemptCancelled(val leaderboardId: Long) : RAEvent()
+    data class OnAchievementProgressHidden(val achievementId: Long) : RAEvent()
+    data class OnLeaderboardTrackerHidden(val leaderboardId: Long) : RAEvent()
 }

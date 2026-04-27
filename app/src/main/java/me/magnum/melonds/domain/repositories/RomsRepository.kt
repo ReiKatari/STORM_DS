@@ -20,6 +20,7 @@ interface RomsRepository {
     fun updateRomConfig(rom: Rom, romConfig: RomConfig)
     fun setRomLastPlayed(rom: Rom, lastPlayed: Date)
     fun addRomPlayTime(rom: Rom, playTime: Duration)
+    fun setRomFavorite(rom: Rom, favorite: Boolean)
     fun rescanRoms()
     fun invalidateRoms()
 }

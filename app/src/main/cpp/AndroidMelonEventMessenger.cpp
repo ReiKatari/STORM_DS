@@ -106,6 +106,18 @@ void AndroidMelonEventMessenger::onLeaderboardAttemptCanceled(long leaderboardId
     MelonDSAndroid::fireEmulatorEvent(EVENT_RA_LBOARD_ATTEMPT_CANCELED, sizeof(leaderboardIdLong), &leaderboardIdLong);
 }
 
+void AndroidMelonEventMessenger::onLeaderboardTrackerHidden(long leaderboardId)
+{
+    int64_t leaderboardIdLong = (int64_t) leaderboardId;
+    MelonDSAndroid::fireEmulatorEvent(EVENT_RA_LBOARD_TRACKER_HIDDEN, sizeof(leaderboardIdLong), &leaderboardIdLong);
+}
+
+void AndroidMelonEventMessenger::onAchievementProgressHidden(long achievementId)
+{
+    int64_t achievementIdLong = (int64_t) achievementId;
+    MelonDSAndroid::fireEmulatorEvent(EVENT_RA_ACHIEVEMENT_PROGRESS_HIDDEN, sizeof(achievementIdLong), &achievementIdLong);
+}
+
 void AndroidMelonEventMessenger::onLeaderboardAttemptCompleted(long leaderboardId, int value, std::string formattedValue)
 {
     struct {

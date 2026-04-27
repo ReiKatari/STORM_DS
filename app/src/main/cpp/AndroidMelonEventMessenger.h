@@ -16,9 +16,11 @@ public:
     void onAchievementTriggered(long achievementId) override;
     void onAchievementUnprimed(long achievementId) override;
     void onAchievementProgressUpdated(long achievementId, unsigned int current, unsigned int target, std::string progress) override;
+    void onAchievementProgressHidden(long achievementId) override;
     void onLeaderboardAttemptStarted(long leaderboardId) override;
     void onLeaderboardAttemptUpdated(long leaderboardId, std::string formattedValue) override;
     void onLeaderboardAttemptCanceled(long leaderboardId) override;
+    void onLeaderboardTrackerHidden(long leaderboardId) override;
     void onLeaderboardAttemptCompleted(long leaderboardId, int value, std::string formattedValue) override;
     void onAchievementGameCompleted(long subsetId) override;
     void onAchievementSubsetCompleted(long subsetId) override;
@@ -49,6 +51,8 @@ private:
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_UPDATED = 211;
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_CANCELED = 212;
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_COMPLETED = 213;
+    static constexpr int EVENT_RA_ACHIEVEMENT_PROGRESS_HIDDEN = 214;
+    static constexpr int EVENT_RA_LBOARD_TRACKER_HIDDEN = 215;
 };
 
 #endif // ANDROIDMELONEVENTMESSENGER_H

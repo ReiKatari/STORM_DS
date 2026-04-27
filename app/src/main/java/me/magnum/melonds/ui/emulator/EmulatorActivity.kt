@@ -106,6 +106,7 @@ import me.magnum.melonds.ui.emulator.model.RumbleEvent
 import me.magnum.melonds.ui.emulator.model.RuntimeInputLayoutConfiguration
 import me.magnum.melonds.ui.emulator.model.RuntimeRendererConfiguration
 import me.magnum.melonds.ui.emulator.model.ToastEvent
+import me.magnum.melonds.ui.emulator.model.RetroAchievementsLoadStage
 import me.magnum.melonds.ui.emulator.model.VulkanCompileProgress
 import me.magnum.melonds.ui.emulator.model.VulkanPresentationConfig
 import me.magnum.melonds.ui.emulator.render.ChoreographerFrameRenderer
@@ -599,6 +600,14 @@ class EmulatorActivity : AppCompatActivity() {
                         is ToastEvent.HardcoreOfflineUnsyncedWarning -> {
                             getString(R.string.offline_ra_hardcore_unsynced_warning_toast, it.pendingHardcoreCount) to Toast.LENGTH_LONG
                         }
+                        is ToastEvent.HardcoreQueueSyncResult -> {
+                            val message = when {
+                                it.remainingCount == 0 -> getString(R.string.offline_ra_hardcore_sync_result_all, it.submittedCount)
+                                it.submittedCount == 0 -> getString(R.string.offline_ra_hardcore_sync_result_none, it.remainingCount)
+                                else -> getString(R.string.offline_ra_hardcore_sync_result_partial, it.submittedCount, it.remainingCount)
+                            }
+                            message to Toast.LENGTH_LONG
+                        }
                         is ToastEvent.RetroAchievementsMode -> {
                             val message = when (it.status) {
                                 ToastEvent.RetroAchievementsModeStatus.SOFTCORE -> {
@@ -753,7 +762,8 @@ class EmulatorActivity : AppCompatActivity() {
                                 is EmulatorState.LoadingRom -> it.vulkanCompileProgress
                                 is EmulatorState.LoadingFirmware -> it.vulkanCompileProgress
                             }
-                            renderLoadingState(compileProgress)
+                            val raLoadStage = (it as? EmulatorState.LoadingRom)?.retroAchievementsLoadStage
+                            renderLoadingState(compileProgress, raLoadStage)
                         }
                         is EmulatorState.RunningRom,
                         is EmulatorState.RunningFirmware -> {
@@ -832,7 +842,16 @@ class EmulatorActivity : AppCompatActivity() {
         binding.textLoading.isVisible = true
     }
 
-    private fun renderLoadingState(progress: VulkanCompileProgress?) {
+    private fun renderLoadingState(progress: VulkanCompileProgress?, raLoadStage: RetroAchievementsLoadStage? = null) {
+        if (raLoadStage == RetroAchievementsLoadStage.FETCHING_LATEST_DATA) {
+            binding.textLoading.setText(R.string.info_refreshing_retroachievements_title)
+            binding.progressLoading.isVisible = true
+            binding.progressLoading.isIndeterminate = true
+            binding.textLoadingDetail.isVisible = true
+            binding.textLoadingDetail.setText(R.string.info_refreshing_retroachievements_detail)
+            return
+        }
+
         if (progress == null || progress.total <= 0) {
             binding.textLoading.setText(R.string.info_loading)
             binding.progressLoading.isVisible = true
@@ -887,11 +906,11 @@ class EmulatorActivity : AppCompatActivity() {
             .setTitle(getString(R.string.offline_ra_hardcore_pending_exit_title))
             .setMessage(getString(R.string.offline_ra_hardcore_pending_exit_message, pendingHardcoreCount))
             .setCancelable(false)
-            .setPositiveButton(R.string.offline_ra_continue_playing_button) { _, _ ->
-                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.CONTINUE_PLAYING)
+            .setPositiveButton(R.string.offline_ra_hardcore_try_sync_button) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.TRY_SYNC_NOW)
             }
-            .setNegativeButton(R.string.offline_ra_exit_anyway_button) { _, _ ->
-                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.EXIT_ANYWAY)
+            .setNegativeButton(R.string.offline_ra_hardcore_discard_exit_button) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.DISCARD_AND_EXIT)
             }
             .show()
     }

@@ -1,7 +1,9 @@
 package me.magnum.melonds.database.daos
 
 import androidx.room.*
+import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.database.entities.retroachievements.*
+import me.magnum.melonds.database.entities.retroachievements.HashIconRow
 
 @Dao
 abstract class RetroAchievementsDao {
@@ -120,6 +122,16 @@ abstract class RetroAchievementsDao {
 
     @Query("SELECT game_hash FROM ra_game_hash_library WHERE game_id = :gameId LIMIT 1")
     abstract suspend fun getAnyGameHashForGameId(gameId: Long): String?
+
+    @Query("SELECT game_hash FROM ra_game_hash_library")
+    abstract fun observeAllGameHashes(): Flow<List<String>>
+
+    @Query("""
+        SELECT gh.game_hash AS hash, g.icon AS iconUrl
+        FROM ra_game_hash_library gh
+        INNER JOIN ra_game g ON g.game_id = gh.game_id
+    """)
+    abstract fun observeRomCoverIcons(): Flow<List<HashIconRow>>
 
     @Transaction
     open suspend fun updateGameHashLibrary(hashLibrary: List<RAGameHashEntity>) {

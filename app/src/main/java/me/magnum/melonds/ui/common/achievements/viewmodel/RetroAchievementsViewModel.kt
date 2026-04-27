@@ -52,13 +52,16 @@ abstract class RetroAchievementsViewModel (
         achievementLoadJob?.cancel()
         achievementLoadJob = viewModelScope.launch {
             if (retroAchievementsRepository.isUserAuthenticated()) {
-                val rom = getRom()
+                val rom = kotlin.runCatching { getRom() }.getOrElse {
+                    _uiState.value = RomRetroAchievementsUiState.AchievementLoadError
+                    return@launch
+                }
                 val forHardcoreMode = settingsRepository.isRetroAchievementsHardcoreEnabled()
                 val runtimeBucketByAchievementId = withContext(Dispatchers.Default) {
-                    getRuntimeBucketByAchievementId(rom)
+                    runCatching { getRuntimeBucketByAchievementId(rom) }.getOrElse { emptyMap() }
                 }
                 val runtimeSubsetOrder = withContext(Dispatchers.Default) {
-                    getRuntimeSubsetOrder(rom)
+                    runCatching { getRuntimeSubsetOrder(rom) }.getOrElse { emptyMap() }
                 }
                 retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode).fold(
                     onSuccess = { userGameData ->
@@ -81,7 +84,7 @@ abstract class RetroAchievementsViewModel (
                             sets
                         }
                         val pendingLedgerAchievementIds = withContext(Dispatchers.IO) {
-                            getPendingLedgerAchievementIds(rom)
+                            runCatching { getPendingLedgerAchievementIds(rom) }.getOrElse { emptySet() }
                         }
                         _uiState.value = RomRetroAchievementsUiState.Ready(
                             sets = orderedSets,

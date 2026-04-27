@@ -125,4 +125,8 @@ enum class EmulatorEventType(val event: Int) {
      * * formated value string (`u8[32]`)
      */
     EventRALeaderboardAttemptCompleted(213),
+
+    EventRAAchievementProgressIndicatorHidden(214),
+
+    EventRALeaderboardTrackerHidden(215),
 }

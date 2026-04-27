@@ -13,6 +13,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.common.suspendMapCatching
@@ -68,6 +69,11 @@ class AndroidRetroAchievementsRepository(
         const val RA_TRACE_TAG = "RATrace"
     }
 
+    override fun observeKnownAchievementHashes() = retroAchievementsDao.observeAllGameHashes()
+
+    override fun observeRomCoverIcons() = retroAchievementsDao.observeRomCoverIcons()
+        .map { rows -> rows.associate { it.hash to it.iconUrl } }
+
     override suspend fun isUserAuthenticated(): Boolean {
         return raUserAuthStore.getUserAuth() != null
     }
@@ -77,7 +83,18 @@ class AndroidRetroAchievementsRepository(
     }
 
     override suspend fun login(username: String, password: String): Result<Unit> {
-        return raApi.login(username, password)
+        val trimmedUsername = username.trim()
+        val trimmedPassword = password.trim()
+
+        if (trimmedUsername.isBlank() || trimmedPassword.isBlank()) {
+            return Result.failure(IllegalArgumentException("Username and password cannot be blank"))
+        }
+
+        val result = raApi.login(trimmedUsername, trimmedPassword)
+        if (result.isFailure) {
+            raUserAuthStore.clearUserAuth()
+        }
+        return result
     }
 
     override suspend fun logout() {
@@ -147,11 +164,15 @@ class AndroidRetroAchievementsRepository(
     }
 
     override suspend fun getRuntimeAchievementBuckets(): List<RASimpleRuntimeAchievementBucketEntry> = withContext(Dispatchers.Default) {
-        MelonEmulator.getRuntimeAchievementBuckets().toList()
+        runCatching { MelonEmulator.getRuntimeAchievementBuckets().toList() }
+            .onFailure { logRaTrace("runtime_buckets_unavailable", "error" to (it.message ?: it.javaClass.simpleName)) }
+            .getOrElse { emptyList() }
     }
 
     override suspend fun getRuntimeSubsetIds(): List<Long> = withContext(Dispatchers.Default) {
-        MelonEmulator.getRuntimeSubsetIds().toList()
+        runCatching { MelonEmulator.getRuntimeSubsetIds().toList() }
+            .onFailure { logRaTrace("runtime_subset_ids_unavailable", "error" to (it.message ?: it.javaClass.simpleName)) }
+            .getOrElse { emptyList() }
     }
 
     override suspend fun getGameSummary(gameHash: String): RAGameSummary? {
@@ -187,6 +208,13 @@ class AndroidRetroAchievementsRepository(
         }.map {
             it?.mapToModel()
         }
+    }
+
+    override suspend fun isAchievementUnlocked(gameId: Long, achievementId: Long, forHardcoreMode: Boolean): Boolean {
+        return runCatching {
+            retroAchievementsDao.getGameUserUnlockedAchievements(gameId, forHardcoreMode)
+                .any { it.achievementId == achievementId }
+        }.getOrDefault(false)
     }
 
     override suspend fun awardAchievement(achievement: RAAchievement, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {

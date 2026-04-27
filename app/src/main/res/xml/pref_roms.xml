@@ -21,6 +21,22 @@
             android:entryValues="@array/rom_icon_filtering_values"
             android:defaultValue="none" />
 
+    <ListPreference
+            android:key="rom_view_mode"
+            android:title="@string/rom_view_mode"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/rom_view_mode_options"
+            android:entryValues="@array/rom_view_mode_values"
+            android:defaultValue="grid" />
+
+    <SwitchPreference
+            android:key="rom_ra_covers_enabled"
+            android:title="@string/rom_ra_cover_enabled"
+            android:summary="@string/rom_ra_cover_enabled_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="true" />
+
     <!-- 7 steps of cache size. Real cache size is equal to 128MB * (2 ^ rom_cache_max_size) -->
     <SeekBarPreference
             android:key="rom_cache_max_size"

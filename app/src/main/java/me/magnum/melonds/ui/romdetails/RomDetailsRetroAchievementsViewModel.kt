@@ -79,7 +79,7 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
             val userId = userAuth.username
             val contentId = getRom().retroAchievementsHash
 
-            if (!networkStatusProvider.isOnline()) {
+            if (!networkStatusProvider.isLikelyOnline()) {
                 refreshOfflineAchievementsStatus()
                 return@launch
             }
@@ -124,7 +124,7 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
     }
 
     private suspend fun buildOfflineAchievementsUiState(isSyncing: Boolean): OfflineAchievementsUiState {
-        val isOnline = networkStatusProvider.isOnline()
+        val isOnline = networkStatusProvider.isLikelyOnline()
         val userAuth = retroAchievementsRepository.getUserAuthentication()
             ?: return OfflineAchievementsUiState(
                 availability = OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN,
@@ -157,20 +157,11 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
             offlineLedgerRepository.getStatus(userId, contentId)
         }
 
-        val pendingSoftcoreUnlockCount = if (ledgerStatus.integrity == OfflineLedgerIntegrity.OK) {
-            ledgerStatus.pendingSoftcoreUnlockCount
-        } else {
-            0
-        }
-
+        val ledgerOk = ledgerStatus.integrity == OfflineLedgerIntegrity.OK
         return OfflineAchievementsUiState(
             availability = availability,
-            pendingSoftcoreUnlockCount = pendingSoftcoreUnlockCount,
-            pendingLedgerUnlockCount = if (ledgerStatus.integrity == OfflineLedgerIntegrity.OK) {
-                ledgerStatus.pendingUnlockCount
-            } else {
-                0
-            },
+            pendingSoftcoreUnlockCount = if (ledgerOk) ledgerStatus.pendingSoftcoreUnlockCount else 0,
+            pendingLedgerUnlockCount = if (ledgerOk) ledgerStatus.pendingSoftcoreUnlockCount else 0,
             ledgerIntegrity = ledgerStatus.integrity,
             isOnline = isOnline,
             isSyncing = isSyncing,
