@@ -3,9 +3,11 @@ package me.magnum.melonds.common.romprocessors
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import io.reactivex.Single
+import kotlinx.coroutines.isActive
 import me.magnum.melonds.common.uridelegates.UriHandler
-import me.magnum.melonds.domain.model.*
+import me.magnum.melonds.domain.model.RomInfo
+import me.magnum.melonds.domain.model.RomMetadata
+import me.magnum.melonds.domain.model.SizeUnit
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.extensions.isBlank
@@ -16,12 +18,16 @@ import java.io.FileOutputStream
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 abstract class CompressedRomFileProcessor(private val context: Context, private val uriHandler: UriHandler, private val ndsRomCache: NdsRomCache) : RomFileProcessor {
 
-    private class CouldNotOpenCompressedFileException : Exception("Failed to open compressed file for extraction")
-    private class CouldNotFindNdsRomException : Exception("Failed to find an NDS ROM to extract")
-    private class CouldNotFindExtractedFileException : Exception("Failed to find extracted NDS ROM file")
+    private sealed class RomExtractionException(message: String) : Exception(message)
+    private class CouldNotOpenCompressedFileException : RomExtractionException("Failed to open compressed file for extraction")
+    private class CouldNotFindNdsRomException : RomExtractionException("Failed to find an NDS ROM to extract")
+    private class CouldNotFindExtractedFileException : RomExtractionException("Failed to find extracted NDS ROM file")
 
     private companion object {
         val SUPPORTED_ROM_EXTENSIONS = listOf("nds", "dsi", "ids")
@@ -75,12 +81,16 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
         }
     }
 
-    override fun getRealRomUri(rom: Rom): Single<Uri> {
+    override suspend fun getRealRomUri(rom: Rom): Uri? {
         val cachedRomUri = ndsRomCache.getCachedRomFile(rom, true)
         return if (cachedRomUri != null) {
-            Single.just(cachedRomUri)
+            cachedRomUri
         } else {
-            extractRomFile(rom)
+            try {
+                extractRomFile(rom)
+            } catch (_: RomExtractionException) {
+                null
+            }
         }
     }
 
@@ -104,46 +114,44 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
         return RomProcessor.getRomMetadata(inputStream)
     }
 
-    private fun extractRomFile(rom: Rom): Single<Uri> {
-        return Single.create { emitter ->
-            context.contentResolver.openInputStream(rom.uri)?.use {
-                getNdsEntryStreamInFileStream(it)?.use { romFileStream ->
-                    ndsRomCache.cacheRom(rom, object : NdsRomCache.RomExtractor {
-                        override fun getExtractedRomFileSize(): SizeUnit {
-                            return romFileStream.romFileSize
-                        }
-
-                        override fun saveRomFile(fileStream: FileOutputStream): Boolean {
-                            val buffer = ByteArray(8192)
-
-                            try {
-                                do {
-                                    val read = romFileStream.read(buffer)
-                                    if (read <= 0) {
-                                        break
-                                    }
-
-                                    fileStream.write(buffer, 0, read)
-                                } while (!emitter.isDisposed)
-                            } catch (_: IOException) {
-                                return false
-                            }
-
-                            return !emitter.isDisposed
-                        }
-                    })
-
-                    if (!emitter.isDisposed) {
-                        val cachedRomUri = ndsRomCache.getCachedRomFile(rom)
-                        if (cachedRomUri == null) {
-                            emitter.onError(CouldNotFindExtractedFileException())
-                        } else {
-                            emitter.onSuccess(cachedRomUri)
-                        }
+    private suspend fun extractRomFile(rom: Rom): Uri? = suspendCoroutine { continuation ->
+        context.contentResolver.openInputStream(rom.uri)?.use {
+            getNdsEntryStreamInFileStream(it)?.use { romFileStream ->
+                ndsRomCache.cacheRom(rom, object : NdsRomCache.RomExtractor {
+                    override fun getExtractedRomFileSize(): SizeUnit {
+                        return romFileStream.romFileSize
                     }
-                } ?: emitter.onError(CouldNotFindNdsRomException())
-            } ?: emitter.onError(CouldNotOpenCompressedFileException())
-        }
+
+                    override fun saveRomFile(fileStream: FileOutputStream): Boolean {
+                        val buffer = ByteArray(8192)
+
+                        try {
+                            do {
+                                val read = romFileStream.read(buffer)
+                                if (read <= 0) {
+                                    break
+                                }
+
+                                fileStream.write(buffer, 0, read)
+                            } while (continuation.context.isActive)
+                        } catch (_: IOException) {
+                            return false
+                        }
+
+                        return continuation.context.isActive
+                    }
+                })
+
+                if (continuation.context.isActive) {
+                    val cachedRomUri = ndsRomCache.getCachedRomFile(rom)
+                    if (cachedRomUri == null) {
+                        continuation.resumeWithException(CouldNotFindExtractedFileException())
+                    } else {
+                        continuation.resume(cachedRomUri)
+                    }
+                }
+            } ?: continuation.resumeWithException(CouldNotFindNdsRomException())
+        } ?: continuation.resumeWithException(CouldNotOpenCompressedFileException())
     }
 
     /**

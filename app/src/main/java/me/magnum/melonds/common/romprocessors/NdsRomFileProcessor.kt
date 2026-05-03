@@ -3,12 +3,11 @@ package me.magnum.melonds.common.romprocessors
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import io.reactivex.Single
 import me.magnum.melonds.common.uridelegates.UriHandler
-import me.magnum.melonds.domain.model.rom.Rom
-import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.RomMetadata
+import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.extensions.isBlank
 import me.magnum.melonds.extensions.nameWithoutExtension
 import me.magnum.melonds.utils.RomProcessor
@@ -60,8 +59,8 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
         }
     }
 
-    override fun getRealRomUri(rom: Rom): Single<Uri> {
-        return Single.just(rom.uri)
+    override suspend fun getRealRomUri(rom: Rom): Uri {
+        return rom.uri
     }
 
     private fun getRomMetadata(uri: Uri): RomMetadata? {
