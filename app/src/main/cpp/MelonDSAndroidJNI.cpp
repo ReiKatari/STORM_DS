@@ -1940,6 +1940,12 @@ Java_me_magnum_melonds_MelonEmulator_onKeyRelease(JNIEnv* env, jobject thiz, jin
     MelonDSAndroid::releaseKey(key);
 }
 
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_takeScreenshot(JNIEnv* env, jobject thiz)
+{
+    return MelonDSAndroid::takeScreenshot();
+}
+
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setSlot2AnalogInput(JNIEnv* env, jobject thiz, jfloat x, jfloat y)
 {

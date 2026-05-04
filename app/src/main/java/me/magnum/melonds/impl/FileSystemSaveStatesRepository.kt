@@ -68,6 +68,10 @@ class FileSystemSaveStatesRepository(
         saveStateScreenshotProvider.saveRomSaveStateScreenshot(rom, saveState, screenshot)
     }
 
+    override fun deleteRomSaveStateScreenshot(rom: Rom, saveState: SaveStateSlot) {
+        saveStateScreenshotProvider.deleteRomSaveStateScreenshot(rom, saveState)
+    }
+
     override fun deleteRomSaveState(rom: Rom, saveState: SaveStateSlot) {
         if (!saveState.exists) {
             return
