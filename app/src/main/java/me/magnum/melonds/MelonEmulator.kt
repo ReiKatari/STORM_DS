@@ -160,6 +160,8 @@ object MelonEmulator {
 
     external fun setSlot2AnalogInput(x: Float, y: Float)
 
+    external fun takeScreenshot(): Boolean
+
     external fun setFastForwardEnabled(enabled: Boolean)
 
     external fun setMicrophoneEnabled(enabled: Boolean)

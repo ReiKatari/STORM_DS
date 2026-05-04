@@ -1275,13 +1275,23 @@ class EmulatorViewModel @Inject constructor(
 
     private suspend fun saveRomState(rom: Rom, slot: SaveStateSlot): Boolean {
         val slotUri = saveStatesRepository.getRomSaveStateUri(rom, slot)
-        return if (emulatorManager.saveState(slotUri)) {
-            val screenshot = screenshotFrameBufferProvider.getScreenshot()
-            saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
-            true
-        } else {
-            false
+        if (!emulatorManager.saveState(slotUri)) {
+            return false
         }
+
+        // Capture and store the screenshot asynchronously
+        sessionCoroutineScope.launch {
+            // Delete old screenshot immediately
+            saveStatesRepository.deleteRomSaveStateScreenshot(rom, slot)
+            val screenshotCaptured = emulatorManager.takeScreenshot()
+
+            if (screenshotCaptured) {
+                val screenshot = screenshotFrameBufferProvider.getScreenshot()
+                saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
+            }
+        }
+
+        return true
     }
 
     private suspend fun loadRomState(rom: Rom, slot: SaveStateSlot): Boolean {
