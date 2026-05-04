@@ -3,18 +3,21 @@ package me.magnum.melonds.ui.settings.fragments
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
-import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SeekBarPreference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.domain.model.SizeUnit
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
-import me.magnum.melonds.ui.settings.SettingsViewModel
+import me.magnum.melonds.ui.settings.viewmodel.RomPreferencesViewModel
 import me.magnum.melonds.utils.SizeUtils
 import javax.inject.Inject
 import kotlin.math.pow
@@ -22,7 +25,7 @@ import kotlin.math.pow
 @AndroidEntryPoint
 class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
-    private val viewModel: SettingsViewModel by activityViewModels()
+    private val viewModel by viewModels<RomPreferencesViewModel>()
     private val helper by lazy { PreferenceFragmentHelper(this, uriPermissionManager, directoryAccessValidator) }
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
@@ -54,9 +57,13 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        viewModel.getRomCacheSize().observe(viewLifecycleOwner) {
-            val cacheSizeRepresentation = SizeUtils.getBestSizeStringRepresentation(requireContext(), it)
-            clearRomCachePreference.summary = getString(R.string.cache_size, cacheSizeRepresentation)
+        lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.romCacheSize.collect {
+                    val cacheSizeRepresentation = SizeUtils.getBestSizeStringRepresentation(requireContext(), it)
+                    clearRomCachePreference.summary = getString(R.string.cache_size, cacheSizeRepresentation)
+                }
+            }
         }
     }
 

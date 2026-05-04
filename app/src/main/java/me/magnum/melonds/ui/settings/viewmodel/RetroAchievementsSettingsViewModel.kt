@@ -1,4 +1,4 @@
-package me.magnum.melonds.ui.settings
+package me.magnum.melonds.ui.settings.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

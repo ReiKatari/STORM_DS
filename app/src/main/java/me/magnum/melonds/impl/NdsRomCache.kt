@@ -3,8 +3,11 @@ package me.magnum.melonds.impl
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
-import io.reactivex.Observable
-import io.reactivex.subjects.PublishSubject
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.receiveAsFlow
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.SizeUnit
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -20,16 +23,18 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
 
     private class CouldNotCreateRomCacheDirectoryException : Exception("Failed to create ROM cache directory")
 
-    private val cacheModifiedSubject = PublishSubject.create<Unit>()
+    private val cacheModifiedSubject = Channel<Unit>(Channel.CONFLATED)
 
-    fun getCacheSize(): Observable<SizeUnit> {
-        return cacheModifiedSubject.startWith(Unit).map { calculateCacheSize() }
+    fun getCacheSizeFlow(): Flow<SizeUnit> {
+        return cacheModifiedSubject.receiveAsFlow()
+            .onStart { emit(Unit) }
+            .map { calculateCacheSize() }
     }
 
     fun clearCache(): Boolean {
         val romCacheDir = context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) } ?: return false
         val result = romCacheDir.deleteRecursively()
-        cacheModifiedSubject.onNext(Unit)
+        cacheModifiedSubject.trySend(Unit)
 
         return result
     }
@@ -47,7 +52,7 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
                 romFile.setLastModified(Date().time)
             }
 
-            return DocumentFile.fromFile(romFile).uri
+            DocumentFile.fromFile(romFile).uri
         } else {
             null
         }
@@ -78,7 +83,7 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
                     val romHash = rom.uri.hashCode().toString()
                     val cachedFile = File(romCacheDir, romHash)
                     tempCachedFile.renameTo(cachedFile)
-                    cacheModifiedSubject.onNext(Unit)
+                    cacheModifiedSubject.trySend(Unit)
                 } else {
                     tempCachedFile.delete()
                 }

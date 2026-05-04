@@ -2,16 +2,15 @@ package me.magnum.melonds.impl
 
 import android.content.Context
 import android.net.Uri
-import androidx.lifecycle.Observer
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import io.reactivex.Observable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import me.magnum.melonds.common.workers.CheatImportWorker
 import me.magnum.melonds.database.MelonDatabase
 import me.magnum.melonds.database.entities.CheatDatabaseEntity
@@ -265,46 +264,28 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         return infos.any { !it.state.isFinished }
     }
 
-    override fun getCheatImportProgress(): Observable<CheatImportProgress> {
-        return Observable.create { emitter ->
-            val workManager = WorkManager.getInstance(context)
-            val statuses = workManager.getWorkInfosForUniqueWork(IMPORT_WORKER_NAME)
-            val infos = statuses.get()
-
-            if (infos.all { it.state.isFinished }) {
-                emitter.onNext(CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null))
-                emitter.onComplete()
-            } else {
-                val observer = Observer<List<WorkInfo>> {
-                    val workInfo = it.firstOrNull()
-                    if (workInfo != null) {
-                        when (workInfo.state) {
-                            WorkInfo.State.ENQUEUED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
-                            WorkInfo.State.RUNNING -> {
-                                val relativeProgress = workInfo.progress.getFloat(CheatImportWorker.KEY_PROGRESS_RELATIVE, 0f)
-                                val itemName = workInfo.progress.getString(CheatImportWorker.KEY_PROGRESS_ITEM)
-                                CheatImportProgress(CheatImportProgress.CheatImportStatus.ONGOING, relativeProgress, itemName)
-                            }
-                            WorkInfo.State.SUCCEEDED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FINISHED, 1f, null)
-                            WorkInfo.State.CANCELLED,
-                            WorkInfo.State.FAILED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FAILED, 0f, null)
-                            else -> null
-                        }?.let { progress ->
-                            emitter.onNext(progress)
-                            if (progress.status == CheatImportProgress.CheatImportStatus.FAILED || progress.status == CheatImportProgress.CheatImportStatus.FINISHED) {
-                                emitter.onComplete()
-                            }
+    override fun getCheatImportProgress(): Flow<CheatImportProgress> {
+        val workManager = WorkManager.getInstance(context)
+        return workManager.getWorkInfosForUniqueWorkFlow(IMPORT_WORKER_NAME)
+            .mapNotNull { workInfos ->
+                val allWorkFinished = workInfos.all { it.state.isFinished }
+                if (allWorkFinished) {
+                    CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
+                } else {
+                    val workInfo = workInfos.first()
+                    when (workInfo.state) {
+                        WorkInfo.State.ENQUEUED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
+                        WorkInfo.State.RUNNING -> {
+                            val relativeProgress = workInfo.progress.getFloat(CheatImportWorker.KEY_PROGRESS_RELATIVE, 0f)
+                            val itemName = workInfo.progress.getString(CheatImportWorker.KEY_PROGRESS_ITEM)
+                            CheatImportProgress(CheatImportProgress.CheatImportStatus.ONGOING, relativeProgress, itemName)
                         }
+                        WorkInfo.State.SUCCEEDED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FINISHED, 1f, null)
+                        WorkInfo.State.CANCELLED,
+                        WorkInfo.State.FAILED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FAILED, 0f, null)
+                        WorkInfo.State.BLOCKED -> null
                     }
                 }
-
-                val workInfosLiveData = workManager.getWorkInfosForUniqueWorkLiveData(IMPORT_WORKER_NAME)
-                workInfosLiveData.observeForever(observer)
-
-                emitter.setCancellable {
-                    workInfosLiveData.removeObserver(observer)
-                }
             }
-        }
     }
 }

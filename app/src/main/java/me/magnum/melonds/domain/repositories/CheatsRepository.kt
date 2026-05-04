@@ -1,7 +1,6 @@
 package me.magnum.melonds.domain.repositories
 
 import android.net.Uri
-import io.reactivex.Observable
 import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatDatabase
@@ -28,5 +27,5 @@ interface CheatsRepository {
     suspend fun deleteCheat(cheat: Cheat)
     fun importCheats(uri: Uri)
     fun isCheatImportOngoing(): Boolean
-    fun getCheatImportProgress(): Observable<CheatImportProgress>
+    fun getCheatImportProgress(): Flow<CheatImportProgress>
 }

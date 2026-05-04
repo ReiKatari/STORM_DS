@@ -4,20 +4,21 @@ import android.Manifest
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
+import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.R
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.contracts.FilePickerContract
 import me.magnum.melonds.extensions.isNotificationPermissionGranted
 import me.magnum.melonds.ui.settings.CheatsImportProgressDialog
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
-import me.magnum.melonds.ui.settings.SettingsViewModel
+import me.magnum.melonds.ui.settings.viewmodel.CheatsPreferencesViewModel
 
+@AndroidEntryPoint
 class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
-    private val viewModel: SettingsViewModel by activityViewModels()
+    private val viewModel by viewModels<CheatsPreferencesViewModel>()
 
     private val cheatFilePickerLauncher = registerForActivityResult(FilePickerContract(Permission.READ)) {
         if (it != null) {
