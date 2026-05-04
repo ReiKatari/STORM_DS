@@ -4,13 +4,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreference
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -19,13 +19,14 @@ import me.magnum.melonds.databinding.DialogRetroachievementsLoginBinding
 import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.ui.common.LoadingDialog
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
-import me.magnum.melonds.ui.settings.RetroAchievementsSettingsViewModel
 import me.magnum.melonds.ui.settings.flow.observeAsFlow
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
+import me.magnum.melonds.ui.settings.viewmodel.RetroAchievementsSettingsViewModel
 
+@AndroidEntryPoint
 class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
-    private val viewModel by activityViewModels<RetroAchievementsSettingsViewModel>()
+    private val viewModel by viewModels<RetroAchievementsSettingsViewModel>()
 
     private var loginProgressDialog: LoadingDialog? = null
 

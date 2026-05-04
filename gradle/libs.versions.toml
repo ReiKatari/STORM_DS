@@ -32,8 +32,6 @@ preference = "1.2.1"
 recyclerView = "1.4.0"
 retrofit = "3.0.0"
 room = "2.8.4"
-rxAndroid = "2.1.1"
-rxJava = "2.2.21"
 securityCrypto = "1.0.0"
 splashscreen = "1.2.0"
 startup = "1.2.0"
@@ -98,8 +96,6 @@ markwon = { module = "io.noties.markwon:core", version.ref = "markwon" }
 markwon-imagepicasso = { module = "io.noties.markwon:image-picasso", version.ref = "markwon" }
 markwon-linkify = { module = "io.noties.markwon:linkify", version.ref = "markwon" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okHttp" }
-rxjava = { module = "io.reactivex.rxjava2:rxjava", version.ref = "rxJava" }
-rxjava-android = { module = "io.reactivex.rxjava2:rxandroid", version.ref = "rxAndroid" }
 commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
 xz = { module = "org.tukaani:xz", version.ref = "xz" }
 
