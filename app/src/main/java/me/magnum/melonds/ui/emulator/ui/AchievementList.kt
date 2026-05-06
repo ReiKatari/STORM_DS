@@ -179,7 +179,7 @@ fun AchievementList(
                 // elements at the top of the list
                 Box(Modifier.focusable())
                 Content(
-                    modifier = Modifier.widthIn(max = 640.dp),
+                    modifier = Modifier.widthIn(max = 640.dp).weight(1f),
                     sets = state.sets,
                     pendingLedgerAchievementIds = state.pendingLedgerAchievementIds,
                     onViewAchievement = onViewAchievement,
