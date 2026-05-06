@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.emulator.render
 import android.app.Presentation
 import android.content.Context
 import android.graphics.Color
+import android.os.Build
 import android.view.Display
 import android.view.View
 import android.view.WindowManager
@@ -25,6 +26,7 @@ import me.magnum.melonds.ui.emulator.model.RuntimeInputLayoutConfiguration
 import me.magnum.melonds.ui.emulator.model.RuntimeRendererConfiguration
 import me.magnum.melonds.ui.emulator.model.VulkanPresentationConfig
 import me.magnum.melonds.ui.layouteditor.model.LayoutTarget
+import kotlin.collections.orEmpty
 
 class ExternalPresentation(
     context: Context,
@@ -119,6 +121,14 @@ class ExternalPresentation(
             ),
             currentBackground ?: RuntimeBackground.None,
         )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val touchScreenArea = bottomView?.getRect()?.let {
+                val rect = android.graphics.Rect(it.x, it.y, it.right, it.bottom)
+                listOf(rect)
+            }
+            window?.systemGestureExclusionRects = touchScreenArea.orEmpty()
+        }
     }
 
     fun setPauseOverlayVisibility(visible: Boolean) {
