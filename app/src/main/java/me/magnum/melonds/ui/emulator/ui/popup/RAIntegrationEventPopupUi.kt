@@ -81,6 +81,22 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                         )
                     }
                 }
+                is RAIntegrationEvent.LoginExpired -> {
+                    Column {
+                        Text(
+                            text = stringResource(id = R.string.achievements_login_expired),
+                            style = MaterialTheme.typography.body2,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.error,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = stringResource(id = R.string.achievements_login_expired_tip),
+                            style = MaterialTheme.typography.body2,
+                            maxLines = 1,
+                        )
+                    }
+                }
                 is RAIntegrationEvent.LoadedNoAchievements -> {
                     Text(
                         text = stringResource(id = R.string.game_has_no_achievements),

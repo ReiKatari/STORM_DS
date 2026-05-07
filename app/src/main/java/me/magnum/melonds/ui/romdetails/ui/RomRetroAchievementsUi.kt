@@ -91,6 +91,7 @@ fun RomRetroAchievementsUi(
         when (retroAchievementsUiState) {
             is RomRetroAchievementsUiState.LoggedOut -> LoggedOut(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
+                state = retroAchievementsUiState,
                 onLogin = onLogin,
             )
             is RomRetroAchievementsUiState.Loading -> Loading(Modifier.weight(1f).fillMaxWidth())
@@ -172,6 +173,7 @@ private fun StatusLine(text: String, highlight: Boolean = false) {
 @Composable
 private fun LoggedOut(
     modifier: Modifier,
+    state: RomRetroAchievementsUiState.LoggedOut,
     onLogin: (username: String, password: String) -> Unit,
 ) {
     var showLoginPopup by rememberSaveable {
@@ -205,6 +207,7 @@ private fun LoggedOut(
 
     if (showLoginPopup) {
         RetroAchievementsLoginDialog(
+            existingUsername = state.existingUsername,
             onDismiss = { showLoginPopup = false },
             onLogin = { username, password ->
                 onLogin(username, password)
@@ -513,6 +516,7 @@ private fun LoginError(
 
     if (showLoginPopup) {
         RetroAchievementsLoginDialog(
+            existingUsername = null,
             onDismiss = { showLoginPopup = false },
             onLogin = { username, password ->
                 onLogin(username, password)
@@ -604,6 +608,7 @@ private fun PreviewLoggedOut() {
     MelonTheme {
         LoggedOut(
             modifier = Modifier.fillMaxSize(),
+            state = RomRetroAchievementsUiState.LoggedOut(null),
             onLogin = { _, _ -> },
         )
     }

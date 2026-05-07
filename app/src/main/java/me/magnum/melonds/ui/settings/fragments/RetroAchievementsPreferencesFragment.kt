@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.settings.fragments
 
 import android.os.Bundle
+import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -52,7 +53,8 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
             val accountState = viewModel.accountState.value
             when (accountState) {
                 is RetroAchievementsAccountState.LoggedIn -> showLogoutConfirmationDialog()
-                RetroAchievementsAccountState.LoggedOut -> showLoginDialog()
+                is RetroAchievementsAccountState.LoginExpired -> showLoginDialog(accountState.existingUsername)
+                RetroAchievementsAccountState.LoggedOut -> showLoginDialog(null)
                 RetroAchievementsAccountState.Unknown -> {
                     // Do nothing until a proper state is known
                 }
@@ -68,6 +70,11 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                             accountPreference.title = getString(R.string.retroachievements_logout)
                             accountPreference.summary = getString(R.string.retroachievements_login_status, it.accountName)
                             accountPreference.notifyDependencyChange(false)
+                        }
+                        is RetroAchievementsAccountState.LoginExpired -> {
+                            accountPreference.title = getString(R.string.login)
+                            accountPreference.summary = getString(R.string.retroachievements_login_expired_status)
+                            accountPreference.notifyDependencyChange(true)
                         }
                         RetroAchievementsAccountState.LoggedOut -> {
                             accountPreference.title = getString(R.string.login_with_retro_achievements)
@@ -119,9 +126,14 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         }
     }
 
-    private fun showLoginDialog() {
-        val binding = DialogRetroachievementsLoginBinding.inflate(LayoutInflater.from(context))
-        AlertDialog.Builder(requireContext())
+    private fun showLoginDialog(existingUsername: String?) {
+        val themedDialogContext = ContextThemeWrapper(requireContext(), R.style.MaterialDialog)
+        val binding = DialogRetroachievementsLoginBinding.inflate(LayoutInflater.from(themedDialogContext))
+        if (existingUsername != null) {
+            binding.textUsername.setText(existingUsername)
+        }
+
+        AlertDialog.Builder(themedDialogContext)
             .setTitle(R.string.login_with_retro_achievements)
             .setView(binding.root)
             .setPositiveButton(R.string.login) { dialog, _ ->

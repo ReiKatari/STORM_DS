@@ -41,11 +41,12 @@ import me.magnum.melonds.ui.common.melonTextButtonColors
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun RetroAchievementsLoginDialog(
+    existingUsername: String?,
     onDismiss: () -> Unit,
     onLogin: (username: String, password: String) -> Unit,
 ) {
     var username by rememberSaveable {
-        mutableStateOf("")
+        mutableStateOf(existingUsername.orEmpty())
     }
     var password by remember {
         mutableStateOf("")

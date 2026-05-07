@@ -13,6 +13,7 @@ class GameAchievementData private constructor(
 
     enum class IntegrationStatus {
         DISABLED_NOT_LOGGED_IN,
+        DISABLED_LOGIN_EXPIRED,
         DISABLED_LOAD_ERROR,
         DISABLED_GAME_NOT_FOUND,
         ENABLED_NO_ACHIEVEMENTS,

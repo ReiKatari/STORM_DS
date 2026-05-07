@@ -75,7 +75,7 @@ class AndroidRetroAchievementsRepository(
         .map { rows -> rows.associate { it.hash to it.iconUrl } }
 
     override suspend fun isUserAuthenticated(): Boolean {
-        return raUserAuthStore.getUserAuth() != null
+        return raUserAuthStore.getUserAuth() is RAUserAuth.Authenticated
     }
 
     override suspend fun getUserAuthentication(): RAUserAuth? {

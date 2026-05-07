@@ -1,6 +1,7 @@
 package me.magnum.rcheevosapi
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.InternalSerializationApi
@@ -24,6 +25,7 @@ import me.magnum.rcheevosapi.dto.UserUnlocksDto
 import me.magnum.rcheevosapi.dto.mapper.mapToModel
 import me.magnum.rcheevosapi.exception.UnsuccessfulRequestException
 import me.magnum.rcheevosapi.exception.UserNotAuthenticatedException
+import me.magnum.rcheevosapi.exception.UserTokenExpiredException
 import me.magnum.rcheevosapi.model.RAAwardAchievementResponse
 import me.magnum.rcheevosapi.model.RAGame
 import me.magnum.rcheevosapi.model.RAGameId
@@ -90,7 +92,7 @@ class RAApi(
                 PARAMETER_PASSWORD to password,
             )
         ).onSuccess {
-            userAuthStore.storeUserAuth(RAUserAuth(username, it.token))
+            userAuthStore.storeUserAuth(RAUserAuth.Authenticated(username, it.token))
         }.map { }
     }
 
@@ -105,7 +107,8 @@ class RAApi(
     }
 
     suspend fun getUserUnlockedAchievements(gameId: RAGameId, forHardcoreMode: Boolean): Result<List<Long>> {
-        val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
 
         return get<UserUnlocksDto>(
             mapOf(
@@ -121,7 +124,8 @@ class RAApi(
     }
 
     suspend fun getGameAchievementSets(gameHash: String): Result<RAGame> {
-        val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
 
         return get<GameAchievementSetsDto>(
             mapOf(
@@ -136,7 +140,8 @@ class RAApi(
     }
 
     suspend fun startSession(gameId: RAGameId, gameHash: String, forHardcoreMode: Boolean): Result<Unit> {
-        val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
 
         return post(
             mapOf(
@@ -156,7 +161,8 @@ class RAApi(
         forHardcoreMode: Boolean,
         gameHash: String? = null,
     ): Result<RAAwardAchievementResponse> {
-        val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
 
         val signature = signatureProvider.provideAchievementSignature(achievementId, userAuth, forHardcoreMode)
 
@@ -193,7 +199,8 @@ class RAApi(
         value: Int,
         gameHash: String? = null,
     ): Result<RASubmitLeaderboardEntryResponse> {
-        val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
 
         val signature = signatureProvider.provideLeaderboardSignature(leaderboardId, value, userAuth)
 
@@ -220,8 +227,8 @@ class RAApi(
     }
 
     suspend fun sendPing(gameId: RAGameId, gameHash: String, forHardcoreMode: Boolean, richPresenceDescription: String?): Result<Unit> {
-        // NOTE: Call this every 2 minutes if rich presence is enabled or every 4 minutes if not
-        val userAuth = userAuthStore.getUserAuth() ?: return Result.failure(UserNotAuthenticatedException())
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
 
         val parameters = mutableMapOf(
             PARAMETER_REQUEST to REQUEST_PING,
@@ -339,7 +346,14 @@ class RAApi(
             }
 
             override fun onResponse(call: Call, response: Response) {
-                continuation.resume(response)
+                if (response.code == 401) {
+                    runBlocking {
+                        userAuthStore.clearUserToken()
+                    }
+                    continuation.resumeWithException(UserTokenExpiredException())
+                } else {
+                    continuation.resume(response)
+                }
             }
         })
 

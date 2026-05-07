@@ -6,6 +6,7 @@ sealed class RAIntegrationEvent(open val icon: URL?) {
     data class Loaded(override val icon: URL?, val unlockedAchievements: Int, val totalAchievements: Int) : RAIntegrationEvent(icon)
     data class LoadedNoAchievements(override val icon: URL?) : RAIntegrationEvent(icon)
     data class Failed(override val icon: URL?) : RAIntegrationEvent(icon)
+    data class LoginExpired(override val icon: URL?) : RAIntegrationEvent(icon)
     data class OfflineDisabledNoCache(override val icon: URL?) : RAIntegrationEvent(icon)
     data class RuntimeFallback(override val icon: URL?, val reason: String) : RAIntegrationEvent(icon)
 }
