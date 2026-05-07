@@ -1,7 +1,7 @@
 package me.magnum.melonds.ui.romdetails.model
 
 sealed class RomRetroAchievementsUiState {
-    object LoggedOut : RomRetroAchievementsUiState()
+    data class LoggedOut(val existingUsername: String?) : RomRetroAchievementsUiState()
     object Loading : RomRetroAchievementsUiState()
     data class Ready(
         val sets: List<AchievementSetUiModel>,

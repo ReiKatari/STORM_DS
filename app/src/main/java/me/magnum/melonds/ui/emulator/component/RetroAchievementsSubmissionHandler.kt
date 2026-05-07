@@ -25,6 +25,7 @@ import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAchievementSet
 import me.magnum.rcheevosapi.model.RALeaderboard
 import me.magnum.rcheevosapi.model.RASetId
+import me.magnum.rcheevosapi.model.RAUserAuth
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.minutes
 
@@ -198,7 +199,7 @@ class RetroAchievementsSubmissionHandler @Inject constructor(
         val rom = (emulatorSession.currentSessionType() as? EmulatorSession.SessionType.RomSession)?.rom
         if (rom != null) {
             val setSummary = retroAchievementsRepository.getAchievementSetSummary(setId)
-            val raUserName = retroAchievementsRepository.getUserAuthentication()?.username
+            val raUserName = (retroAchievementsRepository.getUserAuthentication() as? RAUserAuth.Authenticated)?.username
             val romPlayTime = romsRepository.getRomAtUri(rom.uri)?.totalPlayTime
 
             if (setSummary != null) {

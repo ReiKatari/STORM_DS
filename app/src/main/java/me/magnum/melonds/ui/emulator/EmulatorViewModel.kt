@@ -131,9 +131,11 @@ import me.magnum.melonds.ui.emulator.model.VulkanCompileProgress
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
 import me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption
 import me.magnum.melonds.utils.EventSharedFlow
+import me.magnum.rcheevosapi.exception.UserTokenExpiredException
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAchievementSet
 import me.magnum.rcheevosapi.model.RASetId
+import me.magnum.rcheevosapi.model.RAUserAuth
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -1820,8 +1822,13 @@ class EmulatorViewModel @Inject constructor(
 
     private suspend fun getRomAchievementData(rom: Rom): OnlineRetroAchievementsBootstrap {
         val userAuth = retroAchievementsRepository.getUserAuthentication()
-        if (userAuth == null) {
-            return OnlineRetroAchievementsBootstrap(
+        when (userAuth) {
+            is RAUserAuth.Authenticated -> { /* no-op */ }
+            is RAUserAuth.AuthenticationExpired -> return OnlineRetroAchievementsBootstrap(
+                achievementData = GameAchievementData.withDisabledRetroAchievementsIntegration(GameAchievementData.IntegrationStatus.DISABLED_LOGIN_EXPIRED),
+                source = OnlineRetroAchievementsBootstrapSource.NETWORK,
+            )
+            null -> return OnlineRetroAchievementsBootstrap(
                 achievementData = GameAchievementData.withDisabledRetroAchievementsIntegration(GameAchievementData.IntegrationStatus.DISABLED_NOT_LOGGED_IN),
                 source = OnlineRetroAchievementsBootstrapSource.NETWORK,
             )
@@ -2895,7 +2902,7 @@ class EmulatorViewModel @Inject constructor(
         }
 
         val setSummary = retroAchievementsRepository.getAchievementSetSummary(setId)
-        val raUserName = retroAchievementsRepository.getUserAuthentication()?.username
+        val raUserName = (retroAchievementsRepository.getUserAuthentication() as? RAUserAuth.Authenticated)?.username
         val romPlayTime = romsRepository.getRomAtUri(rom.uri)?.totalPlayTime
 
         if (setSummary == null) {
@@ -2958,6 +2965,8 @@ class EmulatorViewModel @Inject constructor(
                     _raIntegrationEvent.tryEmit(RAIntegrationEvent.OfflineDisabledNoCache(achievementData.icon))
                 } else if (achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR) {
                     _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon))
+                } else if (achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOGIN_EXPIRED) {
+                    _raIntegrationEvent.tryEmit(RAIntegrationEvent.LoginExpired(achievementData.icon))
                 }
 
                 return@launch
@@ -3065,6 +3074,10 @@ class EmulatorViewModel @Inject constructor(
                                     retroAchievementsRepository.startSession(rom.retroAchievementsHash, isHardcoreModeEnabled)
                                 }
                                 if (startResult.isFailure) {
+                                    if (startResult.exceptionOrNull() is UserTokenExpiredException) {
+                                        _raIntegrationEvent.tryEmit(RAIntegrationEvent.LoginExpired(achievementData.icon))
+                                        break
+                                    }
                                     delay(15.seconds)
                                     continue
                                 }
@@ -3091,7 +3104,7 @@ class EmulatorViewModel @Inject constructor(
                     RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING -> {
                         val context = offlineContext ?: return@launch
                         currentRetroAchievementsGameId = context.cache.gameId
-                        val userAuth = retroAchievementsRepository.getUserAuthentication()
+                        val userAuth = retroAchievementsRepository.getUserAuthentication() as? RAUserAuth.Authenticated
                         val runtimeConfig = if (userAuth != null) {
                             RARuntimeBridgeConfig(
                                 useRcClientRuntime = false,
@@ -3198,7 +3211,7 @@ class EmulatorViewModel @Inject constructor(
     )
 
     private suspend fun buildOfflineRetroAchievementsContext(rom: Rom): OfflineRetroAchievementsContext? {
-        val userAuth = retroAchievementsRepository.getUserAuthentication() ?: return null
+        val userAuth = retroAchievementsRepository.getUserAuthentication() as? RAUserAuth.Authenticated ?: return null
         val userId = userAuth.username
         val contentId = rom.retroAchievementsHash
 

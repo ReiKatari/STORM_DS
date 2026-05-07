@@ -1,6 +1,10 @@
 package me.magnum.rcheevosapi.model
 
-data class RAUserAuth(
-    val username: String,
-    val token: String,
-)
+sealed class RAUserAuth {
+    data class Authenticated(
+        val username: String,
+        val token: String,
+    ) : RAUserAuth()
+
+    data class AuthenticationExpired(val username: String) : RAUserAuth()
+}

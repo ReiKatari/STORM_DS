@@ -20,7 +20,9 @@ import me.magnum.melonds.ui.romdetails.model.AchievementBucketUiModel
 import me.magnum.melonds.ui.romdetails.model.AchievementSetUiModel
 import me.magnum.melonds.ui.romdetails.model.RomAchievementsSummary
 import me.magnum.melonds.ui.romdetails.model.RomRetroAchievementsUiState
+import me.magnum.rcheevosapi.exception.UserTokenExpiredException
 import me.magnum.rcheevosapi.model.RAAchievement
+import me.magnum.rcheevosapi.model.RAUserAuth
 
 abstract class RetroAchievementsViewModel (
     private val retroAchievementsRepository: RetroAchievementsRepository,
@@ -51,53 +53,62 @@ abstract class RetroAchievementsViewModel (
     private fun loadAchievements() {
         achievementLoadJob?.cancel()
         achievementLoadJob = viewModelScope.launch {
-            if (retroAchievementsRepository.isUserAuthenticated()) {
-                val rom = kotlin.runCatching { getRom() }.getOrElse {
-                    _uiState.value = RomRetroAchievementsUiState.AchievementLoadError
-                    return@launch
-                }
-                val forHardcoreMode = settingsRepository.isRetroAchievementsHardcoreEnabled()
-                val runtimeBucketByAchievementId = withContext(Dispatchers.Default) {
-                    runCatching { getRuntimeBucketByAchievementId(rom) }.getOrElse { emptyMap() }
-                }
-                val runtimeSubsetOrder = withContext(Dispatchers.Default) {
-                    runCatching { getRuntimeSubsetOrder(rom) }.getOrElse { emptyMap() }
-                }
-                retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode).fold(
-                    onSuccess = { userGameData ->
-                        val sets = userGameData?.sets?.map { set ->
-                            AchievementSetUiModel(
-                                setId = set.id.id,
-                                setTitle = set.title,
-                                setType = set.type,
-                                setIcon = set.iconUrl,
-                                setSummary = buildAchievementsSummary(forHardcoreMode, set.achievements),
-                                buckets = buildAchievementBuckets(set.achievements, runtimeBucketByAchievementId),
-                            )
-                        }.orEmpty()
-                        val orderedSets = if (runtimeSubsetOrder.isNotEmpty()) {
-                            sets.sortedWith(
-                                compareBy<AchievementSetUiModel> { runtimeSubsetOrder[it.setId] ?: Int.MAX_VALUE }
-                                    .thenBy { it.setId }
-                            )
-                        } else {
-                            sets
-                        }
-                        val pendingLedgerAchievementIds = withContext(Dispatchers.IO) {
-                            runCatching { getPendingLedgerAchievementIds(rom) }.getOrElse { emptySet() }
-                        }
-                        _uiState.value = RomRetroAchievementsUiState.Ready(
-                            sets = orderedSets,
-                            pendingLedgerAchievementIds = pendingLedgerAchievementIds,
-                        )
-                    },
-                    onFailure = {
-                        ensureActive()
+            val userAuth = retroAchievementsRepository.getUserAuthentication()
+            when (userAuth) {
+                is RAUserAuth.Authenticated -> {
+                    val rom = kotlin.runCatching { getRom() }.getOrElse {
                         _uiState.value = RomRetroAchievementsUiState.AchievementLoadError
-                    },
-                )
-            } else {
-                _uiState.value = RomRetroAchievementsUiState.LoggedOut
+                        return@launch
+                    }
+                    val forHardcoreMode = settingsRepository.isRetroAchievementsHardcoreEnabled()
+                    val runtimeBucketByAchievementId = withContext(Dispatchers.Default) {
+                        runCatching { getRuntimeBucketByAchievementId(rom) }.getOrElse { emptyMap() }
+                    }
+                    val runtimeSubsetOrder = withContext(Dispatchers.Default) {
+                        runCatching { getRuntimeSubsetOrder(rom) }.getOrElse { emptyMap() }
+                    }
+                    retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode).fold(
+                        onSuccess = { userGameData ->
+                            val sets = userGameData?.sets.orEmpty().map { set ->
+                                AchievementSetUiModel(
+                                    setId = set.id.id,
+                                    setTitle = set.title,
+                                    setType = set.type,
+                                    setIcon = set.iconUrl,
+                                    setSummary = buildAchievementsSummary(forHardcoreMode, set.achievements),
+                                    buckets = buildAchievementBuckets(set.achievements, runtimeBucketByAchievementId),
+                                )
+                            }
+                            val orderedSets = if (runtimeSubsetOrder.isNotEmpty()) {
+                                sets.sortedWith(
+                                    compareBy<AchievementSetUiModel> { runtimeSubsetOrder[it.setId] ?: Int.MAX_VALUE }
+                                        .thenBy { it.setId }
+                                )
+                            } else {
+                                sets
+                            }
+                            val pendingLedgerAchievementIds = withContext(Dispatchers.IO) {
+                                runCatching { getPendingLedgerAchievementIds(rom) }.getOrElse { emptySet() }
+                            }
+                            _uiState.value = RomRetroAchievementsUiState.Ready(
+                                sets = orderedSets,
+                                pendingLedgerAchievementIds = pendingLedgerAchievementIds,
+                            )
+                        },
+                        onFailure = {
+                            ensureActive()
+                            if (it is UserTokenExpiredException) {
+                                val userAuth = retroAchievementsRepository.getUserAuthentication()
+                                val existingUsername = (userAuth as? RAUserAuth.AuthenticationExpired)?.username
+                                _uiState.value = RomRetroAchievementsUiState.LoggedOut(existingUsername)
+                            } else {
+                                _uiState.value = RomRetroAchievementsUiState.AchievementLoadError
+                            }
+                        },
+                    )
+                }
+                is RAUserAuth.AuthenticationExpired -> _uiState.value = RomRetroAchievementsUiState.LoggedOut(userAuth.username)
+                null -> _uiState.value = RomRetroAchievementsUiState.LoggedOut(null)
             }
         }
     }

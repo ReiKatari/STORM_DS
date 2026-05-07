@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
+import me.magnum.rcheevosapi.model.RAUserAuth
 import javax.inject.Inject
 
 @HiltViewModel
@@ -55,10 +56,10 @@ class RetroAchievementsSettingsViewModel @Inject constructor(
 
     private suspend fun updateLoggedInState() {
         val userAuth = retroAchievementsRepository.getUserAuthentication()
-        if (userAuth == null) {
-            _accountState.value = RetroAchievementsAccountState.LoggedOut
-        } else {
-            _accountState.value = RetroAchievementsAccountState.LoggedIn(userAuth.username)
+        _accountState.value = when (userAuth) {
+            is RAUserAuth.Authenticated -> RetroAchievementsAccountState.LoggedIn(userAuth.username)
+            is RAUserAuth.AuthenticationExpired -> RetroAchievementsAccountState.LoginExpired(userAuth.username)
+            null -> RetroAchievementsAccountState.LoggedOut
         }
     }
 }

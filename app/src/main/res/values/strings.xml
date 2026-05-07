@@ -554,6 +554,7 @@
     <string name="login">Login</string>
     <string name="retroachievements_login_summary">Login with RetroAchievements to unlock achievements while playing!</string>
     <string name="retroachievements_login_status">Logged in as %1$s</string>
+    <string name="retroachievements_login_expired_status">Your RetroAchievements login expired. Click to log in again</string>
     <string name="retroachievements_logout">Logout</string>
     <string name="retroachievements_logout_confirmation">Are you sure you want to logout from RetroAchievements? You won\'t be able to unlock achievements while playing.</string>
     <string name="retro_achievements_login_error">There was a problem when trying to login. Make sure that your username and password are correct, and that you are connected to the internet</string>
@@ -635,6 +636,8 @@
     <string name="game_has_no_achievements">This game has no achievements</string>
     <string name="achievements_failed_load">Failed to load achievements!</string>
     <string name="achievements_failed_load_tip">Make sure you are Online</string>
+    <string name="achievements_login_expired">RetroAchievements login expired!</string>
+    <string name="achievements_login_expired_tip">Log in again to enable RetroAchievements</string>
     <string name="ra_runtime_fallback_title">RetroAchievements runtime fallback</string>
     <string name="ra_runtime_fallback_login_timeout">rc_client login timed out. The emulator switched to the legacy runtime for this session.</string>
     <string name="ra_runtime_fallback_login_failed">rc_client login failed. The emulator switched to the legacy runtime for this session.</string>
