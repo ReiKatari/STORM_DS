@@ -25,5 +25,6 @@ data class RendererConfiguration(
         VideoRenderer.SOFTWARE -> 1
         VideoRenderer.OPENGL -> internalResolutionScaling
         VideoRenderer.VULKAN -> internalResolutionScaling
+        VideoRenderer.COMPUTE -> internalResolutionScaling
     }
 }

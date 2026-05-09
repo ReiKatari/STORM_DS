@@ -648,6 +648,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 VideoRenderer.SOFTWARE -> "Software"
                                 VideoRenderer.OPENGL -> "OpenGL"
                                 VideoRenderer.VULKAN -> "Vulkan"
+                                VideoRenderer.COMPUTE -> "Compute"
                             }
                             getString(R.string.renderer_init_failed_message, rendererLabel) to Toast.LENGTH_LONG
                         }

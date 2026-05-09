@@ -525,6 +525,8 @@
     <string-array name="video_renderer_options">
         <item>Perangkat lunak</item>
         <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
     </string-array>
 
     <string-array name="video_internal_resolution_options">
