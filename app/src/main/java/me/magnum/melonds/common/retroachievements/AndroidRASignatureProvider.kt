@@ -19,8 +19,8 @@ class AndroidRASignatureProvider : RASignatureProvider {
     override fun provideLeaderboardSignature(leaderboardId: Long, score: Int, userAuth: RAUserAuth.Authenticated): String {
         val md5Digest = MessageDigest.getInstance("MD5")
         md5Digest.update(leaderboardId.toString().toByteArray())
-        md5Digest.update(score.toString().toByteArray())
         md5Digest.update(userAuth.username.toByteArray())
+        md5Digest.update(score.toString().toByteArray())
 
         return BigInteger(1, md5Digest.digest()).toString(16).padStart(32, '0')
     }
