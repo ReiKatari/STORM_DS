@@ -33,6 +33,7 @@
         <item>software</item>
         <item>opengl</item>
         <item>vulkan</item>
+        <item>compute</item>
     </string-array>
 
     <string-array name="video_internal_resolution_values">

@@ -147,6 +147,7 @@ class EmulatorLaunchValidatorDelegate(
             VideoRenderer.SOFTWARE -> "Software"
             VideoRenderer.OPENGL -> "OpenGL"
             VideoRenderer.VULKAN -> "Vulkan"
+            VideoRenderer.COMPUTE -> "Compute"
         }
 
         AlertDialog.Builder(context)
@@ -166,6 +167,7 @@ class EmulatorLaunchValidatorDelegate(
             VideoRenderer.SOFTWARE -> "Software"
             VideoRenderer.OPENGL -> "OpenGL"
             VideoRenderer.VULKAN -> "Vulkan"
+            VideoRenderer.COMPUTE -> "Compute"
         }
 
         AlertDialog.Builder(context)

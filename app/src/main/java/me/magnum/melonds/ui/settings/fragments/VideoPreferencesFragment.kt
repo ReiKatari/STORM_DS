@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.settings.fragments
 
 import android.app.ActivityManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -12,7 +13,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -117,16 +117,23 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val activityManager = requireContext().getSystemService<ActivityManager>()
         val deviceGlesVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0
         val supportsOpenGlRenderer = deviceGlesVersion >= GLES_3_2
+        val supportsComputeRenderer = supportsOpenGlRenderer && Build.HARDWARE.equals("qcom", ignoreCase = true)
 
         rendererPreference.apply {
-            if (!supportsOpenGlRenderer) {
+            if (!supportsOpenGlRenderer || !supportsComputeRenderer) {
                 val values = context.resources.getStringArray(R.array.video_renderer_values)
                 val entries = context.resources.getStringArray(R.array.video_renderer_options)
-                val filteredPairs = values.zip(entries).filterNot { it.first == "opengl" }
+                val filteredPairs = values.zip(entries).filterNot { (value, _) ->
+                    (!supportsOpenGlRenderer && value == "opengl") ||
+                        (!supportsComputeRenderer && value == "compute")
+                }
                 entryValues = filteredPairs.map { it.first }.toTypedArray()
                 this.entries = filteredPairs.map { it.second }.toTypedArray()
 
                 if (value.equals("opengl", ignoreCase = true)) {
+                    value = "software"
+                }
+                if (value.equals("compute", ignoreCase = true)) {
                     value = "software"
                 }
             }
@@ -455,6 +462,23 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 }
                 rendererDebugPreferences.forEach {
                     it.isVisible = true
+                }
+                vulkanRendererPreferences.forEach {
+                    it.isVisible = false
+                }
+            }
+            VideoRenderer.COMPUTE -> {
+                threadedRendererPreferences.forEach {
+                    it.isVisible = false
+                }
+                highResRendererPreferences.forEach {
+                    it.isVisible = true
+                }
+                coverageFixPreferences.forEach {
+                    it.isVisible = false
+                }
+                rendererDebugPreferences.forEach {
+                    it.isVisible = false
                 }
                 vulkanRendererPreferences.forEach {
                     it.isVisible = false
