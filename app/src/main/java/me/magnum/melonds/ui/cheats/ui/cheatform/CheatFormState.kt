@@ -155,7 +155,7 @@ fun formatCheatCode(cheatCodeState: TextFieldValue): TextFieldValue {
             stringBuilder.append(char.uppercaseChar())
             cheatLineSize++
             cheatWordSize++
-            if (!char.isUpperCase()) {
+            if (!char.isDigit() && !char.isUpperCase()) {
                 // Char case was changed. Mark text as modified
                 isTextModified = true
             }
