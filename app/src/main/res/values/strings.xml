@@ -278,6 +278,8 @@
     <string name="video_renderer_debug_tools_enabled_summary">Enables renderer snapshots, parity captures and performance/debug logs in release builds.</string>
     <string name="video_renderer_debug_bgobj_enabled">Show RendererDebug BGOBJ</string>
     <string name="video_renderer_debug_bgobj_enabled_summary">Enables extra RendererDebug[BGOBJ] logs for 2D compositor diagnosis. Requires Renderer debug tools.</string>
+    <string name="video_renderer_debug_latch_trace_enabled">Show RendererDebug Latch trace</string>
+    <string name="video_renderer_debug_latch_trace_enabled_summary">Enables RendererDebug[Latch] logs that compare live framebuffer vs latched packed snapshot stage by stage. Requires Renderer debug tools. Spammy.</string>
     <string name="renderer_debug_menu">Renderer debug</string>
     <string name="renderer_debug_capture">Dump renderer capture</string>
     <string name="renderer_debug_capture_logged">Renderer capture dumped to Logcat. Capture ID: %1$s</string>

@@ -127,6 +127,7 @@ class SharedPreferencesSettingsRepository(
         val vulkanSimplePipelineEnabled: Boolean,
         val rendererDebugToolsEnabled: Boolean,
         val rendererDebugBgObjEnabled: Boolean,
+        val rendererDebugLatchTraceEnabled: Boolean,
     )
     private data class CoverageFixConfigurationInputs(
         val enabled: Boolean,
@@ -162,6 +163,7 @@ class SharedPreferencesSettingsRepository(
                     vulkanSimplePipelineEnabled,
                     rendererDebugToolsEnabled = false,
                     rendererDebugBgObjEnabled = false,
+                    rendererDebugLatchTraceEnabled = false,
                 )
             },
             isRendererDebugToolsEnabled(),
@@ -169,11 +171,18 @@ class SharedPreferencesSettingsRepository(
             coreInputs.copy(rendererDebugToolsEnabled = rendererDebugToolsEnabled)
         }
 
-        val fullCoreRenderInputsFlow = combine(
+        val coreWithBgObjFlow = combine(
             coreRenderInputsFlow,
             isRendererDebugBgObjEnabled(),
         ) { coreInputs, rendererDebugBgObjEnabled ->
             coreInputs.copy(rendererDebugBgObjEnabled = rendererDebugBgObjEnabled)
+        }
+
+        val fullCoreRenderInputsFlow = combine(
+            coreWithBgObjFlow,
+            isRendererDebugLatchTraceEnabled(),
+        ) { coreInputs, rendererDebugLatchTraceEnabled ->
+            coreInputs.copy(rendererDebugLatchTraceEnabled = rendererDebugLatchTraceEnabled)
         }
 
         val coverageFixInputsFlow = combine(
@@ -229,6 +238,7 @@ class SharedPreferencesSettingsRepository(
                 renderInputs.core.vulkanSimplePipelineEnabled,
                 renderInputs.core.rendererDebugToolsEnabled,
                 renderInputs.core.rendererDebugBgObjEnabled,
+                renderInputs.core.rendererDebugLatchTraceEnabled,
                 renderInputs.coverageFix.enabled,
                 renderInputs.coverageFix.coveragePx,
                 renderInputs.coverageFix.depthBias,
@@ -805,6 +815,12 @@ class SharedPreferencesSettingsRepository(
     override fun isRendererDebugBgObjEnabled(): Flow<Boolean> {
         return getOrCreatePreferenceSharedFlow("video_renderer_debug_bgobj_enabled") {
             preferences.getBoolean("video_renderer_debug_bgobj_enabled", false)
+        }
+    }
+
+    override fun isRendererDebugLatchTraceEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("video_renderer_debug_latch_trace_enabled") {
+            preferences.getBoolean("video_renderer_debug_latch_trace_enabled", false)
         }
     }
 

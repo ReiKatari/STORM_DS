@@ -120,6 +120,7 @@ internal object RendererDebugBridge {
     external fun captureCurrentSoftPackedFrameMetaJson(): String?
     external fun isCurrentFrameReadyForDebug(): Boolean
     external fun getCurrentFrameIndexForDebug(): Int
+    external fun requestPreparedRendererSnapshot()
     external fun clearPreparedRendererSnapshot()
     external fun startDenseScreenBurstCapture(frameCount: Int, stepFrames: Int, captureKindsMask: Int)
     external fun isDenseScreenBurstCaptureComplete(): Boolean

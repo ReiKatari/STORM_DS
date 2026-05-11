@@ -50,6 +50,7 @@ import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
 import me.magnum.melonds.database.daos.RetroAchievementsDao
 import me.magnum.melonds.database.entities.retroachievements.RAUserAchievementEntity
+import me.magnum.melonds.debug.DebugCommandStateStore
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.DualScreenPreset
@@ -536,6 +537,7 @@ class EmulatorViewModel @Inject constructor(
                 }
                 _emulatorState.value = EmulatorState.RunningRom(rom)
                 maybeAutoLoadStateOnLaunch(rom)
+                DebugCommandStateStore.onRunningRomReady(rom.uri, rom.name)
                 startTrackingFps()
                 startTrackingPlayTime(rom)
             }

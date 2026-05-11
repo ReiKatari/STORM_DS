@@ -1530,6 +1530,14 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_getCurrentFrameIn
 }
 
 JNIEXPORT void JNICALL
+Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_requestPreparedRendererSnapshot(JNIEnv* env, jobject thiz)
+{
+    (void)env;
+    (void)thiz;
+    MelonDSAndroid::requestPreparedRendererDebugSnapshot();
+}
+
+JNIEXPORT void JNICALL
 Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_clearPreparedRendererSnapshot(JNIEnv* env, jobject thiz)
 {
     (void)env;

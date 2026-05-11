@@ -48,6 +48,7 @@ interface SettingsRepository {
     fun isThreadedRenderingEnabled(): Flow<Boolean>
     fun isRendererDebugToolsEnabled(): Flow<Boolean>
     fun isRendererDebugBgObjEnabled(): Flow<Boolean>
+    fun isRendererDebugLatchTraceEnabled(): Flow<Boolean>
     fun getFpsCounterPosition(): FpsCounterPosition
 
     fun isExternalDisplayKeepAspectRationEnabled(): Boolean
