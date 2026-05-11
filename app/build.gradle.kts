@@ -138,9 +138,10 @@ val vulkanShaderSources = listOf(
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeShader.frag"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeFogShader.frag"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFogShader.frag"),
-    rootProject.file("melonDS-android-lib/src/android/renderer/VulkanCompositorShader.comp"),
-    rootProject.file("melonDS-android-lib/src/android/renderer/VulkanSurfacePresenter.vert"),
-    rootProject.file("melonDS-android-lib/src/android/renderer/VulkanSurfacePresenter.frag"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanCompositorShader.comp"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dShader.comp"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenter.vert"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenter.frag"),
 )
 
 val vulkanShaderHeaders = listOf(
@@ -169,9 +170,10 @@ val vulkanShaderHeaders = listOf(
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeShaderData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeFogShaderData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFogShaderData.h"),
-    rootProject.file("melonDS-android-lib/src/android/renderer/VulkanCompositorShaderData.h"),
-    rootProject.file("melonDS-android-lib/src/android/renderer/VulkanSurfacePresenterVertexShaderData.h"),
-    rootProject.file("melonDS-android-lib/src/android/renderer/VulkanSurfacePresenterFragmentShaderData.h"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanCompositorShaderData.h"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dShaderData.h"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenterVertexShaderData.h"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenterFragmentShaderData.h"),
 )
 
 val regenerateVulkanSpirv by tasks.registering(Exec::class) {
