@@ -122,7 +122,7 @@ class ExternalPresentation(
             currentBackground ?: RuntimeBackground.None,
         )
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && window?.decorView?.isAttachedToWindow == true) {
             val touchScreenArea = bottomView?.getRect()?.let {
                 val rect = android.graphics.Rect(it.x, it.y, it.right, it.bottom)
                 listOf(rect)
