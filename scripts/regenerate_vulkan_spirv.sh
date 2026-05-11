@@ -330,28 +330,28 @@ generate_header \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFogShaderData.h"
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanCompositorShader.comp" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanCompositorShader.comp" \
   "comp" \
   "melonDS_android_vulkan_compositor_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanCompositorShaderData.h"
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanCompositorShaderData.h"
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanAccumulate3dShader.comp" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dShader.comp" \
   "comp" \
   "melonDS_android_vulkan_accumulate_3d_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanAccumulate3dShaderData.h"
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dShaderData.h"
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanSurfacePresenter.vert" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenter.vert" \
   "vert" \
   "melonDS_android_vulkan_surface_presenter_vert_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanSurfacePresenterVertexShaderData.h"
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterVertexShaderData.h"
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanSurfacePresenter.frag" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenter.frag" \
   "frag" \
   "melonDS_android_vulkan_surface_presenter_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/android/renderer/VulkanSurfacePresenterFragmentShaderData.h"
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFragmentShaderData.h"
 
 if [[ "$MODE" == "check" ]]; then
   echo "Vulkan SPIR-V headers are up to date."
