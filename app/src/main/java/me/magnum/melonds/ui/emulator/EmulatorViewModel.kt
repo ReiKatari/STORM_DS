@@ -1995,7 +1995,7 @@ class EmulatorViewModel @Inject constructor(
         rom: Rom,
         launchDecision: RetroAchievementsLaunchDecision,
     ): RARuntimeBridgeConfig? {
-        val userAuth = retroAchievementsRepository.getUserAuthentication() ?: return null
+        val userAuth = retroAchievementsRepository.getUserAuthentication() as? RAUserAuth.Authenticated ?: return null
         Log.i(
             RA_IDENTITY_TAG,
                 "source=runtime_config runtime=rc_client user_agent=$retroAchievementsUserAgent " +

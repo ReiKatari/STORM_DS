@@ -650,6 +650,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             "software", "soft" -> VideoRenderer.SOFTWARE
             "opengl", "gl" -> VideoRenderer.OPENGL
             "vulkan", "vk" -> VideoRenderer.VULKAN
+            "compute" -> VideoRenderer.COMPUTE
             else -> null
         }
     }

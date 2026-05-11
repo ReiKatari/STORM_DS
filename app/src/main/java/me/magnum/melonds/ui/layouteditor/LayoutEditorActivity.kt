@@ -46,6 +46,7 @@ import javax.inject.Inject
 class LayoutEditorActivity : AppCompatActivity() {
     companion object {
         const val KEY_LAYOUT_ID = "layout_id"
+        const val KEY_IS_EXTERNAL = "is_external"
     }
 
     enum class MenuOption(@field:StringRes val stringRes: Int) {
