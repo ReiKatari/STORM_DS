@@ -10,6 +10,7 @@ data class RendererConfiguration(
     val vulkanSimplePipelineEnabled: Boolean,
     val rendererDebugToolsEnabled: Boolean,
     val rendererDebugBgObjEnabled: Boolean,
+    val rendererDebugLatchTraceEnabled: Boolean,
     val conservativeCoverageEnabled: Boolean,
     val conservativeCoveragePx: Float,
     val conservativeCoverageDepthBias: Float,

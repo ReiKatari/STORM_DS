@@ -4,8 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.edit
+import kotlinx.coroutines.delay
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.ui.emulator.EmulatorActivity
 import me.magnum.melonds.ui.emulator.EmulatorViewModel
+import me.magnum.melonds.ui.emulator.model.EmulatorState
 import java.lang.ref.WeakReference
 import kotlin.Lazy
 
@@ -19,6 +22,9 @@ internal object DebugCommandStateStore {
 
     @Volatile
     private var debugPauseHeld = false
+
+    @Volatile
+    private var pendingPauseAfterRunningRom: Boolean? = null
 
     fun onEmulatorActivitySeen(context: Context, activity: EmulatorActivity) {
         currentEmulatorActivity = WeakReference(activity)
@@ -54,6 +60,50 @@ internal object DebugCommandStateStore {
 
     fun setDebugPauseHeld(held: Boolean) {
         debugPauseHeld = held
+    }
+
+    fun requestPauseAfterNextRunningRom(pauseAfterReady: Boolean) {
+        pendingPauseAfterRunningRom = pauseAfterReady
+    }
+
+    fun isRunningRom(): Boolean {
+        val viewModel = currentEmulatorActivity.get()?.let { resolveEmulatorViewModel(it) }
+        return viewModel?.emulatorState?.value is EmulatorState.RunningRom
+    }
+
+    fun hasEmulatorActivity(): Boolean {
+        return currentEmulatorActivity.get() != null
+    }
+
+    fun onRunningRomReady(romUri: Uri, romName: String) {
+        val pendingPause = pendingPauseAfterRunningRom
+        pendingPauseAfterRunningRom = null
+
+        if (pendingPause == true) {
+            debugPauseHeld = true
+            MelonEmulator.pauseEmulation()
+        } else if (pendingPause == false) {
+            debugPauseHeld = false
+        }
+
+        Log.w(
+            TAG,
+            "action=rom_ready name=$romName uri=$romUri pauseAfter=${when (pendingPause) { true -> 1; false -> 0; null -> -1 }}",
+        )
+    }
+
+    suspend fun waitForRunningRom(timeoutMs: Long): Boolean {
+        if (isRunningRom()) {
+            return true
+        }
+        val deadlineAt = System.nanoTime() + timeoutMs.coerceAtLeast(1L) * 1_000_000L
+        while (System.nanoTime() < deadlineAt) {
+            if (isRunningRom()) {
+                return true
+            }
+            delay(100L)
+        }
+        return false
     }
 
     private fun resolveEmulatorViewModel(activity: EmulatorActivity): EmulatorViewModel? {

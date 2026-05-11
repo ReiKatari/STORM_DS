@@ -1,9 +1,12 @@
 package me.magnum.melonds.debug
 
+import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineScope
@@ -12,8 +15,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.magnum.melonds.MelonEmulator
+import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.VideoRenderer
+import me.magnum.melonds.impl.emulator.debug.RendererDebugBridge
+import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureKind
+import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
+import me.magnum.melonds.impl.emulator.debug.RendererDebugCapturePresets
+import me.magnum.melonds.ui.emulator.EmulatorActivity
 import java.io.File
 import java.util.LinkedHashSet
 import java.util.Locale
@@ -38,7 +47,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         val entryPoint = DebugCommandEntryPoint.resolve(context)
         val toolsEnabled = entryPoint.sharedPreferences().getBoolean(KEY_RENDERER_DEBUG_TOOLS_ENABLED, false)
         val propertyEnabled = readBooleanSystemProperty(RELEASE_STATE_COMMANDS_PROPERTY)
-        if (!toolsEnabled || !propertyEnabled) {
+        if (!propertyEnabled || (!toolsEnabled && !isConfigurationAction(context, intent.action))) {
             Log.w(
                 TAG,
                 "action=ignored_release_state_command actionName=${intent.action} toolsEnabled=${if (toolsEnabled) 1 else 0} propertyEnabled=${if (propertyEnabled) 1 else 0}",
@@ -48,9 +57,21 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX) -> handleSetRenderer(entryPoint, intent)
+            context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX) -> handleSetRendererDebugTools(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
+            context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> handleSetBgObjLog(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX) -> handleSetVulkanSimplePipeline(entryPoint, intent)
+            context.debugCommandAction(ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX) -> handleSetRenderer2DDebugControls(intent)
+            context.debugCommandAction(ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX) -> handleSetRenderer3DDebugControls(intent)
+            context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX) -> handleLaunchRom(context, intent)
+            context.debugCommandAction(ACTION_WAIT_ROM_READY_SUFFIX) -> handleWaitRomReady(intent)
+            context.debugCommandAction(ACTION_SET_DEBUG_PAUSE_SUFFIX) -> handleSetDebugPause(intent)
+            context.debugCommandAction(ACTION_STEP_FRAME_SUFFIX) -> handleStepFrame(intent)
+            context.debugCommandAction(ACTION_STEP_FRAMES_SUFFIX) -> handleStepFrame(intent)
+            context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX) -> handleDumpRendererCapture(context, entryPoint, intent)
+            context.debugCommandAction(ACTION_TOUCH_SCREEN_SUFFIX) -> handleTouchScreen(intent)
+            context.debugCommandAction(ACTION_PRESS_INPUT_SUFFIX) -> handlePressInput(intent)
             context.debugCommandAction(ACTION_SAVE_STATE_SUFFIX) -> handleSaveState(context, entryPoint, intent)
             context.debugCommandAction(ACTION_LOAD_STATE_SUFFIX) -> handleLoadState(context, entryPoint, intent)
             else -> Log.w(TAG, "Ignored unknown action=${intent.action}")
@@ -72,6 +93,19 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         )
     }
 
+    private fun handleSetRendererDebugTools(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val enabled = intent.firstBooleanExtra(EXTRA_ENABLED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing enabled extra")
+        entryPoint.sharedPreferences().edit(commit = true) {
+            putBoolean(KEY_RENDERER_DEBUG_TOOLS_ENABLED, enabled)
+        }
+        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
+        Log.w(
+            TAG,
+            "action=set_renderer_debug_tools mode=release enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}",
+        )
+    }
+
     private fun handleSetInternalResolution(entryPoint: DebugCommandEntryPoint, intent: Intent) {
         val scale = intent.firstNullableIntExtra(EXTRA_SCALE, EXTRA_IR, EXTRA_VALUE)
             ?: throw IllegalArgumentException("Missing internal resolution extra")
@@ -90,6 +124,19 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         Log.w(TAG, "action=set_fast_forward mode=release enabled=${if (enabled) 1 else 0}")
     }
 
+    private fun handleSetBgObjLog(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val enabled = intent.firstBooleanExtra(EXTRA_ENABLED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing enabled extra")
+        entryPoint.sharedPreferences().edit(commit = true) {
+            putBoolean(KEY_RENDERER_DEBUG_BGOBJ_ENABLED, enabled)
+        }
+        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
+        Log.w(
+            TAG,
+            "action=set_bgobj_log mode=release enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}",
+        )
+    }
+
     private fun handleSetVulkanSimplePipeline(entryPoint: DebugCommandEntryPoint, intent: Intent) {
         val enabled = intent.firstBooleanExtra(EXTRA_ENABLED, EXTRA_VALUE)
             ?: throw IllegalArgumentException("Missing enabled extra")
@@ -100,6 +147,350 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         Log.w(
             TAG,
             "action=set_vulkan_simple_pipeline mode=release enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}",
+        )
+    }
+
+    private fun handleSetRenderer2DDebugControls(intent: Intent) {
+        val state = readRenderer2DDebugControlState()
+        val featureMask = intent.firstNullableIntExtra(EXTRA_FEATURE_MASK)
+            ?: state[RENDERER_2D_STATE_FEATURE_MASK_INDEX]
+        val mainForcedMode = intent.firstNullableIntExtra(EXTRA_MAIN_FORCED_MODE)
+            ?: state[RENDERER_2D_STATE_MAIN_FORCED_MODE_INDEX]
+        val subForcedMode = intent.firstNullableIntExtra(EXTRA_SUB_FORCED_MODE)
+            ?: state[RENDERER_2D_STATE_SUB_FORCED_MODE_INDEX]
+        val topForcedCompMode = intent.firstNullableIntExtra(EXTRA_TOP_FORCED_COMP_MODE)
+            ?: state[RENDERER_2D_STATE_TOP_FORCED_COMP_MODE_INDEX]
+        val bottomForcedCompMode = intent.firstNullableIntExtra(EXTRA_BOTTOM_FORCED_COMP_MODE)
+            ?: state[RENDERER_2D_STATE_BOTTOM_FORCED_COMP_MODE_INDEX]
+        val disabledMainBgMask = intent.firstNullableIntExtra(EXTRA_DISABLED_MAIN_BG_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_MAIN_BG_MASK_INDEX]
+        val disabledSubBgMask = intent.firstNullableIntExtra(EXTRA_DISABLED_SUB_BG_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_SUB_BG_MASK_INDEX]
+        val disabledMainBgPriorityMask = intent.firstNullableIntExtra(EXTRA_DISABLED_MAIN_BG_PRIORITY_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_MAIN_BG_PRIORITY_MASK_INDEX]
+        val disabledSubBgPriorityMask = intent.firstNullableIntExtra(EXTRA_DISABLED_SUB_BG_PRIORITY_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_SUB_BG_PRIORITY_MASK_INDEX]
+        val disabledMainObjPriorityMask = intent.firstNullableIntExtra(EXTRA_DISABLED_MAIN_OBJ_PRIORITY_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_MAIN_OBJ_PRIORITY_MASK_INDEX]
+        val disabledSubObjPriorityMask = intent.firstNullableIntExtra(EXTRA_DISABLED_SUB_OBJ_PRIORITY_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_SUB_OBJ_PRIORITY_MASK_INDEX]
+        val disabledMainObjOrderMask = intent.firstNullableIntExtra(EXTRA_DISABLED_MAIN_OBJ_ORDER_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_MAIN_OBJ_ORDER_MASK_INDEX]
+        val disabledSubObjOrderMask = intent.firstNullableIntExtra(EXTRA_DISABLED_SUB_OBJ_ORDER_MASK)
+            ?: state[RENDERER_2D_STATE_DISABLED_SUB_OBJ_ORDER_MASK_INDEX]
+
+        RendererDebugBridge.setRenderer2DDebugControls(
+            mainForcedMode = mainForcedMode,
+            subForcedMode = subForcedMode,
+            topForcedCompMode = topForcedCompMode,
+            bottomForcedCompMode = bottomForcedCompMode,
+            disabledMainBgMask = disabledMainBgMask,
+            disabledSubBgMask = disabledSubBgMask,
+            disabledMainBgPriorityMask = disabledMainBgPriorityMask,
+            disabledSubBgPriorityMask = disabledSubBgPriorityMask,
+            disabledMainObjPriorityMask = disabledMainObjPriorityMask,
+            disabledSubObjPriorityMask = disabledSubObjPriorityMask,
+            disabledMainObjOrderMask = disabledMainObjOrderMask,
+            disabledSubObjOrderMask = disabledSubObjOrderMask,
+            featureMask = featureMask,
+        )
+        Log.w(
+            TAG,
+            "action=set_renderer_2d_debug_controls mode=release featureMask=$featureMask mainForcedMode=$mainForcedMode subForcedMode=$subForcedMode topComp=$topForcedCompMode bottomComp=$bottomForcedCompMode disabledMainBg=$disabledMainBgMask disabledSubBg=$disabledSubBgMask",
+        )
+        stepRendererDebugForwardFrameIfPaused("renderer_2d_debug_controls")
+    }
+
+    private fun handleSetRenderer3DDebugControls(intent: Intent) {
+        val state = RendererDebugBridge.getRenderer3DDebugControls()
+        val currentFeatureMask = if (state != null && state.isNotEmpty()) {
+            state[0]
+        } else {
+            RendererDebugBridge.RENDERER_3D_DEBUG_FEATURE_ALL
+        }
+        val featureMask = intent.firstNullableIntExtra(EXTRA_FEATURE_MASK) ?: currentFeatureMask
+        RendererDebugBridge.setRenderer3DDebugControls(featureMask)
+        Log.w(TAG, "action=set_renderer_3d_debug_controls mode=release featureMask=$featureMask")
+        stepRendererDebugForwardFrameIfPaused("renderer_3d_debug_controls")
+    }
+
+    private fun readRenderer2DDebugControlState(): IntArray {
+        val state = RendererDebugBridge.getRenderer2DDebugControls()
+        return if (state != null && state.size >= RENDERER_2D_STATE_SIZE) {
+            state
+        } else {
+            intArrayOf(
+                RENDERER_2D_NATIVE_MODE,
+                RENDERER_2D_NATIVE_MODE,
+                RENDERER_2D_NATIVE_MODE,
+                RENDERER_2D_NATIVE_MODE,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                RendererDebugBridge.RENDERER_2D_DEBUG_FEATURE_ALL,
+            )
+        }
+    }
+
+    private fun handleSetDebugPause(intent: Intent) {
+        val paused = intent.firstBooleanExtra(EXTRA_PAUSED, EXTRA_ENABLED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing paused/enabled extra")
+        DebugCommandStateStore.setDebugPauseHeld(paused)
+        if (paused) {
+            MelonEmulator.pauseEmulation()
+        } else {
+            MelonEmulator.resumeEmulation()
+        }
+        Log.w(TAG, "action=set_debug_pause mode=release paused=${if (paused) 1 else 0}")
+    }
+
+    private fun handleStepFrame(intent: Intent) {
+        val frames = intent.firstNullableIntExtra(EXTRA_STEP_FRAMES, EXTRA_FRAMES, EXTRA_VALUE)
+            ?.coerceAtLeast(1)
+            ?: 1
+        var success = true
+        repeat(frames) {
+            success = MelonEmulator.debugStepFrame() && success
+        }
+        DebugCommandStateStore.setDebugPauseHeld(true)
+        Log.w(TAG, "action=step_frame mode=release frames=$frames success=${if (success) 1 else 0}")
+    }
+
+    private fun stepRendererDebugForwardFrameIfPaused(reason: String) {
+        if (!DebugCommandStateStore.isDebugPauseHeld()) {
+            return
+        }
+        val success = MelonEmulator.debugStepFrame()
+        Log.w(TAG, "action=auto_step_frame mode=release reason=$reason success=${if (success) 1 else 0}")
+    }
+
+    private suspend fun handleDumpRendererCapture(
+        context: Context,
+        entryPoint: DebugCommandEntryPoint,
+        intent: Intent,
+    ) {
+        val refreshSettings = intent.firstBooleanExtra(EXTRA_REFRESH, EXTRA_REFRESH_SETTINGS) ?: true
+        val refreshed = if (refreshSettings) {
+            entryPoint.sharedPreferences().edit(commit = true) {
+                putBoolean(KEY_RENDERER_DEBUG_TOOLS_ENABLED, true)
+            }
+            DebugCommandStateStore.requestSettingsRefresh()
+        } else {
+            false
+        }
+        if (refreshed) {
+            delay(350L)
+        }
+
+        val renderer = entryPoint.settingsRepository().getCurrentVideoRenderer()
+        val burstCount = intent.firstNullableIntExtra(EXTRA_BURST_COUNT, EXTRA_CAPTURE_COUNT)
+            ?.coerceIn(1, 600)
+            ?: 1
+        val burstLive = intent.firstBooleanExtra(EXTRA_BURST_LIVE, EXTRA_LIVE_BURST) ?: (burstCount > 1)
+        val burstStepFrames = intent.firstNullableIntExtra(EXTRA_BURST_STEP_FRAMES, EXTRA_STEP_FRAMES)
+            ?.coerceAtLeast(1)
+            ?: 1
+        val timeoutMs = intent.firstNullableIntExtra(EXTRA_TIMEOUT_MS)
+            ?.coerceAtLeast(1)
+            ?.toLong()
+            ?: ((burstCount.toLong() * burstStepFrames.toLong() * 1_000L) / 24L + 5_000L)
+        val captureKinds = parseCaptureKinds(
+            intent.firstStringExtra(EXTRA_CAPTURE_KINDS, EXTRA_KINDS),
+            if (burstCount > 1) {
+                setOf(RendererDebugCaptureKind.SCREEN_FRAME)
+            } else {
+                RendererDebugCapturePresets.vulkanExactFrame
+            },
+        )
+        val captureId = intent.firstStringExtra(EXTRA_CAPTURE_ID, EXTRA_CAPTURE_ID_BASE)
+            ?.takeIf { it.isNotBlank() }
+        val outputDir = context.getExternalFilesDir("renderer-debug-captures")
+            ?: File(context.cacheDir, "renderer-debug-captures")
+        val captureOutputDir = if (burstCount > 1) {
+            File(outputDir, "burst_${System.currentTimeMillis()}").apply { mkdirs() }
+        } else {
+            outputDir
+        }
+        val pauseWasHeld = DebugCommandStateStore.isDebugPauseHeld()
+
+        try {
+            if (burstCount > 1 && burstLive) {
+                DebugCommandStateStore.setDebugPauseHeld(false)
+                MelonEmulator.resumeEmulation()
+                val captureBaseId = captureId ?: java.lang.Long.toHexString(System.currentTimeMillis())
+                val results = RendererDebugCaptureLogger.dumpDenseScreenBurstCapture(
+                    configuredRenderer = renderer,
+                    outputDir = captureOutputDir,
+                    captureIdBase = captureBaseId,
+                    burstCount = burstCount,
+                    burstStepFrames = burstStepFrames,
+                    timeoutMs = timeoutMs,
+                    captureKinds = captureKinds,
+                )
+                val successCount = results.count { it.success }
+                Log.w(
+                    TAG,
+                    "action=dump_renderer_capture mode=release renderer=${renderer.name.lowercase(Locale.US)} refreshed=${if (refreshed) 1 else 0} paused=${if (pauseWasHeld) 1 else 0} liveBurst=1 burstCount=$burstCount burstStepFrames=$burstStepFrames captureId=$captureBaseId success=$successCount/${results.size} outputDir=${captureOutputDir.absolutePath}",
+                )
+                return
+            }
+
+            if (!pauseWasHeld) {
+                MelonEmulator.pauseEmulation()
+                DebugCommandStateStore.setDebugPauseHeld(true)
+                waitForRendererReadyOrTimeout(renderer, timeoutMs = 1_000L)
+            }
+
+            val result = RendererDebugCaptureLogger.dumpPauseMenuCapture(
+                configuredRenderer = renderer,
+                outputDir = outputDir,
+                captureIdOverride = captureId,
+                captureKinds = captureKinds,
+                freezeRendererSnapshot = true,
+            )
+            Log.w(
+                TAG,
+                "action=dump_renderer_capture mode=release renderer=${renderer.name.lowercase(Locale.US)} refreshed=${if (refreshed) 1 else 0} paused=${if (pauseWasHeld) 1 else 0} captureId=${result.captureId} success=${if (result.success) 1 else 0} outputDir=${result.outputDir?.absolutePath ?: outputDir.absolutePath}",
+            )
+        } finally {
+            if (!pauseWasHeld) {
+                DebugCommandStateStore.setDebugPauseHeld(false)
+                MelonEmulator.resumeEmulation()
+            }
+        }
+    }
+
+    private suspend fun handleTouchScreen(intent: Intent) {
+        val x = intent.firstNullableIntExtra(EXTRA_X, EXTRA_VALUE_X, EXTRA_VALUE)
+            ?.coerceIn(0, 255)
+            ?: DEFAULT_TOUCH_X
+        val y = intent.firstNullableIntExtra(EXTRA_Y, EXTRA_VALUE_Y)
+            ?.coerceIn(0, 191)
+            ?: DEFAULT_TOUCH_Y
+        val durationMs = (intent.firstNullableIntExtra(EXTRA_DURATION_MS) ?: DEFAULT_TOUCH_DURATION_MS)
+            .coerceIn(1, 2_000)
+        MelonEmulator.onInputDown(Input.TOUCHSCREEN)
+        MelonEmulator.onScreenTouch(x, y)
+        delay(durationMs.toLong())
+        MelonEmulator.onInputUp(Input.TOUCHSCREEN)
+        MelonEmulator.onScreenRelease()
+        Log.w(TAG, "action=touch_screen mode=release x=$x y=$y durationMs=$durationMs")
+    }
+
+    private suspend fun handleLaunchRom(context: Context, intent: Intent) {
+        val romUri = intent.data ?: intent.firstStringExtra(EXTRA_ROM_URI, EXTRA_URI, EXTRA_PATH)?.let { Uri.parse(it) }
+            ?: throw IllegalArgumentException("Missing ROM URI. Provide intent data or rom_uri.")
+        val waitReady = intent.firstBooleanExtra(EXTRA_WAIT_ROM_READY, EXTRA_WAIT_READY) ?: false
+        val pauseAfterReady = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
+        val requestedTimeoutMs = intent.firstNullableIntExtra(EXTRA_WAIT_TIMEOUT_MS, EXTRA_TIMEOUT_MS)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ROM_READY_TIMEOUT_MS
+
+        if (waitReady) {
+            DebugCommandStateStore.requestPauseAfterNextRunningRom(pauseAfterReady)
+        }
+
+        startEmulatorActivityFromReleaseCommand(
+            context = context,
+            launchIntent = Intent(context, EmulatorActivity::class.java).apply {
+                action = context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX)
+                data = romUri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
+
+        delay(LAUNCH_ACTIVITY_SEEN_TIMEOUT_MS)
+        val activitySeen = DebugCommandStateStore.hasEmulatorActivity()
+        val ready = DebugCommandStateStore.isRunningRom()
+        if (ready && waitReady) {
+            applyPauseAfterReady(pauseAfterReady)
+        }
+        Log.w(
+            TAG,
+            "action=launch_rom mode=release uri=$romUri waitReady=${if (waitReady) 1 else 0} activitySeen=${if (activitySeen) 1 else 0} ready=${if (ready) 1 else 0} pauseAfter=${if (pauseAfterReady) 1 else 0} requestedTimeoutMs=$requestedTimeoutMs deferredReady=1",
+        )
+    }
+
+    private fun startEmulatorActivityFromReleaseCommand(context: Context, launchIntent: Intent) {
+        val options = ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val mode = if (Build.VERSION.SDK_INT >= 36) {
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+            } else {
+                @Suppress("DEPRECATION")
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+            options.setPendingIntentBackgroundActivityStartMode(mode)
+            options.setPendingIntentCreatorBackgroundActivityStartMode(mode)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            REQUEST_CODE_LAUNCH_ROM,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        pendingIntent.send(
+            context,
+            0,
+            null,
+            null,
+            null,
+            null,
+            options.toBundle(),
+        )
+    }
+
+    private suspend fun handleWaitRomReady(intent: Intent) {
+        val pauseAfterReady = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
+        val requestedTimeoutMs = intent.firstNullableIntExtra(EXTRA_WAIT_TIMEOUT_MS, EXTRA_TIMEOUT_MS)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ROM_READY_TIMEOUT_MS
+        val timeoutMs = requestedTimeoutMs.coerceAtMost(MAX_RECEIVER_WAIT_TIMEOUT_MS)
+        val ready = DebugCommandStateStore.waitForRunningRom(timeoutMs.toLong())
+        if (ready) {
+            applyPauseAfterReady(pauseAfterReady)
+        }
+        Log.w(
+            TAG,
+            "action=wait_rom_ready mode=release ready=${if (ready) 1 else 0} pauseAfter=${if (pauseAfterReady) 1 else 0} timeoutMs=$timeoutMs requestedTimeoutMs=$requestedTimeoutMs",
+        )
+    }
+
+    private suspend fun handlePressInput(intent: Intent) {
+        val rawInputs = intent.firstStringExtra(EXTRA_INPUTS, EXTRA_INPUT, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing input extra")
+        val durationMs = (intent.firstNullableIntExtra(EXTRA_DURATION_MS) ?: DEFAULT_INPUT_DURATION_MS)
+            .coerceIn(0, 2_000)
+        val gapMs = (intent.firstNullableIntExtra(EXTRA_GAP_MS, EXTRA_DELAY_MS) ?: DEFAULT_INPUT_GAP_MS)
+            .coerceIn(0, 2_000)
+        val repeatCount = (intent.firstNullableIntExtra(EXTRA_REPEAT, EXTRA_COUNT) ?: 1)
+            .coerceIn(1, 100)
+        val inputs = rawInputs
+            .split(',', '+', ' ', ';')
+            .mapNotNull { parseInput(it) }
+        require(inputs.isNotEmpty()) { "No supported inputs in $rawInputs" }
+
+        repeat(repeatCount) { repeatIndex ->
+            inputs.forEachIndexed { index, input ->
+                MelonEmulator.onInputDown(input)
+                delay(durationMs.toLong())
+                MelonEmulator.onInputUp(input)
+                if (repeatIndex != repeatCount - 1 || index != inputs.lastIndex) {
+                    delay(gapMs.toLong())
+                }
+            }
+        }
+        Log.w(
+            TAG,
+            "action=press_input mode=release inputs=${inputs.joinToString(",") { it.name }} repeat=$repeatCount durationMs=$durationMs gapMs=$gapMs",
         )
     }
 
@@ -263,6 +654,43 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun parseInput(value: String): Input? {
+        val normalized = value
+            .trim()
+            .uppercase(Locale.US)
+            .replace('-', '_')
+            .replace(".", "_")
+        if (normalized.isEmpty()) {
+            return null
+        }
+
+        return when (normalized.removePrefix("INPUT_").removePrefix("BUTTON_")) {
+            "A" -> Input.A
+            "B" -> Input.B
+            "X" -> Input.X
+            "Y" -> Input.Y
+            "L", "L1" -> Input.L
+            "R", "R1" -> Input.R
+            "START" -> Input.START
+            "SELECT" -> Input.SELECT
+            "LEFT", "DPAD_LEFT", "HAT_LEFT", "AXIS_HAT_X_LEFT", "AXIS_HAT_X_NEGATIVE", "AXIS_X_LEFT", "AXIS_X_NEGATIVE" -> Input.LEFT
+            "RIGHT", "DPAD_RIGHT", "HAT_RIGHT", "AXIS_HAT_X_RIGHT", "AXIS_HAT_X_POSITIVE", "AXIS_X_RIGHT", "AXIS_X_POSITIVE" -> Input.RIGHT
+            "UP", "DPAD_UP", "HAT_UP", "AXIS_HAT_Y_UP", "AXIS_HAT_Y_NEGATIVE", "AXIS_Y_UP", "AXIS_Y_NEGATIVE" -> Input.UP
+            "DOWN", "DPAD_DOWN", "HAT_DOWN", "AXIS_HAT_Y_DOWN", "AXIS_HAT_Y_POSITIVE", "AXIS_Y_DOWN", "AXIS_Y_POSITIVE" -> Input.DOWN
+            else -> null
+        }
+    }
+
+    private fun applyPauseAfterReady(pauseAfterReady: Boolean) {
+        if (pauseAfterReady) {
+            DebugCommandStateStore.setDebugPauseHeld(true)
+            MelonEmulator.pauseEmulation()
+        } else {
+            DebugCommandStateStore.setDebugPauseHeld(false)
+            MelonEmulator.resumeEmulation()
+        }
+    }
+
     private fun readBooleanSystemProperty(key: String): Boolean {
         return try {
             val process = ProcessBuilder(GETPROP_BINARY, key)
@@ -332,12 +760,83 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         return null
     }
 
+    private suspend fun waitForRendererReadyOrTimeout(renderer: VideoRenderer, timeoutMs: Long) {
+        if (renderer != VideoRenderer.VULKAN) {
+            return
+        }
+
+        val minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+        val deadlineAt = System.nanoTime() + timeoutMs.coerceAtLeast(1L) * 1_000_000L
+        while (System.nanoTime() < deadlineAt) {
+            if (RendererDebugBridge.getCurrentFrameIndexForDebug() >= minFrame
+                && RendererDebugBridge.isCurrentFrameReadyForDebug()
+            ) {
+                return
+            }
+            delay(8L)
+        }
+    }
+
+    private fun parseCaptureKinds(
+        rawKinds: String?,
+        defaultKinds: Set<RendererDebugCaptureKind>,
+    ): Set<RendererDebugCaptureKind> {
+        val value = rawKinds?.trim().orEmpty()
+        if (value.isEmpty()) {
+            return defaultKinds
+        }
+
+        val parsed = LinkedHashSet<RendererDebugCaptureKind>()
+        value.split(',')
+            .map { it.trim().lowercase(Locale.US) }
+            .filter { it.isNotEmpty() }
+            .forEach { token ->
+                when (token) {
+                    "all" -> parsed.addAll(RendererDebugCaptureKind.allKinds)
+                    "vulkanexact", "vulkan_exact", "vulkan-exact", "exactframe", "exact_frame", "exact-frame" ->
+                        parsed.addAll(RendererDebugCapturePresets.vulkanExactFrame)
+                    "screen", "screenframe" -> parsed.add(RendererDebugCaptureKind.SCREEN_FRAME)
+                    "packed" -> {
+                        parsed.add(RendererDebugCaptureKind.PACKED_TOP_PRIMARY)
+                        parsed.add(RendererDebugCaptureKind.PACKED_BOTTOM_PRIMARY)
+                    }
+                    "packedtop", "packed_top", "packedtopprimary" -> parsed.add(RendererDebugCaptureKind.PACKED_TOP_PRIMARY)
+                    "packedbottom", "packed_bottom", "packedbottomprimary" -> parsed.add(RendererDebugCaptureKind.PACKED_BOTTOM_PRIMARY)
+                    "packedtopplane1", "packed_top_plane1" -> parsed.add(RendererDebugCaptureKind.PACKED_TOP_PLANE1)
+                    "packedtopcontrol", "packed_top_control" -> parsed.add(RendererDebugCaptureKind.PACKED_TOP_CONTROL)
+                    "packedbottomplane1", "packed_bottom_plane1" -> parsed.add(RendererDebugCaptureKind.PACKED_BOTTOM_PLANE1)
+                    "packedbottomcontrol", "packed_bottom_control" -> parsed.add(RendererDebugCaptureKind.PACKED_BOTTOM_CONTROL)
+                    "capture3dsource", "capture3dsourceds", "capture3dsourceframe" ->
+                        parsed.add(RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME)
+                    "capturelinemask", "capturelineuses3dmask", "capture_line_uses_3d_mask" ->
+                        parsed.add(RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK)
+                    "comp4top", "comp4_top", "comp4topplaceholder", "comp4_top_placeholder" ->
+                        parsed.add(RendererDebugCaptureKind.COMP4_TOP_PLACEHOLDER)
+                    "comp4bottom", "comp4_bottom", "comp4bottomplaceholder", "comp4_bottom_placeholder" ->
+                        parsed.add(RendererDebugCaptureKind.COMP4_BOTTOM_PLACEHOLDER)
+                    "capturefallback", "capturefallbackmask", "capture_fallback_mask", "fallbackmask" ->
+                        parsed.add(RendererDebugCaptureKind.CAPTURE_FALLBACK_MASK)
+                    "softpackedmeta", "softpackedframemeta", "soft_packed_frame_meta", "softpackedframejson" ->
+                        parsed.add(RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON)
+                    "renderer3d", "3d", "renderer3dframe" -> parsed.add(RendererDebugCaptureKind.RENDERER3D_FRAME)
+                    "capture3d", "3dcapture", "renderer3dcapture", "renderer3dcaptureframe" ->
+                        parsed.add(RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME)
+                    "depth", "renderer3ddepth" -> parsed.add(RendererDebugCaptureKind.RENDERER3D_DEPTH)
+                    "attr", "attributes", "renderer3dattr" -> parsed.add(RendererDebugCaptureKind.RENDERER3D_ATTR)
+                    "coverage", "renderer3dcoverage" -> parsed.add(RendererDebugCaptureKind.RENDERER3D_COVERAGE)
+                    else -> throw IllegalArgumentException("Unsupported capture kind=$token")
+                }
+            }
+        return if (parsed.isEmpty()) defaultKinds else parsed
+    }
+
     private companion object {
         private const val TAG = "DebugCommand"
         private const val KEY_RENDERER_DEBUG_TOOLS_ENABLED = "video_renderer_debug_tools_enabled"
         private const val KEY_VIDEO_RENDERER = "video_renderer"
         private const val KEY_VIDEO_INTERNAL_RESOLUTION = "video_internal_resolution"
         private const val KEY_VIDEO_VULKAN_SIMPLE_PIPELINE_ENABLED = "video_vulkan_simple_pipeline_enabled"
+        private const val KEY_RENDERER_DEBUG_BGOBJ_ENABLED = "video_renderer_debug_bgobj_enabled"
         private const val RELEASE_STATE_COMMANDS_PROPERTY = "debug.melonds.release_state_commands"
         private const val GETPROP_BINARY = "/system/bin/getprop"
 
@@ -345,27 +844,123 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_SCALE = "scale"
         private const val EXTRA_IR = "ir"
         private const val EXTRA_ENABLED = "enabled"
+        private const val EXTRA_X = "x"
+        private const val EXTRA_Y = "y"
+        private const val EXTRA_VALUE_X = "value_x"
+        private const val EXTRA_VALUE_Y = "value_y"
+        private const val EXTRA_DURATION_MS = "duration_ms"
+        private const val EXTRA_GAP_MS = "gap_ms"
+        private const val EXTRA_DELAY_MS = "delay_ms"
+        private const val EXTRA_INPUT = "input"
+        private const val EXTRA_INPUTS = "inputs"
+        private const val EXTRA_REPEAT = "repeat"
+        private const val EXTRA_COUNT = "count"
         private const val EXTRA_SLOT = "slot"
         private const val EXTRA_PATH = "path"
         private const val EXTRA_URI = "uri"
         private const val EXTRA_ROM_URI = "rom_uri"
+        private const val EXTRA_WAIT_ROM_READY = "wait_rom_ready"
+        private const val EXTRA_WAIT_READY = "wait_ready"
+        private const val EXTRA_WAIT_TIMEOUT_MS = "wait_timeout_ms"
         private const val EXTRA_PAUSE_AFTER = "pause_after"
         private const val EXTRA_VALUE = "value"
+        private const val EXTRA_PAUSED = "paused"
+        private const val EXTRA_FRAMES = "frames"
+        private const val EXTRA_STEP_FRAMES = "step_frames"
+        private const val EXTRA_CAPTURE_KINDS = "capture_kinds"
+        private const val EXTRA_KINDS = "kinds"
+        private const val EXTRA_CAPTURE_ID = "capture_id"
+        private const val EXTRA_CAPTURE_ID_BASE = "capture_id_base"
+        private const val EXTRA_BURST_COUNT = "burst_count"
+        private const val EXTRA_CAPTURE_COUNT = "capture_count"
+        private const val EXTRA_BURST_STEP_FRAMES = "burst_step_frames"
+        private const val EXTRA_TIMEOUT_MS = "timeout_ms"
+        private const val EXTRA_BURST_LIVE = "burst_live"
+        private const val EXTRA_LIVE_BURST = "live_burst"
+        private const val EXTRA_REFRESH = "refresh"
+        private const val EXTRA_REFRESH_SETTINGS = "refresh_settings"
+        private const val EXTRA_FEATURE_MASK = "feature_mask"
+        private const val EXTRA_MAIN_FORCED_MODE = "main_forced_mode"
+        private const val EXTRA_SUB_FORCED_MODE = "sub_forced_mode"
+        private const val EXTRA_TOP_FORCED_COMP_MODE = "top_forced_comp_mode"
+        private const val EXTRA_BOTTOM_FORCED_COMP_MODE = "bottom_forced_comp_mode"
+        private const val EXTRA_DISABLED_MAIN_BG_MASK = "disabled_main_bg_mask"
+        private const val EXTRA_DISABLED_SUB_BG_MASK = "disabled_sub_bg_mask"
+        private const val EXTRA_DISABLED_MAIN_BG_PRIORITY_MASK = "disabled_main_bg_priority_mask"
+        private const val EXTRA_DISABLED_SUB_BG_PRIORITY_MASK = "disabled_sub_bg_priority_mask"
+        private const val EXTRA_DISABLED_MAIN_OBJ_PRIORITY_MASK = "disabled_main_obj_priority_mask"
+        private const val EXTRA_DISABLED_SUB_OBJ_PRIORITY_MASK = "disabled_sub_obj_priority_mask"
+        private const val EXTRA_DISABLED_MAIN_OBJ_ORDER_MASK = "disabled_main_obj_order_mask"
+        private const val EXTRA_DISABLED_SUB_OBJ_ORDER_MASK = "disabled_sub_obj_order_mask"
+
+        private const val RENDERER_2D_NATIVE_MODE = -1
+        private const val RENDERER_2D_STATE_SIZE = 13
+        private const val RENDERER_2D_STATE_MAIN_FORCED_MODE_INDEX = 0
+        private const val RENDERER_2D_STATE_SUB_FORCED_MODE_INDEX = 1
+        private const val RENDERER_2D_STATE_TOP_FORCED_COMP_MODE_INDEX = 2
+        private const val RENDERER_2D_STATE_BOTTOM_FORCED_COMP_MODE_INDEX = 3
+        private const val RENDERER_2D_STATE_DISABLED_MAIN_BG_MASK_INDEX = 4
+        private const val RENDERER_2D_STATE_DISABLED_SUB_BG_MASK_INDEX = 5
+        private const val RENDERER_2D_STATE_DISABLED_MAIN_BG_PRIORITY_MASK_INDEX = 6
+        private const val RENDERER_2D_STATE_DISABLED_SUB_BG_PRIORITY_MASK_INDEX = 7
+        private const val RENDERER_2D_STATE_DISABLED_MAIN_OBJ_PRIORITY_MASK_INDEX = 8
+        private const val RENDERER_2D_STATE_DISABLED_SUB_OBJ_PRIORITY_MASK_INDEX = 9
+        private const val RENDERER_2D_STATE_DISABLED_MAIN_OBJ_ORDER_MASK_INDEX = 10
+        private const val RENDERER_2D_STATE_DISABLED_SUB_OBJ_ORDER_MASK_INDEX = 11
+        private const val RENDERER_2D_STATE_FEATURE_MASK_INDEX = 12
 
         private const val ROM_URI_RESOLVE_TIMEOUT_MS = 4_000L
         private const val ROM_URI_RESOLVE_STEP_MS = 100L
+        private const val DEFAULT_ROM_READY_TIMEOUT_MS = 8_000
+        private const val MAX_RECEIVER_WAIT_TIMEOUT_MS = 8_000
+        private const val LAUNCH_ACTIVITY_SEEN_TIMEOUT_MS = 2_000L
+        private const val REQUEST_CODE_LAUNCH_ROM = 1
+        private const val DEFAULT_TOUCH_X = 128
+        private const val DEFAULT_TOUCH_Y = 96
+        private const val DEFAULT_TOUCH_DURATION_MS = 80
+        private const val DEFAULT_INPUT_DURATION_MS = 80
+        private const val DEFAULT_INPUT_GAP_MS = 80
 
         private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private const val ACTION_SET_RENDERER_SUFFIX = "SET_RENDERER"
+        private const val ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX = "SET_RENDERER_DEBUG_TOOLS"
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
+        private const val ACTION_SET_BGOBJ_LOG_SUFFIX = "SET_BGOBJ_LOG"
         private const val ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX = "SET_VULKAN_SIMPLE_PIPELINE"
+        private const val ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX = "SET_RENDERER_2D_DEBUG_CONTROLS"
+        private const val ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX = "SET_RENDERER_3D_DEBUG_CONTROLS"
+        private const val ACTION_LAUNCH_ROM_SUFFIX = "LAUNCH_ROM"
+        private const val ACTION_WAIT_ROM_READY_SUFFIX = "WAIT_ROM_READY"
+        private const val ACTION_SET_DEBUG_PAUSE_SUFFIX = "SET_DEBUG_PAUSE"
+        private const val ACTION_STEP_FRAME_SUFFIX = "STEP_FRAME"
+        private const val ACTION_STEP_FRAMES_SUFFIX = "STEP_FRAMES"
+        private const val ACTION_DUMP_RENDERER_CAPTURE_SUFFIX = "DUMP_RENDERER_CAPTURE"
+        private const val ACTION_TOUCH_SCREEN_SUFFIX = "TOUCH_SCREEN"
+        private const val ACTION_PRESS_INPUT_SUFFIX = "PRESS_INPUT"
         private const val ACTION_SAVE_STATE_SUFFIX = "SAVE_STATE"
         private const val ACTION_LOAD_STATE_SUFFIX = "LOAD_STATE"
     }
 
     private fun Context.debugCommandAction(suffix: String): String {
         return "$packageName.$suffix"
+    }
+
+    private fun isConfigurationAction(context: Context, action: String?): Boolean {
+        return action == context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_IR_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX)
+            || action == context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX)
+            || action == context.debugCommandAction(ACTION_WAIT_ROM_READY_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_DEBUG_PAUSE_SUFFIX)
+            || action == context.debugCommandAction(ACTION_STEP_FRAME_SUFFIX)
+            || action == context.debugCommandAction(ACTION_STEP_FRAMES_SUFFIX)
+            || action == context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX)
     }
 }

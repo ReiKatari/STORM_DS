@@ -1,9 +1,12 @@
 package me.magnum.melonds.debug
 
+import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +17,7 @@ import kotlinx.coroutines.launch
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.ControllerConfiguration
+import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureKind
@@ -21,6 +25,7 @@ import me.magnum.melonds.impl.emulator.debug.RendererDebugCapturePresets
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
 import me.magnum.melonds.impl.emulator.debug.RendererDebugBridge
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureResult
+import me.magnum.melonds.ui.emulator.EmulatorActivity
 import java.io.File
 import java.util.LinkedHashSet
 import java.util.Locale
@@ -30,33 +35,46 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         receiverScope.launch {
             try {
-                DebugCommandExecutionLock.withLock {
+                val success = DebugCommandExecutionLock.withLock {
                     handleIntent(context.applicationContext, intent)
                 }
+                pendingResult.setResultCode(if (success) RESULT_SUCCESS else RESULT_FAILURE)
+                pendingResult.setResultData("success=${if (success) 1 else 0}")
             } catch (error: Exception) {
                 Log.w(TAG, "Debug command failed: action=${intent.action}", error)
+                pendingResult.setResultCode(RESULT_FAILURE)
+                pendingResult.setResultData("success=0 error=${error.javaClass.simpleName}")
             } finally {
                 pendingResult.finish()
             }
         }
     }
 
-    private suspend fun handleIntent(context: Context, intent: Intent) {
+    private suspend fun handleIntent(context: Context, intent: Intent): Boolean {
         val entryPoint = DebugCommandEntryPoint.resolve(context)
-        when (intent.action) {
-            context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX) -> handleSetRenderer(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_JIT_SUFFIX) -> handleSetJit(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> handleSetBgObjLog(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX) -> handleSetVulkanSimplePipeline(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
-            context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_SUFFIX) -> handleSetSlot2Analog(intent)
-            context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX) -> handleSetSlot2AnalogMapping(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_VULKAN_FALLBACKS_SUFFIX) -> handleSetVulkanFallbacks(intent)
+        return when (intent.action) {
+            context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX) -> { handleSetRenderer(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> { handleSetInternalResolution(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_JIT_SUFFIX) -> { handleSetJit(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> { handleSetBgObjLog(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_LATCH_TRACE_SUFFIX) -> { handleSetLatchTrace(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX) -> { handleSetVulkanSimplePipeline(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> { handleSetFastForward(intent); true }
+            context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_SUFFIX) -> { handleSetSlot2Analog(intent); true }
+            context.debugCommandAction(ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX) -> { handleSetSlot2AnalogMapping(entryPoint, intent); true }
+            context.debugCommandAction(ACTION_SET_VULKAN_FALLBACKS_SUFFIX) -> { handleSetVulkanFallbacks(intent); true }
+            context.debugCommandAction(ACTION_TOUCH_SCREEN_SUFFIX) -> { handleTouchScreen(intent); true }
+            context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX) -> handleLaunchRom(context, intent)
+            context.debugCommandAction(ACTION_WAIT_ROM_READY_SUFFIX) -> handleWaitRomReady(intent)
             context.debugCommandAction(ACTION_SAVE_STATE_SUFFIX) -> handleSaveState(context, entryPoint, intent)
             context.debugCommandAction(ACTION_LOAD_STATE_SUFFIX) -> handleLoadState(context, entryPoint, intent)
+            context.debugCommandAction(ACTION_STEP_FRAME_SUFFIX) -> handleStepFrame(entryPoint, intent)
+            context.debugCommandAction(ACTION_STEP_FRAMES_SUFFIX) -> handleStepFrame(entryPoint, intent)
             context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX) -> handleDumpRendererCapture(context, entryPoint, intent)
-            else -> Log.w(TAG, "Ignored unknown action=${intent.action}")
+            else -> {
+                Log.w(TAG, "Ignored unknown action=${intent.action}")
+                false
+            }
         }
     }
 
@@ -100,6 +118,16 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         }
         val refreshed = DebugCommandStateStore.requestSettingsRefresh()
         Log.w(TAG, "action=set_bgobj_log enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}")
+    }
+
+    private fun handleSetLatchTrace(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val enabled = intent.firstBooleanExtra(EXTRA_ENABLED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing enabled extra")
+        entryPoint.sharedPreferences().edit(commit = true) {
+            putBoolean(KEY_RENDERER_DEBUG_LATCH_TRACE_ENABLED, enabled)
+        }
+        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
+        Log.w(TAG, "action=set_latch_trace enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}")
     }
 
     private fun handleSetVulkanSimplePipeline(entryPoint: DebugCommandEntryPoint, intent: Intent) {
@@ -178,14 +206,132 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         )
     }
 
+    private suspend fun handleTouchScreen(intent: Intent) {
+        val x = intent.firstNullableIntExtra(EXTRA_X, EXTRA_VALUE_X, EXTRA_VALUE)
+            ?.coerceIn(0, 255)
+            ?: DEFAULT_TOUCH_X
+        val y = intent.firstNullableIntExtra(EXTRA_Y, EXTRA_VALUE_Y)
+            ?.coerceIn(0, 191)
+            ?: DEFAULT_TOUCH_Y
+        val durationMs = (intent.firstNullableIntExtra(EXTRA_DURATION_MS) ?: DEFAULT_TOUCH_DURATION_MS)
+            .coerceIn(1, 2_000)
+        MelonEmulator.onInputDown(Input.TOUCHSCREEN)
+        MelonEmulator.onScreenTouch(x, y)
+        delay(durationMs.toLong())
+        MelonEmulator.onInputUp(Input.TOUCHSCREEN)
+        MelonEmulator.onScreenRelease()
+        Log.w(TAG, "action=touch_screen x=$x y=$y durationMs=$durationMs")
+    }
+
+    private suspend fun handleLaunchRom(context: Context, intent: Intent): Boolean {
+        val romUri = intent.data ?: intent.firstStringExtra(EXTRA_ROM_URI, EXTRA_URI, EXTRA_PATH)?.let { Uri.parse(it) }
+            ?: throw IllegalArgumentException("Missing ROM URI. Provide intent data or rom_uri.")
+        val waitReady = intent.firstBooleanExtra(EXTRA_WAIT_ROM_READY, EXTRA_WAIT_READY)
+            ?: false
+        val pauseAfterReady = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
+        val requestedTimeoutMs = intent.firstNullableIntExtra(EXTRA_WAIT_TIMEOUT_MS, EXTRA_TIMEOUT_MS)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ROM_READY_TIMEOUT_MS
+
+        if (waitReady) {
+            DebugCommandStateStore.requestPauseAfterNextRunningRom(pauseAfterReady)
+        }
+
+        startEmulatorActivityFromDebugCommand(
+            context = context,
+            launchIntent = Intent(context, EmulatorActivity::class.java).apply {
+                action = context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX)
+                data = romUri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
+
+        delay(LAUNCH_ACTIVITY_SEEN_TIMEOUT_MS)
+        val activitySeen = DebugCommandStateStore.hasEmulatorActivity()
+        val ready = DebugCommandStateStore.isRunningRom()
+        if (ready && waitReady) {
+            applyPauseAfterReady(pauseAfterReady)
+        }
+        Log.w(
+            TAG,
+            "action=launch_rom uri=$romUri waitReady=${if (waitReady) 1 else 0} activitySeen=${if (activitySeen) 1 else 0} ready=${if (ready) 1 else 0} pauseAfter=${if (pauseAfterReady) 1 else 0} requestedTimeoutMs=$requestedTimeoutMs deferredReady=1",
+        )
+        return activitySeen
+    }
+
+    private fun startEmulatorActivityFromDebugCommand(context: Context, launchIntent: Intent) {
+        val options = ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val mode = if (Build.VERSION.SDK_INT >= 36) {
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+            } else {
+                @Suppress("DEPRECATION")
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+            options.setPendingIntentBackgroundActivityStartMode(mode)
+            options.setPendingIntentCreatorBackgroundActivityStartMode(mode)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            REQUEST_CODE_LAUNCH_ROM,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        pendingIntent.send(
+            context,
+            0,
+            null,
+            null,
+            null,
+            null,
+            options.toBundle(),
+        )
+    }
+
+    private suspend fun handleWaitRomReady(intent: Intent): Boolean {
+        val pauseAfterReady = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
+        val requestedTimeoutMs = intent.firstNullableIntExtra(EXTRA_WAIT_TIMEOUT_MS, EXTRA_TIMEOUT_MS)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ROM_READY_TIMEOUT_MS
+        val timeoutMs = requestedTimeoutMs.coerceAtMost(MAX_RECEIVER_WAIT_TIMEOUT_MS)
+        val ready = DebugCommandStateStore.waitForRunningRom(timeoutMs.toLong())
+        if (ready) {
+            applyPauseAfterReady(pauseAfterReady)
+        }
+        Log.w(
+            TAG,
+            "action=wait_rom_ready ready=${if (ready) 1 else 0} pauseAfter=${if (pauseAfterReady) 1 else 0} timeoutMs=$timeoutMs requestedTimeoutMs=$requestedTimeoutMs",
+        )
+        return ready
+    }
+
     private suspend fun handleLoadState(
         context: Context,
         entryPoint: DebugCommandEntryPoint,
         intent: Intent,
-    ) {
+    ): Boolean {
+        val waitReady = intent.firstBooleanExtra(EXTRA_WAIT_ROM_READY, EXTRA_WAIT_READY)
+            ?: true
+        val requestedTimeoutMs = intent.firstNullableIntExtra(EXTRA_WAIT_TIMEOUT_MS, EXTRA_TIMEOUT_MS)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ROM_READY_TIMEOUT_MS
+        val timeoutMs = requestedTimeoutMs.coerceAtMost(MAX_RECEIVER_WAIT_TIMEOUT_MS)
+        val pauseAfterLoad = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
+        if (waitReady) {
+            val ready = DebugCommandStateStore.waitForRunningRom(timeoutMs.toLong())
+            if (!ready) {
+                Log.w(
+                    TAG,
+                    "action=load_state waitReady=1 ready=0 success=0 pauseAfter=${if (pauseAfterLoad) 1 else 0} timeoutMs=$timeoutMs requestedTimeoutMs=$requestedTimeoutMs",
+                )
+                return false
+            }
+        }
         val stateUri = resolveStateUri(context, entryPoint, intent, preferExistingSlotFallback = true)
             ?: throw IllegalArgumentException("Missing load target. Provide slot or path.")
-        val pauseAfterLoad = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
         MelonEmulator.pauseEmulation()
         val success = try {
             MelonEmulator.loadState(stateUri)
@@ -199,15 +345,16 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         }
         Log.w(
             TAG,
-            "action=load_state uri=$stateUri success=${if (success) 1 else 0} pauseAfter=${if (pauseAfterLoad) 1 else 0}",
+            "action=load_state uri=$stateUri waitReady=${if (waitReady) 1 else 0} success=${if (success) 1 else 0} pauseAfter=${if (pauseAfterLoad) 1 else 0} timeoutMs=$timeoutMs requestedTimeoutMs=$requestedTimeoutMs",
         )
+        return success
     }
 
     private suspend fun handleSaveState(
         context: Context,
         entryPoint: DebugCommandEntryPoint,
         intent: Intent,
-    ) {
+    ): Boolean {
         val stateUri = resolveStateUri(context, entryPoint, intent, preferExistingSlotFallback = false)
             ?: throw IllegalArgumentException("Missing save target. Provide slot or path.")
         val pauseAfterSave = intent.getBooleanExtra(EXTRA_PAUSE_AFTER, false)
@@ -226,13 +373,52 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             TAG,
             "action=save_state uri=$stateUri success=${if (success) 1 else 0} pauseAfter=${if (pauseAfterSave) 1 else 0}",
         )
+        return success
+    }
+
+    private suspend fun handleStepFrame(
+        entryPoint: DebugCommandEntryPoint,
+        intent: Intent,
+    ): Boolean {
+        val frames = intent.firstNullableIntExtra(EXTRA_STEP_FRAMES, EXTRA_FRAMES, EXTRA_VALUE)
+            ?.coerceAtLeast(1)
+            ?: 1
+        val timeoutMs = intent.firstNullableIntExtra(EXTRA_TIMEOUT_MS, EXTRA_DURATION_MS, EXTRA_RESUME_MS)
+            ?.coerceAtLeast(1)
+            ?: 5_000
+        val renderer = entryPoint.settingsRepository().getCurrentVideoRenderer()
+        val startFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+
+        DebugCommandStateStore.setDebugPauseHeld(false)
+        MelonEmulator.resumeEmulation()
+        waitForRendererFrameOrTimeout(
+            renderer = renderer,
+            startFrame = startFrame,
+            resumeFrames = frames,
+            timeoutMs = timeoutMs.toLong(),
+        )
+        MelonEmulator.pauseEmulation()
+        waitForRendererReadyOrTimeout(
+            renderer = renderer,
+            minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+            timeoutMs = timeoutMs.toLong(),
+        )
+        DebugCommandStateStore.setDebugPauseHeld(true)
+
+        val endFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+        val ready = renderer != VideoRenderer.VULKAN || RendererDebugBridge.isCurrentFrameReadyForDebug()
+        Log.w(
+            TAG,
+            "action=step_frame renderer=${renderer.name.lowercase(Locale.US)} frames=$frames startFrame=$startFrame endFrame=$endFrame ready=${if (ready) 1 else 0}",
+        )
+        return ready
     }
 
     private suspend fun handleDumpRendererCapture(
         context: Context,
         entryPoint: DebugCommandEntryPoint,
         intent: Intent,
-    ) {
+    ): Boolean {
         entryPoint.sharedPreferences().edit(commit = true) {
             putBoolean(KEY_RENDERER_DEBUG_TOOLS_ENABLED, true)
         }
@@ -336,6 +522,7 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             TAG,
             "action=dump_renderer_capture renderer=${renderer.name.lowercase(Locale.US)} refreshed=${if (refreshed) 1 else 0} paused=${if (pauseWasHeld) 1 else 0} liveBurst=${if (burstLive) 1 else 0} resumeMs=$resumeMs resumeFrames=$resumeFrames burstCount=$burstCount burstStepMs=$burstStepMs burstStepFrames=$burstStepFrames captureKindsFirst=${captureKindsFirst.joinToString(separator = ",") { it.name.lowercase(Locale.US) }} captureKindsRest=${captureKindsRest.joinToString(separator = ",") { it.name.lowercase(Locale.US) }} captureId=$firstCaptureId success=$successCount/${results.size} outputDir=${captureOutputDir.absolutePath}",
         )
+        return successCount == results.size
     }
 
     private suspend fun performPausedBurstCapture(
@@ -356,6 +543,9 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         } else if (resumeMs > 0 || resumeFrames > 0) {
             DebugCommandStateStore.setDebugPauseHeld(false)
             val startFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+            if (shouldPrepareRendererSnapshot(renderer, captureKindsFirst)) {
+                RendererDebugBridge.requestPreparedRendererSnapshot()
+            }
             MelonEmulator.resumeEmulation()
             waitForRendererFrameOrTimeout(
                 renderer = renderer,
@@ -364,6 +554,11 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
                 timeoutMs = resumeMs.toLong(),
             )
             MelonEmulator.pauseEmulation()
+            waitForRendererReadyOrTimeout(
+                renderer = renderer,
+                minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+                timeoutMs = resumeMs.coerceAtLeast(1_000).toLong(),
+            )
         }
 
         val captureBaseId = captureIdBase ?: java.lang.Long.toHexString(System.currentTimeMillis())
@@ -374,6 +569,11 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
                 } else {
                     captureBaseId.takeIf { captureIdBase != null }
                 }
+                waitForRendererReadyOrTimeout(
+                    renderer = renderer,
+                    minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+                    timeoutMs = 1_000L,
+                )
                 add(
                     RendererDebugCaptureLogger.dumpPauseMenuCapture(
                         configuredRenderer = renderer,
@@ -386,6 +586,9 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
                 if (index + 1 < burstCount) {
                     DebugCommandStateStore.setDebugPauseHeld(false)
                     val startFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+                    if (shouldPrepareRendererSnapshot(renderer, captureKindsRest)) {
+                        RendererDebugBridge.requestPreparedRendererSnapshot()
+                    }
                     MelonEmulator.resumeEmulation()
                     waitForRendererFrameOrTimeout(
                         renderer = renderer,
@@ -394,6 +597,11 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
                         timeoutMs = burstStepMs.toLong(),
                     )
                     MelonEmulator.pauseEmulation()
+                    waitForRendererReadyOrTimeout(
+                        renderer = renderer,
+                        minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+                        timeoutMs = burstStepMs.coerceAtLeast(1_000).toLong(),
+                    )
                 }
             }
         }
@@ -442,6 +650,9 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         val initialStepMs = if (resumeMs > 0) resumeMs else 0
         if (initialStepFrames > 0 || initialStepMs > 0) {
             val startFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+            if (shouldPrepareRendererSnapshot(renderer, captureKindsFirst)) {
+                RendererDebugBridge.requestPreparedRendererSnapshot()
+            }
             waitForRendererFrameOrTimeout(
                 renderer = renderer,
                 startFrame = startFrame,
@@ -476,6 +687,13 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             val startIndex = if (burstCount > 0 && requiresPausedBurstCapture(captureKindsFirst)) 1 else 0
             for (index in startIndex until burstCount) {
                 if (index > 0 || startIndex > 0) {
+                    if (shouldPrepareRendererSnapshot(
+                            renderer = renderer,
+                            captureKinds = if (index == 0) captureKindsFirst else captureKindsRest,
+                        )
+                    ) {
+                        RendererDebugBridge.requestPreparedRendererSnapshot()
+                    }
                     waitForRendererAdvanceOrTimeout(
                         renderer = renderer,
                         lastObservedFrame = lastObservedFrame,
@@ -603,6 +821,16 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         return names.toList()
     }
 
+    private fun applyPauseAfterReady(pauseAfterReady: Boolean) {
+        if (pauseAfterReady) {
+            DebugCommandStateStore.setDebugPauseHeld(true)
+            MelonEmulator.pauseEmulation()
+        } else {
+            DebugCommandStateStore.setDebugPauseHeld(false)
+            MelonEmulator.resumeEmulation()
+        }
+    }
+
     private fun parseRenderer(value: String): VideoRenderer? {
         return when (value.trim().lowercase(Locale.US)) {
             "software", "soft" -> VideoRenderer.SOFTWARE
@@ -701,6 +929,25 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         }
     }
 
+    private suspend fun waitForRendererReadyOrTimeout(
+        renderer: VideoRenderer,
+        minFrame: Int,
+        timeoutMs: Long,
+    ) {
+        if (renderer != VideoRenderer.VULKAN)
+            return
+
+        val effectiveTimeoutMs = timeoutMs.coerceAtLeast(1L)
+        val deadlineAt = System.nanoTime() + effectiveTimeoutMs * 1_000_000L
+        while (System.nanoTime() < deadlineAt) {
+            val currentFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+            if (currentFrame >= minFrame && RendererDebugBridge.isCurrentFrameReadyForDebug()) {
+                return
+            }
+            delay(8L)
+        }
+    }
+
     private suspend fun waitForRendererAdvanceOrTimeout(
         renderer: VideoRenderer,
         lastObservedFrame: Int,
@@ -760,6 +1007,22 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
             return true
         }
         return captureKinds.any { it != RendererDebugCaptureKind.SCREEN_FRAME }
+    }
+
+    private fun shouldPrepareRendererSnapshot(
+        renderer: VideoRenderer,
+        captureKinds: Set<RendererDebugCaptureKind>,
+    ): Boolean {
+        if (renderer != VideoRenderer.OPENGL) {
+            return false
+        }
+        return captureKinds.any {
+            it == RendererDebugCaptureKind.RENDERER3D_FRAME
+                || it == RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME
+                || it == RendererDebugCaptureKind.RENDERER3D_DEPTH
+                || it == RendererDebugCaptureKind.RENDERER3D_ATTR
+                || it == RendererDebugCaptureKind.RENDERER3D_COVERAGE
+        }
     }
 
     private fun parseUri(pathOrUri: String): Uri {
@@ -838,12 +1101,16 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
 
     private companion object {
         private const val TAG = "DebugCommand"
+        private const val RESULT_FAILURE = 0
+        private const val RESULT_SUCCESS = 1
+        private const val REQUEST_CODE_LAUNCH_ROM = 1
         private const val KEY_VIDEO_RENDERER = "video_renderer"
         private const val KEY_VIDEO_INTERNAL_RESOLUTION = "video_internal_resolution"
         private const val KEY_ENABLE_JIT = "enable_jit"
         private const val KEY_VIDEO_VULKAN_SIMPLE_PIPELINE_ENABLED = "video_vulkan_simple_pipeline_enabled"
         private const val KEY_RENDERER_DEBUG_TOOLS_ENABLED = "video_renderer_debug_tools_enabled"
         private const val KEY_RENDERER_DEBUG_BGOBJ_ENABLED = "video_renderer_debug_bgobj_enabled"
+        private const val KEY_RENDERER_DEBUG_LATCH_TRACE_ENABLED = "video_renderer_debug_latch_trace_enabled"
 
         private const val EXTRA_RENDERER = "renderer"
         private const val EXTRA_SCALE = "scale"
@@ -869,9 +1136,13 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_URI = "uri"
         private const val EXTRA_ROM_URI = "rom_uri"
         private const val EXTRA_PAUSE_AFTER = "pause_after"
+        private const val EXTRA_WAIT_ROM_READY = "wait_rom_ready"
+        private const val EXTRA_WAIT_READY = "wait_ready"
+        private const val EXTRA_WAIT_TIMEOUT_MS = "wait_timeout_ms"
         private const val EXTRA_RESUME_MS = "resume_ms"
         private const val EXTRA_RESUME_FRAMES = "resume_frames"
         private const val EXTRA_DURATION_MS = "duration_ms"
+        private const val EXTRA_TIMEOUT_MS = "timeout_ms"
         private const val EXTRA_FRAMES = "frames"
         private const val EXTRA_BURST_COUNT = "burst_count"
         private const val EXTRA_CAPTURE_COUNT = "capture_count"
@@ -890,8 +1161,14 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_CAPTURE_KINDS_REST = "capture_kinds_rest"
         private const val EXTRA_REST_KINDS = "rest_kinds"
         private const val EXTRA_VALUE = "value"
+        private const val DEFAULT_ROM_READY_TIMEOUT_MS = 8_000
+        private const val MAX_RECEIVER_WAIT_TIMEOUT_MS = 8_000
+        private const val LAUNCH_ACTIVITY_SEEN_TIMEOUT_MS = 2_000L
         private const val ROM_URI_RESOLVE_TIMEOUT_MS = 4_000L
         private const val ROM_URI_RESOLVE_STEP_MS = 100L
+        private const val DEFAULT_TOUCH_X = 128
+        private const val DEFAULT_TOUCH_Y = 96
+        private const val DEFAULT_TOUCH_DURATION_MS = 80
 
         private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -899,13 +1176,19 @@ internal class DebugCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_JIT_SUFFIX = "SET_JIT"
         private const val ACTION_SET_BGOBJ_LOG_SUFFIX = "SET_BGOBJ_LOG"
+        private const val ACTION_SET_LATCH_TRACE_SUFFIX = "SET_LATCH_TRACE"
         private const val ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX = "SET_VULKAN_SIMPLE_PIPELINE"
         private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
         private const val ACTION_SET_SLOT2_ANALOG_SUFFIX = "SET_SLOT2_ANALOG"
         private const val ACTION_SET_SLOT2_ANALOG_MAPPING_SUFFIX = "SET_SLOT2_ANALOG_MAPPING"
         private const val ACTION_SET_VULKAN_FALLBACKS_SUFFIX = "SET_VULKAN_FALLBACKS"
+        private const val ACTION_TOUCH_SCREEN_SUFFIX = "TOUCH_SCREEN"
+        private const val ACTION_LAUNCH_ROM_SUFFIX = "LAUNCH_ROM"
+        private const val ACTION_WAIT_ROM_READY_SUFFIX = "WAIT_ROM_READY"
         private const val ACTION_SAVE_STATE_SUFFIX = "SAVE_STATE"
         private const val ACTION_LOAD_STATE_SUFFIX = "LOAD_STATE"
+        private const val ACTION_STEP_FRAME_SUFFIX = "STEP_FRAME"
+        private const val ACTION_STEP_FRAMES_SUFFIX = "STEP_FRAMES"
         private const val ACTION_DUMP_RENDERER_CAPTURE_SUFFIX = "DUMP_RENDERER_CAPTURE"
     }
 
