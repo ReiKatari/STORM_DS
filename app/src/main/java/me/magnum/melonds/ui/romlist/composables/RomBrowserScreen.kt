@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.romlist.composables
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,8 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -74,6 +77,11 @@ fun RomBrowserScreen(
     val folderCount = remember(state.entries) { state.entries.takeWhile { it is RomBrowserEntry.Folder }.size }
     val hasFolders = folderCount > 0
     val showAlphabetBar = (state.alphabetIndex.isNotEmpty() || hasFolders) && state.sortingMode == SortingMode.ALPHABETICALLY
+
+    LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive) {
+        gridState.scrollToItem(0)
+        listState.scrollToItem(0)
+    }
 
     Surface(color = MaterialTheme.colors.surface, modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -207,41 +215,43 @@ private fun GridContent(
     onRomClick: (Rom) -> Unit,
     onRomLongPress: (Rom) -> Unit,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 120.dp),
-        state = gridState,
-        contentPadding = PaddingValues(
-            start = 12.dp,
-            end = if (showAlphabetBar) 36.dp else 12.dp,
-            top = 8.dp,
-            bottom = 8.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        items(
-            items = state.entries,
-            key = { entry ->
+    RomListOverscrollProvider(filter = state.filter) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 120.dp),
+            state = gridState,
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                end = if (showAlphabetBar) 36.dp else 12.dp,
+                top = 8.dp,
+                bottom = if (state.filter == RomFilter.FAVORITES) 96.dp else 32.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(
+                items = state.entries,
+                key = { entry ->
+                    when (entry) {
+                        is RomBrowserEntry.Folder -> "folder:${entry.docId}"
+                        is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                    }
+                },
+            ) { entry ->
                 when (entry) {
-                    is RomBrowserEntry.Folder -> "folder:${entry.docId}"
-                    is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                    is RomBrowserEntry.Folder -> FolderGridCard(
+                        name = entry.name,
+                        relativePath = entry.relativePath,
+                        onClick = { onFolderClick(entry) },
+                    )
+                    is RomBrowserEntry.RomItem -> RomGridCard(
+                        rom = entry.rom,
+                        coverUrl = coverByHash[entry.rom.retroAchievementsHash],
+                        showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                        onClick = { onRomClick(entry.rom) },
+                        onLongPress = { onRomLongPress(entry.rom) },
+                    )
                 }
-            },
-        ) { entry ->
-            when (entry) {
-                is RomBrowserEntry.Folder -> FolderGridCard(
-                    name = entry.name,
-                    relativePath = entry.relativePath,
-                    onClick = { onFolderClick(entry) },
-                )
-                is RomBrowserEntry.RomItem -> RomGridCard(
-                    rom = entry.rom,
-                    coverUrl = coverByHash[entry.rom.retroAchievementsHash],
-                    showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
-                    onClick = { onRomClick(entry.rom) },
-                    onLongPress = { onRomLongPress(entry.rom) },
-                )
             }
         }
     }
@@ -260,42 +270,58 @@ private fun ListContent(
     onRomLongPress: (Rom) -> Unit,
     onRomConfigClick: (Rom) -> Unit,
 ) {
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 0.dp,
-            end = if (showAlphabetBar) 36.dp else 0.dp,
-            top = 4.dp,
-            bottom = 4.dp,
-        ),
-    ) {
-        items(
-            items = state.entries,
-            key = { entry ->
+    RomListOverscrollProvider(filter = state.filter) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 0.dp,
+                end = if (showAlphabetBar) 36.dp else 0.dp,
+                top = 4.dp,
+                bottom = if (state.filter == RomFilter.FAVORITES) 96.dp else 32.dp,
+            ),
+        ) {
+            items(
+                items = state.entries,
+                key = { entry ->
+                    when (entry) {
+                        is RomBrowserEntry.Folder -> "folder:${entry.docId}"
+                        is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                    }
+                },
+            ) { entry ->
                 when (entry) {
-                    is RomBrowserEntry.Folder -> "folder:${entry.docId}"
-                    is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                    is RomBrowserEntry.Folder -> FolderListRow(
+                        name = entry.name,
+                        relativePath = entry.relativePath,
+                        onClick = { onFolderClick(entry) },
+                    )
+                    is RomBrowserEntry.RomItem -> RomListRow(
+                        rom = entry.rom,
+                        coverUrl = coverByHash[entry.rom.retroAchievementsHash],
+                        allowConfiguration = allowConfiguration,
+                        showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                        onClick = { onRomClick(entry.rom) },
+                        onLongPress = { onRomLongPress(entry.rom) },
+                        onConfigClick = { onRomConfigClick(entry.rom) },
+                    )
                 }
-            },
-        ) { entry ->
-            when (entry) {
-                is RomBrowserEntry.Folder -> FolderListRow(
-                    name = entry.name,
-                    relativePath = entry.relativePath,
-                    onClick = { onFolderClick(entry) },
-                )
-                is RomBrowserEntry.RomItem -> RomListRow(
-                    rom = entry.rom,
-                    coverUrl = coverByHash[entry.rom.retroAchievementsHash],
-                    allowConfiguration = allowConfiguration,
-                    showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
-                    onClick = { onRomClick(entry.rom) },
-                    onLongPress = { onRomLongPress(entry.rom) },
-                    onConfigClick = { onRomConfigClick(entry.rom) },
-                )
             }
         }
+    }
+}
+
+@Composable
+private fun RomListOverscrollProvider(
+    filter: RomFilter,
+    content: @Composable () -> Unit,
+) {
+    if (filter == RomFilter.FAVORITES) {
+        CompositionLocalProvider(LocalOverscrollFactory provides null) {
+            content()
+        }
+    } else {
+        content()
     }
 }
 
