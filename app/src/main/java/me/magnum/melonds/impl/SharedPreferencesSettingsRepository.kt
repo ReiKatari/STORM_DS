@@ -57,6 +57,7 @@ import me.magnum.melonds.domain.model.camera.DSiCameraSourceType
 import me.magnum.melonds.domain.model.input.SoftInputBehaviour
 import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.impl.dtos.input.ControllerConfigurationDto
 import me.magnum.melonds.impl.input.ControllerConfigurationFactory
@@ -314,6 +315,19 @@ class SharedPreferencesSettingsRepository(
         )
     }
 
+    override suspend fun getEmulatorConfiguration(romConfig: RomConfig): EmulatorConfiguration {
+        val globalConfiguration = getEmulatorConfiguration()
+        return globalConfiguration.copy(
+            rendererConfiguration = buildRomRendererConfiguration(
+                baseConfiguration = globalConfiguration.rendererConfiguration,
+                romConfig = romConfig,
+                rootUri = observeRetroArchShaderRoot().first(),
+                globalPresetRelativePath = observeRetroArchShaderPreset().first(),
+                globalParameterText = observeRetroArchShaderParameterText().first(),
+            ),
+        )
+    }
+
     override fun getTheme(): Theme {
         val themePreference = preferences.getString("theme", "light")!!
         return Theme.valueOf(themePreference.uppercase())
@@ -387,6 +401,12 @@ class SharedPreferencesSettingsRepository(
     override fun getDefaultConsoleType(): ConsoleType {
         val consoleTypePreference = preferences.getString("console_type", "ds")!!
         return enumValueOfIgnoreCase(consoleTypePreference)
+    }
+
+    override fun observeDefaultConsoleType(): Flow<ConsoleType> {
+        return getOrCreatePreferenceSharedFlow("console_type") {
+            getDefaultConsoleType()
+        }
     }
 
     override fun getFirmwareConfiguration(): FirmwareConfiguration {
@@ -519,8 +539,18 @@ class SharedPreferencesSettingsRepository(
 
     private fun observeRetroArchShaderParameters(): Flow<Map<String, Float>> {
         return getOrCreatePreferenceSharedFlow("video_retroarch_shader_parameters") {
-            parseRetroArchShaderParameters(preferences.getString("video_retroarch_shader_parameters", null))
+            parseRetroArchShaderParameters(getRetroArchShaderParameterText())
         }
+    }
+
+    private fun observeRetroArchShaderParameterText(): Flow<String?> {
+        return getOrCreatePreferenceSharedFlow("video_retroarch_shader_parameters") {
+            getRetroArchShaderParameterText()
+        }
+    }
+
+    private fun getRetroArchShaderParameterText(): String? {
+        return preferences.getString("video_retroarch_shader_parameters", null)
     }
 
     private fun observeRetroArchShaderClearHistory(): Flow<Boolean> {
@@ -618,6 +648,11 @@ class SharedPreferencesSettingsRepository(
             parameterOverrides = parameterOverrides,
             clearHistory = clearHistory,
         )
+    }
+
+    private fun isRetroArchShaderRootValid(rootUri: Uri?): Boolean {
+        val rootDocument = rootUri?.let { DocumentFile.fromTreeUri(context, it) } ?: return false
+        return rootDocument.exists() && rootDocument.isDirectory
     }
 
     private fun buildImportedRetroArchShaderConfiguration(
@@ -814,6 +849,18 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    override fun observeRetroArchShaderRootValid(): Flow<Boolean> {
+        return observeRetroArchShaderRoot().map { isRetroArchShaderRootValid(it) }
+    }
+
+    override fun observeRetroArchShaderPresetPath(): Flow<String?> {
+        return observeRetroArchShaderPreset()
+    }
+
+    override fun observeRetroArchShaderParametersText(): Flow<String?> {
+        return observeRetroArchShaderParameterText()
+    }
+
     private fun isConservativeCoverageEnabled(): Flow<Boolean> {
         return getOrCreatePreferenceSharedFlow("video_conservative_coverage_enabled") {
             preferences.getBoolean("video_conservative_coverage_enabled", false)
@@ -992,6 +1039,12 @@ class SharedPreferencesSettingsRepository(
     override fun getMicSource(): MicSource {
         val micSourcePreference = preferences.getString("mic_source", "blow")!!
         return enumValueOfIgnoreCase(micSourcePreference)
+    }
+
+    override fun observeMicSource(): Flow<MicSource> {
+        return getOrCreatePreferenceSharedFlow("mic_source") {
+            getMicSource()
+        }
     }
 
     override fun getRomSortingMode(): SortingMode {
@@ -1321,5 +1374,66 @@ class SharedPreferencesSettingsRepository(
 
     override fun observeRenderConfiguration(): Flow<RendererConfiguration> {
         return renderConfigurationFlow
+    }
+
+    override fun observeRenderConfiguration(romConfig: RomConfig): Flow<RendererConfiguration> {
+        return combine(
+            renderConfigurationFlow,
+            observeRetroArchShaderRoot(),
+            observeRetroArchShaderPreset(),
+            observeRetroArchShaderParameterText(),
+        ) { baseConfiguration, rootUri, globalPresetRelativePath, globalParameterText ->
+            buildRomRendererConfiguration(
+                baseConfiguration = baseConfiguration,
+                romConfig = romConfig,
+                rootUri = rootUri,
+                globalPresetRelativePath = globalPresetRelativePath,
+                globalParameterText = globalParameterText,
+            )
+        }
+    }
+
+    private fun buildRomRendererConfiguration(
+        baseConfiguration: RendererConfiguration,
+        romConfig: RomConfig,
+        rootUri: Uri?,
+        globalPresetRelativePath: String?,
+        globalParameterText: String?,
+    ): RendererConfiguration {
+        val renderer = romConfig.videoRenderer ?: baseConfiguration.renderer
+        val requestedFiltering = romConfig.videoFiltering ?: baseConfiguration.videoFiltering
+        val retroArchShader = if (renderer == VideoRenderer.VULKAN && requestedFiltering == VideoFiltering.RETROARCH) {
+            if (romConfig.retroArchShaderPresetPath == null && romConfig.retroArchShaderParameters == null) {
+                baseConfiguration.retroArchShader
+            } else {
+                importRetroArchShader(
+                    rootUri = rootUri,
+                    presetRelativePath = romConfig.retroArchShaderPresetPath ?: globalPresetRelativePath,
+                    parameterOverrides = parseRetroArchShaderParameters(romConfig.retroArchShaderParameters ?: globalParameterText),
+                    clearHistory = false,
+                )
+            }
+        } else {
+            EmptyRetroArchShaderConfiguration
+        }
+        val effectiveFiltering = when {
+            renderer == VideoRenderer.VULKAN && !requestedFiltering.isSupportedByVulkan() -> VideoFiltering.NONE
+            renderer == VideoRenderer.VULKAN &&
+                requestedFiltering == VideoFiltering.RETROARCH &&
+                retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.NONE
+            renderer != VideoRenderer.VULKAN && !requestedFiltering.isSupportedByOpenGlSurface() -> VideoFiltering.NONE
+            else -> requestedFiltering
+        }
+        val threadedRendering = (romConfig.threadedRendering ?: baseConfiguration.threadedRendering) &&
+            (renderer == VideoRenderer.SOFTWARE || renderer == VideoRenderer.VULKAN)
+
+        return baseConfiguration.copy(
+            renderer = renderer,
+            videoFiltering = effectiveFiltering,
+            threadedRendering = threadedRendering,
+            internalResolutionScaling = romConfig.internalResolutionScaling ?: baseConfiguration.resolutionScaling,
+            customShader = if (renderer == VideoRenderer.VULKAN) null else baseConfiguration.customShader,
+            retroArchShader = if (effectiveFiltering == VideoFiltering.RETROARCH) retroArchShader else EmptyRetroArchShaderConfiguration,
+        )
     }
 }

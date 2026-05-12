@@ -25,6 +25,10 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
 
     companion object {
         const val KEY_ENTRY_POINT = "entry_point"
+        const val KEY_IN_GAME = "in_game"
+        const val KEY_LOCK_INPUT_MAPPING = "lock_input_mapping"
+        const val KEY_LOCK_INPUT_LAYOUT = "lock_input_layout"
+        const val KEY_LOCK_VIDEO_FILTERING = "lock_video_filtering"
 
         const val CUSTOM_FIRMWARE_ENTRY_POINT = "custom_firmware_entry_point"
     }

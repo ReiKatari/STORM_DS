@@ -1,6 +1,8 @@
 package me.magnum.melonds.impl.dtos.rom
 
 import com.google.gson.annotations.SerializedName
+import me.magnum.melonds.domain.model.VideoFiltering
+import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.rom.config.RomInputMode
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
@@ -25,6 +27,18 @@ data class RomConfigDto(
     val inputMode: RomInputMode? = null,
     @SerializedName("customControllerConfiguration")
     val customControllerConfiguration: ControllerConfigurationDto? = null,
+    @SerializedName("videoRenderer")
+    val videoRenderer: VideoRenderer? = null,
+    @SerializedName("threadedRendering")
+    val threadedRendering: Boolean? = null,
+    @SerializedName("internalResolutionScaling")
+    val internalResolutionScaling: Int? = null,
+    @SerializedName("videoFiltering")
+    val videoFiltering: VideoFiltering? = null,
+    @SerializedName("retroArchShaderPresetPath")
+    val retroArchShaderPresetPath: String? = null,
+    @SerializedName("retroArchShaderParameters")
+    val retroArchShaderParameters: String? = null,
 ) {
 
     companion object {
@@ -38,6 +52,12 @@ data class RomConfigDto(
                 romConfig.useHgEngineFix,
                 romConfig.inputMode,
                 romConfig.customControllerConfiguration?.let { ControllerConfigurationDto.fromControllerConfiguration(it) },
+                romConfig.videoRenderer,
+                romConfig.threadedRendering,
+                romConfig.internalResolutionScaling,
+                romConfig.videoFiltering,
+                romConfig.retroArchShaderPresetPath,
+                romConfig.retroArchShaderParameters,
             )
         }
     }
@@ -52,6 +72,12 @@ data class RomConfigDto(
             useHgEngineFix = useHgEngineFix ?: false,
             inputMode = inputMode ?: RomInputMode.GLOBAL,
             customControllerConfiguration = customControllerConfiguration?.toControllerConfiguration(),
+            videoRenderer = videoRenderer,
+            threadedRendering = threadedRendering,
+            internalResolutionScaling = internalResolutionScaling,
+            videoFiltering = videoFiltering,
+            retroArchShaderPresetPath = retroArchShaderPresetPath,
+            retroArchShaderParameters = retroArchShaderParameters,
         )
     }
 }

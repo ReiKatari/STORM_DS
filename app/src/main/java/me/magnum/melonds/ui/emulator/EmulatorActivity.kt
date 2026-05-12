@@ -10,6 +10,7 @@ import android.hardware.input.InputManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.text.InputType
 import android.util.TypedValue
 import android.view.Display
 import android.view.Gravity
@@ -19,6 +20,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -77,6 +79,7 @@ import me.magnum.melonds.domain.model.layout.Insets
 import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.domain.model.layout.ScreenFold
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.domain.model.ui.Orientation
 import me.magnum.melonds.extensions.insetsControllerCompat
 import me.magnum.melonds.extensions.setLayoutOrientation
@@ -102,6 +105,7 @@ import me.magnum.melonds.ui.emulator.model.EmulatorUiEvent
 import me.magnum.melonds.ui.emulator.model.HardcorePendingExitChoice
 import me.magnum.melonds.ui.emulator.model.LaunchArgs
 import me.magnum.melonds.ui.emulator.model.OfflineAchievementsSyncChoice
+import me.magnum.melonds.ui.emulator.model.InGameRomSettingsMenuState
 import me.magnum.melonds.ui.emulator.model.PauseMenu
 import me.magnum.melonds.ui.emulator.model.RAEventUi
 import me.magnum.melonds.ui.emulator.model.RumbleEvent
@@ -125,10 +129,13 @@ import me.magnum.melonds.ui.emulator.ui.AchievementListDialog
 import me.magnum.melonds.ui.emulator.ui.AchievementUpdatesUi
 import me.magnum.melonds.ui.emulator.ui.DualScreenPresetsDialog
 import me.magnum.melonds.ui.emulator.ui.PendingSubmissionsDialog
+import me.magnum.melonds.ui.inputsetup.InputSetupActivity
+import me.magnum.melonds.ui.layouts.LayoutSelectorActivity
 import me.magnum.melonds.ui.layouteditor.model.LayoutTarget
 import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.theme.MelonTheme
 import java.text.SimpleDateFormat
+import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -281,6 +288,19 @@ class EmulatorActivity : AppCompatActivity() {
         viewModel.onSettingsChanged()
         setupSustainedPerformanceMode()
         setupFpsCounter()
+        viewModel.resumeEmulator()
+    }
+    private val romInputSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        viewModel.onRomCustomInputConfigEdited()
+        viewModel.resumeEmulator()
+    }
+    private val romLayoutSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val layoutId = result.data
+                ?.getStringExtra(LayoutSelectorActivity.KEY_SELECTED_LAYOUT_ID)
+                ?.let { UUID.fromString(it) }
+            viewModel.onRunningRomLayoutSelected(layoutId)
+        }
         viewModel.resumeEmulator()
     }
     private val cheatsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -680,8 +700,13 @@ class EmulatorActivity : AppCompatActivity() {
                             intent.putExtra(CheatsActivity.KEY_ROM_INFO, RomInfoParcelable.fromRomInfo(it.romInfo))
                             cheatsLauncher.launch(intent)
                         }
-                        EmulatorUiEvent.OpenScreen.SettingsScreen -> {
-                            val settingsIntent = Intent(this@EmulatorActivity, SettingsActivity::class.java)
+                        is EmulatorUiEvent.OpenScreen.SettingsScreen -> {
+                            val settingsIntent = Intent(this@EmulatorActivity, SettingsActivity::class.java).apply {
+                                putExtra(SettingsActivity.KEY_IN_GAME, true)
+                                putExtra(SettingsActivity.KEY_LOCK_INPUT_MAPPING, it.romSettingsOverrides.controllerMapping)
+                                putExtra(SettingsActivity.KEY_LOCK_INPUT_LAYOUT, it.romSettingsOverrides.controllerLayout)
+                                putExtra(SettingsActivity.KEY_LOCK_VIDEO_FILTERING, it.romSettingsOverrides.videoFiltering)
+                            }
                             settingsLauncher.launch(settingsIntent)
                         }
                         is EmulatorUiEvent.ShowPauseMenu -> showPauseMenu(it.pauseMenu)
@@ -708,6 +733,11 @@ class EmulatorActivity : AppCompatActivity() {
                             showDualScreenPresets.value = true
                         }
                         EmulatorUiEvent.ShowRendererDebugMenu -> showRendererDebugMenu()
+                        is EmulatorUiEvent.ShowRomSettings -> showRomSettingsMenu(
+                            rom = it.rom,
+                            renderer = it.renderer,
+                            menuState = it.menuState,
+                        )
                         EmulatorUiEvent.ShowRenderer2DDebugControls -> {
                             if (isDebuggableBuild()) {
                                 showRenderer2DDebugControlsDialog()
@@ -1372,6 +1402,185 @@ class EmulatorActivity : AppCompatActivity() {
                     viewModel.resumeEmulator()
                 }
                 .show()
+    }
+
+    private fun showRomSettingsMenu(
+        rom: Rom,
+        renderer: VideoRenderer,
+        menuState: InGameRomSettingsMenuState,
+    ) {
+        val entries = buildList {
+            add(romSettingsMenuLabel(getString(R.string.key_mapping), menuState.controllerMappingValue) to {
+                romInputSettingsLauncher.launch(InputSetupActivity.getRomCustomIntent(this@EmulatorActivity, rom))
+            })
+            add(romSettingsMenuLabel(getString(R.string.controller_layout), menuState.layoutValue) to {
+                val intent = Intent(this@EmulatorActivity, LayoutSelectorActivity::class.java).apply {
+                    putExtra(LayoutSelectorActivity.KEY_SELECTED_LAYOUT_ID, rom.config.layoutId?.toString())
+                }
+                romLayoutSettingsLauncher.launch(intent)
+            })
+            add(romSettingsMenuLabel(getString(R.string.filter), menuState.videoFilteringValue) to {
+                showRomVideoFilteringDialog(
+                    renderer = renderer,
+                    selectedFiltering = rom.config.videoFiltering,
+                    hasValidRetroArchShaderRoot = menuState.hasValidRetroArchShaderRoot,
+                )
+            })
+            if (menuState.showRetroArchSettings) {
+                add(romSettingsMenuLabel(getString(R.string.video_retroarch_shader_preset_title), menuState.retroArchPresetPathValue) to {
+                    showRomRetroArchPresetPathDialog(
+                        hasValidRetroArchShaderRoot = menuState.hasValidRetroArchShaderRoot,
+                        selectedPresetPath = rom.config.retroArchShaderPresetPath,
+                    )
+                })
+                add(romSettingsMenuLabel(getString(R.string.video_retroarch_shader_parameters_title), menuState.retroArchParametersValue) to {
+                    showRomRetroArchParametersDialog(
+                        hasValidRetroArchShaderRoot = menuState.hasValidRetroArchShaderRoot,
+                        selectedParameters = rom.config.retroArchShaderParameters,
+                    )
+                })
+            }
+            add(romSettingsMenuLabel(getString(R.string.microphone_source), menuState.micSourceValue) to {
+                showRomMicSourceDialog(rom.config.runtimeMicSource)
+            })
+        }
+
+        if (entries.isEmpty()) {
+            viewModel.resumeEmulator()
+            return
+        }
+
+        var handledSelection = false
+        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rom_settings)
+            .setItems(entries.map { it.first }.toTypedArray()) { _, which ->
+                handledSelection = true
+                entries[which].second.invoke()
+            }
+            .setOnDismissListener {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                if (!handledSelection) {
+                    viewModel.resumeEmulator()
+                }
+            }
+            .show()
+    }
+
+    private fun romSettingsMenuLabel(title: String, value: String): String {
+        return "$title: $value"
+    }
+
+    private fun showRomVideoFilteringDialog(
+        renderer: VideoRenderer,
+        selectedFiltering: VideoFiltering?,
+        hasValidRetroArchShaderRoot: Boolean,
+    ) {
+        val allFilteringOptions = resources.getStringArray(R.array.video_filtering_options)
+        val items = listOf(null) + VideoFiltering.entries.filter { filtering ->
+            when (renderer) {
+                VideoRenderer.VULKAN -> filtering.isSupportedByVulkan() &&
+                    (filtering != VideoFiltering.RETROARCH || hasValidRetroArchShaderRoot)
+                else -> filtering.isSupportedByOpenGlSurface()
+            }
+        }
+        val labels = items.map { filtering ->
+            filtering?.let { allFilteringOptions[it.ordinal] } ?: getString(R.string.use_global_preference)
+        }.toTypedArray()
+        val checkedItem = items.indexOf(selectedFiltering).coerceAtLeast(0)
+
+        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.filter)
+            .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
+                viewModel.onRunningRomVideoFilteringSelected(items[which])
+                dialog.dismiss()
+            }
+            .setOnDismissListener {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                viewModel.resumeEmulator()
+            }
+            .show()
+    }
+
+    private fun showRomRetroArchPresetPathDialog(
+        hasValidRetroArchShaderRoot: Boolean,
+        selectedPresetPath: String?,
+    ) {
+        showRomRetroArchTextDialog(
+            titleRes = R.string.video_retroarch_shader_preset_title,
+            hasValidRetroArchShaderRoot = hasValidRetroArchShaderRoot,
+            initialText = selectedPresetPath,
+            onConfirm = viewModel::onRunningRomRetroArchPresetPathSelected,
+        )
+    }
+
+    private fun showRomRetroArchParametersDialog(
+        hasValidRetroArchShaderRoot: Boolean,
+        selectedParameters: String?,
+    ) {
+        showRomRetroArchTextDialog(
+            titleRes = R.string.video_retroarch_shader_parameters_title,
+            hasValidRetroArchShaderRoot = hasValidRetroArchShaderRoot,
+            initialText = selectedParameters,
+            onConfirm = viewModel::onRunningRomRetroArchParametersSelected,
+        )
+    }
+
+    private fun showRomRetroArchTextDialog(
+        titleRes: Int,
+        hasValidRetroArchShaderRoot: Boolean,
+        initialText: String?,
+        onConfirm: (String?) -> Unit,
+    ) {
+        if (!hasValidRetroArchShaderRoot) {
+            Toast.makeText(this, R.string.retroarch_shader_root_not_valid, Toast.LENGTH_LONG).show()
+            viewModel.resumeEmulator()
+            return
+        }
+
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setSingleLine(false)
+            setText(initialText.orEmpty())
+            setSelection(text.length)
+        }
+
+        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setView(input)
+            .setPositiveButton(R.string.ok) { _, _ ->
+                onConfirm(input.text.toString().ifBlank { null })
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .setOnDismissListener {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                viewModel.resumeEmulator()
+            }
+            .show()
+    }
+
+    private fun showRomMicSourceDialog(selectedMicSource: RuntimeMicSource) {
+        val micOptions = resources.getStringArray(R.array.game_runtime_mic_source_options)
+        val items = RuntimeMicSource.entries.toList()
+        val labels = items.map { micSource ->
+            micOptions[micSource.ordinal]
+        }.toTypedArray()
+        val checkedItem = items.indexOf(selectedMicSource).coerceAtLeast(0)
+
+        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.microphone_source)
+            .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
+                viewModel.onRunningRomMicSourceSelected(items[which])
+                dialog.dismiss()
+            }
+            .setOnDismissListener {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                viewModel.resumeEmulator()
+            }
+            .show()
     }
 
     private fun showRendererDebugMenu() {

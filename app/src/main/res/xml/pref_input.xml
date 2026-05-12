@@ -3,13 +3,13 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <Preference
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedPreference
             android:key="input_key_mapping"
             android:title="@string/key_mapping"
             android:summary="@string/key_mapping_summary"
             app:iconSpaceReserved="false" />
 
-    <Preference
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedPreference
         android:key="input_layouts"
         android:title="@string/layouts"
         android:summary="@string/layouts_summary"

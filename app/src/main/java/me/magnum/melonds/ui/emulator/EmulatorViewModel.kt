@@ -62,6 +62,7 @@ import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.SCREEN_HEIGHT
 import me.magnum.melonds.domain.model.SCREEN_WIDTH
 import me.magnum.melonds.domain.model.ScreenAlignment
+import me.magnum.melonds.domain.model.VideoFiltering
 import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.defaultExternalAlignment
 import me.magnum.melonds.domain.model.defaultInternalAlignment
@@ -86,6 +87,7 @@ import me.magnum.melonds.domain.model.retroachievements.RASimpleAchievement
 import me.magnum.melonds.domain.model.input.SoftInputBehaviour
 import me.magnum.melonds.domain.model.retroachievements.RASimpleLeaderboard
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.domain.model.ui.Orientation
 import me.magnum.melonds.domain.repositories.BackgroundRepository
 import me.magnum.melonds.domain.repositories.CheatsRepository
@@ -118,6 +120,8 @@ import me.magnum.melonds.ui.emulator.model.RumbleEvent
 import me.magnum.melonds.ui.emulator.model.EmulatorState
 import me.magnum.melonds.ui.emulator.model.EmulatorUiEvent
 import me.magnum.melonds.ui.emulator.model.HardcorePendingExitChoice
+import me.magnum.melonds.ui.emulator.model.InGameRomSettingsOverrides
+import me.magnum.melonds.ui.emulator.model.InGameRomSettingsMenuState
 import me.magnum.melonds.ui.emulator.model.OfflineAchievementsSyncChoice
 import me.magnum.melonds.ui.emulator.model.LaunchArgs
 import me.magnum.melonds.ui.emulator.model.PauseMenu
@@ -520,7 +524,7 @@ class EmulatorViewModel @Inject constructor(
         startObservingRendererConfiguration()
         startObservingEmulatorEvents()
         startObservingAchievementEvents()
-        startObservingLayoutForRom(rom)
+        startObservingLayoutForRom()
         val raBootstrapReady = startRetroAchievementsSession(rom, launchDecision)
 
         raBootstrapReady.await()
@@ -885,6 +889,56 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
+    fun onRunningRomVideoFilteringSelected(videoFiltering: VideoFiltering?) {
+        updateRunningRomConfig { it.copy(videoFiltering = videoFiltering) }
+    }
+
+    fun onRunningRomRetroArchPresetPathSelected(presetPath: String?) {
+        updateRunningRomConfig { it.copy(retroArchShaderPresetPath = presetPath) }
+    }
+
+    fun onRunningRomRetroArchParametersSelected(parameters: String?) {
+        updateRunningRomConfig { it.copy(retroArchShaderParameters = parameters) }
+    }
+
+    fun onRunningRomLayoutSelected(layoutId: UUID?) {
+        updateRunningRomConfig { it.copy(layoutId = layoutId) }
+    }
+
+    fun onRunningRomMicSourceSelected(micSource: RuntimeMicSource) {
+        updateRunningRomConfig { it.copy(runtimeMicSource = micSource) }
+    }
+
+    fun onRomCustomInputConfigEdited() {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: return
+        sessionCoroutineScope.launch {
+            val refreshedRom = romsRepository.getRomAtUri(runningRom.uri) ?: return@launch
+            updateRunningRom(refreshedRom)
+            emulatorManager.updateRomEmulatorConfiguration(refreshedRom)
+        }
+    }
+
+    private fun updateRunningRomConfig(update: (me.magnum.melonds.domain.model.rom.config.RomConfig) -> me.magnum.melonds.domain.model.rom.config.RomConfig) {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: return
+        val updatedRom = runningRom.copy(config = update(runningRom.config))
+        romsRepository.updateRomConfig(runningRom, updatedRom.config)
+        updateRunningRom(updatedRom)
+        sessionCoroutineScope.launch {
+            emulatorManager.updateRomEmulatorConfiguration(updatedRom)
+        }
+    }
+
+    private fun updateRunningRom(updatedRom: Rom) {
+        currentRom = updatedRom
+        activeRomConfig.value = updatedRom
+        _emulatorState.update { currentState ->
+            when (currentState) {
+                is EmulatorState.RunningRom -> currentState.copy(rom = updatedRom)
+                else -> currentState
+            }
+        }
+    }
+
     fun pauseEmulator(showPauseMenu: Boolean) {
         sessionCoroutineScope.launch {
             emulatorManager.pauseEmulator()
@@ -1073,7 +1127,27 @@ class EmulatorViewModel @Inject constructor(
         when (option) {
             is RomPauseMenuOption -> {
                 when (option) {
-                    RomPauseMenuOption.SETTINGS -> _uiEvent.tryEmit(EmulatorUiEvent.OpenScreen.SettingsScreen)
+                    RomPauseMenuOption.SETTINGS -> _uiEvent.tryEmit(
+                        EmulatorUiEvent.OpenScreen.SettingsScreen(
+                            (_emulatorState.value as? EmulatorState.RunningRom)?.rom?.let {
+                                getInGameRomSettingsOverrides(it)
+                            } ?: InGameRomSettingsOverrides(),
+                        ),
+                    )
+                    RomPauseMenuOption.ROM_SETTINGS -> {
+                        (_emulatorState.value as? EmulatorState.RunningRom)?.rom?.let { rom ->
+                            sessionCoroutineScope.launch {
+                                val renderConfiguration = settingsRepository.getEmulatorConfiguration(rom.config).rendererConfiguration
+                                _uiEvent.emit(
+                                    EmulatorUiEvent.ShowRomSettings(
+                                        rom = rom,
+                                        renderer = renderConfiguration.renderer,
+                                        menuState = buildInGameRomSettingsMenuState(rom),
+                                    ),
+                                )
+                            }
+                        }
+                    }
                     RomPauseMenuOption.SAVE_STATE -> {
                         if (emulatorSession.areSaveStatesAllowed()) {
                             (_emulatorState.value as? EmulatorState.RunningRom)?.let {
@@ -1124,7 +1198,7 @@ class EmulatorViewModel @Inject constructor(
             }
             is FirmwarePauseMenuOption -> {
                 when (option) {
-                    FirmwarePauseMenuOption.SETTINGS -> _uiEvent.tryEmit(EmulatorUiEvent.OpenScreen.SettingsScreen)
+                    FirmwarePauseMenuOption.SETTINGS -> _uiEvent.tryEmit(EmulatorUiEvent.OpenScreen.SettingsScreen())
                     FirmwarePauseMenuOption.RESET -> resetEmulator()
                     FirmwarePauseMenuOption.EXIT -> {
                         stopEmulator()
@@ -1728,20 +1802,22 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    private fun startObservingLayoutForRom(rom: Rom) {
-        val romLayoutId = rom.config.layoutId
-        val layoutFlow = if (romLayoutId == null) {
-            getGlobalLayoutFlow()
-        } else {
-            // Load and observe ROM layout but switch to global layout if the ROM layout stops existing
-            layoutsRepository.observeLayout(romLayoutId)
-                .onCompletion {
-                    emitAll(getGlobalLayoutFlow())
-                }
-        }
-
+    private fun startObservingLayoutForRom() {
         sessionCoroutineScope.launch {
-            combine(layoutFlow, ensureEmulatorIsRunning()) { layout, _ ->
+            combine(
+                activeRomConfig.flatMapLatest { rom ->
+                    val romLayoutId = rom?.config?.layoutId
+                    if (romLayoutId == null) {
+                        getGlobalLayoutFlow()
+                    } else {
+                        layoutsRepository.observeLayout(romLayoutId)
+                            .onCompletion {
+                                emitAll(getGlobalLayoutFlow())
+                            }
+                    }
+                },
+                ensureEmulatorIsRunning(),
+            ) { layout, _ ->
                 layout
             }.collect(_layout)
         }
@@ -1749,7 +1825,14 @@ class EmulatorViewModel @Inject constructor(
 
     private fun startObservingRendererConfiguration() {
         sessionCoroutineScope.launch {
-            settingsRepository.observeRenderConfiguration().collectLatest {
+            _emulatorState.flatMapLatest { state ->
+                val romConfig = (state as? EmulatorState.RunningRom)?.rom?.config
+                if (romConfig == null) {
+                    settingsRepository.observeRenderConfiguration()
+                } else {
+                    settingsRepository.observeRenderConfiguration(romConfig)
+                }
+            }.collectLatest {
                 _runtimeRendererConfiguration.value = RuntimeRendererConfiguration(
                     renderer = it.renderer,
                     videoFiltering = it.videoFiltering,
@@ -3288,6 +3371,7 @@ class EmulatorViewModel @Inject constructor(
 
     private fun filterRomPauseMenuOption(option: RomPauseMenuOption, rendererDebugToolsEnabled: Boolean): Boolean {
         return when (option) {
+            RomPauseMenuOption.ROM_SETTINGS -> _emulatorState.value is EmulatorState.RunningRom
             RomPauseMenuOption.SAVE_STATE -> emulatorSession.areSaveStatesAllowed()
             RomPauseMenuOption.REWIND -> settingsRepository.isRewindEnabled() && emulatorSession.areSaveStateLoadsAllowed()
             RomPauseMenuOption.LOAD_STATE -> emulatorSession.areSaveStateLoadsAllowed()
@@ -3296,6 +3380,63 @@ class EmulatorViewModel @Inject constructor(
             RomPauseMenuOption.RENDERER_DEBUG -> rendererDebugToolsEnabled
             else -> true
         }
+    }
+
+    private fun getInGameRomSettingsOverrides(rom: Rom): InGameRomSettingsOverrides {
+        val globalLayoutId = settingsRepository.getSelectedLayoutId()
+        return InGameRomSettingsOverrides(
+            controllerMapping = rom.config.inputMode != me.magnum.melonds.domain.model.rom.config.RomInputMode.GLOBAL,
+            controllerLayout = rom.config.layoutId != null && rom.config.layoutId != globalLayoutId,
+            videoFiltering = rom.config.videoFiltering != null,
+        )
+    }
+
+    private suspend fun buildInGameRomSettingsMenuState(rom: Rom): InGameRomSettingsMenuState {
+        val inputModeOptions = context.resources.getStringArray(R.array.rom_input_mode_options)
+        val filteringOptions = context.resources.getStringArray(R.array.video_filtering_options)
+        val micOptions = context.resources.getStringArray(R.array.game_runtime_mic_source_options)
+        val effectiveConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
+        val globalVideoFiltering = settingsRepository.getVideoFiltering().firstOrNull()
+            ?: effectiveConfiguration.rendererConfiguration.videoFiltering
+        val requestedVideoFiltering = rom.config.videoFiltering ?: globalVideoFiltering
+        val globalRetroArchPresetPath = settingsRepository.observeRetroArchShaderPresetPath().firstOrNull()
+        val globalRetroArchParameters = settingsRepository.observeRetroArchShaderParametersText().firstOrNull()
+        val globalLayoutName = layoutsRepository.getLayout(settingsRepository.getSelectedLayoutId())?.name
+            ?: context.getString(R.string.not_set)
+        val globalRetroArchPresetPathLabel = globalRetroArchPresetPath ?: context.getString(R.string.not_set)
+        val globalRetroArchParametersLabel = globalRetroArchParameters ?: context.getString(R.string.not_set)
+        val useGlobalWithValue = { value: String ->
+            context.getString(R.string.use_global_preference_with_value, value)
+        }
+        val effectiveMicSource = RuntimeMicSource.entries.firstOrNull { it.micSource == effectiveConfiguration.micSource }
+            ?: RuntimeMicSource.DEFAULT
+        val hasValidRetroArchShaderRoot = settingsRepository.observeRetroArchShaderRootValid().firstOrNull() == true
+        val showRetroArchSettings = effectiveConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN &&
+            requestedVideoFiltering == VideoFiltering.RETROARCH &&
+            hasValidRetroArchShaderRoot
+
+        return InGameRomSettingsMenuState(
+            controllerMappingValue = if (rom.config.inputMode == me.magnum.melonds.domain.model.rom.config.RomInputMode.GLOBAL) {
+                useGlobalWithValue(context.getString(R.string.global_controller_mapping))
+            } else {
+                inputModeOptions[rom.config.inputMode.ordinal]
+            },
+            layoutValue = rom.config.layoutId?.let { layoutId ->
+                layoutsRepository.getLayout(layoutId)?.name ?: context.getString(R.string.not_set)
+            } ?: useGlobalWithValue(globalLayoutName),
+            videoFilteringValue = rom.config.videoFiltering?.let { filtering ->
+                filteringOptions[filtering.ordinal]
+            } ?: useGlobalWithValue(filteringOptions[globalVideoFiltering.ordinal]),
+            showRetroArchSettings = showRetroArchSettings,
+            retroArchPresetPathValue = rom.config.retroArchShaderPresetPath ?: useGlobalWithValue(globalRetroArchPresetPathLabel),
+            retroArchParametersValue = rom.config.retroArchShaderParameters ?: useGlobalWithValue(globalRetroArchParametersLabel),
+            hasValidRetroArchShaderRoot = hasValidRetroArchShaderRoot,
+            micSourceValue = if (rom.config.runtimeMicSource == RuntimeMicSource.DEFAULT) {
+                useGlobalWithValue(micOptions[effectiveMicSource.ordinal])
+            } else {
+                micOptions[rom.config.runtimeMicSource.ordinal]
+            },
+        )
     }
 
     private fun ensureEmulatorIsRunning(): Flow<Unit> {

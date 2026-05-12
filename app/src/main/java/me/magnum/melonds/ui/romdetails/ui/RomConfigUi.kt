@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.romdetails.ui
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import me.magnum.melonds.R
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.contracts.FilePickerContract
+import me.magnum.melonds.domain.model.VideoFiltering
+import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.rom.config.RomInputMode
@@ -97,6 +100,12 @@ private fun Content(
     val micDialogState = rememberSingleChoiceDialogState<RuntimeMicSource>()
     val inputModeDialogState = rememberSingleChoiceDialogState<RomInputMode>()
     val gbaSlotDialogState = rememberSingleChoiceDialogState<RomGbaSlotConfigUiModel.Type>()
+    val videoRendererDialogState = rememberSingleChoiceDialogState<VideoRenderer?>()
+    val threadedRenderingDialogState = rememberSingleChoiceDialogState<Boolean?>()
+    val internalResolutionDialogState = rememberSingleChoiceDialogState<Int?>()
+    val videoFilteringDialogState = rememberSingleChoiceDialogState<VideoFiltering?>()
+    val retroArchPresetPathDialogState = rememberTextInputDialogState()
+    val retroArchParametersDialogState = rememberTextInputDialogState()
 
     val customInputSetupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         onCustomInputConfigEdited()
@@ -118,6 +127,38 @@ private fun Content(
     val micOptions = stringArrayResource(id = R.array.game_runtime_mic_source_options)
     val inputModeOptions = stringArrayResource(id = R.array.rom_input_mode_options)
     val gbaSlotOptions = stringArrayResource(id = R.array.gba_slot_options)
+    val rendererOptions = stringArrayResource(id = R.array.video_renderer_options)
+    val internalResolutionOptions = stringArrayResource(id = R.array.video_internal_resolution_options)
+    val videoFilteringOptions = stringArrayResource(id = R.array.video_filtering_options)
+    val useGlobal = stringResource(R.string.use_global_preference)
+    val effectiveRenderer = romConfig.videoRenderer ?: romConfig.globalVideoRenderer
+    val effectiveFiltering = romConfig.videoFiltering ?: romConfig.globalVideoFiltering
+    fun useGlobalWithValue(value: String): String {
+        return context.getString(R.string.use_global_preference_with_value, value)
+    }
+    val globalConsoleLabel = consoleOptions[romConfig.globalRuntimeConsoleType.ordinal + 1]
+    val globalMicLabel = micOptions[romConfig.globalRuntimeMicSource.ordinal + 1]
+    val globalInputModeLabel = context.getString(R.string.global_controller_mapping)
+    val globalLayoutLabel = romConfig.globalLayoutName ?: context.getString(R.string.not_set)
+    val globalRendererLabel = rendererOptions[romConfig.globalVideoRenderer.ordinal]
+    val globalThreadedRenderingLabel = if (romConfig.globalThreadedRendering) {
+        context.getString(R.string.on)
+    } else {
+        context.getString(R.string.off)
+    }
+    val globalInternalResolutionLabel = internalResolutionOptions[
+        (romConfig.globalInternalResolutionScaling - 1).coerceIn(internalResolutionOptions.indices)
+    ]
+    val globalVideoFilteringLabel = videoFilteringOptions[romConfig.globalVideoFiltering.ordinal]
+    val globalRetroArchPresetPathLabel = romConfig.globalRetroArchShaderPresetPath ?: context.getString(R.string.not_set)
+    val globalRetroArchParametersLabel = romConfig.globalRetroArchShaderParameters ?: context.getString(R.string.not_set)
+    val rendererItems = listOf(null, VideoRenderer.SOFTWARE, VideoRenderer.OPENGL, VideoRenderer.VULKAN)
+    val filteringItems = listOf(null) + VideoFiltering.entries.filter { filtering ->
+        when (effectiveRenderer) {
+            VideoRenderer.VULKAN -> filtering.isSupportedByVulkan()
+            else -> filtering.isSupportedByOpenGlSurface()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -143,14 +184,24 @@ private fun Content(
         ConfigSection(title = stringResource(R.string.console_type)) {
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_console),
-                value = consoleOptions[romConfig.runtimeConsoleType.ordinal],
+                value = if (romConfig.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
+                    useGlobalWithValue(globalConsoleLabel)
+                } else {
+                    consoleOptions[romConfig.runtimeConsoleType.ordinal]
+                },
                 enabled = !rom.isDsiWareTitle,
                 showDivider = true,
                 onClick = {
                     consoleDialogState.show(
                         title = context.getString(R.string.label_rom_config_console),
                         items = RuntimeConsoleType.entries.toList(),
-                        labelOf = { consoleOptions[it.ordinal] },
+                        labelOf = {
+                            if (it == RuntimeConsoleType.DEFAULT) {
+                                useGlobalWithValue(globalConsoleLabel)
+                            } else {
+                                consoleOptions[it.ordinal]
+                            }
+                        },
                         selected = romConfig.runtimeConsoleType,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.RuntimeConsoleUpdate(it)) },
                     )
@@ -158,13 +209,23 @@ private fun Content(
             )
             ConfigRow(
                 title = stringResource(R.string.microphone_source),
-                value = micOptions[romConfig.runtimeMicSource.ordinal],
+                value = if (romConfig.runtimeMicSource == RuntimeMicSource.DEFAULT) {
+                    useGlobalWithValue(globalMicLabel)
+                } else {
+                    micOptions[romConfig.runtimeMicSource.ordinal]
+                },
                 showDivider = true,
                 onClick = {
                     micDialogState.show(
                         title = context.getString(R.string.microphone_source),
                         items = RuntimeMicSource.entries.toList(),
-                        labelOf = { micOptions[it.ordinal] },
+                        labelOf = {
+                            if (it == RuntimeMicSource.DEFAULT) {
+                                useGlobalWithValue(globalMicLabel)
+                            } else {
+                                micOptions[it.ordinal]
+                            }
+                        },
                         selected = romConfig.runtimeMicSource,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.RuntimeMicSourceUpdate(it)) },
                     )
@@ -177,16 +238,136 @@ private fun Content(
             )
         }
 
+        ConfigSection(title = stringResource(R.string.label_rom_config_video)) {
+            ConfigRow(
+                title = stringResource(R.string.renderer),
+                value = romConfig.videoRenderer?.let { rendererOptions[it.ordinal] } ?: useGlobalWithValue(globalRendererLabel),
+                showDivider = true,
+                onClick = {
+                    videoRendererDialogState.show(
+                        title = context.getString(R.string.renderer),
+                        items = rendererItems,
+                        labelOf = { renderer -> renderer?.let { rendererOptions[it.ordinal] } ?: useGlobalWithValue(globalRendererLabel) },
+                        selected = romConfig.videoRenderer,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoRendererUpdate(it)) },
+                    )
+                },
+            )
+            AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.SOFTWARE) {
+                ConfigRow(
+                    title = stringResource(R.string.threaded_rendering),
+                    value = when (romConfig.threadedRendering) {
+                        true -> stringResource(R.string.on)
+                        false -> stringResource(R.string.off)
+                        null -> useGlobalWithValue(globalThreadedRenderingLabel)
+                    },
+                    showDivider = true,
+                    onClick = {
+                        threadedRenderingDialogState.show(
+                            title = context.getString(R.string.threaded_rendering),
+                            items = listOf(null, true, false),
+                            labelOf = {
+                                when (it) {
+                                    true -> context.getString(R.string.on)
+                                    false -> context.getString(R.string.off)
+                                    null -> useGlobalWithValue(globalThreadedRenderingLabel)
+                                }
+                            },
+                            selected = romConfig.threadedRendering,
+                            onSelect = { onConfigUpdate(RomConfigUpdateEvent.ThreadedRenderingUpdate(it)) },
+                        )
+                    },
+                )
+            }
+            AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.OPENGL || effectiveRenderer == VideoRenderer.VULKAN) {
+                ConfigRow(
+                    title = stringResource(R.string.internal_resolution),
+                    value = romConfig.internalResolutionScaling?.let { internalResolutionOptions[(it - 1).coerceIn(internalResolutionOptions.indices)] }
+                        ?: useGlobalWithValue(globalInternalResolutionLabel),
+                    showDivider = true,
+                    onClick = {
+                        internalResolutionDialogState.show(
+                            title = context.getString(R.string.internal_resolution),
+                            items = listOf(null) + (1..internalResolutionOptions.size).toList(),
+                            labelOf = { scaling ->
+                                scaling?.let { internalResolutionOptions[(it - 1).coerceIn(internalResolutionOptions.indices)] }
+                                    ?: useGlobalWithValue(globalInternalResolutionLabel)
+                            },
+                            selected = romConfig.internalResolutionScaling,
+                            onSelect = { onConfigUpdate(RomConfigUpdateEvent.InternalResolutionScalingUpdate(it)) },
+                        )
+                    },
+                )
+            }
+            ConfigRow(
+                title = stringResource(R.string.filter),
+                value = romConfig.videoFiltering?.let { videoFilteringOptions[it.ordinal] } ?: useGlobalWithValue(globalVideoFilteringLabel),
+                showDivider = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH,
+                onClick = {
+                    videoFilteringDialogState.show(
+                        title = context.getString(R.string.filter),
+                        items = filteringItems,
+                        labelOf = { filtering -> filtering?.let { videoFilteringOptions[it.ordinal] } ?: useGlobalWithValue(globalVideoFilteringLabel) },
+                        selected = romConfig.videoFiltering,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoFilteringUpdate(it)) },
+                    )
+                },
+            )
+            AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH) {
+                Column {
+                    ConfigRow(
+                        title = stringResource(R.string.video_retroarch_shader_preset_title),
+                        value = romConfig.retroArchShaderPresetPath ?: useGlobalWithValue(globalRetroArchPresetPathLabel),
+                        showDivider = true,
+                        onClick = {
+                            if (romConfig.hasValidRetroArchShaderRoot) {
+                                retroArchPresetPathDialogState.show(
+                                    initialText = romConfig.retroArchShaderPresetPath.orEmpty(),
+                                    onConfirm = { onConfigUpdate(RomConfigUpdateEvent.RetroArchShaderPresetPathUpdate(it.ifBlank { null })) },
+                                )
+                            } else {
+                                Toast.makeText(context, R.string.retroarch_shader_root_not_valid, Toast.LENGTH_LONG).show()
+                            }
+                        },
+                    )
+                    ConfigRow(
+                        title = stringResource(R.string.video_retroarch_shader_parameters_title),
+                        value = romConfig.retroArchShaderParameters ?: useGlobalWithValue(globalRetroArchParametersLabel),
+                        onClick = {
+                            if (romConfig.hasValidRetroArchShaderRoot) {
+                                retroArchParametersDialogState.show(
+                                    initialText = romConfig.retroArchShaderParameters.orEmpty(),
+                                    onConfirm = { onConfigUpdate(RomConfigUpdateEvent.RetroArchShaderParametersUpdate(it.ifBlank { null })) },
+                                )
+                            } else {
+                                Toast.makeText(context, R.string.retroarch_shader_root_not_valid, Toast.LENGTH_LONG).show()
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
         ConfigSection(title = stringResource(R.string.label_rom_config_input_mode)) {
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_input_mode),
-                value = inputModeOptions[romConfig.inputMode.ordinal],
+                value = if (romConfig.inputMode == RomInputMode.GLOBAL) {
+                    useGlobalWithValue(globalInputModeLabel)
+                } else {
+                    inputModeOptions[romConfig.inputMode.ordinal]
+                },
                 showDivider = romConfig.inputMode == RomInputMode.CUSTOM,
                 onClick = {
                     inputModeDialogState.show(
                         title = context.getString(R.string.label_rom_config_input_mode),
                         items = RomInputMode.entries.toList(),
-                        labelOf = { inputModeOptions[it.ordinal] },
+                        labelOf = {
+                            if (it == RomInputMode.GLOBAL) {
+                                useGlobalWithValue(globalInputModeLabel)
+                            } else {
+                                inputModeOptions[it.ordinal]
+                            }
+                        },
                         selected = romConfig.inputMode,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.InputModeUpdate(it)) },
                     )
@@ -206,7 +387,7 @@ private fun Content(
         ConfigSection(title = stringResource(R.string.controller_layout)) {
             ConfigRow(
                 title = stringResource(R.string.controller_layout),
-                value = romConfig.layoutName ?: stringResource(R.string.use_global_layout),
+                value = romConfig.layoutName ?: useGlobalWithValue(globalLayoutLabel),
                 onClick = {
                     val intent = Intent(context, LayoutSelectorActivity::class.java).apply {
                         putExtra(LayoutSelectorActivity.KEY_SELECTED_LAYOUT_ID, romConfig.layoutId?.toString())
@@ -262,6 +443,22 @@ private fun Content(
     SingleChoiceDialog(micDialogState)
     SingleChoiceDialog(inputModeDialogState)
     SingleChoiceDialog(gbaSlotDialogState)
+    SingleChoiceDialog(videoRendererDialogState)
+    SingleChoiceDialog(threadedRenderingDialogState)
+    SingleChoiceDialog(internalResolutionDialogState)
+    SingleChoiceDialog(videoFilteringDialogState)
+    TextInputDialog(
+        title = stringResource(R.string.video_retroarch_shader_preset_title),
+        dialogState = retroArchPresetPathDialogState,
+        textValidator = { true },
+        onDelete = { onConfigUpdate(RomConfigUpdateEvent.RetroArchShaderPresetPathUpdate(null)) },
+    )
+    TextInputDialog(
+        title = stringResource(R.string.video_retroarch_shader_parameters_title),
+        dialogState = retroArchParametersDialogState,
+        textValidator = { true },
+        onDelete = { onConfigUpdate(RomConfigUpdateEvent.RetroArchShaderParametersUpdate(null)) },
+    )
 }
 
 @MelonPreviewSet
