@@ -124,7 +124,6 @@ class SharedPreferencesSettingsRepository(
         val filtering: VideoFiltering,
         val threadedRenderingEnabled: Boolean,
         val resolutionScaling: Int,
-        val vulkanSimplePipelineEnabled: Boolean,
         val rendererDebugToolsEnabled: Boolean,
         val rendererDebugBgObjEnabled: Boolean,
         val rendererDebugLatchTraceEnabled: Boolean,
@@ -153,14 +152,12 @@ class SharedPreferencesSettingsRepository(
                 getVideoFiltering(),
                 isThreadedRenderingEnabled(),
                 getVideoInternalResolutionScaling(),
-                isVulkanSimplePipelineEnabled(),
-            ) { renderer, filtering, threadedRenderingEnabled, resolutionScaling, vulkanSimplePipelineEnabled ->
+            ) { renderer, filtering, threadedRenderingEnabled, resolutionScaling ->
                 CoreRenderConfigurationInputs(
                     renderer,
                     filtering,
                     threadedRenderingEnabled,
                     resolutionScaling,
-                    vulkanSimplePipelineEnabled,
                     rendererDebugToolsEnabled = false,
                     rendererDebugBgObjEnabled = false,
                     rendererDebugLatchTraceEnabled = false,
@@ -235,7 +232,6 @@ class SharedPreferencesSettingsRepository(
                 effectiveFiltering,
                 effectiveThreadedRendering,
                 renderInputs.core.resolutionScaling,
-                renderInputs.core.vulkanSimplePipelineEnabled,
                 renderInputs.core.rendererDebugToolsEnabled,
                 renderInputs.core.rendererDebugBgObjEnabled,
                 renderInputs.core.rendererDebugLatchTraceEnabled,
@@ -470,12 +466,6 @@ class SharedPreferencesSettingsRepository(
     override fun getVideoRenderer(): Flow<VideoRenderer> {
         return getOrCreatePreferenceSharedFlow("video_renderer") {
             getCurrentVideoRenderer()
-        }
-    }
-
-    override fun isVulkanSimplePipelineEnabled(): Flow<Boolean> {
-        return getOrCreatePreferenceSharedFlow("video_vulkan_simple_pipeline_enabled") {
-            preferences.getBoolean("video_vulkan_simple_pipeline_enabled", true)
         }
     }
 

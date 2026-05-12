@@ -683,9 +683,8 @@ int getEffectiveVulkanRenderScale(const VulkanRenderSettings& renderSettings)
 
 VulkanRenderer3D::BackendMode getConfiguredVulkanBackendMode(const VulkanRenderSettings& renderSettings)
 {
-    return renderSettings.useSimplePipeline
-        ? VulkanRenderer3D::BackendMode::GraphicsHardware
-        : VulkanRenderer3D::BackendMode::ComputeLegacy;
+    (void)renderSettings;
+    return VulkanRenderer3D::BackendMode::GraphicsHardware;
 }
 
 FrameQueuePolicy makeLegacyFrameQueuePolicy()
