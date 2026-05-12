@@ -4,9 +4,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.magnum.melonds.common.Permission
@@ -35,6 +35,16 @@ class RomDetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
+    private data class GlobalVideoConfig(
+        val renderer: me.magnum.melonds.domain.model.VideoRenderer,
+        val threadedRendering: Boolean,
+        val internalResolutionScaling: Int,
+        val filtering: me.magnum.melonds.domain.model.VideoFiltering,
+        val retroArchShaderPresetPath: String?,
+        val retroArchShaderParameters: String?,
+        val hasValidRetroArchShaderRoot: Boolean,
+    )
+
     private val _rom = MutableStateFlow(savedStateHandle.get<RomParcelable>(RomDetailsActivity.KEY_ROM)!!.rom)
     val rom = _rom.asStateFlow()
 
@@ -43,8 +53,53 @@ class RomDetailsViewModel @Inject constructor(
     val romConfigUiState by lazy {
         val uiStateFlow = MutableStateFlow<RomConfigUiState>(RomConfigUiState.Loading)
         viewModelScope.launch {
-            _romConfig.map {
-                romDetailsUiMapper.mapRomConfigToUi(it)
+            val globalCoreVideoConfig = combine(
+                settingsRepository.getVideoRenderer(),
+                settingsRepository.isThreadedRenderingEnabled(),
+                settingsRepository.getVideoInternalResolutionScaling(),
+                settingsRepository.getVideoFiltering(),
+            ) { renderer, threadedRendering, internalResolutionScaling, filtering ->
+                GlobalVideoConfig(
+                    renderer = renderer,
+                    threadedRendering = threadedRendering,
+                    internalResolutionScaling = internalResolutionScaling,
+                    filtering = filtering,
+                    retroArchShaderPresetPath = null,
+                    retroArchShaderParameters = null,
+                    hasValidRetroArchShaderRoot = false,
+                )
+            }
+            val globalShaderConfig = combine(
+                settingsRepository.observeRetroArchShaderPresetPath(),
+                settingsRepository.observeRetroArchShaderParametersText(),
+                settingsRepository.observeRetroArchShaderRootValid(),
+            ) { presetPath, parameters, hasValidRoot ->
+                Triple(presetPath, parameters, hasValidRoot)
+            }
+            val globalRuntimeConfig = combine(
+                settingsRepository.observeDefaultConsoleType(),
+                settingsRepository.observeMicSource(),
+            ) { consoleType, micSource ->
+                consoleType to micSource
+            }
+            combine(
+                _romConfig,
+                globalRuntimeConfig,
+                globalCoreVideoConfig,
+                globalShaderConfig,
+            ) { romConfig, globalRuntimeConfig, globalVideoConfig, shaderConfig ->
+                romDetailsUiMapper.mapRomConfigToUi(
+                    romConfig = romConfig,
+                    globalRuntimeConsoleType = globalRuntimeConfig.first,
+                    globalRuntimeMicSource = globalRuntimeConfig.second,
+                    globalVideoRenderer = globalVideoConfig.renderer,
+                    globalThreadedRendering = globalVideoConfig.threadedRendering,
+                    globalInternalResolutionScaling = globalVideoConfig.internalResolutionScaling,
+                    globalVideoFiltering = globalVideoConfig.filtering,
+                    globalRetroArchShaderPresetPath = shaderConfig.first,
+                    globalRetroArchShaderParameters = shaderConfig.second,
+                    hasValidRetroArchShaderRoot = shaderConfig.third,
+                )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)
             }
@@ -89,6 +144,12 @@ class RomDetailsViewModel @Inject constructor(
                 }
             }
             is RomConfigUpdateEvent.CustomNameUpdate -> currentRomConfig.copy(customName = event.customName)
+            is RomConfigUpdateEvent.VideoRendererUpdate -> currentRomConfig.copy(videoRenderer = event.videoRenderer)
+            is RomConfigUpdateEvent.ThreadedRenderingUpdate -> currentRomConfig.copy(threadedRendering = event.threadedRendering)
+            is RomConfigUpdateEvent.InternalResolutionScalingUpdate -> currentRomConfig.copy(internalResolutionScaling = event.internalResolutionScaling)
+            is RomConfigUpdateEvent.VideoFilteringUpdate -> currentRomConfig.copy(videoFiltering = event.videoFiltering)
+            is RomConfigUpdateEvent.RetroArchShaderPresetPathUpdate -> currentRomConfig.copy(retroArchShaderPresetPath = event.presetPath)
+            is RomConfigUpdateEvent.RetroArchShaderParametersUpdate -> currentRomConfig.copy(retroArchShaderParameters = event.parameters)
         }
 
         newRomConfig?.let { newConfig ->

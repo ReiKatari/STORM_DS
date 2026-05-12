@@ -321,7 +321,7 @@
     <string name="volume_percentage">%1$d%%</string>
     <string name="audio_latency">Audio latency</string>
     <string name="microphone_source">Microphone source</string>
-    <string name="controller_layout">Controller layout</string>
+    <string name="controller_layout">Layouts</string>
     <string name="category_save_files">Save Files</string>
     <string name="category_save_files_summary">Save file &amp; save state locations</string>
     <string name="save_next_rom">Save next to ROM file</string>
@@ -414,7 +414,7 @@
     <string name="symbol_increase">+</string>
     <string name="symbol_decrease">-</string>
 
-    <string name="rom_settings">Rom settings</string> <!-- Accessibility string. Should not use acronyms -->
+    <string name="rom_settings">ROM settings</string>
     <string name="label_rom_config_console">Boot system</string>
     <string name="label_rom_config_custom_name">ROM display name</string>
     <string name="label_rom_config_hg_engine_fix">Use hg-engine fix</string>
@@ -471,6 +471,12 @@
     <string name="custom_layout_default_name">My Layout</string>
     <string name="use_global_layout">Use global layout</string>
     <string name="use_global_preference">Use global setting</string>
+    <string name="use_global_preference_with_value">Use global setting (%1$s)</string>
+    <string name="global_controller_mapping">Global mapping</string>
+    <string name="cannot_change_use_rom_settings">Cannot change, use ROM Settings</string>
+    <string name="label_rom_config_video">Video</string>
+    <string name="retroarch_shader_root_not_valid">No valid RetroArch shader root is configured.</string>
+    <string name="video_setting_cannot_change_ingame">Cannot change in-game</string>
     <string name="layout_deleted">Layout deleted</string>
     <string name="named_layout_deleted">Layout \"%1$s\" deleted</string>
 

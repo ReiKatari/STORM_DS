@@ -7,11 +7,13 @@ import me.magnum.melonds.domain.model.*
 import me.magnum.melonds.domain.model.camera.DSiCameraSourceType
 import me.magnum.melonds.domain.model.input.SoftInputBehaviour
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.ui.Theme
 import java.util.UUID
 
 interface SettingsRepository {
     suspend fun getEmulatorConfiguration(): EmulatorConfiguration
+    suspend fun getEmulatorConfiguration(romConfig: RomConfig): EmulatorConfiguration
 
     fun getTheme(): Theme
     fun getFastForwardSpeedMultiplier(): Float
@@ -32,6 +34,7 @@ interface SettingsRepository {
 
 
     fun getDefaultConsoleType(): ConsoleType
+    fun observeDefaultConsoleType(): Flow<ConsoleType>
     fun getFirmwareConfiguration(): FirmwareConfiguration
     fun useCustomBios(): Boolean
     fun getDsBiosDirectory(): Uri?
@@ -49,6 +52,9 @@ interface SettingsRepository {
     fun isRendererDebugBgObjEnabled(): Flow<Boolean>
     fun isRendererDebugLatchTraceEnabled(): Flow<Boolean>
     fun getFpsCounterPosition(): FpsCounterPosition
+    fun observeRetroArchShaderRootValid(): Flow<Boolean>
+    fun observeRetroArchShaderPresetPath(): Flow<String?>
+    fun observeRetroArchShaderParametersText(): Flow<String?>
 
     fun isExternalDisplayKeepAspectRationEnabled(): Boolean
     fun observeExternalDisplayKeepAspectRationEnabled(): Flow<Boolean>
@@ -75,6 +81,7 @@ interface SettingsRepository {
     fun isSoundEnabled(): Boolean
     fun getAudioLatency(): AudioLatency
     fun getMicSource(): MicSource
+    fun observeMicSource(): Flow<MicSource>
 
     fun getRomSortingMode(): SortingMode
     fun getRomSortingOrder(): SortingOrder
@@ -131,4 +138,5 @@ interface SettingsRepository {
     fun setDualScreenExternalVerticalAlignmentOverride(alignment: ScreenAlignment?)
 
     fun observeRenderConfiguration(): Flow<RendererConfiguration>
+    fun observeRenderConfiguration(romConfig: RomConfig): Flow<RendererConfiguration>
 }

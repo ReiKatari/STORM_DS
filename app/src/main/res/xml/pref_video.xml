@@ -3,7 +3,7 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <ListPreference
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
             android:key="video_renderer"
             android:title="@string/renderer"
             android:summary="%s"
@@ -12,7 +12,7 @@
             android:entryValues="@array/video_renderer_values"
             android:defaultValue="software"/>
 
-    <ListPreference
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
             android:key="video_internal_resolution"
             android:title="@string/internal_resolution"
             android:summary="%s"
@@ -28,7 +28,7 @@
             app:iconSpaceReserved="false"
             android:defaultValue="true" />
 
-    <ListPreference
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
             android:key="video_filtering"
             android:title="@string/filter"
             android:summary="%s"

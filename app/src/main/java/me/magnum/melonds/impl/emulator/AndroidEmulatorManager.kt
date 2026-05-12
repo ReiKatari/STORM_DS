@@ -315,7 +315,7 @@ class AndroidEmulatorManager(
     }
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
-        val baseConfiguration = settingsRepository.getEmulatorConfiguration()
+        val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
         val mustUseCustomBios = baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
 
         return baseConfiguration.copy(

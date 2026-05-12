@@ -5,6 +5,7 @@ import me.magnum.melonds.ui.emulator.PauseMenuOption
 
 enum class RomPauseMenuOption(override val textResource: Int) : PauseMenuOption {
     SETTINGS(R.string.settings),
+    ROM_SETTINGS(R.string.rom_settings),
     SAVE_STATE(R.string.save_state),
     LOAD_STATE(R.string.load_state),
     REWIND(R.string.rewind),

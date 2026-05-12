@@ -29,6 +29,8 @@ import me.magnum.melonds.domain.model.defaultExternalAlignment
 import me.magnum.melonds.domain.model.defaultInternalAlignment
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.SettingsActivity
+import me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
 import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
 import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
@@ -72,12 +74,20 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_video, rootKey)
 
+        val launchedInGame = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false)
+        val rendererPreference = findPreference<InGameLockedListPreference>("video_renderer")!!
+        val internalResolutionPreference = findPreference<InGameLockedListPreference>("video_internal_resolution")!!
+        listOf(rendererPreference, internalResolutionPreference).forEach {
+            it.isInGameLocked = launchedInGame
+            it.inGameLockedMessageRes = R.string.video_setting_cannot_change_ingame
+        }
+
         threadedRendererPreferences.apply {
             add(findPreference("enable_threaded_rendering")!!)
         }
 
         highResRendererPreferences.apply {
-            add(findPreference("video_internal_resolution")!!)
+            add(internalResolutionPreference)
             add(findPreference("video_hacks_category")!!)
             add(findPreference("video_debug_3d_clear_magenta")!!)
         }
@@ -97,8 +107,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             add(findPreference("video_conservative_coverage_depth_bias")!!)
         }
 
-        val rendererPreference = findPreference<ListPreference>("video_renderer")!!
-        val videoFilteringPreference = findPreference<ListPreference>("video_filtering")!!
+        val videoFilteringPreference = findPreference<InGameLockedListPreference>("video_filtering")!!
+        videoFilteringPreference.isInGameLocked = launchedInGame &&
+            requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_VIDEO_FILTERING, false)
+        videoFilteringPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
         val dsiCameraSourcePreference = findPreference<ListPreference>("dsi_camera_source")!!
         val dsiCameraImagePreference = findPreference<StoragePickerPreference>("dsi_camera_static_image")!!
         val customShaderPreference = findPreference<StoragePickerPreference>("video_custom_shader")!!

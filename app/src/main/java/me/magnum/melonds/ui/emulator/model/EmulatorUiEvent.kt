@@ -2,11 +2,14 @@ package me.magnum.melonds.ui.emulator.model
 
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.SaveStateSlot
+import me.magnum.melonds.domain.model.VideoFiltering
+import me.magnum.melonds.domain.model.VideoRenderer
+import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
 
 sealed class EmulatorUiEvent {
     sealed class OpenScreen : EmulatorUiEvent() {
-        data object SettingsScreen : OpenScreen()
+        data class SettingsScreen(val romSettingsOverrides: InGameRomSettingsOverrides = InGameRomSettingsOverrides()) : OpenScreen()
         data class CheatsScreen(val romInfo: RomInfo) : OpenScreen()
     }
     data class ShowPauseMenu(val pauseMenu: PauseMenu) : EmulatorUiEvent()
@@ -23,6 +26,11 @@ sealed class EmulatorUiEvent {
     data object ShowDualScreenPresets : EmulatorUiEvent()
     data object ShowRendererDebugMenu : EmulatorUiEvent()
     data object ShowRenderer2DDebugControls : EmulatorUiEvent()
+    data class ShowRomSettings(
+        val rom: Rom,
+        val renderer: VideoRenderer,
+        val menuState: InGameRomSettingsMenuState,
+    ) : EmulatorUiEvent()
     data class ShowOfflineAchievementsSyncChoice(val pendingUnlockCount: Int) : EmulatorUiEvent()
     data class ShowHardcorePendingExitWarning(
         val pendingHardcoreCount: Int,

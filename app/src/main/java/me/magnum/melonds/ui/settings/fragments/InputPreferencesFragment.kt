@@ -12,6 +12,8 @@ import me.magnum.melonds.common.vibration.TouchVibrator
 import me.magnum.melonds.ui.inputsetup.InputSetupActivity
 import me.magnum.melonds.ui.layouts.LayoutListActivity
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.SettingsActivity
+import me.magnum.melonds.ui.settings.preferences.InGameLockedPreference
 import me.magnum.melonds.ui.settings.preferences.SoftwareInputBehaviourPreference
 import javax.inject.Inject
 
@@ -29,8 +31,12 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         softInputBehaviourPreference = findPreference("soft_input_behaviour")!!
         val touchVibratePreference = findPreference<SwitchPreference>("input_touch_haptic_feedback_enabled")!!
         val vibrationStrengthPreference = findPreference<SeekBarPreference>("input_touch_haptic_feedback_strength")!!
-        val keyMappingPreference = findPreference<Preference>("input_key_mapping")!!
-        val layoutsPreference = findPreference<Preference>("input_layouts")!!
+        val keyMappingPreference = findPreference<InGameLockedPreference>("input_key_mapping")!!
+        val layoutsPreference = findPreference<InGameLockedPreference>("input_layouts")!!
+        keyMappingPreference.isInGameLocked = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_INPUT_MAPPING, false)
+        keyMappingPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
+        layoutsPreference.isInGameLocked = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_INPUT_LAYOUT, false)
+        layoutsPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
 
         if (!vibrator.supportsVibration()) {
             touchVibratePreference.isVisible = false

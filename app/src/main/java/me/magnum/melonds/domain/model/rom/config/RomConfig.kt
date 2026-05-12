@@ -1,6 +1,8 @@
 package me.magnum.melonds.domain.model.rom.config
 
 import me.magnum.melonds.domain.model.ControllerConfiguration
+import me.magnum.melonds.domain.model.VideoFiltering
+import me.magnum.melonds.domain.model.VideoRenderer
 import java.util.*
 
 data class RomConfig(
@@ -12,6 +14,12 @@ data class RomConfig(
     val useHgEngineFix: Boolean = false,
     val inputMode: RomInputMode = RomInputMode.GLOBAL,
     val customControllerConfiguration: ControllerConfiguration? = null,
+    val videoRenderer: VideoRenderer? = null,
+    val threadedRendering: Boolean? = null,
+    val internalResolutionScaling: Int? = null,
+    val videoFiltering: VideoFiltering? = null,
+    val retroArchShaderPresetPath: String? = null,
+    val retroArchShaderParameters: String? = null,
 ) {
 
     fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
@@ -35,6 +43,12 @@ data class RomConfig(
                 useHgEngineFix = false,
                 inputMode = RomInputMode.GLOBAL,
                 customControllerConfiguration = null,
+                videoRenderer = null,
+                threadedRendering = null,
+                internalResolutionScaling = null,
+                videoFiltering = null,
+                retroArchShaderPresetPath = null,
+                retroArchShaderParameters = null,
             )
         }
     }
