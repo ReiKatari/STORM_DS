@@ -42,7 +42,6 @@ interface SettingsRepository {
     fun getCurrentVideoRenderer(): VideoRenderer
     fun setCurrentVideoRenderer(renderer: VideoRenderer)
     fun getVideoRenderer(): Flow<VideoRenderer>
-    fun isVulkanSimplePipelineEnabled(): Flow<Boolean>
     fun getVideoInternalResolutionScaling(): Flow<Int>
     fun getVideoFiltering(): Flow<VideoFiltering>
     fun isThreadedRenderingEnabled(): Flow<Boolean>

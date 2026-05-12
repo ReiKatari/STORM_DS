@@ -61,7 +61,6 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
             context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> handleSetBgObjLog(entryPoint, intent)
-            context.debugCommandAction(ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX) -> handleSetVulkanSimplePipeline(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX) -> handleSetRenderer2DDebugControls(intent)
             context.debugCommandAction(ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX) -> handleSetRenderer3DDebugControls(intent)
             context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX) -> handleLaunchRom(context, intent)
@@ -134,19 +133,6 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         Log.w(
             TAG,
             "action=set_bgobj_log mode=release enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}",
-        )
-    }
-
-    private fun handleSetVulkanSimplePipeline(entryPoint: DebugCommandEntryPoint, intent: Intent) {
-        val enabled = intent.firstBooleanExtra(EXTRA_ENABLED, EXTRA_VALUE)
-            ?: throw IllegalArgumentException("Missing enabled extra")
-        entryPoint.sharedPreferences().edit(commit = true) {
-            putBoolean(KEY_VIDEO_VULKAN_SIMPLE_PIPELINE_ENABLED, enabled)
-        }
-        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
-        Log.w(
-            TAG,
-            "action=set_vulkan_simple_pipeline mode=release enabled=${if (enabled) 1 else 0} refreshed=${if (refreshed) 1 else 0}",
         )
     }
 
@@ -836,7 +822,6 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val KEY_RENDERER_DEBUG_TOOLS_ENABLED = "video_renderer_debug_tools_enabled"
         private const val KEY_VIDEO_RENDERER = "video_renderer"
         private const val KEY_VIDEO_INTERNAL_RESOLUTION = "video_internal_resolution"
-        private const val KEY_VIDEO_VULKAN_SIMPLE_PIPELINE_ENABLED = "video_vulkan_simple_pipeline_enabled"
         private const val KEY_RENDERER_DEBUG_BGOBJ_ENABLED = "video_renderer_debug_bgobj_enabled"
         private const val RELEASE_STATE_COMMANDS_PROPERTY = "debug.melonds.release_state_commands"
         private const val GETPROP_BINARY = "/system/bin/getprop"
@@ -929,7 +914,6 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
         private const val ACTION_SET_BGOBJ_LOG_SUFFIX = "SET_BGOBJ_LOG"
-        private const val ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX = "SET_VULKAN_SIMPLE_PIPELINE"
         private const val ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX = "SET_RENDERER_2D_DEBUG_CONTROLS"
         private const val ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX = "SET_RENDERER_3D_DEBUG_CONTROLS"
         private const val ACTION_LAUNCH_ROM_SUFFIX = "LAUNCH_ROM"
@@ -954,7 +938,6 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             || action == context.debugCommandAction(ACTION_SET_IR_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX)
-            || action == context.debugCommandAction(ACTION_SET_VULKAN_SIMPLE_PIPELINE_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX)
             || action == context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX)

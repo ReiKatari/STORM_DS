@@ -213,7 +213,6 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
     jclass renderSettingsClass = env->GetObjectClass(renderSettings);
     jmethodID getResolutionScalingMethod = env->GetMethodID(renderSettingsClass, "getResolutionScaling", "()I");
     jboolean threadedRendering = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "threadedRendering", "Z"));
-    jboolean vulkanSimplePipelineEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "vulkanSimplePipelineEnabled", "Z"));
     jboolean rendererDebugToolsEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugToolsEnabled", "Z"));
     jboolean rendererDebugBgObjEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugBgObjEnabled", "Z"));
     jboolean rendererDebugLatchTraceEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugLatchTraceEnabled", "Z"));
@@ -256,7 +255,7 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
                 .threadedRendering = (bool) threadedRendering,
                 .betterPolygons = true,
                 .scale = internalResolutionScaling,
-                .useSimplePipeline = vulkanSimplePipelineEnabled != 0,
+                .useSimplePipeline = true,
                 .rendererDebugToolsEnabled = rendererDebugToolsEnabled != 0,
                 .rendererDebugBgObjEnabled = rendererDebugBgObjEnabled != 0,
                 .rendererDebugLatchTraceEnabled = rendererDebugLatchTraceEnabled != 0,

@@ -82,10 +82,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             add(findPreference("video_debug_3d_clear_magenta")!!)
         }
 
-        vulkanRendererPreferences.apply {
-            add(findPreference("video_vulkan_simple_pipeline_enabled")!!)
-        }
-
         rendererDebugPreferences.apply {
             add(findPreference("video_hacks_category")!!)
             add(findPreference("video_renderer_debug_tools_enabled")!!)

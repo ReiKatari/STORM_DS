@@ -271,8 +271,6 @@
     <string name="threaded_rendering">Threaded rendering</string>
     <string name="fps_counter_position">FPS counter position</string>
     <string name="threaded_rendering_summary">Improves performance on 3D games when enabled but may cause graphical glitches.</string>
-    <string name="video_vulkan_simple_pipeline_enabled">Use simple pipeline</string>
-    <string name="video_vulkan_simple_pipeline_enabled_summary">Uses the Vulkan simple graphics pipeline. Disable only to force the legacy compute path for A/B or recovery.</string>
     <string name="video_hacks">Video Hacks</string>
     <string name="video_renderer_debug_tools_enabled">Renderer debug tools</string>
     <string name="video_renderer_debug_tools_enabled_summary">Enables renderer snapshots, parity captures and performance/debug logs in release builds.</string>
