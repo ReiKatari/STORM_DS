@@ -108,7 +108,6 @@ class RomListFragment : Fragment() {
                         onDismiss = { contextRomUri = null },
                         onToggleFavorite = { rom -> romListViewModel.toggleFavorite(rom) },
                         onShowDetails = { rom -> openRomDetails(rom) },
-                        onShare = { rom -> shareRom(rom) },
                     )
                 }
             }
@@ -120,15 +119,6 @@ class RomListFragment : Fragment() {
             putExtra(RomDetailsActivity.KEY_ROM, RomParcelable(rom))
         }
         startActivity(intent)
-    }
-
-    private fun shareRom(rom: Rom) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/octet-stream"
-            putExtra(Intent.EXTRA_STREAM, rom.uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(intent, rom.config.customName ?: rom.name))
     }
 
     fun setRomSelectedListener(listener: (Rom) -> Unit) {

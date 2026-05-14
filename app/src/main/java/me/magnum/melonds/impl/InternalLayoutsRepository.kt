@@ -26,7 +26,11 @@ import java.io.OutputStreamWriter
 import java.lang.reflect.Type
 import java.util.UUID
 
-class InternalLayoutsRepository(private val context: Context, private val gson: Gson) : LayoutsRepository {
+class InternalLayoutsRepository(
+    private val context: Context,
+    private val gson: Gson,
+    private val settingsBackupManager: SettingsBackupManager,
+) : LayoutsRepository {
     companion object {
         private const val DATA_FILE = "layouts.json"
         private val layoutListType: Type = object : TypeToken<List<LayoutConfigurationDto>>(){}.type
@@ -161,6 +165,7 @@ class InternalLayoutsRepository(private val context: Context, private val gson: 
             OutputStreamWriter(dataFile.outputStream()).use {
                 it.write(layoutsJson)
             }
+            settingsBackupManager.requestMirrorWrite()
         } catch (e: Exception) {
             e.printStackTrace()
         }

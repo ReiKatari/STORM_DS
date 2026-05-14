@@ -52,6 +52,10 @@ class RomDetailsViewModel @Inject constructor(
 
     private val _romConfig = MutableStateFlow(_rom.value.config)
 
+    init {
+        refreshRom()
+    }
+
     val romConfigUiState by lazy {
         val uiStateFlow = MutableStateFlow<RomConfigUiState>(RomConfigUiState.Loading)
         viewModelScope.launch {

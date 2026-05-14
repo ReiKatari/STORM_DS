@@ -39,6 +39,14 @@
         android:defaultValue="false" />
 
     <SwitchPreference
+        android:key="ra_offline_softcore_enabled"
+        android:title="@string/offline_ra_softcore_enabled"
+        android:summary="@string/offline_ra_softcore_enabled_summary"
+        app:iconSpaceReserved="false"
+        app:dependency="ra_login"
+        android:defaultValue="true" />
+
+    <SwitchPreference
         android:key="ra_active_challenge_indicators"
         android:title="@string/show_active_challenge_indicators"
         android:summary="@string/show_active_challenge_indicators_summary"

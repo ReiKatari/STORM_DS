@@ -74,6 +74,7 @@ class SharedPreferencesSettingsRepository(
     private val json: Json,
     private val uriHandler: UriHandler,
     preferencesCoroutineScope: CoroutineScope,
+    private val settingsBackupManager: SettingsBackupManager,
 ) : SettingsRepository, OnSharedPreferenceChangeListener {
 
     companion object {
@@ -1145,6 +1146,10 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("ra_hardcore_enabled", false)
     }
 
+    override fun isRetroAchievementsOfflineSoftcoreEnabled(): Boolean {
+        return preferences.getBoolean("ra_offline_softcore_enabled", true)
+    }
+
     override fun areRetroAchievementsUnofficialAchievementsEnabled(): Boolean {
         return preferences.getBoolean("ra_unofficial_enabled", true)
     }
@@ -1226,6 +1231,7 @@ class SharedPreferencesSettingsRepository(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to save controller configuration", e)
         }
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override fun setRomSortingMode(sortingMode: SortingMode) {

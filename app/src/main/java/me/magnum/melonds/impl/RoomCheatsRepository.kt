@@ -27,7 +27,11 @@ import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.repositories.CheatsRepository
 import me.magnum.melonds.ui.cheats.model.CheatSubmissionForm
 
-class RoomCheatsRepository(private val context: Context, private val database: MelonDatabase) : CheatsRepository {
+class RoomCheatsRepository(
+    private val context: Context,
+    private val database: MelonDatabase,
+    private val settingsBackupManager: SettingsBackupManager,
+) : CheatsRepository {
     companion object {
         private const val IMPORT_WORKER_NAME = "cheat_import_worker"
     }
@@ -113,6 +117,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         }
 
         database.cheatDao().updateCheatsStatus(cheatEntities)
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun addCheatFolder(folderName: String, game: Game) {
@@ -131,6 +136,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
 
         val cheatFolderEntity = CheatFolderEntity(null, gameId, folderName)
         database.cheatFolderDao().insertCheatFolder(cheatFolderEntity)
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun deleteCheatDatabaseIfExists(databaseName: String) {
@@ -142,6 +148,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         database.cheatDatabaseDao().deleteCheatDatabase(databaseName)
         database.cheatFolderDao().deleteEmptyFolders()
         database.gameDao().deleteEmptyGames()
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun addCheatDatabase(databaseName: String): CheatDatabase {
@@ -151,6 +158,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         )
 
         val databaseId = database.cheatDatabaseDao().insertCheatDatabase(cheatDatabaseEntity)
+        settingsBackupManager.requestMirrorWrite()
         return CheatDatabase(databaseId, databaseName)
     }
 
@@ -191,6 +199,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         }
         database.cheatDao().insertCheats(cheatEntities)
 
+        settingsBackupManager.requestMirrorWrite()
         return Game(
             id = insertedGame.id,
             name = insertedGame.name,
@@ -212,6 +221,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         )
 
         database.cheatDao().insertCheat(cheatEntity)
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun addCustomCheat(folder: CheatFolder, cheatForm: CheatSubmissionForm) {
@@ -226,6 +236,7 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         )
 
         database.cheatDao().insertCheat(cheatEntity)
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun updateCheat(cheat: Cheat) {
@@ -241,11 +252,13 @@ class RoomCheatsRepository(private val context: Context, private val database: M
         )
 
         database.cheatDao().insertCheat(updatedCheatEntity)
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun deleteCheat(cheat: Cheat) {
         val cheatId = cheat.id ?: return
         database.cheatDao().deleteCheat(cheatId)
+        settingsBackupManager.requestMirrorWrite()
     }
 
     override fun importCheats(uri: Uri) {

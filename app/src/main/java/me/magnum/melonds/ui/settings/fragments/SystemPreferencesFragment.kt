@@ -26,6 +26,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
+    private var updatingMirrorPreference = false
 
     private val backupInternalLayoutLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -116,11 +117,24 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_system, rootKey)
         val jitPreference = findPreference<SwitchPreference>("enable_jit")!!
+        val mirrorPreference = findPreference<SwitchPreference>("save_internal_config_as_file")!!
 
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             jitPreference.isEnabled = false
             jitPreference.isChecked = false
             jitPreference.setSummary(R.string.jit_not_supported)
+        }
+
+        mirrorPreference.setOnPreferenceChangeListener { _, newValue ->
+            if (updatingMirrorPreference) {
+                return@setOnPreferenceChangeListener true
+            }
+            if (newValue != true) {
+                return@setOnPreferenceChangeListener true
+            }
+
+            enableSettingsMirror(mirrorPreference)
+            false
         }
 
         findPreference<Preference>("backup_internal_layout")?.setOnPreferenceClickListener {
@@ -139,5 +153,35 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             restoreExternalLayoutLauncher.launch(null)
             true
         }
+    }
+
+    private fun enableSettingsMirror(mirrorPreference: SwitchPreference) {
+        val mirrorDirectory = settingsBackupManager.getActiveMirrorDirectory()
+        if (mirrorDirectory == null || !settingsBackupManager.hasMirrorAt(mirrorDirectory)) {
+            setMirrorEnabled(mirrorPreference)
+            settingsBackupManager.requestMirrorWrite()
+            return
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.settings_mirror_detected_title)
+            .setMessage(R.string.settings_mirror_detected_message)
+            .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
+                setMirrorEnabled(mirrorPreference)
+                settingsBackupManager.restoreMirrorFrom(mirrorDirectory)
+                settingsBackupManager.requestMirrorWrite()
+            }
+            .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
+                setMirrorEnabled(mirrorPreference)
+                settingsBackupManager.overwriteMirrorAt(mirrorDirectory)
+                settingsBackupManager.requestMirrorWrite()
+            }
+            .show()
+    }
+
+    private fun setMirrorEnabled(mirrorPreference: SwitchPreference) {
+        updatingMirrorPreference = true
+        mirrorPreference.isChecked = true
+        updatingMirrorPreference = false
     }
 }
