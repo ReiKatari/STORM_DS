@@ -726,10 +726,10 @@ FrameQueuePolicy makeVulkanFastForwardFrameQueuePolicy(int renderScale)
 {
     FrameQueuePolicy policy{};
     const bool highResolutionFastForward = renderScale > 1;
-    policy.MaxBacklogDepth = highResolutionFastForward ? 4 : 2;
+    policy.MaxBacklogDepth = highResolutionFastForward ? 2 : 1;
     policy.AllowStealPending = true;
     policy.AllowPreviousFrameReuse = highResolutionFastForward;
-    policy.AllowDropForDeadline = true;
+    policy.AllowDropForDeadline = false;
     policy.PreferOldestFrame = false;
     policy.PreserveBacklogOnPresent = false;
     policy.TreatBacklogTrimAsFastForwardSkip = true;
@@ -739,6 +739,9 @@ FrameQueuePolicy makeVulkanFastForwardFrameQueuePolicy(int renderScale)
 FrameQueuePolicy constrainGraphicsHardwareFrameQueuePolicy(FrameQueuePolicy policy, bool graphicsHardwareActive)
 {
     if (!graphicsHardwareActive)
+        return policy;
+
+    if (isFastForwardActive())
         return policy;
 
     policy.AllowStealPending = false;
@@ -1932,6 +1935,8 @@ void MelonInstance::requestVulkanPresentationResync()
     frameQueue.requestPresentationResync();
     if (vulkanOutput)
         vulkanOutput->invalidateTemporalHistory();
+    if (vulkanSurfacePresenter)
+        vulkanSurfacePresenter->invalidateDescriptorCaches();
     auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
     renderer3D.requestPostFastForwardDrain();
     renderer3D.InvalidatePresentationState(true);

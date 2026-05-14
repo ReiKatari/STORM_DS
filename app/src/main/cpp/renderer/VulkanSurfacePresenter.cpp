@@ -1227,6 +1227,17 @@ VulkanPresenterPacingStats VulkanSurfacePresenter::takePacingStatsSnapshotAndRes
     return stats;
 }
 
+void VulkanSurfacePresenter::invalidateDescriptorCaches()
+{
+    for (auto& [surfaceId, surfaceState] : surfaces)
+    {
+        (void)surfaceId;
+        surfaceState.screenDescriptorCache = {};
+        surfaceState.backgroundDescriptorCache = {};
+        surfaceState.backgroundDescriptorDirty = true;
+    }
+}
+
 bool VulkanSurfacePresenter::createSurfaceStateResources(SurfaceState& surfaceState)
 {
     VkCommandPoolCreateInfo commandPoolInfo{};
@@ -2651,7 +2662,13 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
     capture3dBufferInfo.offset = 0;
     capture3dBufferInfo.range = inputs.capture3dBufferSize;
 
+    const bool screenInputShapeChanged =
+        screenCache.scale != inputs.scale
+        || screenCache.rendererWidth != inputs.rendererWidth
+        || screenCache.rendererHeight != inputs.rendererHeight;
+
     if (!screenCache.ready
+        || screenInputShapeChanged
         || screenCache.sampledImageView != frameImageView
         || screenCache.sampledImageLayout != screenImageInfo.imageLayout
         || screenCache.sampledSampler != screenImageInfo.sampler
@@ -2684,33 +2701,34 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
         };
 
         if (!screenCache.ready
+            || screenInputShapeChanged
             || screenCache.sampledImageView != frameImageView
             || screenCache.sampledImageLayout != screenImageInfo.imageLayout
             || screenCache.sampledSampler != screenImageInfo.sampler)
         {
             appendScreenImageWrite(0, &screenImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         }
-        if (!screenCache.ready || screenCache.rendererImageView != inputs.sourceImageView)
+        if (!screenCache.ready || screenInputShapeChanged || screenCache.rendererImageView != inputs.sourceImageView)
         {
             appendScreenImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         }
-        if (!screenCache.ready || screenCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
+        if (!screenCache.ready || screenInputShapeChanged || screenCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
         {
             appendScreenImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         }
-        if (!screenCache.ready || screenCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
+        if (!screenCache.ready || screenInputShapeChanged || screenCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
         {
             appendScreenImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         }
-        if (!screenCache.ready || screenCache.topPackedBuffer != inputs.topPackedBuffer)
+        if (!screenCache.ready || screenInputShapeChanged || screenCache.topPackedBuffer != inputs.topPackedBuffer)
         {
             appendScreenBufferWrite(2, &topPackedBufferInfo);
         }
-        if (!screenCache.ready || screenCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
+        if (!screenCache.ready || screenInputShapeChanged || screenCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
         {
             appendScreenBufferWrite(3, &bottomPackedBufferInfo);
         }
-        if (!screenCache.ready || screenCache.capture3dBuffer != inputs.capture3dBuffer)
+        if (!screenCache.ready || screenInputShapeChanged || screenCache.capture3dBuffer != inputs.capture3dBuffer)
         {
             appendScreenBufferWrite(5, &capture3dBufferInfo);
         }
@@ -2728,6 +2746,9 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
         screenCache.topPackedBuffer = inputs.topPackedBuffer;
         screenCache.bottomPackedBuffer = inputs.bottomPackedBuffer;
         screenCache.capture3dBuffer = inputs.capture3dBuffer;
+        screenCache.scale = inputs.scale;
+        screenCache.rendererWidth = inputs.rendererWidth;
+        screenCache.rendererHeight = inputs.rendererHeight;
     }
 
     DescriptorSetCacheState& backgroundCache = surfaceState.backgroundDescriptorCache;
