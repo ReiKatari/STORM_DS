@@ -120,12 +120,7 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
             }
 
             glContext.use(windowSurface!!)
-            val renderWidth = if (surfaceWidth > 0) surfaceWidth else width
-            val renderHeight = if (surfaceHeight > 0) surfaceHeight else height
-            if (renderWidth <= 0 || renderHeight <= 0) {
-                return
-            }
-            GLES30.glViewport(0, 0, renderWidth, renderHeight)
+            GLES30.glViewport(0, 0, width, height)
 
             if (surfaceState == SurfaceState.UNINITIALIZED && renderer != null) {
                 renderer?.onSurfaceCreated()
@@ -133,7 +128,7 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
             }
 
             if (surfaceState == SurfaceState.DIRTY && renderer != null) {
-                renderer?.onSurfaceChanged(renderWidth, renderHeight)
+                renderer?.onSurfaceChanged(surfaceWidth, surfaceHeight)
                 surfaceState = SurfaceState.READY
             }
 

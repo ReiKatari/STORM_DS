@@ -35,6 +35,24 @@ Frame* FrameQueue::getRenderFrame(const FrameQueuePolicy& requestedPolicy)
         return frame;
     }
 
+    if (policy.UseLegacyOpenGlQueue)
+    {
+        if (presentQueue.empty())
+        {
+            stats.RenderFramesDroppedByPolicy++;
+            return nullptr;
+        }
+
+        Frame* frame = presentQueue.back();
+        presentQueue.pop_back();
+        frame->frameId = nextFrameId++;
+        frame->queuedAtNs = 0;
+        frame->presentTimelineValue = 0;
+        stats.PendingFramesStolenForRender++;
+        updateBacklogStatsLocked();
+        return frame;
+    }
+
     if (policy.AllowStealPending && !presentQueue.empty())
     {
         const u64 nowNs = MelonDSAndroid::PerfNowNs();
@@ -59,6 +77,50 @@ Frame* FrameQueue::getPresentFrame(
 {
     std::unique_lock lock(frameLock);
     const FrameQueuePolicy policy = sanitizePolicy(requestedPolicy);
+
+    if (policy.UseLegacyOpenGlQueue)
+    {
+        if (presentQueue.empty())
+        {
+            bool hasNewFrame = false;
+            if (deadline.has_value())
+                hasNewFrame = presentFrameReadyCondition.wait_until(lock, *deadline, [&]{ return !presentQueue.empty(); });
+
+            if (!hasNewFrame)
+            {
+                if (previousFrame != nullptr)
+                    stats.PreviousFrameReused++;
+                return previousFrame;
+            }
+        }
+
+        if (previousFrame)
+        {
+            freeQueue.push(previousFrame);
+            previousFrame->queuedAtNs = 0;
+            previousFrame = nullptr;
+        }
+
+        const u64 nowNs = MelonDSAndroid::PerfNowNs();
+        Frame* frame = presentQueue.front();
+        presentQueue.pop_front();
+        stats.PresentFramesReturned++;
+
+        const u64 staleFrameCount = static_cast<u64>(presentQueue.size());
+        for (auto f : presentQueue)
+        {
+            freeQueue.push(f);
+            recordDroppedFrameLocked(f, PresentDropCause::Stale, nowNs);
+        }
+        stats.StaleFramesDropped += staleFrameCount;
+        stats.PresentFramesDroppedByPolicy += staleFrameCount;
+
+        presentQueue.clear();
+        previousFrame = frame;
+        recordPresentedFrameAgeLocked(frame, nowNs);
+        updateBacklogStatsLocked();
+        return frame;
+    }
 
     if (presentQueue.empty()) {
         bool hasNewFrame = false;
@@ -350,6 +412,15 @@ void FrameQueue::pushRenderedFrame(Frame* frame, const FrameQueuePolicy& request
     std::unique_lock lock(frameLock);
     const FrameQueuePolicy policy = sanitizePolicy(requestedPolicy);
     frame->queuedAtNs = MelonDSAndroid::PerfNowNs();
+    if (policy.UseLegacyOpenGlQueue)
+    {
+        presentQueue.push_front(frame);
+        stats.RenderFramesQueued++;
+        updateBacklogStatsLocked();
+        presentFrameReadyCondition.notify_one();
+        return;
+    }
+
     dropPendingFramesToBacklogLocked(
         policy.MaxBacklogDepth > 0 ? policy.MaxBacklogDepth - 1 : 0,
         policy.TreatBacklogTrimAsFastForwardSkip);

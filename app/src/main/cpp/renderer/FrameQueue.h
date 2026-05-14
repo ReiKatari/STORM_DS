@@ -28,6 +28,7 @@ struct FrameQueuePolicy
     bool PreferOldestFrame = false;
     bool PreserveBacklogOnPresent = false;
     bool TreatBacklogTrimAsFastForwardSkip = false;
+    bool UseLegacyOpenGlQueue = false;
 };
 
 enum class FrameBackend : u8 {

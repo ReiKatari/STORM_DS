@@ -83,15 +83,13 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
     switch (ordinal)
     {
         case 1: return MelonDSAndroid::VulkanFilterMode::Linear;
-        case 2: return MelonDSAndroid::VulkanFilterMode::Sharp2D;
-        case 3: return MelonDSAndroid::VulkanFilterMode::Xbr2;
-        case 4: return MelonDSAndroid::VulkanFilterMode::Hq2x;
-        case 5: return MelonDSAndroid::VulkanFilterMode::Hq4x;
-        case 6: return MelonDSAndroid::VulkanFilterMode::Quilez;
-        case 7: return MelonDSAndroid::VulkanFilterMode::Lcd;
-        case 8: return MelonDSAndroid::VulkanFilterMode::LcdGridDsLite;
-        case 9: return MelonDSAndroid::VulkanFilterMode::Scanlines;
-        case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 2: return MelonDSAndroid::VulkanFilterMode::Xbr2;
+        case 3: return MelonDSAndroid::VulkanFilterMode::Hq2x;
+        case 4: return MelonDSAndroid::VulkanFilterMode::Hq4x;
+        case 5: return MelonDSAndroid::VulkanFilterMode::Quilez;
+        case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
+        case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
+        case 8: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }
@@ -145,7 +143,7 @@ jmethodID getOrInitFrameRenderMethodId(JNIEnv* env, jobject callbackObject)
     if (frameRenderCallbackClass == nullptr)
         return nullptr;
 
-    frameRenderMethodId = env->GetMethodID(frameRenderCallbackClass, "renderFrame", "(ZIII)V");
+    frameRenderMethodId = env->GetMethodID(frameRenderCallbackClass, "renderFrame", "(ZI)V");
     return frameRenderMethodId;
 }
 
@@ -1168,7 +1166,7 @@ Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jlo
                 static_cast<unsigned>(presentationFrame->backend),
                 static_cast<unsigned>(MelonDSAndroid::getCurrentRenderer())
             );
-            env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0, 0, 0);
+            env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0);
             return;
         }
 
@@ -1179,16 +1177,14 @@ Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jlo
             renderFrameCallback,
             renderMethod,
             true,
-            static_cast<jint>(presentationFrame->frameTexture),
-            (jint) presentationFrame->width,
-            (jint) presentationFrame->height
+            static_cast<jint>(presentationFrame->frameTexture)
         );
         EGLSyncKHR presentFence = eglCreateSyncKHR(currentDisplay, EGL_SYNC_FENCE_KHR, nullptr);
         presentationFrame->presentFence = presentFence;
     }
     else
     {
-        env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0, 0, 0);
+        env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0);
     }
 }
 

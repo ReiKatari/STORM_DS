@@ -694,6 +694,7 @@ FrameQueuePolicy makeLegacyFrameQueuePolicy()
     policy.AllowStealPending = true;
     policy.AllowPreviousFrameReuse = true;
     policy.AllowDropForDeadline = false;
+    policy.UseLegacyOpenGlQueue = true;
     return policy;
 }
 
