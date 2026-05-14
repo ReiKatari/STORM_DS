@@ -138,6 +138,8 @@
     <string name="category_system_summary">Configuración de firmware, BIOS customizado, JIT</string>
     <string name="theme">Tema</string>
     <string name="fast_forward_max_speed">Velocidad máxima avance rápido</string>
+    <string name="frame_limit_speed">Velocidad de emulación</string>
+    <string name="frame_limit_speed_disabled_hardcore">Desactivado mientras el modo Hardcore de RetroAchievements está activo</string>
     <string name="rewind_description">Cuando está habilitado, un estado de guardado se guarda periódicamente de forma automática. Siempre que desee retroceder en su progreso por un corto período de tiempo, simplemente abra la pantalla de rebobinado y seleccione el estado desde el que desea reanudar.\n\nTenga en cuenta que al habilitar esta función, puede experimentar tartamudeos ocasionales si su dispositivo no es lo suficientemente potente. También se utiliza una cantidad considerable de memoria dependiendo de la frecuencia con la que desee que se capture el estado y durante cuánto tiempo se debe mantener.</string>
     <string name="rewind_save_period">Período de guardado</string>
     <string name="rewind_length">Duración de rebobinado</string>
@@ -368,6 +370,13 @@
         <item>3x</item>
         <item>4x</item>
         <item>8x</item>
+    </string-array>
+
+    <string-array name="frame_limit_speed_multiplier_options">
+        <item>1,0x</item>
+        <item>0,75x</item>
+        <item>0,5x</item>
+        <item>0,25x</item>
     </string-array>
 
     <string-array name="rom_icon_filtering_options">

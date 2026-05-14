@@ -62,6 +62,7 @@ int observedFrames = 0;
 float fps = 0;
 int targetFps;
 float fastForwardSpeedMultiplier;
+float frameLimitSpeedMultiplier = 1.0f;
 bool limitFps = true;
 bool isFastForwardEnabled = false;
 
@@ -764,6 +765,41 @@ static const int64_t FRAME_DURATION_60FPS_NS = 16666666;
 static const int64_t FRAME_DURATION_1000FPS_NS = 1000000; // 1ms. Used as frame time when fast-forward is enabled
 ThreadSafePerformanceHintSession* performanceHintSession = nullptr;
 
+float sanitizeFrameLimitSpeedMultiplier(float multiplier)
+{
+    if (multiplier < 0.25f)
+        return 0.25f;
+    if (multiplier > 1.0f)
+        return 1.0f;
+    return multiplier;
+}
+
+int targetFpsForFrameLimit()
+{
+    return static_cast<int>(60.0f * sanitizeFrameLimitSpeedMultiplier(frameLimitSpeedMultiplier));
+}
+
+int64_t frameDurationForFrameLimit()
+{
+    return static_cast<int64_t>(FRAME_DURATION_60FPS_NS / sanitizeFrameLimitSpeedMultiplier(frameLimitSpeedMultiplier));
+}
+
+void updatePerformanceHintTarget()
+{
+    if (performanceHintSession == nullptr)
+        return;
+
+    if (isFastForwardEnabled) {
+        if (fastForwardSpeedMultiplier > 0) {
+            performanceHintSession->updateTargetWorkDuration(static_cast<int64_t>(FRAME_DURATION_60FPS_NS / fastForwardSpeedMultiplier));
+        } else {
+            performanceHintSession->updateTargetWorkDuration(FRAME_DURATION_1000FPS_NS);
+        }
+    } else {
+        performanceHintSession->updateTargetWorkDuration(frameDurationForFrameLimit());
+    }
+}
+
 extern "C"
 {
 JNIEXPORT void JNICALL
@@ -771,6 +807,7 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulator(JNIEnv* env, jobject thiz, jo
 {
     MelonDSAndroid::EmulatorConfiguration finalEmulatorConfiguration = MelonDSAndroidConfiguration::buildEmulatorConfiguration(env, emulatorConfiguration);
     fastForwardSpeedMultiplier = finalEmulatorConfiguration.fastForwardSpeedMultiplier;
+    frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(finalEmulatorConfiguration.frameLimitSpeedMultiplier);
 
     globalCameraManager = env->NewGlobalRef(cameraManager);
 
@@ -1070,7 +1107,7 @@ Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, j
     frameStepRequested = false;
     isThreadReallyPaused = false;
     limitFps = true;
-    targetFps = 60;
+    targetFps = targetFpsForFrameLimit();
     isFastForwardEnabled = false;
     paused = startPaused == JNI_TRUE;
 
@@ -1959,23 +1996,23 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
         targetFps = 60 * fastForwardSpeedMultiplier;
     } else {
         limitFps = true;
-        targetFps = 60;
+        targetFps = targetFpsForFrameLimit();
         if (wasFastForwardEnabled)
             MelonDSAndroid::requestVulkanPresentationResync();
     }
 
-    if (performanceHintSession != nullptr) {
-        if (enabled) {
-            if (fastForwardSpeedMultiplier > 0) {
-                auto frameDurationNs = static_cast<int64_t>(FRAME_DURATION_60FPS_NS / fastForwardSpeedMultiplier);
-                performanceHintSession->updateTargetWorkDuration(frameDurationNs);
-            } else {
-                performanceHintSession->updateTargetWorkDuration(FRAME_DURATION_1000FPS_NS);
-            }
-        } else {
-            performanceHintSession->updateTargetWorkDuration(FRAME_DURATION_60FPS_NS);
-        }
+    updatePerformanceHintTarget();
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setFrameLimitSpeedMultiplier(JNIEnv* env, jobject thiz, jfloat multiplier)
+{
+    frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(multiplier);
+    if (!isFastForwardEnabled) {
+        limitFps = true;
+        targetFps = targetFpsForFrameLimit();
     }
+    updatePerformanceHintTarget();
 }
 
 JNIEXPORT void JNICALL
@@ -1993,22 +2030,18 @@ Java_me_magnum_melonds_MelonEmulator_updateEmulatorConfiguration(JNIEnv* env, jo
     MelonDSAndroid::EmulatorConfiguration newConfiguration = MelonDSAndroidConfiguration::buildEmulatorConfiguration(env, emulatorConfiguration);
 
     fastForwardSpeedMultiplier = newConfiguration.fastForwardSpeedMultiplier;
+    frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(newConfiguration.frameLimitSpeedMultiplier);
 
     MelonDSAndroid::updateEmulatorConfiguration(std::make_unique<MelonDSAndroid::EmulatorConfiguration>(std::move(newConfiguration)));
 
     if (isFastForwardEnabled) {
         limitFps = fastForwardSpeedMultiplier > 0;
         targetFps = 60 * fastForwardSpeedMultiplier;
-
-        if (performanceHintSession != nullptr) {
-            if (fastForwardSpeedMultiplier > 0) {
-                auto frameDurationNs = static_cast<int64_t>(FRAME_DURATION_60FPS_NS / fastForwardSpeedMultiplier);
-                performanceHintSession->updateTargetWorkDuration(frameDurationNs);
-            } else {
-                performanceHintSession->updateTargetWorkDuration(FRAME_DURATION_1000FPS_NS);
-            }
-        }
+    } else {
+        limitFps = true;
+        targetFps = targetFpsForFrameLimit();
     }
+    updatePerformanceHintTarget();
 }
 }
 
@@ -2059,6 +2092,7 @@ void* emulate(void*)
     performanceHintSession = new ThreadSafePerformanceHintSession(std::move(manager));
     if (performanceHintSession != nullptr) {
         performanceHintSession->createSession(gettid(), FRAME_DURATION_60FPS_NS);
+        updatePerformanceHintTarget();
     }
 
     for (;;)

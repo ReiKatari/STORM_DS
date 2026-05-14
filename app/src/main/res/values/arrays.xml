@@ -116,6 +116,13 @@
         <item>8</item>
     </string-array>
 
+    <string-array name="frame_limit_speed_multiplier_values">
+        <item>1</item>
+        <item>0.75</item>
+        <item>0.5</item>
+        <item>0.25</item>
+    </string-array>
+
     <string-array name="save_state_location_values">
         <item>save_dir</item>
         <item>rom_dir</item>

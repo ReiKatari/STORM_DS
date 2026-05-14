@@ -5,8 +5,9 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.ListPreference
 import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceManager
 import androidx.preference.SwitchPreference
 import com.smp.masterswitchpreference.MasterSwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
@@ -31,6 +32,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
     private lateinit var rewindPreference: MasterSwitchPreference
+    private lateinit var frameLimitSpeedPreference: ListPreference
 
     private val backupLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -79,10 +81,15 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         addPreferencesFromResource(R.xml.pref_general_updates)
 
         rewindPreference = findPreference("enable_rewind")!!
+        frameLimitSpeedPreference = findPreference("frame_limit_speed_multiplier")!!
         val sustainedPerformancePreference = findPreference<SwitchPreference>("enable_sustained_performance")!!
 
         helper.bindPreferenceSummaryToValue(rewindPreference)
+        helper.bindPreferenceSummaryToValue(frameLimitSpeedPreference)
+        updateFrameLimitSpeedPreferenceState()
         sustainedPerformancePreference.isVisible = requireContext().isSustainedPerformanceModeAvailable()
+
+        frameLimitSpeedPreference.sharedPreferences?.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener)
 
         findPreference<Preference>("backup_settings")?.setOnPreferenceClickListener {
             backupLauncher.launch(null)
@@ -98,7 +105,30 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         super.onResume()
         // Set proper value for Rewind preference since the value is not updated when returning from the fragment
         rewindPreference.onPreferenceChangeListener?.onPreferenceChange(rewindPreference, rewindPreference.sharedPreferences?.getBoolean(rewindPreference.key, false))
+        updateFrameLimitSpeedPreferenceState()
+    }
+
+    override fun onDestroy() {
+        frameLimitSpeedPreference.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(sharedPreferenceChangeListener)
+        super.onDestroy()
     }
 
     override fun getTitle() = getString(R.string.category_general)
+
+    private val sharedPreferenceChangeListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "ra_hardcore_enabled" || key == frameLimitSpeedPreference.key) {
+            updateFrameLimitSpeedPreferenceState()
+        }
+    }
+
+    private fun updateFrameLimitSpeedPreferenceState() {
+        val preferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val hardcoreEnabled = preferences.getBoolean("ra_hardcore_enabled", false)
+        frameLimitSpeedPreference.isEnabled = !hardcoreEnabled
+        frameLimitSpeedPreference.summary = if (hardcoreEnabled) {
+            getString(R.string.frame_limit_speed_disabled_hardcore)
+        } else {
+            frameLimitSpeedPreference.entry ?: getString(R.string.not_set)
+        }
+    }
 }
