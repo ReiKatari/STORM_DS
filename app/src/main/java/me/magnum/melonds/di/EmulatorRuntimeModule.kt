@@ -117,6 +117,7 @@ object EmulatorRuntimeModule {
         romFileProcessorFactory: RomFileProcessorFactory,
         permissionHandler: PermissionHandler,
         cameraManagerMultiplexer: DSiCameraSourceMultiplexer,
+        emulatorSession: EmulatorSession,
     ): EmulatorManager {
         return AndroidEmulatorManager(
             context,
@@ -126,6 +127,7 @@ object EmulatorRuntimeModule {
             romFileProcessorFactory,
             permissionHandler,
             cameraManagerMultiplexer,
+            emulatorSession,
         )
     }
 

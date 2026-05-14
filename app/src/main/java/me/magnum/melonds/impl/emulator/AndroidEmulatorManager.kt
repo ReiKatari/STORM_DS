@@ -46,6 +46,7 @@ class AndroidEmulatorManager(
     private val romFileProcessorFactory: RomFileProcessorFactory,
     private val permissionHandler: PermissionHandler,
     private val cameraManager: DSiCameraSourceMultiplexer,
+    private val emulatorSession: EmulatorSession,
 ) : EmulatorManager {
     private companion object {
         private const val TAG = "AndroidEmulatorManager"
@@ -325,6 +326,7 @@ class AndroidEmulatorManager(
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
             showBootScreen = baseConfiguration.showBootScreen && mustUseCustomBios,
+            frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType),
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource)

@@ -60,6 +60,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX) -> handleSetRendererDebugTools(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
+            context.debugCommandAction(ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX) -> handleSetFrameLimitSpeed(entryPoint, intent)
+            context.debugCommandAction(ACTION_GET_FPS_SUFFIX) -> handleGetFps()
             context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX) -> handleSetBgObjLog(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX) -> handleSetRenderer2DDebugControls(intent)
             context.debugCommandAction(ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX) -> handleSetRenderer3DDebugControls(intent)
@@ -121,6 +123,22 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             ?: throw IllegalArgumentException("Missing enabled extra")
         MelonEmulator.setFastForwardEnabled(enabled)
         Log.w(TAG, "action=set_fast_forward mode=release enabled=${if (enabled) 1 else 0}")
+    }
+
+    private fun handleSetFrameLimitSpeed(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val multiplier = intent.firstNullableFloatExtra(EXTRA_MULTIPLIER, EXTRA_SPEED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing frame limit speed extra")
+        require(multiplier in 0.25f..1.0f) { "Unsupported frame limit speed=$multiplier" }
+        entryPoint.sharedPreferences().edit(commit = true) {
+            putString(KEY_FRAME_LIMIT_SPEED_MULTIPLIER, multiplier.toString())
+        }
+        MelonEmulator.setFrameLimitSpeedMultiplier(multiplier)
+        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
+        Log.w(TAG, "action=set_frame_limit_speed mode=release multiplier=$multiplier refreshed=${if (refreshed) 1 else 0}")
+    }
+
+    private fun handleGetFps() {
+        Log.w(TAG, "action=get_fps mode=release fps=${MelonEmulator.getFPS()}")
     }
 
     private fun handleSetBgObjLog(entryPoint: DebugCommandEntryPoint, intent: Intent) {
@@ -747,6 +765,24 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         return null
     }
 
+    private fun Intent.firstNullableFloatExtra(vararg keys: String): Float? {
+        keys.forEach { key ->
+            if (!hasExtra(key)) {
+                return@forEach
+            }
+
+            val raw = extras?.get(key)
+            when (raw) {
+                is Float -> return raw
+                is Double -> return raw.toFloat()
+                is Int -> return raw.toFloat()
+                is String -> raw.toFloatOrNull()?.let { return it }
+            }
+        }
+
+        return null
+    }
+
     private suspend fun waitForRendererReadyOrTimeout(renderer: VideoRenderer, timeoutMs: Long) {
         if (renderer != VideoRenderer.VULKAN) {
             return
@@ -822,6 +858,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val KEY_RENDERER_DEBUG_TOOLS_ENABLED = "video_renderer_debug_tools_enabled"
         private const val KEY_VIDEO_RENDERER = "video_renderer"
         private const val KEY_VIDEO_INTERNAL_RESOLUTION = "video_internal_resolution"
+        private const val KEY_FRAME_LIMIT_SPEED_MULTIPLIER = "frame_limit_speed_multiplier"
         private const val KEY_RENDERER_DEBUG_BGOBJ_ENABLED = "video_renderer_debug_bgobj_enabled"
         private const val RELEASE_STATE_COMMANDS_PROPERTY = "debug.melonds.release_state_commands"
         private const val GETPROP_BINARY = "/system/bin/getprop"
@@ -830,6 +867,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_SCALE = "scale"
         private const val EXTRA_IR = "ir"
         private const val EXTRA_ENABLED = "enabled"
+        private const val EXTRA_MULTIPLIER = "multiplier"
+        private const val EXTRA_SPEED = "speed"
         private const val EXTRA_X = "x"
         private const val EXTRA_Y = "y"
         private const val EXTRA_VALUE_X = "value_x"
@@ -913,6 +952,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX = "SET_RENDERER_DEBUG_TOOLS"
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
+        private const val ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX = "SET_FRAME_LIMIT_SPEED"
+        private const val ACTION_GET_FPS_SUFFIX = "GET_FPS"
         private const val ACTION_SET_BGOBJ_LOG_SUFFIX = "SET_BGOBJ_LOG"
         private const val ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX = "SET_RENDERER_2D_DEBUG_CONTROLS"
         private const val ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX = "SET_RENDERER_3D_DEBUG_CONTROLS"
@@ -937,6 +978,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             || action == context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_IR_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX)
+            || action == context.debugCommandAction(ACTION_GET_FPS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_BGOBJ_LOG_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_RENDERER_2D_DEBUG_CONTROLS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_RENDERER_3D_DEBUG_CONTROLS_SUFFIX)

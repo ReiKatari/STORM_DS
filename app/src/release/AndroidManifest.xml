@@ -12,6 +12,8 @@
                 <action android:name="${applicationId}.SET_RENDERER_DEBUG_TOOLS" />
                 <action android:name="${applicationId}.SET_IR" />
                 <action android:name="${applicationId}.SET_FAST_FORWARD" />
+                <action android:name="${applicationId}.SET_FRAME_LIMIT_SPEED" />
+                <action android:name="${applicationId}.GET_FPS" />
                 <action android:name="${applicationId}.SET_BGOBJ_LOG" />
                 <action android:name="${applicationId}.SET_RENDERER_2D_DEBUG_CONTROLS" />
                 <action android:name="${applicationId}.SET_RENDERER_3D_DEBUG_CONTROLS" />

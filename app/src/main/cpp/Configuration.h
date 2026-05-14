@@ -103,6 +103,7 @@ typedef struct
     char* dsiNandPath;
     char* internalFilesDir;
     float fastForwardSpeedMultiplier;
+    float frameLimitSpeedMultiplier;
     bool showBootScreen;
     bool useJit;
     bool hgEngineFixEnabled;

@@ -196,6 +196,8 @@
     <string name="category_system_summary">Firmware settings, custom BIOS, JIT</string>
     <string name="theme">Theme</string>
     <string name="fast_forward_max_speed">Fast-forward max speed</string>
+    <string name="frame_limit_speed">Emulation speed</string>
+    <string name="frame_limit_speed_disabled_hardcore">Disabled while RetroAchievements Hardcore mode is enabled</string>
     <string name="rewind_description">When enabled, a save-state is periodically saved automatically. Whenever you want to go back on your progress by a short amount of time, just open the rewind screen and select the state that you want to resume from.\n\nBe aware that by enabling this feature, you may experience occasional stutters if your device is not powerful enough. A considerable amount of memory is also used depending on how often you want the state to be captured and for how long it should be kept.</string>
     <string name="rewind_save_period">Save period</string>
     <string name="rewind_length">Rewind length</string>
@@ -688,6 +690,13 @@
         <item>3x</item>
         <item>4x</item>
         <item>8x</item>
+    </string-array>
+
+    <string-array name="frame_limit_speed_multiplier_options">
+        <item>1.0x</item>
+        <item>0.75x</item>
+        <item>0.5x</item>
+        <item>0.25x</item>
     </string-array>
 
     <string-array name="rom_icon_filtering_options">

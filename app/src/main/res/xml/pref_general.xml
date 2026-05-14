@@ -21,6 +21,15 @@
             android:entryValues="@array/fast_forward_speed_multiplier_values"
             android:defaultValue="-1" />
 
+    <ListPreference
+            android:key="frame_limit_speed_multiplier"
+            android:title="@string/frame_limit_speed"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/frame_limit_speed_multiplier_options"
+            android:entryValues="@array/frame_limit_speed_multiplier_values"
+            android:defaultValue="1" />
+
     <com.smp.masterswitchpreference.MasterSwitchPreference
             android:key="enable_rewind"
             android:title="@string/rewind"
