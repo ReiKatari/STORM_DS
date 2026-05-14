@@ -45,14 +45,12 @@ const uint kMetaFlagRegularCaptureUses3d = 1u << 21u;
 const uint kMetaFlagVramCaptureUses3d = 1u << 22u;
 const uint kMetaFlagForceLive3dCompMode7 = 1u << 18u;
 const uint kFilterLinear = 1u;
-const uint kFilterSharp2D = 2u;
-const uint kFilterXbr2 = 3u;
-const uint kFilterHq2x = 4u;
-const uint kFilterHq4x = 5u;
-const uint kFilterQuilez = 6u;
-const uint kFilterLcd = 7u;
-const uint kFilterLcdGridDsLite = 8u;
-const uint kFilterScanlines = 9u;
+const uint kFilterXbr2 = 2u;
+const uint kFilterHq2x = 3u;
+const uint kFilterHq4x = 4u;
+const uint kFilterQuilez = 5u;
+const uint kFilterLcd = 6u;
+const uint kFilterScanlines = 7u;
 
 layout(location = 0) in vec2 fragUv;
 layout(location = 1) in float fragAlpha;
@@ -338,7 +336,7 @@ DEFINE_SAMPLE_PACKED_WITH_BRIGHTNESS(sampleBottomPackedWithBrightness, readBotto
 Rgba6 FUNC_NAME(int sourceX, int sourceY, float sourceXFloat, float sourceYFloat, int layerOffset) \
 { \
     Rgba6 nearest = unpackColor6(READ_PACKED_FUNC(sourceY, layerOffset + sourceX)); \
-    if (pushConstants.filtering != kFilterLinear && pushConstants.filtering != kFilterSharp2D) \
+    if (pushConstants.filtering != kFilterLinear) \
         return nearest; \
     float sharpX = clamp(sourceXFloat - 0.5, 0.0, 255.0); \
     float sharpY = clamp(sourceYFloat - 0.5, 0.0, 191.0); \
@@ -362,12 +360,7 @@ Rgba6 FUNC_NAME(int sourceX, int sourceY, float sourceXFloat, float sourceYFloat
     vec3 v01 = color6ToVec3(c01); \
     vec3 v11 = color6ToVec3(c11); \
     vec3 blended = mix(mix(v00, v10, tx), mix(v01, v11, tx), ty); \
-    if (pushConstants.filtering == kFilterLinear) \
-        return vec3ToColor6(blended, nearest.a); \
-    vec3 sharpened = mix(blended, color6ToVec3(nearest), 0.45); \
-    vec3 minColor = min(min(v00, v10), min(v01, v11)); \
-    vec3 maxColor = max(max(v00, v10), max(v01, v11)); \
-    return vec3ToColor6(clamp(sharpened, minColor, maxColor), nearest.a); \
+    return vec3ToColor6(blended, nearest.a); \
 }
 
 DEFINE_SAMPLE_FILTERED_PACKED_LAYER(sampleTopFilteredPackedLayer, readTopPacked)
@@ -1041,144 +1034,6 @@ vec3 filterLcd(vec2 uv, bool topScreen)
     return clamp(color * yFactor * xFactors, 0.0, 1.0);
 }
 
-float intsmearFuncX(float z)
-{
-    float z2 = z * z;
-    float zn = z;
-    float ret = 0.0;
-    ret += zn * 1.0;
-    zn *= z2;
-    ret += zn * -0.6666667;
-    zn *= z2;
-    ret += zn * -0.2;
-    zn *= z2;
-    ret += zn * 0.5714286;
-    zn *= z2;
-    ret += zn * -0.1111111;
-    zn *= z2;
-    ret += zn * -0.1818182;
-    zn *= z2;
-    ret += zn * 0.0769231;
-    return ret;
-}
-
-float intsmearFuncY(float z)
-{
-    float z2 = z * z;
-    float zn = z;
-    float ret = 0.0;
-    ret += zn * 1.0;
-    zn *= z2;
-    ret += zn * 0.0;
-    zn *= z2;
-    ret += zn * -0.8;
-    zn *= z2;
-    ret += zn * 0.2857143;
-    zn *= z2;
-    ret += zn * 0.4444444;
-    zn *= z2;
-    ret += zn * -0.3636364;
-    zn *= z2;
-    ret += zn * 0.0769231;
-    return ret;
-}
-
-float intsmearX(float x, float dx, float d)
-{
-    float safeDx = max(dx, 0.000001);
-    float zl = clamp((x - safeDx * 0.5) / d, -1.0, 1.0);
-    float zh = clamp((x + safeDx * 0.5) / d, -1.0, 1.0);
-    return d * (intsmearFuncX(zh) - intsmearFuncX(zl)) / safeDx;
-}
-
-float intsmearY(float x, float dx, float d)
-{
-    float safeDx = max(dx, 0.000001);
-    float zl = clamp((x - safeDx * 0.5) / d, -1.0, 1.0);
-    float zh = clamp((x + safeDx * 0.5) / d, -1.0, 1.0);
-    return d * (intsmearFuncY(zh) - intsmearFuncY(zl)) / safeDx;
-}
-
-vec3 filterLcdGridDsLite(vec2 uv, bool topScreen)
-{
-    const float brightenScanlines = 16.0;
-    const float brightenLcd = 4.0;
-    const vec3 offsets = 3.141592654 * vec3(0.5, 0.5 - 0.6666667, 0.5 - 1.3333333);
-    const float gain = 1.0;
-    const float gamma = 2.2;
-    const float blacklevel = 0.0;
-    const float ambient = 0.0;
-    const float outgamma = 2.2;
-    const float maskContrast = 0.8;
-    const float detailBlend = 0.3;
-    const vec3 postBias = vec3(0.0);
-    const vec2 lowerScreenPhase = vec2(0.15, 0.10);
-    const vec3 channelGain = vec3(1.07, 0.97, 1.05);
-    const float saturationBoost = 1.12;
-    const vec3 rSubpixel = vec3(1.0, 0.0, 0.0);
-    const vec3 gSubpixel = vec3(0.0, 1.0, 0.0);
-    const vec3 bSubpixel = vec3(0.0, 0.0, 1.0);
-    const float targetGamma = 2.2;
-    const float displayGamma = 2.2;
-    const float dslLuminance = 0.955;
-    const mat3 dslMatrix = mat3(
-        0.965, 0.11, -0.065,
-        0.02, 0.925, 0.055,
-        0.01, -0.02, 1.03
-    );
-
-    vec2 local = screenLocalCoord(uv, topScreen);
-    vec2 screenPixelCoord = local * vec2(256.0, 192.0);
-    vec2 pixelCoord = screenPixelCoord - vec2(0.4999);
-    ivec2 tli = ivec2(floor(pixelCoord));
-    float subpix = (pixelCoord.x - float(tli.x)) * 3.0;
-    vec2 viewport = max(vec2(pushConstants.viewportWidth, pushConstants.viewportHeight), vec2(1.0));
-    float rsubpix = (256.0 / viewport.x) * 3.0;
-    vec3 lcol = vec3(
-        intsmearX(subpix + 1.0, rsubpix, 1.5),
-        intsmearX(subpix, rsubpix, 1.5),
-        intsmearX(subpix - 1.0, rsubpix, 1.5)
-    ).bgr;
-    vec3 rcol = vec3(
-        intsmearX(subpix - 2.0, rsubpix, 1.5),
-        intsmearX(subpix - 3.0, rsubpix, 1.5),
-        intsmearX(subpix - 4.0, rsubpix, 1.5)
-    ).bgr;
-    float subpixY = pixelCoord.y - float(tli.y);
-    float rsubpixY = 192.0 / viewport.y;
-    float tcol = intsmearY(subpixY, rsubpixY, 0.63);
-    float bcol = intsmearY(subpixY - 1.0, rsubpixY, 0.63);
-
-    vec2 baseTexel = vec2(tli);
-    vec3 topLeftColor = pow(gain * sampleCompositeRgb(uvFromScreenTexel(clamp(baseTexel + vec2(0.0, 0.0), vec2(0.0), vec2(255.0, 191.0)), topScreen), topScreen) + vec3(blacklevel), vec3(gamma)) + vec3(ambient);
-    vec3 bottomRightColor = pow(gain * sampleCompositeRgb(uvFromScreenTexel(clamp(baseTexel + vec2(1.0, 1.0), vec2(0.0), vec2(255.0, 191.0)), topScreen), topScreen) + vec3(blacklevel), vec3(gamma)) + vec3(ambient);
-    vec3 bottomLeftColor = pow(gain * sampleCompositeRgb(uvFromScreenTexel(clamp(baseTexel + vec2(0.0, 1.0), vec2(0.0), vec2(255.0, 191.0)), topScreen), topScreen) + vec3(blacklevel), vec3(gamma)) + vec3(ambient);
-    vec3 topRightColor = pow(gain * sampleCompositeRgb(uvFromScreenTexel(clamp(baseTexel + vec2(1.0, 0.0), vec2(0.0), vec2(255.0, 191.0)), topScreen), topScreen) + vec3(blacklevel), vec3(gamma)) + vec3(ambient);
-    vec3 averageColor = topLeftColor * lcol * vec3(tcol)
-        + bottomRightColor * rcol * vec3(bcol)
-        + bottomLeftColor * lcol * vec3(bcol)
-        + topRightColor * rcol * vec3(tcol);
-
-    vec2 angle = screenPixelCoord * 6.28318530718;
-    angle += (topScreen ? 0.0 : 1.0) * lowerScreenPhase;
-    float yfactor = (brightenScanlines + sin(angle.y)) / (brightenScanlines + 1.0);
-    vec3 xfactors = (brightenLcd + sin(angle.x + offsets)) / (brightenLcd + 1.0);
-    vec3 mask = yfactor * xfactors;
-    vec3 softenedMask = mix(vec3(1.0), mask, maskContrast);
-    vec3 maskedColor = averageColor * softenedMask;
-    averageColor = mix(maskedColor, averageColor, detailBlend);
-    averageColor = mat3(pow(rSubpixel, vec3(outgamma)), pow(gSubpixel, vec3(outgamma)), pow(bSubpixel, vec3(outgamma))) * averageColor;
-    vec3 baseColor = pow(max(averageColor, vec3(0.0)), vec3(1.0 / outgamma));
-    vec3 dslLinear = pow(baseColor, vec3(targetGamma));
-    dslLinear = clamp(dslLinear * dslLuminance, 0.0, 1.0);
-    vec3 corrected = dslMatrix * dslLinear;
-    corrected *= channelGain;
-    float gray = dot(corrected, vec3(0.299, 0.587, 0.114));
-    corrected = mix(vec3(gray), corrected, saturationBoost);
-    vec3 finalColor = pow(max(corrected, vec3(0.0)), vec3(1.0 / displayGamma));
-    return clamp(finalColor + postBias, 0.0, 1.0);
-}
-
 vec3 filterXbr2(vec2 uv, bool topScreen)
 {
     vec2 texel = compositeDsTexelSize();
@@ -1308,8 +1163,6 @@ vec3 applyCompositePostFilter(vec2 uv, bool topScreen)
         return filterHq4x(uv, topScreen);
     if (pushConstants.filtering == kFilterLcd)
         return filterLcd(uv, topScreen);
-    if (pushConstants.filtering == kFilterLcdGridDsLite)
-        return filterLcdGridDsLite(uv, topScreen);
     if (pushConstants.filtering == kFilterScanlines)
         return filterScanlines(uv, topScreen);
     return sampleCompositeRgb(uv, topScreen);

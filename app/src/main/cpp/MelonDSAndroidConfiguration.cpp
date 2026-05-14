@@ -53,15 +53,13 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
     switch (ordinal)
     {
         case 1: return MelonDSAndroid::VulkanFilterMode::Linear;
-        case 2: return MelonDSAndroid::VulkanFilterMode::Sharp2D;
-        case 3: return MelonDSAndroid::VulkanFilterMode::Xbr2;
-        case 4: return MelonDSAndroid::VulkanFilterMode::Hq2x;
-        case 5: return MelonDSAndroid::VulkanFilterMode::Hq4x;
-        case 6: return MelonDSAndroid::VulkanFilterMode::Quilez;
-        case 7: return MelonDSAndroid::VulkanFilterMode::Lcd;
-        case 8: return MelonDSAndroid::VulkanFilterMode::LcdGridDsLite;
-        case 9: return MelonDSAndroid::VulkanFilterMode::Scanlines;
-        case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 2: return MelonDSAndroid::VulkanFilterMode::Xbr2;
+        case 3: return MelonDSAndroid::VulkanFilterMode::Hq2x;
+        case 4: return MelonDSAndroid::VulkanFilterMode::Hq4x;
+        case 5: return MelonDSAndroid::VulkanFilterMode::Quilez;
+        case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
+        case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
+        case 8: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }

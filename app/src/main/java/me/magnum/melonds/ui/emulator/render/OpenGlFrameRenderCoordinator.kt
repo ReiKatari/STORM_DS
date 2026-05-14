@@ -64,19 +64,12 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
         private val renderStatistics = RenderStatistics()
 
         private val frameRenderCallback = object : FrameRenderCallback {
-            override fun renderFrame(
-                isValidFrame: Boolean,
-                frameTextureId: Int,
-                frameTextureWidth: Int,
-                frameTextureHeight: Int,
-            ) {
+            override fun renderFrame(isValidFrame: Boolean, frameTextureId: Int) {
                 val renderStart = System.nanoTime()
 
                 presentFrameWrapper.apply {
                     this.isValidFrame = isValidFrame
                     this.textureId = frameTextureId
-                    this.textureWidth = frameTextureWidth
-                    this.textureHeight = frameTextureHeight
                 }
 
                 managedSurfaces.forEach {

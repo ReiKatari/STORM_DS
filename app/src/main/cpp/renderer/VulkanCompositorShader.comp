@@ -46,7 +46,6 @@ const uint kMetaFlagRegularCaptureUses3d = 1u << 21u;
 const uint kMetaFlagVramCaptureUses3d = 1u << 22u;
 const uint kMetaFlagForceLive3dCompMode7 = 1u << 18u;
 const uint kFilterLinear = 1u;
-const uint kFilterSharp2D = 2u;
 
 struct Rgba6
 {
@@ -296,7 +295,7 @@ uint readBottomPacked(int y, int x)
 Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale, int layerOffset) \
 { \
     Rgba6 nearest = unpackColor6(READ_PACKED_FN(dsY, layerOffset + sourceX)); \
-    if ((pc.filtering != kFilterLinear && pc.filtering != kFilterSharp2D) || safeScale <= 1u) \
+    if (pc.filtering != kFilterLinear || safeScale <= 1u) \
         return nearest; \
     float dsXFloat = (float(scaledX) + 0.5) / float(safeScale) - 0.5; \
     float dsYFloat = (float(scaledY) + 0.5) / float(safeScale) - 0.5; \
