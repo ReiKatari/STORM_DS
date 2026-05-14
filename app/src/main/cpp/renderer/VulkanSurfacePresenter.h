@@ -104,6 +104,7 @@ public:
 
     bool presentFrame(Frame* frame, VulkanOutput& output, const VulkanCompositionInputs& inputs, u64 timeoutNs);
     bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX);
+    void invalidateDescriptorCaches();
     VulkanPresenterPacingStats takePacingStatsSnapshotAndReset();
     static bool prewarmRetroArchFilter(
         const VulkanSurfaceConfig& config,
@@ -180,6 +181,9 @@ private:
         VkBuffer topPackedBuffer = VK_NULL_HANDLE;
         VkBuffer bottomPackedBuffer = VK_NULL_HANDLE;
         VkBuffer capture3dBuffer = VK_NULL_HANDLE;
+        u32 scale = 0;
+        u32 rendererWidth = 0;
+        u32 rendererHeight = 0;
     };
 
     struct SurfaceState
