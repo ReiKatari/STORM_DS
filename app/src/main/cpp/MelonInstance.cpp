@@ -40,6 +40,8 @@ const int kScreenshotScreenWidth = 256;
 const int kScreenshotScreenHeight = 192;
 const int kCompositedScreenGapPx = 2;
 const int kVulkanFastForwardHighResolutionScaleCap = 4;
+const int kVulkanTemporal3dHistoryGateFrames = 8;
+const int kVulkanTemporal3dNotReadyBlockingFrames = 3;
 const int kVulkanCompileStageInitRenderer = 1;
 const int kVulkanCompileStageBuildPipelines = 2;
 const int kVulkanCompileStageInitOutput = 3;
@@ -110,6 +112,41 @@ bool packedLineNeedsCompMode7Live3dFallback(
 bool hasMatchingLatchedSoftPackedSnapshot(const SoftPackedFrameSnapshot& snapshot, const Frame* frame)
 {
     return frame != nullptr && snapshot.valid && snapshot.frameId == frame->frameId;
+}
+
+bool softPackedScreenUsesTemporal3dHistory(const SoftPackedScreenStats& stats)
+{
+    return stats.CaptureBackedComp4Lines > 0u
+        || stats.RegularCaptureUses3dLines > 0u
+        || stats.VramCaptureUses3dLines > 0u
+        || stats.ForceLive3dCompMode7Lines > 0u;
+}
+
+bool softPackedFrameUsesTemporal3dHistory(const SoftPackedFrameSnapshot& snapshot)
+{
+    return snapshot.valid
+        && (snapshot.hasCapture3dSource
+            || snapshot.captureBackedClass4Only
+            || softPackedScreenUsesTemporal3dHistory(snapshot.topScreenStats)
+            || softPackedScreenUsesTemporal3dHistory(snapshot.bottomScreenStats));
+}
+
+bool softPackedFramesAlternate3dOwner(
+    const SoftPackedFrameSnapshot& current,
+    const SoftPackedFrameSnapshot& previous)
+{
+    return current.valid
+        && previous.valid
+        && current.screenSwapLatched != previous.screenSwapLatched;
+}
+
+bool softPackedFrameNeedsReusablePreviousFrame(
+    const SoftPackedFrameSnapshot& current,
+    const SoftPackedFrameSnapshot& previous)
+{
+    return softPackedFramesAlternate3dOwner(current, previous)
+        || softPackedFrameUsesTemporal3dHistory(current)
+        || softPackedFrameUsesTemporal3dHistory(previous);
 }
 
 std::vector<u32> expandPackedPixelsToRgbaVector(const u32* pixels, size_t pixelCount)
@@ -736,7 +773,10 @@ FrameQueuePolicy makeVulkanFastForwardFrameQueuePolicy(int renderScale)
     return policy;
 }
 
-FrameQueuePolicy constrainGraphicsHardwareFrameQueuePolicy(FrameQueuePolicy policy, bool graphicsHardwareActive)
+FrameQueuePolicy constrainGraphicsHardwareFrameQueuePolicy(
+    FrameQueuePolicy policy,
+    bool graphicsHardwareActive,
+    bool temporal3dHistoryRequired)
 {
     if (!graphicsHardwareActive)
         return policy;
@@ -744,9 +784,14 @@ FrameQueuePolicy constrainGraphicsHardwareFrameQueuePolicy(FrameQueuePolicy poli
     if (isFastForwardActive())
         return policy;
 
+    const auto& deviceProfile = VulkanContext::Get().GetDeviceProfile();
+    if (temporal3dHistoryRequired && (deviceProfile.IsAdreno || deviceProfile.IsArmMali))
+        return policy;
+
     policy.MaxBacklogDepth = 1;
     policy.AllowStealPending = false;
     policy.AllowPreviousFrameReuse = false;
+    policy.AllowDropForDeadline = false;
     policy.PreferOldestFrame = false;
     policy.PreserveBacklogOnPresent = false;
     return policy;
@@ -1256,9 +1301,11 @@ u32 MelonInstance::runFrame()
     if (currentRenderer == Renderer::Vulkan)
     {
         auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+        const bool needsReusablePreviousFrame = updateVulkanTemporal3dHistoryGate();
         frameQueuePolicy = constrainGraphicsHardwareFrameQueuePolicy(
             frameQueuePolicy,
-            renderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware);
+            renderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware,
+            needsReusablePreviousFrame);
     }
     Frame* renderFrame = nullptr;
     const int maxRenderFrameAcquireAttempts = currentRenderer == Renderer::Vulkan
@@ -1800,7 +1847,20 @@ bool MelonInstance::presentVulkanFrame(
     FrameQueuePolicy frameQueuePolicy = lateRealtimePresentation
         ? makeVulkanLateRealtimeFrameQueuePolicy(renderScale)
         : makeFrameQueuePolicy(Renderer::Vulkan, renderScale);
-    frameQueuePolicy = constrainGraphicsHardwareFrameQueuePolicy(frameQueuePolicy, graphicsHardwareActive);
+    const bool needsReusablePreviousFrame = isVulkanTemporal3dHistoryGateActive()
+        || softPackedFrameNeedsReusablePreviousFrame(
+            lastSoftPackedFrameSnapshot,
+            previousSoftPackedFrameSnapshot);
+    frameQueuePolicy = constrainGraphicsHardwareFrameQueuePolicy(
+        frameQueuePolicy,
+        graphicsHardwareActive,
+        needsReusablePreviousFrame);
+    const auto& deviceProfile = VulkanContext::Get().GetDeviceProfile();
+    const bool shouldBlockForSingleScreenGraphicsHardware =
+        !fastForwardActive
+        && graphicsHardwareActive
+        && !needsReusablePreviousFrame
+        && deviceProfile.IsAdreno;
     const FrameQueuePolicy deferFrameQueuePolicy = [&]() -> FrameQueuePolicy {
         if (!fastForwardActive)
             return frameQueuePolicy;
@@ -1811,11 +1871,20 @@ bool MelonInstance::presentVulkanFrame(
     }();
     const bool shouldProbeRealtimeBacklog = !frameQueuePolicy.AllowDropForDeadline
         && frameQueuePolicy.MaxBacklogDepth > 1;
-    const bool shouldAllowBlockingHighResolutionRealtimePresentation = !frameQueuePolicy.AllowDropForDeadline
+    const bool shouldAllowBlockingHighResolutionRealtimePresentation =
+        !frameQueuePolicy.AllowDropForDeadline
         && frameQueuePolicy.MaxBacklogDepth > 2;
+    const bool shouldUseAdaptiveTemporalBlocking =
+        !fastForwardActive
+        && graphicsHardwareActive
+        && needsReusablePreviousFrame
+        && (deviceProfile.IsAdreno || deviceProfile.IsArmMali);
+    const bool shouldPreserveRealtimeBacklog =
+        shouldUseAdaptiveTemporalBlocking
+        && (deviceProfile.IsArmMali || vulkanTemporal3dNotReadyFrames > 0);
     const FrameQueuePolicy candidateQueuePolicy = [&]() -> FrameQueuePolicy {
         FrameQueuePolicy policy = frameQueuePolicy;
-        if (shouldProbeRealtimeBacklog)
+        if (shouldProbeRealtimeBacklog && shouldPreserveRealtimeBacklog)
         {
             policy.PreserveBacklogOnPresent = true;
             policy.PreferOldestFrame = false;
@@ -1846,6 +1915,16 @@ bool MelonInstance::presentVulkanFrame(
         }
 
         const bool frameReady = vulkanOutput->isFrameReady(frame);
+        if (shouldUseAdaptiveTemporalBlocking && !frameReady)
+            vulkanTemporal3dNotReadyFrames = deviceProfile.IsArmMali
+                ? kVulkanTemporal3dNotReadyBlockingFrames
+                : std::min(vulkanTemporal3dNotReadyFrames + 1, kVulkanTemporal3dNotReadyBlockingFrames);
+        else
+            vulkanTemporal3dNotReadyFrames = 0;
+
+        const bool shouldBlockForSustainedTemporalPressure =
+            shouldUseAdaptiveTemporalBlocking
+            && vulkanTemporal3dNotReadyFrames >= kVulkanTemporal3dNotReadyBlockingFrames;
         if (frameQueuePolicy.AllowDropForDeadline && !frameReady)
         {
             frameQueue.deferPresentedFrame(frame, deferFrameQueuePolicy);
@@ -1853,7 +1932,6 @@ bool MelonInstance::presentVulkanFrame(
                 break;
             continue;
         }
-
         u64 waitTimeoutNs = UINT64_MAX;
         if (effectiveBudgetDeadline.has_value())
         {
@@ -1894,7 +1972,10 @@ bool MelonInstance::presentVulkanFrame(
         }
 
         const u64 presenterTimeoutNs = [&]() -> u64 {
-            if (shouldAllowBlockingHighResolutionRealtimePresentation)
+            if ((shouldAllowBlockingHighResolutionRealtimePresentation
+                    || shouldBlockForSustainedTemporalPressure
+                    || shouldBlockForSingleScreenGraphicsHardware)
+                && !frameReady)
                 return UINT64_MAX;
 
             if (!shouldProbeRealtimeBacklog || waitTimeoutNs == UINT64_MAX)
@@ -4194,6 +4275,26 @@ void MelonInstance::clearLatchedSoftPackedFrameSnapshot()
     framesSinceLastScreenSwapToggle = 1024;
     wasInAlternatingMode = false;
     vulkanStructuredCaptureGateFrames = 0;
+    vulkanTemporal3dHistoryGateFrames = 0;
+    vulkanTemporal3dNotReadyFrames = 0;
+}
+
+bool MelonInstance::updateVulkanTemporal3dHistoryGate()
+{
+    const bool detected = softPackedFrameNeedsReusablePreviousFrame(
+        lastSoftPackedFrameSnapshot,
+        previousSoftPackedFrameSnapshot);
+    if (detected)
+        vulkanTemporal3dHistoryGateFrames = kVulkanTemporal3dHistoryGateFrames;
+    else if (vulkanTemporal3dHistoryGateFrames > 0)
+        vulkanTemporal3dHistoryGateFrames--;
+
+    return isVulkanTemporal3dHistoryGateActive();
+}
+
+bool MelonInstance::isVulkanTemporal3dHistoryGateActive() const
+{
+    return vulkanTemporal3dHistoryGateFrames > 0;
 }
 
 bool MelonInstance::latchSoftPackedFrameSnapshot(

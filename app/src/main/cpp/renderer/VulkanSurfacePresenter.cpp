@@ -971,6 +971,7 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
     const bool directPresentRequested = !inputs.needsReadback
         && !inputs.validationMode
         && !postProcessFilterRequested
+        && surfaces.size() == 1
         && !hasDualScreenSurface
         && hasRequiredDirectHandles
         && !inputs.capture3dSourceValid

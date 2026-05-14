@@ -181,6 +181,8 @@ private:
     void setDateTime();
     void saveRewindState(RewindSaveState* rewindSaveState);
     void clearLatchedSoftPackedFrameSnapshot();
+    bool updateVulkanTemporal3dHistoryGate();
+    bool isVulkanTemporal3dHistoryGateActive() const;
     bool latchSoftPackedFrameSnapshot(const Frame* frame, int frontBuffer, bool screenSwap, bool useStructuredVulkan2D);
     std::vector<u32> captureCurrentPackedPrimaryForDebug(bool topScreen);
     std::vector<u32> captureCurrentComp4PlaceholderForDebug(bool topScreen);
@@ -223,6 +225,8 @@ private:
     bool hasLastValidBottomScreenCapture3dDsFrame = false;
     bool vulkanRegularCaptureTransitionResyncPending = false;
     int vulkanStructuredCaptureGateFrames = 0;
+    int vulkanTemporal3dHistoryGateFrames = 0;
+    int vulkanTemporal3dNotReadyFrames = 0;
     SoftPackedFrameSnapshot lastSoftPackedFrameSnapshot;
     SoftPackedFrameSnapshot previousSoftPackedFrameSnapshot;
     std::array<u32, SoftPackedFrameSnapshot::kPixelCount> cachedEngineATopPlane0{};

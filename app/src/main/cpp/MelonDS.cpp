@@ -1254,6 +1254,7 @@ namespace MelonDSAndroid
 
             return false;
         }
+        requestVulkanPresentationResync();
         return true;
     }
 
