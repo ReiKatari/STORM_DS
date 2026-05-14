@@ -105,6 +105,7 @@ interface SettingsRepository {
 
     fun isRetroAchievementsRichPresenceEnabled(): Boolean
     fun isRetroAchievementsHardcoreEnabled(): Boolean
+    fun isRetroAchievementsOfflineSoftcoreEnabled(): Boolean
     fun areRetroAchievementsUnofficialAchievementsEnabled(): Boolean
     fun isRetroAchievementsEncoreModeEnabled(): Boolean
     fun areRetroAchievementsActiveChallengeIndicatorsEnabled(): Boolean

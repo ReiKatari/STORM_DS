@@ -12,7 +12,6 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.runtime.Composable
@@ -30,7 +29,6 @@ fun RomContextMenu(
     onDismiss: () -> Unit,
     onToggleFavorite: (Rom) -> Unit,
     onShowDetails: (Rom) -> Unit,
-    onShare: (Rom) -> Unit,
 ) {
     if (rom == null) return
     Dialog(onDismissRequest = onDismiss) {
@@ -60,14 +58,6 @@ fun RomContextMenu(
                     label = stringResource(R.string.rom_action_details),
                     onClick = {
                         onShowDetails(rom)
-                        onDismiss()
-                    },
-                )
-                ContextItem(
-                    icon = Icons.Filled.Share,
-                    label = stringResource(R.string.rom_action_share),
-                    onClick = {
-                        onShare(rom)
                         onDismiss()
                     },
                 )

@@ -61,26 +61,26 @@ object MelonModule {
 
     @Provides
     @Singleton
-    fun provideSettingsRepository(@ApplicationContext context: Context, sharedPreferences: SharedPreferences, controllerConfigurationFactory: ControllerConfigurationFactory, json: Json, uriHandler: UriHandler): SettingsRepository {
-        return SharedPreferencesSettingsRepository(context, sharedPreferences, controllerConfigurationFactory, json, uriHandler, CoroutineScope(Dispatchers.IO))
+    fun provideSettingsRepository(@ApplicationContext context: Context, sharedPreferences: SharedPreferences, controllerConfigurationFactory: ControllerConfigurationFactory, json: Json, uriHandler: UriHandler, settingsBackupManager: SettingsBackupManager): SettingsRepository {
+        return SharedPreferencesSettingsRepository(context, sharedPreferences, controllerConfigurationFactory, json, uriHandler, CoroutineScope(Dispatchers.IO), settingsBackupManager)
     }
 
     @Provides
     @Singleton
-    fun provideSettingsBackupManager(@ApplicationContext context: Context, sharedPreferences: SharedPreferences): SettingsBackupManager {
-        return SettingsBackupManager(context, sharedPreferences)
+    fun provideSettingsBackupManager(@ApplicationContext context: Context, sharedPreferences: SharedPreferences, database: MelonDatabase): SettingsBackupManager {
+        return SettingsBackupManager(context, sharedPreferences, database)
     }
 
     @Provides
     @Singleton
-    fun provideRomsRepository(@ApplicationContext context: Context, gson: Gson, settingsRepository: SettingsRepository, romFileProcessorFactory: RomFileProcessorFactory): RomsRepository {
-        return FileSystemRomsRepository(context, gson, settingsRepository, romFileProcessorFactory)
+    fun provideRomsRepository(@ApplicationContext context: Context, gson: Gson, settingsRepository: SettingsRepository, romFileProcessorFactory: RomFileProcessorFactory, uriHandler: UriHandler, settingsBackupManager: SettingsBackupManager): RomsRepository {
+        return FileSystemRomsRepository(context, gson, settingsRepository, romFileProcessorFactory, uriHandler, settingsBackupManager)
     }
 
     @Provides
     @Singleton
-    fun provideCheatsRepository(@ApplicationContext context: Context, database: MelonDatabase): CheatsRepository {
-        return RoomCheatsRepository(context, database)
+    fun provideCheatsRepository(@ApplicationContext context: Context, database: MelonDatabase, settingsBackupManager: SettingsBackupManager): CheatsRepository {
+        return RoomCheatsRepository(context, database, settingsBackupManager)
     }
 
     @Provides
@@ -91,14 +91,14 @@ object MelonModule {
 
     @Provides
     @Singleton
-    fun provideLayoutsRepository(@ApplicationContext context: Context, gson: Gson): LayoutsRepository {
-        return InternalLayoutsRepository(context, gson)
+    fun provideLayoutsRepository(@ApplicationContext context: Context, gson: Gson, settingsBackupManager: SettingsBackupManager): LayoutsRepository {
+        return InternalLayoutsRepository(context, gson, settingsBackupManager)
     }
 
     @Provides
     @Singleton
-    fun provideBackgroundsRepository(@ApplicationContext context: Context, gson: Gson): BackgroundRepository {
-        return InternalBackgroundsRepository(context, gson)
+    fun provideBackgroundsRepository(@ApplicationContext context: Context, gson: Gson, settingsBackupManager: SettingsBackupManager): BackgroundRepository {
+        return InternalBackgroundsRepository(context, gson, settingsBackupManager)
     }
 
     @Provides

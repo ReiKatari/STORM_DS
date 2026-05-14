@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import me.magnum.melonds.common.UriFileHandler
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.repositories.SettingsRepository
+import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.impl.retroachievements.offline.HardcoreOfflineLossTracker
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerIntegrity
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerRepository
@@ -39,12 +40,14 @@ class MelonDSApplication : Application(), Configuration.Provider {
     @Inject lateinit var uriHandler: UriHandler
     @Inject lateinit var hardcoreOfflineLossTracker: HardcoreOfflineLossTracker
     @Inject lateinit var offlineLedgerRepository: OfflineLedgerRepository
+    @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
         applyTheme()
         performMigrations()
+        settingsBackupManager.initializeMirror()
         recoverUnexpectedHardcoreOfflineLossIfNeeded()
         MelonDSAndroidInterface.setup(UriFileHandler(this, uriHandler))
     }

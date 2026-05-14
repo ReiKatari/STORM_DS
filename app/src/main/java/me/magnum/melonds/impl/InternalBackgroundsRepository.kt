@@ -22,7 +22,11 @@ import java.io.OutputStreamWriter
 import java.lang.reflect.Type
 import java.util.UUID
 
-class InternalBackgroundsRepository(private val context: Context, private val gson: Gson) : BackgroundRepository {
+class InternalBackgroundsRepository(
+        private val context: Context,
+        private val gson: Gson,
+        private val settingsBackupManager: SettingsBackupManager,
+) : BackgroundRepository {
     companion object {
         private const val DATA_FILE = "backgrounds.json"
         private val backgroundListType: Type = object : TypeToken<List<Background>>(){}.type
@@ -121,6 +125,7 @@ class InternalBackgroundsRepository(private val context: Context, private val gs
             OutputStreamWriter(dataFile.outputStream()).use {
                 it.write(layoutsJson)
             }
+            settingsBackupManager.requestMirrorWrite()
         } catch (e: Exception) {
             e.printStackTrace()
         }

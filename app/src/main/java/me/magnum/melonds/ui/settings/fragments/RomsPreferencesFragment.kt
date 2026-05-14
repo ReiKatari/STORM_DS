@@ -1,8 +1,10 @@
 package me.magnum.melonds.ui.settings.fragments
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -15,8 +17,10 @@ import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.domain.model.SizeUnit
+import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
 import me.magnum.melonds.ui.settings.viewmodel.RomPreferencesViewModel
 import me.magnum.melonds.utils.SizeUtils
 import javax.inject.Inject
@@ -29,6 +33,7 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     private val helper by lazy { PreferenceFragmentHelper(this, uriPermissionManager, directoryAccessValidator) }
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
+    @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
     private lateinit var clearRomCachePreference: Preference
 
@@ -39,7 +44,9 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         val cacheSizePreference = findPreference<SeekBarPreference>("rom_cache_max_size")!!
         clearRomCachePreference = findPreference("rom_cache_clear")!!
 
-        helper.setupStoragePickerPreference(findPreference("rom_search_dirs")!!)
+        helper.setupStoragePickerPreference(findPreference<StoragePickerPreference>("rom_search_dirs")!!) { uri, persistDirectory ->
+            handleSettingsMirror(uri, persistDirectory)
+        }
 
         updateMaxCacheSizePreferenceSummary(cacheSizePreference, cacheSizePreference.value)
 
@@ -70,5 +77,36 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     private fun updateMaxCacheSizePreferenceSummary(maxCacheSizePreference: SeekBarPreference, cacheSizeStep: Int) {
         val cacheSize = SizeUnit.MB(128) * 2.toDouble().pow(cacheSizeStep).toLong()
         maxCacheSizePreference.summary = SizeUtils.getBestSizeStringRepresentation(requireContext(), cacheSize)
+    }
+
+    private fun handleSettingsMirror(uri: Uri, persistDirectory: () -> Unit) {
+        if (!settingsBackupManager.isMirrorEnabled()) {
+            persistDirectory()
+            return
+        }
+
+        if (!settingsBackupManager.hasMirrorAt(uri)) {
+            settingsBackupManager.rememberMirrorFallback(uri)
+            persistDirectory()
+            settingsBackupManager.requestMirrorWrite()
+            return
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.settings_mirror_detected_title)
+            .setMessage(R.string.settings_mirror_detected_message)
+            .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
+                settingsBackupManager.rememberMirrorFallback(uri)
+                settingsBackupManager.restoreMirrorFrom(uri)
+                persistDirectory()
+                settingsBackupManager.requestMirrorWrite()
+            }
+            .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
+                settingsBackupManager.rememberMirrorFallback(uri)
+                persistDirectory()
+                settingsBackupManager.overwriteMirrorAt(uri)
+                settingsBackupManager.requestMirrorWrite()
+            }
+            .show()
     }
 }

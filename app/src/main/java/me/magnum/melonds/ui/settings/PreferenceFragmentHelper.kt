@@ -93,15 +93,21 @@ class PreferenceFragmentHelper(
         sBindPreferenceSummaryToValueListener.onPreferenceChange(preference, initialValue)
     }
 
-    fun setupStoragePickerPreference(storagePreference: StoragePickerPreference) {
+    fun setupStoragePickerPreference(
+        storagePreference: StoragePickerPreference,
+        onDirectoryPicked: ((Uri, () -> Unit) -> Unit)? = null,
+    ) {
         if (storagePreference.selectionType == StoragePickerPreference.SelectionType.FILE) {
             setupFilePickerPreference(storagePreference)
         } else {
-            setupDirectoryPickerPreference(storagePreference)
+            setupDirectoryPickerPreference(storagePreference, onDirectoryPicked)
         }
     }
 
-    private fun setupDirectoryPickerPreference(storagePreference: StoragePickerPreference) {
+    private fun setupDirectoryPickerPreference(
+        storagePreference: StoragePickerPreference,
+        onDirectoryPicked: ((Uri, () -> Unit) -> Unit)?,
+    ) {
         bindPreferenceSummaryToValue(storagePreference)
         val filePickerLauncher = fragment.registerForActivityResult(DirectoryPickerContract(storagePreference.permissions), ActivityResultCallback {
             if (it == null) {
@@ -110,7 +116,12 @@ class PreferenceFragmentHelper(
 
             // Validate directory access before update preference
             if (directoryAccessValidator.getDirectoryAccessForPermission(it, storagePreference.permissions) == DirectoryAccessValidator.DirectoryAccessResult.OK) {
-                storagePreference.onDirectoryPicked(it)
+                val persistDirectory = { storagePreference.onDirectoryPicked(it) }
+                if (onDirectoryPicked != null) {
+                    onDirectoryPicked(it, persistDirectory)
+                } else {
+                    persistDirectory()
+                }
             } else {
                 showInvalidDirectoryAccessDialog()
             }
