@@ -744,9 +744,9 @@ FrameQueuePolicy constrainGraphicsHardwareFrameQueuePolicy(FrameQueuePolicy poli
     if (isFastForwardActive())
         return policy;
 
+    policy.MaxBacklogDepth = 1;
     policy.AllowStealPending = false;
-    policy.AllowPreviousFrameReuse = true;
-    policy.AllowDropForDeadline = false;
+    policy.AllowPreviousFrameReuse = false;
     policy.PreferOldestFrame = false;
     policy.PreserveBacklogOnPresent = false;
     return policy;
