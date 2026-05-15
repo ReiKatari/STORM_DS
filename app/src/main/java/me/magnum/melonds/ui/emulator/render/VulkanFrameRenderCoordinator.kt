@@ -42,12 +42,16 @@ class VulkanFrameRenderCoordinator(
     private val managedSurfaces = mutableMapOf<EmulatorSurfaceView, ManagedSurface>()
     private val pendingConfigs = mutableMapOf<EmulatorSurfaceView, PendingSurfaceConfig>()
     private val frameRenderThread = FrameRenderThread()
+    @Volatile private var stopped = false
 
     init {
         frameRenderThread.start()
     }
 
     override fun addSurface(surface: EmulatorSurfaceView) {
+        if (stopped) {
+            return
+        }
         synchronized(surfacesLock) {
             managedSurfaces.putIfAbsent(surface, ManagedSurface())
         }
@@ -64,6 +68,9 @@ class VulkanFrameRenderCoordinator(
 
     override fun removeSurface(surface: EmulatorSurfaceView) {
         surface.setSurfaceLifecycleListener(null)
+        if (stopped) {
+            return
+        }
 
         val surfaceId = synchronized(surfacesLock) {
             pendingConfigs.remove(surface)
@@ -80,6 +87,9 @@ class VulkanFrameRenderCoordinator(
         config: VulkanPresentationConfig?,
         background: RuntimeBackground,
     ) {
+        if (stopped) {
+            return
+        }
         val generation = synchronized(surfacesLock) {
             val currentState = managedSurfaces.getOrPut(surface) { ManagedSurface() }
             currentState.config = config
@@ -113,10 +123,23 @@ class VulkanFrameRenderCoordinator(
     }
 
     override fun renderFrame(frameDeadlineNanos: Long?) {
+        if (stopped) {
+            return
+        }
         frameRenderThread.requestFrameRender(frameDeadlineNanos)
     }
 
     override fun stop() {
+        if (stopped) {
+            return
+        }
+        stopped = true
+        val surfaces = synchronized(surfacesLock) {
+            managedSurfaces.keys.toList()
+        }
+        surfaces.forEach {
+            it.setSurfaceLifecycleListener(null)
+        }
         coordinatorScope.cancel()
         frameRenderThread.requestStop()
         frameRenderThread.quitSafely()
@@ -124,12 +147,18 @@ class VulkanFrameRenderCoordinator(
     }
 
     override fun onSurfaceCreated(surfaceView: EmulatorSurfaceView, surface: Surface) {
+        if (stopped) {
+            return
+        }
         val (width, height) = surfaceView.getCurrentSurfaceSize()
         requestSurfaceAttachmentIfNeeded(surfaceView, surface, width, height)
         refreshSurfacePresentation(surfaceView)
     }
 
     override fun onSurfaceChanged(surfaceView: EmulatorSurfaceView, surface: Surface, width: Int, height: Int) {
+        if (stopped) {
+            return
+        }
         val surfaceId = synchronized(surfacesLock) {
             managedSurfaces[surfaceView]?.surfaceId ?: 0
         }
@@ -143,6 +172,9 @@ class VulkanFrameRenderCoordinator(
     }
 
     override fun onSurfaceDestroyed(surfaceView: EmulatorSurfaceView) {
+        if (stopped) {
+            return
+        }
         val surfaceId = synchronized(surfacesLock) {
             pendingConfigs.remove(surfaceView)
             managedSurfaces[surfaceView]?.also {
@@ -164,6 +196,9 @@ class VulkanFrameRenderCoordinator(
         width: Int,
         height: Int,
     ) {
+        if (stopped) {
+            return
+        }
         val shouldAttach = synchronized(surfacesLock) {
             val managedSurface = managedSurfaces[surfaceView] ?: return@synchronized false
             if (managedSurface.surfaceId != 0 || managedSurface.pendingSurface != null) {
@@ -180,6 +215,9 @@ class VulkanFrameRenderCoordinator(
     }
 
     private fun refreshSurfacePresentation(surface: EmulatorSurfaceView) {
+        if (stopped) {
+            return
+        }
         val currentState = synchronized(surfacesLock) {
             managedSurfaces[surface]?.copy()
         } ?: return
@@ -209,6 +247,9 @@ class VulkanFrameRenderCoordinator(
     private inner class FrameRenderThread : HandlerThread("VulkanPresentThread") {
         @Volatile
         private var handler: Handler? = null
+        @Volatile
+        private var running = true
+        private var cleanedUp = false
         private val renderStatistics = RenderStatistics()
 
         override fun onLooperPrepared() {
@@ -252,6 +293,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         fun requestSurfaceAttachment(surfaceView: EmulatorSurfaceView, surface: Surface, width: Int, height: Int) {
+            if (!running) {
+                return
+            }
             val currentHandler = getActiveHandler() ?: return
             currentHandler.obtainMessage(MSG_ATTACH_SURFACE, surfaceView).also {
                 it.data = bundleOf(
@@ -272,6 +316,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         fun requestSurfaceResize(surfaceView: EmulatorSurfaceView, width: Int, height: Int) {
+            if (!running) {
+                return
+            }
             val currentHandler = getActiveHandler() ?: return
             currentHandler.obtainMessage(MSG_RESIZE_SURFACE, surfaceView).also {
                 it.data = bundleOf(
@@ -296,6 +343,10 @@ class VulkanFrameRenderCoordinator(
             config: VulkanPresentationConfig?,
             backgroundBitmap: Bitmap?,
         ) {
+            if (!running) {
+                backgroundBitmap?.recycle()
+                return
+            }
             val shouldQueueMessage = synchronized(surfacesLock) {
                 val currentPending = pendingConfigs[surfaceView]
                 if (currentPending != null && generation < currentPending.generation) {
@@ -337,6 +388,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         fun requestSurfaceDetachment(surfaceId: Int) {
+            if (!running) {
+                return
+            }
             if (surfaceId == 0) {
                 return
             }
@@ -355,6 +409,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         fun requestFrameRender(frameDeadlineNanos: Long?) {
+            if (!running) {
+                return
+            }
             val currentHandler = getActiveHandler() ?: return
             currentHandler.removeMessages(MSG_RENDER_FRAME)
             currentHandler.obtainMessage(MSG_RENDER_FRAME).also {
@@ -372,9 +429,10 @@ class VulkanFrameRenderCoordinator(
         }
 
         fun requestStop() {
+            running = false
             val currentHandler = getActiveHandler() ?: return
             try {
-                currentHandler.sendEmptyMessage(MSG_STOP)
+                currentHandler.sendMessageAtFrontOfQueue(Message.obtain(currentHandler, MSG_STOP))
             } catch (_: IllegalStateException) {
                 if (handler === currentHandler) {
                     currentHandler.removeCallbacksAndMessages(null)
@@ -384,6 +442,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         private fun renderFrame(frameDeadlineNanos: Long) {
+            if (!running) {
+                return
+            }
             val deadline = frameDeadlineNanos.takeIf { it > 0L } ?: 0L
             val budgetDeadline = if (deadline > 0L) {
                 (deadline - renderStatistics.getPresentationBudgetMarginNs()).coerceAtLeast(0L)
@@ -397,6 +458,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         private fun attachSurface(surfaceView: EmulatorSurfaceView, surface: Surface?, width: Int, height: Int) {
+            if (!running) {
+                return
+            }
             if (surface == null) {
                 return
             }
@@ -446,6 +510,9 @@ class VulkanFrameRenderCoordinator(
         }
 
         private fun resizeSurface(surfaceView: EmulatorSurfaceView, width: Int, height: Int) {
+            if (!running) {
+                return
+            }
             val surfaceId = synchronized(surfacesLock) {
                 managedSurfaces[surfaceView]?.surfaceId ?: 0
             }
@@ -456,6 +523,10 @@ class VulkanFrameRenderCoordinator(
         }
 
         private fun configureSurface(surfaceView: EmulatorSurfaceView, generation: Int, backgroundBitmap: Bitmap?) {
+            if (!running) {
+                backgroundBitmap?.recycle()
+                return
+            }
             val (surfaceId, currentGeneration) = synchronized(surfacesLock) {
                 val managedSurface = managedSurfaces[surfaceView]
                 (managedSurface?.surfaceId ?: 0) to (managedSurface?.generation ?: -1)
@@ -488,10 +559,18 @@ class VulkanFrameRenderCoordinator(
         }
 
         private fun detachSurface(surfaceId: Int) {
+            if (!running && cleanedUp) {
+                return
+            }
             MelonEmulator.detachVulkanSurface(surfaceId)
         }
 
         private fun stopThread() {
+            if (cleanedUp) {
+                return
+            }
+            cleanedUp = true
+            running = false
             val currentHandler = handler
             currentHandler?.removeCallbacksAndMessages(null)
             handler = null
@@ -504,6 +583,10 @@ class VulkanFrameRenderCoordinator(
                 MelonEmulator.detachVulkanSurface(it)
             }
             synchronized(surfacesLock) {
+                managedSurfaces.values.forEach {
+                    it.surfaceId = 0
+                    it.pendingSurface = null
+                }
                 pendingConfigs.clear()
             }
         }

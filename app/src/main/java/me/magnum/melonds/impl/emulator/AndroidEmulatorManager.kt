@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -125,75 +126,97 @@ class AndroidEmulatorManager(
 
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
-            val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
-            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
-            val romUri = fileRomProcessor?.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
+            try {
+                val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
+                val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
+                val romUri = fileRomProcessor?.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
 
-            val emulatorConfiguration = getRomEmulatorConfiguration(rom)
-            setupEmulator(emulatorConfiguration)
+                val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+                setupEmulator(emulatorConfiguration)
 
-            val sram = try {
-                sramProvider.getSramForRom(rom)
-            } catch (exception: SramLoadException) {
-                return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
-            }
+                val sram = try {
+                    sramProvider.getSramForRom(rom)
+                } catch (exception: SramLoadException) {
+                    return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
+                }
 
-            val gbaSlotRomConfig = rom.config.gbaSlotConfig
-            val gbaSlotType = when (gbaSlotRomConfig) {
-                RomGbaSlotConfig.None -> MelonEmulator.GbaSlotType.NONE
-                is RomGbaSlotConfig.GbaRom -> MelonEmulator.GbaSlotType.GBA_ROM
-                RomGbaSlotConfig.MemoryExpansion -> MelonEmulator.GbaSlotType.MEMORY_EXPANSION
-                RomGbaSlotConfig.RumblePak -> MelonEmulator.GbaSlotType.RUMBLE_PAK
-                RomGbaSlotConfig.AnalogInput -> MelonEmulator.GbaSlotType.ANALOG_INPUT
-            }
-            Log.w(TAG, "loadRom: rom='${rom.name}' gbaSlotType=${gbaSlotType.name}")
+                val gbaSlotRomConfig = rom.config.gbaSlotConfig
+                val gbaSlotType = when (gbaSlotRomConfig) {
+                    RomGbaSlotConfig.None -> MelonEmulator.GbaSlotType.NONE
+                    is RomGbaSlotConfig.GbaRom -> MelonEmulator.GbaSlotType.GBA_ROM
+                    RomGbaSlotConfig.MemoryExpansion -> MelonEmulator.GbaSlotType.MEMORY_EXPANSION
+                    RomGbaSlotConfig.RumblePak -> MelonEmulator.GbaSlotType.RUMBLE_PAK
+                    RomGbaSlotConfig.AnalogInput -> MelonEmulator.GbaSlotType.ANALOG_INPUT
+                }
+                Log.w(TAG, "loadRom: rom='${rom.name}' gbaSlotType=${gbaSlotType.name}")
 
-            val loadResult = MelonEmulator.loadRom(
-                romUri = romUri,
-                sramUri = sram,
-                gbaSlotType = gbaSlotType,
-                gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
-                gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
-            )
-            if (loadResult.isTerminal || !isActive) {
-                cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
-                RomLaunchResult.LaunchFailed(loadResult)
-            } else {
-                messageQueue.start()
-                if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                val loadResult = MelonEmulator.loadRom(
+                    romUri = romUri,
+                    sramUri = sram,
+                    gbaSlotType = gbaSlotType,
+                    gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
+                    gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
+                )
+                if (loadResult.isTerminal || !isActive) {
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
-                    messageQueue.stop()
-                    return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-                }
-                MelonEmulator.setupCheats(cheats.toTypedArray())
-                MelonEmulator.startEmulation(startPaused = true)
+                    RomLaunchResult.LaunchFailed(loadResult)
+                } else {
+                    messageQueue.start()
+                    if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                        cameraManager.stopCurrentCameraSource()
+                        MelonEmulator.stopEmulation()
+                        messageQueue.stop()
+                        return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                    }
+                    MelonEmulator.setupCheats(cheats.toTypedArray())
+                    MelonEmulator.startEmulation(startPaused = true)
 
-                RomLaunchResult.LaunchSuccessful(loadResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
+                    RomLaunchResult.LaunchSuccessful(loadResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
+                }
+            } catch (exception: Throwable) {
+                if (exception is CancellationException) {
+                    throw exception
+                }
+                Log.e(TAG, "Failed to load ROM '${rom.name}'", exception)
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                messageQueue.stop()
+                RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
         }
     }
 
     override suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult {
         return withContext(Dispatchers.IO) {
-            val emulatorConfiguration = getFirmwareEmulatorConfiguration(consoleType)
-            setupEmulator(emulatorConfiguration)
-            val result = MelonEmulator.bootFirmware()
-            if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {
-                cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
-                FirmwareLaunchResult.LaunchFailed(result)
-            } else {
-                messageQueue.start()
-                if (!precompileVulkanPipelines(emulatorConfiguration)) {
+            try {
+                val emulatorConfiguration = getFirmwareEmulatorConfiguration(consoleType)
+                setupEmulator(emulatorConfiguration)
+                val result = MelonEmulator.bootFirmware()
+                if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
-                    messageQueue.stop()
-                    return@withContext FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
+                    FirmwareLaunchResult.LaunchFailed(result)
+                } else {
+                    messageQueue.start()
+                    if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                        cameraManager.stopCurrentCameraSource()
+                        MelonEmulator.stopEmulation()
+                        messageQueue.stop()
+                        return@withContext FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
+                    }
+                    MelonEmulator.startEmulation(startPaused = true)
+                    FirmwareLaunchResult.LaunchSuccessful
                 }
-                MelonEmulator.startEmulation(startPaused = true)
-                FirmwareLaunchResult.LaunchSuccessful
+            } catch (exception: Throwable) {
+                if (exception is CancellationException) {
+                    throw exception
+                }
+                Log.e(TAG, "Failed to load firmware", exception)
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                messageQueue.stop()
+                FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
             }
         }
     }

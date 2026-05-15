@@ -20,6 +20,8 @@ interface SettingsRepository {
     fun getFrameLimitSpeedMultiplier(): Float
     fun isRewindEnabled(): Boolean
     fun isSustainedPerformanceModeEnabled(): Boolean
+    fun isAppLogFileEnabled(): Boolean
+    fun observeAppLogFileEnabled(): Flow<Boolean>
 
     fun getRomSearchDirectories(): Array<Uri>
     fun clearRomSearchDirectories()

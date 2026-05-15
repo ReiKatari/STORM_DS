@@ -87,12 +87,18 @@ class AndroidRetroAchievementsRepository(
         val trimmedPassword = password.trim()
 
         if (trimmedUsername.isBlank() || trimmedPassword.isBlank()) {
+            Log.w(RA_TRACE_TAG, "login skipped: blank username or password")
             return Result.failure(IllegalArgumentException("Username and password cannot be blank"))
         }
 
+        Log.i(RA_TRACE_TAG, "login start")
         val result = raApi.login(trimmedUsername, trimmedPassword)
         if (result.isFailure) {
+            val exception = result.exceptionOrNull()
+            Log.w(RA_TRACE_TAG, "login failed: ${exception?.javaClass?.simpleName ?: "unknown"} message=${exception?.message ?: "none"}", exception)
             raUserAuthStore.clearUserAuth()
+        } else {
+            Log.i(RA_TRACE_TAG, "login success")
         }
         return result
     }

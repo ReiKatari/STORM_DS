@@ -8,6 +8,7 @@ sealed class ToastEvent {
     data object RewindNotAvailableWhileRAHardcoreModeEnabled : ToastEvent()
     data object StateSaveFailed : ToastEvent()
     data object StateLoadFailed : ToastEvent()
+    data object InvalidAutoLoadState : ToastEvent()
     data object StateStateDoesNotExist : ToastEvent()
     data object QuickSaveSuccessful : ToastEvent()
     data object QuickLoadSuccessful : ToastEvent()

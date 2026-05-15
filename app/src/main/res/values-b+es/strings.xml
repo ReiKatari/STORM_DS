@@ -81,6 +81,7 @@
     <string name="save_state_slot">%1$s.</string>
     <string name="failed_save_state">No se pudo guardar</string>
     <string name="failed_load_state">No se pudo cargar</string>
+    <string name="invalid_auto_load_state">El estado de carga automática no es válido y se omitió</string>
     <string name="cant_load_empty_slot">No se puede cargar un espacio vacío</string>
     <string name="failed_reset_emulation">No se pudo restablecer la emulación</string>
     <string name="save_states_not_supported">Los estados de guardado no son compatibles mientras se ejecuta el firmware</string>
@@ -109,6 +110,8 @@
     <string name="set_rom_directory">Establecer directorio de la ROM</string>
     <string name="error_invalid_directory">Directorio no válido</string>
     <string name="error_invalid_directory_description">No es posible escribir en el directorio seleccionado. Seleccione uno diferente. Si está seleccionando un archivo comprimido, intente extraerlo.</string>
+    <string name="rom_directory_permission_missing_title">El acceso a la carpeta de ROMs expiró</string>
+    <string name="rom_directory_permission_missing_message">Android restauró la lista de ROMs sin restaurar el acceso a la carpeta. Vuelve a agregar la carpeta de ROMs en Ajustes para autorizarla de nuevo.</string>
     <string name="no_roms_found">No se han encontrado ROMs</string>
     
     <string name="press_any_button">Pulse cualquier botón…</string>
@@ -172,6 +175,8 @@
     <string name="jit_not_supported">JIT solamente es compatible con dispositivos de 64 bits.</string>
     <string name="save_internal_config_as_file">Guardar configuración interna como archivo</string>
     <string name="save_internal_config_as_file_summary">Mantiene melonDualDS.opts sincronizado en el directorio de archivos de guardado, o en una ruta de ROMs si no hay directorio de guardado configurado.</string>
+    <string name="system_app_log_file_enabled">Escribir log de la app en la carpeta de ROMs</string>
+    <string name="system_app_log_file_enabled_summary">Crea melonDualLog.log en la primera carpeta de ROMs y registra líneas logcat de app, nativo y core para depurar. Actívalo solo mientras reproduces un problema.</string>
     <string name="backup_settings">Respaldar ajustes</string>
     <string name="restore_settings">Restaurar ajustes</string>
     <string name="settings_backup_success">Respaldo de ajustes creado.\n\nSe omitieron:\n&#8226; Token de sesión de RetroAchievements\n&#8226; Directorios de búsqueda de ROMs\n&#8226; Directorio de DS BIOS\n&#8226; Directorio de DSi BIOS</string>

@@ -232,6 +232,8 @@ class EmulatorActivity : AppCompatActivity() {
     private var startupPresentationRefreshRunnable: Runnable? = null
     private var startupPresentationRefreshAttempts = 0
     private var rendererDebugPauseEmulation = true
+    private var isClosingEmulator = false
+    private var isFrameRenderCoordinatorStopped = false
     private val frontendInputHandler = object : FrontendInputHandler() {
         var fastForwardEnabled = false
             private set
@@ -609,6 +611,7 @@ class EmulatorActivity : AppCompatActivity() {
                         ToastEvent.RewindNotEnabled -> getString(R.string.rewind_not_enabled) to Toast.LENGTH_SHORT
                         ToastEvent.RewindNotAvailableWhileRAHardcoreModeEnabled -> getString(R.string.rewind_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
                         ToastEvent.StateLoadFailed -> getString(R.string.failed_load_state) to Toast.LENGTH_SHORT
+                        ToastEvent.InvalidAutoLoadState -> getString(R.string.invalid_auto_load_state) to Toast.LENGTH_LONG
                         ToastEvent.StateSaveFailed -> getString(R.string.failed_save_state) to Toast.LENGTH_SHORT
                         ToastEvent.StateStateDoesNotExist -> getString(R.string.cant_load_empty_slot) to Toast.LENGTH_SHORT
                         ToastEvent.CannotLoadSaveStatesWhenRAHardcoreIsEnabled -> getString(R.string.load_states_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
@@ -689,11 +692,7 @@ class EmulatorActivity : AppCompatActivity() {
                 viewModel.uiEvent.collectLatest {
                     when (it) {
                         EmulatorUiEvent.CloseEmulator -> {
-                            choreographerFrameRenderer.stopRendering()
-                            presentation?.apply {
-                                dismiss()
-                            }
-                            finish()
+                            closeEmulatorActivity()
                         }
                         is EmulatorUiEvent.OpenScreen.CheatsScreen -> {
                             val intent = Intent(this@EmulatorActivity, CheatsActivity::class.java)
@@ -962,6 +961,9 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (isClosingEmulator) {
+            return
+        }
         updateDisplays()
         getSystemService<DisplayManager>()?.registerDisplayListener(displayListener, null)
         getSystemService<InputManager>()?.registerInputDeviceListener(connectedControllerManager, null)
@@ -970,6 +972,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun updateDisplays() {
+        if (isClosingEmulator) {
+            return
+        }
         val currentDisplay = ContextCompat.getDisplayOrDefault(this)
         val secondaryDisplay = secondaryDisplaySelector.getSecondaryDisplay(this)
 
@@ -980,6 +985,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun showExternalDisplay(secondaryDisplay: Display?) {
+        if (isClosingEmulator) {
+            return
+        }
         if (presentation?.display?.displayId == secondaryDisplay?.displayId) {
             return
         }
@@ -1190,6 +1198,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun updateRendererScreenAreas() {
+        if (isClosingEmulator || isFrameRenderCoordinatorStopped) {
+            return
+        }
         val (topScreen, bottomScreen) = if (binding.viewLayoutControls.areScreensSwapped()) {
             LayoutComponent.BOTTOM_SCREEN to LayoutComponent.TOP_SCREEN
         } else {
@@ -1228,6 +1239,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun ensurePresentationBackend(renderer: VideoRenderer) {
+        if (isClosingEmulator) {
+            return
+        }
         val targetBackend = renderer.toPresentationBackend()
         if (targetBackend == currentPresentationBackend) {
             return
@@ -1245,6 +1259,7 @@ class EmulatorActivity : AppCompatActivity() {
 
         currentPresentationBackend = targetBackend
         frameRenderCoordinator = createFrameRenderCoordinator(targetBackend)
+        isFrameRenderCoordinatorStopped = false
         choreographerFrameRenderer = ChoreographerFrameRendererFactory.createFrameRenderer(frameRenderCoordinator)
 
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
@@ -1262,6 +1277,9 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun scheduleStartupPresentationRefreshes() {
         cancelStartupPresentationRefreshes()
+        if (isClosingEmulator) {
+            return
+        }
         if (currentPresentationBackend != PresentationBackend.VULKAN) {
             return
         }
@@ -1354,6 +1372,48 @@ class EmulatorActivity : AppCompatActivity() {
         val topHeight = max(1, surfaceHeight / 2)
         val bottomHeight = max(1, surfaceHeight - topHeight)
         return Rect(0, 0, surfaceWidth, topHeight) to Rect(0, topHeight, surfaceWidth, bottomHeight)
+    }
+
+    private fun closeEmulatorActivity() {
+        if (isClosingEmulator) {
+            return
+        }
+
+        isClosingEmulator = true
+        releaseEmulatorUiResources()
+        finish()
+    }
+
+    private fun releaseEmulatorUiResources() {
+        cancelStartupPresentationRefreshes()
+        offlineSyncChoiceDialog?.dismiss()
+        offlineSyncChoiceDialog = null
+        offlineSyncProgressDialog?.dismiss()
+        offlineSyncProgressDialog = null
+        hardcorePendingExitDialog?.dismiss()
+        hardcorePendingExitDialog = null
+        showAchievementList.value = false
+        showPendingSubmissionsDialog.value = false
+        showDualScreenPresets.value = false
+
+        if (::choreographerFrameRenderer.isInitialized) {
+            choreographerFrameRenderer.stopRendering()
+        }
+
+        presentation?.let {
+            runCatching {
+                it.dismiss()
+            }
+        }
+        presentation = null
+
+        if (!isFrameRenderCoordinatorStopped && ::frameRenderCoordinator.isInitialized) {
+            if (::binding.isInitialized) {
+                frameRenderCoordinator.removeSurface(binding.surfaceMain)
+            }
+            frameRenderCoordinator.stop()
+            isFrameRenderCoordinatorStopped = true
+        }
     }
 
     private fun createFrameRenderCoordinator(backend: PresentationBackend): FrameRenderCoordinator {
@@ -3081,7 +3141,9 @@ class EmulatorActivity : AppCompatActivity() {
         cancelStartupPresentationRefreshes()
         enableScreenTimeOut()
         choreographerFrameRenderer.stopRendering()
-        viewModel.pauseEmulator(false)
+        if (!isClosingEmulator && !isFinishing) {
+            viewModel.pauseEmulator(false)
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -3100,17 +3162,14 @@ class EmulatorActivity : AppCompatActivity() {
         getSystemService<DisplayManager>()?.unregisterDisplayListener(displayListener)
         getSystemService<InputManager>()?.unregisterInputDeviceListener(connectedControllerManager)
         connectedControllerManager.stopTrackingControllers()
-        frameRenderCoordinator.removeSurface(binding.surfaceMain)
+        if (!isFrameRenderCoordinatorStopped) {
+            frameRenderCoordinator.removeSurface(binding.surfaceMain)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        cancelStartupPresentationRefreshes()
-        offlineSyncChoiceDialog?.dismiss()
-        offlineSyncProgressDialog?.dismiss()
-        hardcorePendingExitDialog?.dismiss()
-        frameRenderCoordinator.stop()
-        presentation?.dismiss()
+        releaseEmulatorUiResources()
     }
 }
 
