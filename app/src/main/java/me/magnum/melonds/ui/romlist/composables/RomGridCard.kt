@@ -41,11 +41,12 @@ fun RomGridCard(
     showAchievementBadge: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         elevation = 3.dp,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
@@ -122,12 +123,13 @@ fun FolderGridCard(
     name: String,
     relativePath: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colors.secondary
     Card(
         elevation = 2.dp,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
     ) {

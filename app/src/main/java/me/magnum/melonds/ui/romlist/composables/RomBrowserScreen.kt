@@ -30,13 +30,18 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -73,6 +78,7 @@ fun RomBrowserScreen(
     val coroutineScope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
+    val itemFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
 
     val folderCount = remember(state.entries) { state.entries.takeWhile { it is RomBrowserEntry.Folder }.size }
     val hasFolders = folderCount > 0
@@ -132,6 +138,7 @@ fun RomBrowserScreen(
                                     coverByHash = coverByHash,
                                     confirmedAchievementHashes = confirmedAchievementHashes,
                                     showAlphabetBar = showAlphabetBar,
+                                    itemFocusRequesters = itemFocusRequesters,
                                     onFolderClick = onFolderClick,
                                     onRomClick = onRomClick,
                                     onRomLongPress = onRomLongPress,
@@ -143,6 +150,7 @@ fun RomBrowserScreen(
                                     allowConfiguration = allowConfiguration,
                                     confirmedAchievementHashes = confirmedAchievementHashes,
                                     showAlphabetBar = showAlphabetBar,
+                                    itemFocusRequesters = itemFocusRequesters,
                                     onFolderClick = onFolderClick,
                                     onRomClick = onRomClick,
                                     onRomLongPress = onRomLongPress,
@@ -187,6 +195,12 @@ fun RomBrowserScreen(
                                 RomViewMode.GRID -> gridState.scrollToItem(0)
                                 RomViewMode.LIST -> listState.scrollToItem(0)
                             }
+                            requestFirstVisibleRomFocus(
+                                state = state,
+                                gridState = gridState,
+                                listState = listState,
+                                itemFocusRequesters = itemFocusRequesters,
+                            )
                         }
                     },
                     onLetterTouched = { idx, letter ->
@@ -195,6 +209,12 @@ fun RomBrowserScreen(
                                 RomViewMode.GRID -> smartScrollGrid(gridState, idx, letter, state.alphabetIndex)
                                 RomViewMode.LIST -> smartScrollList(listState, idx, letter, state.alphabetIndex)
                             }
+                            requestFirstVisibleRomFocus(
+                                state = state,
+                                gridState = gridState,
+                                listState = listState,
+                                itemFocusRequesters = itemFocusRequesters,
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -211,6 +231,7 @@ private fun GridContent(
     coverByHash: Map<String, String>,
     confirmedAchievementHashes: Set<String>,
     showAlphabetBar: Boolean,
+    itemFocusRequesters: MutableMap<String, FocusRequester>,
     onFolderClick: (RomBrowserEntry.Folder) -> Unit,
     onRomClick: (Rom) -> Unit,
     onRomLongPress: (Rom) -> Unit,
@@ -243,6 +264,7 @@ private fun GridContent(
                         name = entry.name,
                         relativePath = entry.relativePath,
                         onClick = { onFolderClick(entry) },
+                        modifier = rememberRomBrowserItemFocusModifier(entry.focusKey(), itemFocusRequesters),
                     )
                     is RomBrowserEntry.RomItem -> RomGridCard(
                         rom = entry.rom,
@@ -250,6 +272,7 @@ private fun GridContent(
                         showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
                         onClick = { onRomClick(entry.rom) },
                         onLongPress = { onRomLongPress(entry.rom) },
+                        modifier = rememberRomBrowserItemFocusModifier(entry.focusKey(), itemFocusRequesters),
                     )
                 }
             }
@@ -265,6 +288,7 @@ private fun ListContent(
     allowConfiguration: Boolean,
     confirmedAchievementHashes: Set<String>,
     showAlphabetBar: Boolean,
+    itemFocusRequesters: MutableMap<String, FocusRequester>,
     onFolderClick: (RomBrowserEntry.Folder) -> Unit,
     onRomClick: (Rom) -> Unit,
     onRomLongPress: (Rom) -> Unit,
@@ -295,6 +319,7 @@ private fun ListContent(
                         name = entry.name,
                         relativePath = entry.relativePath,
                         onClick = { onFolderClick(entry) },
+                        modifier = rememberRomBrowserItemFocusModifier(entry.focusKey(), itemFocusRequesters),
                     )
                     is RomBrowserEntry.RomItem -> RomListRow(
                         rom = entry.rom,
@@ -304,11 +329,64 @@ private fun ListContent(
                         onClick = { onRomClick(entry.rom) },
                         onLongPress = { onRomLongPress(entry.rom) },
                         onConfigClick = { onRomConfigClick(entry.rom) },
+                        modifier = rememberRomBrowserItemFocusModifier(entry.focusKey(), itemFocusRequesters),
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun rememberRomBrowserItemFocusModifier(
+    focusKey: String,
+    itemFocusRequesters: MutableMap<String, FocusRequester>,
+): Modifier {
+    val focusRequester = remember(focusKey) { FocusRequester() }
+    DisposableEffect(focusKey, focusRequester) {
+        itemFocusRequesters[focusKey] = focusRequester
+        onDispose {
+            if (itemFocusRequesters[focusKey] == focusRequester) {
+                itemFocusRequesters.remove(focusKey)
+            }
+        }
+    }
+    return Modifier.focusRequester(focusRequester)
+}
+
+private suspend fun requestFirstVisibleRomFocus(
+    state: RomBrowserUiState,
+    gridState: LazyGridState,
+    listState: LazyListState,
+    itemFocusRequesters: Map<String, FocusRequester>,
+) {
+    repeat(4) {
+        withFrameNanos { }
+        val visibleIndexes = when (state.viewMode) {
+            RomViewMode.GRID -> gridState.layoutInfo.visibleItemsInfo.map { item -> item.index }
+            RomViewMode.LIST -> listState.layoutInfo.visibleItemsInfo.map { item -> item.index }
+        }.sorted()
+        val targetEntry = visibleIndexes
+            .asSequence()
+            .mapNotNull { index -> state.entries.getOrNull(index) as? RomBrowserEntry.RomItem }
+            .firstOrNull()
+        val focusRequester = targetEntry?.let { itemFocusRequesters[it.focusKey()] }
+        if (focusRequester != null) {
+            runCatching { focusRequester.requestFocus() }
+            return
+        }
+    }
+}
+
+private fun RomBrowserEntry.focusKey(): String {
+    return when (this) {
+        is RomBrowserEntry.Folder -> "folder:$docId"
+        is RomBrowserEntry.RomItem -> focusKey()
+    }
+}
+
+private fun RomBrowserEntry.RomItem.focusKey(): String {
+    return "rom:${rom.uri}"
 }
 
 @Composable

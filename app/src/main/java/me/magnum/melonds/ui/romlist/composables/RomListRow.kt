@@ -49,11 +49,12 @@ fun RomListRow(
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     onConfigClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     Surface(color = MaterialTheme.colors.surface) {
         Row(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = onClick,
@@ -147,11 +148,12 @@ fun FolderListRow(
     name: String,
     relativePath: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colors.secondary
     Surface(color = MaterialTheme.colors.surface) {
         Row(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .clickable { onClick() }
                 .padding(horizontal = 12.dp, vertical = 12.dp),

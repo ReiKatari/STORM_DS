@@ -263,6 +263,7 @@ fun AlphabetIndexBar(
                 .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
                 .width(36.dp)
                 .fillMaxHeight()
+                .focusProperties { canFocus = false }
                 .onSizeChanged { barHeightPx = it.height }
                 .pointerInput(letters, hasFolders) {
                     detectVerticalDragGestures(
@@ -296,6 +297,7 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
+                            .focusProperties { canFocus = false }
                             .clickable { onFoldersClicked() },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -323,6 +325,7 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
+                            .focusProperties { canFocus = false }
                             .clickable { alphabetIndex[ch]?.let { idx -> onLetterTouched(idx, ch) } },
                         contentAlignment = Alignment.Center,
                     ) {
