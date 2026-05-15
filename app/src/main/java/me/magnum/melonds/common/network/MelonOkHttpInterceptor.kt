@@ -16,11 +16,11 @@ class MelonOkHttpInterceptor(
         const val IDENTITY_TAG = "RAIdentity"
         const val REQUEST_TAG = "RARequest"
         const val USER_AGENT = "User-Agent"
-        const val MELON_USER_AGENT_PREFIX = "melonDualDS-android/"
+        const val MELON_USER_AGENT_PREFIX = "melonDualDS-android"
         const val UNKNOWN_VERSION = "unknown"
         const val REQUEST_PARAM_ACTION = "r"
         const val MAX_LOGGED_VALUE_LENGTH = 200
-        val REDACTED_PARAMETER_KEYS = setOf("p", "t", "v")
+        val REDACTED_PARAMETER_KEYS = setOf("p", "t", "u", "v")
     }
 
     private val appPackageName = context.packageName
@@ -29,7 +29,8 @@ class MelonOkHttpInterceptor(
     }.getOrNull().orEmpty().ifBlank { UNKNOWN_VERSION }
     private val melonUserAgent: String = buildString {
         append(MELON_USER_AGENT_PREFIX)
-        append(appVersionName)
+        append("/")
+        append(appVersionName.lowercase().replace(' ', '-').replace("(", "").replace(")", ""))
     }
 
     private data class RequestParameter(

@@ -1,8 +1,10 @@
 package me.magnum.melonds.ui.common.rom
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
@@ -19,6 +21,9 @@ import javax.inject.Inject
 class EmulatorLaunchValidationViewModel @Inject constructor(
     private val emulatorLaunchPreconditionChecker: EmulatorLaunchPreconditionChecker,
 ) : ViewModel() {
+    private companion object {
+        private const val TAG = "LaunchValidationVM"
+    }
 
     private sealed class LaunchValidationState {
         data class ValidatingRom(val rom: Rom) : LaunchValidationState()
@@ -34,7 +39,15 @@ class EmulatorLaunchValidationViewModel @Inject constructor(
         currentLaunchValidationState = LaunchValidationState.ValidatingRom(rom)
 
         viewModelScope.launch {
-            val preconditionsCheckResult = emulatorLaunchPreconditionChecker.checkRomLaunchPreconditions(rom)
+            val preconditionsCheckResult = try {
+                emulatorLaunchPreconditionChecker.checkRomLaunchPreconditions(rom)
+            } catch (exception: Throwable) {
+                if (exception is CancellationException) {
+                    throw exception
+                }
+                Log.e(TAG, "ROM launch precondition check failed; continuing to guarded load", exception)
+                RomLaunchPreconditionCheckResult.Success(rom)
+            }
             _romValidationResult.tryEmit(LaunchValidationResult.Rom(preconditionsCheckResult))
             if (preconditionsCheckResult is RomLaunchPreconditionCheckResult.Success) {
                 currentLaunchValidationState = null
@@ -46,7 +59,15 @@ class EmulatorLaunchValidationViewModel @Inject constructor(
         currentLaunchValidationState = LaunchValidationState.ValidatingFirmware(consoleType)
 
         viewModelScope.launch {
-            val preconditionsCheckResult = emulatorLaunchPreconditionChecker.checkFirmwareLaunchPreconditions(consoleType)
+            val preconditionsCheckResult = try {
+                emulatorLaunchPreconditionChecker.checkFirmwareLaunchPreconditions(consoleType)
+            } catch (exception: Throwable) {
+                if (exception is CancellationException) {
+                    throw exception
+                }
+                Log.e(TAG, "Firmware launch precondition check failed; continuing to guarded load", exception)
+                FirmwareLaunchPreconditionCheckResult.Success(consoleType)
+            }
             _romValidationResult.tryEmit(LaunchValidationResult.Firmware(preconditionsCheckResult))
             if (preconditionsCheckResult is FirmwareLaunchPreconditionCheckResult.Success) {
                 currentLaunchValidationState = null

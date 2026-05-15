@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import me.magnum.melonds.common.UriFileHandler
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.repositories.SettingsRepository
+import me.magnum.melonds.impl.AppLogFileRecorder
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.impl.retroachievements.offline.HardcoreOfflineLossTracker
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerIntegrity
@@ -41,6 +42,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
     @Inject lateinit var hardcoreOfflineLossTracker: HardcoreOfflineLossTracker
     @Inject lateinit var offlineLedgerRepository: OfflineLedgerRepository
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
+    @Inject lateinit var appLogFileRecorder: AppLogFileRecorder
 
     override fun onCreate() {
         super.onCreate()
@@ -48,6 +50,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
         applyTheme()
         performMigrations()
         settingsBackupManager.initializeMirror()
+        appLogFileRecorder.start()
         recoverUnexpectedHardcoreOfflineLossIfNeeded()
         MelonDSAndroidInterface.setup(UriFileHandler(this, uriHandler))
     }
@@ -113,6 +116,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
 
     override fun onTerminate() {
         super.onTerminate()
+        appLogFileRecorder.stop()
         MelonDSAndroidInterface.cleanup()
     }
 

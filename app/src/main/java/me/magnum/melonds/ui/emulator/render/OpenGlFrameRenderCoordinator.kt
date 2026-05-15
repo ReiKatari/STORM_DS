@@ -19,6 +19,7 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
     private val surfacesLock = Any()
     private val managedSurfaces = mutableListOf<EmulatorSurfaceView>()
     private val surfacesPendingRemoval = mutableListOf<EmulatorSurfaceView>()
+    @Volatile private var stopped = false
 
     init {
         glContext = GlContext(MelonDSAndroidInterface.getEmulatorGlContext())
@@ -26,12 +27,18 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
     }
 
     override fun addSurface(surface: EmulatorSurfaceView) {
+        if (stopped) {
+            return
+        }
         synchronized(surfacesLock) {
             managedSurfaces.add(surface)
         }
     }
 
     override fun removeSurface(surface: EmulatorSurfaceView) {
+        if (stopped) {
+            return
+        }
         synchronized(surfacesLock) {
             managedSurfaces.remove(surface)
             surfacesPendingRemoval.add(surface)
@@ -40,6 +47,9 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
     }
 
     override fun renderFrame(frameDeadlineNanos: Long?) {
+        if (stopped) {
+            return
+        }
         frameRenderThread.requestFrameRender(frameDeadlineNanos)
     }
 
@@ -52,6 +62,10 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
     }
 
     override fun stop() {
+        if (stopped) {
+            return
+        }
+        stopped = true
         frameRenderThread.requestStop()
         frameRenderThread.quitSafely()
         frameRenderThread.join()
@@ -61,6 +75,7 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
 
         private var handler: Handler? = null
         @Volatile private var running = true
+        private var cleanedUp = false
         private val renderStatistics = RenderStatistics()
 
         private val frameRenderCallback = object : FrameRenderCallback {
@@ -94,6 +109,9 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
         }
 
         fun requestFrameRender(frameDeadlineNanos: Long?) {
+            if (!running) {
+                return
+            }
             handler?.removeMessages(MSG_RENDER_FRAME)
             handler?.obtainMessage(MSG_RENDER_FRAME)?.let {
                 it.data = bundleOf(MSG_RENDER_FRAME_FRAME_DEADLINE_NS to (frameDeadlineNanos ?: 0L))
@@ -102,13 +120,16 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
         }
 
         fun requestSurfaceDestruction() {
+            if (!running) {
+                return
+            }
             handler?.removeMessages(MSG_DESTROY_SURFACES)
             handler?.sendEmptyMessage(MSG_DESTROY_SURFACES)
         }
 
         fun requestStop() {
             running = false
-            handler?.sendEmptyMessage(MSG_STOP)
+            handler?.sendMessageAtFrontOfQueue(Message.obtain(handler, MSG_STOP))
         }
 
         private fun renderFrame(frameDeadlineNanos: Long) {
@@ -138,14 +159,22 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
         }
 
         private fun stopThread() {
-            managedSurfaces.forEach {
-                it.stop(glContext)
+            if (cleanedUp) {
+                return
             }
-            surfacesPendingRemoval.forEach {
-                it.stop(glContext)
+            cleanedUp = true
+            running = false
+
+            synchronized(surfacesLock) {
+                managedSurfaces.forEach {
+                    it.stop(glContext)
+                }
+                surfacesPendingRemoval.forEach {
+                    it.stop(glContext)
+                }
+                managedSurfaces.clear()
+                surfacesPendingRemoval.clear()
             }
-            managedSurfaces.clear()
-            surfacesPendingRemoval.clear()
 
             glContext.release()
             glContext.destroy()

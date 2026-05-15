@@ -127,6 +127,14 @@ class RomListActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.romDirectoryPermissionMissingEvent.collectLatest {
+                    showRomDirectoryPermissionMissingDialog()
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 updatesViewModel.appUpdate.collectLatest {
                     when (it.type) {
                         AppUpdate.Type.PRODUCTION -> showProdUpdateAvailableDialog(it)
@@ -378,6 +386,19 @@ class RomListActivity : AppCompatActivity() {
             .setTitle(R.string.error_invalid_directory)
             .setMessage(R.string.error_invalid_directory_description)
             .setPositiveButton(R.string.ok, null)
+            .setCancelable(true)
+            .show()
+    }
+
+    private fun showRomDirectoryPermissionMissingDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rom_directory_permission_missing_title)
+            .setMessage(R.string.rom_directory_permission_missing_message)
+            .setPositiveButton(R.string.settings) { _, _ ->
+                val intent = Intent(this, SettingsActivity::class.java)
+                startActivity(intent)
+            }
+            .setNegativeButton(R.string.ok, null)
             .setCancelable(true)
             .show()
     }

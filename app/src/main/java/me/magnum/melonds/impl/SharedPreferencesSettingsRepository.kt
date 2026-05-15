@@ -98,6 +98,33 @@ class SharedPreferencesSettingsRepository(
         )
     }
 
+    private inline fun <reified T> getEnumPreference(key: String, default: T): T where T : Enum<T> {
+        val value = preferences.getString(key, default.name.lowercase()) ?: return default
+        return runCatching { enumValueOfIgnoreCase<T>(value) }
+            .onFailure { Log.w(TAG, "Invalid enum preference $key=$value; using ${default.name}") }
+            .getOrDefault(default)
+    }
+
+    private fun getTreeDocument(uri: Uri?, key: String): DocumentFile? {
+        if (uri == null) {
+            return null
+        }
+
+        return runCatching { DocumentFile.fromTreeUri(context, uri) }
+            .onFailure { Log.w(TAG, "Could not access restored tree preference $key=$uri", it) }
+            .getOrNull()
+    }
+
+    private fun getFileUri(document: DocumentFile?, fileName: String): Uri? {
+        if (document == null) {
+            return null
+        }
+
+        return runCatching { document.findFile(fileName)?.uri }
+            .onFailure { Log.w(TAG, "Could not access restored file $fileName", it) }
+            .getOrNull()
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     private val controllerConfiguration by lazy {
         val initialConfiguration = try {
@@ -270,27 +297,23 @@ class SharedPreferencesSettingsRepository(
         val dsBiosDirUri = getDsBiosDirectory()
         val dsiBiosDirUri = getDsiBiosDirectory()
 
-        // Ensure all BIOS dirs are set. DSi requires both dirs to be set
-        if ((consoleType == ConsoleType.DS && useCustomBios && dsBiosDirUri == null) || (consoleType == ConsoleType.DSi && (dsBiosDirUri == null || dsiBiosDirUri == null)))
-            throw IllegalStateException("BIOS directory not set")
+        if ((consoleType == ConsoleType.DS && useCustomBios && dsBiosDirUri == null) || (consoleType == ConsoleType.DSi && (dsBiosDirUri == null || dsiBiosDirUri == null))) {
+            Log.w(TAG, "BIOS directory preference is incomplete; load will fail gracefully if custom BIOS is required")
+        }
 
-        val dsDirDocument = dsBiosDirUri?.let {
-            DocumentFile.fromTreeUri(context, it)
-        }
-        val dsiDirDocument = dsiBiosDirUri?.let {
-            DocumentFile.fromTreeUri(context, it)
-        }
+        val dsDirDocument = getTreeDocument(dsBiosDirUri, "bios_dir")
+        val dsiDirDocument = getTreeDocument(dsiBiosDirUri, "dsi_bios_dir")
 
         return EmulatorConfiguration(
             useCustomBios(),
             showBootScreen(),
-            dsDirDocument?.findFile("bios7.bin")?.uri,
-            dsDirDocument?.findFile("bios9.bin")?.uri,
-            dsDirDocument?.findFile("firmware.bin")?.uri,
-            dsiDirDocument?.findFile("bios7.bin")?.uri,
-            dsiDirDocument?.findFile("bios9.bin")?.uri,
-            dsiDirDocument?.findFile("firmware.bin")?.uri,
-            dsiDirDocument?.findFile("nand.bin")?.uri,
+            getFileUri(dsDirDocument, "bios7.bin"),
+            getFileUri(dsDirDocument, "bios9.bin"),
+            getFileUri(dsDirDocument, "firmware.bin"),
+            getFileUri(dsiDirDocument, "bios7.bin"),
+            getFileUri(dsiDirDocument, "bios9.bin"),
+            getFileUri(dsiDirDocument, "firmware.bin"),
+            getFileUri(dsiDirDocument, "nand.bin"),
             context.filesDir.absolutePath,
             getFastForwardSpeedMultiplier(),
             getFrameLimitSpeedMultiplier(),
@@ -325,13 +348,12 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getTheme(): Theme {
-        val themePreference = preferences.getString("theme", "light")!!
-        return Theme.valueOf(themePreference.uppercase())
+        return getEnumPreference("theme", Theme.LIGHT)
     }
 
     override fun getFastForwardSpeedMultiplier(): Float {
         val speedMultiplierPreference = preferences.getString("fast_forward_speed_multiplier", "-1")!!
-        return speedMultiplierPreference.toFloat()
+        return speedMultiplierPreference.toFloatOrNull() ?: -1.0f
     }
 
     override fun getFrameLimitSpeedMultiplier(): Float {
@@ -347,6 +369,16 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("enable_sustained_performance", false)
     }
 
+    override fun isAppLogFileEnabled(): Boolean {
+        return preferences.getBoolean("system_app_log_file_enabled", false)
+    }
+
+    override fun observeAppLogFileEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("system_app_log_file_enabled") {
+            isAppLogFileEnabled()
+        }
+    }
+
     override fun getRomSearchDirectories(): Array<Uri> {
         val dirPreference = preferences.getStringSet("rom_search_dirs", emptySet())
         return dirPreference?.map { it.toUri() }?.toTypedArray() ?: emptyArray()
@@ -359,8 +391,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getRomIconFiltering(): RomIconFiltering {
-        val romIconFilteringPreference = preferences.getString("rom_icon_filtering", "none")!!
-        return enumValueOfIgnoreCase(romIconFilteringPreference)
+        return getEnumPreference("rom_icon_filtering", RomIconFiltering.NONE)
     }
 
     override fun getRomCacheMaxSize(): SizeUnit {
@@ -400,8 +431,7 @@ class SharedPreferencesSettingsRepository(
 
 
     override fun getDefaultConsoleType(): ConsoleType {
-        val consoleTypePreference = preferences.getString("console_type", "ds")!!
-        return enumValueOfIgnoreCase(consoleTypePreference)
+        return getEnumPreference("console_type", ConsoleType.DS)
     }
 
     override fun observeDefaultConsoleType(): Flow<ConsoleType> {
@@ -441,7 +471,7 @@ class SharedPreferencesSettingsRepository(
         return FirmwareConfiguration(
                 preferences.getString("firmware_settings_nickname", "Player")!!,
                 preferences.getString("firmware_settings_message", "Hello!")!!,
-                preferences.getString("firmware_settings_language", "1")!!.toInt(),
+                preferences.getString("firmware_settings_language", "1")!!.toIntOrNull() ?: 1,
                 preferences.getInt("firmware_settings_colour", 0),
                 birthday.second,
                 birthday.first,
@@ -868,8 +898,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getFpsCounterPosition(): FpsCounterPosition {
-        val fpsCounterPreference = preferences.getString("fps_counter_position", "hidden")!!
-        return FpsCounterPosition.valueOf(fpsCounterPreference.uppercase())
+        return getEnumPreference("fps_counter_position", FpsCounterPosition.HIDDEN)
     }
 
     override fun isExternalDisplayKeepAspectRationEnabled(): Boolean {
@@ -883,8 +912,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getDualScreenPreset(): DualScreenPreset {
-        val value = preferences.getString(KEY_DUAL_SCREEN_PRESET, DualScreenPreset.OFF.name.lowercase())
-        return value?.let { enumValueOfIgnoreCase<DualScreenPreset>(it) } ?: DualScreenPreset.OFF
+        return getEnumPreference(KEY_DUAL_SCREEN_PRESET, DualScreenPreset.OFF)
     }
 
     override fun observeDualScreenPreset(): Flow<DualScreenPreset> {
@@ -945,7 +973,9 @@ class SharedPreferencesSettingsRepository(
 
     override fun getDualScreenInternalVerticalAlignmentOverride(): ScreenAlignment? {
         val value = preferences.getString(KEY_DUAL_SCREEN_INTERNAL_VERTICAL_ALIGNMENT, null) ?: return null
-        return enumValueOfIgnoreCase<ScreenAlignment>(value)
+        return runCatching { enumValueOfIgnoreCase<ScreenAlignment>(value) }
+            .onFailure { Log.w(TAG, "Invalid enum preference $KEY_DUAL_SCREEN_INTERNAL_VERTICAL_ALIGNMENT=$value; ignoring") }
+            .getOrNull()
     }
 
     override fun observeDualScreenInternalVerticalAlignmentOverride(): Flow<ScreenAlignment?> {
@@ -956,7 +986,9 @@ class SharedPreferencesSettingsRepository(
 
     override fun getDualScreenExternalVerticalAlignmentOverride(): ScreenAlignment? {
         val value = preferences.getString(KEY_DUAL_SCREEN_EXTERNAL_VERTICAL_ALIGNMENT, null) ?: return null
-        return enumValueOfIgnoreCase<ScreenAlignment>(value)
+        return runCatching { enumValueOfIgnoreCase<ScreenAlignment>(value) }
+            .onFailure { Log.w(TAG, "Invalid enum preference $KEY_DUAL_SCREEN_EXTERNAL_VERTICAL_ALIGNMENT=$value; ignoring") }
+            .getOrNull()
     }
 
     override fun observeDualScreenExternalVerticalAlignmentOverride(): Flow<ScreenAlignment?> {
@@ -966,8 +998,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getDSiCameraSource(): DSiCameraSourceType {
-        val dsiCameraSource = preferences.getString("dsi_camera_source", "physical_cameras")!!
-        return DSiCameraSourceType.valueOf(dsiCameraSource.uppercase())
+        return getEnumPreference("dsi_camera_source", DSiCameraSourceType.PHYSICAL_CAMERAS)
     }
 
     override fun getDSiCameraStaticImage(): Uri? {
@@ -992,23 +1023,19 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun getAudioInterpolation(): AudioInterpolation {
-        val interpolationPreference = preferences.getString("audio_interpolation", "none")!!
-        return enumValueOfIgnoreCase(interpolationPreference)
+        return getEnumPreference("audio_interpolation", AudioInterpolation.NONE)
     }
 
     private fun getAudioBitrate(): AudioBitrate {
-        val bitratePreference = preferences.getString("audio_bitrate", "auto")!!
-        return enumValueOfIgnoreCase(bitratePreference)
+        return getEnumPreference("audio_bitrate", AudioBitrate.AUTO)
     }
 
     override fun getAudioLatency(): AudioLatency {
-        val audioLatencyPreference = preferences.getString("audio_latency", "medium")!!
-        return enumValueOfIgnoreCase(audioLatencyPreference)
+        return getEnumPreference("audio_latency", AudioLatency.MEDIUM)
     }
 
     override fun getMicSource(): MicSource {
-        val micSourcePreference = preferences.getString("mic_source", "blow")!!
-        return enumValueOfIgnoreCase(micSourcePreference)
+        return getEnumPreference("mic_source", MicSource.BLOW)
     }
 
     override fun observeMicSource(): Flow<MicSource> {
@@ -1074,8 +1101,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getSaveStateLocation(rom: Rom): SaveStateLocation {
-        val locationPreference = preferences.getString("save_state_location", "save_dir")!!
-        return SaveStateLocation.valueOf(locationPreference.uppercase())
+        return getEnumPreference("save_state_location", SaveStateLocation.SAVE_DIR)
     }
 
     override fun getSaveStateDirectory(rom: Rom): Uri? {

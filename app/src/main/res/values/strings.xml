@@ -110,6 +110,7 @@
     <string name="save_state_slot">%1$s.</string>
     <string name="failed_save_state">Failed to save state</string>
     <string name="failed_load_state">Failed to load state</string>
+    <string name="invalid_auto_load_state">Auto-load state is invalid and was skipped</string>
     <string name="cant_load_empty_slot">Can\'t load an empty save state slot</string>
     <string name="failed_reset_emulation">Failed to reset emulation</string>
     <string name="save_states_not_supported">Save states are not supported while running the firmware</string>
@@ -145,6 +146,8 @@
     <string name="set_rom_directory">Set ROM directory</string>
     <string name="error_invalid_directory">Invalid directory</string>
     <string name="error_invalid_directory_description">It\'s not possible to write to the selected directory. Please select a different one. If you are selecting a compressed file, try extracting its contents.</string>
+    <string name="rom_directory_permission_missing_title">ROM folder access expired</string>
+    <string name="rom_directory_permission_missing_message">Android restored the ROM list without restoring folder access. Re-add your ROM folder in Settings to authorize it again.</string>
     <string name="no_roms_found">No ROMs found</string>
     <string name="rom_browser_virtual_root">All ROM folders</string>
     <string name="rom_browser_search_results">Search results</string>
@@ -253,6 +256,8 @@
     <string name="jit_not_supported">JIT is only supported in 64 bit devices.</string>
     <string name="save_internal_config_as_file">Save internal config as a file</string>
     <string name="save_internal_config_as_file_summary">Keeps melonDualDS.opts synchronized in the save-file directory, or in a ROM directory when no save-file directory is configured.</string>
+    <string name="system_app_log_file_enabled">Write app log to ROM folder</string>
+    <string name="system_app_log_file_enabled_summary">Creates melonDualLog.log in the first ROM folder and records app, native, and core logcat lines for debugging. Enable only while reproducing an issue.</string>
     <string name="backup_settings">Backup settings</string>
     <string name="restore_settings">Restore settings</string>
     <string name="settings_backup_success">Settings backup created.\n\nThe following were skipped:\n&#8226; RetroAchievements session token\n&#8226; ROM search directories\n&#8226; DS BIOS directory\n&#8226; DSi BIOS directory</string>

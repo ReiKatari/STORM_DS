@@ -80,6 +80,7 @@ class FileSystemRomsRepository(
     private val directoryScanStatuses: MutableMap<String, RomDirectoryScanStatus> = mutableMapOf()
     private val directoryScanStatusFlow = MutableStateFlow<List<RomDirectoryScanStatus>>(emptyList())
     @Volatile private var currentDirectoryUris: Map<String, Uri> = emptyMap()
+    @Volatile private var hasUnavailableSearchDirectories = false
     private val skipNextRomDataSave = AtomicBoolean(false)
 
     init {
@@ -484,7 +485,7 @@ class FileSystemRomsRepository(
     }
 
     private fun onRomsChanged(persist: Boolean = true) {
-        if (!persist) {
+        if (!persist || hasUnavailableSearchDirectories) {
             skipNextRomDataSave.set(true)
         }
         romsChannel.tryEmit(roms.toList())
@@ -493,10 +494,18 @@ class FileSystemRomsRepository(
     private suspend fun loadCachedRoms() {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
 
+        val searchDirectories = settingsRepository.getRomSearchDirectories()
+        val unavailableDirectories = updateUnavailableSearchDirectories(searchDirectories)
         val cacheReadResult = getCachedRoms()
-        val cachedRoms = cacheReadResult.roms
+        val cachedRoms = if (unavailableDirectories.isEmpty()) {
+            cacheReadResult.roms
+        } else {
+            cacheReadResult.roms.filterNot { rom ->
+                unavailableDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) }
+            }
+        }
 
-        if (cachedRoms.isEmpty() && settingsRepository.getRomSearchDirectories().isNotEmpty()) {
+        if (cachedRoms.isEmpty() && searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty()) {
             Log.w(TAG, "ROM cache is empty but search directories exist; forcing full rescan")
             synchronized(directoryStatesLock) {
                 directoryStates.clear()
@@ -508,7 +517,7 @@ class FileSystemRomsRepository(
 
         roms.addAll(cachedRoms)
         if (cachedRoms.isNotEmpty() || cacheReadResult.isValid) {
-            onRomsChanged()
+            onRomsChanged(persist = unavailableDirectories.isEmpty())
         }
 
         var scannedRom = false
@@ -525,9 +534,15 @@ class FileSystemRomsRepository(
 
     private fun scanForNewRoms(targetDirectories: Set<String>? = null): Flow<Rom> = flow {
         val directories = settingsRepository.getRomSearchDirectories()
+        updateUnavailableSearchDirectories(directories)
         for (directory in directories) {
             val directoryString = directory.toString()
             if (targetDirectories != null && !targetDirectories.contains(directoryString)) {
+                continue
+            }
+            if (!hasPersistedReadPermission(directory)) {
+                Log.w(TAG, "ROM directory permission is missing; reauthorization required for $directory")
+                markDirectoryNotScanned(directory, getDirectoryState(directory)?.lastScanned)
                 continue
             }
             val documentFile = DocumentFile.fromTreeUri(context, directory)
@@ -722,6 +737,32 @@ class FileSystemRomsRepository(
         if (hasChanged) {
             saveDirectoryStates()
         }
+    }
+
+    private fun updateUnavailableSearchDirectories(searchDirectories: Array<Uri>): List<Uri> {
+        val unavailableDirectories = searchDirectories.filterNot { hasPersistedReadPermission(it) }
+        hasUnavailableSearchDirectories = unavailableDirectories.isNotEmpty()
+        unavailableDirectories.forEach { directoryUri ->
+            Log.w(TAG, "ROM search directory has no persisted read permission; cache will not be trusted for $directoryUri")
+            markDirectoryNotScanned(directoryUri, getDirectoryState(directoryUri)?.lastScanned)
+        }
+        return unavailableDirectories
+    }
+
+    private fun hasPersistedReadPermission(directoryUri: Uri): Boolean {
+        if (directoryUri.scheme != "content") {
+            return true
+        }
+        return context.contentResolver.persistedUriPermissions.any { permission ->
+            permission.isReadPermission && permission.uri == directoryUri
+        }
+    }
+
+    private fun isRomInDirectory(rom: Rom, directoryUri: Uri): Boolean {
+        val parentUri = rom.parentTreeUri ?: return true
+        val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull() ?: return true
+        val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull() ?: return true
+        return parentDocId.startsWith(directoryDocId)
     }
 
     private fun loadDirectoryStates() {

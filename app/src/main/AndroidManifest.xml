@@ -29,7 +29,8 @@
 
     <application
         android:name=".MelonDSApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="${appName}"
         android:networkSecurityConfig="@xml/network_security_config"

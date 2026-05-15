@@ -29,6 +29,13 @@
             app:iconSpaceReserved="false"
             android:defaultValue="false" />
 
+    <SwitchPreference
+            android:key="system_app_log_file_enabled"
+            android:title="@string/system_app_log_file_enabled"
+            android:summary="@string/system_app_log_file_enabled_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
     <Preference
             android:key="backup_internal_layout"
             android:title="@string/backup_internal_layout"

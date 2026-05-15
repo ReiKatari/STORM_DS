@@ -47,6 +47,10 @@
     <string name="title_emulator_running">模拟器运行中</string>
     <string name="message_stop_emulation">停止模拟并加载新的 ROM？</string>
     <string name="error_load_gba_rom">无法加载 GBA ROM</string>
+    <string name="renderer_unsupported_title">渲染器不受支持</string>
+    <string name="renderer_unsupported_message">此设备/构建版本不支持 %1$s 渲染器。请在设置中更改视频渲染器。</string>
+    <string name="renderer_init_failed_title">渲染器初始化失败</string>
+    <string name="renderer_init_failed_message">%1$s 渲染器无法初始化。请在设置中更改视频渲染器。</string>
     <string name="action_search_roms">搜索 ROM</string>
     <string name="action_sort_roms">为 ROM 排序</string>
     <string name="action_boot_firmware">启动固件</string>
@@ -93,16 +97,29 @@
     <string name="info_play_time_hours_minutes">游玩时长：%1$d小时 %2$d分钟</string> <!-- 例如：4小时 28分钟 -->
     <string name="info_play_time_minutes">游玩时长：%1$d分钟</string> <!-- 例如：28分钟 -->
     <string name="info_loading">加载中…</string>
+    <string name="info_refreshing_retroachievements_title">正在刷新 RetroAchievements…</string>
+    <string name="info_refreshing_retroachievements_detail">正在获取最新成就集</string>
+    <string name="info_vulkan_compiling_title">正在构建 Vulkan 着色器…</string>
+    <string name="info_retroarch_compiling_title">正在构建 RetroArch 着色器…</string>
+    <string name="info_vulkan_compiling_progress">%1$s（%2$d/%3$d）</string>
+    <string name="info_vulkan_compiling_stage_init">正在初始化 Vulkan 渲染器</string>
+    <string name="info_vulkan_compiling_stage_pipelines">正在构建 Vulkan 管线</string>
+    <string name="info_vulkan_compiling_stage_output">正在初始化 Vulkan 输出</string>
+    <string name="info_vulkan_compiling_stage_warmup">正在预热首帧</string>
+    <string name="info_vulkan_compiling_stage_retroarch">正在准备 RetroArch 着色器</string>
     <string name="save_state_slot">%1$s.</string>
     <string name="failed_save_state">保存即时存档失败</string>
     <string name="failed_load_state">读取即时存档失败</string>
+    <string name="invalid_auto_load_state">自动读取的即时存档无效，已跳过</string>
     <string name="cant_load_empty_slot">无法读取空存档槽</string>
     <string name="failed_reset_emulation">重启模拟失败</string>
     <string name="save_states_not_supported">运行固件时不支持即时存档</string>
+    <string name="load_states_unavailable_ra_hardcore_enabled">硬核模式开启时无法读取即时存档</string>
     <string name="rewind_time_seconds">%1$s秒</string> <!-- 例如：43.56秒 -->
     <string name="rewind_time_minutes_seconds">%1$d分%2$s秒</string> <!-- 例如：2分37.93秒 -->
     <string name="rewind_not_enabled">倒带未启用</string>
     <string name="rewind_unavailable_ra_hardcore_enabled">硬核模式开启时无法使用倒带</string>
+    <string name="cheats_unavailable_ra_hardcore_enabled">硬核模式开启时无法使用金手指</string>
     <string name="no_image_selected">未选择图像</string>
     <string name="failed_to_load_image">加载图像失败</string>
     <string name="emulator_stop_gba_mode_unsupported">不支持 GBA 模式</string>
@@ -129,7 +146,22 @@
     <string name="set_rom_directory">设置 ROM 目录</string>
     <string name="error_invalid_directory">无效目录</string>
     <string name="error_invalid_directory_description">无法写入所选目录。请选择另一个目录。如果您选择的是压缩文件，请尝试解压出里面的内容。</string>
+    <string name="rom_directory_permission_missing_title">ROM 文件夹访问权限已过期</string>
+    <string name="rom_directory_permission_missing_message">Android 恢复了 ROM 列表，但没有恢复文件夹访问权限。请在设置中重新添加 ROM 文件夹以再次授权。</string>
     <string name="no_roms_found">未找到 ROM</string>
+    <string name="rom_browser_virtual_root">所有 ROM 文件夹</string>
+    <string name="rom_browser_search_results">搜索结果</string>
+    <string name="rom_browser_navigate_up">返回上级文件夹</string>
+    <string name="manage_rom_directories">管理 ROM 目录</string>
+    <string name="remove_rom_directory_title">移除目录？</string>
+    <string name="remove_rom_directory_message">要从 ROM 搜索目录中移除 %1$s 吗？</string>
+    <string name="action_remove">移除</string>
+    <string name="add_directory">添加目录</string>
+    <string name="rom_cache_status_updated">已更新 %1$s</string>
+    <string name="rom_cache_status_cached">已检查 %1$s（缓存）</string>
+    <string name="rom_cache_status_never">尚未扫描</string>
+    <string name="rom_cache_status_just_now">刚刚</string>
+
     <string name="rom_launch_failed">启动 ROM 失败</string>
     <string name="rom_launch_custom_bios_firmware_bad_setup">此 ROM 被设置为使用自定义的 BIOS 与固件运行，但未正确配置。</string>
     <string name="firmware_launch_failed">启动固件失败</string>
@@ -167,6 +199,8 @@
     <string name="category_system_summary">固件设置，自定义 BIOS，JIT</string>
     <string name="theme">主题</string>
     <string name="fast_forward_max_speed">快进最高速度</string>
+    <string name="frame_limit_speed">模拟速度</string>
+    <string name="frame_limit_speed_disabled_hardcore">RetroAchievements 硬核模式开启时已禁用</string>
     <string name="rewind_description">启用后，系统将定期自动保存即时存档。每当您想倒退一段时间时，只需打开倒带界面并选择要恢复的存档。\n\n请注意，启用此功能后，如果您的设备性能不足，可能会偶尔发生卡顿。此外，还会使用大量内存，具体取决于保存存档的频率以及保存的时长。</string>
     <string name="rewind_save_period">保存间隔</string>
     <string name="rewind_length">倒带长度</string>
@@ -177,6 +211,27 @@
     <string name="check_for_updates">检查更新</string>
     <string name="check_for_updates_summary">启用后，应用程序将定期检查可用更新</string>
     <string name="rom_icon_filtering">图标过滤</string>
+    <string name="rom_view_mode">默认 ROM 列表视图</string>
+    <string name="rom_ra_cover_enabled">使用 RetroAchievements 徽章作为封面</string>
+    <string name="rom_ra_cover_enabled_summary">将官方 RetroAchievements 游戏徽章显示为 ROM 封面。该徽章会在你至少打开过一次 ROM 且 RetroAchievements 会话处于活动状态后显示。</string>
+    <string name="rom_view_mode_grid">网格</string>
+    <string name="rom_view_mode_list">列表</string>
+    <string name="rom_filter_all">全部</string>
+    <string name="rom_filter_favorites">收藏</string>
+    <string name="rom_filter_ds">DS</string>
+    <string name="rom_filter_dsiware">DSiWare</string>
+    <string name="rom_filter_retro_achievements">RA</string>
+    <string name="rom_continue_playing">继续游玩</string>
+    <string name="rom_no_results_filter">没有符合此筛选条件的 ROM</string>
+    <string name="rom_no_favorites">还没有收藏，长按 ROM 可标记收藏</string>
+    <string name="rom_action_favorite">添加到收藏</string>
+    <string name="rom_action_unfavorite">从收藏中移除</string>
+    <string name="rom_action_details">详情</string>
+    <string name="rom_view_toggle">切换网格/列表</string>
+    <string name="rom_config">ROM 配置</string>
+    <string name="rom_sorting_most_played">游玩次数最多</string>
+    <string name="rom_total_play_time_format">已游玩 %1$s</string>
+    <string name="rom_last_played_format">上次游玩：%1$s</string>
     <string name="max_rom_cache_size">最大 ROM 缓存大小</string>
     <string name="clear_extracted_rom_cache">清除提取的 ROM 缓存</string>
     <string name="cache_size">缓存大小：%s</string>
@@ -199,12 +254,20 @@
     <string name="enable_jit">启用 JIT</string>
     <string name="enable_jit_summary">提高性能，但可能会导致定格或崩溃。</string>
     <string name="jit_not_supported">JIT 仅支持64位设备。</string>
+    <string name="save_internal_config_as_file">将内部配置保存为文件</string>
+    <string name="save_internal_config_as_file_summary">使 melonDualDS.opts 与存档文件目录保持同步；未配置存档文件目录时，则与 ROM 目录保持同步。</string>
+    <string name="system_app_log_file_enabled">将应用日志写入 ROM 文件夹</string>
+    <string name="system_app_log_file_enabled_summary">在第一个 ROM 文件夹中创建 melonDualLog.log，并记录应用、原生代码和核心的 logcat 日志用于调试。仅在复现问题时启用。</string>
     <string name="backup_settings">备份设置</string>
     <string name="restore_settings">恢复设置</string>
     <string name="settings_backup_success">设置备份已创建。\n\n已跳过下列设置：\n&#8226; RetroAchievements 会话\n&#8226; ROM/存档目录\n&#8226; DS BIOS 目录\n&#8226; DSi BIOS 目录</string>
     <string name="settings_backup_error">备份设置失败</string>
     <string name="settings_restore_success">设置已恢复。\n\n下列设置未改变：\n&#8226; RetroAchievements 会话\n&#8226; ROM/存档目录\n&#8226; DS BIOS 目录\n&#8226; DSi BIOS 目录</string>
     <string name="settings_restore_error">恢复设置失败</string>
+    <string name="settings_mirror_detected_title">检测到之前的设置</string>
+    <string name="settings_mirror_detected_message">在此目录中找到了 melonDualDS.opts 文件。是否从之前的安装恢复设置？</string>
+    <string name="settings_mirror_restore">恢复</string>
+    <string name="settings_mirror_ignore">不使用</string>
     <string name="backup_internal_layout">备份内部布局</string>
     <string name="backup_external_layout">备份布局</string>
     <string name="restore_internal_layout">恢复内部布局</string>
@@ -220,6 +283,33 @@
     <string name="threaded_rendering">线程化渲染</string>
     <string name="fps_counter_position">FPS 计数器位置</string>
     <string name="threaded_rendering_summary">启用后可提高 3D 游戏性能，但可能会引起图形故障。</string>
+    <string name="video_hacks">视频修正</string>
+    <string name="video_renderer_debug_tools_enabled">渲染器调试工具</string>
+    <string name="video_renderer_debug_tools_enabled_summary">在发布版中启用渲染器快照、一致性捕获以及性能/调试日志。</string>
+    <string name="video_renderer_debug_bgobj_enabled">显示 RendererDebug BGOBJ</string>
+    <string name="video_renderer_debug_bgobj_enabled_summary">启用额外的 RendererDebug[BGOBJ] 日志，用于诊断 2D 合成器。需要开启渲染器调试工具。</string>
+    <string name="video_renderer_debug_latch_trace_enabled">显示 RendererDebug Latch 跟踪</string>
+    <string name="video_renderer_debug_latch_trace_enabled_summary">启用 RendererDebug[Latch] 日志，逐阶段比较实时帧缓冲与锁存后的打包快照。需要开启渲染器调试工具。日志量很大。</string>
+    <string name="renderer_debug_menu">渲染器调试</string>
+    <string name="renderer_debug_capture">转储渲染器捕获</string>
+    <string name="renderer_debug_capture_logged">渲染器捕获已转储到 Logcat。捕获 ID：%1$s</string>
+    <string name="renderer_debug_capture_failed">无法转储渲染器捕获。请检查是否已启用渲染器调试工具。</string>
+    <string name="renderer_2d_debug_controls">2D 渲染器控制</string>
+    <string name="renderer_2d_debug_controls_reset">重置 2D 控制</string>
+    <string name="renderer_3d_debug_controls">3D 渲染器控制</string>
+    <string name="renderer_3d_debug_controls_reset">重置 3D 控制</string>
+    <string name="conservative_coverage_enabled">保守覆盖修正（实验性）</string>
+    <string name="conservative_coverage_enabled_summary">扩展屏幕空间中的多边形覆盖范围，以减少多边形之间 1px-2px 的裂缝。用于修复宝可梦黑线问题。可能会造成轻微过绘。</string>
+    <string name="conservative_coverage_px">覆盖扩展</string>
+    <string name="conservative_coverage_px_summary">内部分辨率像素中的扩展量（0–200 = 0.00–2.00px）。</string>
+    <string name="conservative_coverage_apply_repeat">应用于重复纹理</string>
+    <string name="conservative_coverage_apply_repeat_summary">将覆盖修正应用于 REPEAT 纹理（环绕）。推荐用于使用平铺的地板/水面。</string>
+    <string name="conservative_coverage_apply_clamp">应用于钳制纹理</string>
+    <string name="conservative_coverage_apply_clamp_summary">同时将覆盖修正应用于 CLAMP 纹理。更激进，可能影响精灵/广告牌。</string>
+    <string name="conservative_coverage_depth_bias">深度偏移</string>
+    <string name="conservative_coverage_depth_bias_summary">应用于扩展多边形的深度偏移（0–2000 = 0.000000–0.002000）。仅在看到 Z 冲突或闪烁时使用。</string>
+    <string name="debug_3d_clear_magenta">调试：将 3D 清为洋红色</string>
+    <string name="debug_3d_clear_magenta_summary">如果裂缝变成洋红色，说明它们是覆盖空隙。仅用于调试。</string>
     <string name="category_video">视频</string>
     <string name="category_video_summary">过滤器，线程化渲染，FPS 计数器</string>
     <string name="filter">过滤器</string>
@@ -248,11 +338,32 @@
     <string name="category_save_files_summary">存档文件与即时存档保存位置</string>
     <string name="save_next_rom">保存在 ROM 文件旁边</string>
     <string name="save_file_directory">存档文件目录</string>
+    <string name="save_file_use_srm_extension">使用 .srm 存档扩展名</string>
+    <string name="save_file_use_srm_extension_summary">将游戏存档保存为 .srm 而不是 .sav</string>
     <string name="save_state_location">即时存档保存位置</string>
+    <string name="auto_save_state_on_exit">退出时自动保存即时存档</string>
+    <string name="auto_save_state_on_exit_summary">退出 ROM 时自动保存快速存档槽</string>
+    <string name="auto_load_state_on_launch">启动时自动读取即时存档</string>
+    <string name="auto_load_state_on_launch_summary">启动 ROM 时自动读取快速存档槽</string>
     <string name="input">输入</string>
     <string name="input_summary">按键映射，布局，触觉反馈</string>
     <string name="key_mapping">按键映射</string>
     <string name="key_mapping_summary">为控制器输入分配按键</string>
+    <string name="slot2_analog_mapping_title">Slot-2 模拟输入</string>
+    <string name="slot2_analog_mapping_summary">配置摇杆轴映射以支持 Slot-2 模拟输入。</string>
+    <string name="slot2_analog_axis_x">模拟轴 X</string>
+    <string name="slot2_analog_axis_y">模拟轴 Y</string>
+    <string name="slot2_analog_axis_x_expected">预期移动：左或右</string>
+    <string name="slot2_analog_axis_y_expected">预期移动：上或下</string>
+    <string name="slot2_analog_invert_x">反转 X 轴</string>
+    <string name="slot2_analog_invert_y">反转 Y 轴</string>
+    <string name="slot2_analog_deadzone">死区</string>
+    <string name="slot2_analog_device">控制器过滤</string>
+    <string name="slot2_analog_device_summary">使用任意已配置模拟轴的控制器向 Slot-2 模拟输入提供数据。</string>
+    <string name="slot2_analog_any_device">任意控制器</string>
+    <string name="slot2_analog_map_axis_first">先映射 Slot-2 轴</string>
+    <string name="slot2_analog_waiting_axis_x">左右移动摇杆以映射 Slot-2 X 轴…</string>
+    <string name="slot2_analog_waiting_axis_y">上下移动摇杆以映射 Slot-2 Y 轴…</string>
     <string name="show_soft_input">显示虚拟按键</string>
     <string name="soft_input_behaviour">虚拟按键行为</string>
     <string name="vibrate_on_touch">触摸时振动</string>
@@ -262,6 +373,10 @@
     <string name="retroachievements_summary">登录与管理 RetroAchievements 集成</string> <!-- 将单词拼在一起，因为这是官方名称 -->
     <string name="enable_rich_presence">启用 Rich Presence</string>
     <string name="rich_presence_summary">允许其他 RetroAchievements 用户看到您正在玩什么游戏</string>
+    <string name="show_unofficial_achievements">显示非官方成就</string>
+    <string name="show_unofficial_achievements_summary">在运行时列表和叠加层中包含非官方成就定义</string>
+    <string name="enable_encore_mode">启用 Encore 模式</string>
+    <string name="enable_encore_mode_summary">在当前成就集支持时，允许重新获得已解锁的成就</string>
     <string name="hardcore_mode">硬核模式</string>
     <string name="hardcore_mode_summary">允许获得硬核成就。金手指、即时存档、慢动作和倒带被禁用</string>
     <string name="show_active_challenge_indicators">显示进行中挑战指示器</string>
@@ -312,13 +427,18 @@
     <string name="symbol_decrease">-</string>
 
     <string name="rom_settings">Rom 设置</string> <!-- 无障碍字符串。应避免使用缩写 -->
+    <string name="rom_options_read_error">无法读取 ROM 选项。保存 ROM 设置时将重新创建该文件。</string>
     <string name="label_rom_config_console">启动系统</string>
     <string name="label_rom_config_custom_name">ROM 显示名称</string>
+    <string name="label_rom_config_hg_engine_fix">使用 hg-engine 修正</string>
+    <string name="label_rom_config_input_mode">控制器映射</string>
+    <string name="label_rom_config_custom_input_mapping">自定义按键映射</string>
     <string name="label_rom_config_gba_slot">GBA 卡槽</string>
     <string name="label_rom_config_gba_rom_path">GBA ROM 路径</string>
     <string name="label_rom_config_gba_save_path">GBA 存档路径</string>
     <string name="rom_details_configuration_tab">配置</string>
     <string name="retro_achievements_tab">Retro Achievements</string> <!-- 将单词分开，方便自动换行 -->
+    <string name="rom_details_offline_achievements_tab">离线</string>
 
     <string name="theme_option_light">浅色</string>
     <string name="theme_option_dark">深色</string>
@@ -364,6 +484,12 @@
     <string name="custom_layout_default_name">我的布局</string>
     <string name="use_global_layout">使用全局布局</string>
     <string name="use_global_preference">使用全局设置</string>
+    <string name="use_global_preference_with_value">使用全局设置（%1$s）</string>
+    <string name="global_controller_mapping">全局映射</string>
+    <string name="cannot_change_use_rom_settings">无法更改，请使用 ROM 设置</string>
+    <string name="label_rom_config_video">视频</string>
+    <string name="retroarch_shader_root_not_valid">未配置有效的 RetroArch 着色器根目录。</string>
+    <string name="video_setting_cannot_change_ingame">游戏运行中无法更改</string>
     <string name="layout_deleted">布局已删除</string>
     <string name="named_layout_deleted">布局 “%1$s” 已删除</string>
 
@@ -379,6 +505,38 @@
     <string name="aspect_ratio_16_9">16:9（宽屏）</string>
     <string name="aspect_ratio_unrestricted">无限制</string>
     <string name="keep_ds_ratio">保持 DS 宽高比</string>
+    <string name="dual_screen_presets">预设</string>
+    <string name="dual_screen_presets_settings_title">双屏预设</string>
+    <string name="dual_screen_presets_summary">预设：%1$s\n保持 DS 比例：%2$s • 整数缩放：%3$s\n内部高：%4$s • 内部宽：%5$s\n外部高：%6$s • 外部宽：%7$s</string>
+    <string name="dual_screen_preset_off">已禁用（手动布局）</string>
+    <string name="dual_screen_preset_internal_top_external_bottom">内部：上屏，外部：下屏</string>
+    <string name="dual_screen_preset_internal_bottom_external_top">内部：下屏，外部：上屏</string>
+    <string name="dual_screen_integer_scale">整数缩放</string>
+    <string name="dual_screen_internal_fill_height">填满内部高度</string>
+    <string name="dual_screen_external_fill_height">填满外部高度</string>
+    <string name="dual_screen_internal_fill_width">填满内部宽度</string>
+    <string name="dual_screen_external_fill_width">填满外部宽度</string>
+    <string name="dual_screen_fill_area_button">填充区域选项</string>
+    <string name="dual_screen_fill_area_title">填充区域选项</string>
+    <string name="dual_screen_fill_area_description">选择在整数缩放或保持 DS 比例启用时，哪些 DS 屏幕可以纵向或横向拉伸。</string>
+    <string name="dual_screen_fill_area_requires_integer">启用整数缩放或保持 DS 比例后才能调整这些选项。</string>
+    <string name="dual_screen_fill_section_internal">内部屏幕</string>
+    <string name="dual_screen_fill_section_external">外部屏幕</string>
+    <string name="dual_screen_fill_height_label">高度</string>
+    <string name="dual_screen_fill_width_label">宽度</string>
+    <string name="dual_screen_vertical_alignment_button">垂直对齐选项</string>
+    <string name="dual_screen_vertical_alignment_title">垂直对齐</string>
+    <string name="dual_screen_vertical_alignment_description">覆盖每个屏幕的垂直位置。关闭所有开关则回退到预设默认值。</string>
+    <string name="dual_screen_vertical_alignment_internal_label">内部</string>
+    <string name="dual_screen_vertical_alignment_external_label">外部</string>
+    <string name="dual_screen_vertical_alignment_option_top">顶部</string>
+    <string name="dual_screen_vertical_alignment_option_center">居中</string>
+    <string name="dual_screen_vertical_alignment_option_bottom">底部</string>
+    <string name="dual_screen_vertical_alignment_summary">内部：%1$s • 外部：%2$s</string>
+    <string name="dual_screen_vertical_alignment_preset_value">预设（%1$s）</string>
+    <string name="dual_screen_vertical_alignment_default_hint">预设默认值：内部：%1$s • 外部：%2$s</string>
+    <string name="presets">双屏预设</string>
+    <string name="layout_editing_disabled_by_presets">双屏预设启用时无法编辑布局。</string>
     <string name="above_other_screen">在其它界面上方</string>
     <string name="center_horizontal">水平居中</string>
     <string name="center_vertical">垂直居中</string>
@@ -388,6 +546,7 @@
     <string name="properties">属性</string>
     <string name="revert_changes">撤销更改</string>
     <string name="reset_default">重置为默认值</string>
+    <string name="save_as_new">另存为新布局</string>
     <string name="exit_without_saving">退出但不保存</string>
     <string name="save_and_exit">保存并退出</string>
     <string name="layout_name">布局名称</string>
@@ -395,6 +554,8 @@
     <string name="layout_use_default_opacity">使用默认不透明度</string>
     <string name="layout_opacity">布局不透明度</string>
     <string name="layout_background_load_failed">加载背景失败</string>
+    <string name="layout_component_position_title">%1$s 位置</string>
+    <string name="layout_position_allowed_range">允许范围：%1$d 到 %2$d</string>
 
     <string name="layout_background_title">布局背景</string>
     <string name="background">背景</string>
@@ -410,6 +571,7 @@
     <string name="login">登录</string>
     <string name="retroachievements_login_summary">使用 RetroAchievements 登录以在游玩时解锁成就！</string>
     <string name="retroachievements_login_status">已登录为 %1$s</string>
+    <string name="retroachievements_login_expired_status">RetroAchievements 登录已过期。点击重新登录</string>
     <string name="retroachievements_logout">退出登录</string>
     <string name="retroachievements_logout_confirmation">您确定要从 RetroAchievements 退出登录吗？您将无法在游玩时解锁成就。</string>
     <string name="retro_achievements_login_error">尝试登录时出现问题。请确保您的用户名和密码正确，并且您已连接到互联网</string>
@@ -420,9 +582,18 @@
     <string name="retro_achievements_pending_unlocks">待定的解锁</string>
     <string name="retro_achievements_active_challenges">进行中的挑战</string>
     <string name="retro_achievements_recently_unlokced">最近解锁</string>
+    <string name="retro_achievements_unsynced">未同步</string>
     <string name="retro_achievements_almost_there">即将达成</string>
     <string name="retro_achievements_locked">未解锁</string>
+    <string name="retro_achievements_unsupported">不支持</string>
+    <string name="retro_achievements_unofficial">非官方</string>
     <string name="retro_achievements_unlocked">已解锁</string>
+    <string name="retro_achievements_filter_type">类型</string>
+    <string name="retro_achievements_filter_state">状态</string>
+    <string name="retro_achievements_filter_all">全部</string>
+    <string name="retro_achievements_filter_core">核心</string>
+    <string name="retro_achievements_filter_unofficial">非官方</string>
+    <string name="retro_achievements_filter_no_results">没有符合所选筛选条件的成就。</string>
     <string name="username">用户名</string>
     <string name="password">密码</string>
     <string name="retry">重试</string>
@@ -435,11 +606,64 @@
     <string name="view_achievement">查看成就</string>
     <string name="completed_achievements"><b>%1$d</b> / <b>%2$d</b>（%3$d%%）</string>
     <string name="submitting_achievements">正在登录 RetroAchievements…</string>
+    <string name="offline_ra_pending_title">有待同步的离线成就</string>
+    <string name="offline_ra_softcore_enabled">启用离线软核 RetroAchievements</string>
+    <string name="offline_ra_softcore_enabled_summary">当 RetroAchievements 无法在线提交时，在本地排队保存软核解锁。</string>
+    <string name="offline_ra_pending_message">你有 %1$d 个离线解锁待处理。在线游玩前要立即同步吗？</string>
+    <string name="offline_ra_sync_now">立即同步并开始游玩</string>
+    <string name="offline_ra_continue_offline">继续离线游玩</string>
+    <string name="offline_ra_syncing_title">正在同步离线解锁</string>
+    <string name="offline_ra_syncing_message">正在重放 %1$d 个离线解锁…</string>
+    <string name="offline_ra_sync_failed_toast">离线成就同步失败。继续离线。</string>
+    <string name="offline_ra_sync_skipped_missing_toast">离线成就未同步：%1$s（已不存在）。</string>
+    <string name="offline_ra_sync_skipped_definition_changed_toast">离线成就未同步：%1$s（逻辑已变化）。</string>
+    <string name="offline_ra_sync_skipped_cache_mismatch_toast">离线成就未同步：%1$s（缓存不匹配）。</string>
+    <string name="offline_ra_sync_skipped_summary_toast">%1$d 个离线成就未同步。</string>
+    <string name="offline_ra_ledger_tampered_toast">离线成就账本已被修改。同步已被阻止。</string>
+    <string name="offline_ra_disabled_no_cache_title">离线成就已禁用</string>
+    <string name="offline_ra_disabled_no_cache_message">联网时打开一次此 ROM，以启用离线成就。</string>
+    <string name="offline_ra_settings_title">离线成就</string>
+    <string name="offline_ra_status_enabled">状态：已启用</string>
+    <string name="offline_ra_status_disabled_not_logged_in">状态：已禁用（未登录）</string>
+    <string name="offline_ra_status_disabled_no_cache">状态：已禁用（无预取缓存）</string>
+    <string name="offline_ra_pending_softcore_unlocks">软核待处理：%1$d</string>
+    <string name="offline_ra_pending_ledger_unlocks">账本队列中：%1$d</string>
+    <string name="offline_ra_pending_softcore_notice">软核待处理解锁：%1$d。你可以稍后同步。</string>
+    <string name="offline_ra_in_ledger_badge">在账本中</string>
+    <string name="offline_ra_ledger_integrity">账本完整性：%1$s</string>
+    <string name="offline_ra_ledger_integrity_ok">正常</string>
+    <string name="offline_ra_ledger_integrity_tampered">已篡改</string>
+    <string name="offline_ra_sync_now_button">立即同步</string>
+    <string name="offline_ra_continue_playing_button">继续游玩</string>
+    <string name="offline_ra_exit_anyway_button">仍然退出</string>
+    <string name="offline_ra_hardcore_pending_exit_title">需要同步硬核成就</string>
+    <string name="offline_ra_hardcore_pending_exit_message">你有 %1$d 个硬核成就等待同步。如果现在不先同步就关闭，它们将会丢失。</string>
+    <string name="offline_ra_hardcore_unsynced_warning_toast">%1$d 个硬核解锁已在本地排队。请重新联网并继续游玩以同步，否则关闭时可能会丢失。</string>
+    <string name="offline_ra_hardcore_try_sync_button">立即尝试同步</string>
+    <string name="offline_ra_hardcore_discard_exit_button">放弃并退出</string>
+    <string name="offline_ra_hardcore_sync_result_all">已同步 %1$d 个硬核解锁。现在可以退出。</string>
+    <string name="offline_ra_hardcore_sync_result_partial">已同步 %1$d 个，仍有 %2$d 个待处理。退出前请重试。</string>
+    <string name="offline_ra_hardcore_sync_result_none">无法同步 %1$d 个硬核解锁。请重试，或在退出时放弃。</string>
+    <string name="offline_ra_hardcore_loss_notification_title">硬核离线解锁已丢失</string>
+    <string name="offline_ra_hardcore_loss_notification_message">来自 %2$s 的 %1$d 个硬核解锁已丢失，因为应用在重新联网前已关闭。</string>
+    <string name="offline_ra_mode_softcore">RetroAchievements 模式：软核</string>
+    <string name="offline_ra_mode_hardcore">RetroAchievements 模式：硬核</string>
+    <string name="offline_ra_mode_softcore_offline">RetroAchievements 模式：离线软核</string>
+    <string name="offline_ra_mode_softcore_offline_no_internet_start">离线软核（硬核已禁用：无互联网连接）。</string>
     <string name="achievements_loaded">成就已加载</string>
     <string name="achievements_unlocked_compact">已解锁：%1$d/%2$d</string>
     <string name="game_has_no_achievements">此游戏没有成就</string>
     <string name="achievements_failed_load">加载成就失败！</string>
     <string name="achievements_failed_load_tip">确保您已联网</string>
+    <string name="achievements_login_expired">RetroAchievements 登录已过期！</string>
+    <string name="achievements_login_expired_tip">重新登录以启用 RetroAchievements</string>
+    <string name="ra_runtime_fallback_title">RetroAchievements 运行时回退</string>
+    <string name="ra_runtime_fallback_login_timeout">rc_client 登录超时。本次会话已切换到旧版运行时。</string>
+    <string name="ra_runtime_fallback_login_failed">rc_client 登录失败。本次会话已切换到旧版运行时。</string>
+    <string name="ra_runtime_fallback_load_timeout">rc_client 游戏加载超时。本次会话已切换到旧版运行时。</string>
+    <string name="ra_runtime_fallback_load_failed">rc_client 游戏加载失败。本次会话已切换到旧版运行时。</string>
+    <string name="ra_runtime_fallback_performance">rc_client 对本设备/会话开销过高。本次会话已切换到旧版运行时。</string>
+    <string name="ra_runtime_fallback_unknown">rc_client 不可用。本次会话已切换到旧版运行时。</string>
     <string name="achievement_unlocked">成就已解锁！</string>
     <string name="achievement_missable">可能错过</string>
     <string name="achievement_missable_description">在闯关过程中可能会错过该成就</string>
@@ -471,9 +695,26 @@
         <item>8倍</item>
     </string-array>
 
+    <string-array name="frame_limit_speed_multiplier_options">
+        <item>1.0倍</item>
+        <item>0.75倍</item>
+        <item>0.5倍</item>
+        <item>0.25倍</item>
+    </string-array>
+
     <string-array name="rom_icon_filtering_options">
         <item>无（像素化）</item>
         <item>线性（平滑）</item>
+    </string-array>
+
+    <string-array name="rom_view_mode_options">
+        <item>@string/rom_view_mode_grid</item>
+        <item>@string/rom_view_mode_list</item>
+    </string-array>
+
+    <string-array name="rom_view_mode_values">
+        <item>grid</item>
+        <item>list</item>
     </string-array>
 
     <string-array name="game_runtime_console_type_options">
@@ -497,12 +738,16 @@
         <item>吹气</item>
         <item>设备麦克风</item>
     </string-array>
-
+    <string-array name="rom_input_mode_options">
+        <item>@string/use_global_preference</item>
+        <item>自定义</item>
+    </string-array>
     <string-array name="gba_slot_options">
         <item>无</item>
         <item>GBA ROM</item>
         <item>震动包</item>
         <item>内存扩展卡</item>
+        <item>模拟输入</item>
     </string-array>
 
     <string-array name="console_type_options">
@@ -550,6 +795,15 @@
         <item>RetroArch (.slangp)</item>
     </string-array>
 
+    <string name="video_retroarch_shader_root_title">RetroArch 着色器根目录</string>
+    <string name="video_retroarch_shader_root_summary">选择顶层 slang-shaders 文件夹，以便预设能够解析同级的 shader、include 和 LUT 文件夹。</string>
+    <string name="video_retroarch_shader_preset_title">RetroArch 预设路径</string>
+    <string name="video_retroarch_shader_preset_summary">所选着色器根目录内的相对 .slangp 路径。</string>
+    <string name="video_retroarch_shader_parameters_title">RetroArch 预设参数</string>
+    <string name="video_retroarch_shader_parameters_summary">可选覆盖项，例如 curvature=0.25,mask_strength=0.6。</string>
+    <string name="video_retroarch_shader_clear_history_title">清除 RetroArch 着色器历史</string>
+    <string name="video_retroarch_shader_clear_history_summary">在下一次更新显示配置时重置多通道历史。</string>
+
     <string-array name="dsi_camera_source_options">
         <item>黑屏</item>
         <item>物理摄像头</item>
@@ -559,6 +813,7 @@
     <string-array name="external_display_screen_options">
         <item>@string/top_screen</item>
         <item>@string/bottom_screen</item>
+        <item>@string/custom_layout</item>
     </string-array>
 
     <string-array name="audio_interpolation_options">
