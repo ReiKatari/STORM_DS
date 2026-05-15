@@ -18,6 +18,7 @@ import me.magnum.melonds.database.MelonDatabase
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -110,13 +111,24 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun hasMirrorAt(treeUri: Uri): Boolean {
-        return getMirrorDocument(treeUri)?.isFile == true
+        val mirrorDocument = getMirrorDocument(treeUri)?.takeIf { it.isFile } ?: return false
+        return runCatching {
+            context.contentResolver.openInputStream(mirrorDocument.uri)?.use { input ->
+                JSONObject(input.reader().readText())
+            } != null
+        }.onFailure {
+            Log.w(TAG, "Ignoring invalid settings mirror at $treeUri", it)
+        }.getOrDefault(false)
     }
 
     fun restoreMirrorFrom(treeUri: Uri) {
-        val mirrorDocument = getMirrorDocument(treeUri) ?: return
-        context.contentResolver.openInputStream(mirrorDocument.uri)?.use { input ->
-            restoreBackupJson(JSONObject(input.reader().readText()))
+        runCatching {
+            val mirrorDocument = getMirrorDocument(treeUri) ?: return
+            context.contentResolver.openInputStream(mirrorDocument.uri)?.use { input ->
+                restoreBackupJson(JSONObject(input.reader().readText()))
+            }
+        }.onFailure {
+            Log.w(TAG, "Failed to restore settings mirror from $treeUri", it)
         }
     }
 
@@ -134,9 +146,7 @@ class SettingsBackupManager @Inject constructor(
 
     private fun writeInternalMirror() {
         val mirrorJson = createBackupJson().toString()
-        File(context.filesDir, MELON_DUAL_DS_OPTIONS_FILE).outputStream().use { output ->
-            output.writer().use { it.write(mirrorJson) }
-        }
+        writeTextAtomically(File(context.filesDir, MELON_DUAL_DS_OPTIONS_FILE), mirrorJson)
         val mirrorDirectory = getConfiguredMirrorDirectory()
         if (mirrorDirectory != null) {
             writeMirrorToTree(mirrorDirectory, mirrorJson)
@@ -296,9 +306,7 @@ class SettingsBackupManager @Inject constructor(
         controllerDoc?.uri?.let { uri ->
             val dest = File(context.filesDir, CONTROLLER_FILE)
             context.contentResolver.openInputStream(uri)?.use { input ->
-                dest.outputStream().use { output ->
-                    input.copyTo(output)
-                }
+                writeBytesAtomically(dest, input.readBytes())
             }
         }
 
@@ -306,19 +314,16 @@ class SettingsBackupManager @Inject constructor(
         layoutsDoc?.uri?.let { uri ->
             val dest = File(context.filesDir, LAYOUTS_FILE)
             context.contentResolver.openInputStream(uri)?.use { input ->
-                dest.outputStream().use { output ->
-                    input.copyTo(output)
-                }
+                writeBytesAtomically(dest, input.readBytes())
             }
         }
 
         val romDataDoc = root.findFile(ROM_DATA_FILE)
         romDataDoc?.uri?.let { uri ->
-            val dest = File(context.filesDir, ROM_DATA_FILE)
             context.contentResolver.openInputStream(uri)?.use { input ->
-                dest.outputStream().use { output ->
-                    input.copyTo(output)
-                }
+                val text = input.reader().readText()
+                JSONArray(text)
+                writeTextAtomically(File(context.filesDir, ROM_DATA_FILE), text)
             }
         }
     }
@@ -374,9 +379,11 @@ class SettingsBackupManager @Inject constructor(
 
     private fun restoreJsonFile(root: JSONObject, key: String, fileName: String) {
         val value = root.opt(key) ?: return
-        File(context.filesDir, fileName).outputStream().use { output ->
-            output.writer().use { it.write(value.toString()) }
+        if (value !is JSONObject && value !is JSONArray) {
+            Log.w(TAG, "Skipping invalid backup value for $key")
+            return
         }
+        writeTextAtomically(File(context.filesDir, fileName), value.toString())
     }
 
     private fun restoreRomsJson(root: JSONObject) {
@@ -384,15 +391,11 @@ class SettingsBackupManager @Inject constructor(
         for (i in 0 until roms.length()) {
             val rom = roms.optJSONObject(i) ?: return
             if (!rom.has("uri")) {
-                File(context.filesDir, ROM_METADATA_MIRROR_FILE).outputStream().use { output ->
-                    output.writer().use { it.write(roms.toString()) }
-                }
+                writeTextAtomically(File(context.filesDir, ROM_METADATA_MIRROR_FILE), roms.toString())
                 return
             }
         }
-        File(context.filesDir, ROM_DATA_FILE).outputStream().use { output ->
-            output.writer().use { it.write(roms.toString()) }
-        }
+        writeTextAtomically(File(context.filesDir, ROM_DATA_FILE), roms.toString())
     }
 
     private fun createCheatsJson(): JSONObject {
@@ -531,8 +534,28 @@ class SettingsBackupManager @Inject constructor(
         for (i in 0 until backupArray.length()) {
             merged.put(backupArray.getJSONObject(i))
         }
-        layoutsFile.outputStream().use { out ->
-            out.writer().use { it.write(merged.toString()) }
+        writeTextAtomically(layoutsFile, merged.toString())
+    }
+
+    private fun writeTextAtomically(file: File, text: String) {
+        writeBytesAtomically(file, text.toByteArray())
+    }
+
+    private fun writeBytesAtomically(file: File, bytes: ByteArray) {
+        val tempFile = File(file.parentFile, "${file.name}.tmp")
+        FileOutputStream(tempFile).use { stream ->
+            stream.write(bytes)
+            stream.flush()
+            runCatching { stream.fd.sync() }
+        }
+
+        if (!tempFile.renameTo(file)) {
+            if (file.exists() && !file.delete()) {
+                throw IllegalStateException("Could not replace ${file.absolutePath}")
+            }
+            if (!tempFile.renameTo(file)) {
+                throw IllegalStateException("Could not move ${tempFile.absolutePath} to ${file.absolutePath}")
+            }
         }
     }
 }

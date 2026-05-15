@@ -1267,10 +1267,14 @@ class EmulatorViewModel @Inject constructor(
     fun saveStateToSlot(slot: SaveStateSlot) {
         sessionCoroutineScope.launch {
             (_emulatorState.value as? EmulatorState.RunningRom)?.let {
-                if (!saveRomState(it.rom, slot)) {
-                    _toastEvent.emit(ToastEvent.StateSaveFailed)
+                emulatorManager.pauseEmulator()
+                try {
+                    if (!saveRomState(it.rom, slot)) {
+                        _toastEvent.emit(ToastEvent.StateSaveFailed)
+                    }
+                } finally {
+                    emulatorManager.resumeEmulator()
                 }
-                emulatorManager.resumeEmulator()
             }
         }
     }
@@ -1356,16 +1360,10 @@ class EmulatorViewModel @Inject constructor(
             return false
         }
 
-        // Capture and store the screenshot asynchronously
-        sessionCoroutineScope.launch {
-            // Delete old screenshot immediately
+        withContext(Dispatchers.IO) {
             saveStatesRepository.deleteRomSaveStateScreenshot(rom, slot)
-            val screenshotCaptured = emulatorManager.takeScreenshot()
-
-            if (screenshotCaptured) {
-                val screenshot = screenshotFrameBufferProvider.getScreenshot()
-                saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
-            }
+            val screenshot = screenshotFrameBufferProvider.getScreenshot()
+            saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
         }
 
         return true

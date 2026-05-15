@@ -39,6 +39,7 @@ import me.magnum.melonds.domain.model.rom.RomDirectoryScanStatus
 import me.magnum.melonds.utils.FileUtils
 import me.magnum.melonds.utils.SubjectSharedFlow
 import java.io.File
+import java.io.FileOutputStream
 import java.io.FileReader
 import java.io.OutputStreamWriter
 import java.lang.reflect.Type
@@ -79,12 +80,16 @@ class FileSystemRomsRepository(
     private val directoryScanStatuses: MutableMap<String, RomDirectoryScanStatus> = mutableMapOf()
     private val directoryScanStatusFlow = MutableStateFlow<List<RomDirectoryScanStatus>>(emptyList())
     @Volatile private var currentDirectoryUris: Map<String, Uri> = emptyMap()
+    private val skipNextRomDataSave = AtomicBoolean(false)
 
     init {
         loadDirectoryStates()
 
         coroutineScope.launch {
             romsChannel.collect {
+                if (skipNextRomDataSave.compareAndSet(true, false)) {
+                    return@collect
+                }
                 saveRomData(it)
             }
         }
@@ -478,14 +483,18 @@ class FileSystemRomsRepository(
         }
     }
 
-    private fun onRomsChanged() {
-        romsChannel.tryEmit(roms)
+    private fun onRomsChanged(persist: Boolean = true) {
+        if (!persist) {
+            skipNextRomDataSave.set(true)
+        }
+        romsChannel.tryEmit(roms.toList())
     }
 
     private suspend fun loadCachedRoms() {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
 
-        val cachedRoms = getCachedRoms()
+        val cacheReadResult = getCachedRoms()
+        val cachedRoms = cacheReadResult.roms
 
         if (cachedRoms.isEmpty() && settingsRepository.getRomSearchDirectories().isNotEmpty()) {
             Log.w(TAG, "ROM cache is empty but search directories exist; forcing full rescan")
@@ -498,10 +507,17 @@ class FileSystemRomsRepository(
         }
 
         roms.addAll(cachedRoms)
-        onRomsChanged()
+        if (cachedRoms.isNotEmpty() || cacheReadResult.isValid) {
+            onRomsChanged()
+        }
 
+        var scannedRom = false
         scanForNewRoms().collect {
+            scannedRom = true
             addRom(it)
+        }
+        if (!cacheReadResult.isValid && !scannedRom) {
+            onRomsChanged(persist = false)
         }
 
         scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
@@ -517,14 +533,28 @@ class FileSystemRomsRepository(
             val documentFile = DocumentFile.fromTreeUri(context, directory)
             if (documentFile != null) {
                 processDirectory(directory, documentFile, this)
+            } else {
+                markDirectoryNotScanned(directory, null)
             }
         }
     }
 
     private suspend fun processDirectory(directoryUri: Uri, directoryDocument: DocumentFile, collector: FlowCollector<Rom>) {
-        val fileStates = collectDirectoryFileStates(directoryDocument)
-        val directoryHash = computeDirectoryHash(fileStates)
         val cachedState = getDirectoryState(directoryUri)
+        if (!directoryDocument.exists() || !directoryDocument.canRead()) {
+            Log.w(TAG, "ROM directory is not readable; preserving cached ROM data for $directoryUri")
+            markDirectoryNotScanned(directoryUri, cachedState?.lastScanned)
+            return
+        }
+
+        val fileStates = collectDirectoryFileStates(directoryDocument)
+        if (fileStates == null) {
+            Log.w(TAG, "ROM directory scan failed; preserving cached ROM data for $directoryUri")
+            markDirectoryNotScanned(directoryUri, cachedState?.lastScanned)
+            return
+        }
+
+        val directoryHash = computeDirectoryHash(fileStates)
         val now = System.currentTimeMillis()
 
         if (cachedState != null && cachedState.hash == directoryHash) {
@@ -579,22 +609,31 @@ class FileSystemRomsRepository(
         updateDirectoryState(newCacheState, scanResult)
     }
 
-    private fun collectDirectoryFileStates(rootDirectory: DocumentFile): List<DirectoryFileState> {
+    private fun collectDirectoryFileStates(rootDirectory: DocumentFile): List<DirectoryFileState>? {
         val files = mutableListOf<DirectoryFileState>()
-        collectDirectoryFileStatesRecursive(rootDirectory, files)
+        if (!collectDirectoryFileStatesRecursive(rootDirectory, files)) {
+            return null
+        }
         return files
     }
 
-    private fun collectDirectoryFileStatesRecursive(currentDirectory: DocumentFile, accumulator: MutableList<DirectoryFileState>) {
+    private fun collectDirectoryFileStatesRecursive(currentDirectory: DocumentFile, accumulator: MutableList<DirectoryFileState>): Boolean {
+        if (!currentDirectory.exists() || !currentDirectory.canRead()) {
+            Log.w(TAG, "Cannot read ROM directory ${currentDirectory.uri}")
+            return false
+        }
+
         val files = try {
             currentDirectory.listFiles()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to list files for directory ${currentDirectory.uri}", e)
-            return
+            return false
         }
         for (file in files) {
             if (file.isDirectory) {
-                collectDirectoryFileStatesRecursive(file, accumulator)
+                if (!collectDirectoryFileStatesRecursive(file, accumulator)) {
+                    return false
+                }
                 continue
             }
 
@@ -611,6 +650,7 @@ class FileSystemRomsRepository(
                 )
             }
         }
+        return true
     }
 
     private fun computeDirectoryHash(fileStates: List<DirectoryFileState>): String {
@@ -639,6 +679,17 @@ class FileSystemRomsRepository(
             emitDirectoryScanStatusesLocked()
         }
         saveDirectoryStates()
+    }
+
+    private fun markDirectoryNotScanned(directoryUri: Uri, lastScanTimestamp: Long?) {
+        synchronized(directoryStatesLock) {
+            directoryScanStatuses[directoryUri.toString()] = RomDirectoryScanStatus(
+                directoryUri = directoryUri,
+                lastScanTimestamp = lastScanTimestamp,
+                result = RomDirectoryScanStatus.ScanResult.NOT_SCANNED
+            )
+            emitDirectoryScanStatusesLocked()
+        }
     }
 
     private fun removeRomsByUriStrings(uriStrings: Set<String>) {
@@ -717,27 +768,29 @@ class FileSystemRomsRepository(
         val cacheFile = File(context.filesDir, ROM_DIRECTORY_STATE_FILE)
         try {
             val json = gson.toJson(directoryStateDtos)
-            OutputStreamWriter(cacheFile.outputStream()).use {
-                it.write(json)
-            }
+            writeTextAtomically(cacheFile, json)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save ROM directory cache", e)
         }
     }
 
-    private fun getCachedRoms(): List<Rom> {
+    private fun getCachedRoms(): RomCacheReadResult {
         val cacheFile = File(context.filesDir, ROM_DATA_FILE)
         if (!cacheFile.isFile) {
-            return emptyList()
+            return RomCacheReadResult(emptyList(), true)
         }
 
         return runCatching {
-            gson.fromJson<List<RomDto>>(FileReader(cacheFile), romListType).map {
-                it.toModel()
+            FileReader(cacheFile).use { reader ->
+                gson.fromJson<List<RomDto>>(reader, romListType).orEmpty().map {
+                    it.toModel()
+                }
             }
+        }.map {
+            RomCacheReadResult(it, true)
         }.onFailure {
             Log.w(TAG, "Failed to parse cached ROM data; cache will be rebuilt", it)
-        }.getOrElse { emptyList() }
+        }.getOrElse { RomCacheReadResult(emptyList(), false) }
     }
 
     private fun saveRomData(romData: List<Rom>) {
@@ -749,14 +802,55 @@ class FileSystemRomsRepository(
             }
             val romsJson = gson.toJson(romDtos)
 
-            OutputStreamWriter(cacheFile.outputStream()).use {
-                it.write(romsJson)
-            }
+            writeTextAtomically(cacheFile, romsJson)
+            saveRomMetadataMirror(romData)
             settingsBackupManager.requestMirrorWrite()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save ROM data", e)
         }
     }
+
+    private fun saveRomMetadataMirror(romData: List<Rom>) {
+        val metadataFile = File(context.filesDir, ROM_METADATA_MIRROR_FILE)
+        val metadata = romData.map {
+            RomMetadataMirrorDto(
+                name = it.name,
+                developerName = it.developerName,
+                fileName = it.fileName,
+                config = RomConfigDto.fromModel(it.config),
+                lastPlayed = it.lastPlayed,
+                isDsiWareTitle = it.isDsiWareTitle,
+                retroAchievementsHash = it.retroAchievementsHash,
+                totalPlayTime = it.totalPlayTime.inWholeMilliseconds,
+                isFavorite = it.isFavorite,
+            )
+        }
+        writeTextAtomically(metadataFile, gson.toJson(metadata))
+    }
+
+    private fun writeTextAtomically(file: File, text: String) {
+        val tempFile = File(file.parentFile, "${file.name}.tmp")
+        FileOutputStream(tempFile).use { stream ->
+            val writer = OutputStreamWriter(stream)
+            writer.write(text)
+            writer.flush()
+            runCatching { stream.fd.sync() }
+        }
+
+        if (!tempFile.renameTo(file)) {
+            if (file.exists() && !file.delete()) {
+                throw IllegalStateException("Could not replace ${file.absolutePath}")
+            }
+            if (!tempFile.renameTo(file)) {
+                throw IllegalStateException("Could not move ${tempFile.absolutePath} to ${file.absolutePath}")
+            }
+        }
+    }
+
+    private data class RomCacheReadResult(
+        val roms: List<Rom>,
+        val isValid: Boolean,
+    )
 
     private data class DirectoryCacheState(
         val directoryUri: Uri,

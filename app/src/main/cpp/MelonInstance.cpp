@@ -3667,13 +3667,21 @@ bool MelonInstance::areSaveStatesAllowed()
 
 bool MelonInstance::saveState(Savestate* state, bool refreshScreenshot)
 {
-    if (refreshScreenshot && currentRenderer == Renderer::Vulkan)
+    const bool refreshedVulkanScreenshot = refreshScreenshot && currentRenderer == Renderer::Vulkan;
+    if (refreshedVulkanScreenshot)
         (void)updateVulkanScreenshot(lastCompletedVulkanFrame, lastCompletedVulkanScale, true);
 
     if (!retroAchievementsManager->DoSavestate(state))
+    {
+        if (refreshedVulkanScreenshot)
+            requestVulkanPresentationResync();
         return false;
+    }
 
-    return nds->DoSavestate(state);
+    const bool saved = nds->DoSavestate(state);
+    if (refreshedVulkanScreenshot)
+        requestVulkanPresentationResync();
+    return saved;
 }
 
 bool MelonInstance::loadState(Savestate* state)
