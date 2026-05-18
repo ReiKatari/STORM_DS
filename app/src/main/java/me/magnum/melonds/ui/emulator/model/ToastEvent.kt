@@ -38,6 +38,7 @@ sealed class ToastEvent {
         MISSING_FROM_CURRENT_SET,
         DEFINITION_CHANGED,
         NOT_IN_PREFETCH_CACHE,
+        SERVER_REJECTED,
     }
 
     enum class RetroAchievementsModeStatus {
@@ -49,6 +50,7 @@ sealed class ToastEvent {
     data class OfflineAchievementNotSynced(
         val title: String,
         val reason: OfflineAchievementNotSyncedReason,
+        val reasonDetail: String? = null,
     ) : ToastEvent()
 
     data class OfflineAchievementsNotSyncedSummary(

@@ -629,6 +629,8 @@
     <string name="offline_ra_sync_skipped_missing_toast">Offline achievement not synced: %1$s (no longer exists).</string>
     <string name="offline_ra_sync_skipped_definition_changed_toast">Offline achievement not synced: %1$s (logic changed).</string>
     <string name="offline_ra_sync_skipped_cache_mismatch_toast">Offline achievement not synced: %1$s (cache mismatch).</string>
+    <string name="offline_ra_sync_skipped_server_rejected_toast">%1$s cannot be awarded. Reason: %2$s.</string>
+    <string name="offline_ra_sync_skipped_server_rejected_unknown_reason">RetroAchievements rejected the unlock</string>
     <string name="offline_ra_sync_skipped_summary_toast">%1$d offline achievement(s) were not synced.</string>
     <string name="offline_ra_ledger_tampered_toast">Offline achievements ledger was modified. Sync is blocked.</string>
     <string name="offline_ra_disabled_no_cache_title">Offline achievements disabled</string>

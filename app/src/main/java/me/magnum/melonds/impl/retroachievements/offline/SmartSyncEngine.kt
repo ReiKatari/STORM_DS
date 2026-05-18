@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.exception.UnsuccessfulRequestException
 import me.magnum.rcheevosapi.exception.UserNotAuthenticatedException
+import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAGameId
 import java.io.IOException
 import kotlin.math.min
@@ -16,11 +17,13 @@ enum class SmartSyncSkipReason {
     MISSING_FROM_CURRENT_SET,
     DEFINITION_CHANGED,
     NOT_IN_PREFETCH_CACHE,
+    SERVER_REJECTED,
 }
 
 data class SmartSyncSkippedAchievement(
     val achievementId: Long,
     val reason: SmartSyncSkipReason,
+    val reasonDetail: String? = null,
 )
 
 data class SmartSyncResult(
@@ -119,10 +122,10 @@ class SmartSyncEngine(
             return@withContext Result.failure(IllegalStateException("Game ID mismatch"))
         }
 
-        val currentDefinitionById = currentGame.sets
+        val currentAchievementById = currentGame.sets
             .asSequence()
             .flatMap { it.achievements.asSequence() }
-            .associate { it.id to it.memoryAddress }
+            .associateBy { it.id }
 
         val startSessionResult = raApi.startSession(
             gameId = RAGameId(cache.gameId),
@@ -152,23 +155,35 @@ class SmartSyncEngine(
             val unlock = item.unlock
 
             val cachedDefinition = cachedDefinitionById[unlock.achievementId]
-            val currentDefinition = currentDefinitionById[unlock.achievementId]
+            val currentAchievement = currentAchievementById[unlock.achievementId]
+            val currentDefinition = currentAchievement?.memoryAddress
 
             val skipReason = when {
                 cachedDefinition == null -> SmartSyncSkipReason.NOT_IN_PREFETCH_CACHE
                 currentDefinition == null -> SmartSyncSkipReason.MISSING_FROM_CURRENT_SET
                 currentDefinition != cachedDefinition -> SmartSyncSkipReason.DEFINITION_CHANGED
+                currentAchievement.type == RAAchievement.Type.UNOFFICIAL -> SmartSyncSkipReason.SERVER_REJECTED
                 else -> null
             }
 
             if (skipReason != null) {
+                val reasonDetail = if (skipReason == SmartSyncSkipReason.SERVER_REJECTED) {
+                    "unofficial achievement in current RA set"
+                } else {
+                    null
+                }
                 logRaTrace(
                     "smart_sync_unlock_skipped",
                     "achievement_id" to unlock.achievementId,
                     "reason" to skipReason.name,
+                    "detail" to reasonDetail,
                     "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
                 )
-                skipped += SmartSyncSkippedAchievement(achievementId = unlock.achievementId, reason = skipReason)
+                skipped += SmartSyncSkippedAchievement(
+                    achievementId = unlock.achievementId,
+                    reason = skipReason,
+                    reasonDetail = reasonDetail,
+                )
             } else {
                 val awardResult = retryingAward(
                     achievementId = unlock.achievementId,
@@ -176,22 +191,40 @@ class SmartSyncEngine(
                 )
                 if (awardResult.isFailure) {
                     val error = awardResult.exceptionOrNull()
+                    if (isPermanentSmartSyncAwardRejection(error)) {
+                        val reasonDetail = smartSyncAwardRejectionReason(error)
+                        logRaTrace(
+                            "smart_sync_unlock_skipped",
+                            "achievement_id" to unlock.achievementId,
+                            "reason" to SmartSyncSkipReason.SERVER_REJECTED.name,
+                            "detail" to reasonDetail,
+                            "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
+                            "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+                        )
+                        skipped += SmartSyncSkippedAchievement(
+                            achievementId = unlock.achievementId,
+                            reason = SmartSyncSkipReason.SERVER_REJECTED,
+                            reasonDetail = reasonDetail,
+                        )
+                    } else {
+                        logRaTrace(
+                            "smart_sync_failed",
+                            "filter" to filterTag,
+                            "reason" to "award_failed",
+                            "achievement_id" to unlock.achievementId,
+                            "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+                            "submitted_so_far" to submitted,
+                        )
+                        return@withContext Result.failure(error ?: IllegalStateException("Award failed"))
+                    }
+                } else {
                     logRaTrace(
-                        "smart_sync_failed",
-                        "filter" to filterTag,
-                        "reason" to "award_failed",
+                        "smart_sync_unlock_submitted",
                         "achievement_id" to unlock.achievementId,
-                        "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
-                        "submitted_so_far" to submitted,
+                        "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
                     )
-                    return@withContext Result.failure(error ?: IllegalStateException("Award failed"))
+                    submitted++
                 }
-                logRaTrace(
-                    "smart_sync_unlock_submitted",
-                    "achievement_id" to unlock.achievementId,
-                    "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
-                )
-                submitted++
             }
 
             ledgerRepository.appendAchievementAck(
@@ -305,4 +338,28 @@ class SmartSyncEngine(
         }
         Log.i(RA_TRACE_TAG, message)
     }
+}
+
+internal fun isPermanentSmartSyncAwardRejection(error: Throwable?): Boolean {
+    if (error !is UnsuccessfulRequestException) return false
+
+    val message = error.message ?: return false
+    return message.contains("Unpromoted_achievements_cannot_be_unlocked", ignoreCase = true) ||
+        (message.contains("\"Code\":\"invalid_state\"", ignoreCase = true) &&
+            message.contains("Unpromoted", ignoreCase = true))
+}
+
+internal fun smartSyncAwardRejectionReason(error: Throwable?): String? {
+    if (error !is UnsuccessfulRequestException) return null
+
+    val message = error.message ?: return null
+    val raError = Regex(""""Error"\s*:\s*"([^"]+)"""")
+        .find(message)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.replace('_', ' ')
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+
+    return raError ?: message.takeIf { isPermanentSmartSyncAwardRejection(error) }
 }
