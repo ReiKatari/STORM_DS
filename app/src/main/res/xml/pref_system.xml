@@ -36,6 +36,45 @@
             app:iconSpaceReserved="false"
             android:defaultValue="false" />
 
+    <SwitchPreference
+            android:key="system_dldi_sd_card_enabled"
+            android:title="@string/system_dldi_sd_card_enabled"
+            android:summary="@string/system_dldi_sd_card_enabled_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+            android:key="system_dldi_sd_card_dir"
+            android:title="@string/system_dldi_sd_card_dir"
+            android:summary="@string/not_set"
+            app:iconSpaceReserved="false"
+            app:selection="single"
+            app:type="directory"
+            app:permissions="read_write"
+            app:persistPermissions="true" />
+
+    <ListPreference
+            android:key="system_dldi_sd_card_image_size"
+            android:title="@string/system_dldi_sd_card_image_size"
+            app:iconSpaceReserved="false"
+            android:defaultValue="0"
+            android:entries="@array/dldi_sd_card_image_size_options"
+            android:entryValues="@array/dldi_sd_card_image_size_values" />
+
+    <SwitchPreference
+            android:key="system_disable_touch_gestures_on_touch_screen_area"
+            android:title="@string/system_disable_touch_gestures_on_touch_screen_area"
+            android:summary="@string/system_disable_touch_gestures_on_touch_screen_area_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SwitchPreference
+            android:key="system_ignore_display_cutout_in_layouts"
+            android:title="@string/system_ignore_display_cutout_in_layouts"
+            android:summary="@string/system_ignore_display_cutout_in_layouts_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
     <Preference
             android:key="backup_internal_layout"
             android:title="@string/backup_internal_layout"

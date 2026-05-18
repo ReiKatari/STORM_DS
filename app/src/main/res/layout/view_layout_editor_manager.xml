@@ -43,6 +43,24 @@
                 android:text="@string/delete"
                 style="@style/Button.Editor" />
 
+            <Button
+                android:id="@+id/button_edit_position"
+                app:layout_constraintTop_toTopOf="@id/button_delete_button"
+                app:layout_constraintStart_toEndOf="@id/button_delete_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_position"
+                style="@style/Button.Editor" />
+
+            <Button
+                android:id="@+id/button_edit_size"
+                app:layout_constraintTop_toTopOf="@id/button_delete_button"
+                app:layout_constraintStart_toEndOf="@id/button_edit_position"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_size"
+                style="@style/Button.Editor" />
+
             <ImageButton
                 android:id="@+id/button_hide_controls"
                 android:layout_width="wrap_content"

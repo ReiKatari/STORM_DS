@@ -34,8 +34,10 @@ import me.magnum.melonds.domain.model.AudioInterpolation
 import me.magnum.melonds.domain.model.AudioLatency
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.ControllerConfiguration
+import me.magnum.melonds.domain.model.DldiSdCardConfiguration
 import me.magnum.melonds.domain.model.DualScreenPreset
 import me.magnum.melonds.domain.model.EmulatorConfiguration
+import me.magnum.melonds.domain.model.ExternalDisplayMode
 import me.magnum.melonds.domain.model.FirmwareConfiguration
 import me.magnum.melonds.domain.model.FpsCounterPosition
 import me.magnum.melonds.domain.model.MacAddress
@@ -80,6 +82,7 @@ class SharedPreferencesSettingsRepository(
     companion object {
         private const val TAG = "SPSettingsRepository"
         private const val CONTROLLER_CONFIG_FILE = "controller_config.json"
+        private const val KEY_EXTERNAL_DISPLAY_MODE = "external_display_mode"
         private const val KEY_DUAL_SCREEN_PRESET = "dual_screen_preset"
         private const val KEY_DUAL_SCREEN_INTEGER_SCALE = "dual_screen_integer_scale"
         private const val KEY_DUAL_SCREEN_INTERNAL_FILL = "dual_screen_internal_fill_height"
@@ -327,10 +330,17 @@ class SharedPreferencesSettingsRepository(
             getAudioInterpolation(),
             getAudioBitrate(),
             getVolume(),
-            AudioLatency.LOW,
+            getAudioLatency(),
             getMicSource(),
             getFirmwareConfiguration(),
             renderConfigurationFlow.first(),
+            DldiSdCardConfiguration(
+                enabled = isDldiSdCardEnabled(),
+                imagePath = File(context.filesDir, "dldi/dldi_sd.img").absolutePath,
+                imageSize = getDldiSdCardImageSize(),
+                folderSync = isDldiSdCardEnabled() && getDldiSdCardDirectory() != null,
+                folderPath = File(context.filesDir, "dldi/sync").absolutePath,
+            ),
         )
     }
 
@@ -377,6 +387,20 @@ class SharedPreferencesSettingsRepository(
         return getOrCreatePreferenceSharedFlow("system_app_log_file_enabled") {
             isAppLogFileEnabled()
         }
+    }
+
+    override fun isTouchScreenSystemGestureExclusionEnabled(): Boolean {
+        return preferences.getBoolean("system_disable_touch_gestures_on_touch_screen_area", false)
+    }
+
+    override fun observeTouchScreenSystemGestureExclusionEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("system_disable_touch_gestures_on_touch_screen_area") {
+            isTouchScreenSystemGestureExclusionEnabled()
+        }
+    }
+
+    override fun shouldIgnoreDisplayCutoutInLayouts(): Boolean {
+        return preferences.getBoolean("system_ignore_display_cutout_in_layouts", false)
     }
 
     override fun getRomSearchDirectories(): Array<Uri> {
@@ -492,6 +516,22 @@ class SharedPreferencesSettingsRepository(
     override fun getDsiBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("dsi_bios_dir", null)?.firstOrNull()
         return dirPreference?.toUri()
+    }
+
+    override fun isDldiSdCardEnabled(): Boolean {
+        return preferences.getBoolean("system_dldi_sd_card_enabled", false)
+    }
+
+    override fun getDldiSdCardDirectory(): Uri? {
+        val dirPreference = preferences.getStringSet("system_dldi_sd_card_dir", null)?.firstOrNull()
+        return dirPreference?.toUri()
+    }
+
+    override fun getDldiSdCardImageSize(): Int {
+        return preferences.getString("system_dldi_sd_card_image_size", "0")
+            ?.toIntOrNull()
+            ?.coerceIn(0, 5)
+            ?: 0
     }
 
     override fun showBootScreen(): Boolean {
@@ -901,6 +941,16 @@ class SharedPreferencesSettingsRepository(
         return getEnumPreference("fps_counter_position", FpsCounterPosition.HIDDEN)
     }
 
+    override fun getExternalDisplayMode(): ExternalDisplayMode {
+        return getEnumPreference(KEY_EXTERNAL_DISPLAY_MODE, ExternalDisplayMode.MELON_DUAL_DS)
+    }
+
+    override fun observeExternalDisplayMode(): Flow<ExternalDisplayMode> {
+        return getOrCreatePreferenceSharedFlow(KEY_EXTERNAL_DISPLAY_MODE) {
+            getExternalDisplayMode()
+        }
+    }
+
     override fun isExternalDisplayKeepAspectRationEnabled(): Boolean {
         return preferences.getBoolean("external_display_keep_ratio", true)
     }
@@ -1031,7 +1081,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getAudioLatency(): AudioLatency {
-        return getEnumPreference("audio_latency", AudioLatency.MEDIUM)
+        return getEnumPreference("audio_latency", AudioLatency.LOW)
     }
 
     override fun getMicSource(): MicSource {

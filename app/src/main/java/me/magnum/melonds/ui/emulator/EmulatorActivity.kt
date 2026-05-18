@@ -70,6 +70,7 @@ import me.magnum.melonds.databinding.ActivityEmulatorBinding
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.ControllerConfiguration
 import me.magnum.melonds.domain.model.DualScreenPreset
+import me.magnum.melonds.domain.model.ExternalDisplayMode
 import me.magnum.melonds.domain.model.FpsCounterPosition
 import me.magnum.melonds.domain.model.Rect
 import me.magnum.melonds.domain.model.SaveStateSlot
@@ -81,6 +82,7 @@ import me.magnum.melonds.domain.model.layout.ScreenFold
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.domain.model.ui.Orientation
+import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.extensions.insetsControllerCompat
 import me.magnum.melonds.extensions.setLayoutOrientation
 import me.magnum.melonds.impl.emulator.LifecycleOwnerProvider
@@ -196,6 +198,9 @@ class EmulatorActivity : AppCompatActivity() {
     @Inject
     lateinit var appForegroundStateObserver: AppForegroundStateObserver
 
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
+
     private var presentation: ExternalPresentation? = null
 
     private lateinit var handler: Handler
@@ -234,6 +239,8 @@ class EmulatorActivity : AppCompatActivity() {
     private var rendererDebugPauseEmulation = true
     private var isClosingEmulator = false
     private var isFrameRenderCoordinatorStopped = false
+    private var excludeTouchScreenFromSystemGestures = false
+    private var externalDisplayMode = ExternalDisplayMode.MELON_DUAL_DS
     private val frontendInputHandler = object : FrontendInputHandler() {
         var fastForwardEnabled = false
             private set
@@ -290,6 +297,8 @@ class EmulatorActivity : AppCompatActivity() {
         viewModel.onSettingsChanged()
         setupSustainedPerformanceMode()
         setupFpsCounter()
+        externalDisplayMode = settingsRepository.getExternalDisplayMode()
+        updateDisplays()
         viewModel.resumeEmulator()
     }
     private val romInputSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -331,6 +340,19 @@ class EmulatorActivity : AppCompatActivity() {
         VULKAN,
     }
 
+    private data class ScreenPresentationAreas(
+        val topScreenRect: Rect?,
+        val bottomScreenRect: Rect?,
+        val topAlpha: Float,
+        val bottomAlpha: Float,
+        val topOnTop: Boolean,
+        val bottomOnTop: Boolean,
+        val hybridTopScreenRect: Rect?,
+        val hybridBottomScreenRect: Rect?,
+        val hybridAlpha: Float,
+        val hybridOnTop: Boolean,
+    )
+
     private val rewindSaveStateAdapter = RewindSaveStateAdapter {
         viewModel.rewindToState(it)
         closeRewindWindow()
@@ -353,6 +375,7 @@ class EmulatorActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handler = Handler(mainLooper)
+        externalDisplayMode = settingsRepository.getExternalDisplayMode()
         lifecycleOwnerProvider.setCurrentLifecycleOwner(this)
         binding = ActivityEmulatorBinding.inflate(layoutInflater)
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -365,7 +388,11 @@ class EmulatorActivity : AppCompatActivity() {
                 setMargins(insets.left, insets.top, insets.right, insets.bottom)
             }
 
-            val uiInsets = Insets(insets.left, insets.top, insets.right, insets.bottom)
+            val uiInsets = if (viewModel.shouldIgnoreDisplayCutoutInLayouts()) {
+                Insets.Zero
+            } else {
+                Insets(insets.left, insets.top, insets.right, insets.bottom)
+            }
             viewModel.setUiInsets(uiInsets)
 
             WindowInsetsCompat.CONSUMED
@@ -598,6 +625,23 @@ class EmulatorActivity : AppCompatActivity() {
                     } else {
                         binding.textFps.text = getString(R.string.info_fps, it)
                     }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsRepository.observeTouchScreenSystemGestureExclusionEnabled().collectLatest {
+                    excludeTouchScreenFromSystemGestures = it
+                    updateRendererScreenAreas()
+                    presentation?.setTouchScreenSystemGestureExclusionEnabled(it)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsRepository.observeExternalDisplayMode().collectLatest {
+                    externalDisplayMode = it
+                    updateDisplays()
                 }
             }
         }
@@ -977,6 +1021,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
         val currentDisplay = ContextCompat.getDisplayOrDefault(this)
         val secondaryDisplay = secondaryDisplaySelector.getSecondaryDisplay(this)
+            .takeIf { externalDisplayMode == ExternalDisplayMode.MELON_DUAL_DS }
 
         val displays = deviceLayoutDisplayMapper.mapDisplaysToLayoutDisplays(currentDisplay, secondaryDisplay)
         viewModel.setConnectedDisplays(displays)
@@ -1000,6 +1045,7 @@ class EmulatorActivity : AppCompatActivity() {
                 context = this,
                 display = secondaryDisplay,
                 frameRenderCoordinator = frameRenderCoordinator,
+                excludeTouchScreenFromSystemGestures = excludeTouchScreenFromSystemGestures,
             ).apply {
                 layoutView.apply {
                     setLayoutComponentViewBuilderFactory(RuntimeLayoutComponentViewBuilderFactory())
@@ -1201,6 +1247,47 @@ class EmulatorActivity : AppCompatActivity() {
         if (isClosingEmulator || isFrameRenderCoordinatorStopped) {
             return
         }
+        val areas = resolveMainScreenPresentationAreas()
+        mainScreenRenderer.updateScreenAreas(
+            areas.topScreenRect,
+            areas.bottomScreenRect,
+            areas.topAlpha,
+            areas.bottomAlpha,
+            areas.topOnTop,
+            areas.bottomOnTop,
+            areas.hybridTopScreenRect,
+            areas.hybridBottomScreenRect,
+            areas.hybridAlpha,
+            areas.hybridOnTop,
+        )
+        frameRenderCoordinator.updateSurfacePresentation(
+            binding.surfaceMain,
+            buildVulkanPresentationConfig(
+                topScreenRect = areas.topScreenRect,
+                bottomScreenRect = areas.bottomScreenRect,
+                topAlpha = areas.topAlpha,
+                bottomAlpha = areas.bottomAlpha,
+                topOnTop = areas.topOnTop,
+                bottomOnTop = areas.bottomOnTop,
+                hybridTopScreenRect = areas.hybridTopScreenRect,
+                hybridBottomScreenRect = areas.hybridBottomScreenRect,
+                hybridAlpha = areas.hybridAlpha,
+                hybridOnTop = areas.hybridOnTop,
+            ),
+            currentMainScreenBackground,
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && window?.decorView?.isAttachedToWindow == true) {
+            val touchScreenArea = if (excludeTouchScreenFromSystemGestures) {
+                listOfNotNull(areas.bottomScreenRect, areas.hybridBottomScreenRect).map {
+                    android.graphics.Rect(it.x, it.y, it.right, it.bottom)
+                }
+            } else null
+            window?.systemGestureExclusionRects = touchScreenArea.orEmpty()
+        }
+    }
+
+    private fun resolveMainScreenPresentationAreas(): ScreenPresentationAreas {
         val (topScreen, bottomScreen) = if (binding.viewLayoutControls.areScreensSwapped()) {
             LayoutComponent.BOTTOM_SCREEN to LayoutComponent.TOP_SCREEN
         } else {
@@ -1208,34 +1295,26 @@ class EmulatorActivity : AppCompatActivity() {
         }
         val topView = binding.viewLayoutControls.getLayoutComponentView(topScreen)
         val bottomView = binding.viewLayoutControls.getLayoutComponentView(bottomScreen)
-        mainScreenRenderer.updateScreenAreas(
-            topView?.getRect(),
-            bottomView?.getRect(),
-            topView?.baseAlpha ?: 1f,
-            bottomView?.baseAlpha ?: 1f,
-            topView?.onTop ?: false,
-            bottomView?.onTop ?: false,
+        val hybridView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
+        val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
+        return ScreenPresentationAreas(
+            topScreenRect = topView?.getRect(),
+            bottomScreenRect = bottomView?.getRect(),
+            topAlpha = topView?.baseAlpha ?: 1f,
+            bottomAlpha = bottomView?.baseAlpha ?: 1f,
+            topOnTop = topView?.onTop ?: false,
+            bottomOnTop = bottomView?.onTop ?: false,
+            hybridTopScreenRect = hybridTopRect,
+            hybridBottomScreenRect = hybridBottomRect,
+            hybridAlpha = hybridView?.baseAlpha ?: 1f,
+            hybridOnTop = hybridView?.onTop ?: false,
         )
-        frameRenderCoordinator.updateSurfacePresentation(
-            binding.surfaceMain,
-            buildVulkanPresentationConfig(
-                topScreenRect = topView?.getRect(),
-                bottomScreenRect = bottomView?.getRect(),
-                topAlpha = topView?.baseAlpha ?: 1f,
-                bottomAlpha = bottomView?.baseAlpha ?: 1f,
-                topOnTop = topView?.onTop ?: false,
-                bottomOnTop = bottomView?.onTop ?: false,
-            ),
-            currentMainScreenBackground,
-        )
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && window?.decorView?.isAttachedToWindow == true) {
-            val touchScreenArea = bottomView?.getRect()?.let {
-                val rect = android.graphics.Rect(it.x, it.y, it.right, it.bottom)
-                listOf(rect)
-            }
-            window?.systemGestureExclusionRects = touchScreenArea.orEmpty()
-        }
+    private fun splitHybridScreenRect(rect: Rect): Pair<Rect, Rect> {
+        val topHeight = max(1, rect.height / 2)
+        val bottomHeight = max(1, rect.height - topHeight)
+        return Rect(rect.x, rect.y, rect.width, topHeight) to Rect(rect.x, rect.y + topHeight, rect.width, bottomHeight)
     }
 
     private fun ensurePresentationBackend(renderer: VideoRenderer) {
@@ -1320,6 +1399,10 @@ class EmulatorActivity : AppCompatActivity() {
         bottomAlpha: Float,
         topOnTop: Boolean,
         bottomOnTop: Boolean,
+        hybridTopScreenRect: Rect?,
+        hybridBottomScreenRect: Rect?,
+        hybridAlpha: Float,
+        hybridOnTop: Boolean,
     ): VulkanPresentationConfig? {
         val rendererConfiguration = currentRuntimeRendererConfiguration ?: return null
         if (rendererConfiguration.renderer != VideoRenderer.VULKAN) {
@@ -1332,6 +1415,7 @@ class EmulatorActivity : AppCompatActivity() {
             bottomScreenRect = bottomScreenRect,
             surfaceWidth = if (surfaceWidth > 0) surfaceWidth else binding.surfaceMain.width,
             surfaceHeight = if (surfaceHeight > 0) surfaceHeight else binding.surfaceMain.height,
+            fallbackWhenEmpty = hybridTopScreenRect == null && hybridBottomScreenRect == null,
         )
 
         return VulkanPresentationConfig(
@@ -1341,6 +1425,10 @@ class EmulatorActivity : AppCompatActivity() {
             bottomAlpha = bottomAlpha,
             topOnTop = topOnTop,
             bottomOnTop = bottomOnTop,
+            hybridTopScreenRect = hybridTopScreenRect?.takeIf { it.width > 0 && it.height > 0 },
+            hybridBottomScreenRect = hybridBottomScreenRect?.takeIf { it.width > 0 && it.height > 0 },
+            hybridAlpha = hybridAlpha,
+            hybridOnTop = hybridOnTop,
             backgroundMode = currentMainScreenBackground.mode,
             videoFiltering = rendererConfiguration.videoFiltering,
             retroShaderEnabled = rendererConfiguration.videoFiltering == VideoFiltering.RETROARCH,
@@ -1357,11 +1445,12 @@ class EmulatorActivity : AppCompatActivity() {
         bottomScreenRect: Rect?,
         surfaceWidth: Int,
         surfaceHeight: Int,
+        fallbackWhenEmpty: Boolean,
     ): Pair<Rect?, Rect?> {
         val sanitizedTopRect = topScreenRect?.takeIf { it.width > 0 && it.height > 0 }
         val sanitizedBottomRect = bottomScreenRect?.takeIf { it.width > 0 && it.height > 0 }
 
-        if (sanitizedTopRect != null || sanitizedBottomRect != null) {
+        if (sanitizedTopRect != null || sanitizedBottomRect != null || !fallbackWhenEmpty) {
             return sanitizedTopRect to sanitizedBottomRect
         }
 

@@ -48,10 +48,14 @@ struct VulkanSurfaceConfig
 {
     VulkanPresenterRect topScreen;
     VulkanPresenterRect bottomScreen;
+    VulkanPresenterRect hybridTopScreen;
+    VulkanPresenterRect hybridBottomScreen;
     float topAlpha = 1.0f;
     float bottomAlpha = 1.0f;
     bool topOnTop = false;
     bool bottomOnTop = false;
+    float hybridAlpha = 1.0f;
+    bool hybridOnTop = false;
     VulkanPresenterBackgroundMode backgroundMode = VulkanPresenterBackgroundMode::Stretch;
     VulkanFilterMode filtering = VulkanFilterMode::Nearest;
     bool retroShaderEnabled = false;

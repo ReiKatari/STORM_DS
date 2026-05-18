@@ -48,7 +48,7 @@
             app:isPreferenceVisible="@bool/settings_audio_latency_enabled"
             android:entries="@array/audio_latency_options"
             android:entryValues="@array/audio_latency_values"
-            android:defaultValue="medium" />
+            android:defaultValue="low" />
 
     <ListPreference
             android:key="mic_source"

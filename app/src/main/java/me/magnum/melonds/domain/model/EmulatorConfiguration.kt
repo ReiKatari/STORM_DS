@@ -1,7 +1,9 @@
 package me.magnum.melonds.domain.model
 
 import android.net.Uri
+import androidx.annotation.Keep
 
+@Keep
 data class EmulatorConfiguration(
         val useCustomBios: Boolean,
         val showBootScreen: Boolean,
@@ -28,5 +30,6 @@ data class EmulatorConfiguration(
         val audioLatency: AudioLatency,
         val micSource: MicSource,
         val firmwareConfiguration: FirmwareConfiguration,
-        val rendererConfiguration: RendererConfiguration
+        val rendererConfiguration: RendererConfiguration,
+        val dldiSdCardConfiguration: DldiSdCardConfiguration
 )

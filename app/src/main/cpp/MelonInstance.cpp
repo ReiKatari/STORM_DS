@@ -995,7 +995,7 @@ bool MelonInstance::loadRom(std::string romPath, std::string sramPath)
         // Don't load the SD card itself yet, because we don't know if
         // the ROM is homebrew or not.
         // So this is the card we *would* load if the ROM were homebrew.
-        .SDCard = std::nullopt, // getSDCardArgs("DLDI"), // TODO: Re-enable this
+        .SDCard = getSDCardArgs(currentConfiguration->dldiSdCardSettings),
         .SRAM = std::move(sramData),
         .SRAMLength = sramFileLength,
     };

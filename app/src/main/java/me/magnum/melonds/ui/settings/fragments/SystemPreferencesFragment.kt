@@ -17,7 +17,9 @@ import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.impl.SettingsBackupManager
+import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -26,6 +28,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
+    private val helper by lazy { PreferenceFragmentHelper(this, uriPermissionManager, directoryAccessValidator) }
     private var updatingMirrorPreference = false
 
     private val backupInternalLayoutLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -118,12 +121,16 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         setPreferencesFromResource(R.xml.pref_system, rootKey)
         val jitPreference = findPreference<SwitchPreference>("enable_jit")!!
         val mirrorPreference = findPreference<SwitchPreference>("save_internal_config_as_file")!!
+        val dldiDirectoryPreference = findPreference<StoragePickerPreference>("system_dldi_sd_card_dir")!!
 
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             jitPreference.isEnabled = false
             jitPreference.isChecked = false
             jitPreference.setSummary(R.string.jit_not_supported)
         }
+
+        helper.setupStoragePickerPreference(dldiDirectoryPreference)
+        helper.bindPreferenceSummaryToValue(findPreference("system_dldi_sd_card_image_size"))
 
         mirrorPreference.setOnPreferenceChangeListener { _, newValue ->
             if (updatingMirrorPreference) {

@@ -7,6 +7,7 @@ fun getLayoutComponentName(layoutComponent: LayoutComponent): Int {
     return when (layoutComponent) {
         LayoutComponent.TOP_SCREEN -> R.string.top_screen
         LayoutComponent.BOTTOM_SCREEN -> R.string.bottom_screen
+        LayoutComponent.HYBRID_SCREEN -> R.string.hybrid_screen
         LayoutComponent.DPAD -> R.string.input_dpad
         LayoutComponent.BUTTONS -> R.string.input_abxy_buttons
         LayoutComponent.BUTTON_L -> R.string.input_l

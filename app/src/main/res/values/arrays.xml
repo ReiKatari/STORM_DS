@@ -69,6 +69,12 @@
         <item>top</item>
         <item>bottom</item>
     </string-array>
+
+    <string-array name="external_display_mode_values">
+        <item>mirror</item>
+        <item>melon_dual_ds</item>
+    </string-array>
+
     <string-array name="audio_interpolation_values">
         <item>none</item>
         <item>linear</item>
@@ -121,6 +127,15 @@
         <item>0.75</item>
         <item>0.5</item>
         <item>0.25</item>
+    </string-array>
+
+    <string-array name="dldi_sd_card_image_size_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
     </string-array>
 
     <string-array name="save_state_location_values">

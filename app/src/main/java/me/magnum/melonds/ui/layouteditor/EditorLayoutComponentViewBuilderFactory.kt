@@ -13,6 +13,7 @@ class EditorLayoutComponentViewBuilderFactory : LayoutComponentViewBuilderFactor
             val builder = when (layoutComponent) {
                 LayoutComponent.TOP_SCREEN -> TopScreenLayoutComponentViewBuilder()
                 LayoutComponent.BOTTOM_SCREEN -> BottomScreenLayoutComponentViewBuilder()
+                LayoutComponent.HYBRID_SCREEN -> HybridScreenLayoutComponentViewBuilder()
                 LayoutComponent.DPAD -> EditorBackgroundLayoutComponentViewBuilder(DpadLayoutComponentViewBuilder())
                 LayoutComponent.BUTTONS -> EditorBackgroundLayoutComponentViewBuilder(ButtonsLayoutComponentViewBuilder())
                 else -> EditorBackgroundLayoutComponentViewBuilder(SingleButtonLayoutComponentViewBuilder(layoutComponent))

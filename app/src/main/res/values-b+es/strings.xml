@@ -282,6 +282,7 @@
 
     <string name="top_screen">Pantalla superior</string>
     <string name="bottom_screen">Pantalla inferior</string>
+    <string name="hybrid_screen">Pantalla híbrida</string>
     <string name="refresh_external_screen">Refrescar pantalla externa</string>
     <string name="external_display_rotate_left">Rotar contenido a la izquierda en la pantalla externa</string>
     <string name="input_a">A</string>

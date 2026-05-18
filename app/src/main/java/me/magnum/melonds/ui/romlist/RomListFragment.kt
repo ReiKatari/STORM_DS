@@ -101,6 +101,9 @@ class RomListFragment : Fragment() {
                         onFilterSelected = { filter -> romListViewModel.setFilter(filter) },
                         onNavigateUp = { romListViewModel.navigateUp() },
                         onRefresh = { romListViewModel.refreshRoms() },
+                        onDpadDownGateChanged = { gate ->
+                            (activity as? RomListActivity)?.setRomBrowserDpadDownGate(gate)
+                        },
                     )
 
                     RomContextMenu(

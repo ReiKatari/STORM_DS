@@ -56,6 +56,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     }
 
     override fun instantiateLayout(layoutConfiguration: UILayout, layoutTarget: LayoutTarget) {
+        selectedView = null
         super.instantiateLayout(layoutConfiguration, layoutTarget)
         modifiedByUser = false
         notifyLayoutChanged()
@@ -87,6 +88,18 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun setOnViewPositionEditRequestedListener(listener: ((LayoutComponentPositionEditorState) -> Unit)?) {
         onViewPositionEditRequestedListener = listener
+    }
+
+    fun getSelectedComponent(): LayoutComponent? {
+        return selectedView?.component
+    }
+
+    fun selectComponent(component: LayoutComponent): Boolean {
+        val componentView = views[component] ?: return false
+        selectView(componentView)
+        componentView.view.alpha = 1f
+        componentView.setHighlighted(true)
+        return true
     }
 
     fun addLayoutComponent(component: LayoutComponent) {
@@ -164,7 +177,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
                 return when (motionEvent.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        if (selectedView != null) {
+                        if (selectedView != null && selectedView != layoutComponentView) {
                             deselectCurrentView()
                         }
                         downOffsetX = motionEvent.x
@@ -298,11 +311,22 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun setSelectedViewPosition(x: Int, y: Int) {
         val currentlySelectedView = selectedView ?: return
-        val boundedX = x.coerceIn(0, max(width - currentlySelectedView.getWidth(), 0))
-        val boundedY = y.coerceIn(0, max(height - currentlySelectedView.getHeight(), 0))
-        currentlySelectedView.setPosition(Point(boundedX, boundedY))
+        setComponentPosition(currentlySelectedView.component, x, y)
+    }
+
+    fun setComponentPosition(component: LayoutComponent, x: Int, y: Int): Boolean {
+        val view = views[component] ?: return false
+        val boundedX = x.coerceIn(0, max(width - view.getWidth(), 0))
+        val boundedY = y.coerceIn(0, max(height - view.getHeight(), 0))
+        view.setPosition(Point(boundedX, boundedY))
         modifiedByUser = true
         notifyLayoutChanged()
+        return true
+    }
+
+    fun buildComponentPositionEditorState(component: LayoutComponent): LayoutComponentPositionEditorState? {
+        val view = views[component] ?: return null
+        return buildPositionEditorState(view)
     }
 
     private fun rearrangeScreens() {
@@ -355,7 +379,31 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun scaleSelectedView(widthScale: Float, heightScale: Float) {
         val currentlySelectedView = selectedView ?: return
+        scaleComponent(currentlySelectedView.component, widthScale, heightScale, selectedViewAnchor)
+    }
 
+    fun scaleComponent(component: LayoutComponent, scale: Float): Boolean {
+        // Assume view has a 1:1 aspect ratio. Always scale on the smallest axis
+        return if (width > height) {
+            val widthScale = ((height - minComponentSize) * scale) / (width - minComponentSize)
+            scaleComponent(component, widthScale, scale)
+        } else {
+            val heightScale =  ((width - minComponentSize) * scale) / (height - minComponentSize)
+            scaleComponent(component, scale, heightScale)
+        }
+    }
+
+    fun scaleComponent(component: LayoutComponent, widthScale: Float, heightScale: Float): Boolean {
+        return scaleComponent(component, widthScale, heightScale, findAnchor(views[component] ?: return false))
+    }
+
+    private fun scaleComponent(
+        component: LayoutComponent,
+        widthScale: Float,
+        heightScale: Float,
+        anchor: Anchor,
+    ): Boolean {
+        val currentlySelectedView = views[component] ?: return false
         val newViewWidth = ((width - minComponentSize) * widthScale + minComponentSize).roundToInt()
         val newViewHeight = ((height - minComponentSize) * heightScale + minComponentSize).roundToInt()
 
@@ -363,7 +411,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         var viewX: Int
         var viewY: Int
 
-        if (selectedViewAnchor == Anchor.TOP_LEFT) {
+        if (anchor == Anchor.TOP_LEFT) {
             viewX = viewPosition.x
             viewY = viewPosition.y
             if (viewX + newViewWidth > width) {
@@ -372,7 +420,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
             if (viewY + newViewHeight > height) {
                 viewY = height - newViewHeight
             }
-        } else if (selectedViewAnchor == Anchor.TOP_RIGHT) {
+        } else if (anchor == Anchor.TOP_RIGHT) {
             viewX = viewPosition.x + currentlySelectedView.getWidth() - newViewWidth
             viewY = viewPosition.y
             if (viewX < 0) {
@@ -381,7 +429,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
             if (viewY + newViewHeight > height) {
                 viewY = height - newViewHeight
             }
-        } else if (selectedViewAnchor == Anchor.BOTTOM_LEFT) {
+        } else if (anchor == Anchor.BOTTOM_LEFT) {
             viewX = viewPosition.x
             viewY = viewPosition.y + currentlySelectedView.getHeight() - newViewHeight
             if (viewX + newViewWidth > width) {
@@ -403,6 +451,36 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         currentlySelectedView.setPositionAndSize(Point(viewX, viewY), newViewWidth, newViewHeight)
         modifiedByUser = true
         notifyLayoutChanged()
+        return true
+    }
+
+    fun releaseComponentEdit(component: LayoutComponent?) {
+        val componentView = component?.let { views[it] }
+        if (componentView != null && componentView != selectedView) {
+            componentView.view.alpha = 0.5f
+            componentView.setHighlighted(false)
+            onViewDeselectedListener?.invoke(componentView)
+        }
+        deselectCurrentView()
+    }
+
+    private fun findAnchor(view: LayoutComponentView): Anchor {
+        val anchorDistances = mutableMapOf<Anchor, Double>()
+        anchorDistances[Anchor.TOP_LEFT] = view.getPosition().x.toDouble().pow(2) + view.getPosition().y.toDouble().pow(2)
+        anchorDistances[Anchor.TOP_RIGHT] = (width - (view.getPosition().x + view.getWidth())).toDouble().pow(2) + view.getPosition().y.toDouble().pow(2)
+        anchorDistances[Anchor.BOTTOM_LEFT] = view.getPosition().x.toDouble().pow(2) + (height - (view.getPosition().y + view.getHeight())).toDouble().pow(2)
+        anchorDistances[Anchor.BOTTOM_RIGHT] = (width - (view.getPosition().x + view.getWidth())).toDouble().pow(2) + (height - (view.getPosition().y + view.getHeight())).toDouble().pow(2)
+
+        var anchor = Anchor.TOP_LEFT
+        var minDistance = Double.MAX_VALUE
+        anchorDistances.keys.forEach {
+            if (anchorDistances[it]!! < minDistance) {
+                minDistance = anchorDistances[it]!!
+                anchor = it
+            }
+        }
+
+        return anchor
     }
 
     private fun notifyLayoutChanged() {

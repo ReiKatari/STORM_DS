@@ -1433,6 +1433,12 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
     }
 }
 
+void RetroAchievementsManager::NoopRcClientEventHandler(const rc_client_event_t* event, rc_client_t* client)
+{
+    (void) event;
+    (void) client;
+}
+
 uint32_t RetroAchievementsManager::RcClientReadMemory(uint32_t address, uint8_t* buffer, uint32_t numBytes, rc_client_t* client)
 {
     if (!client || !buffer || numBytes == 0)
@@ -1636,7 +1642,7 @@ void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
 {
     if (rcClientRuntime)
     {
-        rc_client_set_event_handler(rcClientRuntime, nullptr);
+        rc_client_set_event_handler(rcClientRuntime, &NoopRcClientEventHandler);
         rc_client_unload_game(rcClientRuntime);
         rc_client_logout(rcClientRuntime);
         rc_client_destroy(rcClientRuntime);

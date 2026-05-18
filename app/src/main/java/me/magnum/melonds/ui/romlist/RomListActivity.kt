@@ -57,6 +57,7 @@ class RomListActivity : AppCompatActivity() {
     private lateinit var emulatorLauncherValidatorDelegate: EmulatorLaunchValidatorDelegate
 
     private var downloadProgressDialog: AlertDialog? = null
+    private var romBrowserDpadDownGate: (() -> Boolean)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -174,6 +175,11 @@ class RomListActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (romBrowserDpadDownGate?.invoke() == true) {
+                        return true
+                    }
+                }
                 KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_PAGE_UP -> {
                     viewModel.cycleFilter(forward = false)
                     return true
@@ -185,6 +191,10 @@ class RomListActivity : AppCompatActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    internal fun setRomBrowserDpadDownGate(gate: (() -> Boolean)?) {
+        romBrowserDpadDownGate = gate
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
