@@ -80,8 +80,17 @@ class RomDetailsActivity : AppCompatActivity() {
                                 RomDetailsToastEvent.OfflineAchievementNotSyncedReason.MISSING_FROM_CURRENT_SET -> R.string.offline_ra_sync_skipped_missing_toast
                                 RomDetailsToastEvent.OfflineAchievementNotSyncedReason.DEFINITION_CHANGED -> R.string.offline_ra_sync_skipped_definition_changed_toast
                                 RomDetailsToastEvent.OfflineAchievementNotSyncedReason.NOT_IN_PREFETCH_CACHE -> R.string.offline_ra_sync_skipped_cache_mismatch_toast
+                                RomDetailsToastEvent.OfflineAchievementNotSyncedReason.SERVER_REJECTED -> R.string.offline_ra_sync_skipped_server_rejected_toast
                             }
-                            getString(messageRes, event.title)
+                            if (event.reason == RomDetailsToastEvent.OfflineAchievementNotSyncedReason.SERVER_REJECTED) {
+                                getString(
+                                    messageRes,
+                                    event.title,
+                                    event.reasonDetail ?: getString(R.string.offline_ra_sync_skipped_server_rejected_unknown_reason),
+                                )
+                            } else {
+                                getString(messageRes, event.title)
+                            }
                         }
                         is RomDetailsToastEvent.OfflineAchievementsNotSyncedSummary -> {
                             getString(R.string.offline_ra_sync_skipped_summary_toast, event.skippedCount)

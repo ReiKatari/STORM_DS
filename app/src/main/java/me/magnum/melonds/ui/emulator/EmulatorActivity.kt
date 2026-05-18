@@ -704,8 +704,18 @@ class EmulatorActivity : AppCompatActivity() {
                                 ToastEvent.OfflineAchievementNotSyncedReason.MISSING_FROM_CURRENT_SET -> R.string.offline_ra_sync_skipped_missing_toast
                                 ToastEvent.OfflineAchievementNotSyncedReason.DEFINITION_CHANGED -> R.string.offline_ra_sync_skipped_definition_changed_toast
                                 ToastEvent.OfflineAchievementNotSyncedReason.NOT_IN_PREFETCH_CACHE -> R.string.offline_ra_sync_skipped_cache_mismatch_toast
+                                ToastEvent.OfflineAchievementNotSyncedReason.SERVER_REJECTED -> R.string.offline_ra_sync_skipped_server_rejected_toast
                             }
-                            getString(messageRes, it.title) to Toast.LENGTH_LONG
+                            val message = if (it.reason == ToastEvent.OfflineAchievementNotSyncedReason.SERVER_REJECTED) {
+                                getString(
+                                    messageRes,
+                                    it.title,
+                                    it.reasonDetail ?: getString(R.string.offline_ra_sync_skipped_server_rejected_unknown_reason),
+                                )
+                            } else {
+                                getString(messageRes, it.title)
+                            }
+                            message to Toast.LENGTH_LONG
                         }
                         is ToastEvent.OfflineAchievementsNotSyncedSummary -> {
                             getString(R.string.offline_ra_sync_skipped_summary_toast, it.skippedCount) to Toast.LENGTH_LONG

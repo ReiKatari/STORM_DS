@@ -760,9 +760,16 @@ class EmulatorViewModel @Inject constructor(
                 SmartSyncSkipReason.MISSING_FROM_CURRENT_SET -> ToastEvent.OfflineAchievementNotSyncedReason.MISSING_FROM_CURRENT_SET
                 SmartSyncSkipReason.DEFINITION_CHANGED -> ToastEvent.OfflineAchievementNotSyncedReason.DEFINITION_CHANGED
                 SmartSyncSkipReason.NOT_IN_PREFETCH_CACHE -> ToastEvent.OfflineAchievementNotSyncedReason.NOT_IN_PREFETCH_CACHE
+                SmartSyncSkipReason.SERVER_REJECTED -> ToastEvent.OfflineAchievementNotSyncedReason.SERVER_REJECTED
             }
 
-            _toastEvent.tryEmit(ToastEvent.OfflineAchievementNotSynced(title = title, reason = reason))
+            _toastEvent.tryEmit(
+                ToastEvent.OfflineAchievementNotSynced(
+                    title = title,
+                    reason = reason,
+                    reasonDetail = skip.reasonDetail,
+                )
+            )
         }
 
         val remaining = skipped.size - individual.size

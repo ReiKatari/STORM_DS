@@ -112,9 +112,16 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
                 SmartSyncSkipReason.MISSING_FROM_CURRENT_SET -> RomDetailsToastEvent.OfflineAchievementNotSyncedReason.MISSING_FROM_CURRENT_SET
                 SmartSyncSkipReason.DEFINITION_CHANGED -> RomDetailsToastEvent.OfflineAchievementNotSyncedReason.DEFINITION_CHANGED
                 SmartSyncSkipReason.NOT_IN_PREFETCH_CACHE -> RomDetailsToastEvent.OfflineAchievementNotSyncedReason.NOT_IN_PREFETCH_CACHE
+                SmartSyncSkipReason.SERVER_REJECTED -> RomDetailsToastEvent.OfflineAchievementNotSyncedReason.SERVER_REJECTED
             }
 
-            _toastEvent.tryEmit(RomDetailsToastEvent.OfflineAchievementNotSynced(title = title, reason = reason))
+            _toastEvent.tryEmit(
+                RomDetailsToastEvent.OfflineAchievementNotSynced(
+                    title = title,
+                    reason = reason,
+                    reasonDetail = skip.reasonDetail,
+                )
+            )
         }
 
         val remaining = skipped.size - individual.size
