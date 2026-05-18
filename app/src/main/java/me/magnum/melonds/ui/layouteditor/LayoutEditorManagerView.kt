@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.AdapterView
@@ -94,16 +95,21 @@ class LayoutEditorManagerView(
     private var currentWidthScale = 0f
     private var currentHeightScale = 0f
     private var selectedViewIsScreen = false
+    private var selectedViewSupportsAspectRatio = false
     private var selectedScreenComponent: LayoutComponent? = null
     private var selectedAspectRatio = ScreenAspectRatio.RATIO_4_3
     private var topAspectRatio = ScreenAspectRatio.RATIO_4_3
     private var bottomAspectRatio = ScreenAspectRatio.RATIO_4_3
     private var updatingAspectSpinner = false
+    private var updatingScalingControls = false
 
     private var showLayoutPropertiesDialog by mutableStateOf(initialEditorState?.isPropertiesDialogShown ?: false)
     private var showBackgroundPropertiesDialog by mutableStateOf(initialEditorState?.isBackgroundPropertiesDialogShown ?: false)
     private var shownEditablePropertyDialog by mutableStateOf<LayoutComponentEditableProperty?>(null)
     private var shownPositionDialog by mutableStateOf<LayoutComponentPositionEditorState?>(null)
+    private var pendingEditTargetComponent: LayoutComponent? = null
+    private var editableDialogTargetComponent: LayoutComponent? = null
+    private var positionDialogTargetComponent: LayoutComponent? = null
     private val nameInputDialogState = TextInputDialogState()
 
     val layoutEditorView get() = binding.viewLayoutEditor
@@ -168,30 +174,38 @@ class LayoutEditorManagerView(
                             LayoutComponentEditableProperty.HEIGHT -> binding.seekBarHeight.progress + selectedViewMinSize
                             null -> 0
                         },
-                        onValueChanged = {
-                            when (currentlyShownEditablePropertyDialog) {
-                                LayoutComponentEditableProperty.SIZE -> binding.seekBarSize.progress = it - selectedViewMinSize
-                                LayoutComponentEditableProperty.WIDTH -> {
-                                    binding.seekBarWidth.progress = it - selectedViewMinSize
-                                    enforceAspectRatio(selectedAspectRatio, WIDTH)
-                                }
-                                LayoutComponentEditableProperty.HEIGHT -> {
-                                    binding.seekBarHeight.progress = it - selectedViewMinSize
-                                    enforceAspectRatio(selectedAspectRatio, HEIGHT)
-                                }
-                                null -> { /* no-op */ }
-                            }
-                            shownEditablePropertyDialog = null
+                        minValue = selectedViewMinSize,
+                        maxValue = when (currentlyShownEditablePropertyDialog) {
+                            LayoutComponentEditableProperty.SIZE -> binding.seekBarSize.max + selectedViewMinSize
+                            LayoutComponentEditableProperty.WIDTH -> binding.seekBarWidth.max + selectedViewMinSize
+                            LayoutComponentEditableProperty.HEIGHT -> binding.seekBarHeight.max + selectedViewMinSize
+                            null -> selectedViewMinSize
                         },
-                        onCancel = { shownEditablePropertyDialog = null },
+                        onValueChanged = {
+                            applyEditablePropertyDialogValue(currentlyShownEditablePropertyDialog, it)
+                            shownEditablePropertyDialog = null
+                            editableDialogTargetComponent = null
+                        },
+                        onCancel = {
+                            shownEditablePropertyDialog = null
+                            editableDialogTargetComponent = null
+                        },
                     )
 
                     LayoutComponentPositionDialog(
                         positionEditorState = shownPositionDialog,
-                        onDismiss = { shownPositionDialog = null },
-                        onSave = { x, y ->
-                            binding.viewLayoutEditor.setSelectedViewPosition(x, y)
+                        onDismiss = {
                             shownPositionDialog = null
+                            positionDialogTargetComponent = null
+                        },
+                        onSave = { x, y ->
+                            val targetComponent = positionDialogTargetComponent ?: shownPositionDialog?.component
+                            if (targetComponent != null && binding.viewLayoutEditor.setComponentPosition(targetComponent, x, y)) {
+                                listener?.onStoreLayoutChanges()
+                                finishAppliedComponentEdit(targetComponent)
+                            }
+                            shownPositionDialog = null
+                            positionDialogTargetComponent = null
                         }
                     )
 
@@ -232,6 +246,14 @@ class LayoutEditorManagerView(
         binding.buttonDeleteButton.setOnClickListener {
             binding.viewLayoutEditor.deleteSelectedView()
         }
+        binding.buttonEditPosition.captureEditTargetOnTouchDown()
+        binding.buttonEditPosition.setOnClickListener {
+            openSelectedViewPositionDialog()
+        }
+        binding.buttonEditSize.captureEditTargetOnTouchDown()
+        binding.buttonEditSize.setOnClickListener {
+            openSelectedViewSizeDialog()
+        }
         binding.buttonCenterHorizontal.setOnClickListener {
             binding.viewLayoutEditor.centerSelectedViewHorizontally()
         }
@@ -252,6 +274,7 @@ class LayoutEditorManagerView(
             // receives fresh listeners even if they were already visible.
             hideScalingControls(false)
             selectedViewIsScreen = view.component.isScreen()
+            selectedViewSupportsAspectRatio = view.component.supportsAspectRatioSelection()
             selectedScreenComponent = view.component
             selectedAspectRatio = when (view.component) {
                 LayoutComponent.TOP_SCREEN -> topAspectRatio
@@ -273,16 +296,22 @@ class LayoutEditorManagerView(
             hideScalingControls()
         }
         binding.viewLayoutEditor.setOnViewPositionEditRequestedListener {
+            positionDialogTargetComponent = it.component
             shownPositionDialog = it
         }
         binding.layoutSizeLabels.setOnClickListener {
-            shownEditablePropertyDialog = LayoutComponentEditableProperty.SIZE
+            openSelectedViewSizeDialog()
         }
+        binding.layoutSizeLabels.captureEditTargetOnTouchDown()
         binding.seekBarSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                val scale = progress / seekBar.max.toFloat()
-                val value = (binding.seekBarSize.max * scale + selectedViewMinSize).toInt()
+                val maxDelta = seekBar.max.coerceAtLeast(1)
+                val scale = progress / maxDelta.toFloat()
+                val value = (maxDelta * scale + selectedViewMinSize).toInt()
                 binding.textSize.text = value.toString()
+                if (updatingScalingControls) {
+                    return
+                }
                 binding.viewLayoutEditor.scaleSelectedView(scale)
             }
 
@@ -294,16 +323,20 @@ class LayoutEditorManagerView(
         })
 
         binding.layoutWidthLabels.setOnClickListener {
-            shownEditablePropertyDialog = LayoutComponentEditableProperty.WIDTH
+            openSelectedViewPropertyDialog(LayoutComponentEditableProperty.WIDTH)
         }
+        binding.layoutWidthLabels.captureEditTargetOnTouchDown()
         binding.seekBarWidth.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 if (selectedViewIsScreen && fromUser && selectedAspectRatio.ratio != null) {
                     enforceAspectRatio(selectedAspectRatio, WIDTH)
                 } else {
-                    var widthScale = progress / binding.seekBarWidth.max.toFloat()
+                    val widthScale = progress / binding.seekBarWidth.max.toFloat()
                     currentWidthScale = widthScale
                     binding.textWidth.text = (binding.seekBarWidth.max * currentWidthScale + selectedViewMinSize).toInt().toString()
+                }
+                if (updatingScalingControls) {
+                    return
                 }
                 binding.viewLayoutEditor.scaleSelectedView(currentWidthScale, currentHeightScale)
             }
@@ -316,16 +349,20 @@ class LayoutEditorManagerView(
         })
 
         binding.layoutHeightLabels.setOnClickListener {
-            shownEditablePropertyDialog = LayoutComponentEditableProperty.HEIGHT
+            openSelectedViewPropertyDialog(LayoutComponentEditableProperty.HEIGHT)
         }
+        binding.layoutHeightLabels.captureEditTargetOnTouchDown()
         binding.seekBarHeight.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 if (selectedViewIsScreen && fromUser && selectedAspectRatio.ratio != null) {
                     enforceAspectRatio(selectedAspectRatio, HEIGHT)
                 } else {
-                    var heightScale = progress / binding.seekBarHeight.max.toFloat()
+                    val heightScale = progress / binding.seekBarHeight.max.toFloat()
                     currentHeightScale = heightScale
                     binding.textHeight.text = (binding.seekBarHeight.max * currentHeightScale + selectedViewMinSize).toInt().toString()
+                }
+                if (updatingScalingControls) {
+                    return
                 }
                 binding.viewLayoutEditor.scaleSelectedView(currentWidthScale, currentHeightScale)
             }
@@ -340,6 +377,9 @@ class LayoutEditorManagerView(
         binding.seekBarAlpha.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 val alpha = progress / 100f
+                if (updatingScalingControls) {
+                    return
+                }
                 binding.viewLayoutEditor.setSelectedViewAlpha(alpha)
             }
 
@@ -357,20 +397,28 @@ class LayoutEditorManagerView(
         binding.spinnerAspectRatio.adapter = aspectAdapter
         binding.spinnerAspectRatio.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                if (!selectedViewIsScreen || updatingAspectSpinner) return
+                if (!selectedViewSupportsAspectRatio || updatingAspectSpinner) return
+                val targetComponent = selectedScreenComponent ?: return
                 selectedAspectRatio = ScreenAspectRatio.entries[position]
-                when (selectedScreenComponent) {
+                when (targetComponent) {
                     LayoutComponent.TOP_SCREEN -> topAspectRatio = selectedAspectRatio
                     LayoutComponent.BOTTOM_SCREEN -> bottomAspectRatio = selectedAspectRatio
                     else -> { }
                 }
                 enforceAspectRatio(selectedAspectRatio, WIDTH)
+                binding.viewLayoutEditor.scaleSelectedView(currentWidthScale, currentHeightScale)
+                binding.spinnerAspectRatio.post {
+                    binding.viewLayoutEditor.selectComponent(targetComponent)
+                }
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         binding.checkboxAboveScreen.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingScalingControls) {
+                return@setOnCheckedChangeListener
+            }
             binding.viewLayoutEditor.setSelectedScreenOnTop(isChecked)
         }
 
@@ -416,6 +464,101 @@ class LayoutEditorManagerView(
                 Toast.makeText(context, R.string.layout_background_load_failed, Toast.LENGTH_LONG).show()
             }
         })
+    }
+
+    private fun openSelectedViewPositionDialog() {
+        val targetComponent = consumeEditTargetComponent() ?: return
+        val positionEditorState = binding.viewLayoutEditor.buildComponentPositionEditorState(targetComponent) ?: return
+        positionDialogTargetComponent = targetComponent
+        shownPositionDialog = positionEditorState
+    }
+
+    private fun openSelectedViewSizeDialog() {
+        openSelectedViewPropertyDialog(LayoutComponentEditableProperty.SIZE)
+    }
+
+    private fun openSelectedViewPropertyDialog(editableProperty: LayoutComponentEditableProperty) {
+        val targetComponent = consumeEditTargetComponent() ?: return
+        editableDialogTargetComponent = targetComponent
+        shownEditablePropertyDialog = editableProperty
+    }
+
+    private fun consumeEditTargetComponent(): LayoutComponent? {
+        return (pendingEditTargetComponent ?: binding.viewLayoutEditor.getSelectedComponent()).also {
+            pendingEditTargetComponent = null
+        }
+    }
+
+    private fun applyEditablePropertyDialogValue(
+        editableProperty: LayoutComponentEditableProperty?,
+        value: Int,
+    ) {
+        val targetComponent = editableDialogTargetComponent ?: binding.viewLayoutEditor.getSelectedComponent() ?: return
+
+        updatingScalingControls = true
+        try {
+            when (editableProperty) {
+                LayoutComponentEditableProperty.SIZE -> {
+                    binding.seekBarSize.progress = (value - selectedViewMinSize).coerceIn(0, binding.seekBarSize.max)
+                }
+                LayoutComponentEditableProperty.WIDTH -> {
+                    binding.seekBarWidth.progress = (value - selectedViewMinSize).coerceIn(0, binding.seekBarWidth.max)
+                    enforceAspectRatio(selectedAspectRatio, WIDTH)
+                }
+                LayoutComponentEditableProperty.HEIGHT -> {
+                    binding.seekBarHeight.progress = (value - selectedViewMinSize).coerceIn(0, binding.seekBarHeight.max)
+                    enforceAspectRatio(selectedAspectRatio, HEIGHT)
+                }
+                null -> return
+            }
+        } finally {
+            updatingScalingControls = false
+        }
+
+        val applied = when (editableProperty) {
+            LayoutComponentEditableProperty.SIZE -> {
+                val maxDelta = binding.seekBarSize.max.coerceAtLeast(1)
+                val scale = binding.seekBarSize.progress / maxDelta.toFloat()
+                binding.viewLayoutEditor.scaleComponent(targetComponent, scale)
+            }
+            LayoutComponentEditableProperty.WIDTH,
+            LayoutComponentEditableProperty.HEIGHT -> {
+                binding.viewLayoutEditor.scaleComponent(targetComponent, currentWidthScale, currentHeightScale)
+            }
+        }
+
+        if (applied) {
+            listener?.onStoreLayoutChanges()
+            finishAppliedComponentEdit(targetComponent)
+        }
+    }
+
+    private fun finishAppliedComponentEdit(component: LayoutComponent) {
+        binding.viewLayoutEditor.releaseComponentEdit(component)
+        hideScalingControls()
+    }
+
+    private fun View.captureEditTargetOnTouchDown() {
+        setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    pendingEditTargetComponent = binding.viewLayoutEditor.getSelectedComponent()
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    pendingEditTargetComponent = null
+                }
+                MotionEvent.ACTION_UP -> view.post {
+                    if (!isEditDialogShown()) {
+                        pendingEditTargetComponent = null
+                    }
+                }
+            }
+            false
+        }
+    }
+
+    private fun isEditDialogShown(): Boolean {
+        return shownEditablePropertyDialog != null || shownPositionDialog != null
     }
 
     private fun openButtonsMenu() {
@@ -572,49 +715,62 @@ class LayoutEditorManagerView(
         animate: Boolean = true,
     ) {
         binding.layoutScalingContainer.animate().cancel()
+        selectedViewMinSize = minSize
+        currentWidthScale = widthScale
+        currentHeightScale = heightScale
 
-        if (isScreen) {
-            binding.seekBarWidth.apply {
-                max = maxWidth - minSize
-                progress = (widthScale * (maxWidth - minSize)).toInt()
-            }
-            binding.textWidth.text = ((maxWidth - minSize) * widthScale + minSize).toInt().toString()
+        updatingScalingControls = true
 
-            binding.seekBarHeight.apply {
-                max = maxHeight - minSize
-                progress = (heightScale * (maxHeight - minSize)).toInt()
+        try {
+            if (isScreen) {
+                binding.seekBarWidth.apply {
+                    max = maxWidth - minSize
+                    progress = (widthScale * (maxWidth - minSize)).roundToInt().coerceIn(0, max)
+                }
+                binding.textWidth.text = ((maxWidth - minSize) * widthScale + minSize).roundToInt().toString()
+
+                binding.seekBarHeight.apply {
+                    max = maxHeight - minSize
+                    progress = (heightScale * (maxHeight - minSize)).roundToInt().coerceIn(0, max)
+                }
+                binding.textHeight.text = ((maxHeight - minSize) * heightScale + minSize).roundToInt().toString()
+            } else {
+                val maxDelta = (min(maxWidth, maxHeight) - minSize).coerceAtLeast(1)
+                val currentWidth = ((maxWidth - minSize) * widthScale + minSize).roundToInt()
+                val currentHeight = ((maxHeight - minSize) * heightScale + minSize).roundToInt()
+                val currentSize = min(currentWidth, currentHeight).coerceIn(minSize, minSize + maxDelta)
+                binding.seekBarSize.apply {
+                    max = maxDelta
+                    progress = currentSize - minSize
+                }
+                binding.textSize.text = currentSize.toString()
             }
-            binding.textHeight.text = ((maxHeight - minSize) * heightScale + minSize).toInt().toString()
-        } else {
-            binding.seekBarSize.apply {
-                max = min(maxWidth - minSize, maxHeight - minSize)
-                progress = (widthScale * (maxWidth - minSize)).roundToInt()
+
+            binding.seekBarAlpha.progress = (alpha * 100).roundToInt().coerceIn(0, binding.seekBarAlpha.max)
+            binding.checkboxAboveScreen.isChecked = onTop
+            updatingAspectSpinner = true
+            try {
+                binding.spinnerAspectRatio.setSelection(selectedAspectRatio.ordinal, false)
+            } finally {
+                updatingAspectSpinner = false
             }
-            binding.textSize.text = ((maxWidth - minSize) * widthScale + minSize).toInt().toString()
+        } finally {
+            updatingScalingControls = false
         }
-
-        binding.seekBarAlpha.progress = (alpha * 100).toInt()
-        binding.checkboxAboveScreen.isChecked = onTop
-        updatingAspectSpinner = true
-        binding.spinnerAspectRatio.setSelection(selectedAspectRatio.ordinal, false)
-        updatingAspectSpinner = false
 
         binding.layoutSizeLabels.isVisible = !isScreen
         binding.seekBarSize.isVisible = !isScreen
+        binding.buttonEditSize.isVisible = !isScreen
         binding.layoutWidthLabels.isVisible = isScreen
         binding.seekBarWidth.isVisible = isScreen
         binding.layoutHeightLabels.isVisible = isScreen
         binding.seekBarHeight.isVisible = isScreen
         binding.layoutAlphaLabels.isVisible = isScreen
         binding.seekBarAlpha.isVisible = isScreen
-        binding.layoutAspectRatio.isVisible = isScreen
+        binding.layoutAspectRatio.isVisible = selectedViewSupportsAspectRatio
         binding.checkboxAboveScreen.isVisible = isScreen
         binding.buttonCenterHorizontal.isVisible = isScreen
         binding.buttonCenterVertical.isVisible = isScreen
-
-        currentWidthScale = widthScale
-        currentHeightScale = heightScale
-        selectedViewMinSize = minSize
 
         if (!areScalingControlsShown) {
             if (animate) {
@@ -717,6 +873,10 @@ class LayoutEditorManagerView(
         currentHeightScale = ((height - selectedViewMinSize) / binding.seekBarHeight.max.toFloat()).coerceIn(0f, 1f)
         binding.seekBarHeight.progress = (currentHeightScale * binding.seekBarHeight.max).toInt()
         binding.textHeight.text = (binding.seekBarHeight.max * currentHeightScale + selectedViewMinSize).toInt().toString()
+    }
+
+    private fun LayoutComponent.supportsAspectRatioSelection(): Boolean {
+        return this == LayoutComponent.TOP_SCREEN || this == LayoutComponent.BOTTOM_SCREEN
     }
 
     /**

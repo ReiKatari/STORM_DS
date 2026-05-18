@@ -267,19 +267,8 @@ class RAApi(
         suspendRunCatching {
             executeRequest(request, clearTokenOnUnauthorized)
         }.suspendMapCatching { response ->
-            if (response.isSuccessful) {
-                val body = response.body.charStream().use { it.readText() }
-                val responseJson = parseRaResponse(body)
-                validateRaResponseSuccess(responseJson, errorHandler)
-
-                if (responseClass == Unit::class) {
-                    // Ignore response. Don't parse anything
-                    Unit as T
-                } else {
-                    json.decodeFromJsonElement(responseClass.serializer(), responseJson)
-                }
-            } else {
-                throw UnsuccessfulRequestException("HTTP ${response.code}: ${response.message}")
+            response.use {
+                parseResponse(responseClass, response, errorHandler)
             }
         }
     }
@@ -301,21 +290,43 @@ class RAApi(
         suspendRunCatching {
             executeRequest(request)
         }.suspendMapCatching { response ->
-            if (response.isSuccessful) {
-                val body = response.body.charStream().use { it.readText() }
-                val responseJson = parseRaResponse(body)
-                validateRaResponseSuccess(responseJson, errorHandler)
-
-                if (responseClass == Unit::class) {
-                    // Ignore response. Don't parse anything
-                    Unit as T
-                } else {
-                    json.decodeFromJsonElement(responseClass.serializer(), responseJson)
-                }
-            } else {
-                throw UnsuccessfulRequestException("HTTP ${response.code}: ${response.message}")
+            response.use {
+                parseResponse(responseClass, response, errorHandler)
             }
         }
+    }
+
+    @OptIn(InternalSerializationApi::class)
+    private fun <T : Any> parseResponse(
+        responseClass: KClass<T>,
+        response: Response,
+        errorHandler: (String?) -> Unit,
+    ): T {
+        val body = response.body.string()
+        if (!response.isSuccessful) {
+            throw UnsuccessfulRequestException(buildHttpErrorMessage(response, body))
+        }
+
+        val responseJson = parseRaResponse(body)
+        validateRaResponseSuccess(responseJson, errorHandler)
+
+        return if (responseClass == Unit::class) {
+            // Ignore response. Don't parse anything
+            @Suppress("UNCHECKED_CAST")
+            Unit as T
+        } else {
+            json.decodeFromJsonElement(responseClass.serializer(), responseJson)
+        }
+    }
+
+    private fun buildHttpErrorMessage(response: Response, body: String): String {
+        val statusMessage = response.message.ifBlank { "no status message" }
+        val bodySummary = body
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+            .take(200)
+            .ifBlank { "empty body" }
+        return "HTTP ${response.code}: $statusMessage; body=$bodySummary"
     }
 
     private fun buildGetRequest(parameters: Map<String, String>): Request {

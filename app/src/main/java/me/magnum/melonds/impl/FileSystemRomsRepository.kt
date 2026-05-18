@@ -391,10 +391,17 @@ class FileSystemRomsRepository(
         }.onFailure { throwable ->
             Log.w(TAG, "Failed to read ROM options for ${rom.fileName}", throwable)
             notifyRomOptionsReadError(optionsDocument)
-            runCatching { optionsDocument.delete() }.onFailure {
-                Log.w(TAG, "Failed to delete unreadable ROM options for ${rom.fileName}", it)
-            }
+            rewriteRomOptionsFromCachedConfig(rom)
         }.getOrNull()
+    }
+
+    private fun rewriteRomOptionsFromCachedConfig(rom: Rom) {
+        if (!shouldPersistRomOptions(rom)) {
+            return
+        }
+
+        Log.i(TAG, "Rewriting unreadable ROM options from cached config for ${rom.fileName}")
+        writeRomOptions(rom)
     }
 
     private fun writeRomOptions(rom: Rom) {

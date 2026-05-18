@@ -69,6 +69,16 @@
             android:key="dual_screen_presets"
             android:title="@string/dual_screen_presets_settings_title"
             app:iconSpaceReserved="false" />
+
+    <ListPreference
+            android:key="external_display_mode"
+            android:title="@string/external_display_mode"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/external_display_mode_options"
+            android:entryValues="@array/external_display_mode_values"
+            android:defaultValue="melon_dual_ds" />
+
     <ListPreference
             android:key="fps_counter_position"
             android:title="@string/fps_counter_position"

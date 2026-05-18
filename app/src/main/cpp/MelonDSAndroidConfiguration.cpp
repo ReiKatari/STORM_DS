@@ -48,6 +48,101 @@ bool getEnumOrdinal(JNIEnv* env, jobject enumObject, jint* ordinalOut)
     return !env->ExceptionCheck();
 }
 
+jfieldID getFieldIdOrClear(JNIEnv* env, jclass objectClass, const char* name, const char* signature)
+{
+    jfieldID fieldId = env->GetFieldID(objectClass, name, signature);
+    if (fieldId == nullptr || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    return fieldId;
+}
+
+jobject getOptionalObjectField(JNIEnv* env, jobject object, jclass objectClass, const char* name, const char* signature)
+{
+    jfieldID fieldId = getFieldIdOrClear(env, objectClass, name, signature);
+    if (fieldId == nullptr)
+        return nullptr;
+
+    jobject value = env->GetObjectField(object, fieldId);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    return value;
+}
+
+MelonDSAndroid::SdCardSettings disabledSdCardSettings()
+{
+    return MelonDSAndroid::SdCardSettings { .enabled = false };
+}
+
+MelonDSAndroid::SdCardSettings buildSdCardSettings(JNIEnv* env, jobject sdCardConfiguration)
+{
+    if (sdCardConfiguration == nullptr)
+        return disabledSdCardSettings();
+
+    jclass sdCardConfigurationClass = env->GetObjectClass(sdCardConfiguration);
+    if (sdCardConfigurationClass == nullptr || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return disabledSdCardSettings();
+    }
+
+    jfieldID enabledField = getFieldIdOrClear(env, sdCardConfigurationClass, "enabled", "Z");
+    if (enabledField == nullptr)
+    {
+        env->DeleteLocalRef(sdCardConfigurationClass);
+        return disabledSdCardSettings();
+    }
+
+    jboolean enabled = env->GetBooleanField(sdCardConfiguration, enabledField);
+    if (env->ExceptionCheck() || enabled == 0)
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(sdCardConfigurationClass);
+        return disabledSdCardSettings();
+    }
+
+    jfieldID imagePathField = getFieldIdOrClear(env, sdCardConfigurationClass, "imagePath", "Ljava/lang/String;");
+    jfieldID imageSizeField = getFieldIdOrClear(env, sdCardConfigurationClass, "imageSize", "I");
+    jfieldID folderSyncField = getFieldIdOrClear(env, sdCardConfigurationClass, "folderSync", "Z");
+    jfieldID folderPathField = getFieldIdOrClear(env, sdCardConfigurationClass, "folderPath", "Ljava/lang/String;");
+    if (imagePathField == nullptr || imageSizeField == nullptr || folderSyncField == nullptr || folderPathField == nullptr)
+    {
+        env->DeleteLocalRef(sdCardConfigurationClass);
+        return disabledSdCardSettings();
+    }
+
+    jstring imagePathString = static_cast<jstring>(env->GetObjectField(sdCardConfiguration, imagePathField));
+    jint imageSize = env->GetIntField(sdCardConfiguration, imageSizeField);
+    jboolean folderSync = env->GetBooleanField(sdCardConfiguration, folderSyncField);
+    jstring folderPathString = static_cast<jstring>(env->GetObjectField(sdCardConfiguration, folderPathField));
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(sdCardConfigurationClass);
+        return disabledSdCardSettings();
+    }
+
+    char* imagePath = duplicateJavaString(env, imagePathString);
+    char* folderPath = duplicateJavaString(env, folderPathString);
+    env->DeleteLocalRef(sdCardConfigurationClass);
+
+    return MelonDSAndroid::SdCardSettings {
+        .enabled = true,
+        .imagePath = imagePath,
+        .imageSize = imageSize,
+        .readOnly = false,
+        .folderSync = folderSync != 0,
+        .folderPath = folderPath,
+    };
+}
+
 MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
 {
     switch (ordinal)
@@ -82,6 +177,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
 
     jobject firmwareConfigurationObject = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "firmwareConfiguration", "Lme/magnum/melonds/domain/model/FirmwareConfiguration;"));
     jobject rendererConfigurationObject = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "rendererConfiguration", "Lme/magnum/melonds/domain/model/RendererConfiguration;"));
+    jobject dldiSdCardConfigurationObject = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dldiSdCardConfiguration", "Lme/magnum/melonds/domain/model/DldiSdCardConfiguration;");
     jboolean useCustomBios = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "useCustomBios", "Z"));
     jboolean showBootScreen = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "showBootScreen", "Z"));
     jobject dsBios7Uri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsBios7Uri", "Landroid/net/Uri;"));
@@ -159,7 +255,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.rewindLengthSeconds = rewindWindowSeconds;
     finalEmulatorConfiguration.renderSettings = std::move(buildRenderSettings(env, videoRenderer, rendererConfigurationObject));
     finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
-    finalEmulatorConfiguration.dldiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
+    finalEmulatorConfiguration.dldiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
     finalEmulatorConfiguration.renderer = videoRenderer;
     return finalEmulatorConfiguration;
 }

@@ -62,6 +62,7 @@ class AndroidEmulatorManager(
     override val emulatorEvents: Flow<EmulatorEvent> = _emulatorEvents.asSharedFlow()
 
     private val achievementsSharedFlow = MutableSharedFlow<RAEvent>(replay = 0, extraBufferCapacity = Int.MAX_VALUE)
+    private val dldiFolderSyncManager = DldiFolderSyncManager(context, settingsRepository)
 
     private val messageQueue = EmulatorMessageQueue { type, data ->
         when (type) {
@@ -132,6 +133,8 @@ class AndroidEmulatorManager(
                 val romUri = fileRomProcessor?.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
 
                 val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+                    .withPreparedDldiConfiguration()
+                    ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                 setupEmulator(emulatorConfiguration)
 
                 val sram = try {
@@ -160,6 +163,7 @@ class AndroidEmulatorManager(
                 if (loadResult.isTerminal || !isActive) {
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
+                    dldiFolderSyncManager.syncBackIfNeeded()
                     RomLaunchResult.LaunchFailed(loadResult)
                 } else {
                     messageQueue.start()
@@ -167,6 +171,7 @@ class AndroidEmulatorManager(
                         cameraManager.stopCurrentCameraSource()
                         MelonEmulator.stopEmulation()
                         messageQueue.stop()
+                        dldiFolderSyncManager.syncBackIfNeeded()
                         return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                     }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
@@ -182,6 +187,7 @@ class AndroidEmulatorManager(
                 cameraManager.stopCurrentCameraSource()
                 MelonEmulator.stopEmulation()
                 messageQueue.stop()
+                dldiFolderSyncManager.syncBackIfNeeded()
                 RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
         }
@@ -321,6 +327,7 @@ class AndroidEmulatorManager(
 
     override fun stopEmulator() {
         MelonEmulator.stopEmulation()
+        dldiFolderSyncManager.syncBackIfNeeded()
         cameraManager.stopCurrentCameraSource()
         messageQueue.stop()
     }
@@ -380,6 +387,11 @@ class AndroidEmulatorManager(
         }
 
         return originalConfiguration
+    }
+
+    private fun EmulatorConfiguration.withPreparedDldiConfiguration(): EmulatorConfiguration? {
+        val preparedConfiguration = dldiFolderSyncManager.prepareConfiguration(dldiSdCardConfiguration) ?: return null
+        return copy(dldiSdCardConfiguration = preparedConfiguration)
     }
 
     private fun ByteBuffer.readBoundedString(): String {

@@ -22,6 +22,9 @@ interface SettingsRepository {
     fun isSustainedPerformanceModeEnabled(): Boolean
     fun isAppLogFileEnabled(): Boolean
     fun observeAppLogFileEnabled(): Flow<Boolean>
+    fun isTouchScreenSystemGestureExclusionEnabled(): Boolean
+    fun observeTouchScreenSystemGestureExclusionEnabled(): Flow<Boolean>
+    fun shouldIgnoreDisplayCutoutInLayouts(): Boolean
 
     fun getRomSearchDirectories(): Array<Uri>
     fun clearRomSearchDirectories()
@@ -42,6 +45,9 @@ interface SettingsRepository {
     fun useCustomBios(): Boolean
     fun getDsBiosDirectory(): Uri?
     fun getDsiBiosDirectory(): Uri?
+    fun isDldiSdCardEnabled(): Boolean
+    fun getDldiSdCardDirectory(): Uri?
+    fun getDldiSdCardImageSize(): Int
     fun showBootScreen(): Boolean
     fun isJitEnabled(): Boolean
 
@@ -59,6 +65,8 @@ interface SettingsRepository {
     fun observeRetroArchShaderRootValid(): Flow<Boolean>
     fun observeRetroArchShaderPresetPath(): Flow<String?>
     fun observeRetroArchShaderParametersText(): Flow<String?>
+    fun getExternalDisplayMode(): ExternalDisplayMode
+    fun observeExternalDisplayMode(): Flow<ExternalDisplayMode>
 
     fun isExternalDisplayKeepAspectRationEnabled(): Boolean
     fun observeExternalDisplayKeepAspectRationEnabled(): Flow<Boolean>

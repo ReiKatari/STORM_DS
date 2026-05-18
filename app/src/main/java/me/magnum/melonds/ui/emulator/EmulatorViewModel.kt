@@ -704,6 +704,13 @@ class EmulatorViewModel @Inject constructor(
             emitOfflineAchievementsNotSyncedToasts(skipped)
             return true
         }
+        val error = syncResult.exceptionOrNull()
+        logRaTrace(
+            "offline_sync_now_failed",
+            "pending" to pendingUnlockCount,
+            "content_id" to contentId,
+            "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+        )
         return false
     }
 
@@ -800,6 +807,10 @@ class EmulatorViewModel @Inject constructor(
 
     fun setUiInsets(insets: Insets) {
         uiLayoutProvider.updateUiInsets(insets)
+    }
+
+    fun shouldIgnoreDisplayCutoutInLayouts(): Boolean {
+        return settingsRepository.shouldIgnoreDisplayCutoutInLayouts()
     }
 
     fun setScreenFolds(folds: List<ScreenFold>) {

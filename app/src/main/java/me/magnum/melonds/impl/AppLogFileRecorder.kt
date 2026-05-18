@@ -65,8 +65,9 @@ class AppLogFileRecorder @Inject constructor(
             return
         }
 
-        context.contentResolver.openOutputStream(logDocument.uri, "wt")?.use { outputStream ->
+        context.contentResolver.openOutputStream(logDocument.uri, "wa")?.use { outputStream ->
             BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
+                writer.appendLine()
                 writer.appendLine("melonDualDS app log")
                 writer.appendLine("started=${DATE_FORMAT.format(Date())}")
                 writer.appendLine("pid=${Process.myPid()}")

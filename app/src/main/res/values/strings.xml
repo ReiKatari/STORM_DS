@@ -258,6 +258,14 @@
     <string name="save_internal_config_as_file_summary">Keeps melonDualDS.opts synchronized in the save-file directory, or in a ROM directory when no save-file directory is configured.</string>
     <string name="system_app_log_file_enabled">Write app log to ROM folder</string>
     <string name="system_app_log_file_enabled_summary">Creates melonDualLog.log in the first ROM folder and records app, native, and core logcat lines for debugging. Enable only while reproducing an issue.</string>
+    <string name="system_dldi_sd_card_enabled">Enable DLDI / Homebrew SD</string>
+    <string name="system_dldi_sd_card_enabled_summary">Mounts a virtual SD card for DLDI homebrew. Needed by apps like ZXDS.</string>
+    <string name="system_dldi_sd_card_dir">DLDI SD folder</string>
+    <string name="system_dldi_sd_card_image_size">DLDI SD image size</string>
+    <string name="system_disable_touch_gestures_on_touch_screen_area">Disable touch gestures on touch screen area</string>
+    <string name="system_disable_touch_gestures_on_touch_screen_area_summary">Prevents Android system gestures from triggering over the DS touch screen while playing. Leave off if you use the back gesture to open the in-game menu.</string>
+    <string name="system_ignore_display_cutout_in_layouts">Ignore display cutout in layouts</string>
+    <string name="system_ignore_display_cutout_in_layouts_summary">Lets emulator layouts use the notch or camera cutout area. Restart the layout editor or emulator after changing this.</string>
     <string name="backup_settings">Backup settings</string>
     <string name="restore_settings">Restore settings</string>
     <string name="settings_backup_success">Settings backup created.\n\nThe following were skipped:\n&#8226; RetroAchievements session token\n&#8226; ROM search directories\n&#8226; DS BIOS directory\n&#8226; DSi BIOS directory</string>
@@ -318,6 +326,7 @@
     <string name="dsi_camera_source">DSi camera source</string>
     <string name="external_screen_layout">External screen layout</string>
     <string name="external_display_screen">External display screen</string>
+    <string name="external_display_mode">External display mode</string>
     <string name="external_display_rotate_left">Rotate external screen content left</string>
     <string name="refresh_external_screen">Refresh external screen</string>
     <string name="dsi_camera_image">DSi camera image</string>
@@ -448,6 +457,7 @@
 
     <string name="top_screen">Top Screen</string>
     <string name="bottom_screen">Bottom Screen</string>
+    <string name="hybrid_screen">Hybrid Screen</string>
     <string name="custom_layout">Custom layout</string>
     <string name="input_a">A</string>
     <string name="input_b">B</string>
@@ -496,6 +506,7 @@
     <string name="layout_editor">Layout editor</string>
     <string name="add_component">Add component</string>
     <string name="no_more_components">No more components to add</string>
+    <string name="label_position">Position</string>
     <string name="label_size">Size</string>
     <string name="label_width">Width</string>
     <string name="label_height">Height</string>
@@ -704,6 +715,15 @@
         <item>0.25x</item>
     </string-array>
 
+    <string-array name="dldi_sd_card_image_size_options">
+        <item>Auto</item>
+        <item>256 MB</item>
+        <item>512 MB</item>
+        <item>1 GB</item>
+        <item>2 GB</item>
+        <item>4 GB</item>
+    </string-array>
+
     <string-array name="rom_icon_filtering_options">
         <item>None (Pixelated)</item>
         <item>Linear (Smooth)</item>
@@ -816,6 +836,11 @@
         <item>@string/top_screen</item>
         <item>@string/bottom_screen</item>
         <item>@string/custom_layout</item>
+    </string-array>
+
+    <string-array name="external_display_mode_options">
+        <item>Mirror</item>
+        <item>MelonDualDS</item>
     </string-array>
 
     <string-array name="audio_interpolation_options">

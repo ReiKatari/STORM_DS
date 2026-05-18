@@ -15,6 +15,7 @@ class RuntimeLayoutComponentViewBuilderFactory : LayoutComponentViewBuilderFacto
             val builder = when (layoutComponent) {
                 LayoutComponent.TOP_SCREEN -> RuntimeScreenLayoutComponentViewBuilder()
                 LayoutComponent.BOTTOM_SCREEN -> RuntimeScreenLayoutComponentViewBuilder()
+                LayoutComponent.HYBRID_SCREEN -> RuntimeScreenLayoutComponentViewBuilder(256f / (192f * 2f))
                 LayoutComponent.DPAD -> DpadLayoutComponentViewBuilder()
                 LayoutComponent.BUTTONS -> ButtonsLayoutComponentViewBuilder()
                 LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE,

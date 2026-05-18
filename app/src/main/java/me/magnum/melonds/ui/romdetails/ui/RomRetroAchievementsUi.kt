@@ -248,6 +248,11 @@ private fun Ready(
     content: RomRetroAchievementsUiState.Ready,
     onViewAchievement: (RAAchievement) -> Unit,
 ) {
+    if (content.sets.isEmpty()) {
+        NoAchievements(modifier)
+        return
+    }
+
     var selectedSetId by rememberSaveable {
         mutableLongStateOf(content.sets.first().setId)
     }
@@ -257,8 +262,13 @@ private fun Ready(
     var selectedStateFilter by rememberSaveable {
         mutableStateOf(AchievementStateFilter.All)
     }
-    val selectedSet = remember(selectedSetId) {
-        content.sets.first { it.setId == selectedSetId }
+    LaunchedEffect(content.sets) {
+        if (content.sets.none { it.setId == selectedSetId }) {
+            selectedSetId = content.sets.first().setId
+        }
+    }
+    val selectedSet = remember(content.sets, selectedSetId) {
+        content.sets.firstOrNull { it.setId == selectedSetId } ?: content.sets.first()
     }
     val availableStateFilters = remember(selectedSet) {
         buildList {

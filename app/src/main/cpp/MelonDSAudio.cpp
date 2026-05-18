@@ -28,6 +28,20 @@ namespace MelonDSAndroid
 
     void resetAudioOutputStream();
 
+    int getAudioBufferSizeInFrames(int audioLatency)
+    {
+        switch (audioLatency) {
+            case 0:
+                return 512;
+            case 1:
+                return 1024;
+            case 2:
+                return 2048;
+            default:
+                return 1024;
+        }
+    }
+
     void setupAudioOutputStream(int audioLatency, int volume)
     {
         oboe::PerformanceMode performanceMode;
@@ -58,18 +72,23 @@ namespace MelonDSAndroid
         streamBuilder.setDirection(oboe::Direction::Output);
         streamBuilder.setPerformanceMode(performanceMode);
         streamBuilder.setSharingMode(oboe::SharingMode::Shared);
-        streamBuilder.setUsage(oboe::Usage::Game);
+        streamBuilder.setUsage(oboe::Usage::Media);
         streamBuilder.setDataCallback(stabilizedOutputCallback);
         streamBuilder.setErrorCallback(stabilizedOutputCallback);
 
         oboe::Result result = streamBuilder.openStream(audioStream);
-        audioStream->setPerformanceHintEnabled(true);
-        audioStream->setBufferSizeInFrames(std::min(audioStream->getBufferCapacityInFrames(), 2048));
-        if (result != oboe::Result::OK) {
+        if (result != oboe::Result::OK || !audioStream) {
             Log(Error, "Failed to init audio stream");
             outputCallback = nullptr;
             stabilizedOutputCallback = nullptr;
+            audioStream = nullptr;
+            return;
         }
+
+        audioStream->setPerformanceHintEnabled(true);
+        audioStream->setBufferSizeInFrames(std::min(
+                audioStream->getBufferCapacityInFrames(),
+                getAudioBufferSizeInFrames(audioLatency)));
     }
 
     void cleanupAudioOutputStream()

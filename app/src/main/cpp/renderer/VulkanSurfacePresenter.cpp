@@ -19,7 +19,7 @@ bool areRendererDebugBgObjLogsEnabled();
 
 namespace
 {
-constexpr u32 kMaxSurfaceVertexCount = 18;
+constexpr u32 kMaxSurfaceVertexCount = 30;
 constexpr VkDeviceSize kVertexBufferSize = static_cast<VkDeviceSize>(kMaxSurfaceVertexCount * 5u * sizeof(float));
 constexpr u32 kDescriptorSetCapacity = 64;
 constexpr u32 kDrawModeBackground = 0u;
@@ -84,10 +84,14 @@ bool surfaceConfigsEqual(const VulkanSurfaceConfig& left, const VulkanSurfaceCon
 {
     return presenterRectsEqual(left.topScreen, right.topScreen)
         && presenterRectsEqual(left.bottomScreen, right.bottomScreen)
+        && presenterRectsEqual(left.hybridTopScreen, right.hybridTopScreen)
+        && presenterRectsEqual(left.hybridBottomScreen, right.hybridBottomScreen)
         && left.topAlpha == right.topAlpha
         && left.bottomAlpha == right.bottomAlpha
         && left.topOnTop == right.topOnTop
         && left.bottomOnTop == right.bottomOnTop
+        && left.hybridAlpha == right.hybridAlpha
+        && left.hybridOnTop == right.hybridOnTop
         && left.backgroundMode == right.backgroundMode
         && left.filtering == right.filtering
         && left.retroShaderEnabled == right.retroShaderEnabled
@@ -945,8 +949,8 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
         && inputs.sourceImageView != VK_NULL_HANDLE
         && inputs.topPackedBuffer != VK_NULL_HANDLE
         && inputs.bottomPackedBuffer != VK_NULL_HANDLE;
-	    const bool hasDualScreenSurface = std::any_of(
-	        surfaces.begin(),
+    const bool hasDualScreenSurface = std::any_of(
+        surfaces.begin(),
         surfaces.end(),
         [](const auto& entry) {
             const SurfaceState& surfaceState = entry.second;
@@ -957,9 +961,13 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
                 return rect.enabled && rect.width > 0 && rect.height > 0;
             };
 
-	            return rectEnabled(surfaceState.config.topScreen)
-	                && rectEnabled(surfaceState.config.bottomScreen);
-	        });
+            int screenRectCount = 0;
+            screenRectCount += rectEnabled(surfaceState.config.topScreen) ? 1 : 0;
+            screenRectCount += rectEnabled(surfaceState.config.bottomScreen) ? 1 : 0;
+            screenRectCount += rectEnabled(surfaceState.config.hybridTopScreen) ? 1 : 0;
+            screenRectCount += rectEnabled(surfaceState.config.hybridBottomScreen) ? 1 : 0;
+            return screenRectCount > 1;
+        });
     const bool postProcessFilterRequested = std::any_of(
         surfaces.begin(),
         surfaces.end(),
@@ -3008,16 +3016,39 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
         });
     };
 
+    struct PendingScreen
+    {
+        VulkanPresenterRect rect;
+        bool topScreen = false;
+        float alpha = 1.0f;
+    };
+
+    std::vector<PendingScreen> underScreens;
+    std::vector<PendingScreen> overScreens;
+    const auto enqueueScreen = [&](const VulkanPresenterRect& rect, bool topScreen, float alpha, bool onTop) {
+        if (onTop)
+            overScreens.push_back(PendingScreen{rect, topScreen, alpha});
+        else
+            underScreens.push_back(PendingScreen{rect, topScreen, alpha});
+    };
+
     if (config.bottomOnTop)
     {
-        appendScreen(config.topScreen, true, config.topAlpha);
-        appendScreen(config.bottomScreen, false, config.bottomAlpha);
+        enqueueScreen(config.topScreen, true, config.topAlpha, false);
+        enqueueScreen(config.bottomScreen, false, config.bottomAlpha, true);
     }
     else
     {
-        appendScreen(config.bottomScreen, false, config.bottomAlpha);
-        appendScreen(config.topScreen, true, config.topAlpha);
+        enqueueScreen(config.bottomScreen, false, config.bottomAlpha, false);
+        enqueueScreen(config.topScreen, true, config.topAlpha, true);
     }
+    enqueueScreen(config.hybridTopScreen, true, config.hybridAlpha, config.hybridOnTop);
+    enqueueScreen(config.hybridBottomScreen, false, config.hybridAlpha, config.hybridOnTop);
+
+    for (const PendingScreen& screen : underScreens)
+        appendScreen(screen.rect, screen.topScreen, screen.alpha);
+    for (const PendingScreen& screen : overScreens)
+        appendScreen(screen.rect, screen.topScreen, screen.alpha);
 
     if (vertices.size() > kMaxSurfaceVertexCount)
         return false;
@@ -3056,7 +3087,7 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
 
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Info,
-            "VulkanPresenter[Config]: surface=%d extent=%ux%u direct=%d topRect=(%d,%d,%d,%d,%d) bottomRect=(%d,%d,%d,%d,%d) bottomOnTop=%d drawCalls=%zu",
+            "VulkanPresenter[Config]: surface=%d extent=%ux%u direct=%d topRect=(%d,%d,%d,%d,%d) bottomRect=(%d,%d,%d,%d,%d) hybridTopRect=(%d,%d,%d,%d,%d) hybridBottomRect=(%d,%d,%d,%d,%d) bottomOnTop=%d hybridOnTop=%d drawCalls=%zu",
             surfaceState.id,
             surfaceState.extent.width,
             surfaceState.extent.height,
@@ -3071,7 +3102,18 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
             config.bottomScreen.y,
             config.bottomScreen.width,
             config.bottomScreen.height,
+            config.hybridTopScreen.enabled ? 1 : 0,
+            config.hybridTopScreen.x,
+            config.hybridTopScreen.y,
+            config.hybridTopScreen.width,
+            config.hybridTopScreen.height,
+            config.hybridBottomScreen.enabled ? 1 : 0,
+            config.hybridBottomScreen.x,
+            config.hybridBottomScreen.y,
+            config.hybridBottomScreen.width,
+            config.hybridBottomScreen.height,
             config.bottomOnTop ? 1 : 0,
+            config.hybridOnTop ? 1 : 0,
             drawCalls.size()
         );
 

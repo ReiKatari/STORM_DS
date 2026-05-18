@@ -652,6 +652,18 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
         "getBottomScreenRect",
         "()Lme/magnum/melonds/domain/model/Rect;"
     );
+    jobject hybridTopRectObject = callObjectGetter(
+        env,
+        configObject,
+        "getHybridTopScreenRect",
+        "()Lme/magnum/melonds/domain/model/Rect;"
+    );
+    jobject hybridBottomRectObject = callObjectGetter(
+        env,
+        configObject,
+        "getHybridBottomScreenRect",
+        "()Lme/magnum/melonds/domain/model/Rect;"
+    );
     jobject backgroundModeObject = callObjectGetter(
         env,
         configObject,
@@ -673,8 +685,10 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
 
     float topAlpha = 1.0f;
     float bottomAlpha = 1.0f;
+    float hybridAlpha = 1.0f;
     bool topOnTop = false;
     bool bottomOnTop = false;
+    bool hybridOnTop = false;
     bool retroShaderEnabled = false;
     bool retroShaderClearHistory = false;
     std::string retroShaderPresetPath;
@@ -684,6 +698,8 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
         && callFloatGetter(env, configObject, "getBottomAlpha", &bottomAlpha)
         && callBooleanGetter(env, configObject, "getTopOnTop", &topOnTop)
         && callBooleanGetter(env, configObject, "getBottomOnTop", &bottomOnTop)
+        && callFloatGetter(env, configObject, "getHybridAlpha", &hybridAlpha)
+        && callBooleanGetter(env, configObject, "getHybridOnTop", &hybridOnTop)
         && callBooleanGetter(env, configObject, "getRetroShaderEnabled", &retroShaderEnabled)
         && callStringGetter(env, configObject, "getRetroShaderPresetPath", &retroShaderPresetPath)
         && callStringGetter(env, configObject, "getRetroShaderSourceResolution", &retroShaderSourceResolution)
@@ -694,6 +710,8 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
     configOut->bottomAlpha = bottomAlpha;
     configOut->topOnTop = topOnTop;
     configOut->bottomOnTop = bottomOnTop;
+    configOut->hybridAlpha = hybridAlpha;
+    configOut->hybridOnTop = hybridOnTop;
     configOut->retroShaderEnabled = retroShaderEnabled;
     configOut->retroShaderPresetPath = retroShaderPresetPath;
     configOut->retroShaderSourceResolution =
@@ -708,7 +726,9 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
         && backgroundModeObject != nullptr
         && filteringObject != nullptr
         && mapRect(env, topRectObject, &configOut->topScreen)
-        && mapRect(env, bottomRectObject, &configOut->bottomScreen);
+        && mapRect(env, bottomRectObject, &configOut->bottomScreen)
+        && mapRect(env, hybridTopRectObject, &configOut->hybridTopScreen)
+        && mapRect(env, hybridBottomRectObject, &configOut->hybridBottomScreen);
 
     jint backgroundModeOrdinal = 0;
     jint filteringOrdinal = 0;
@@ -749,6 +769,10 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
         env->DeleteLocalRef(topRectObject);
     if (bottomRectObject != nullptr)
         env->DeleteLocalRef(bottomRectObject);
+    if (hybridTopRectObject != nullptr)
+        env->DeleteLocalRef(hybridTopRectObject);
+    if (hybridBottomRectObject != nullptr)
+        env->DeleteLocalRef(hybridBottomRectObject);
     if (backgroundModeObject != nullptr)
         env->DeleteLocalRef(backgroundModeObject);
     if (filteringObject != nullptr)

@@ -83,16 +83,13 @@ class AndroidRetroAchievementsRepository(
     }
 
     override suspend fun login(username: String, password: String): Result<Unit> {
-        val trimmedUsername = username.trim()
-        val trimmedPassword = password.trim()
-
-        if (trimmedUsername.isBlank() || trimmedPassword.isBlank()) {
+        if (username.isBlank() || password.isEmpty()) {
             Log.w(RA_TRACE_TAG, "login skipped: blank username or password")
             return Result.failure(IllegalArgumentException("Username and password cannot be blank"))
         }
 
         Log.i(RA_TRACE_TAG, "login start")
-        val result = raApi.login(trimmedUsername, trimmedPassword)
+        val result = raApi.login(username, password)
         if (result.isFailure) {
             val exception = result.exceptionOrNull()
             Log.w(RA_TRACE_TAG, "login failed: ${exception?.javaClass?.simpleName ?: "unknown"} message=${exception?.message ?: "none"}", exception)

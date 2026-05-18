@@ -23,6 +23,10 @@ import me.magnum.melonds.common.PermissionHandler
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.common.uridelegates.CompositeUriHandler
 import me.magnum.melonds.common.uridelegates.UriHandler
+import me.magnum.melonds.impl.dtos.input.ControllerConfigurationDto
+import me.magnum.melonds.impl.dtos.input.InputConfigDto
+import me.magnum.melonds.utils.ControllerConfigurationDtoTypeAdapter
+import me.magnum.melonds.utils.InputAssignmentDtoTypeAdapter
 import me.magnum.melonds.impl.system.AppForegroundStateObserver
 import me.magnum.melonds.impl.system.AppForegroundStateTracker
 import me.magnum.melonds.utils.UriTypeHierarchyAdapter
@@ -45,6 +49,8 @@ object AppModule {
     fun provideGson(): Gson {
         return GsonBuilder()
                 .registerTypeHierarchyAdapter(Uri::class.java, UriTypeHierarchyAdapter())
+                .registerTypeAdapter(ControllerConfigurationDto::class.java, ControllerConfigurationDtoTypeAdapter())
+                .registerTypeAdapter(InputConfigDto.AssignmentDto::class.java, InputAssignmentDtoTypeAdapter())
                 .create()
     }
 

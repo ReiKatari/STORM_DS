@@ -51,6 +51,10 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     private var bottomAlpha: Float = 1f
     private var topOnTop: Boolean = false
     private var bottomOnTop: Boolean = false
+    private var hybridTopScreenRect: Rect? = null
+    private var hybridBottomScreenRect: Rect? = null
+    private var hybridAlpha: Float = 1f
+    private var hybridOnTop: Boolean = false
 
     private var width = 0f
     private var height = 0f
@@ -75,6 +79,10 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         bottomAlpha: Float,
         topOnTop: Boolean,
         bottomOnTop: Boolean,
+        hybridTopScreenRect: Rect? = null,
+        hybridBottomScreenRect: Rect? = null,
+        hybridAlpha: Float = 1f,
+        hybridOnTop: Boolean = false,
     ) {
         synchronized(configurationLock) {
             this.topScreenRect = topScreenRect
@@ -83,6 +91,10 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
             this.bottomAlpha = bottomAlpha
             this.topOnTop = topOnTop
             this.bottomOnTop = bottomOnTop
+            this.hybridTopScreenRect = hybridTopScreenRect
+            this.hybridBottomScreenRect = hybridBottomScreenRect
+            this.hybridAlpha = hybridAlpha
+            this.hybridOnTop = hybridOnTop
             mustUpdateConfiguration = true
         }
     }
@@ -177,23 +189,42 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
             1f, 1f,
         )
 
-        val (overScreenVertexData, underScreenVertexData) = if (bottomOnTop) {
-            val over = bottomScreenRect?.let { buildScreenVertexData(it, bottomUvs, bottomAlpha) }
-            val under = topScreenRect?.let { buildScreenVertexData(it, topUvs, topAlpha) }
-            over to under
-        } else {
-            val over = topScreenRect?.let { buildScreenVertexData(it, topUvs, topAlpha) }
-            val under = bottomScreenRect?.let { buildScreenVertexData(it, bottomUvs, bottomAlpha) }
-            over to under
+        data class ScreenDrawTarget(
+            val rect: Rect,
+            val uvs: FloatArray,
+            val alpha: Float,
+            val onTop: Boolean,
+        )
+
+        val underTargets = mutableListOf<ScreenDrawTarget>()
+        val overTargets = mutableListOf<ScreenDrawTarget>()
+        fun addTarget(target: ScreenDrawTarget) {
+            if (target.onTop) {
+                overTargets += target
+            } else {
+                underTargets += target
+            }
         }
 
-        val vertexBufferSize = ((overScreenVertexData?.size ?: 0) + (underScreenVertexData?.size ?: 0)) * Float.SIZE_BYTES
+        if (bottomOnTop) {
+            topScreenRect?.let { addTarget(ScreenDrawTarget(it, topUvs, topAlpha, false)) }
+            bottomScreenRect?.let { addTarget(ScreenDrawTarget(it, bottomUvs, bottomAlpha, true)) }
+        } else {
+            bottomScreenRect?.let { addTarget(ScreenDrawTarget(it, bottomUvs, bottomAlpha, false)) }
+            topScreenRect?.let { addTarget(ScreenDrawTarget(it, topUvs, topAlpha, true)) }
+        }
+        hybridTopScreenRect?.let { addTarget(ScreenDrawTarget(it, topUvs, hybridAlpha, hybridOnTop)) }
+        hybridBottomScreenRect?.let { addTarget(ScreenDrawTarget(it, bottomUvs, hybridAlpha, hybridOnTop)) }
+
+        val screenVertexData = (underTargets + overTargets).flatMap {
+            buildScreenVertexData(it.rect, it.uvs, it.alpha).asIterable()
+        }.toFloatArray()
+        val vertexBufferSize = screenVertexData.size * Float.SIZE_BYTES
         val vertexBuffer = ByteBuffer.allocateDirect(vertexBufferSize)
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .apply {
-                underScreenVertexData?.let { put(it) }
-                overScreenVertexData?.let { put(it) }
+                put(screenVertexData)
                 position(0)
             }
 

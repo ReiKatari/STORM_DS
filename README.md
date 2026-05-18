@@ -20,7 +20,7 @@ Performance is solid on 64 bit devices with thread rendering and JIT enabled, an
 # Integration with third-party frontends
 It's possible to launch melonDS from third part frontends. For that, you will need to have the ROMs you want to launch already scanned by melonDS. Then, you can configure your
 third-party frontend with the following configuration:
-*  Package name: `me.magnum.melonds`
+*  Package name: `me.magnum.melondualds`
 *  Activity name: `me.magnum.melonds.ui.emulator.EmulatorActivity`
 *  Parameters (choose one):
     * Intent data (preferred) - a URI of the NDS ROM (ZIP and 7z files are supported). Ensure [read permission is granted](https://developer.android.com/reference/android/content/Intent#FLAG_GRANT_READ_URI_PERMISSION)

@@ -42,6 +42,7 @@ public:
 
     static void CheevosEventHandler(const rc_runtime_event_t* runtime_event);
     static void RcClientEventHandler(const rc_client_event_t* event, rc_client_t* client);
+    static void NoopRcClientEventHandler(const rc_client_event_t* event, rc_client_t* client);
     static uint32_t RcClientReadMemory(uint32_t address, uint8_t* buffer, uint32_t numBytes, rc_client_t* client);
     static void RcClientServerCall(const rc_api_request_t* request, rc_client_server_callback_t callback, void* callbackData, rc_client_t* client);
     static void RcClientLogCallback(const char* message, const rc_client_t* client);

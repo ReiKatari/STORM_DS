@@ -25,6 +25,7 @@
 -keep class me.magnum.melonds.domain.model.RendererConfiguration { *; }
 -keep class me.magnum.melonds.domain.model.FirmwareConfiguration { *; }
 -keep class me.magnum.melonds.domain.model.EmulatorConfiguration { *; }
+-keep class me.magnum.melonds.domain.model.DldiSdCardConfiguration { *; }
 -keep class me.magnum.melonds.domain.model.Rect { *; }
 -keep class me.magnum.melonds.domain.model.AudioBitrate { *; }
 -keep class me.magnum.melonds.domain.model.AudioInterpolation { *; }

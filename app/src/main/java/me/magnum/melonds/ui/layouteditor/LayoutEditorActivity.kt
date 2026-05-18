@@ -145,7 +145,11 @@ class LayoutEditorActivity : AppCompatActivity() {
         setContentView(container)
         ViewCompat.setOnApplyWindowInsetsListener(container) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
-            val uiInsets = Insets(insets.left, insets.top, insets.right, insets.bottom)
+            val uiInsets = if (viewModel.shouldIgnoreDisplayCutoutInLayouts()) {
+                Insets.Zero
+            } else {
+                Insets(insets.left, insets.top, insets.right, insets.bottom)
+            }
             storeLayoutChanges()
             viewModel.setUiInsets(uiInsets)
 

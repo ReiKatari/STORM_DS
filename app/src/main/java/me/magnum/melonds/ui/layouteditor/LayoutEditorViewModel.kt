@@ -25,6 +25,7 @@ import me.magnum.melonds.domain.model.layout.UILayoutVariant
 import me.magnum.melonds.domain.model.ui.Orientation
 import me.magnum.melonds.domain.repositories.BackgroundRepository
 import me.magnum.melonds.domain.repositories.LayoutsRepository
+import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.impl.layout.UILayoutProvider
 import me.magnum.melonds.ui.layouteditor.model.CurrentLayoutState
 import me.magnum.melonds.ui.layouteditor.model.LayoutBackgroundProperties
@@ -37,6 +38,7 @@ class LayoutEditorViewModel @Inject constructor(
     private val layoutsRepository: LayoutsRepository,
     private val backgroundsRepository: BackgroundRepository,
     private val uiLayoutProvider: UILayoutProvider,
+    private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val editingLayoutId = savedStateHandle.get<String?>(LayoutEditorActivity.KEY_LAYOUT_ID)?.let { UUID.fromString(it) }
@@ -142,6 +144,10 @@ class LayoutEditorViewModel @Inject constructor(
 
     fun setUiInsets(insets: Insets) {
         uiLayoutProvider.updateUiInsets(insets)
+    }
+
+    fun shouldIgnoreDisplayCutoutInLayouts(): Boolean {
+        return settingsRepository.shouldIgnoreDisplayCutoutInLayouts()
     }
 
     fun setScreenFolds(folds: List<ScreenFold>) {

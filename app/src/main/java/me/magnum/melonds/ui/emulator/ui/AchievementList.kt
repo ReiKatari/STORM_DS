@@ -207,6 +207,11 @@ private fun Content(
     onViewAchievement: (RAAchievement) -> Unit,
     lazyListState: LazyListState,
 ) {
+    if (sets.isEmpty()) {
+        EmptyAchievements(modifier)
+        return
+    }
+
     var selectedSetId by rememberSaveable {
         mutableLongStateOf(sets.first().setId)
     }
@@ -216,8 +221,13 @@ private fun Content(
     var selectedStateFilter by rememberSaveable {
         mutableStateOf(AchievementStateFilter.All)
     }
-    val selectedSet = remember(selectedSetId) {
-        sets.first { it.setId == selectedSetId }
+    LaunchedEffect(sets) {
+        if (sets.none { it.setId == selectedSetId }) {
+            selectedSetId = sets.first().setId
+        }
+    }
+    val selectedSet = remember(sets, selectedSetId) {
+        sets.firstOrNull { it.setId == selectedSetId } ?: sets.first()
     }
     val availableStateFilters = remember(selectedSet) {
         buildList {
@@ -403,6 +413,19 @@ private fun Content(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyAchievements(modifier: Modifier) {
+    Box(
+        modifier = modifier.padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(id = R.string.retro_achievements_no_achievements),
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

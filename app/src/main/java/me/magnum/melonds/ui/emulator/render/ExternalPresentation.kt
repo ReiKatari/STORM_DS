@@ -27,12 +27,27 @@ import me.magnum.melonds.ui.emulator.model.RuntimeRendererConfiguration
 import me.magnum.melonds.ui.emulator.model.VulkanPresentationConfig
 import me.magnum.melonds.ui.layouteditor.model.LayoutTarget
 import kotlin.collections.orEmpty
+import kotlin.math.max
 
 class ExternalPresentation(
     context: Context,
     display: Display,
     private val frameRenderCoordinator: FrameRenderCoordinator,
+    private var excludeTouchScreenFromSystemGestures: Boolean,
 ) : Presentation(context, display) {
+    private data class ScreenPresentationAreas(
+        val topScreenRect: me.magnum.melonds.domain.model.Rect?,
+        val bottomScreenRect: me.magnum.melonds.domain.model.Rect?,
+        val topAlpha: Float,
+        val bottomAlpha: Float,
+        val topOnTop: Boolean,
+        val bottomOnTop: Boolean,
+        val hybridTopScreenRect: me.magnum.melonds.domain.model.Rect?,
+        val hybridBottomScreenRect: me.magnum.melonds.domain.model.Rect?,
+        val hybridAlpha: Float,
+        val hybridOnTop: Boolean,
+    )
+
 
     val layoutView = RuntimeLayoutView(context)
     private val container = FrameLayout(context)
@@ -93,6 +108,48 @@ class ExternalPresentation(
     }
 
     fun updateRendererScreenAreas() {
+        val areas = resolveScreenPresentationAreas()
+        emulatorRenderer.updateScreenAreas(
+            topScreenRect = areas.topScreenRect,
+            bottomScreenRect = areas.bottomScreenRect,
+            topAlpha = areas.topAlpha,
+            bottomAlpha = areas.bottomAlpha,
+            topOnTop = areas.topOnTop,
+            bottomOnTop = areas.bottomOnTop,
+            hybridTopScreenRect = areas.hybridTopScreenRect,
+            hybridBottomScreenRect = areas.hybridBottomScreenRect,
+            hybridAlpha = areas.hybridAlpha,
+            hybridOnTop = areas.hybridOnTop,
+        )
+
+        frameRenderCoordinator.updateSurfacePresentation(
+            surfaceView,
+            buildVulkanPresentationConfig(
+                areas.topScreenRect,
+                areas.bottomScreenRect,
+                areas.topAlpha,
+                areas.bottomAlpha,
+                areas.topOnTop,
+                areas.bottomOnTop,
+                areas.hybridTopScreenRect,
+                areas.hybridBottomScreenRect,
+                areas.hybridAlpha,
+                areas.hybridOnTop,
+            ),
+            currentBackground ?: RuntimeBackground.None,
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && window?.decorView?.isAttachedToWindow == true) {
+            val touchScreenArea = if (excludeTouchScreenFromSystemGestures) {
+                listOfNotNull(areas.bottomScreenRect, areas.hybridBottomScreenRect).map {
+                    android.graphics.Rect(it.x, it.y, it.right, it.bottom)
+                }
+            } else null
+            window?.systemGestureExclusionRects = touchScreenArea.orEmpty()
+        }
+    }
+
+    private fun resolveScreenPresentationAreas(): ScreenPresentationAreas {
         val (topScreen, bottomScreen) = if (layoutView.areScreensSwapped()) {
             LayoutComponent.BOTTOM_SCREEN to LayoutComponent.TOP_SCREEN
         } else {
@@ -100,35 +157,32 @@ class ExternalPresentation(
         }
         val topView = layoutView.getLayoutComponentView(topScreen)
         val bottomView = layoutView.getLayoutComponentView(bottomScreen)
-        emulatorRenderer.updateScreenAreas(
+        val hybridView = layoutView.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
+        val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
+        return ScreenPresentationAreas(
             topScreenRect = topView?.getRect(),
             bottomScreenRect = bottomView?.getRect(),
             topAlpha = topView?.baseAlpha ?: 1f,
             bottomAlpha = bottomView?.baseAlpha ?: 1f,
             topOnTop = topView?.onTop ?: false,
             bottomOnTop = bottomView?.onTop ?: false,
+            hybridTopScreenRect = hybridTopRect,
+            hybridBottomScreenRect = hybridBottomRect,
+            hybridAlpha = hybridView?.baseAlpha ?: 1f,
+            hybridOnTop = hybridView?.onTop ?: false,
         )
+    }
 
-        frameRenderCoordinator.updateSurfacePresentation(
-            surfaceView,
-            buildVulkanPresentationConfig(
-                topView?.getRect(),
-                bottomView?.getRect(),
-                topView?.baseAlpha ?: 1f,
-                bottomView?.baseAlpha ?: 1f,
-                topView?.onTop ?: false,
-                bottomView?.onTop ?: false,
-            ),
-            currentBackground ?: RuntimeBackground.None,
-        )
+    private fun splitHybridScreenRect(rect: me.magnum.melonds.domain.model.Rect): Pair<me.magnum.melonds.domain.model.Rect, me.magnum.melonds.domain.model.Rect> {
+        val topHeight = max(1, rect.height / 2)
+        val bottomHeight = max(1, rect.height - topHeight)
+        return me.magnum.melonds.domain.model.Rect(rect.x, rect.y, rect.width, topHeight) to
+                me.magnum.melonds.domain.model.Rect(rect.x, rect.y + topHeight, rect.width, bottomHeight)
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && window?.decorView?.isAttachedToWindow == true) {
-            val touchScreenArea = bottomView?.getRect()?.let {
-                val rect = android.graphics.Rect(it.x, it.y, it.right, it.bottom)
-                listOf(rect)
-            }
-            window?.systemGestureExclusionRects = touchScreenArea.orEmpty()
-        }
+    fun setTouchScreenSystemGestureExclusionEnabled(enabled: Boolean) {
+        excludeTouchScreenFromSystemGestures = enabled
+        updateRendererScreenAreas()
     }
 
     fun setPauseOverlayVisibility(visible: Boolean) {
@@ -179,6 +233,10 @@ class ExternalPresentation(
         bottomAlpha: Float,
         topOnTop: Boolean,
         bottomOnTop: Boolean,
+        hybridTopScreenRect: me.magnum.melonds.domain.model.Rect?,
+        hybridBottomScreenRect: me.magnum.melonds.domain.model.Rect?,
+        hybridAlpha: Float,
+        hybridOnTop: Boolean,
     ): VulkanPresentationConfig? {
         val rendererConfiguration = currentRendererConfiguration ?: return null
         if (rendererConfiguration.renderer != VideoRenderer.VULKAN) {
@@ -200,6 +258,10 @@ class ExternalPresentation(
             bottomAlpha = bottomAlpha,
             topOnTop = topOnTop,
             bottomOnTop = bottomOnTop,
+            hybridTopScreenRect = hybridTopScreenRect?.takeIf { it.width > 0 && it.height > 0 },
+            hybridBottomScreenRect = hybridBottomScreenRect?.takeIf { it.width > 0 && it.height > 0 },
+            hybridAlpha = hybridAlpha,
+            hybridOnTop = hybridOnTop,
             backgroundMode = currentBackground?.mode ?: RuntimeBackground.None.mode,
             videoFiltering = rendererConfiguration.videoFiltering,
             retroShaderEnabled = rendererConfiguration.videoFiltering == VideoFiltering.RETROARCH,
