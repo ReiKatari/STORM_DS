@@ -1233,7 +1233,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun areRetroAchievementsUnofficialAchievementsEnabled(): Boolean {
-        return preferences.getBoolean("ra_unofficial_enabled", true)
+        return preferences.getBoolean("ra_unofficial_enabled", false)
     }
 
     override fun isRetroAchievementsEncoreModeEnabled(): Boolean {

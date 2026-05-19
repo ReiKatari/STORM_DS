@@ -30,6 +30,8 @@ constexpr u32 kDrawModeFilteredCompositeTop = 4u;
 constexpr u32 kDrawModeFilteredCompositeBottom = 5u;
 constexpr u32 kNativeScreenWidth = 256u;
 constexpr u32 kNativeScreenHeight = 192u;
+constexpr u32 kNativeAtlasHeight = 386u;
+constexpr u32 kMaxRetroArchNativeDisplayScale = 8u;
 constexpr size_t kPrewarmedRetroArchSurfaceCount = 2u;
 constexpr std::array<VkFormat, 7> kPreferredSurfaceFormats = {
     VK_FORMAT_R8G8B8A8_UNORM,
@@ -2070,14 +2072,131 @@ void VulkanSurfacePresenter::destroyRetroArchImage(RetroArchImageResource& resou
     resource = {};
 }
 
+VulkanSurfacePresenter::RetroArchSizing VulkanSurfacePresenter::calculateRetroArchSizing(
+    const SurfaceState& surfaceState,
+    u32 atlasWidth,
+    u32 atlasHeight) const
+{
+    RetroArchSizing sizing{};
+    sizing.nativeDisplayMode = surfaceState.config.retroShaderSourceResolution == RetroArchSourceResolution::Native;
+    sizing.inputScale = std::max(1u, atlasWidth / kNativeScreenWidth);
+    sizing.inputScreenWidth = kNativeScreenWidth * sizing.inputScale;
+    sizing.inputScreenHeight = kNativeScreenHeight * sizing.inputScale;
+    sizing.inputBottomOffsetY = atlasHeight > sizing.inputScreenHeight
+        ? atlasHeight - sizing.inputScreenHeight
+        : 0u;
+
+    auto includeRect = [&](const VulkanPresenterRect& rect, float alpha) {
+        if (!rect.enabled || rect.width <= 0 || rect.height <= 0 || alpha <= 0.0f)
+            return;
+
+        sizing.maxLayoutWidth = std::max(sizing.maxLayoutWidth, static_cast<u32>(rect.width));
+        sizing.maxLayoutHeight = std::max(sizing.maxLayoutHeight, static_cast<u32>(rect.height));
+    };
+
+    includeRect(surfaceState.config.topScreen, surfaceState.config.topAlpha);
+    includeRect(surfaceState.config.bottomScreen, surfaceState.config.bottomAlpha);
+    includeRect(surfaceState.config.hybridTopScreen, surfaceState.config.hybridAlpha);
+    includeRect(surfaceState.config.hybridBottomScreen, surfaceState.config.hybridAlpha);
+
+    auto ceilDiv = [](u32 value, u32 divisor) -> u32 {
+        if (value == 0 || divisor == 0)
+            return 0;
+        return (value + divisor - 1u) / divisor;
+    };
+
+    u32 requestedOutputScale = sizing.inputScale;
+    if (sizing.nativeDisplayMode)
+    {
+        const u32 layoutScale = std::max(
+            ceilDiv(sizing.maxLayoutWidth, kNativeScreenWidth),
+            ceilDiv(sizing.maxLayoutHeight, kNativeScreenHeight));
+        requestedOutputScale = std::max(sizing.inputScale, std::max(1u, layoutScale));
+    }
+
+    const u32 maxAllowedScale = std::max(sizing.inputScale, kMaxRetroArchNativeDisplayScale);
+    sizing.requestedOutputScale = requestedOutputScale;
+    sizing.outputScale = std::min(requestedOutputScale, maxAllowedScale);
+    sizing.clamped = sizing.outputScale != requestedOutputScale;
+
+    sizing.sourceScreenWidth = sizing.nativeDisplayMode ? kNativeScreenWidth : sizing.inputScreenWidth;
+    sizing.sourceScreenHeight = sizing.nativeDisplayMode ? kNativeScreenHeight : sizing.inputScreenHeight;
+    sizing.outputScreenWidth = kNativeScreenWidth * sizing.outputScale;
+    sizing.outputScreenHeight = kNativeScreenHeight * sizing.outputScale;
+    sizing.outputAtlasWidth = sizing.outputScreenWidth;
+    sizing.outputAtlasHeight = kNativeAtlasHeight * sizing.outputScale;
+    sizing.outputBottomOffsetY = sizing.outputAtlasHeight > sizing.outputScreenHeight
+        ? sizing.outputAtlasHeight - sizing.outputScreenHeight
+        : 0u;
+
+    return sizing;
+}
+
+void VulkanSurfacePresenter::logRetroArchSizingIfNeeded(
+    SurfaceState& surfaceState,
+    const RetroArchSizing& sizing,
+    u32 atlasWidth,
+    u32 atlasHeight)
+{
+    RetroArchResources& retro = surfaceState.retroArch;
+    std::string logKey = surfaceState.config.retroShaderPresetPath
+        + "|mode="
+        + (sizing.nativeDisplayMode ? "native_display" : "vulkan_ir")
+        + "|source="
+        + std::to_string(sizing.sourceScreenWidth)
+        + "x"
+        + std::to_string(sizing.sourceScreenHeight)
+        + "|inputAtlas="
+        + std::to_string(atlasWidth)
+        + "x"
+        + std::to_string(atlasHeight)
+        + "|output="
+        + std::to_string(sizing.outputScreenWidth)
+        + "x"
+        + std::to_string(sizing.outputScreenHeight)
+        + "|outputAtlas="
+        + std::to_string(sizing.outputAtlasWidth)
+        + "x"
+        + std::to_string(sizing.outputAtlasHeight)
+        + "|scale="
+        + std::to_string(sizing.outputScale);
+    if (retro.lastSizingLogKey == logKey)
+        return;
+
+    retro.lastSizingLogKey = std::move(logKey);
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Info,
+        "VulkanPresenter[RetroArchSizing]: preset=%s mode=%s source=%ux%u inputAtlas=%ux%u inputScreen=%ux%u outputScreen=%ux%u outputAtlas=%ux%u layoutMax=%ux%u scale=%u requestedScale=%u clamped=%d surface=%ux%u passes=%u",
+        surfaceState.config.retroShaderPresetPath.c_str(),
+        sizing.nativeDisplayMode ? "native_display" : "vulkan_ir",
+        sizing.sourceScreenWidth,
+        sizing.sourceScreenHeight,
+        atlasWidth,
+        atlasHeight,
+        sizing.inputScreenWidth,
+        sizing.inputScreenHeight,
+        sizing.outputScreenWidth,
+        sizing.outputScreenHeight,
+        sizing.outputAtlasWidth,
+        sizing.outputAtlasHeight,
+        sizing.maxLayoutWidth,
+        sizing.maxLayoutHeight,
+        sizing.outputScale,
+        sizing.requestedOutputScale,
+        sizing.clamped ? 1 : 0,
+        surfaceState.extent.width,
+        surfaceState.extent.height,
+        surfaceState.config.retroShaderPassCount);
+}
+
 bool VulkanSurfacePresenter::ensureRetroArchResources(
     SurfaceState& surfaceState,
     u32 sourceScreenWidth,
     u32 sourceScreenHeight,
     u32 outputScreenWidth,
     u32 outputScreenHeight,
-    u32 atlasWidth,
-    u32 atlasHeight)
+    u32 outputAtlasWidth,
+    u32 outputAtlasHeight)
 {
     RetroArchResources& retro = surfaceState.retroArch;
     const bool sizeMatches =
@@ -2085,7 +2204,7 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
         && retro.bottomInput.width == sourceScreenWidth && retro.bottomInput.height == sourceScreenHeight
         && retro.topOutput.width == outputScreenWidth && retro.topOutput.height == outputScreenHeight
         && retro.bottomOutput.width == outputScreenWidth && retro.bottomOutput.height == outputScreenHeight
-        && retro.atlasOutput.width == atlasWidth && retro.atlasOutput.height == atlasHeight;
+        && retro.atlasOutput.width == outputAtlasWidth && retro.atlasOutput.height == outputAtlasHeight;
 
     if (retro.initialized && sizeMatches)
         return true;
@@ -2116,7 +2235,7 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
         || !createRetroArchImage(retro.bottomInput, sourceScreenWidth, sourceScreenHeight)
         || !createRetroArchImage(retro.topOutput, outputScreenWidth, outputScreenHeight)
         || !createRetroArchImage(retro.bottomOutput, outputScreenWidth, outputScreenHeight)
-        || !createRetroArchImage(retro.atlasOutput, atlasWidth, atlasHeight))
+        || !createRetroArchImage(retro.atlasOutput, outputAtlasWidth, outputAtlasHeight))
     {
         destroyRetroArchResources(surfaceState);
         return false;
@@ -2168,49 +2287,90 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         return false;
     }
 
-    const u32 outputScreenWidth = kNativeScreenWidth * std::max(1u, atlasWidth / kNativeScreenWidth);
-    const u32 outputScreenHeight = kNativeScreenHeight * std::max(1u, outputScreenWidth / kNativeScreenWidth);
-    const bool nativeSourcePreset = surfaceState.config.retroShaderSourceResolution == RetroArchSourceResolution::Native;
-    const u32 sourceScreenWidth = nativeSourcePreset ? kNativeScreenWidth : outputScreenWidth;
-    const u32 sourceScreenHeight = nativeSourcePreset ? kNativeScreenHeight : outputScreenHeight;
-    if (outputScreenWidth == 0
-        || outputScreenHeight == 0
-        || outputScreenWidth > atlasWidth
-        || outputScreenHeight > atlasHeight)
+    const RetroArchSizing sizing = calculateRetroArchSizing(surfaceState, atlasWidth, atlasHeight);
+    if (sizing.sourceScreenWidth == 0
+        || sizing.sourceScreenHeight == 0
+        || sizing.inputScreenWidth == 0
+        || sizing.inputScreenHeight == 0
+        || sizing.outputScreenWidth == 0
+        || sizing.outputScreenHeight == 0
+        || sizing.outputAtlasWidth == 0
+        || sizing.outputAtlasHeight == 0
+        || sizing.inputScreenWidth > atlasWidth
+        || sizing.inputScreenHeight > atlasHeight)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanPresenter[RetroArchSizing]: invalid dimensions preset=%s mode=%s source=%ux%u inputAtlas=%ux%u inputScreen=%ux%u outputScreen=%ux%u outputAtlas=%ux%u surface=%ux%u",
+            surfaceState.config.retroShaderPresetPath.c_str(),
+            sizing.nativeDisplayMode ? "native_display" : "vulkan_ir",
+            sizing.sourceScreenWidth,
+            sizing.sourceScreenHeight,
+            atlasWidth,
+            atlasHeight,
+            sizing.inputScreenWidth,
+            sizing.inputScreenHeight,
+            sizing.outputScreenWidth,
+            sizing.outputScreenHeight,
+            sizing.outputAtlasWidth,
+            sizing.outputAtlasHeight,
+            surfaceState.extent.width,
+            surfaceState.extent.height);
         return false;
+    }
 
     if (!ensureRetroArchResources(
             surfaceState,
-            sourceScreenWidth,
-            sourceScreenHeight,
-            outputScreenWidth,
-            outputScreenHeight,
+            sizing.sourceScreenWidth,
+            sizing.sourceScreenHeight,
+            sizing.outputScreenWidth,
+            sizing.outputScreenHeight,
+            sizing.outputAtlasWidth,
+            sizing.outputAtlasHeight))
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanPresenter[RetroArchSizing]: resource allocation failed preset=%s mode=%s source=%ux%u inputAtlas=%ux%u inputScreen=%ux%u outputScreen=%ux%u outputAtlas=%ux%u surface=%ux%u",
+            surfaceState.config.retroShaderPresetPath.c_str(),
+            sizing.nativeDisplayMode ? "native_display" : "vulkan_ir",
+            sizing.sourceScreenWidth,
+            sizing.sourceScreenHeight,
             atlasWidth,
-            atlasHeight))
+            atlasHeight,
+            sizing.inputScreenWidth,
+            sizing.inputScreenHeight,
+            sizing.outputScreenWidth,
+            sizing.outputScreenHeight,
+            sizing.outputAtlasWidth,
+            sizing.outputAtlasHeight,
+            surfaceState.extent.width,
+            surfaceState.extent.height);
         return false;
+    }
 
     RetroArchResources& retro = surfaceState.retroArch;
+    logRetroArchSizingIfNeeded(surfaceState, sizing, atlasWidth, atlasHeight);
     std::string configKey = makeRetroArchConfigKey(
         surfaceState.config,
-        sourceScreenWidth,
-        sourceScreenHeight,
-        outputScreenWidth,
-        outputScreenHeight);
+        sizing.sourceScreenWidth,
+        sizing.sourceScreenHeight,
+        sizing.outputScreenWidth,
+        sizing.outputScreenHeight);
     if (retro.failedConfigKey == configKey)
         return false;
 
     const bool chainConfigMatches =
         retro.topChain.getPresetPath() == surfaceState.config.retroShaderPresetPath
-        && retro.topChain.getSourceWidth() == sourceScreenWidth
-        && retro.topChain.getSourceHeight() == sourceScreenHeight
-        && retro.topChain.getOutputWidth() == outputScreenWidth
-        && retro.topChain.getOutputHeight() == outputScreenHeight
+        && retro.topChain.getSourceWidth() == sizing.sourceScreenWidth
+        && retro.topChain.getSourceHeight() == sizing.sourceScreenHeight
+        && retro.topChain.getOutputWidth() == sizing.outputScreenWidth
+        && retro.topChain.getOutputHeight() == sizing.outputScreenHeight
         && retro.topChain.getParameterOverrides() == surfaceState.config.retroShaderParameterOverrides
         && retro.bottomChain.getPresetPath() == surfaceState.config.retroShaderPresetPath
-        && retro.bottomChain.getSourceWidth() == sourceScreenWidth
-        && retro.bottomChain.getSourceHeight() == sourceScreenHeight
-        && retro.bottomChain.getOutputWidth() == outputScreenWidth
-        && retro.bottomChain.getOutputHeight() == outputScreenHeight
+        && retro.bottomChain.getSourceWidth() == sizing.sourceScreenWidth
+        && retro.bottomChain.getSourceHeight() == sizing.sourceScreenHeight
+        && retro.bottomChain.getOutputWidth() == sizing.outputScreenWidth
+        && retro.bottomChain.getOutputHeight() == sizing.outputScreenHeight
         && retro.bottomChain.getParameterOverrides() == surfaceState.config.retroShaderParameterOverrides;
     if (!chainConfigMatches)
     {
@@ -2223,17 +2383,17 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
     if (!consumedPrewarmedChains
         && (!retro.topChain.configure(
                 surfaceState.config.retroShaderPresetPath,
-                sourceScreenWidth,
-                sourceScreenHeight,
-                outputScreenWidth,
-                outputScreenHeight,
+                sizing.sourceScreenWidth,
+                sizing.sourceScreenHeight,
+                sizing.outputScreenWidth,
+                sizing.outputScreenHeight,
                 surfaceState.config.retroShaderParameterOverrides)
             || !retro.bottomChain.configure(
                 surfaceState.config.retroShaderPresetPath,
-                sourceScreenWidth,
-                sourceScreenHeight,
-                outputScreenWidth,
-                outputScreenHeight,
+                sizing.sourceScreenWidth,
+                sizing.sourceScreenHeight,
+                sizing.outputScreenWidth,
+                sizing.outputScreenHeight,
                 surfaceState.config.retroShaderParameterOverrides)))
     {
         retro.topChain.shutdown();
@@ -2241,7 +2401,17 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         retro.failedConfigKey = std::move(configKey);
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
-            "VulkanPresenter[RetroArch]: preset failed to compile/load; presenting unfiltered until config changes"
+            "VulkanPresenter[RetroArch]: preset failed to compile/load; preset=%s mode=%s source=%ux%u output=%ux%u outputAtlas=%ux%u passes=%u params=%zu; presenting unfiltered until config changes",
+            surfaceState.config.retroShaderPresetPath.c_str(),
+            sizing.nativeDisplayMode ? "native_display" : "vulkan_ir",
+            sizing.sourceScreenWidth,
+            sizing.sourceScreenHeight,
+            sizing.outputScreenWidth,
+            sizing.outputScreenHeight,
+            sizing.outputAtlasWidth,
+            sizing.outputAtlasHeight,
+            surfaceState.config.retroShaderPassCount,
+            surfaceState.config.retroShaderParameterOverrides.size()
         );
         return false;
     }
@@ -2301,8 +2471,6 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         resource.layout = newLayout;
     };
 
-    const u32 bottomOffsetY = atlasHeight - outputScreenHeight;
-
     auto sourceAtlasBarrier = [&](VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -2324,11 +2492,17 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.srcSubresource.layerCount = 1;
         blit.srcOffsets[0] = {0, static_cast<int32_t>(srcY), 0};
-        blit.srcOffsets[1] = {static_cast<int32_t>(outputScreenWidth), static_cast<int32_t>(srcY + outputScreenHeight), 1};
+        blit.srcOffsets[1] = {
+            static_cast<int32_t>(sizing.inputScreenWidth),
+            static_cast<int32_t>(srcY + sizing.inputScreenHeight),
+            1};
         blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.layerCount = 1;
         blit.dstOffsets[0] = {0, 0, 0};
-        blit.dstOffsets[1] = {static_cast<int32_t>(sourceScreenWidth), static_cast<int32_t>(sourceScreenHeight), 1};
+        blit.dstOffsets[1] = {
+            static_cast<int32_t>(sizing.sourceScreenWidth),
+            static_cast<int32_t>(sizing.sourceScreenHeight),
+            1};
         vkCmdBlitImage(
             retro.commandBuffer,
             sourceAtlasImage,
@@ -2357,7 +2531,7 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
     imageBarrier(retro.topInput, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
     imageBarrier(retro.bottomInput, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
     copyScreenInput(retro.topInput, 0);
-    copyScreenInput(retro.bottomInput, bottomOffsetY);
+    copyScreenInput(retro.bottomInput, sizing.inputBottomOffsetY);
 
     sourceAtlasBarrier(
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -2385,11 +2559,17 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.srcSubresource.layerCount = 1;
         blit.srcOffsets[0] = {0, 0, 0};
-        blit.srcOffsets[1] = {static_cast<int32_t>(outputScreenWidth), static_cast<int32_t>(outputScreenHeight), 1};
+        blit.srcOffsets[1] = {
+            static_cast<int32_t>(sizing.outputScreenWidth),
+            static_cast<int32_t>(sizing.outputScreenHeight),
+            1};
         blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.layerCount = 1;
         blit.dstOffsets[0] = {0, static_cast<int32_t>(dstY), 0};
-        blit.dstOffsets[1] = {static_cast<int32_t>(outputScreenWidth), static_cast<int32_t>(dstY + outputScreenHeight), 1};
+        blit.dstOffsets[1] = {
+            static_cast<int32_t>(sizing.outputScreenWidth),
+            static_cast<int32_t>(dstY + sizing.outputScreenHeight),
+            1};
         vkCmdBlitImage(
             retro.commandBuffer,
             src.image,
@@ -2401,7 +2581,7 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
             VK_FILTER_NEAREST);
     };
     copyFilteredScreen(retro.topOutput, 0);
-    copyFilteredScreen(retro.bottomOutput, bottomOffsetY);
+    copyFilteredScreen(retro.bottomOutput, sizing.outputBottomOffsetY);
     imageBarrier(retro.atlasOutput, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     imageBarrier(retro.topOutput, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
     imageBarrier(retro.bottomOutput, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);

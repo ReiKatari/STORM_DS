@@ -15,6 +15,7 @@
 #include <jni.h>
 #include <sstream>
 #include <thread>
+#include <ctime>
 #include <vector>
 
 using namespace melonDS;
@@ -51,6 +52,8 @@ constexpr auto RC_CLIENT_BOOTSTRAP_RETRY_DELAY = std::chrono::milliseconds(500);
 constexpr int RC_CLIENT_PERF_WINDOW_FRAMES = 180;
 constexpr long long RC_CLIENT_PERF_WINDOW_AVG_US_LIMIT = 2000;
 constexpr long long RC_CLIENT_PERF_WINDOW_PEAK_US_LIMIT = 7000;
+constexpr long long RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT = 50000;
+constexpr int RC_CLIENT_PERF_WINDOW_SLOW_FRAME_COUNT_LIMIT = 12;
 constexpr int RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_FALLBACK = 2;
 constexpr const char* RC_CLIENT_DEFAULT_IMAGE = "https://media.retroachievements.org/Images/000001.png";
 constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "melonDualDS-android/unknown";
@@ -74,6 +77,15 @@ struct RcClientWaitResult
     int result = RC_OK;
     std::string errorMessage;
 };
+
+long long GetCurrentThreadCpuTimeUs()
+{
+    timespec time{};
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time) != 0)
+        return -1;
+
+    return static_cast<long long>(time.tv_sec) * 1000000LL + static_cast<long long>(time.tv_nsec / 1000LL);
+}
 
 const char* ExtractRcClientRequestAction(const char* postData)
 {
@@ -855,8 +867,13 @@ RetroAchievementsManager::RetroAchievementsManager(melonDS::NDS* nds) : nds(nds)
     hasRcClientPerformanceFallback = false;
     rcClientSlowWindowCount = 0;
     rcClientWindowFrameCount = 0;
+    rcClientWindowSlowFrameCount = 0;
     rcClientWindowAccumulatedUs = 0;
     rcClientWindowPeakUs = 0;
+    rcClientWindowCpuFrameCount = 0;
+    rcClientWindowCpuSlowFrameCount = 0;
+    rcClientWindowCpuAccumulatedUs = 0;
+    rcClientWindowCpuPeakUs = 0;
 }
 
 RetroAchievementsManager::~RetroAchievementsManager()
@@ -1133,21 +1150,40 @@ void RetroAchievementsManager::FrameUpdate()
     if (IsRcClientRuntimeActiveLocked())
     {
         const auto frameStart = std::chrono::steady_clock::now();
+        const long long frameCpuStartUs = GetCurrentThreadCpuTimeUs();
         rc_client_do_frame(rcClientRuntime);
+        const long long frameCpuEndUs = GetCurrentThreadCpuTimeUs();
 
         const auto frameElapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - frameStart
         ).count();
+        const long long frameCpuElapsedUs =
+            frameCpuStartUs >= 0 && frameCpuEndUs >= frameCpuStartUs
+                ? frameCpuEndUs - frameCpuStartUs
+                : -1;
         rcClientWindowFrameCount++;
         rcClientWindowAccumulatedUs += frameElapsedUs;
         rcClientWindowPeakUs = std::max(rcClientWindowPeakUs, frameElapsedUs);
+        if (frameElapsedUs > RC_CLIENT_PERF_WINDOW_PEAK_US_LIMIT)
+            rcClientWindowSlowFrameCount++;
+        if (frameCpuElapsedUs >= 0)
+        {
+            rcClientWindowCpuFrameCount++;
+            rcClientWindowCpuAccumulatedUs += frameCpuElapsedUs;
+            rcClientWindowCpuPeakUs = std::max(rcClientWindowCpuPeakUs, frameCpuElapsedUs);
+            if (frameCpuElapsedUs > RC_CLIENT_PERF_WINDOW_PEAK_US_LIMIT)
+                rcClientWindowCpuSlowFrameCount++;
+        }
 
         if (rcClientWindowFrameCount >= RC_CLIENT_PERF_WINDOW_FRAMES)
         {
-            const long long avgUs = rcClientWindowAccumulatedUs / rcClientWindowFrameCount;
+            const long long avgWallUs = rcClientWindowAccumulatedUs / rcClientWindowFrameCount;
+            const long long avgCpuUs = rcClientWindowCpuFrameCount > 0
+                ? rcClientWindowCpuAccumulatedUs / rcClientWindowCpuFrameCount
+                : -1;
             const bool isSlowWindow =
-                avgUs > RC_CLIENT_PERF_WINDOW_AVG_US_LIMIT ||
-                rcClientWindowPeakUs > RC_CLIENT_PERF_WINDOW_PEAK_US_LIMIT;
+                avgCpuUs > RC_CLIENT_PERF_WINDOW_AVG_US_LIMIT ||
+                rcClientWindowCpuSlowFrameCount >= RC_CLIENT_PERF_WINDOW_SLOW_FRAME_COUNT_LIMIT;
 
             if (isSlowWindow)
                 rcClientSlowWindowCount++;
@@ -1158,13 +1194,34 @@ void RetroAchievementsManager::FrameUpdate()
             {
                 melonDS::Platform::Log(
                     melonDS::Platform::LogLevel::Warn,
-                    "[RAClient] Falling back to legacy runtime due to frame cost (avg=%lldus peak=%lldus)\n",
-                    avgUs,
-                    rcClientWindowPeakUs
+                    "[RAClient] Falling back to legacy runtime due to sustained CPU cost (cpuAvg=%lldus cpuPeak=%lldus cpuSlowFrames=%d/%d wallAvg=%lldus wallPeak=%lldus wallSlowFrames=%d/%d)\n",
+                    avgCpuUs,
+                    rcClientWindowCpuPeakUs,
+                    rcClientWindowCpuSlowFrameCount,
+                    rcClientWindowCpuFrameCount,
+                    avgWallUs,
+                    rcClientWindowPeakUs,
+                    rcClientWindowSlowFrameCount,
+                    rcClientWindowFrameCount
                 );
                 hasRcClientPerformanceFallback = true;
                 NotifyRcClientRuntimeFallbackLocked(RetroAchievementsRuntimeFallbackReason::Performance);
                 DeactivateRcClientRuntimeLocked();
+            }
+            else if (rcClientWindowPeakUs > RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT)
+            {
+                melonDS::Platform::Log(
+                    melonDS::Platform::LogLevel::Info,
+                    "[RAClient] Ignoring runtime wall-time spike without sustained CPU cost (cpuAvg=%lldus cpuPeak=%lldus cpuSlowFrames=%d/%d wallAvg=%lldus wallPeak=%lldus wallSlowFrames=%d/%d)\n",
+                    avgCpuUs,
+                    rcClientWindowCpuPeakUs,
+                    rcClientWindowCpuSlowFrameCount,
+                    rcClientWindowCpuFrameCount,
+                    avgWallUs,
+                    rcClientWindowPeakUs,
+                    rcClientWindowSlowFrameCount,
+                    rcClientWindowFrameCount
+                );
             }
 
             ResetRcClientPerformanceWindowLocked();
@@ -1315,7 +1372,7 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
                 unsigned int value = 0;
                 unsigned int target = 0;
                 ParseMeasuredProgress(event->achievement->measured_progress, &value, &target);
-                eventMessenger->onAchievementProgressUpdated(event->achievement->id, value, target, event->achievement->measured_progress ? event->achievement->measured_progress : "");
+                eventMessenger->onAchievementProgressUpdated(event->achievement->id, value, target, event->achievement->measured_progress);
             }
             break;
         case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_HIDE:
@@ -1666,8 +1723,13 @@ void RetroAchievementsManager::NotifyRcClientRuntimeFallbackLocked(RetroAchievem
 void RetroAchievementsManager::ResetRcClientPerformanceWindowLocked()
 {
     rcClientWindowFrameCount = 0;
+    rcClientWindowSlowFrameCount = 0;
     rcClientWindowAccumulatedUs = 0;
     rcClientWindowPeakUs = 0;
+    rcClientWindowCpuFrameCount = 0;
+    rcClientWindowCpuSlowFrameCount = 0;
+    rcClientWindowCpuAccumulatedUs = 0;
+    rcClientWindowCpuPeakUs = 0;
 }
 
 std::string RetroAchievementsManager::BuildRcClientLoginResponse() const

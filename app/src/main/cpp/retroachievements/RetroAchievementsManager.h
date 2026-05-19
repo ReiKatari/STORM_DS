@@ -80,8 +80,13 @@ private:
     bool hasRcClientPerformanceFallback;
     int rcClientSlowWindowCount;
     int rcClientWindowFrameCount;
+    int rcClientWindowSlowFrameCount;
     long long rcClientWindowAccumulatedUs;
     long long rcClientWindowPeakUs;
+    int rcClientWindowCpuFrameCount;
+    int rcClientWindowCpuSlowFrameCount;
+    long long rcClientWindowCpuAccumulatedUs;
+    long long rcClientWindowCpuPeakUs;
     std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig;
     std::string loadedRichPresenceScript;
 
