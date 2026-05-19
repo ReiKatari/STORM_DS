@@ -169,8 +169,30 @@ private:
         VulkanRetroArchFilterChain topChain;
         VulkanRetroArchFilterChain bottomChain;
         std::string failedConfigKey;
+        std::string lastSizingLogKey;
         u64 frameCount = 0;
         bool initialized = false;
+    };
+
+    struct RetroArchSizing
+    {
+        bool nativeDisplayMode = false;
+        bool clamped = false;
+        u32 inputScale = 1;
+        u32 outputScale = 1;
+        u32 requestedOutputScale = 1;
+        u32 maxLayoutWidth = 0;
+        u32 maxLayoutHeight = 0;
+        u32 sourceScreenWidth = 0;
+        u32 sourceScreenHeight = 0;
+        u32 inputScreenWidth = 0;
+        u32 inputScreenHeight = 0;
+        u32 outputScreenWidth = 0;
+        u32 outputScreenHeight = 0;
+        u32 outputAtlasWidth = 0;
+        u32 outputAtlasHeight = 0;
+        u32 inputBottomOffsetY = 0;
+        u32 outputBottomOffsetY = 0;
     };
 
     struct DescriptorSetCacheState
@@ -296,11 +318,13 @@ private:
         u32 sourceScreenHeight,
         u32 outputScreenWidth,
         u32 outputScreenHeight,
-        u32 atlasWidth,
-        u32 atlasHeight);
+        u32 outputAtlasWidth,
+        u32 outputAtlasHeight);
     void destroyRetroArchResources(SurfaceState& surfaceState);
     bool createRetroArchImage(RetroArchImageResource& resource, u32 width, u32 height);
     void destroyRetroArchImage(RetroArchImageResource& resource);
+    RetroArchSizing calculateRetroArchSizing(const SurfaceState& surfaceState, u32 atlasWidth, u32 atlasHeight) const;
+    void logRetroArchSizingIfNeeded(SurfaceState& surfaceState, const RetroArchSizing& sizing, u32 atlasWidth, u32 atlasHeight);
     bool runRetroArchFilter(
         SurfaceState& surfaceState,
         VkImage sourceAtlasImage,

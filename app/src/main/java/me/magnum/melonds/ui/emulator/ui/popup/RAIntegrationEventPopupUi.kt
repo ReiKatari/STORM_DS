@@ -125,7 +125,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                             text = stringResource(id = R.string.ra_runtime_fallback_title),
                             style = MaterialTheme.typography.body2,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colors.error,
+                            color = MaterialTheme.colors.secondary,
                             maxLines = 2,
                         )
                         Text(

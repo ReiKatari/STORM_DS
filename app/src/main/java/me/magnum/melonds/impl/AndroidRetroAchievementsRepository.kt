@@ -559,7 +559,7 @@ class AndroidRetroAchievementsRepository(
     }
 
     private fun buildUserGameData(gameData: RAGame?, userUnlocks: List<Long>, forHardcoreMode: Boolean): RAUserGameData? {
-        val includeUnofficialAchievements = sharedPreferences.getBoolean(RA_UNOFFICIAL_ENABLED, true)
+        val includeUnofficialAchievements = sharedPreferences.getBoolean(RA_UNOFFICIAL_ENABLED, false)
         return gameData?.let { game ->
             val userSets = game.sets.map { set ->
                 RAUserAchievementSet(

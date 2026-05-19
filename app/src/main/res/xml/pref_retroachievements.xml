@@ -28,7 +28,7 @@
         android:summary="@string/show_unofficial_achievements_summary"
         app:iconSpaceReserved="false"
         app:dependency="ra_login"
-        android:defaultValue="true" />
+        android:defaultValue="false" />
 
     <SwitchPreference
         android:key="ra_encore_enabled"
