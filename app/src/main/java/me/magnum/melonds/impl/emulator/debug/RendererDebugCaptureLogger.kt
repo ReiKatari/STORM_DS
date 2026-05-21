@@ -90,6 +90,27 @@ internal object RendererDebugCaptureLogger {
         if (RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
             captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_RENDERER3D_CAPTURE_FRAME
         }
+        if (RendererDebugCaptureKind.PACKED_TOP_PLANE1 in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_PACKED_TOP_PLANE1
+        }
+        if (RendererDebugCaptureKind.PACKED_TOP_CONTROL in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_PACKED_TOP_CONTROL
+        }
+        if (RendererDebugCaptureKind.PACKED_BOTTOM_PLANE1 in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_PACKED_BOTTOM_PLANE1
+        }
+        if (RendererDebugCaptureKind.PACKED_BOTTOM_CONTROL in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_PACKED_BOTTOM_CONTROL
+        }
+        if (RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_CAPTURE3D_SOURCE
+        }
+        if (RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_CAPTURE_LINE_MASK
+        }
+        if (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_SOFT_PACKED_META
+        }
         if (captureKindsMask == 0) {
             captureKindsMask = RendererDebugBridge.DENSE_CAPTURE_SCREEN_FRAME
         }
@@ -113,7 +134,7 @@ internal object RendererDebugCaptureLogger {
         val results = buildList {
             for (index in 0 until availableFrameCount) {
                 val captureId = "${captureIdBase}_frame_${index.toString().padStart(4, '0')}"
-                val frameId = RendererDebugBridge.getCurrentFrameIndexForDebug()
+                val frameId = RendererDebugBridge.getDenseScreenBurstCaptureFrameId(index)
                 val frameReady = RendererDebugBridge.isCurrentFrameReadyForDebug()
                 val screenFrame = if (RendererDebugCaptureKind.SCREEN_FRAME in requestedKinds) {
                     RendererDebugBridge.getDenseScreenBurstCaptureFrame(index)
@@ -127,6 +148,41 @@ internal object RendererDebugCaptureLogger {
                 }
                 val packedBottomPrimary = if (RendererDebugCaptureKind.PACKED_BOTTOM_PRIMARY in requestedKinds) {
                     RendererDebugBridge.getDenseScreenBurstPackedBottomFrame(index)
+                } else {
+                    null
+                }
+                val packedTopPlane1 = if (RendererDebugCaptureKind.PACKED_TOP_PLANE1 in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstPackedPlaneFrame(index, 0, 1)
+                } else {
+                    null
+                }
+                val packedTopControl = if (RendererDebugCaptureKind.PACKED_TOP_CONTROL in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstPackedPlaneFrame(index, 0, 2)
+                } else {
+                    null
+                }
+                val packedBottomPlane1 = if (RendererDebugCaptureKind.PACKED_BOTTOM_PLANE1 in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstPackedPlaneFrame(index, 1, 1)
+                } else {
+                    null
+                }
+                val packedBottomControl = if (RendererDebugCaptureKind.PACKED_BOTTOM_CONTROL in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstPackedPlaneFrame(index, 1, 2)
+                } else {
+                    null
+                }
+                val capture3dSource = if (RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstCapture3dSourceFrame(index)
+                } else {
+                    null
+                }
+                val captureLineMask = if (RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstCaptureLineUses3dMaskFrame(index)
+                } else {
+                    null
+                }
+                val softPackedFrameMetaJson = if (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstSoftPackedFrameMetaJson(index)
                 } else {
                     null
                 }
@@ -169,6 +225,66 @@ internal object RendererDebugCaptureLogger {
                         pixels = packedBottomPrimary,
                     )
                 }
+                if (RendererDebugCaptureKind.PACKED_TOP_PLANE1 in requestedKinds) {
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "packedTopPlane1",
+                        width = CAPTURE_3D_LINE_WIDTH,
+                        height = CAPTURE_3D_LINE_HEIGHT,
+                        pixels = packedTopPlane1,
+                    )
+                }
+                if (RendererDebugCaptureKind.PACKED_TOP_CONTROL in requestedKinds) {
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "packedTopControl",
+                        width = CAPTURE_3D_LINE_WIDTH,
+                        height = CAPTURE_3D_LINE_HEIGHT,
+                        pixels = packedTopControl,
+                    )
+                }
+                if (RendererDebugCaptureKind.PACKED_BOTTOM_PLANE1 in requestedKinds) {
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "packedBottomPlane1",
+                        width = CAPTURE_3D_LINE_WIDTH,
+                        height = CAPTURE_3D_LINE_HEIGHT,
+                        pixels = packedBottomPlane1,
+                    )
+                }
+                if (RendererDebugCaptureKind.PACKED_BOTTOM_CONTROL in requestedKinds) {
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "packedBottomControl",
+                        width = CAPTURE_3D_LINE_WIDTH,
+                        height = CAPTURE_3D_LINE_HEIGHT,
+                        pixels = packedBottomControl,
+                    )
+                }
+                if (RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME in requestedKinds) {
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "capture3dSourceDsFrame",
+                        width = CAPTURE_3D_LINE_WIDTH,
+                        height = CAPTURE_3D_LINE_HEIGHT,
+                        pixels = capture3dSource,
+                    )
+                }
+                if (RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK in requestedKinds) {
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "captureLineUses3dMask",
+                        width = CAPTURE_3D_LINE_WIDTH,
+                        height = CAPTURE_3D_LINE_HEIGHT,
+                        pixels = captureLineMask,
+                    )
+                }
                 if (RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
                     saveFramePng(
                         outputDir = resolvedOutputDir,
@@ -179,9 +295,12 @@ internal object RendererDebugCaptureLogger {
                         pixels = captureFrame3d,
                     )
                 }
+                if (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds) {
+                    Log.w(TAG, "captureId=$captureId kind=softPackedFrameMetaJson available=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} length=${softPackedFrameMetaJson?.length ?: 0}")
+                }
                 Log.w(
                     TAG,
-                    "captureId=$captureId kind=meta screen=${describeBufferShape(RendererDebugBridge.CAPTURE_WIDTH, RendererDebugBridge.CAPTURE_HEIGHT, screenFrame)} packedTop=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPrimary)} packedBottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPrimary)} renderer3d=0x0:empty renderer3dCapture=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFrame3d)} depth=0x0:empty attr=0x0:empty coverage=0x0:empty",
+                    "captureId=$captureId kind=meta screen=${describeBufferShape(RendererDebugBridge.CAPTURE_WIDTH, RendererDebugBridge.CAPTURE_HEIGHT, screenFrame)} packedTop=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPrimary)} packedBottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPrimary)} packedTopPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPlane1)} packedTopControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopControl)} packedBottomPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPlane1)} packedBottomControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomControl)} capture3dSource=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, capture3dSource)} captureLineMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineMask)} softPackedMeta=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} renderer3d=0x0:empty renderer3dCapture=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFrame3d)} depth=0x0:empty attr=0x0:empty coverage=0x0:empty",
                 )
                 if (RendererDebugCaptureKind.SCREEN_FRAME in requestedKinds) {
                     logFrameSummary(
@@ -210,6 +329,24 @@ internal object RendererDebugCaptureLogger {
                         pixels = packedBottomPrimary,
                     )
                 }
+                if (RendererDebugCaptureKind.PACKED_TOP_PLANE1 in requestedKinds) {
+                    logFrameSummary(captureId, "packedTopPlane1", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPlane1)
+                }
+                if (RendererDebugCaptureKind.PACKED_TOP_CONTROL in requestedKinds) {
+                    logFrameSummary(captureId, "packedTopControl", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopControl)
+                }
+                if (RendererDebugCaptureKind.PACKED_BOTTOM_PLANE1 in requestedKinds) {
+                    logFrameSummary(captureId, "packedBottomPlane1", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPlane1)
+                }
+                if (RendererDebugCaptureKind.PACKED_BOTTOM_CONTROL in requestedKinds) {
+                    logFrameSummary(captureId, "packedBottomControl", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomControl)
+                }
+                if (RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME in requestedKinds) {
+                    logFrameSummary(captureId, "capture3dSourceDsFrame", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, capture3dSource)
+                }
+                if (RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK in requestedKinds) {
+                    logFrameSummary(captureId, "captureLineUses3dMask", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineMask)
+                }
                 if (RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
                     logFrameSummary(
                         captureId = captureId,
@@ -223,6 +360,13 @@ internal object RendererDebugCaptureLogger {
                     ((RendererDebugCaptureKind.SCREEN_FRAME !in requestedKinds) || hasData(screenFrame))
                         && ((RendererDebugCaptureKind.PACKED_TOP_PRIMARY !in requestedKinds) || hasData(packedTopPrimary))
                         && ((RendererDebugCaptureKind.PACKED_BOTTOM_PRIMARY !in requestedKinds) || hasData(packedBottomPrimary))
+                        && ((RendererDebugCaptureKind.PACKED_TOP_PLANE1 !in requestedKinds) || hasData(packedTopPlane1))
+                        && ((RendererDebugCaptureKind.PACKED_TOP_CONTROL !in requestedKinds) || hasData(packedTopControl))
+                        && ((RendererDebugCaptureKind.PACKED_BOTTOM_PLANE1 !in requestedKinds) || hasData(packedBottomPlane1))
+                        && ((RendererDebugCaptureKind.PACKED_BOTTOM_CONTROL !in requestedKinds) || hasData(packedBottomControl))
+                        && ((RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME !in requestedKinds) || hasData(capture3dSource))
+                        && ((RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK !in requestedKinds) || hasData(captureLineMask))
+                        && ((RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON !in requestedKinds) || !softPackedFrameMetaJson.isNullOrBlank())
                         && ((RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME !in requestedKinds) || hasData(captureFrame3d))
                 Log.w(TAG, "captureId=$captureId stage=end success=${if (success) 1 else 0}")
                 add(
@@ -369,7 +513,8 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val needs3dDimensions = requestedKinds.any {
+        val canCaptureAccelerated3d = configuredRenderer != VideoRenderer.SOFTWARE
+        val needs3dDimensions = canCaptureAccelerated3d && requestedKinds.any {
             it == RendererDebugCaptureKind.RENDERER3D_FRAME
                 || it == RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME
                 || it == RendererDebugCaptureKind.RENDERER3D_DEPTH
@@ -386,7 +531,7 @@ internal object RendererDebugCaptureLogger {
         }
         val renderer3dWidth = renderer3dDimensions?.getOrNull(0) ?: 0
         val renderer3dHeight = renderer3dDimensions?.getOrNull(1) ?: 0
-        val frame3d = if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
+        val frame3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dFrame", before = true)
             val pixels = RendererDebugBridge.captureCurrent3dFrame()
             logCaptureStep(captureId, "captureCurrent3dFrame", before = false)
@@ -394,7 +539,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val captureFrame3d = if (RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
+        val captureFrame3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dCaptureFrame", before = true)
             val pixels = RendererDebugBridge.captureCurrent3dCaptureFrame()
             logCaptureStep(captureId, "captureCurrent3dCaptureFrame", before = false)
@@ -402,7 +547,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val depth3d = if (RendererDebugCaptureKind.RENDERER3D_DEPTH in requestedKinds) {
+        val depth3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_DEPTH in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dDepth", before = true)
             val values = RendererDebugBridge.captureCurrent3dDepth()
             logCaptureStep(captureId, "captureCurrent3dDepth", before = false)
@@ -410,7 +555,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val attr3d = if (RendererDebugCaptureKind.RENDERER3D_ATTR in requestedKinds) {
+        val attr3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_ATTR in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dAttributes", before = true)
             val values = RendererDebugBridge.captureCurrent3dAttributes()
             logCaptureStep(captureId, "captureCurrent3dAttributes", before = false)
@@ -418,7 +563,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val coverage3d = if (RendererDebugCaptureKind.RENDERER3D_COVERAGE in requestedKinds) {
+        val coverage3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_COVERAGE in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dCoverage", before = true)
             val values = RendererDebugBridge.captureCurrent3dCoverage()
             logCaptureStep(captureId, "captureCurrent3dCoverage", before = false)

@@ -57,6 +57,8 @@ struct PresenterPushConstants
     u32 previousTopSourceValid;
     u32 previousBottomSourceValid;
     u32 captureSourceValid;
+    u32 captureSourceScreenSwapValid;
+    u32 captureSourceScreenSwap;
     u32 liveSourceScreenSwap;
     u32 class4VramStructuredPair;
     u32 class4NoAboveVramStructuredPair;
@@ -3498,6 +3500,8 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         pushConstants.previousTopSourceValid = inputs.previousTopSourceValid ? 1u : 0u;
         pushConstants.previousBottomSourceValid = inputs.previousBottomSourceValid ? 1u : 0u;
         pushConstants.captureSourceValid = inputs.capture3dSourceValid ? 1u : 0u;
+        pushConstants.captureSourceScreenSwapValid = inputs.capture3dSourceScreenSwapValid ? 1u : 0u;
+        pushConstants.captureSourceScreenSwap = inputs.capture3dSourceScreenSwap ? 1u : 0u;
         pushConstants.liveSourceScreenSwap = inputs.liveSourceScreenSwap ? 1u : 0u;
         pushConstants.class4VramStructuredPair = inputs.class4VramStructuredPair ? 1u : 0u;
         pushConstants.class4NoAboveVramStructuredPair = inputs.class4NoAboveVramStructuredPair ? 1u : 0u;

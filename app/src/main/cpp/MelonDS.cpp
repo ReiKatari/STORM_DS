@@ -1093,6 +1093,14 @@ namespace MelonDSAndroid
         return instance->getDenseScreenBurstCaptureFrameCountForDebug();
     }
 
+    int getDenseScreenBurstCaptureFrameIdForDebug(int index)
+    {
+        if (!instance)
+            return -1;
+
+        return instance->getDenseScreenBurstCaptureFrameIdForDebug(index);
+    }
+
     std::vector<u32> getDenseScreenBurstCaptureFrameForDebug(int index)
     {
         if (!instance)
@@ -1115,6 +1123,38 @@ namespace MelonDSAndroid
             return {};
 
         return instance->getDenseScreenBurstPackedBottomFrameForDebug(index);
+    }
+
+    std::vector<u32> getDenseScreenBurstPackedPlaneFrameForDebug(int index, int screenIndex, int planeIndex)
+    {
+        if (!instance)
+            return {};
+
+        return instance->getDenseScreenBurstPackedPlaneFrameForDebug(index, screenIndex, planeIndex);
+    }
+
+    std::vector<u32> getDenseScreenBurstCapture3dSourceFrameForDebug(int index)
+    {
+        if (!instance)
+            return {};
+
+        return instance->getDenseScreenBurstCapture3dSourceFrameForDebug(index);
+    }
+
+    std::vector<u32> getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(int index)
+    {
+        if (!instance)
+            return {};
+
+        return instance->getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(index);
+    }
+
+    std::string getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(int index)
+    {
+        if (!instance)
+            return {};
+
+        return instance->getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index)

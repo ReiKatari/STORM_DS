@@ -68,8 +68,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_LAUNCH_ROM_SUFFIX) -> handleLaunchRom(context, intent)
             context.debugCommandAction(ACTION_WAIT_ROM_READY_SUFFIX) -> handleWaitRomReady(intent)
             context.debugCommandAction(ACTION_SET_DEBUG_PAUSE_SUFFIX) -> handleSetDebugPause(intent)
-            context.debugCommandAction(ACTION_STEP_FRAME_SUFFIX) -> handleStepFrame(intent)
-            context.debugCommandAction(ACTION_STEP_FRAMES_SUFFIX) -> handleStepFrame(intent)
+            context.debugCommandAction(ACTION_STEP_FRAME_SUFFIX) -> handleStepFrame(entryPoint, intent)
+            context.debugCommandAction(ACTION_STEP_FRAMES_SUFFIX) -> handleStepFrame(entryPoint, intent)
             context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX) -> handleDumpRendererCapture(context, entryPoint, intent)
             context.debugCommandAction(ACTION_TOUCH_SCREEN_SUFFIX) -> handleTouchScreen(intent)
             context.debugCommandAction(ACTION_PRESS_INPUT_SUFFIX) -> handlePressInput(intent)
@@ -253,16 +253,36 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         Log.w(TAG, "action=set_debug_pause mode=release paused=${if (paused) 1 else 0}")
     }
 
-    private fun handleStepFrame(intent: Intent) {
+    private suspend fun handleStepFrame(entryPoint: DebugCommandEntryPoint, intent: Intent) {
         val frames = intent.firstNullableIntExtra(EXTRA_STEP_FRAMES, EXTRA_FRAMES, EXTRA_VALUE)
             ?.coerceAtLeast(1)
             ?: 1
-        var success = true
-        repeat(frames) {
-            success = MelonEmulator.debugStepFrame() && success
-        }
+        val timeoutMs = intent.firstNullableIntExtra(EXTRA_TIMEOUT_MS, EXTRA_DURATION_MS, EXTRA_RESUME_MS)
+            ?.coerceAtLeast(1)
+            ?: 5_000
+        val renderer = entryPoint.settingsRepository().getCurrentVideoRenderer()
+        val startFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+        DebugCommandStateStore.setDebugPauseHeld(false)
+        MelonEmulator.resumeEmulation()
+        waitForRendererFrameOrTimeout(
+            renderer = renderer,
+            startFrame = startFrame,
+            resumeFrames = frames,
+            timeoutMs = timeoutMs.toLong(),
+        )
+        MelonEmulator.pauseEmulation()
+        waitForRendererReadyOrTimeout(
+            renderer = renderer,
+            minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+            timeoutMs = timeoutMs.toLong(),
+        )
         DebugCommandStateStore.setDebugPauseHeld(true)
-        Log.w(TAG, "action=step_frame mode=release frames=$frames success=${if (success) 1 else 0}")
+        val endFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+        val ready = renderer != VideoRenderer.VULKAN || RendererDebugBridge.isCurrentFrameReadyForDebug()
+        Log.w(
+            TAG,
+            "action=step_frame mode=release renderer=${renderer.name.lowercase(Locale.US)} frames=$frames startFrame=$startFrame endFrame=$endFrame ready=${if (ready) 1 else 0}",
+        )
     }
 
     private fun stepRendererDebugForwardFrameIfPaused(reason: String) {
@@ -303,6 +323,12 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             ?.coerceAtLeast(1)
             ?.toLong()
             ?: ((burstCount.toLong() * burstStepFrames.toLong() * 1_000L) / 24L + 5_000L)
+        val resumeMs = intent.firstNullableIntExtra(EXTRA_RESUME_MS, EXTRA_DURATION_MS)
+            ?.coerceAtLeast(0)
+            ?: 0
+        val resumeFrames = intent.firstNullableIntExtra(EXTRA_RESUME_FRAMES, EXTRA_FRAMES)
+            ?.coerceAtLeast(0)
+            ?: 0
         val captureKinds = parseCaptureKinds(
             intent.firstStringExtra(EXTRA_CAPTURE_KINDS, EXTRA_KINDS),
             if (burstCount > 1) {
@@ -348,6 +374,23 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
                 MelonEmulator.pauseEmulation()
                 DebugCommandStateStore.setDebugPauseHeld(true)
                 waitForRendererReadyOrTimeout(renderer, timeoutMs = 1_000L)
+            } else if (resumeMs > 0 || resumeFrames > 0) {
+                DebugCommandStateStore.setDebugPauseHeld(false)
+                val startFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+                MelonEmulator.resumeEmulation()
+                waitForRendererFrameOrTimeout(
+                    renderer = renderer,
+                    startFrame = startFrame,
+                    resumeFrames = resumeFrames,
+                    timeoutMs = resumeMs.toLong(),
+                )
+                MelonEmulator.pauseEmulation()
+                waitForRendererReadyOrTimeout(
+                    renderer = renderer,
+                    minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+                    timeoutMs = resumeMs.coerceAtLeast(1_000).toLong(),
+                )
+                DebugCommandStateStore.setDebugPauseHeld(true)
             }
 
             val result = RendererDebugCaptureLogger.dumpPauseMenuCapture(
@@ -359,7 +402,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             )
             Log.w(
                 TAG,
-                "action=dump_renderer_capture mode=release renderer=${renderer.name.lowercase(Locale.US)} refreshed=${if (refreshed) 1 else 0} paused=${if (pauseWasHeld) 1 else 0} captureId=${result.captureId} success=${if (result.success) 1 else 0} outputDir=${result.outputDir?.absolutePath ?: outputDir.absolutePath}",
+                "action=dump_renderer_capture mode=release renderer=${renderer.name.lowercase(Locale.US)} refreshed=${if (refreshed) 1 else 0} paused=${if (pauseWasHeld) 1 else 0} resumeMs=$resumeMs resumeFrames=$resumeFrames captureId=${result.captureId} success=${if (result.success) 1 else 0} outputDir=${result.outputDir?.absolutePath ?: outputDir.absolutePath}",
             )
         } finally {
             if (!pauseWasHeld) {
@@ -783,12 +826,59 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         return null
     }
 
+    private suspend fun waitForRendererFrameOrTimeout(
+        renderer: VideoRenderer,
+        startFrame: Int,
+        resumeFrames: Int,
+        timeoutMs: Long,
+    ) {
+        val effectiveTimeoutMs = when {
+            timeoutMs > 0L -> timeoutMs
+            resumeFrames > 0 -> 5_000L
+            else -> 0L
+        }
+        if (effectiveTimeoutMs <= 0L) {
+            return
+        }
+
+        val targetFrame = if (resumeFrames > 0 && startFrame >= 0) {
+            startFrame + resumeFrames
+        } else {
+            Int.MIN_VALUE
+        }
+        if (targetFrame == Int.MIN_VALUE) {
+            delay(effectiveTimeoutMs)
+            return
+        }
+
+        val deadlineAt = System.nanoTime() + effectiveTimeoutMs * 1_000_000L
+        while (System.nanoTime() < deadlineAt) {
+            val currentFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
+            val rendererReady = renderer != VideoRenderer.VULKAN || RendererDebugBridge.isCurrentFrameReadyForDebug()
+            if (currentFrame >= targetFrame && rendererReady) {
+                return
+            }
+            delay(8L)
+        }
+    }
+
     private suspend fun waitForRendererReadyOrTimeout(renderer: VideoRenderer, timeoutMs: Long) {
+        waitForRendererReadyOrTimeout(
+            renderer = renderer,
+            minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug(),
+            timeoutMs = timeoutMs,
+        )
+    }
+
+    private suspend fun waitForRendererReadyOrTimeout(
+        renderer: VideoRenderer,
+        minFrame: Int,
+        timeoutMs: Long,
+    ) {
         if (renderer != VideoRenderer.VULKAN) {
             return
         }
 
-        val minFrame = RendererDebugBridge.getCurrentFrameIndexForDebug()
         val deadlineAt = System.nanoTime() + timeoutMs.coerceAtLeast(1L) * 1_000_000L
         while (System.nanoTime() < deadlineAt) {
             if (RendererDebugBridge.getCurrentFrameIndexForDebug() >= minFrame
@@ -892,6 +982,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_PAUSED = "paused"
         private const val EXTRA_FRAMES = "frames"
         private const val EXTRA_STEP_FRAMES = "step_frames"
+        private const val EXTRA_RESUME_MS = "resume_ms"
+        private const val EXTRA_RESUME_FRAMES = "resume_frames"
         private const val EXTRA_CAPTURE_KINDS = "capture_kinds"
         private const val EXTRA_KINDS = "kinds"
         private const val EXTRA_CAPTURE_ID = "capture_id"
