@@ -142,6 +142,8 @@ struct VulkanCompositionInputs
     bool previousTopSourceValid{};
     bool previousBottomSourceValid{};
     bool capture3dSourceValid{};
+    bool capture3dSourceScreenSwapValid{};
+    bool capture3dSourceScreenSwap{};
     bool liveSourceScreenSwap{};
     bool class4VramStructuredPair{};
     bool class4NoAboveVramStructuredPair{};
@@ -290,6 +292,8 @@ private:
         u32 previousTopSourceValid;
         u32 previousBottomSourceValid;
         u32 captureSourceValid;
+        u32 captureSourceScreenSwapValid;
+        u32 captureSourceScreenSwap;
         u32 liveSourceScreenSwap;
         u32 class4VramStructuredPair;
         u32 class4NoAboveVramStructuredPair;
@@ -512,6 +516,8 @@ private:
     std::array<u8, SoftPackedFrameSnapshot::kLineCount> lastValidBottomComp4PlaceholderLines{};
     u32 packedDebugLogsRemaining{};
     u32 class4PairDebugLogsRemaining{};
+    u32 regularComp7PackedOwnerDebugLogsRemaining{};
+    bool regularComp7PackedOwnerDebugActive{};
     std::mutex temporalStatsLock;
     VulkanOutputTemporalStats temporalStats{};
     PerfSampleWindow<120> packedUploadCpuWindow;

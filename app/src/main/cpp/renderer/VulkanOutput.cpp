@@ -35,9 +35,46 @@ constexpr VkDeviceSize kCapture3dBufferSize = static_cast<VkDeviceSize>(kScreenW
 constexpr u64 kValidationWaitTimeoutNs = 2'000'000'000ull;
 constexpr melonDS::u32 kMetaFlagRegularCaptureUses3d = 1u << 21u;
 constexpr melonDS::u32 kMetaFlagVramCaptureUses3d = 1u << 22u;
+constexpr melonDS::u32 kMetaFlagStructuredAboveDominant = 1u << 19u;
 constexpr melonDS::u32 kPacked3dPlaceholder = 0x20000000u;
 constexpr melonDS::u32 kRenderer2DDebugFeature3DBackground = 1u << 6u;
 constexpr melonDS::u32 kClass4StructuredAboveStableSamplesFor30Fps = 2u;
+
+bool screenUsesFullRegularComp7(const SoftPackedScreenStats& stats)
+{
+    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
+    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
+    return stats.DisplayModeCounts[1] > dominantLineThreshold
+        && stats.CompModeCounts[7] > dominantPixelThreshold
+        && stats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
+        && stats.VramCaptureUses3dLines == 0u
+        && stats.StructuredSlotPixels > dominantPixelThreshold;
+}
+
+bool screenUsesPlainFullComp4(const SoftPackedScreenStats& stats)
+{
+    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
+    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
+    return stats.DisplayModeCounts[1] > dominantLineThreshold
+        && stats.CompModeCounts[4] > nearlyFullPixelThreshold
+        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
+        && stats.VramCaptureUses3dLines == 0u
+        && stats.ForceLive3dCompMode7Lines == 0u;
+}
+
+bool screenHasVisibleStructured2d(const SoftPackedScreenStats& stats)
+{
+    return stats.StructuredAboveVisiblePixels > 0u
+        || stats.Structured2DOnlyPixels > 0u
+        || stats.Structured2DOnlyVisiblePixels > 0u;
+}
+
+bool screenUsesFullRegularComp7WithDominantAbove(const SoftPackedScreenStats& stats)
+{
+    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
+    return screenUsesFullRegularComp7(stats)
+        && stats.StructuredAboveVisiblePixels > dominantPixelThreshold;
+}
 
 melonDS::u32 expandPackedColor6ToRgba8(melonDS::u32 packedColor)
 {
@@ -310,6 +347,8 @@ void VulkanOutput::shutdown()
     lastValidBottomComp4PlaceholderLines.fill(0);
     packedDebugLogsRemaining = 0;
     class4PairDebugLogsRemaining = 0;
+    regularComp7PackedOwnerDebugLogsRemaining = 0;
+    regularComp7PackedOwnerDebugActive = false;
     {
         std::lock_guard<std::mutex> lock(temporalStatsLock);
         temporalStats = {};
@@ -363,6 +402,8 @@ void VulkanOutput::invalidateTemporalHistory()
     lastValidBottomComp4PlaceholderLines.fill(0);
     packedDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 48u : 0u;
     class4PairDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 240u : 0u;
+    regularComp7PackedOwnerDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 12u : 0u;
+    regularComp7PackedOwnerDebugActive = false;
     class4BottomAboveHashValid = false;
     class4BottomAboveHash = 0;
     class4BottomAboveStableFrames = 0;
@@ -1741,6 +1782,11 @@ bool VulkanOutput::updateCompositorPackedBuffers(
     if (topPacked == nullptr || bottomPacked == nullptr)
         return false;
 
+    const bool topStructuredAboveDominant =
+        screenUsesFullRegularComp7WithDominantAbove(softPackedSnapshot.topScreenStats);
+    const bool bottomStructuredAboveDominant =
+        screenUsesFullRegularComp7WithDominantAbove(softPackedSnapshot.bottomScreenStats);
+
     for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
     {
         const size_t packedRowBase = y * static_cast<size_t>(kAcceleratedStride);
@@ -1758,7 +1804,8 @@ bool VulkanOutput::updateCompositorPackedBuffers(
             softPackedSnapshot.packedTopControl.data() + snapshotRowBase,
             SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
         topPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-            softPackedSnapshot.packedTopLineMeta[y];
+            softPackedSnapshot.packedTopLineMeta[y]
+            | (topStructuredAboveDominant ? kMetaFlagStructuredAboveDominant : 0u);
 
         std::memcpy(
             bottomPacked + packedRowBase,
@@ -1773,7 +1820,8 @@ bool VulkanOutput::updateCompositorPackedBuffers(
             softPackedSnapshot.packedBottomControl.data() + snapshotRowBase,
             SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
         bottomPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-            softPackedSnapshot.packedBottomLineMeta[y];
+            softPackedSnapshot.packedBottomLineMeta[y]
+            | (bottomStructuredAboveDominant ? kMetaFlagStructuredAboveDominant : 0u);
     }
 
     resource.softPackedFrameId = softPackedSnapshot.frameId;
@@ -2260,12 +2308,31 @@ bool VulkanOutput::prepareFrameForPresentation(
         class4PreservePackedTopVramFinal || class4PreservePackedBottomVramFinal;
     resource.class4PreservePackedVramScreenSwap = class4PreservePackedTopVramFinal;
     resource.class4NoAboveVramStructuredPair = class4NoAboveVramStructuredPair;
+    const bool topUsesFullRegularComp7 =
+        screenUsesFullRegularComp7(softPackedSnapshot.topScreenStats);
+    const bool bottomUsesFullRegularComp7 =
+        screenUsesFullRegularComp7(softPackedSnapshot.bottomScreenStats);
+    const bool asymmetricFullRegularComp7 =
+        topUsesFullRegularComp7 != bottomUsesFullRegularComp7;
+    const bool preservePackedOwnerForPlainRegularComp7Pair =
+        currentBackendIsGraphics
+        && topUsesFullRegularComp7
+        && !bottomUsesFullRegularComp7
+        && screenUsesPlainFullComp4(softPackedSnapshot.bottomScreenStats)
+        && !screenHasVisibleStructured2d(softPackedSnapshot.topScreenStats)
+        && !screenHasVisibleStructured2d(softPackedSnapshot.bottomScreenStats);
     bool liveSourceScreenSwap = resource.screenSwap;
     if (class4VramStructuredPair)
     {
         liveSourceScreenSwap = topUsesVramCapture3d;
     }
-    else if (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d)
+    else if (asymmetricFullRegularComp7
+        && !preservePackedOwnerForPlainRegularComp7Pair)
+    {
+        liveSourceScreenSwap = topUsesFullRegularComp7;
+    }
+    else if (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d
+        && !preservePackedOwnerForPlainRegularComp7Pair)
     {
         liveSourceScreenSwap = topUsesCurrentCapture3d;
     }
@@ -2313,6 +2380,18 @@ bool VulkanOutput::prepareFrameForPresentation(
         && class4PairDebugLogsRemaining == 0)
     {
         class4PairDebugLogsRemaining = 600;
+    }
+    if (preservePackedOwnerForPlainRegularComp7Pair)
+    {
+        if (!regularComp7PackedOwnerDebugActive)
+        {
+            regularComp7PackedOwnerDebugActive = true;
+            regularComp7PackedOwnerDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 12u : 0u;
+        }
+    }
+    else
+    {
+        regularComp7PackedOwnerDebugActive = false;
     }
     if (class4AsymmetricBottomDominantPair)
     {
@@ -2388,6 +2467,28 @@ bool VulkanOutput::prepareFrameForPresentation(
         );
         packedDebugLogsRemaining--;
     }
+    else if (preservePackedOwnerForPlainRegularComp7Pair
+        && areRendererDebugBgObjLogsEnabled()
+        && regularComp7PackedOwnerDebugLogsRemaining > 0)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanLive3D[RegularComp7PackedOwner]: frameId=%u packedScreenSwap=%u liveSourceScreenSwap=%u topReg=%u topComp7=%u topAboveVisible=%u top2DOnly=%u bottomComp4=%u bottomStruct=%u bottomAboveVisible=%u bottom2DOnly=%u remaining=%u",
+            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
+            resource.screenSwap ? 1u : 0u,
+            liveSourceScreenSwap ? 1u : 0u,
+            softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines,
+            softPackedSnapshot.topScreenStats.CompModeCounts[7],
+            softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels,
+            softPackedSnapshot.topScreenStats.Structured2DOnlyPixels,
+            softPackedSnapshot.bottomScreenStats.CompModeCounts[4],
+            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
+            softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels,
+            softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels,
+            regularComp7PackedOwnerDebugLogsRemaining
+        );
+        regularComp7PackedOwnerDebugLogsRemaining--;
+    }
 
     const bool canReusePreRunSnapshot = hasStablePreviousPreparedFrame
         && resource.hasRenderer3dSnapshot
@@ -2415,6 +2516,7 @@ bool VulkanOutput::prepareFrameForPresentation(
         screenCanUseAccumulatedHighres(softPackedSnapshot.topScreenStats);
     const bool bottomCanUseAccumulatedHighres =
         screenCanUseAccumulatedHighres(softPackedSnapshot.bottomScreenStats);
+    bool replaceAccumulatedHighres = false;
     if (canReusePreRunSnapshot)
     {
         if (needsDsTimedCaptureBackedComp4Source
@@ -2430,10 +2532,15 @@ bool VulkanOutput::prepareFrameForPresentation(
         const bool live3dOwnerWasSameLcdLastFrame = liveSourceScreenSwap
             ? framesSinceTopLive3D == 0u
             : framesSinceBottomLive3D == 0u;
-        const bool replaceAccumulatedHighres =
+        const bool liveOwnerUsesScreenWideRegularCapture =
+            liveSourceScreenSwap
+                ? softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
+                : softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > (kScreenHeight / 2u);
+        replaceAccumulatedHighres =
             currentBackendIsGraphics
-            && class4VramStructuredPair
-            && live3dOwnerWasSameLcdLastFrame;
+            && ((class4VramStructuredPair && live3dOwnerWasSameLcdLastFrame)
+                || asymmetricFullRegularComp7
+                || liveOwnerUsesScreenWideRegularCapture);
         if (!recordDirectPresentationPrep(
                 frame,
                 resource,
@@ -2498,10 +2605,16 @@ bool VulkanOutput::prepareFrameForPresentation(
     }
     const bool topNeedsAccumulatedHighres =
         topCanUseAccumulatedHighres
-        && (live3dOwnerIsTop || framesSinceTopLive3D <= 1u || (class4VramStructuredPair && !live3dOwnerIsTop));
+        && (live3dOwnerIsTop
+            || framesSinceTopLive3D <= 1u
+            || topUsesFullRegularComp7
+            || (class4VramStructuredPair && !live3dOwnerIsTop));
     const bool bottomNeedsAccumulatedHighres =
         bottomCanUseAccumulatedHighres
-        && (!live3dOwnerIsTop || framesSinceBottomLive3D <= 1u || (class4VramStructuredPair && live3dOwnerIsTop));
+        && (!live3dOwnerIsTop
+            || framesSinceBottomLive3D <= 1u
+            || bottomUsesFullRegularComp7
+            || (class4VramStructuredPair && live3dOwnerIsTop));
 
     resource.previousTopRendererSourceImage = currentSourceImage;
     resource.previousTopRendererSourceImageView = currentSourceImageView;
@@ -2627,14 +2740,16 @@ bool VulkanOutput::prepareFrameForPresentation(
         class4PairDebugLogsRemaining--;
     }
     if (topNeedsAccumulatedHighres
-        && topAccumulatorAvailable)
+        && topAccumulatorAvailable
+        && (!topUsesFullRegularComp7 || !live3dOwnerIsTop))
     {
         resource.previousTopRendererSourceImage = accumulatedTopHighresImage;
         resource.previousTopRendererSourceImageView = accumulatedTopHighresView;
         resource.previousTopRendererSourceValid = true;
     }
     if (bottomNeedsAccumulatedHighres
-        && bottomAccumulatorAvailable)
+        && bottomAccumulatorAvailable
+        && (!bottomUsesFullRegularComp7 || live3dOwnerIsTop))
     {
         resource.previousBottomRendererSourceImage = accumulatedBottomHighresImage;
         resource.previousBottomRendererSourceImageView = accumulatedBottomHighresView;
@@ -2956,6 +3071,25 @@ bool VulkanOutput::updatePreparedCapture3dSource(
             continue;
         }
 
+        if (currentBackendIsGraphics && lineUses3d && previousLineHasPixels)
+        {
+            if (capture3dMapped != nullptr)
+            {
+                std::memcpy(
+                    capture3dMapped + rowOffset,
+                    previousPreparedCapture3dSource + rowOffset,
+                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
+            }
+            for (int x = 0; x < kScreenWidth; x++)
+            {
+                resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
+                    expandPackedColor6ToRgba8(previousPreparedCapture3dSource[rowOffset + static_cast<size_t>(x)]);
+            }
+            resolvedLines[static_cast<size_t>(y)] = 1u;
+            linesFromPreviousFrame++;
+            continue;
+        }
+
         if (currentBackendIsGraphics && lineUses3d)
         {
             needsRenderer3dFallback = true;
@@ -3216,6 +3350,17 @@ bool VulkanOutput::buildCompositionInputs(
     outInputs.scale = static_cast<u32>(scale);
     outInputs.filtering = filtering;
     outInputs.capture3dSourceValid = resource.hasPreparedCapture3dSource && resource.capture3dBuffer != VK_NULL_HANDLE;
+    const bool topUsesCurrentCapture3d = topUsesRegularCapture3d || topUsesVramCapture3d;
+    const bool bottomUsesCurrentCapture3d = bottomUsesRegularCapture3d || bottomUsesVramCapture3d;
+    const bool asymmetricRegularCapture3d =
+        topUsesRegularCapture3d != bottomUsesRegularCapture3d
+        && !topUsesVramCapture3d
+        && !bottomUsesVramCapture3d;
+    outInputs.capture3dSourceScreenSwapValid =
+        asymmetricRegularCapture3d || (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d);
+    outInputs.capture3dSourceScreenSwap = asymmetricRegularCapture3d
+        ? topUsesRegularCapture3d
+        : topUsesCurrentCapture3d;
     outInputs.needsReadback = needsReadback;
     outInputs.multiSurface = multiSurface;
     outInputs.validationMode = validationMode;
@@ -3778,6 +3923,8 @@ bool VulkanOutput::dispatchCompositor(
     pushConstants.previousTopSourceValid = inputs.previousTopSourceValid ? 1u : 0u;
     pushConstants.previousBottomSourceValid = inputs.previousBottomSourceValid ? 1u : 0u;
     pushConstants.captureSourceValid = inputs.capture3dSourceValid ? 1u : 0u;
+    pushConstants.captureSourceScreenSwapValid = inputs.capture3dSourceScreenSwapValid ? 1u : 0u;
+    pushConstants.captureSourceScreenSwap = inputs.capture3dSourceScreenSwap ? 1u : 0u;
     pushConstants.liveSourceScreenSwap = inputs.liveSourceScreenSwap ? 1u : 0u;
     pushConstants.class4VramStructuredPair = inputs.class4VramStructuredPair ? 1u : 0u;
     pushConstants.class4NoAboveVramStructuredPair = inputs.class4NoAboveVramStructuredPair ? 1u : 0u;

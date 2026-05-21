@@ -10,6 +10,13 @@ internal object RendererDebugBridge {
     const val DENSE_CAPTURE_PACKED_TOP_PRIMARY = 1 shl 1
     const val DENSE_CAPTURE_PACKED_BOTTOM_PRIMARY = 1 shl 2
     const val DENSE_CAPTURE_RENDERER3D_CAPTURE_FRAME = 1 shl 3
+    const val DENSE_CAPTURE_PACKED_TOP_PLANE1 = 1 shl 4
+    const val DENSE_CAPTURE_PACKED_TOP_CONTROL = 1 shl 5
+    const val DENSE_CAPTURE_PACKED_BOTTOM_PLANE1 = 1 shl 6
+    const val DENSE_CAPTURE_PACKED_BOTTOM_CONTROL = 1 shl 7
+    const val DENSE_CAPTURE_CAPTURE3D_SOURCE = 1 shl 8
+    const val DENSE_CAPTURE_CAPTURE_LINE_MASK = 1 shl 9
+    const val DENSE_CAPTURE_SOFT_PACKED_META = 1 shl 10
     const val RENDERER_2D_DEBUG_FEATURE_STATIC_BACKGROUND = 1 shl 0
     const val RENDERER_2D_DEBUG_FEATURE_AFFINE_BACKGROUND = 1 shl 1
     const val RENDERER_2D_DEBUG_FEATURE_AFFINE_EXTENDED_TILED_BACKGROUND = 1 shl 2
@@ -125,9 +132,14 @@ internal object RendererDebugBridge {
     external fun startDenseScreenBurstCapture(frameCount: Int, stepFrames: Int, captureKindsMask: Int)
     external fun isDenseScreenBurstCaptureComplete(): Boolean
     external fun getDenseScreenBurstCaptureFrameCount(): Int
+    external fun getDenseScreenBurstCaptureFrameId(index: Int): Int
     external fun getDenseScreenBurstCaptureFrame(index: Int): IntArray?
     external fun getDenseScreenBurstPackedTopFrame(index: Int): IntArray?
     external fun getDenseScreenBurstPackedBottomFrame(index: Int): IntArray?
+    external fun getDenseScreenBurstPackedPlaneFrame(index: Int, screenIndex: Int, planeIndex: Int): IntArray?
+    external fun getDenseScreenBurstCapture3dSourceFrame(index: Int): IntArray?
+    external fun getDenseScreenBurstCaptureLineUses3dMaskFrame(index: Int): IntArray?
+    external fun getDenseScreenBurstSoftPackedFrameMetaJson(index: Int): String?
     external fun getDenseScreenBurstRenderer3dCaptureFrame(index: Int): IntArray?
     external fun clearDenseScreenBurstCapture()
     external fun captureCurrent3dDimensions(): IntArray?

@@ -92,9 +92,14 @@ public:
     void startDenseScreenBurstCaptureForDebug(int frameCount, int stepFrames, u32 captureKindsMask);
     bool isDenseScreenBurstCaptureCompleteForDebug() const;
     int getDenseScreenBurstCaptureFrameCountForDebug() const;
+    int getDenseScreenBurstCaptureFrameIdForDebug(int index) const;
     std::vector<u32> getDenseScreenBurstCaptureFrameForDebug(int index) const;
     std::vector<u32> getDenseScreenBurstPackedTopFrameForDebug(int index) const;
     std::vector<u32> getDenseScreenBurstPackedBottomFrameForDebug(int index) const;
+    std::vector<u32> getDenseScreenBurstPackedPlaneFrameForDebug(int index, int screenIndex, int planeIndex) const;
+    std::vector<u32> getDenseScreenBurstCapture3dSourceFrameForDebug(int index) const;
+    std::vector<u32> getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(int index) const;
+    std::string getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(int index) const;
     std::vector<u32> getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index) const;
     void clearDenseScreenBurstCaptureForDebug();
     void dumpDebugSnapshot();
@@ -155,9 +160,17 @@ private:
 
     struct DenseScreenBurstFrame
     {
+        int frameId = -1;
         std::vector<u32> screenFrame;
         std::vector<u32> packedTopPrimary;
         std::vector<u32> packedBottomPrimary;
+        std::vector<u32> packedTopPlane1;
+        std::vector<u32> packedTopControl;
+        std::vector<u32> packedBottomPlane1;
+        std::vector<u32> packedBottomControl;
+        std::vector<u32> capture3dSourceDsFrame;
+        std::vector<u32> captureLineUses3dMask;
+        std::string softPackedFrameMetaJson;
         std::vector<u32> renderer3dCaptureFrame;
     };
 
