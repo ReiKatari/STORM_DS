@@ -17,6 +17,7 @@ internal object RendererDebugBridge {
     const val DENSE_CAPTURE_CAPTURE3D_SOURCE = 1 shl 8
     const val DENSE_CAPTURE_CAPTURE_LINE_MASK = 1 shl 9
     const val DENSE_CAPTURE_SOFT_PACKED_META = 1 shl 10
+    const val DENSE_CAPTURE_RENDERER3D_FRAME = 1 shl 11
     const val RENDERER_2D_DEBUG_FEATURE_STATIC_BACKGROUND = 1 shl 0
     const val RENDERER_2D_DEBUG_FEATURE_AFFINE_BACKGROUND = 1 shl 1
     const val RENDERER_2D_DEBUG_FEATURE_AFFINE_EXTENDED_TILED_BACKGROUND = 1 shl 2
@@ -140,6 +141,7 @@ internal object RendererDebugBridge {
     external fun getDenseScreenBurstCapture3dSourceFrame(index: Int): IntArray?
     external fun getDenseScreenBurstCaptureLineUses3dMaskFrame(index: Int): IntArray?
     external fun getDenseScreenBurstSoftPackedFrameMetaJson(index: Int): String?
+    external fun getDenseScreenBurstRenderer3dFrame(index: Int): IntArray?
     external fun getDenseScreenBurstRenderer3dCaptureFrame(index: Int): IntArray?
     external fun clearDenseScreenBurstCapture()
     external fun captureCurrent3dDimensions(): IntArray?

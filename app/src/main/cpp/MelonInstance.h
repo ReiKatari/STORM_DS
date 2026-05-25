@@ -100,6 +100,7 @@ public:
     std::vector<u32> getDenseScreenBurstCapture3dSourceFrameForDebug(int index) const;
     std::vector<u32> getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(int index) const;
     std::string getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(int index) const;
+    std::vector<u32> getDenseScreenBurstRenderer3dFrameForDebug(int index) const;
     std::vector<u32> getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index) const;
     void clearDenseScreenBurstCaptureForDebug();
     void dumpDebugSnapshot();
@@ -171,6 +172,7 @@ private:
         std::vector<u32> capture3dSourceDsFrame;
         std::vector<u32> captureLineUses3dMask;
         std::string softPackedFrameMetaJson;
+        std::vector<u32> renderer3dFrame;
         std::vector<u32> renderer3dCaptureFrame;
     };
 

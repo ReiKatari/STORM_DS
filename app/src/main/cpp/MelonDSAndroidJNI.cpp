@@ -1727,6 +1727,16 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_getDenseScreenBur
 }
 
 JNIEXPORT jintArray JNICALL
+Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_getDenseScreenBurstRenderer3dFrame(
+    JNIEnv* env,
+    jobject thiz,
+    jint index)
+{
+    (void)thiz;
+    return MakeJavaIntArray(env, MelonDSAndroid::getDenseScreenBurstRenderer3dFrameForDebug(static_cast<int>(index)));
+}
+
+JNIEXPORT jintArray JNICALL
 Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_getDenseScreenBurstRenderer3dCaptureFrame(
     JNIEnv* env,
     jobject thiz,

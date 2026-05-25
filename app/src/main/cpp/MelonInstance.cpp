@@ -59,9 +59,11 @@ const u32 kDenseBurstCapturePackedBottomControl = 1u << 7;
 const u32 kDenseBurstCaptureCapture3dSource = 1u << 8;
 const u32 kDenseBurstCaptureCaptureLineMask = 1u << 9;
 const u32 kDenseBurstCaptureSoftPackedMeta = 1u << 10;
+const u32 kDenseBurstCaptureRenderer3dFrame = 1u << 11;
 const u32 kSoftPackedStride = 256u * 3u + 1u;
 const u32 kSoftPackedMetaFlagForceLive3dCompMode7 = 1u << 18u;
 const u32 kSoftPackedMetaFlagExactRegularCaptureUses3d = 1u << 19u;
+const u32 kSoftPackedMetaFlagCompMode2StructuredPair = 1u << 20u;
 const u32 kSoftPackedMetaFlagRegularCaptureUses3d = 1u << 21u;
 const u32 kSoftPackedMetaFlagVramCaptureUses3d = 1u << 22u;
 const u32 kPacked3dPlaceholder = 0x20000000u;
@@ -623,6 +625,8 @@ std::string buildSoftPackedFrameMetaJson(
     bool captureBackedClass4Only,
     const SoftPackedScreenStats& topStats,
     const SoftPackedScreenStats& bottomStats,
+    const u32* topLineMeta,
+    const u32* bottomLineMeta,
     const u8* fallbackLines)
 {
     const auto appendCounts = [](std::ostringstream& stream, const auto& counts) {
@@ -667,6 +671,18 @@ std::string buildSoftPackedFrameMetaJson(
     appendScreenStats(stream, "top", topStats);
     stream << ',';
     appendScreenStats(stream, "bottom", bottomStats);
+    const auto appendLineMeta = [](std::ostringstream& metaStream, const char* name, const u32* lineMeta) {
+        metaStream << ",\"" << name << "\":[";
+        for (int y = 0; y < kScreenshotScreenHeight; y++)
+        {
+            if (y > 0)
+                metaStream << ',';
+            metaStream << (lineMeta != nullptr ? lineMeta[static_cast<size_t>(y)] : 0u);
+        }
+        metaStream << ']';
+    };
+    appendLineMeta(stream, "topLineMeta", topLineMeta);
+    appendLineMeta(stream, "bottomLineMeta", bottomLineMeta);
     stream << ",\"captureFallbackLines\":[";
     bool first = true;
     if (fallbackLines != nullptr)
@@ -2537,6 +2553,8 @@ std::string MelonInstance::captureCurrentSoftPackedFrameMetaJsonForDebug()
             lastSoftPackedFrameSnapshot.captureBackedClass4Only,
             lastSoftPackedFrameSnapshot.topScreenStats,
             lastSoftPackedFrameSnapshot.bottomScreenStats,
+            lastSoftPackedFrameSnapshot.packedTopLineMeta.data(),
+            lastSoftPackedFrameSnapshot.packedBottomLineMeta.data(),
             lastSoftPackedFrameSnapshot.captureFallbackLines.data());
     }
 
@@ -2554,6 +2572,8 @@ std::string MelonInstance::captureCurrentSoftPackedFrameMetaJsonForDebug()
                 view.captureBackedClass4Only,
                 view.topScreenStats,
                 view.bottomScreenStats,
+                nullptr,
+                nullptr,
                 view.captureFallbackLines);
         }
     }
@@ -2843,6 +2863,15 @@ std::string MelonInstance::getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(in
     return denseScreenBurstCapture.frames[static_cast<size_t>(index)].softPackedFrameMetaJson;
 }
 
+std::vector<u32> MelonInstance::getDenseScreenBurstRenderer3dFrameForDebug(int index) const
+{
+    std::lock_guard<std::mutex> lock(denseScreenBurstCaptureMutex);
+    if (index < 0 || index >= static_cast<int>(denseScreenBurstCapture.frames.size()))
+        return {};
+
+    return denseScreenBurstCapture.frames[static_cast<size_t>(index)].renderer3dFrame;
+}
+
 std::vector<u32> MelonInstance::getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index) const
 {
     std::lock_guard<std::mutex> lock(denseScreenBurstCaptureMutex);
@@ -2935,7 +2964,8 @@ void MelonInstance::maybeCaptureDenseScreenBurstFrame(Frame* frameOverride, int 
             | kDenseBurstCapturePackedBottomControl
             | kDenseBurstCaptureCapture3dSource
             | kDenseBurstCaptureCaptureLineMask
-            | kDenseBurstCaptureSoftPackedMeta)) != 0u);
+            | kDenseBurstCaptureSoftPackedMeta
+            | kDenseBurstCaptureRenderer3dFrame)) != 0u);
     if (needsPreparedVulkanSnapshot)
     {
         auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
@@ -2960,6 +2990,8 @@ void MelonInstance::maybeCaptureDenseScreenBurstFrame(Frame* frameOverride, int 
         capturedFrame.captureLineUses3dMask = captureCurrentCaptureLineUses3dMaskForDebug();
     if ((captureKindsMask & kDenseBurstCaptureSoftPackedMeta) != 0u)
         capturedFrame.softPackedFrameMetaJson = captureCurrentSoftPackedFrameMetaJsonForDebug();
+    if ((captureKindsMask & kDenseBurstCaptureRenderer3dFrame) != 0u)
+        capturedFrame.renderer3dFrame = captureCurrent3dFrameForDebug();
     if ((captureKindsMask & kDenseBurstCaptureRenderer3dCaptureFrame) != 0u)
         capturedFrame.renderer3dCaptureFrame = captureCurrent3dCaptureFrameForDebug();
 
@@ -2974,6 +3006,7 @@ void MelonInstance::maybeCaptureDenseScreenBurstFrame(Frame* frameOverride, int 
         && (((captureKindsMask & kDenseBurstCaptureCapture3dSource) == 0u) || !capturedFrame.capture3dSourceDsFrame.empty())
         && (((captureKindsMask & kDenseBurstCaptureCaptureLineMask) == 0u) || !capturedFrame.captureLineUses3dMask.empty())
         && (((captureKindsMask & kDenseBurstCaptureSoftPackedMeta) == 0u) || !capturedFrame.softPackedFrameMetaJson.empty())
+        && (((captureKindsMask & kDenseBurstCaptureRenderer3dFrame) == 0u) || !capturedFrame.renderer3dFrame.empty())
         && (((captureKindsMask & kDenseBurstCaptureRenderer3dCaptureFrame) == 0u) || !capturedFrame.renderer3dCaptureFrame.empty());
     if (!hasRequestedData)
         return;
@@ -3586,6 +3619,8 @@ bool MelonInstance::ensurePreparedVulkanDebugSnapshot(Frame* frame, VulkanRender
             lastSoftPackedFrameSnapshot.captureBackedClass4Only,
             lastSoftPackedFrameSnapshot.topScreenStats,
             lastSoftPackedFrameSnapshot.bottomScreenStats,
+            lastSoftPackedFrameSnapshot.packedTopLineMeta.data(),
+            lastSoftPackedFrameSnapshot.packedBottomLineMeta.data(),
             lastSoftPackedFrameSnapshot.captureFallbackLines.data());
     }
     else if (vulkanOutput != nullptr)
@@ -3628,6 +3663,8 @@ bool MelonInstance::ensurePreparedVulkanDebugSnapshot(Frame* frame, VulkanRender
                 view.captureBackedClass4Only,
                 view.topScreenStats,
                 view.bottomScreenStats,
+                nullptr,
+                nullptr,
                 view.captureFallbackLines);
         }
     }
@@ -5570,11 +5607,17 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
                         carriedAnyPixel = true;
                         continue;
                     }
-                    const bool previousIsRealOverlay =
-                        (!previousLineUsesCapture3D
+                    const bool previousPlain2DOverlay =
+                        !previousLineUsesCapture3D
                         && previousCompMode <= 4u
                         && !previousIsCaptureBackedComp4
-                        && packedPixelHasVisibleColor(previousPlane0[index]))
+                        && packedPixelHasVisibleColor(previousPlane0[index]);
+                    const bool previousPlainOverlayHasMetadata =
+                        (previousControl[index] & 0x00FFFFFFu) != 0u
+                        || (previousControlAlpha & (0x20u | 0x40u | 0x80u)) != 0u;
+                    const bool previousIsRealOverlay =
+                        (previousPlain2DOverlay
+                            && (!currentLineUsesCapture3D || previousPlainOverlayHasMetadata))
                         || previousHasStructuredAbove;
                     const bool previousComp7HadOverlayControl =
                         previousCompMode == 7u
@@ -6117,6 +6160,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
         topRegularCaptureLineCount,
         topVramCaptureLineCount);
 
+    int preservedTopFullRegularProtectedBlackPixels = 0;
     auto repairTopFullRegularCapture2DBaseFromPrevious =
         [&](std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane0,
             const std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane1,
@@ -6193,7 +6237,37 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
             if (previousRegularCaptureLines > (kScreenshotScreenHeight / 2))
                 return 0;
 
+            const std::array<u32, SoftPackedFrameSnapshot::kPixelCount> currentPlane0 = plane0;
             plane0 = previousPlane0;
+            for (int y = 0; y < kScreenshotScreenHeight; y++)
+            {
+                const u32 meta = lineMeta[static_cast<size_t>(y)];
+                const bool regularCaptureLine =
+                    ((meta >> 16u) & 0x3u) == 1u
+                    && (meta & kSoftPackedMetaFlagRegularCaptureUses3d) != 0u
+                    && (meta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u;
+                if (!regularCaptureLine)
+                    continue;
+
+                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
+                for (int x = 0; x < kScreenshotScreenWidth; x++)
+                {
+                    const size_t index = rowBase + static_cast<size_t>(x);
+                    const u32 controlAlpha = control[index] >> 24u;
+                    const u32 compMode = controlAlpha & 0xFu;
+                    const bool structuredSlot = (controlAlpha & 0x40u) != 0u;
+                    const bool structured2DOnly = !structuredSlot && (controlAlpha & 0x80u) != 0u;
+                    const bool protectedBlack2D = structured2DOnly && (controlAlpha & 0x20u) != 0u;
+                    if (compMode == 7u
+                        && protectedBlack2D
+                        && currentPlane0[index] != 0u
+                        && currentPlane0[index] != kPacked3dPlaceholder)
+                    {
+                        plane0[index] = currentPlane0[index];
+                        preservedTopFullRegularProtectedBlackPixels++;
+                    }
+                }
+            }
             return 1;
         };
 
@@ -6454,6 +6528,63 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
         lastSoftPackedFrameSnapshot.packedBottomPlane1,
         lastSoftPackedFrameSnapshot.packedBottomControl,
         lastSoftPackedFrameSnapshot.packedBottomLineMeta);
+
+    auto markCompMode2StructuredPairLines =
+        [&](const std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
+            std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta,
+            const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& oppositeLineMeta) {
+            int markedLines = 0;
+            for (int y = 0; y < kScreenshotScreenHeight; y++)
+            {
+                u32& meta = lineMeta[static_cast<size_t>(y)];
+                const u32 displayMode = (meta >> 16u) & 0x3u;
+                const bool currentStructuredDisplayOnly =
+                    displayMode == 1u
+                    && (meta & (kSoftPackedMetaFlagRegularCaptureUses3d
+                        | kSoftPackedMetaFlagVramCaptureUses3d
+                        | kSoftPackedMetaFlagForceLive3dCompMode7)) == 0u;
+                if (!currentStructuredDisplayOnly)
+                    continue;
+
+                const u32 oppositeMeta = oppositeLineMeta[static_cast<size_t>(y)];
+                const bool oppositeRegularCapture3d =
+                    ((oppositeMeta >> 16u) & 0x3u) == 1u
+                    && (oppositeMeta & kSoftPackedMetaFlagRegularCaptureUses3d) != 0u
+                    && (oppositeMeta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u;
+                if (!oppositeRegularCapture3d)
+                    continue;
+
+                int compMode2StructuredPixels = 0;
+                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
+                for (int x = 0; x < kScreenshotScreenWidth; x++)
+                {
+                    const u32 controlAlpha = control[rowBase + static_cast<size_t>(x)] >> 24u;
+                    const u32 compMode = controlAlpha & 0xFu;
+                    const bool structuredSlot = (controlAlpha & 0x40u) != 0u;
+                    const bool structuredAbove = structuredSlot && (controlAlpha & 0x80u) != 0u;
+                    if (compMode == 2u && structuredSlot && !structuredAbove)
+                        compMode2StructuredPixels++;
+                }
+                if (compMode2StructuredPixels <= (kScreenshotScreenWidth / 2))
+                    continue;
+
+                meta |= kSoftPackedMetaFlagCompMode2StructuredPair;
+                markedLines++;
+            }
+            return markedLines;
+        };
+    const int markedTopCompMode2StructuredPairLines = renderer2dDebugControlsActive
+        ? 0
+        : markCompMode2StructuredPairLines(
+            lastSoftPackedFrameSnapshot.packedTopControl,
+            lastSoftPackedFrameSnapshot.packedTopLineMeta,
+            lastSoftPackedFrameSnapshot.packedBottomLineMeta);
+    const int markedBottomCompMode2StructuredPairLines = renderer2dDebugControlsActive
+        ? 0
+        : markCompMode2StructuredPairLines(
+            lastSoftPackedFrameSnapshot.packedBottomControl,
+            lastSoftPackedFrameSnapshot.packedBottomLineMeta,
+            lastSoftPackedFrameSnapshot.packedTopLineMeta);
 
     if (const auto* renderer2D = dynamic_cast<const GPU2D::SoftRenderer*>(&nds->GPU.GetRenderer2D()))
     {
@@ -7165,6 +7296,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
             || carriedTopFullRegularComp7OverlayLines > 0
             || carriedBottomFullRegularComp7OverlayLines > 0
             || repairedTopFullRegular2DBase > 0
+            || preservedTopFullRegularProtectedBlackPixels > 0
             || repairedTopTemporalPrimaryLines > 0
             || repairedBottomTemporalPrimaryLines > 0
             || carriedTopVramPairLines > 0
@@ -7176,11 +7308,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
             || repairedTopRegularStructuredPrimaryLines > 0
             || repairedBottomRegularStructuredPrimaryLines > 0
             || repairedTopVramPrimaryLines > 0
-            || repairedBottomVramPrimaryLines > 0))
+            || repairedBottomVramPrimaryLines > 0
+            || markedTopCompMode2StructuredPairLines > 0
+            || markedBottomCompMode2StructuredPairLines > 0))
     {
         Platform::Log(
             Platform::LogLevel::Warn,
-            "SoftPacked[CarryPrevFront]: frameId=%u front=%d screenSwap=%u carriedTopLatched=%d carriedBottomLatched=%d carriedTopOverlay=%d carriedBottomOverlay=%d carriedTopFullRegularComp7Overlay=%d carriedBottomFullRegularComp7Overlay=%d repairedTopFullRegular2DBase=%d repairedTopTemporal=%d repairedBottomTemporal=%d carriedTopVramPair=%d carriedBottomVramPair=%d carriedTopCurrentStructuredVram2DPair=%d carriedBottomCurrentStructuredVram2DPair=%d repairedTopClass4VramOverlay=%d repairedBottomClass4VramOverlay=%d repairedTopRegularStructuredPrimary=%d repairedBottomRegularStructuredPrimary=%d repairedTopVramPrimary=%d repairedBottomVramPrimary=%d",
+            "SoftPacked[CarryPrevFront]: frameId=%u front=%d screenSwap=%u carriedTopLatched=%d carriedBottomLatched=%d carriedTopOverlay=%d carriedBottomOverlay=%d carriedTopFullRegularComp7Overlay=%d carriedBottomFullRegularComp7Overlay=%d repairedTopFullRegular2DBase=%d preservedTopFullRegularProtectedBlack=%d repairedTopTemporal=%d repairedBottomTemporal=%d carriedTopVramPair=%d carriedBottomVramPair=%d carriedTopCurrentStructuredVram2DPair=%d carriedBottomCurrentStructuredVram2DPair=%d repairedTopClass4VramOverlay=%d repairedBottomClass4VramOverlay=%d repairedTopRegularStructuredPrimary=%d repairedBottomRegularStructuredPrimary=%d repairedTopVramPrimary=%d repairedBottomVramPrimary=%d markedTopCompMode2StructuredPair=%d markedBottomCompMode2StructuredPair=%d",
             static_cast<unsigned>(frame->frameId),
             frontBuffer,
             screenSwap ? 1u : 0u,
@@ -7191,6 +7325,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
             carriedTopFullRegularComp7OverlayLines,
             carriedBottomFullRegularComp7OverlayLines,
             repairedTopFullRegular2DBase,
+            preservedTopFullRegularProtectedBlackPixels,
             repairedTopTemporalPrimaryLines,
             repairedBottomTemporalPrimaryLines,
             carriedTopVramPairLines,
@@ -7202,7 +7337,9 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
             repairedTopRegularStructuredPrimaryLines,
             repairedBottomRegularStructuredPrimaryLines,
             repairedTopVramPrimaryLines,
-            repairedBottomVramPrimaryLines);
+            repairedBottomVramPrimaryLines,
+            markedTopCompMode2StructuredPairLines,
+            markedBottomCompMode2StructuredPairLines);
     }
 
     logLatchTraceStage("after_carry_overlay");

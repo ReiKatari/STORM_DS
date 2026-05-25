@@ -47,6 +47,7 @@ const uint kMetaFlagRegularCaptureUses3d = 1u << 21u;
 const uint kMetaFlagVramCaptureUses3d = 1u << 22u;
 const uint kMetaFlagForceLive3dCompMode7 = 1u << 18u;
 const uint kMetaFlagStructuredAboveDominant = 1u << 19u;
+const uint kMetaFlagCompMode2StructuredPair = 1u << 20u;
 const uint kFilterLinear = 1u;
 const uint kFilterXbr2 = 2u;
 const uint kFilterHq2x = 3u;
@@ -411,6 +412,7 @@ vec4 FUNC_NAME() \
     bool vramCaptureUses3d = (masterBrightness & kMetaFlagVramCaptureUses3d) != 0u; \
     bool forceLive3dCompMode7 = (masterBrightness & kMetaFlagForceLive3dCompMode7) != 0u; \
     bool structuredAboveDominant = (masterBrightness & kMetaFlagStructuredAboveDominant) != 0u; \
+    bool compMode2StructuredPair = (masterBrightness & kMetaFlagCompMode2StructuredPair) != 0u; \
     bool screenOwnsLive3D = SCREEN_IS_TOP ? (pushConstants.liveSourceScreenSwap != 0u) : (pushConstants.liveSourceScreenSwap == 0u); \
     bool screenMatchesCapture3DSource = pushConstants.captureSourceScreenSwapValid == 0u \
         || (SCREEN_IS_TOP ? (pushConstants.captureSourceScreenSwap != 0u) : (pushConstants.captureSourceScreenSwap == 0u)); \
@@ -524,6 +526,23 @@ vec4 FUNC_NAME() \
             pixel3D.b = 0; \
             pixel3D.a = 0; \
         } \
+        if (regularCaptureUses3d \
+            && structuredAboveDominant \
+            && compMode == 2 \
+            && structured2DSlot \
+            && screenHasPrevious3D) \
+        { \
+            pixel3D = SCREEN_IS_TOP \
+                ? samplePreviousTop3DColorAtScaledCoord( \
+                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
+                    scaledYFloat \
+                ) \
+                : samplePreviousBottom3DColorAtScaledCoord( \
+                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
+                    scaledYFloat \
+                ); \
+            pixel3DFromLive = false; \
+        } \
         if (compModeSamples3D \
             && screenOwnsLive3D \
             && screenHasPrevious3D \
@@ -566,11 +585,12 @@ vec4 FUNC_NAME() \
         bool pixel3DHasUsefulColor = (pixel3D.a & 0x1F) > 0 \
             && (pixel3DHasVisibleColor \
                 || regularCaptureUses3d); \
+        bool capture3DHasCoverage = (capture3D.a & 0x1F) > 0; \
         bool captureBackedComp4Valid = captureBackedComp4 \
-            && ((capture3D.a & 0x1F) > 0) \
+            && capture3DHasCoverage \
             && screenMatchesCapture3DSource \
             && (screenOwnsLive3D || screenHasPrevious3D || forceLive3dCompMode7); \
-        bool capture3DHasVisibleColor = (capture3D.a & 0x1F) > 0 \
+        bool capture3DHasVisibleColor = capture3DHasCoverage \
             && ((capture3D.r | capture3D.g | capture3D.b) != 0); \
         bool class4StructuredCaptureOnly = (pushConstants.class4NoAboveVramStructuredPair != 0u) \
             && structured2DSlot \
@@ -724,12 +744,22 @@ vec4 FUNC_NAME() \
                 && structured2DAbove \
                 && !structuredAboveDominant \
                 && isStructured2DVisible(above2D); \
+            bool structuredPlane1Usable2D = isStructured2DVisible(above2D) \
+                || structured2DProtectedBlack; \
+            bool regularCaptureDominant2DPlane = regularCaptureUses3d \
+                && structuredAboveDominant \
+                && structuredPlane1Usable2D; \
             bool structured3DOverDominant2D = compMode == 7 \
                 && structuredFullRegularCapture3d \
                 && structuredAboveDominant \
                 && (screenOwnsLive3D || screenHasPrevious3D) \
                 && !structured2DProtectedBlack \
                 && pixel3DHasVisibleColor; \
+            bool preserveStructuredPair3DFromBrightness = compMode == 2 \
+                && compMode2StructuredPair \
+                && !structured2DAbove \
+                && !regularCaptureUses3d \
+                && !vramCaptureUses3d; \
             if ((pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
@@ -752,10 +782,13 @@ vec4 FUNC_NAME() \
                 } \
                 else if (compMode == 2) \
                 { \
-                    int evy = val3.g; \
-                    composed.r = clampColor6(composed.r + ((((63 - composed.r) * evy) + 0x8) >> 4)); \
-                    composed.g = clampColor6(composed.g + ((((63 - composed.g) * evy) + 0x8) >> 4)); \
-                    composed.b = clampColor6(composed.b + ((((63 - composed.b) * evy) + 0x8) >> 4)); \
+                    if (!preserveStructuredPair3DFromBrightness) \
+                    { \
+                        int evy = val3.g; \
+                        composed.r = clampColor6(composed.r + ((((63 - composed.r) * evy) + 0x8) >> 4)); \
+                        composed.g = clampColor6(composed.g + ((((63 - composed.g) * evy) + 0x8) >> 4)); \
+                        composed.b = clampColor6(composed.b + ((((63 - composed.b) * evy) + 0x8) >> 4)); \
+                    } \
                 } \
                 else if (compMode == 3) \
                 { \
@@ -781,6 +814,12 @@ vec4 FUNC_NAME() \
                 composed = above2D; \
             } \
             if (regularCaptureVisible2DAbove) \
+                composed = above2D; \
+            if (regularCaptureDominant2DPlane) \
+                composed = above2D; \
+            if (compMode == 2 \
+                && (compMode2StructuredPair || (regularCaptureUses3d && structuredAboveDominant)) \
+                && structuredPlane1Usable2D) \
                 composed = above2D; \
             val1 = composed; \
         } \
@@ -855,6 +894,10 @@ vec4 FUNC_NAME() \
             { \
                 val1 = val2; \
             } \
+            if (compMode == 2 \
+                && (compMode2StructuredPair || (regularCaptureUses3d && structuredAboveDominant)) \
+                && (isStructured2DVisible(val2) || structured2DProtectedBlack)) \
+                val1 = val2; \
         } \
         else if (compMode == 7) \
         { \
@@ -1093,7 +1136,7 @@ vec4 FUNC_NAME() \
         } \
     } \
  \
-    if (displayMode != 0) \
+    if (displayMode != 0 && !compMode2StructuredPair) \
     { \
         if (brightnessMode == 1) \
             applyBrightnessUp(pixel, brightnessFactor); \

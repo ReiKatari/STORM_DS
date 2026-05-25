@@ -220,6 +220,7 @@ namespace MelonDSAndroid {
     extern std::vector<u32> getDenseScreenBurstCapture3dSourceFrameForDebug(int index);
     extern std::vector<u32> getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(int index);
     extern std::string getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(int index);
+    extern std::vector<u32> getDenseScreenBurstRenderer3dFrameForDebug(int index);
     extern std::vector<u32> getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index);
     extern void clearDenseScreenBurstCaptureForDebug();
     extern void dumpCurrentRendererDebugSnapshot();

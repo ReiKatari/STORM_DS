@@ -111,6 +111,9 @@ internal object RendererDebugCaptureLogger {
         if (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds) {
             captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_SOFT_PACKED_META
         }
+        if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
+            captureKindsMask = captureKindsMask or RendererDebugBridge.DENSE_CAPTURE_RENDERER3D_FRAME
+        }
         if (captureKindsMask == 0) {
             captureKindsMask = RendererDebugBridge.DENSE_CAPTURE_SCREEN_FRAME
         }
@@ -183,6 +186,11 @@ internal object RendererDebugCaptureLogger {
                 }
                 val softPackedFrameMetaJson = if (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds) {
                     RendererDebugBridge.getDenseScreenBurstSoftPackedFrameMetaJson(index)
+                } else {
+                    null
+                }
+                val frame3d = if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
+                    RendererDebugBridge.getDenseScreenBurstRenderer3dFrame(index)
                 } else {
                     null
                 }
@@ -296,11 +304,30 @@ internal object RendererDebugCaptureLogger {
                     )
                 }
                 if (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds) {
+                    saveTextFile(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "softPackedFrameMeta",
+                        contents = softPackedFrameMetaJson,
+                        extension = "json",
+                    )
                     Log.w(TAG, "captureId=$captureId kind=softPackedFrameMetaJson available=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} length=${softPackedFrameMetaJson?.length ?: 0}")
+                }
+                if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
+                    val renderer3dWidth = inferRenderer3dWidth(frame3d)
+                    val renderer3dHeight = inferRenderer3dHeight(frame3d, renderer3dWidth)
+                    saveFramePng(
+                        outputDir = resolvedOutputDir,
+                        captureId = captureId,
+                        kind = "renderer3dFrame",
+                        width = renderer3dWidth,
+                        height = renderer3dHeight,
+                        pixels = frame3d,
+                    )
                 }
                 Log.w(
                     TAG,
-                    "captureId=$captureId kind=meta screen=${describeBufferShape(RendererDebugBridge.CAPTURE_WIDTH, RendererDebugBridge.CAPTURE_HEIGHT, screenFrame)} packedTop=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPrimary)} packedBottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPrimary)} packedTopPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPlane1)} packedTopControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopControl)} packedBottomPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPlane1)} packedBottomControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomControl)} capture3dSource=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, capture3dSource)} captureLineMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineMask)} softPackedMeta=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} renderer3d=0x0:empty renderer3dCapture=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFrame3d)} depth=0x0:empty attr=0x0:empty coverage=0x0:empty",
+                    "captureId=$captureId kind=meta screen=${describeBufferShape(RendererDebugBridge.CAPTURE_WIDTH, RendererDebugBridge.CAPTURE_HEIGHT, screenFrame)} packedTop=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPrimary)} packedBottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPrimary)} packedTopPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPlane1)} packedTopControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopControl)} packedBottomPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPlane1)} packedBottomControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomControl)} capture3dSource=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, capture3dSource)} captureLineMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineMask)} softPackedMeta=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} renderer3d=${describeBufferShape(inferRenderer3dWidth(frame3d), inferRenderer3dHeight(frame3d, inferRenderer3dWidth(frame3d)), frame3d)} renderer3dCapture=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFrame3d)} depth=0x0:empty attr=0x0:empty coverage=0x0:empty",
                 )
                 if (RendererDebugCaptureKind.SCREEN_FRAME in requestedKinds) {
                     logFrameSummary(
@@ -347,6 +374,10 @@ internal object RendererDebugCaptureLogger {
                 if (RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK in requestedKinds) {
                     logFrameSummary(captureId, "captureLineUses3dMask", CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineMask)
                 }
+                if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
+                    val renderer3dWidth = inferRenderer3dWidth(frame3d)
+                    logFrameSummary(captureId, "renderer3dFrame", renderer3dWidth, inferRenderer3dHeight(frame3d, renderer3dWidth), frame3d)
+                }
                 if (RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
                     logFrameSummary(
                         captureId = captureId,
@@ -367,6 +398,7 @@ internal object RendererDebugCaptureLogger {
                         && ((RendererDebugCaptureKind.CAPTURE3D_SOURCE_DS_FRAME !in requestedKinds) || hasData(capture3dSource))
                         && ((RendererDebugCaptureKind.CAPTURE_LINE_USES_3D_MASK !in requestedKinds) || hasData(captureLineMask))
                         && ((RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON !in requestedKinds) || !softPackedFrameMetaJson.isNullOrBlank())
+                        && ((RendererDebugCaptureKind.RENDERER3D_FRAME !in requestedKinds) || hasData(frame3d))
                         && ((RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME !in requestedKinds) || hasData(captureFrame3d))
                 Log.w(TAG, "captureId=$captureId stage=end success=${if (success) 1 else 0}")
                 add(
@@ -954,6 +986,22 @@ internal object RendererDebugCaptureLogger {
 
     private fun hasData(values: IntArray?): Boolean {
         return values != null && values.isNotEmpty()
+    }
+
+    private fun inferRenderer3dWidth(values: IntArray?): Int {
+        val size = values?.size ?: return 0
+        if (size <= 0 || size % CAPTURE_3D_LINE_HEIGHT != 0) {
+            return 0
+        }
+        return size / CAPTURE_3D_LINE_HEIGHT
+    }
+
+    private fun inferRenderer3dHeight(values: IntArray?, width: Int): Int {
+        val size = values?.size ?: return 0
+        if (size <= 0 || width <= 0 || size % width != 0) {
+            return 0
+        }
+        return size / width
     }
 
     private fun logCaptureStep(captureId: String, step: String, before: Boolean) {

@@ -1157,6 +1157,14 @@ namespace MelonDSAndroid
         return instance->getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(index);
     }
 
+    std::vector<u32> getDenseScreenBurstRenderer3dFrameForDebug(int index)
+    {
+        if (!instance)
+            return {};
+
+        return instance->getDenseScreenBurstRenderer3dFrameForDebug(index);
+    }
+
     std::vector<u32> getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index)
     {
         if (!instance)
