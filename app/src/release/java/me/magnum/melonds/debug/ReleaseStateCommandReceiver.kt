@@ -18,6 +18,7 @@ import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.VideoRenderer
+import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.impl.emulator.debug.RendererDebugBridge
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureKind
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
@@ -59,6 +60,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX) -> handleSetRenderer(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX) -> handleSetRendererDebugTools(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
+            context.debugCommandAction(ACTION_SET_ROM_RUNTIME_CONSOLE_SUFFIX) -> handleSetRomRuntimeConsole(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
             context.debugCommandAction(ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX) -> handleSetFrameLimitSpeed(entryPoint, intent)
             context.debugCommandAction(ACTION_GET_FPS_SUFFIX) -> handleGetFps()
@@ -116,6 +118,30 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         }
         val refreshed = DebugCommandStateStore.requestSettingsRefresh()
         Log.w(TAG, "action=set_ir mode=release scale=$scale refreshed=${if (refreshed) 1 else 0}")
+    }
+
+    private suspend fun handleSetRomRuntimeConsole(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val romUri = intent.data ?: intent.firstStringExtra(EXTRA_ROM_URI, EXTRA_URI, EXTRA_PATH)?.let { Uri.parse(it) }
+            ?: throw IllegalArgumentException("Missing ROM URI. Provide intent data or rom_uri.")
+        val runtimeConsole = parseRuntimeConsole(
+            intent.firstStringExtra(EXTRA_RUNTIME_CONSOLE, EXTRA_CONSOLE, EXTRA_VALUE)
+                ?: throw IllegalArgumentException("Missing runtime console extra"),
+        ) ?: throw IllegalArgumentException("Unsupported runtime console")
+
+        val rom = entryPoint.romsRepository().getRomAtUri(romUri)
+        val updated = if (rom != null) {
+            entryPoint.romsRepository().updateRomConfig(
+                rom,
+                rom.config.copy(runtimeConsoleType = runtimeConsole),
+            )
+            true
+        } else {
+            false
+        }
+        Log.w(
+            TAG,
+            "action=set_rom_runtime_console mode=release uri=$romUri runtimeConsole=${runtimeConsole.name} updated=${if (updated) 1 else 0}",
+        )
     }
 
     private fun handleSetFastForward(intent: Intent) {
@@ -702,6 +728,15 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun parseRuntimeConsole(value: String): RuntimeConsoleType? {
+        return when (value.trim().lowercase(Locale.US)) {
+            "default", "global" -> RuntimeConsoleType.DEFAULT
+            "ds", "nds" -> RuntimeConsoleType.DS
+            "dsi" -> RuntimeConsoleType.DSi
+            else -> null
+        }
+    }
+
     private fun parseInput(value: String): Input? {
         val normalized = value
             .trim()
@@ -956,6 +991,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_RENDERER = "renderer"
         private const val EXTRA_SCALE = "scale"
         private const val EXTRA_IR = "ir"
+        private const val EXTRA_RUNTIME_CONSOLE = "runtime_console"
+        private const val EXTRA_CONSOLE = "console"
         private const val EXTRA_ENABLED = "enabled"
         private const val EXTRA_MULTIPLIER = "multiplier"
         private const val EXTRA_SPEED = "speed"
@@ -1043,6 +1080,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_RENDERER_SUFFIX = "SET_RENDERER"
         private const val ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX = "SET_RENDERER_DEBUG_TOOLS"
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
+        private const val ACTION_SET_ROM_RUNTIME_CONSOLE_SUFFIX = "SET_ROM_RUNTIME_CONSOLE"
         private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
         private const val ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX = "SET_FRAME_LIMIT_SPEED"
         private const val ACTION_GET_FPS_SUFFIX = "GET_FPS"
@@ -1069,6 +1107,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         return action == context.debugCommandAction(ACTION_SET_RENDERER_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_IR_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_ROM_RUNTIME_CONSOLE_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX)
             || action == context.debugCommandAction(ACTION_GET_FPS_SUFFIX)
