@@ -2301,6 +2301,9 @@ std::vector<u32> MelonInstance::captureCurrentPackedPlaneForDebug(int screenInde
     if (planeIndex < 0 || planeIndex > 2)
         return {};
 
+    if (currentRenderer != Renderer::Vulkan)
+        return {};
+
     if (currentRenderer == Renderer::Vulkan)
     {
         const auto& preparedPackedPixels = [&]() -> const std::vector<u32>& {
@@ -2348,7 +2351,13 @@ std::vector<u32> MelonInstance::captureCurrentPackedPlaneForDebug(int screenInde
     }
 
     const u32* packed = topScreen ? topPacked : bottomPacked;
-    if (packed == nullptr || packedStride < 256u || packedHeight < 192u)
+    if (packed == nullptr || packedHeight < 192u)
+        return {};
+
+    const u32 requiredStride = planeIndex == 0
+        ? static_cast<u32>(kScreenshotScreenWidth)
+        : static_cast<u32>(kScreenshotScreenWidth) * 3u + 1u;
+    if (packedStride < requiredStride)
         return {};
 
     std::vector<u32> pixels(static_cast<size_t>(kScreenshotScreenWidth) * static_cast<size_t>(kScreenshotScreenHeight));
@@ -7079,6 +7088,32 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
             const std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane1,
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
             const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta) {
+            size_t regularPixels = 0;
+            size_t regularStructuredAbovePixels = 0;
+            for (int y = 0; y < kScreenshotScreenHeight; y++)
+            {
+                const u32 meta = lineMeta[static_cast<size_t>(y)];
+                const bool regularCapture3dLine =
+                    ((meta >> 16u) & 0x3u) == 1u
+                    && (meta & kSoftPackedMetaFlagRegularCaptureUses3d) != 0u
+                    && (meta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u;
+                if (!regularCapture3dLine)
+                    continue;
+
+                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
+                for (int x = 0; x < kScreenshotScreenWidth; x++)
+                {
+                    const u32 controlAlpha = control[rowBase + static_cast<size_t>(x)] >> 24u;
+                    regularPixels++;
+                    if ((controlAlpha & 0x80u) != 0u)
+                        regularStructuredAbovePixels++;
+                }
+            }
+            if (regularPixels == 0)
+                return 0;
+            if (regularStructuredAbovePixels > (regularPixels / 16u))
+                return 0;
+
             int repairedLines = 0;
             for (int y = 0; y < kScreenshotScreenHeight; y++)
             {

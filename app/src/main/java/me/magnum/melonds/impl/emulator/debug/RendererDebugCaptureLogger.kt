@@ -545,14 +545,14 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val canCaptureAccelerated3d = configuredRenderer != VideoRenderer.SOFTWARE
-        val needs3dDimensions = canCaptureAccelerated3d && requestedKinds.any {
+        val canCapture3dTargets = requestedKinds.any {
             it == RendererDebugCaptureKind.RENDERER3D_FRAME
                 || it == RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME
                 || it == RendererDebugCaptureKind.RENDERER3D_DEPTH
                 || it == RendererDebugCaptureKind.RENDERER3D_ATTR
                 || it == RendererDebugCaptureKind.RENDERER3D_COVERAGE
         }
+        val needs3dDimensions = canCapture3dTargets
         val renderer3dDimensions = if (needs3dDimensions) {
             logCaptureStep(captureId, "captureCurrent3dDimensions", before = true)
             val dimensions = RendererDebugBridge.captureCurrent3dDimensions()
@@ -563,7 +563,7 @@ internal object RendererDebugCaptureLogger {
         }
         val renderer3dWidth = renderer3dDimensions?.getOrNull(0) ?: 0
         val renderer3dHeight = renderer3dDimensions?.getOrNull(1) ?: 0
-        val frame3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
+        val frame3d = if (canCapture3dTargets && RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dFrame", before = true)
             val pixels = RendererDebugBridge.captureCurrent3dFrame()
             logCaptureStep(captureId, "captureCurrent3dFrame", before = false)
@@ -571,7 +571,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val captureFrame3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
+        val captureFrame3d = if (canCapture3dTargets && RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dCaptureFrame", before = true)
             val pixels = RendererDebugBridge.captureCurrent3dCaptureFrame()
             logCaptureStep(captureId, "captureCurrent3dCaptureFrame", before = false)
@@ -579,7 +579,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val depth3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_DEPTH in requestedKinds) {
+        val depth3d = if (canCapture3dTargets && RendererDebugCaptureKind.RENDERER3D_DEPTH in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dDepth", before = true)
             val values = RendererDebugBridge.captureCurrent3dDepth()
             logCaptureStep(captureId, "captureCurrent3dDepth", before = false)
@@ -587,7 +587,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val attr3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_ATTR in requestedKinds) {
+        val attr3d = if (canCapture3dTargets && RendererDebugCaptureKind.RENDERER3D_ATTR in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dAttributes", before = true)
             val values = RendererDebugBridge.captureCurrent3dAttributes()
             logCaptureStep(captureId, "captureCurrent3dAttributes", before = false)
@@ -595,7 +595,7 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
-        val coverage3d = if (canCaptureAccelerated3d && RendererDebugCaptureKind.RENDERER3D_COVERAGE in requestedKinds) {
+        val coverage3d = if (canCapture3dTargets && RendererDebugCaptureKind.RENDERER3D_COVERAGE in requestedKinds) {
             logCaptureStep(captureId, "captureCurrent3dCoverage", before = true)
             val values = RendererDebugBridge.captureCurrent3dCoverage()
             logCaptureStep(captureId, "captureCurrent3dCoverage", before = false)

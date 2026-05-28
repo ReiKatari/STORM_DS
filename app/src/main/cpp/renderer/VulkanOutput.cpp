@@ -3635,21 +3635,48 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(FrameResource& resource, const m
         preCopyBarriers.data()
     );
 
-    VkImageCopy copyRegion{};
-    copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copyRegion.srcSubresource.layerCount = 1;
-    copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copyRegion.dstSubresource.layerCount = 1;
-    copyRegion.extent = {rendererWidth, rendererHeight, 1};
-    vkCmdCopyImage(
-        resource.commandBuffer,
-        renderer3D.GetColorTargetImage(),
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        resource.renderer3dSnapshot,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &copyRegion
-    );
+    if (vkCmdCopyImage != nullptr)
+    {
+        VkImageCopy copyRegion{};
+        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.srcSubresource.layerCount = 1;
+        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.dstSubresource.layerCount = 1;
+        copyRegion.extent = {rendererWidth, rendererHeight, 1};
+        vkCmdCopyImage(
+            resource.commandBuffer,
+            renderer3D.GetColorTargetImage(),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            resource.renderer3dSnapshot,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &copyRegion
+        );
+    }
+    else if (vkCmdBlitImage != nullptr)
+    {
+        VkImageBlit blitRegion{};
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>(rendererWidth), static_cast<int32_t>(rendererHeight), 1};
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.dstOffsets[1] = {static_cast<int32_t>(rendererWidth), static_cast<int32_t>(rendererHeight), 1};
+        vkCmdBlitImage(
+            resource.commandBuffer,
+            renderer3D.GetColorTargetImage(),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            resource.renderer3dSnapshot,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &blitRegion,
+            VK_FILTER_NEAREST
+        );
+    }
+    else
+    {
+        return false;
+    }
 
     VkImageMemoryBarrier sourceBackToGeneralBarrier{};
     sourceBackToGeneralBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
