@@ -75,6 +75,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_DUMP_RENDERER_CAPTURE_SUFFIX) -> handleDumpRendererCapture(context, entryPoint, intent)
             context.debugCommandAction(ACTION_TOUCH_SCREEN_SUFFIX) -> handleTouchScreen(intent)
             context.debugCommandAction(ACTION_PRESS_INPUT_SUFFIX) -> handlePressInput(intent)
+            context.debugCommandAction(ACTION_SET_INPUT_HELD_SUFFIX) -> handleSetInputHeld(intent)
             context.debugCommandAction(ACTION_SAVE_STATE_SUFFIX) -> handleSaveState(context, entryPoint, intent)
             context.debugCommandAction(ACTION_LOAD_STATE_SUFFIX) -> handleLoadState(context, entryPoint, intent)
             else -> Log.w(TAG, "Ignored unknown action=${intent.action}")
@@ -567,6 +568,29 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         )
     }
 
+    private fun handleSetInputHeld(intent: Intent) {
+        val rawInputs = intent.firstStringExtra(EXTRA_INPUTS, EXTRA_INPUT, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing input extra")
+        val held = intent.firstBooleanExtra(EXTRA_HELD, EXTRA_DOWN, EXTRA_PRESSED, EXTRA_ENABLED, EXTRA_VALUE)
+            ?: throw IllegalArgumentException("Missing held/down/enabled extra")
+        val inputs = rawInputs
+            .split(',', '+', ' ', ';')
+            .mapNotNull { parseInput(it) }
+        require(inputs.isNotEmpty()) { "No supported inputs in $rawInputs" }
+
+        inputs.forEach { input ->
+            if (held) {
+                MelonEmulator.onInputDown(input)
+            } else {
+                MelonEmulator.onInputUp(input)
+            }
+        }
+        Log.w(
+            TAG,
+            "action=set_input_held mode=release inputs=${inputs.joinToString(",") { it.name }} held=${if (held) 1 else 0}",
+        )
+    }
+
     private suspend fun handleLoadState(
         context: Context,
         entryPoint: DebugCommandEntryPoint,
@@ -1005,6 +1029,9 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_DELAY_MS = "delay_ms"
         private const val EXTRA_INPUT = "input"
         private const val EXTRA_INPUTS = "inputs"
+        private const val EXTRA_HELD = "held"
+        private const val EXTRA_DOWN = "down"
+        private const val EXTRA_PRESSED = "pressed"
         private const val EXTRA_REPEAT = "repeat"
         private const val EXTRA_COUNT = "count"
         private const val EXTRA_SLOT = "slot"
@@ -1095,6 +1122,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val ACTION_DUMP_RENDERER_CAPTURE_SUFFIX = "DUMP_RENDERER_CAPTURE"
         private const val ACTION_TOUCH_SCREEN_SUFFIX = "TOUCH_SCREEN"
         private const val ACTION_PRESS_INPUT_SUFFIX = "PRESS_INPUT"
+        private const val ACTION_SET_INPUT_HELD_SUFFIX = "SET_INPUT_HELD"
         private const val ACTION_SAVE_STATE_SUFFIX = "SAVE_STATE"
         private const val ACTION_LOAD_STATE_SUFFIX = "LOAD_STATE"
     }
