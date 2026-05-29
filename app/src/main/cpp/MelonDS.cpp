@@ -688,6 +688,12 @@ namespace MelonDSAndroid
             instance->requestVulkanPresentationResync();
     }
 
+    void requestVulkanFastForwardPresentationTransition()
+    {
+        if (instance)
+            instance->requestVulkanFastForwardPresentationTransition();
+    }
+
     bool areRendererDebugToolsEnabled()
     {
         return rendererDebugToolsEnabled.load(std::memory_order_relaxed);

@@ -40,6 +40,7 @@ const int kScreenshotScreenWidth = 256;
 const int kScreenshotScreenHeight = 192;
 const int kCompositedScreenGapPx = 2;
 const int kVulkanFastForwardHighResolutionScaleCap = 4;
+const int kVulkanFastForwardPreviousFrameFallbackFrames = 2;
 const int kVulkanTemporal3dHistoryGateFrames = 8;
 const int kVulkanTemporal3dNotReadyBlockingFrames = 3;
 const int kVulkanCompileStageInitRenderer = 1;
@@ -788,7 +789,7 @@ FrameQueuePolicy makeVulkanFastForwardFrameQueuePolicy(int renderScale)
     const bool highResolutionFastForward = renderScale > 1;
     policy.MaxBacklogDepth = highResolutionFastForward ? 2 : 1;
     policy.AllowStealPending = true;
-    policy.AllowPreviousFrameReuse = highResolutionFastForward;
+    policy.AllowPreviousFrameReuse = false;
     policy.AllowDropForDeadline = false;
     policy.PreferOldestFrame = false;
     policy.PreserveBacklogOnPresent = false;
@@ -1851,12 +1852,18 @@ bool MelonInstance::presentVulkanFrame(
     if (currentRenderer != Renderer::Vulkan || !vulkanOutput || !vulkanSurfacePresenter)
         return false;
 
-	    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
-	    const auto& vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*currentConfiguration->renderSettings);
-	    const int renderScale = std::max(renderer3D.GetScaleFactor(), 1);
+    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+    const auto& vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*currentConfiguration->renderSettings);
+    const int renderScale = std::max(renderer3D.GetScaleFactor(), 1);
     const bool graphicsHardwareActive =
         renderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware;
     const bool fastForwardActive = isFastForwardActive();
+    if (lastVulkanFastForwardPresentationState != fastForwardActive)
+    {
+        lastVulkanFastForwardPresentationState = fastForwardActive;
+        vulkanFastForwardPreviousFrameFallbackFrames = kVulkanFastForwardPreviousFrameFallbackFrames;
+        frameQueue.requestFastForwardPresentationTransition();
+    }
     const bool lateRealtimePresentation = !fastForwardActive && isPresentationDeadlineExpired(deadline);
     const std::optional<std::chrono::time_point<std::chrono::steady_clock>> effectiveBudgetDeadline = [&]() -> std::optional<std::chrono::time_point<std::chrono::steady_clock>> {
         if (fastForwardActive)
@@ -1925,8 +1932,27 @@ bool MelonInstance::presentVulkanFrame(
     for (int attempt = 0; attempt < maxPresentAttempts; attempt++)
     {
         Frame* frame = frameQueue.getPresentCandidate(candidateQueuePolicy, effectiveBudgetDeadline);
+        const auto getFastForwardTransitionPreviousFrame = [&]() -> Frame* {
+            if (!fastForwardActive
+                || renderScale <= 1
+                || vulkanFastForwardPreviousFrameFallbackFrames <= 0)
+                return nullptr;
+
+            FrameQueuePolicy previousFramePolicy = candidateQueuePolicy;
+            previousFramePolicy.AllowPreviousFrameReuse = true;
+            Frame* previousFrame = frameQueue.getReusablePreviousFrame(previousFramePolicy);
+            if (previousFrame == nullptr || !vulkanOutput->isFrameReady(previousFrame))
+                return nullptr;
+
+            vulkanFastForwardPreviousFrameFallbackFrames--;
+            return previousFrame;
+        };
         if (frame == nullptr)
-            return false;
+        {
+            frame = getFastForwardTransitionPreviousFrame();
+            if (frame == nullptr)
+                return false;
+        }
 
         const bool shouldContinueRealtimeProbe = shouldProbeRealtimeBacklog
             && attempt + 1 < maxPresentAttempts
@@ -1955,6 +1981,17 @@ bool MelonInstance::presentVulkanFrame(
                 break;
             continue;
         }
+        if (fastForwardActive
+            && renderScale > 1
+            && !frameReady
+            && vulkanFastForwardPreviousFrameFallbackFrames > 0)
+        {
+            frameQueue.deferPresentedFrame(frame, deferFrameQueuePolicy);
+            Frame* previousFrame = getFastForwardTransitionPreviousFrame();
+            if (previousFrame == nullptr || previousFrame == frame)
+                return false;
+            frame = previousFrame;
+        }
         u64 waitTimeoutNs = UINT64_MAX;
         if (effectiveBudgetDeadline.has_value())
         {
@@ -1977,13 +2014,16 @@ bool MelonInstance::presentVulkanFrame(
         if (frameQueuePolicy.AllowDropForDeadline)
             waitTimeoutNs = 0;
 
+        const int framePresentationScale = frame->width >= 256
+            ? std::max<int>(1, static_cast<int>(frame->width / 256u))
+            : renderScale;
         VulkanCompositionInputs compositionInputs{};
         if (!vulkanOutput->buildCompositionInputs(
                 frame,
-	                renderer3D,
-	                renderScale,
-	                vulkanRenderSettings.videoFiltering,
-	                false,
+                renderer3D,
+                framePresentationScale,
+                vulkanRenderSettings.videoFiltering,
+                false,
                 false,
                 false,
                 compositionInputs))
@@ -2046,6 +2086,8 @@ void MelonInstance::requestVulkanPresentationResync()
     renderer3D.InvalidatePresentationState(true);
     lastCompletedVulkanFrame = nullptr;
     lastCompletedVulkanScale = 1;
+    lastVulkanFastForwardPresentationState = isFastForwardActive();
+    vulkanFastForwardPreviousFrameFallbackFrames = 0;
     clearLatchedSoftPackedFrameSnapshot();
     if (nds != nullptr)
     {
@@ -2054,6 +2096,17 @@ void MelonInstance::requestVulkanPresentationResync()
     }
     vulkanReadbackFrame.clear();
     clearPreparedVulkanDebugSnapshot();
+}
+
+void MelonInstance::requestVulkanFastForwardPresentationTransition()
+{
+    if (currentRenderer != Renderer::Vulkan)
+        return;
+
+    frameQueue.requestFastForwardPresentationTransition();
+    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+    renderer3D.requestPostFastForwardDrain();
+    renderer3D.InvalidatePresentationState(false);
 }
 
 std::vector<u32> MelonInstance::captureCurrentFrameForDebug()
@@ -3752,7 +3805,7 @@ void MelonInstance::updateVulkanFastForwardRenderScale()
         vulkanRenderSettings.conservativeCoverageApplyClamp,
         vulkanRenderSettings.debug3dClearMagenta,
         nds->GPU);
-    requestVulkanPresentationResync();
+    requestVulkanFastForwardPresentationTransition();
 }
 
 void MelonInstance::updateConfiguration(std::shared_ptr<EmulatorConfiguration> newConfiguration)

@@ -69,6 +69,7 @@ public:
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline);
     void requestVulkanPresentationResync();
+    void requestVulkanFastForwardPresentationTransition();
     std::vector<u32> captureCurrentFrameForDebug();
     std::vector<u32> captureCurrentPackedTopPrimaryForDebug();
     std::vector<u32> captureCurrentPackedBottomPrimaryForDebug();
@@ -242,6 +243,8 @@ private:
     int vulkanStructuredCaptureGateFrames = 0;
     int vulkanTemporal3dHistoryGateFrames = 0;
     int vulkanTemporal3dNotReadyFrames = 0;
+    bool lastVulkanFastForwardPresentationState = false;
+    int vulkanFastForwardPreviousFrameFallbackFrames = 0;
     SoftPackedFrameSnapshot lastSoftPackedFrameSnapshot;
     SoftPackedFrameSnapshot previousSoftPackedFrameSnapshot;
     std::array<u32, SoftPackedFrameSnapshot::kPixelCount> cachedEngineATopPlane0{};

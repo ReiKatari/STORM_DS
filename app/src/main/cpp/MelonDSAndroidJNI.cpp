@@ -2094,7 +2094,7 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
         limitFps = true;
         targetFps = targetFpsForFrameLimit();
         if (wasFastForwardEnabled)
-            MelonDSAndroid::requestVulkanPresentationResync();
+            MelonDSAndroid::requestVulkanFastForwardPresentationTransition();
     }
 
     updatePerformanceHintTarget();
