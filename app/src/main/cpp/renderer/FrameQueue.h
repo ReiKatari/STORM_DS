@@ -83,6 +83,7 @@ public:
     Frame* getRenderFrame(const FrameQueuePolicy& policy);
     Frame* getPresentFrame(const FrameQueuePolicy& policy, std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline);
     Frame* getPresentCandidate(const FrameQueuePolicy& policy, std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline);
+    Frame* getReusablePreviousFrame(const FrameQueuePolicy& policy);
     void recycleRenderFrame(Frame* frame);
     void commitPresentedFrame(Frame* frame, const FrameQueuePolicy& policy);
     void deferPresentedFrame(Frame* frame, const FrameQueuePolicy& policy);
@@ -90,6 +91,7 @@ public:
     void pushRenderedFrame(Frame* frame, const FrameQueuePolicy& policy);
     void discardRenderedFrame(Frame* frame);
     void requestPresentationResync();
+    void requestFastForwardPresentationTransition();
     void clear();
     FrameQueueStats takeStatsSnapshotAndReset();
 

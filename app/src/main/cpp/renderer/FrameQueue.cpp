@@ -234,6 +234,17 @@ Frame* FrameQueue::getPresentCandidate(
     return frame;
 }
 
+Frame* FrameQueue::getReusablePreviousFrame(const FrameQueuePolicy& requestedPolicy)
+{
+    std::unique_lock lock(frameLock);
+    const FrameQueuePolicy policy = sanitizePolicy(requestedPolicy);
+    if (suppressPreviousFrameReuse || !policy.AllowPreviousFrameReuse || previousFrame == nullptr)
+        return nullptr;
+
+    stats.PreviousFrameReused++;
+    return previousFrame;
+}
+
 void FrameQueue::recycleRenderFrame(Frame* frame)
 {
     std::unique_lock lock(frameLock);
@@ -468,6 +479,28 @@ void FrameQueue::requestPresentationResync()
     // Reusing the previous frame after this point mixes old frame ownership with
     // the new configuration and reopens flicker/corruption on IR changes.
     suppressPreviousFrameReuse = true;
+    updateBacklogStatsLocked();
+}
+
+void FrameQueue::requestFastForwardPresentationTransition()
+{
+    std::unique_lock lock(frameLock);
+
+    for (auto f : presentQueue)
+    {
+        f->queuedAtNs = 0;
+        freeQueue.push(f);
+    }
+
+    presentQueue.clear();
+    if (pendingPresentFrame != nullptr)
+    {
+        pendingPresentFrame->queuedAtNs = 0;
+        freeQueue.push(pendingPresentFrame);
+        pendingPresentFrame = nullptr;
+    }
+
+    suppressPreviousFrameReuse = false;
     updateBacklogStatsLocked();
 }
 

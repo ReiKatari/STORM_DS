@@ -3268,7 +3268,7 @@ bool VulkanOutput::buildCompositionInputs(
     bool validationMode,
     VulkanCompositionInputs& outInputs) const
 {
-    if (!initialized || frame == nullptr || scale < 1 || !renderer3D.HasColorTarget())
+    if (!initialized || frame == nullptr || scale < 1)
         return false;
 
     auto iterator = resources.find(const_cast<Frame*>(frame));
@@ -3279,9 +3279,14 @@ bool VulkanOutput::buildCompositionInputs(
     if (!resource.hasPreparedInputs)
         return false;
 
-    if (resource.hasRenderer3dSnapshot
+    const bool hasRenderer3dSnapshot =
+        resource.hasRenderer3dSnapshot
         && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE)
+        && resource.renderer3dSnapshotView != VK_NULL_HANDLE;
+    if (!hasRenderer3dSnapshot && !renderer3D.HasColorTarget())
+        return false;
+
+    if (hasRenderer3dSnapshot)
     {
         outInputs.sourceImage = resource.renderer3dSnapshot;
         outInputs.sourceImageView = resource.renderer3dSnapshotView;
