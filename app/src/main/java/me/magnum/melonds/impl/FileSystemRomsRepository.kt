@@ -596,9 +596,21 @@ class FileSystemRomsRepository(
         val cachedFiles = cachedState?.files ?: emptyMap()
         val currentFiles = fileStates.associateBy { it.uri.toString() }
 
-        val updatedFiles = fileStates.filter { fileState ->
-            val cachedFile = cachedFiles[fileState.uri.toString()]
-            cachedFile == null || cachedFile.lastModified != fileState.lastModified || cachedFile.size != fileState.size
+        val directoryMetadataChanged = cachedState != null &&
+            cachedState.hash != directoryHash &&
+            cachedFiles.keys == currentFiles.keys &&
+            currentFiles.all { (uri, fileState) ->
+                cachedFiles[uri]?.let { cachedFile ->
+                    cachedFile.lastModified == fileState.lastModified && cachedFile.size == fileState.size
+                } == true
+            }
+        val updatedFiles = if (directoryMetadataChanged) {
+            fileStates
+        } else {
+            fileStates.filter { fileState ->
+                val cachedFile = cachedFiles[fileState.uri.toString()]
+                cachedFile == null || cachedFile.lastModified != fileState.lastModified || cachedFile.size != fileState.size
+            }
         }
 
         val removedFiles = cachedFiles.keys - currentFiles.keys
@@ -609,19 +621,27 @@ class FileSystemRomsRepository(
         }.toSet()
         removeRomsByUriStrings(updatedExistingUris)
 
+        val updatedFileUris = updatedFiles.map { it.uri.toString() }.toSet()
+        val processedUpdatedFileUris = mutableSetOf<String>()
         for (fileState in updatedFiles) {
-            romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)?.let { fileRomProcessor ->
-                fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)?.let { rom ->
-                    collector.emit(rom)
-                }
-            }
+            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
+                ?: continue
+            val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
+                ?: continue
+
+            processedUpdatedFileUris.add(fileState.uri.toString())
+            collector.emit(rom)
+        }
+
+        val cacheableFiles = currentFiles.filterKeys { uri ->
+            !updatedFileUris.contains(uri) || processedUpdatedFileUris.contains(uri)
         }
 
         val newCacheState = DirectoryCacheState(
             directoryUri = directoryUri,
-            hash = directoryHash,
+            hash = computeDirectoryHash(cacheableFiles.values.toList()),
             lastScanned = now,
-            files = currentFiles.mapValues { (_, fileState) ->
+            files = cacheableFiles.mapValues { (_, fileState) ->
                 DirectoryCacheFile(
                     uri = fileState.uri,
                     lastModified = fileState.lastModified,
@@ -685,6 +705,7 @@ class FileSystemRomsRepository(
 
     private fun computeDirectoryHash(fileStates: List<DirectoryFileState>): String {
         val digest = MessageDigest.getInstance("SHA-256")
+        digest.update("rom-directory-cache-v3".toByteArray())
         fileStates.sortedBy { it.uri.toString() }.forEach { state ->
             val entry = "${state.uri}|${state.lastModified}|${state.size}"
             digest.update(entry.toByteArray())
