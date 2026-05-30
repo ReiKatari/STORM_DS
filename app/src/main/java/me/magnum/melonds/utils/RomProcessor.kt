@@ -4,10 +4,10 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.core.graphics.createBitmap
 import me.magnum.melonds.common.Crc32
-import me.magnum.melonds.common.cheats.ProgressTrackerInputStream
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.RomMetadata
 import me.magnum.melonds.domain.model.rom.Rom
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.math.BigInteger
 import java.nio.ByteBuffer
@@ -18,103 +18,35 @@ import kotlin.math.min
 
 object RomProcessor {
 	private val DSIWARE_CATEGORY = 0x00030004.toUInt()
-	private const val KEY_ROM_NAME = "name"
-	private const val KEY_DEVELOPER_NAME = "developer"
-	private const val KEY_ROM_IS_DSIWARE_TITLE = "isDsiWareTitle"
-	private const val KEY_ARM9_BOOTCODE = "arm9Bootcode"
-	private const val KEY_ARM7_BOOTCODE = "arm7Bootcode"
-	private const val KEY_HEADER = "header"
-	private const val KEY_BANNER = "banner"
 
 	@Suppress("NAME_SHADOWING")
 	fun getRomMetadata(inputStream: InputStream): RomMetadata {
-		val romStreamProcessor = RomStreamDataProcessor().apply {
-			registerProcessor(
-				RomStreamDataProcessor.SectionProcessor.SequentialSectionProcessor(
-					streamOffset = 0x0,
-					then = { stream, register, save ->
-						val header = ByteArray(0x160)
-						stream.read(header)
-						save(KEY_HEADER, header)
+		val sectionReader = CachedRomSectionReader(inputStream)
+		val header = sectionReader.readSection(0, 0x160)
+		val gameCode = String(header, 0x0C, 4)
 
-						val gameCode = String(header, 0x0C, 4)
+		val arm9Offset = byteArrayToInt(header, 0x20)
+		val arm9Size = byteArrayToInt(header, 0x2C)
 
-						val arm9Offset = byteArrayToInt(header, 0x20)
-						val arm9Size = byteArrayToInt(header, 0x2C)
+		val arm7Offset = byteArrayToInt(header, 0x30)
+		val arm7Size = byteArrayToInt(header, 0x3C)
 
-						val arm7Offset = byteArrayToInt(header, 0x30)
-						val arm7Size = byteArrayToInt(header, 0x3C)
+		val bannerOffset = byteArrayToInt(header, 0x68)
 
-						val bannerOffset = byteArrayToInt(header, 0x68)
-
-						val arm9Processor = RomStreamDataProcessor.SectionProcessor.SectionValueProcessor(
-							streamOffset = arm9Offset.toLong()
-						) { stream, save ->
-							val arm9BootCode = ByteArray(arm9Size)
-							stream.read(arm9BootCode)
-							save(KEY_ARM9_BOOTCODE, arm9BootCode)
-						}
-
-						val arm7Processor = RomStreamDataProcessor.SectionProcessor.SectionValueProcessor(
-							streamOffset = arm7Offset.toLong()
-						) { stream, save ->
-							val arm7BootCode = ByteArray(arm7Size)
-							stream.read(arm7BootCode)
-							save(KEY_ARM7_BOOTCODE, arm7BootCode)
-						}
-
-						val bannerProcessor = RomStreamDataProcessor.SectionProcessor.SectionValueProcessor(
-							streamOffset = bannerOffset.toLong(),
-						) { stream, save ->
-							val banner = ByteArray(0xA00)
-							stream.read(banner)
-							save(KEY_BANNER, banner)
-
-							val titleData = banner.copyOfRange(0x340, 0x340 + 256)
-							val titleString = String(titleData, StandardCharsets.UTF_16LE).trim().replace("\u0000", "")
-
-							val title = titleString.substringBeforeLast('\n').replace("\n", " ")
-							val developer = titleString.substringAfterLast('\n')
-
-							save(KEY_ROM_NAME, title)
-							save(KEY_DEVELOPER_NAME, developer)
-						}
-
-						val cartCategory = gameCode[0]
-						if (cartCategory == 'H' || cartCategory == 'K') {
-							// This is probably a DSi Ware game. But confirm in a later value processor
-							register(
-								RomStreamDataProcessor.SectionProcessor.SectionValueProcessor(
-									streamOffset = 0x234
-								) { stream, save ->
-									val categoryData = ByteArray(4)
-									stream.read(categoryData)
-									val categoryId = byteArrayToInt(categoryData)
-									save(KEY_ROM_IS_DSIWARE_TITLE, categoryId.toUInt() == DSIWARE_CATEGORY)
-								}
-							)
-						} else {
-							save(KEY_ROM_IS_DSIWARE_TITLE, false)
-						}
-
-						register(arm9Processor)
-						register(arm7Processor)
-						register(bannerProcessor)
-					}
-				)
-			)
-
-			process(inputStream)
+		val isDsiWareTitle = if (gameCode[0] == 'H' || gameCode[0] == 'K') {
+			// This is probably a DSi Ware game. Confirm with the title category field.
+			byteArrayToInt(sectionReader.readSection(0x234, 4)).toUInt() == DSIWARE_CATEGORY
+		} else {
+			false
 		}
 
-		val romName = romStreamProcessor.getValue<String>(KEY_ROM_NAME)
-		val developerName = romStreamProcessor.getValue<String>(KEY_DEVELOPER_NAME)
-		val isDsiWareTitle = romStreamProcessor.getValue<Boolean>(KEY_ROM_IS_DSIWARE_TITLE)
+		val arm9Bootcode = sectionReader.readSection(arm9Offset, arm9Size)
+		val arm7Bootcode = sectionReader.readSection(arm7Offset, arm7Size)
+		val banner = sectionReader.readSection(bannerOffset, 0xA00)
 
-		val header = romStreamProcessor.getValue<ByteArray>(KEY_HEADER)
-		val arm9Bootcode = romStreamProcessor.getValue<ByteArray>(KEY_ARM9_BOOTCODE)
-		val arm7Bootcode = romStreamProcessor.getValue<ByteArray>(KEY_ARM7_BOOTCODE)
-		val banner = romStreamProcessor.getValue<ByteArray>(KEY_BANNER)
+		val bannerText = readBannerTitleAndDeveloper(banner)
+		val romName = bannerText?.first.orEmpty()
+		val developerName = bannerText?.second.orEmpty()
 
 		val hashDataSize = header.size + arm9Bootcode.size + arm7Bootcode.size + banner.size
 		val retroAchievementsHashData = ByteArray(hashDataSize).apply {
@@ -133,6 +65,23 @@ object RomProcessor {
 			isDsiWareTitle,
 			retroAchievemetnsHash,
 		)
+	}
+
+	private fun readBannerTitleAndDeveloper(banner: ByteArray): Pair<String, String>? {
+		val version = byteArrayToShort(banner, 0).toInt()
+		if (version !in 1..3) {
+			return null
+		}
+
+		val titleData = banner.copyOfRange(0x340, 0x340 + 256)
+		val titleString = String(titleData, StandardCharsets.UTF_16LE).trim().replace("\u0000", "")
+		if (titleString.isBlank()) {
+			return null
+		}
+
+		val title = titleString.substringBeforeLast('\n').replace("\n", " ")
+		val developer = titleString.substringAfterLast('\n', "")
+		return title to developer
 	}
 
 	fun getRomIcon(inputStream: InputStream): Bitmap {
@@ -188,6 +137,11 @@ object RomProcessor {
 				(intData[offset + 1].toInt() and 0xFF).shl(8) or
 				(intData[offset + 2].toInt() and 0xFF).shl(16) or
 				(intData[offset + 3].toInt() and 0xFF).shl(24)
+	}
+
+	private fun byteArrayToShort(shortData: ByteArray, offset: Int = 0): UShort {
+		return ((shortData[offset + 0].toInt() and 0xFF) or
+				(shortData[offset + 1].toInt() and 0xFF).shl(8)).toUShort()
 	}
 
 	private fun paletteToArgb(palette: UShortArray): IntArray {
@@ -278,47 +232,26 @@ object RomProcessor {
 		} while (remaining > 0)
 	}
 
-	private class RomStreamDataProcessor {
-		private val processors = mutableListOf<SectionProcessor>()
-		private val values = mutableMapOf<String, Any>()
+	private class CachedRomSectionReader(private val stream: InputStream) {
+		private val cache = ByteArrayOutputStream()
+		private val buffer = ByteArray(8192)
 
-		fun registerProcessor(processor: SectionProcessor) {
-			processors.add(processor)
-		}
+		fun readSection(offset: Int, size: Int): ByteArray {
+			require(offset >= 0) { "Invalid ROM section offset=$offset" }
+			require(size >= 0) { "Invalid ROM section size=$size" }
+			val endOffset = offset + size
+			require(endOffset >= offset) { "ROM section overflows Int range" }
 
-		fun process(stream: InputStream) {
-			val trackedStream = ProgressTrackerInputStream(stream)
-			val sortedProcessors = processors.sortedBy { it.streamOffset }.toMutableList()
-
-			while (sortedProcessors.isNotEmpty()) {
-				val processor = sortedProcessors.removeAt(0)
-				val bytesToSkip = processor.streamOffset - trackedStream.totalReadBytes
-				trackedStream.skipStreamBytes(bytesToSkip)
-
-				if (processor is SectionProcessor.SectionValueProcessor) {
-					processor.processor(trackedStream) { key, value ->
-						values[key] = value
-					}
-				} else if (processor is SectionProcessor.SequentialSectionProcessor) {
-					processor.then(
-						trackedStream,
-						{ sortedProcessors.add(it) },
-						{ key, value -> values[key] = value }
-					)
-
-					sortedProcessors.sortBy { it.streamOffset }
+			while (cache.size() < endOffset) {
+				val bytesToRead = min(buffer.size, endOffset - cache.size())
+				val read = stream.read(buffer, 0, bytesToRead)
+				if (read <= 0) {
+					throw IllegalStateException("Unexpected end of ROM while reading section offset=$offset size=$size")
 				}
+				cache.write(buffer, 0, read)
 			}
-		}
 
-		@Suppress("UNCHECKED_CAST")
-		fun <T> getValue(key: String): T {
-			return values[key] as T
-		}
-
-		sealed class SectionProcessor(val streamOffset: Long) {
-			class SectionValueProcessor(streamOffset: Long, val processor: (InputStream, save: (String, Any) -> Unit) -> Unit) : SectionProcessor(streamOffset)
-			class SequentialSectionProcessor(streamOffset: Long, val then: (stream: InputStream, register: (SectionProcessor) -> Unit, save: (String, Any) -> Unit) -> Unit) : SectionProcessor(streamOffset)
+			return cache.toByteArray().copyOfRange(offset, endOffset)
 		}
 	}
 }
