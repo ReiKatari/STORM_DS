@@ -93,6 +93,22 @@ bool screenUsesPlainStructuredComp7HandoffSlot(const SoftPackedScreenStats& stat
         && stats.ForceLive3dCompMode7Lines == 0u;
 }
 
+bool screenUsesPlainStructured3dSlot(const SoftPackedScreenStats& stats)
+{
+    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
+    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
+    return stats.DisplayModeCounts[1] > dominantLineThreshold
+        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
+        && stats.StructuredAbovePixels == 0u
+        && stats.StructuredAboveVisiblePixels == 0u
+        && stats.Structured2DOnlyPixels == 0u
+        && stats.Plane0VisiblePixels == 0u
+        && stats.Plane1VisiblePixels == 0u
+        && stats.RegularCaptureUses3dLines == 0u
+        && stats.VramCaptureUses3dLines == 0u
+        && stats.ForceLive3dCompMode7Lines == 0u;
+}
+
 bool screenHasStructuredHandoffOverlay(const SoftPackedScreenStats& stats)
 {
     constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight * 4u) / 5u;
@@ -456,6 +472,7 @@ void VulkanOutput::invalidateTemporalHistory()
     class4PairDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 240u : 0u;
     regularComp7PackedOwnerDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 12u : 0u;
     structuredComp7HandoffDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 24u : 0u;
+    ownershipIntroDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 360u : 0u;
     regularComp7PackedOwnerDebugActive = false;
     class4BottomAboveHashValid = false;
     class4BottomAboveHash = 0;
@@ -2368,6 +2385,21 @@ bool VulkanOutput::prepareFrameForPresentation(
         screenUsesFullRegularComp7(softPackedSnapshot.topScreenStats);
     const bool bottomUsesFullRegularComp7 =
         screenUsesFullRegularComp7(softPackedSnapshot.bottomScreenStats);
+    const bool topUsesPlainStructuredComp7Slot =
+        screenUsesPlainStructuredComp7HandoffSlot(softPackedSnapshot.topScreenStats);
+    const bool bottomUsesPlainStructuredComp7Slot =
+        screenUsesPlainStructuredComp7HandoffSlot(softPackedSnapshot.bottomScreenStats);
+    const bool topUsesPlainStructured3dSlot =
+        screenUsesPlainStructured3dSlot(softPackedSnapshot.topScreenStats);
+    const bool bottomUsesPlainStructured3dSlot =
+        screenUsesPlainStructured3dSlot(softPackedSnapshot.bottomScreenStats);
+    const bool topUsesFullStructured2dOnlyDisplay =
+        screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.topScreenStats);
+    const bool bottomUsesFullStructured2dOnlyDisplay =
+        screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.bottomScreenStats);
+    resource.screenSwapToggledFromPrevious =
+        previousResource != nullptr
+        && previousResource->screenSwap != resource.screenSwap;
     const bool asymmetricFullRegularComp7 =
         topUsesFullRegularComp7 != bottomUsesFullRegularComp7;
     const bool preservePackedOwnerForPlainRegularComp7Pair =
@@ -2377,10 +2409,54 @@ bool VulkanOutput::prepareFrameForPresentation(
         && screenUsesPlainFullComp4(softPackedSnapshot.bottomScreenStats)
         && !screenHasVisibleStructured2d(softPackedSnapshot.topScreenStats)
         && !screenHasVisibleStructured2d(softPackedSnapshot.bottomScreenStats);
+    const bool preservePackedOwnerForAlternatingPlainStructuredComp7 =
+        currentBackendIsGraphics
+        && resource.screenSwapToggledFromPrevious
+        && (topUsesPlainStructuredComp7Slot || bottomUsesPlainStructuredComp7Slot)
+        && topUsesCurrentCapture3d != bottomUsesCurrentCapture3d;
+    const bool preservePackedOwnerForTopVramBottomPlainStructuredComp7 =
+        currentBackendIsGraphics
+        && class4VramStructuredPair
+        && topUsesVramCapture3d
+        && !bottomUsesVramCapture3d
+        && bottomUsesPlainStructuredComp7Slot
+        && softPackedSnapshot.topScreenStats.DisplayModeCounts[2] == kScreenHeight
+        && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1] == kScreenHeight
+        && softPackedSnapshot.topScreenStats.StructuredSlotPixels == 0u
+        && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels == 0u
+        && !resource.screenSwap;
+    const bool topStructuredSlotUsesPreviousWhileBottom2dOnly =
+        currentBackendIsGraphics
+        && !softPackedSnapshot.hasCapture3dSource
+        && topUsesPlainStructured3dSlot
+        && bottomUsesFullStructured2dOnlyDisplay
+        && accumulatedTopHighresValid;
+    const bool bottomStructuredSlotUsesPreviousWhileTop2dOnly =
+        currentBackendIsGraphics
+        && !softPackedSnapshot.hasCapture3dSource
+        && bottomUsesPlainStructured3dSlot
+        && topUsesFullStructured2dOnlyDisplay
+        && accumulatedBottomHighresValid;
     bool liveSourceScreenSwap = resource.screenSwap;
-    if (class4VramStructuredPair)
+    if (topStructuredSlotUsesPreviousWhileBottom2dOnly)
+    {
+        liveSourceScreenSwap = false;
+    }
+    else if (bottomStructuredSlotUsesPreviousWhileTop2dOnly)
+    {
+        liveSourceScreenSwap = true;
+    }
+    else if (preservePackedOwnerForTopVramBottomPlainStructuredComp7)
+    {
+        liveSourceScreenSwap = resource.screenSwap;
+    }
+    else if (class4VramStructuredPair)
     {
         liveSourceScreenSwap = topUsesVramCapture3d;
+    }
+    else if (preservePackedOwnerForAlternatingPlainStructuredComp7)
+    {
+        liveSourceScreenSwap = resource.screenSwap;
     }
     else if (asymmetricFullRegularComp7
         && !preservePackedOwnerForPlainRegularComp7Pair)
@@ -2404,6 +2480,18 @@ bool VulkanOutput::prepareFrameForPresentation(
     {
         liveSourceScreenSwap = true;
     }
+    const bool topPlainStructuredComp7UsesOppositeLive3d =
+        currentBackendIsGraphics
+        && topUsesPlainStructuredComp7Slot
+        && !topUsesCurrentCapture3d
+        && bottomUsesCurrentCapture3d
+        && !liveSourceScreenSwap;
+    const bool bottomPlainStructuredComp7UsesOppositeLive3d =
+        currentBackendIsGraphics
+        && bottomUsesPlainStructuredComp7Slot
+        && !bottomUsesCurrentCapture3d
+        && topUsesCurrentCapture3d
+        && liveSourceScreenSwap;
     const bool topUsesScreenWideCaptureBackedComp4 =
         softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines > currentCaptureLineThreshold;
     const bool bottomUsesScreenWideCaptureBackedComp4 =
@@ -2602,6 +2690,8 @@ bool VulkanOutput::prepareFrameForPresentation(
                 resource,
                 renderer3D,
                 liveSourceScreenSwap,
+                liveSourceScreenSwap,
+                !liveSourceScreenSwap,
                 replaceAccumulatedHighres))
         {
             return false;
@@ -2664,12 +2754,16 @@ bool VulkanOutput::prepareFrameForPresentation(
         && (live3dOwnerIsTop
             || framesSinceTopLive3D <= 1u
             || topUsesFullRegularComp7
+            || topStructuredSlotUsesPreviousWhileBottom2dOnly
+            || topPlainStructuredComp7UsesOppositeLive3d
             || (class4VramStructuredPair && !live3dOwnerIsTop));
     const bool bottomNeedsAccumulatedHighres =
         bottomCanUseAccumulatedHighres
         && (!live3dOwnerIsTop
             || framesSinceBottomLive3D <= 1u
             || bottomUsesFullRegularComp7
+            || bottomStructuredSlotUsesPreviousWhileTop2dOnly
+            || bottomPlainStructuredComp7UsesOppositeLive3d
             || (class4VramStructuredPair && live3dOwnerIsTop));
     resource.previousTopRendererSourceImage = currentSourceImage;
     resource.previousTopRendererSourceImageView = currentSourceImageView;
@@ -2685,10 +2779,6 @@ bool VulkanOutput::prepareFrameForPresentation(
     resource.replayBottomComposedFromPrevious = false;
     resource.previousTopComposedFrame = nullptr;
     resource.previousBottomComposedFrame = nullptr;
-    resource.screenSwapToggledFromPrevious =
-        previousResource != nullptr
-        && previousResource->screenSwap != resource.screenSwap;
-
     auto latchPreviousLcdSource = [&](Frame* sourceFrame, bool topLcd) {
         if (sourceFrame == nullptr || sourceFrame == frame)
             return;
@@ -2740,6 +2830,85 @@ bool VulkanOutput::prepareFrameForPresentation(
         && accumulatedBottomHighresValid
         && accumulatedBottomHighresImage != VK_NULL_HANDLE
         && accumulatedBottomHighresView != VK_NULL_HANDLE;
+    const bool ownershipIntroDebugRelevant =
+        currentBackendIsGraphics
+        && (resource.screenSwapToggledFromPrevious
+            || topUsesPlainStructuredComp7Slot
+            || bottomUsesPlainStructuredComp7Slot
+            || topUsesRegularCapture3d
+            || bottomUsesRegularCapture3d
+            || topUsesVramCapture3d
+            || bottomUsesVramCapture3d
+            || softPackedSnapshot.topScreenStats.CompModeCounts[7] > 0u
+            || softPackedSnapshot.bottomScreenStats.CompModeCounts[7] > 0u
+            || softPackedSnapshot.topScreenStats.DisplayModeCounts[2] > 0u
+            || softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2] > 0u);
+    if (ownershipIntroDebugRelevant
+        && areRendererDebugBgObjLogsEnabled()
+        && ownershipIntroDebugLogsRemaining > 0)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanOwnershipIntro[Frame]: frameId=%u packedSwap=%u liveSwap=%u backendSwap=%u prevSwap=%u toggled=%u snapshot=%u snapshotSwap=%u capSrc=%u capHintValid=%u capHint=%u exactValid=%u exactSwap=%u class4Pair=%u preserveTopVramBottomPlain=%u preserveAltPlain=%u topSlotHold=%u bottomSlotHold=%u topCurrent=%u bottomCurrent=%u topPlain=%u bottomPlain=%u topOpp=%u bottomOpp=%u topCan=%u bottomCan=%u topNeed=%u bottomNeed=%u topAcc=%u bottomAcc=%u sinceTop=%u sinceBottom=%u topPrevValid=%u bottomPrevValid=%u topDM=%u/%u/%u/%u topReg=%u topVram=%u topForce=%u topComp7=%u topStruct=%u topAbove=%u top2DOnly=%u bottomDM=%u/%u/%u/%u bottomReg=%u bottomVram=%u bottomForce=%u bottomComp7=%u bottomStruct=%u bottomAbove=%u bottom2DOnly=%u remaining=%u",
+            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
+            resource.screenSwap ? 1u : 0u,
+            liveSourceScreenSwap ? 1u : 0u,
+            backendRenderScreenSwap ? 1u : 0u,
+            previousResource != nullptr && previousResource->screenSwap ? 1u : 0u,
+            resource.screenSwapToggledFromPrevious ? 1u : 0u,
+            resource.hasRenderer3dSnapshot ? 1u : 0u,
+            resource.renderer3dSnapshotScreenSwap ? 1u : 0u,
+            softPackedSnapshot.hasCapture3dSource ? 1u : 0u,
+            renderer3D.IsCurrentCaptureScreenSwapHintValid() ? 1u : 0u,
+            renderer3D.GetCurrentCaptureScreenSwapHint() ? 1u : 0u,
+            renderer3D.IsLastValidExactCaptureAvailable() ? 1u : 0u,
+            renderer3D.GetLastValidExactCaptureScreenSwap() ? 1u : 0u,
+            class4VramStructuredPair ? 1u : 0u,
+            preservePackedOwnerForTopVramBottomPlainStructuredComp7 ? 1u : 0u,
+            preservePackedOwnerForAlternatingPlainStructuredComp7 ? 1u : 0u,
+            topStructuredSlotUsesPreviousWhileBottom2dOnly ? 1u : 0u,
+            bottomStructuredSlotUsesPreviousWhileTop2dOnly ? 1u : 0u,
+            topUsesCurrentCapture3d ? 1u : 0u,
+            bottomUsesCurrentCapture3d ? 1u : 0u,
+            topUsesPlainStructuredComp7Slot ? 1u : 0u,
+            bottomUsesPlainStructuredComp7Slot ? 1u : 0u,
+            topPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
+            bottomPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
+            topCanUseAccumulatedHighres ? 1u : 0u,
+            bottomCanUseAccumulatedHighres ? 1u : 0u,
+            topNeedsAccumulatedHighres ? 1u : 0u,
+            bottomNeedsAccumulatedHighres ? 1u : 0u,
+            topAccumulatorAvailable ? 1u : 0u,
+            bottomAccumulatorAvailable ? 1u : 0u,
+            framesSinceTopLive3D,
+            framesSinceBottomLive3D,
+            resource.previousTopRendererSourceValid ? 1u : 0u,
+            resource.previousBottomRendererSourceValid ? 1u : 0u,
+            softPackedSnapshot.topScreenStats.DisplayModeCounts[0],
+            softPackedSnapshot.topScreenStats.DisplayModeCounts[1],
+            softPackedSnapshot.topScreenStats.DisplayModeCounts[2],
+            softPackedSnapshot.topScreenStats.DisplayModeCounts[3],
+            softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines,
+            softPackedSnapshot.topScreenStats.VramCaptureUses3dLines,
+            softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines,
+            softPackedSnapshot.topScreenStats.CompModeCounts[7],
+            softPackedSnapshot.topScreenStats.StructuredSlotPixels,
+            softPackedSnapshot.topScreenStats.StructuredAbovePixels,
+            softPackedSnapshot.topScreenStats.Structured2DOnlyPixels,
+            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[0],
+            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1],
+            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2],
+            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[3],
+            softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines,
+            softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines,
+            softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines,
+            softPackedSnapshot.bottomScreenStats.CompModeCounts[7],
+            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
+            softPackedSnapshot.bottomScreenStats.StructuredAbovePixels,
+            softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels,
+            ownershipIntroDebugLogsRemaining);
+        ownershipIntroDebugLogsRemaining--;
+    }
     if (class4VramStructuredPair
         && areRendererDebugBgObjLogsEnabled()
         && class4PairDebugLogsRemaining > 0)
@@ -2850,6 +3019,36 @@ bool VulkanOutput::prepareFrameForPresentation(
         resource.previousTopRendererSourceValid = false;
     if (bottomStructuredHandoffOverlayHasNoCurrent3dSource)
         resource.previousBottomRendererSourceValid = false;
+    const bool topStructuredHandoffBlankCarry =
+        currentBackendIsGraphics
+        && resource.screenSwapToggledFromPrevious
+        && softPackedSnapshot.topScreenStats.DisplayModeCounts[0] == kScreenHeight
+        && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
+        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
+        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
+        && softPackedSnapshot.topScreenStats.StructuredSlotPixels == 0u
+        && bottomUsesPlainStructuredComp7Slot
+        && lastTopComposedFrame != nullptr
+        && lastTopComposedFrame != frame;
+    const bool bottomStructuredHandoffBlankCarry =
+        currentBackendIsGraphics
+        && resource.screenSwapToggledFromPrevious
+        && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[0] == kScreenHeight
+        && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
+        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
+        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u
+        && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels == 0u
+        && topUsesPlainStructuredComp7Slot
+        && lastBottomComposedFrame != nullptr
+        && lastBottomComposedFrame != frame;
+    const bool topPlainStructuredComp7ReplayComposed =
+        topPlainStructuredComp7UsesOppositeLive3d
+        && lastTopComposedFrame != nullptr
+        && lastTopComposedFrame != frame;
+    const bool bottomPlainStructuredComp7ReplayComposed =
+        bottomPlainStructuredComp7UsesOppositeLive3d
+        && lastBottomComposedFrame != nullptr
+        && lastBottomComposedFrame != frame;
     const bool topStructuredHandoffCarrySource =
         currentBackendIsGraphics
         && topStructuredHandoffIncomplete
@@ -2872,12 +3071,16 @@ bool VulkanOutput::prepareFrameForPresentation(
     }
     resource.replayTopComposedFromPrevious =
         currentBackendIsGraphics
-        && topStructuredHandoffIncomplete
+        && (topStructuredHandoffIncomplete
+            || topStructuredHandoffBlankCarry
+            || topPlainStructuredComp7ReplayComposed)
         && lastTopComposedFrame != nullptr
         && lastTopComposedFrame != frame;
     resource.replayBottomComposedFromPrevious =
         currentBackendIsGraphics
-        && bottomStructuredHandoffIncomplete
+        && (bottomStructuredHandoffIncomplete
+            || bottomStructuredHandoffBlankCarry
+            || bottomPlainStructuredComp7ReplayComposed)
         && lastBottomComposedFrame != nullptr
         && lastBottomComposedFrame != frame;
     resource.previousTopComposedFrame = resource.replayTopComposedFromPrevious ? lastTopComposedFrame : nullptr;
@@ -2886,7 +3089,11 @@ bool VulkanOutput::prepareFrameForPresentation(
     if ((topStructuredHandoffCarrySource || bottomStructuredHandoffCarrySource
             || resource.replayTopComposedFromPrevious || resource.replayBottomComposedFromPrevious
             || topStructuredHandoffOverlayHasNoCurrent3dSource
-            || bottomStructuredHandoffOverlayHasNoCurrent3dSource)
+            || bottomStructuredHandoffOverlayHasNoCurrent3dSource
+            || topStructuredHandoffBlankCarry
+            || bottomStructuredHandoffBlankCarry
+            || topPlainStructuredComp7UsesOppositeLive3d
+            || bottomPlainStructuredComp7UsesOppositeLive3d)
         && areRendererDebugBgObjLogsEnabled()
         && structuredComp7HandoffDebugLogsRemaining == 0)
     {
@@ -2895,13 +3102,15 @@ bool VulkanOutput::prepareFrameForPresentation(
     if ((topStructuredHandoffCarrySource || bottomStructuredHandoffCarrySource
             || resource.replayTopComposedFromPrevious || resource.replayBottomComposedFromPrevious
             || topStructuredHandoffOverlayHasNoCurrent3dSource
-            || bottomStructuredHandoffOverlayHasNoCurrent3dSource)
+            || bottomStructuredHandoffOverlayHasNoCurrent3dSource
+            || topPlainStructuredComp7UsesOppositeLive3d
+            || bottomPlainStructuredComp7UsesOppositeLive3d)
         && areRendererDebugBgObjLogsEnabled()
         && structuredComp7HandoffDebugLogsRemaining > 0)
     {
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[StructuredComp7Handoff]: frameId=%u packedSwap=%u liveSwap=%u prevSwap=%u swapToggled=%u topOverlayNo3d=%u bottomOverlayNo3d=%u topCarrySource=%u bottomCarrySource=%u topReplayComposed=%u bottomReplayComposed=%u topAcc=%u bottomAcc=%u topPrev=%u bottomPrev=%u topComp7=%u topStruct=%u topAbove=%u top2DOnly=%u bottomComp7=%u bottomStruct=%u bottomAbove=%u bottom2DOnly=%u remaining=%u",
+            "VulkanLive3D[StructuredComp7Handoff]: frameId=%u packedSwap=%u liveSwap=%u prevSwap=%u swapToggled=%u topOverlayNo3d=%u bottomOverlayNo3d=%u topBlankCarry=%u bottomBlankCarry=%u topPlainOpposite=%u bottomPlainOpposite=%u topCarrySource=%u bottomCarrySource=%u topReplayComposed=%u bottomReplayComposed=%u topAcc=%u bottomAcc=%u topPrev=%u bottomPrev=%u topComp7=%u topStruct=%u topAbove=%u top2DOnly=%u bottomComp7=%u bottomStruct=%u bottomAbove=%u bottom2DOnly=%u remaining=%u",
             frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
             resource.screenSwap ? 1u : 0u,
             liveSourceScreenSwap ? 1u : 0u,
@@ -2909,6 +3118,10 @@ bool VulkanOutput::prepareFrameForPresentation(
             resource.screenSwapToggledFromPrevious ? 1u : 0u,
             topStructuredHandoffOverlayHasNoCurrent3dSource ? 1u : 0u,
             bottomStructuredHandoffOverlayHasNoCurrent3dSource ? 1u : 0u,
+            topStructuredHandoffBlankCarry ? 1u : 0u,
+            bottomStructuredHandoffBlankCarry ? 1u : 0u,
+            topPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
+            bottomPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
             topStructuredHandoffCarrySource ? 1u : 0u,
             bottomStructuredHandoffCarrySource ? 1u : 0u,
             resource.replayTopComposedFromPrevious ? 1u : 0u,
@@ -3654,6 +3867,8 @@ bool VulkanOutput::recordDirectPresentationPrep(
     FrameResource& resource,
     const melonDS::VulkanRenderer3D& renderer3D,
     bool snapshotScreenSwap,
+    bool accumulateTopHighres,
+    bool accumulateBottomHighres,
     bool replaceAccumulatedHighres)
 {
     std::scoped_lock commandLock(commandPoolLock);
@@ -3708,8 +3923,10 @@ bool VulkanOutput::recordDirectPresentationPrep(
             nullptr
         );
 
-        const bool live3dOwnerIsTop = resource.renderer3dSnapshotScreenSwap;
-        (void)recordAccumulateMerge(resource, live3dOwnerIsTop, replaceAccumulatedHighres);
+        if (accumulateTopHighres)
+            (void)recordAccumulateMerge(resource, true, replaceAccumulatedHighres);
+        if (accumulateBottomHighres)
+            (void)recordAccumulateMerge(resource, false, replaceAccumulatedHighres);
     }
 
     VkBufferMemoryBarrier topPackedBarrier{};
