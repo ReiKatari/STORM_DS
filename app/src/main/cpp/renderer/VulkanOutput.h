@@ -423,6 +423,8 @@ private:
         FrameResource& resource,
         const melonDS::VulkanRenderer3D& renderer3D,
         bool snapshotScreenSwap,
+        bool accumulateTopHighres,
+        bool accumulateBottomHighres,
         bool replaceAccumulatedHighres);
     bool dispatchCompositor(Frame* frame, FrameResource& resource, const VulkanCompositionInputs& inputs);
     void recordTemporalStats(
@@ -525,6 +527,7 @@ private:
     u32 class4PairDebugLogsRemaining{};
     u32 regularComp7PackedOwnerDebugLogsRemaining{};
     u32 structuredComp7HandoffDebugLogsRemaining{};
+    u32 ownershipIntroDebugLogsRemaining{};
     bool regularComp7PackedOwnerDebugActive{};
     std::mutex temporalStatsLock;
     VulkanOutputTemporalStats temporalStats{};

@@ -243,6 +243,7 @@ private:
     int vulkanStructuredCaptureGateFrames = 0;
     int vulkanTemporal3dHistoryGateFrames = 0;
     int vulkanTemporal3dNotReadyFrames = 0;
+    int vulkanTemporal3dHistoryDebugLogsRemaining = 0;
     bool lastVulkanFastForwardPresentationState = false;
     int vulkanFastForwardPreviousFrameFallbackFrames = 0;
     SoftPackedFrameSnapshot lastSoftPackedFrameSnapshot;
