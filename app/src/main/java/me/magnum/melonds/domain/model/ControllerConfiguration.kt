@@ -21,6 +21,7 @@ class ControllerConfiguration(
             Input.HINGE,
             Input.PAUSE,
             Input.FAST_FORWARD,
+            Input.HOLD_FAST_FORWARD,
             Input.MICROPHONE,
             Input.RESET,
             Input.SWAP_SCREENS,

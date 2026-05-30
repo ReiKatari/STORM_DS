@@ -244,6 +244,7 @@ class EmulatorActivity : AppCompatActivity() {
     private val frontendInputHandler = object : FrontendInputHandler() {
         var fastForwardEnabled = false
             private set
+        private var fastForwardHoldPressed = false
         var microphoneEnabled = true
             private set
 
@@ -263,7 +264,23 @@ class EmulatorActivity : AppCompatActivity() {
             fastForwardEnabled = !fastForwardEnabled
             binding.viewLayoutControls.setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, fastForwardEnabled)
             presentation?.layoutView?.setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, fastForwardEnabled)
-            MelonEmulator.setFastForwardEnabled(fastForwardEnabled)
+            updateFastForwardState()
+        }
+
+        override fun onFastForwardHoldPressed() {
+            if (fastForwardHoldPressed || !viewModel.onFastForwardToggleRequested()) {
+                return
+            }
+            fastForwardHoldPressed = true
+            updateFastForwardState()
+        }
+
+        override fun onFastForwardHoldReleased() {
+            if (!fastForwardHoldPressed) {
+                return
+            }
+            fastForwardHoldPressed = false
+            updateFastForwardState()
         }
 
         override fun onMicrophonePressed() {
@@ -291,6 +308,18 @@ class EmulatorActivity : AppCompatActivity() {
 
         override fun onRewind() {
             viewModel.onOpenRewind()
+        }
+
+        fun clearFastForwardHold() {
+            if (!fastForwardHoldPressed) {
+                return
+            }
+            fastForwardHoldPressed = false
+            updateFastForwardState()
+        }
+
+        private fun updateFastForwardState() {
+            MelonEmulator.setFastForwardEnabled(fastForwardEnabled || fastForwardHoldPressed)
         }
     }
     private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -3238,6 +3267,7 @@ class EmulatorActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         cancelStartupPresentationRefreshes()
+        frontendInputHandler.clearFastForwardHold()
         enableScreenTimeOut()
         choreographerFrameRenderer.stopRendering()
         if (!isClosingEmulator && !isFinishing) {
