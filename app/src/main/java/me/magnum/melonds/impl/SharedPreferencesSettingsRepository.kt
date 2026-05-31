@@ -1434,6 +1434,16 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("ra_rich_presence", true)
     }
 
+    override fun isRetroAchievementsEnabled(): Boolean {
+        return preferences.getBoolean("ra_enabled", true)
+    }
+
+    override fun observeRetroAchievementsEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("ra_enabled") {
+            isRetroAchievementsEnabled()
+        }
+    }
+
     override fun isRetroAchievementsHardcoreEnabled(): Boolean {
         return preferences.getBoolean("ra_hardcore_enabled", false)
     }

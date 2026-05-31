@@ -35,8 +35,18 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         setPreferencesFromResource(R.xml.pref_retroachievements, rootKey)
 
         val accountPreference = findPreference<Preference>("ra_login")!!
+        val retroAchievementsEnabledPreference = findPreference<SwitchPreference>("ra_enabled")!!
         val hardcoreModePreference = findPreference<SwitchPreference>("ra_hardcore_enabled")!!
         val richPresencePreference = findPreference<SwitchPreference>("ra_rich_presence")!!
+        val integrationPreferences = listOf(
+            hardcoreModePreference,
+            findPreference<SwitchPreference>("ra_unofficial_enabled")!!,
+            findPreference<SwitchPreference>("ra_encore_enabled")!!,
+            findPreference<SwitchPreference>("ra_offline_softcore_enabled")!!,
+            findPreference<SwitchPreference>("ra_active_challenge_indicators")!!,
+            findPreference<SwitchPreference>("ra_progress_indicators")!!,
+            findPreference<SwitchPreference>("ra_leaderboard_indicators")!!,
+        )
 
         hardcoreModePreference.addOnPreferenceChangeListener { _, newValue ->
             val isEnabled = newValue as Boolean
@@ -94,10 +104,18 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 val isLoggedInFlow = viewModel.accountState.map { it is RetroAchievementsAccountState.LoggedIn }
-                combine(isLoggedInFlow, hardcoreModePreference.observeAsFlow()) { isLoggedIn, isHardcoreEnabled ->
-                    isLoggedIn && !isHardcoreEnabled
-                }.collect { isRichPresenceEnabled ->
-                    richPresencePreference.isEnabled = isRichPresenceEnabled
+                combine(
+                    isLoggedInFlow,
+                    retroAchievementsEnabledPreference.observeAsFlow(),
+                    hardcoreModePreference.observeAsFlow(),
+                ) { isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled ->
+                    Triple(isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled)
+                }.collect { (isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled) ->
+                    val integrationOptionsEnabled = isLoggedIn && isRetroAchievementsEnabled
+                    integrationPreferences.forEach { preference ->
+                        preference.isEnabled = integrationOptionsEnabled
+                    }
+                    richPresencePreference.isEnabled = integrationOptionsEnabled && !isHardcoreEnabled
                 }
             }
         }

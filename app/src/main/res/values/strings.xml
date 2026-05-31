@@ -409,6 +409,8 @@
     <string name="soft_input_opacity">Soft input opacity</string>
     <string name="retroachievements">RetroAchievements</string> <!-- Keep words together because this is the official name -->
     <string name="retroachievements_summary">Login &amp; manage RetroAchievements integration</string> <!-- Keep words together because this is the official name -->
+    <string name="enable_retroachievements">Enable RetroAchievements</string>
+    <string name="enable_retroachievements_summary">Keep your account signed in, but skip achievement runtime and profile activity while disabled</string>
     <string name="enable_rich_presence">Enable rich presence</string>
     <string name="rich_presence_summary">Allows other RetroAchievement users to see what you are playing</string>
     <string name="show_unofficial_achievements">Show unofficial achievements</string>
@@ -620,6 +622,13 @@
     <string name="retro_achievements_load_error">There was a problem when trying to load the achievements for this game. Make sure you are connected to the internet and try again later</string>
     <string name="retro_achievements_no_achievements">No RetroAchievements were found for this game</string>
     <string name="retro_achievements_relaunch_to_apply_settings">Relaunch the ROM to apply the new RetroAchievements settings</string>
+    <string name="label_rom_config_retroachievements">RetroAchievements</string>
+    <string name="label_rom_config_retroachievements_for_rom">RetroAchievements for this ROM</string>
+    <string name="retro_achievements_global_enabled">Use global preference (enabled)</string>
+    <string name="retro_achievements_global_disabled">Use global preference (disabled)</string>
+    <string name="retro_achievements_enabled">Enabled</string>
+    <string name="retro_achievements_disabled">Disabled</string>
+    <string name="retro_achievements_enabled_global_disabled">Enabled when global setting is on</string>
     <string name="retro_achievements_pending_unlocks">Pending Unlocks</string>
     <string name="retro_achievements_active_challenges">Active Challenges</string>
     <string name="retro_achievements_recently_unlokced">Recently Unlocked</string>

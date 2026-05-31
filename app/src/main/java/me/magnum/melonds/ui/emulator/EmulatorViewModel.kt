@@ -513,10 +513,21 @@ class EmulatorViewModel @Inject constructor(
             _emulatorState.value = EmulatorState.LoadingRom()
             currentRom = rom
             activeRomConfig.value = rom
-            val launchDecision = runCatching {
-                decideRetroAchievementsLaunchDecision(rom)
-            }.getOrElse { throwable ->
-                Log.e("EmulatorViewModel", "RetroAchievements launch decision failed for '${rom.name}'", throwable)
+            val isRetroAchievementsEnabledForLaunch = isRetroAchievementsEnabledForLaunch(rom)
+            val launchDecision = if (isRetroAchievementsEnabledForLaunch) {
+                runCatching {
+                    decideRetroAchievementsLaunchDecision(rom)
+                }.getOrElse { throwable ->
+                    Log.e("EmulatorViewModel", "RetroAchievements launch decision failed for '${rom.name}'", throwable)
+                    RetroAchievementsLaunchDecision(
+                        networkMode = RetroAchievementsNetworkMode.ONLINE_LIVE,
+                        sessionMode = RetroAchievementsSessionMode.SOFTCORE,
+                        initialOfflineType = null,
+                        isHardcoreEligibleAfterOnlineStart = false,
+                        offlineDueToNoInternetAtStart = false,
+                    )
+                }
+            } else {
                 RetroAchievementsLaunchDecision(
                     networkMode = RetroAchievementsNetworkMode.ONLINE_LIVE,
                     sessionMode = RetroAchievementsSessionMode.SOFTCORE,
@@ -533,6 +544,7 @@ class EmulatorViewModel @Inject constructor(
 
             startEmulatorSession(
                 sessionType = EmulatorSession.SessionType.RomSession(rom),
+                areRetroAchievementsEnabled = isRetroAchievementsEnabledForLaunch,
                 isRetroAchievementsHardcoreModeEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
             )
             startObservingMainScreenBackground()
@@ -542,9 +554,15 @@ class EmulatorViewModel @Inject constructor(
             startObservingEmulatorEvents()
             startObservingAchievementEvents()
             startObservingLayoutForRom()
-            val raBootstrapReady = startRetroAchievementsSession(rom, launchDecision)
-
-            raBootstrapReady.await()
+            if (isRetroAchievementsEnabledForLaunch) {
+                startRetroAchievementsSession(rom, launchDecision).await()
+            } else {
+                activeRuntimeBridgeConfig = null
+                activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
+                emulatorSession.updateRetroAchievementsIntegrationStatus(
+                    GameAchievementData.IntegrationStatus.DISABLED_BY_SETTING,
+                )
+            }
 
             val cheats = getRomInfo(rom)?.let { getRomEnabledCheats(it) } ?: emptyList()
             val result = emulatorManager.loadRom(rom, cheats)
@@ -572,6 +590,19 @@ class EmulatorViewModel @Inject constructor(
             }
             Log.e("EmulatorViewModel", "Failed to launch ROM '${rom.name}'", exception)
             _emulatorState.value = EmulatorState.RomLoadError
+        }
+    }
+
+    private suspend fun isRetroAchievementsEnabledForLaunch(rom: Rom): Boolean {
+        return retroAchievementsRepository.isUserAuthenticated() &&
+            settingsRepository.isRetroAchievementsEnabled() &&
+            (rom.config.retroAchievementsEnabled ?: true)
+    }
+
+    private suspend fun isRetroAchievementsEnabledForSettingsUpdate(currentState: EmulatorState): Boolean {
+        return when (currentState) {
+            is EmulatorState.RunningRom -> isRetroAchievementsEnabledForLaunch(currentState.rom)
+            else -> retroAchievementsRepository.isUserAuthenticated() && settingsRepository.isRetroAchievementsEnabled()
         }
     }
 
@@ -781,7 +812,10 @@ class EmulatorViewModel @Inject constructor(
     private fun launchFirmware(consoleType: ConsoleType) {
         viewModelScope.launch {
             resetEmulatorState(EmulatorState.LoadingFirmware())
-            startEmulatorSession(EmulatorSession.SessionType.FirmwareSession(consoleType))
+            startEmulatorSession(
+                sessionType = EmulatorSession.SessionType.FirmwareSession(consoleType),
+                areRetroAchievementsEnabled = false,
+            )
             sessionCoroutineScope.launch {
                 startObservingMainScreenBackground()
                 startObservingSecondaryScreenBackground()
@@ -901,7 +935,7 @@ class EmulatorViewModel @Inject constructor(
             }
 
             val sessionUpdateActions = emulatorSession.updateRetroAchievementsSettings(
-                retroAchievementsRepository.isUserAuthenticated(),
+                isRetroAchievementsEnabledForSettingsUpdate(currentState),
                 settingsRepository.isRetroAchievementsHardcoreEnabled(),
             )
 
@@ -3586,11 +3620,11 @@ class EmulatorViewModel @Inject constructor(
 
     private suspend fun startEmulatorSession(
         sessionType: EmulatorSession.SessionType,
+        areRetroAchievementsEnabled: Boolean,
         isRetroAchievementsHardcoreModeEnabled: Boolean = settingsRepository.isRetroAchievementsHardcoreEnabled(),
     ) {
-        val isUserAuthenticatedInRetroAchievements = retroAchievementsRepository.isUserAuthenticated()
         emulatorSession.startSession(
-            areRetroAchievementsEnabled = isUserAuthenticatedInRetroAchievements,
+            areRetroAchievementsEnabled = areRetroAchievementsEnabled,
             isRetroAchievementsHardcoreModeEnabled = isRetroAchievementsHardcoreModeEnabled,
             sessionType = sessionType,
         )

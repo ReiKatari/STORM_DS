@@ -20,6 +20,7 @@ data class RomConfig(
     val videoFiltering: VideoFiltering? = null,
     val retroArchShaderPresetPath: String? = null,
     val retroArchShaderParameters: String? = null,
+    val retroAchievementsEnabled: Boolean? = null,
 ) {
 
     fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
@@ -49,6 +50,7 @@ data class RomConfig(
                 videoFiltering = null,
                 retroArchShaderPresetPath = null,
                 retroArchShaderParameters = null,
+                retroAchievementsEnabled = null,
             )
         }
     }

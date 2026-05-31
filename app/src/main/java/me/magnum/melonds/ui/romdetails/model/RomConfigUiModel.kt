@@ -34,4 +34,6 @@ data class RomConfigUiModel(
     val retroArchShaderParameters: String? = null,
     val globalRetroArchShaderParameters: String? = null,
     val hasValidRetroArchShaderRoot: Boolean = false,
+    val retroAchievementsEnabled: Boolean? = null,
+    val globalRetroAchievementsEnabled: Boolean = true,
 )

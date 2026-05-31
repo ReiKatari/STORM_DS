@@ -24,4 +24,5 @@ sealed class RomConfigUpdateEvent {
     data class VideoFilteringUpdate(val videoFiltering: VideoFiltering?) : RomConfigUpdateEvent()
     data class RetroArchShaderPresetPathUpdate(val presetPath: String?) : RomConfigUpdateEvent()
     data class RetroArchShaderParametersUpdate(val parameters: String?) : RomConfigUpdateEvent()
+    data class RetroAchievementsEnabledUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
 }

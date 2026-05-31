@@ -93,7 +93,8 @@ class RomDetailsViewModel @Inject constructor(
                 globalRuntimeConfig,
                 globalCoreVideoConfig,
                 globalShaderConfig,
-            ) { romConfig, globalRuntimeConfig, globalVideoConfig, shaderConfig ->
+                settingsRepository.observeRetroAchievementsEnabled(),
+            ) { romConfig, globalRuntimeConfig, globalVideoConfig, shaderConfig, globalRetroAchievementsEnabled ->
                 romDetailsUiMapper.mapRomConfigToUi(
                     romConfig = romConfig,
                     globalRuntimeConsoleType = globalRuntimeConfig.first,
@@ -105,6 +106,7 @@ class RomDetailsViewModel @Inject constructor(
                     globalRetroArchShaderPresetPath = shaderConfig.first,
                     globalRetroArchShaderParameters = shaderConfig.second,
                     hasValidRetroArchShaderRoot = shaderConfig.third,
+                    globalRetroAchievementsEnabled = globalRetroAchievementsEnabled,
                 )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)
@@ -165,6 +167,7 @@ class RomDetailsViewModel @Inject constructor(
             is RomConfigUpdateEvent.VideoFilteringUpdate -> currentRomConfig.copy(videoFiltering = event.videoFiltering)
             is RomConfigUpdateEvent.RetroArchShaderPresetPathUpdate -> currentRomConfig.copy(retroArchShaderPresetPath = event.presetPath)
             is RomConfigUpdateEvent.RetroArchShaderParametersUpdate -> currentRomConfig.copy(retroArchShaderParameters = event.parameters)
+            is RomConfigUpdateEvent.RetroAchievementsEnabledUpdate -> currentRomConfig.copy(retroAchievementsEnabled = event.enabled)
         }
 
         newRomConfig?.let { newConfig ->

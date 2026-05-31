@@ -39,6 +39,8 @@ data class RomConfigDto(
     val retroArchShaderPresetPath: String? = null,
     @SerializedName("retroArchShaderParameters")
     val retroArchShaderParameters: String? = null,
+    @SerializedName("retroAchievementsEnabled")
+    val retroAchievementsEnabled: Boolean? = null,
 ) {
 
     companion object {
@@ -58,6 +60,7 @@ data class RomConfigDto(
                 romConfig.videoFiltering,
                 romConfig.retroArchShaderPresetPath,
                 romConfig.retroArchShaderParameters,
+                romConfig.retroAchievementsEnabled,
             )
         }
     }
@@ -78,6 +81,7 @@ data class RomConfigDto(
             videoFiltering = videoFiltering,
             retroArchShaderPresetPath = retroArchShaderPresetPath,
             retroArchShaderParameters = retroArchShaderParameters,
+            retroAchievementsEnabled = retroAchievementsEnabled,
         )
     }
 }
