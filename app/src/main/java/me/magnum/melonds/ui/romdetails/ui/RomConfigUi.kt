@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.romdetails.ui
 
 import android.app.Activity
 import android.app.ActivityManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -108,6 +109,7 @@ private fun Content(
     val threadedRenderingDialogState = rememberSingleChoiceDialogState<Boolean?>()
     val internalResolutionDialogState = rememberSingleChoiceDialogState<Int?>()
     val videoFilteringDialogState = rememberSingleChoiceDialogState<VideoFiltering?>()
+    val retroAchievementsDialogState = rememberSingleChoiceDialogState<Boolean?>()
     val retroArchPresetPathDialogState = rememberTextInputDialogState()
     val retroArchParametersDialogState = rememberTextInputDialogState()
 
@@ -415,6 +417,32 @@ private fun Content(
             }
         }
 
+        ConfigSection(title = stringResource(R.string.label_rom_config_retroachievements)) {
+            ConfigRow(
+                title = stringResource(R.string.label_rom_config_retroachievements_for_rom),
+                value = retroAchievementsModeLabel(
+                    context = context,
+                    value = romConfig.retroAchievementsEnabled,
+                    globalEnabled = romConfig.globalRetroAchievementsEnabled,
+                ),
+                onClick = {
+                    retroAchievementsDialogState.show(
+                        title = context.getString(R.string.label_rom_config_retroachievements_for_rom),
+                        items = listOf(null, true, false),
+                        labelOf = { value ->
+                            retroAchievementsModeLabel(
+                                context = context,
+                                value = value,
+                                globalEnabled = romConfig.globalRetroAchievementsEnabled,
+                            )
+                        },
+                        selected = romConfig.retroAchievementsEnabled,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.RetroAchievementsEnabledUpdate(it)) },
+                    )
+                },
+            )
+        }
+
         ConfigSection(title = stringResource(R.string.controller_layout)) {
             ConfigRow(
                 title = stringResource(R.string.controller_layout),
@@ -478,6 +506,7 @@ private fun Content(
     SingleChoiceDialog(threadedRenderingDialogState)
     SingleChoiceDialog(internalResolutionDialogState)
     SingleChoiceDialog(videoFilteringDialogState)
+    SingleChoiceDialog(retroAchievementsDialogState)
     TextInputDialog(
         title = stringResource(R.string.video_retroarch_shader_preset_title),
         dialogState = retroArchPresetPathDialogState,
@@ -490,6 +519,26 @@ private fun Content(
         textValidator = { true },
         onDelete = { onConfigUpdate(RomConfigUpdateEvent.RetroArchShaderParametersUpdate(null)) },
     )
+}
+
+private fun retroAchievementsModeLabel(context: Context, value: Boolean?, globalEnabled: Boolean): String {
+    return when (value) {
+        null -> context.getString(
+            if (globalEnabled) {
+                R.string.retro_achievements_global_enabled
+            } else {
+                R.string.retro_achievements_global_disabled
+            }
+        )
+        true -> context.getString(
+            if (globalEnabled) {
+                R.string.retro_achievements_enabled
+            } else {
+                R.string.retro_achievements_enabled_global_disabled
+            }
+        )
+        false -> context.getString(R.string.retro_achievements_disabled)
+    }
 }
 
 @MelonPreviewSet

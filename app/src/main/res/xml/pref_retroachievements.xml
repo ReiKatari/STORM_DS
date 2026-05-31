@@ -8,6 +8,13 @@
         app:iconSpaceReserved="false" />
 
     <SwitchPreference
+        android:key="ra_enabled"
+        android:title="@string/enable_retroachievements"
+        android:summary="@string/enable_retroachievements_summary"
+        app:iconSpaceReserved="false"
+        android:defaultValue="true" />
+
+    <SwitchPreference
         android:key="ra_hardcore_enabled"
         android:title="@string/hardcore_mode"
         android:summary="@string/hardcore_mode_summary"

@@ -126,6 +126,8 @@ interface SettingsRepository {
     fun getSoftInputOpacity(): Flow<Int>
 
     fun isRetroAchievementsRichPresenceEnabled(): Boolean
+    fun isRetroAchievementsEnabled(): Boolean
+    fun observeRetroAchievementsEnabled(): Flow<Boolean>
     fun isRetroAchievementsHardcoreEnabled(): Boolean
     fun isRetroAchievementsOfflineSoftcoreEnabled(): Boolean
     fun areRetroAchievementsUnofficialAchievementsEnabled(): Boolean
