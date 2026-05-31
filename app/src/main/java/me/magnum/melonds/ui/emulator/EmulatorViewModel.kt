@@ -452,7 +452,7 @@ class EmulatorViewModel @Inject constructor(
 
     fun onRomLaunchValidated(rom: Rom) {
         sessionCoroutineScope.launch {
-            launchRom(rom)
+            launchRom(refreshRomForLaunch(rom))
         }
     }
 
@@ -475,9 +475,13 @@ class EmulatorViewModel @Inject constructor(
         viewModelScope.launch {
             resetEmulatorState(EmulatorState.LoadingRom())
             sessionCoroutineScope.launch {
-                _emulatorState.value = EmulatorState.ValidatingRom(rom)
+                _emulatorState.value = EmulatorState.ValidatingRom(refreshRomForLaunch(rom))
             }
         }
+    }
+
+    private suspend fun refreshRomForLaunch(rom: Rom): Rom {
+        return romsRepository.getRomAtUri(rom.uri) ?: rom
     }
 
     private fun loadRom(romUri: Uri) {
