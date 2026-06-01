@@ -39,6 +39,10 @@ layout(push_constant) uniform PresenterPushConstants
     uint class4NoAboveVramStructuredPair;
     uint class4PreservePackedVramValid;
     uint class4PreservePackedVramScreenSwap;
+    uint topStructuredHandoffNoCurrent3d;
+    uint bottomStructuredHandoffNoCurrent3d;
+    uint topStructuredHandoffSuppress3d;
+    uint bottomStructuredHandoffSuppress3d;
     float viewportWidth;
     float viewportHeight;
 } pushConstants;
@@ -413,9 +417,12 @@ vec4 FUNC_NAME() \
     bool forceLive3dCompMode7 = (masterBrightness & kMetaFlagForceLive3dCompMode7) != 0u; \
     bool structuredAboveDominant = (masterBrightness & kMetaFlagStructuredAboveDominant) != 0u; \
     bool compMode2StructuredPair = (masterBrightness & kMetaFlagCompMode2StructuredPair) != 0u; \
-    bool screenOwnsLive3D = SCREEN_IS_TOP ? (pushConstants.liveSourceScreenSwap != 0u) : (pushConstants.liveSourceScreenSwap == 0u); \
-    bool screenMatchesCapture3DSource = pushConstants.captureSourceScreenSwapValid == 0u \
-        || (SCREEN_IS_TOP ? (pushConstants.captureSourceScreenSwap != 0u) : (pushConstants.captureSourceScreenSwap == 0u)); \
+        bool screenOwnsLive3D = SCREEN_IS_TOP ? (pushConstants.liveSourceScreenSwap != 0u) : (pushConstants.liveSourceScreenSwap == 0u); \
+        bool structuredHandoffNoCurrent3D = SCREEN_IS_TOP ? (pushConstants.topStructuredHandoffNoCurrent3d != 0u) : (pushConstants.bottomStructuredHandoffNoCurrent3d != 0u); \
+        bool oppositeStructuredHandoffNoCurrent3D = SCREEN_IS_TOP ? (pushConstants.bottomStructuredHandoffNoCurrent3d != 0u) : (pushConstants.topStructuredHandoffNoCurrent3d != 0u); \
+        bool structuredHandoffSuppress3D = SCREEN_IS_TOP ? (pushConstants.topStructuredHandoffSuppress3d != 0u) : (pushConstants.bottomStructuredHandoffSuppress3d != 0u); \
+        bool screenMatchesCapture3DSource = pushConstants.captureSourceScreenSwapValid == 0u \
+            || (SCREEN_IS_TOP ? (pushConstants.captureSourceScreenSwap != 0u) : (pushConstants.captureSourceScreenSwap == 0u)); \
 \
     Rgba6 pixel = SCREEN_IS_TOP \
         ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 0) \
@@ -582,10 +589,30 @@ vec4 FUNC_NAME() \
             && (((pixel3D.r | pixel3D.g | pixel3D.b) != 0) \
                 || pixel3DLiveBlackHasSupport \
                 || (!pixel3DFromLive && screenHasPrevious3D)); \
-        bool pixel3DHasUsefulColor = (pixel3D.a & 0x1F) > 0 \
-            && (pixel3DHasVisibleColor \
-                || regularCaptureUses3d); \
-        bool capture3DHasCoverage = (capture3D.a & 0x1F) > 0; \
+            bool pixel3DHasUsefulColor = (pixel3D.a & 0x1F) > 0 \
+                && (pixel3DHasVisibleColor \
+                    || regularCaptureUses3d); \
+            bool structuredHandoffFringeLine = SCREEN_IS_TOP \
+                ? (sourceY >= 160) \
+                : (sourceY <= 31); \
+            if (structuredHandoffSuppress3D \
+                && structuredHandoffFringeLine \
+                && structured2DSlot \
+                && compMode == 7 \
+                && !regularCaptureUses3d \
+                && !vramCaptureUses3d \
+                && !forceLive3dCompMode7) \
+            { \
+                pixel3D.r = 0; \
+                pixel3D.g = 0; \
+                pixel3D.b = 0; \
+                pixel3D.a = 0; \
+                pixel3DFromLive = false; \
+                pixel3DLiveBlackHasSupport = false; \
+                pixel3DHasVisibleColor = false; \
+                pixel3DHasUsefulColor = false; \
+            } \
+            bool capture3DHasCoverage = (capture3D.a & 0x1F) > 0; \
         bool captureBackedComp4Valid = captureBackedComp4 \
             && capture3DHasCoverage \
             && screenMatchesCapture3DSource \
@@ -749,10 +776,17 @@ vec4 FUNC_NAME() \
             bool regularCaptureDominant2DPlane = regularCaptureUses3d \
                 && structuredAboveDominant \
                 && structuredPlane1Usable2D; \
+            bool plainStructuredOppositeNoCurrentHandoff = compMode == 7 \
+                && oppositeStructuredHandoffNoCurrent3D \
+                && !regularCaptureUses3d \
+                && !vramCaptureUses3d \
+                && !forceLive3dCompMode7 \
+                && !screenOwnsLive3D; \
             bool structured3DOverDominant2D = compMode == 7 \
                 && structuredFullRegularCapture3d \
                 && structuredAboveDominant \
                 && (screenOwnsLive3D || screenHasPrevious3D) \
+                && !plainStructuredOppositeNoCurrentHandoff \
                 && !structured2DProtectedBlack \
                 && pixel3DHasVisibleColor; \
             bool preserveStructuredPair3DFromBrightness = compMode == 2 \
@@ -760,7 +794,14 @@ vec4 FUNC_NAME() \
                 && !structured2DAbove \
                 && !regularCaptureUses3d \
                 && !vramCaptureUses3d; \
-            if ((pixel3D.a & 0x1F) > 0 \
+            bool structuredPackedOnlyHandoff = compMode == 7 \
+                && !regularCaptureUses3d \
+                && !vramCaptureUses3d \
+                && !forceLive3dCompMode7 \
+                && !screenOwnsLive3D \
+                && (!screenHasPrevious3D || plainStructuredOppositeNoCurrentHandoff); \
+            if (!structuredPackedOnlyHandoff \
+                && (pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
                 composed = pixel3D; \
@@ -809,7 +850,18 @@ vec4 FUNC_NAME() \
                 if (compMode != 1 && structured2DAbove && !structured3DOverDominant2D) \
                     composed = above2D; \
             } \
-            else if (structured2DAbove) \
+            else if (structuredHandoffNoCurrent3D) \
+            { \
+                bool aboveVisibleNonBlack = structured2DAbove \
+                    && isStructured2DVisible(above2D) \
+                    && ((above2D.r | above2D.g | above2D.b) != 0); \
+                bool belowVisible = isStructured2DVisible(below2D); \
+                if (aboveVisibleNonBlack) \
+                    composed = above2D; \
+                else if (belowVisible) \
+                    composed = below2D; \
+            } \
+            else if (structured2DAbove && structuredPlane1Usable2D) \
             { \
                 composed = above2D; \
             } \
@@ -1071,7 +1123,6 @@ vec4 FUNC_NAME() \
         } \
         if (structured2DOnly) \
         { \
-            pixel = pixel; \
         } \
         else if (structured2DSlot) \
         { \

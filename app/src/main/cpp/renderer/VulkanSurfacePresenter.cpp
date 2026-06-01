@@ -64,6 +64,10 @@ struct PresenterPushConstants
     u32 class4NoAboveVramStructuredPair;
     u32 class4PreservePackedVramValid;
     u32 class4PreservePackedVramScreenSwap;
+    u32 topStructuredHandoffNoCurrent3d;
+    u32 bottomStructuredHandoffNoCurrent3d;
+    u32 topStructuredHandoffSuppress3d;
+    u32 bottomStructuredHandoffSuppress3d;
     float viewportWidth;
     float viewportHeight;
 };
@@ -3507,6 +3511,10 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         pushConstants.class4NoAboveVramStructuredPair = inputs.class4NoAboveVramStructuredPair ? 1u : 0u;
         pushConstants.class4PreservePackedVramValid = inputs.class4PreservePackedVramValid ? 1u : 0u;
         pushConstants.class4PreservePackedVramScreenSwap = inputs.class4PreservePackedVramScreenSwap ? 1u : 0u;
+        pushConstants.topStructuredHandoffNoCurrent3d = inputs.topStructuredHandoffNoCurrent3d ? 1u : 0u;
+        pushConstants.bottomStructuredHandoffNoCurrent3d = inputs.bottomStructuredHandoffNoCurrent3d ? 1u : 0u;
+        pushConstants.topStructuredHandoffSuppress3d = inputs.topStructuredHandoffSuppress3d ? 1u : 0u;
+        pushConstants.bottomStructuredHandoffSuppress3d = inputs.bottomStructuredHandoffSuppress3d ? 1u : 0u;
         pushConstants.viewportWidth = drawCall.viewportWidth;
         pushConstants.viewportHeight = drawCall.viewportHeight;
         if (MelonDSAndroid::areRendererDebugBgObjLogsEnabled())

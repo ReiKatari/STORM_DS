@@ -6,6 +6,7 @@
 #include <array>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 #include <vulkan/vulkan.h>
 
 #include "renderer/FrameQueue.h"
@@ -149,6 +150,10 @@ struct VulkanCompositionInputs
     bool class4NoAboveVramStructuredPair{};
     bool class4PreservePackedVramValid{};
     bool class4PreservePackedVramScreenSwap{};
+    bool topStructuredHandoffNoCurrent3d{};
+    bool bottomStructuredHandoffNoCurrent3d{};
+    bool topStructuredHandoffSuppress3d{};
+    bool bottomStructuredHandoffSuppress3d{};
     bool needsReadback{};
     bool multiSurface{};
     bool validationMode{};
@@ -212,7 +217,7 @@ struct VulkanOutputTemporalStats
 class VulkanOutput
 {
 public:
-    VulkanOutput() = default;
+    VulkanOutput();
     ~VulkanOutput();
 
     VulkanOutput(const VulkanOutput&) = delete;
@@ -279,6 +284,10 @@ public:
     VulkanOutputTemporalStats takeTemporalStatsSnapshotAndReset();
 
 private:
+    static constexpr size_t kPackedScreenWordCount =
+        SoftPackedFrameSnapshot::kLineCount
+        * ((SoftPackedFrameSnapshot::kScreenWidth * 3u) + 1u);
+
     struct CompositorPushConstants
     {
         u32 outputWidth;
@@ -299,6 +308,10 @@ private:
         u32 class4NoAboveVramStructuredPair;
         u32 class4PreservePackedVramValid;
         u32 class4PreservePackedVramScreenSwap;
+        u32 topStructuredHandoffNoCurrent3d;
+        u32 bottomStructuredHandoffNoCurrent3d;
+        u32 topStructuredHandoffSuppress3d;
+        u32 bottomStructuredHandoffSuppress3d;
     };
 
     struct AccumulatePushConstants
@@ -353,6 +366,12 @@ private:
         bool class4NoAboveVramStructuredPair{};
         bool class4PreservePackedVramValid{};
         bool class4PreservePackedVramScreenSwap{};
+        bool topStructuredHandoffNoCurrent3d{};
+        bool bottomStructuredHandoffNoCurrent3d{};
+        bool topStructuredHandoffSuppress3d{};
+        bool bottomStructuredHandoffSuppress3d{};
+        bool topPackedCarryFromPrevious{};
+        bool bottomPackedCarryFromPrevious{};
         bool hasSoftPackedDebugData{};
         SoftPackedScreenStats topScreenStats{};
         SoftPackedScreenStats bottomScreenStats{};
@@ -508,6 +527,12 @@ private:
     Frame* lastBottomRendererSourceFrame{nullptr};
     Frame* lastTopComposedFrame{nullptr};
     Frame* lastBottomComposedFrame{nullptr};
+    std::vector<u32> lastValidTopPacked;
+    std::vector<u32> lastValidBottomPacked;
+    bool lastValidTopPackedAvailable{false};
+    bool lastValidBottomPackedAvailable{false};
+    bool lastPackedScreenSwapValid{false};
+    bool lastPackedScreenSwap{false};
     u32 framesSinceTopLive3D{1024};
     u32 framesSinceBottomLive3D{1024};
     bool class4AsymmetricCadenceActive{};

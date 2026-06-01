@@ -42,6 +42,10 @@ layout(push_constant) uniform PushConsts
     uint class4NoAboveVramStructuredPair;
     uint class4PreservePackedVramValid;
     uint class4PreservePackedVramScreenSwap;
+    uint topStructuredHandoffNoCurrent3d;
+    uint bottomStructuredHandoffNoCurrent3d;
+    uint topStructuredHandoffSuppress3d;
+    uint bottomStructuredHandoffSuppress3d;
 } pc;
 
 const uint kMetaFlagRegularCaptureUses3d = 1u << 21u;
@@ -370,6 +374,9 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
     bool structuredAboveDominant = (masterBrightness & kMetaFlagStructuredAboveDominant) != 0u; \
     bool compMode2StructuredPair = (masterBrightness & kMetaFlagCompMode2StructuredPair) != 0u; \
     bool screenOwnsLive3D = SCREEN_IS_TOP ? (pc.liveSourceScreenSwap != 0u) : (pc.liveSourceScreenSwap == 0u); \
+    bool structuredHandoffNoCurrent3D = SCREEN_IS_TOP ? (pc.topStructuredHandoffNoCurrent3d != 0u) : (pc.bottomStructuredHandoffNoCurrent3d != 0u); \
+    bool oppositeStructuredHandoffNoCurrent3D = SCREEN_IS_TOP ? (pc.bottomStructuredHandoffNoCurrent3d != 0u) : (pc.topStructuredHandoffNoCurrent3d != 0u); \
+    bool structuredHandoffSuppress3D = SCREEN_IS_TOP ? (pc.topStructuredHandoffSuppress3d != 0u) : (pc.bottomStructuredHandoffSuppress3d != 0u); \
     bool screenMatchesCapture3DSource = pc.captureSourceScreenSwapValid == 0u \
         || (SCREEN_IS_TOP ? (pc.captureSourceScreenSwap != 0u) : (pc.captureSourceScreenSwap == 0u)); \
 	    Rgba6 pixel = SCREEN_IS_TOP \
@@ -513,6 +520,26 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
         bool pixel3DHasUsefulColor = (pixel3D.a & 0x1F) > 0 \
             && (pixel3DHasVisibleColor \
                 || regularCaptureUses3d); \
+        bool structuredHandoffFringeLine = SCREEN_IS_TOP \
+            ? (dsY >= 160) \
+            : (dsY <= 31); \
+        if (structuredHandoffSuppress3D \
+            && structuredHandoffFringeLine \
+            && structured2DSlot \
+            && compMode == 7 \
+            && !regularCaptureUses3d \
+            && !vramCaptureUses3d \
+            && !forceLive3dCompMode7) \
+        { \
+            pixel3D.r = 0; \
+            pixel3D.g = 0; \
+            pixel3D.b = 0; \
+            pixel3D.a = 0; \
+            pixel3DFromLive = false; \
+            pixel3DLiveBlackHasSupport = false; \
+            pixel3DHasVisibleColor = false; \
+            pixel3DHasUsefulColor = false; \
+        } \
         bool capture3DHasCoverage = (capture3D.a & 0x1F) > 0; \
         bool captureBackedComp4Valid = captureBackedComp4 \
             && capture3DHasCoverage \
@@ -668,10 +695,17 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
             bool regularCaptureDominant2DPlane = regularCaptureUses3d \
                 && structuredAboveDominant \
                 && structuredPlane1Usable2D; \
+            bool plainStructuredOppositeNoCurrentHandoff = compMode == 7 \
+                && oppositeStructuredHandoffNoCurrent3D \
+                && !regularCaptureUses3d \
+                && !vramCaptureUses3d \
+                && !forceLive3dCompMode7 \
+                && !screenOwnsLive3D; \
             bool structured3DOverDominant2D = compMode == 7 \
                 && structuredFullRegularCapture3d \
                 && structuredAboveDominant \
                 && (screenOwnsLive3D || screenHasPrevious3D) \
+                && !plainStructuredOppositeNoCurrentHandoff \
                 && !structured2DProtectedBlack \
                 && pixel3DHasVisibleColor; \
             bool preserveStructuredPair3DFromBrightness = compMode == 2 \
@@ -679,7 +713,14 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 && !structured2DAbove \
                 && !regularCaptureUses3d \
                 && !vramCaptureUses3d; \
-            if ((pixel3D.a & 0x1F) > 0 \
+            bool structuredPackedOnlyHandoff = compMode == 7 \
+                && !regularCaptureUses3d \
+                && !vramCaptureUses3d \
+                && !forceLive3dCompMode7 \
+                && !screenOwnsLive3D \
+                && (!screenHasPrevious3D || plainStructuredOppositeNoCurrentHandoff); \
+            if (!structuredPackedOnlyHandoff \
+                && (pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
                 composed = pixel3D; \
@@ -728,7 +769,18 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 if (compMode != 1 && structured2DAbove && !structured3DOverDominant2D) \
                     composed = above2D; \
             } \
-            else if (structured2DAbove) \
+            else if (structuredHandoffNoCurrent3D) \
+            { \
+                bool aboveVisibleNonBlack = structured2DAbove \
+                    && isStructured2DVisible(above2D) \
+                    && ((above2D.r | above2D.g | above2D.b) != 0); \
+                bool belowVisible = isStructured2DVisible(below2D); \
+                if (aboveVisibleNonBlack) \
+                    composed = above2D; \
+                else if (belowVisible) \
+                    composed = below2D; \
+            } \
+            else if (structured2DAbove && structuredPlane1Usable2D) \
             { \
                 composed = above2D; \
             } \
@@ -982,7 +1034,6 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
         } \
         if (structured2DOnly) \
         { \
-            pixel = pixel; \
         } \
         else if (structured2DSlot) \
         { \
