@@ -472,69 +472,44 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun backupInternalLayout(treeUri: Uri) {
-        backupFilteredLayout(treeUri, INTERNAL_LAYOUT_FILE, "INTERNAL")
+        backupUnifiedLayout(treeUri, INTERNAL_LAYOUT_FILE)
     }
 
     fun backupExternalLayout(treeUri: Uri) {
-        backupFilteredLayout(treeUri, EXTERNAL_LAYOUT_FILE, "EXTERNAL")
+        backupUnifiedLayout(treeUri, EXTERNAL_LAYOUT_FILE)
     }
 
     fun restoreInternalLayout(treeUri: Uri) {
-        restoreFilteredLayout(treeUri, INTERNAL_LAYOUT_FILE, "INTERNAL")
+        restoreUnifiedLayout(treeUri, INTERNAL_LAYOUT_FILE)
     }
 
     fun restoreExternalLayout(treeUri: Uri) {
-        restoreFilteredLayout(treeUri, EXTERNAL_LAYOUT_FILE, "EXTERNAL")
+        restoreUnifiedLayout(treeUri, EXTERNAL_LAYOUT_FILE)
     }
 
-    private fun backupFilteredLayout(treeUri: Uri, fileName: String, target: String) {
+    private fun backupUnifiedLayout(treeUri: Uri, fileName: String) {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
 
-        val layoutsSrc = File(context.filesDir, LAYOUTS_FILE)
-        if (!layoutsSrc.exists()) return
-
-        val layoutsText = runCatching { layoutsSrc.readText() }.getOrNull() ?: return
-        val allLayouts = runCatching { JSONArray(layoutsText) }.getOrNull() ?: return
-        val filtered = JSONArray()
-        for (i in 0 until allLayouts.length()) {
-            val obj = allLayouts.optJSONObject(i) ?: continue
-            if (obj.optString("target") == target) {
-                filtered.put(obj)
-            }
-        }
+        val layoutsText = File(context.filesDir, LAYOUTS_FILE)
+            .takeIf { it.exists() }
+            ?.let { runCatching { it.readText() }.getOrNull() }
+            ?: "[]"
+        val layouts = runCatching { JSONArray(layoutsText) }.getOrNull() ?: return
 
         val dest = root.findFile(fileName) ?: root.createFile("application/json", fileName) ?: return
         context.contentResolver.openOutputStream(dest.uri)?.use { out ->
-            out.writer().use { it.write(filtered.toString()) }
+            out.writer().use { it.write(layouts.toString()) }
         }
     }
 
-    private fun restoreFilteredLayout(treeUri: Uri, fileName: String, target: String) {
+    private fun restoreUnifiedLayout(treeUri: Uri, fileName: String) {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
         val src = root.findFile(fileName) ?: return
 
-        val backupArray = context.contentResolver.openInputStream(src.uri)?.use { input ->
+        val layouts = context.contentResolver.openInputStream(src.uri)?.use { input ->
             runCatching { JSONArray(input.reader().readText()) }.getOrNull()
         } ?: return
-
-        val layoutsFile = File(context.filesDir, LAYOUTS_FILE)
-        val existingArray = if (layoutsFile.exists()) {
-            runCatching { JSONArray(layoutsFile.readText()) }.getOrElse { JSONArray() }
-        } else {
-            JSONArray()
-        }
-
-        val merged = JSONArray()
-        for (i in 0 until existingArray.length()) {
-            val obj = existingArray.optJSONObject(i) ?: continue
-            if (obj.optString("target") != target) {
-                merged.put(obj)
-            }
-        }
-        for (i in 0 until backupArray.length()) {
-            merged.put(backupArray.getJSONObject(i))
-        }
-        writeTextAtomically(layoutsFile, merged.toString())
+        writeTextAtomically(File(context.filesDir, LAYOUTS_FILE), layouts.toString())
     }
 
     private fun writeTextAtomically(file: File, text: String) {
