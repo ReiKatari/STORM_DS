@@ -442,7 +442,7 @@ namespace MelonDSAndroid
         instance->loadCheats(std::move(cheats));
     }
 
-    void setupAchievements(
+    bool setupAchievements(
         std::list<RetroAchievements::RAAchievement> achievements,
         std::list<RetroAchievements::RALeaderboard> leaderboards,
         std::optional<std::string> richPresenceScript,
@@ -450,8 +450,14 @@ namespace MelonDSAndroid
     )
     {
         if (instance == nullptr)
-            return;
-        instance->setupAchievements(
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "[RAClient] setupAchievements failed reason=no_instance\n"
+            );
+            return false;
+        }
+        return instance->setupAchievements(
             std::move(achievements),
             std::move(leaderboards),
             std::move(richPresenceScript),
@@ -1236,22 +1242,34 @@ namespace MelonDSAndroid
             return false;
         }
 
-        instance->saveState(&state, true);
-
-        if (state.Error)
+        const bool saved = instance->saveState(&state, true);
+        if (!saved || state.Error)
         {
+            Platform::Log(Platform::Error, "Failed to serialize savestate to %s\n", path);
             Platform::CloseFile(saveStateFile);
             return false;
         }
 
-        if (Platform::FileWrite(state.Buffer(), state.Length(), 1, saveStateFile) == 0)
+        if (Platform::FileWrite(state.Buffer(), state.Length(), 1, saveStateFile) != 1)
         {
             Platform::Log(Platform::Error, "Failed to write %d-byte savestate to %s\n", state.Length(), path);
             Platform::CloseFile(saveStateFile);
             return false;
         }
 
-        Platform::CloseFile(saveStateFile);
+        if (!Platform::FileFlush(saveStateFile))
+        {
+            Platform::Log(Platform::Error, "Failed to flush %d-byte savestate to %s\n", state.Length(), path);
+            Platform::CloseFile(saveStateFile);
+            return false;
+        }
+
+        if (!Platform::CloseFile(saveStateFile))
+        {
+            Platform::Log(Platform::Error, "Failed to close %d-byte savestate at %s\n", state.Length(), path);
+            return false;
+        }
+
         return true;
     }
 
@@ -1309,7 +1327,7 @@ namespace MelonDSAndroid
         {
             Platform::Log(Platform::LogLevel::Error, "Failed to load state file \"%s\" into emulator\n", path);
             // Restore backup
-            if (!instance->loadState(backup.get()) || state->Error)
+            if (!instance->loadState(backup.get()) || backup->Error)
                 Platform::Log(Platform::LogLevel::Error, "Failed to load backup state\n", path);
             else
                 Platform::Log(Platform::LogLevel::Info, "Backup state loaded\n", path);

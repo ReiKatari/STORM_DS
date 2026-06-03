@@ -44,6 +44,8 @@ abstract class RetroAchievementsViewModel (
     protected open suspend fun getPendingLedgerAchievementIds(rom: Rom): Set<Long> = emptySet()
     protected open suspend fun getRuntimeBucketByAchievementId(rom: Rom): Map<Long, AchievementBucketUiModel.Bucket> = emptyMap()
     protected open suspend fun getRuntimeSubsetOrder(rom: Rom): Map<Long, Int> = emptyMap()
+    protected open suspend fun getUserGameData(rom: Rom, forHardcoreMode: Boolean) =
+        retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode)
 
     protected abstract suspend fun buildAchievementBuckets(
         achievements: List<RAUserAchievement>,
@@ -67,7 +69,7 @@ abstract class RetroAchievementsViewModel (
                     val runtimeSubsetOrder = withContext(Dispatchers.Default) {
                         runCatching { getRuntimeSubsetOrder(rom) }.getOrElse { emptyMap() }
                     }
-                    retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, forHardcoreMode).fold(
+                    getUserGameData(rom, forHardcoreMode).fold(
                         onSuccess = { userGameData ->
                             val sets = userGameData?.sets.orEmpty().map { set ->
                                 AchievementSetUiModel(

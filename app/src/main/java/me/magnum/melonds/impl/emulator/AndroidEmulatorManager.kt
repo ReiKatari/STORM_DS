@@ -26,7 +26,6 @@ import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
 import me.magnum.melonds.domain.model.retroachievements.GameAchievementData
 import me.magnum.melonds.domain.model.retroachievements.RAEvent
-import me.magnum.melonds.domain.model.retroachievements.RAEvent.RuntimeFallbackReason
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
@@ -56,6 +55,8 @@ class AndroidEmulatorManager(
         private const val BadExceptionRegion = 3
         private const val PowerOff = 4
     }
+
+    private class RetroAchievementsSetupException : RuntimeException("RetroAchievements runtime setup failed")
 
 
     private val _emulatorEvents = MutableSharedFlow<EmulatorEvent>(extraBufferCapacity = Int.MAX_VALUE)
@@ -102,7 +103,6 @@ class AndroidEmulatorManager(
             }
             EmulatorEventType.EventRADisconnected -> achievementsSharedFlow.tryEmit(RAEvent.OnDisconnected)
             EmulatorEventType.EventRAReconnected -> achievementsSharedFlow.tryEmit(RAEvent.OnReconnected)
-            EmulatorEventType.EventRARuntimeFallback -> achievementsSharedFlow.tryEmit(RAEvent.OnRuntimeFallback(data.getRuntimeFallbackReason()))
             EmulatorEventType.EventRALeaderboardAttemptStarted -> achievementsSharedFlow.tryEmit(RAEvent.OnLeaderboardAttemptStarted(data.getLong()))
             EmulatorEventType.EventRALeaderboardAttemptUpdated -> {
                 val event = RAEvent.OnLeaderboardAttemptUpdated(
@@ -296,12 +296,15 @@ class AndroidEmulatorManager(
         }
 
         withContext(Dispatchers.Default) {
-            MelonEmulator.setupAchievements(
+            val setupSucceeded = MelonEmulator.setupAchievements(
                 achievements = achievementData.lockedAchievements.toTypedArray(),
                 leaderboards = achievementData.leaderboards.toTypedArray(),
                 richPresenceScript = richPresencePath,
                 runtimeConfig = runtimeConfig,
             )
+            if (!setupSucceeded) {
+                throw RetroAchievementsSetupException()
+            }
         }
     }
 
@@ -420,17 +423,6 @@ class AndroidEmulatorManager(
         val payload = ByteArray(safeLength)
         get(payload)
         return String(payload)
-    }
-
-    private fun ByteBuffer.getRuntimeFallbackReason(): RuntimeFallbackReason {
-        return when (getInt()) {
-            1 -> RuntimeFallbackReason.LOGIN_TIMEOUT
-            2 -> RuntimeFallbackReason.LOGIN_FAILED
-            3 -> RuntimeFallbackReason.LOAD_TIMEOUT
-            4 -> RuntimeFallbackReason.LOAD_FAILED
-            5 -> RuntimeFallbackReason.PERFORMANCE
-            else -> RuntimeFallbackReason.UNKNOWN
-        }
     }
 
     private fun getStopReason(internalReason: Int): EmulatorEvent.Stop.Reason? {

@@ -1,7 +1,12 @@
 package me.magnum.melonds.domain.model.retroachievements
 
+enum class RARuntimeBridgeMode(val nativeValue: Int) {
+    RC_CLIENT_ONLINE(1),
+    RC_CLIENT_OFFLINE(2),
+}
+
 data class RARuntimeBridgeConfig(
-    val useRcClientRuntime: Boolean,
+    val runtimeMode: RARuntimeBridgeMode,
     val userAgent: String?,
     val username: String?,
     val apiToken: String?,

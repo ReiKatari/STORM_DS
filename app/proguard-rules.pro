@@ -41,6 +41,7 @@
 -keep class me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievement { *; }
 -keep class me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievementBucketEntry { *; }
 -keep class me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig { *; }
+-keep class me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeMode { *; }
 -keep class me.magnum.melonds.ui.emulator.render.FrameRenderCallback { *; }
 -keep class me.magnum.melonds.ui.emulator.model.VulkanPresentationConfig { *; }
 -keep class me.magnum.melonds.domain.model.layout.BackgroundMode { *; }

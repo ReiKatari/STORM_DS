@@ -3981,22 +3981,77 @@ bool MelonInstance::loadRewindState(RewindSaveState rewindSaveState)
     return result;
 }
 
-void MelonInstance::setupAchievements(
+bool MelonInstance::setupAchievements(
     std::list<RetroAchievements::RAAchievement> achievements,
     std::list<RetroAchievements::RALeaderboard> leaderboards,
     std::optional<std::string> richPresenceScript,
     std::optional<RetroAchievements::RARuntimeBridgeConfig> runtimeBridgeConfig
 )
 {
-    if (instanceId == 0)
+    const auto achievementCount = achievements.size();
+    const auto leaderboardCount = leaderboards.size();
+    const bool hasRuntimeConfig = runtimeBridgeConfig.has_value();
+
+    if (instanceId != 0)
     {
-        retroAchievementsManager->ConfigureRuntimeBridge(std::move(runtimeBridgeConfig));
-        retroAchievementsManager->LoadAchievements(achievements);
-        retroAchievementsManager->LoadLeaderboards(leaderboards);
-        if (richPresenceScript)
-            retroAchievementsManager->SetupRichPresence(*richPresenceScript);
-        retroAchievementsManager->ActivatePreferredRuntime();
+        Log(
+            LogLevel::Warn,
+            "[RAClient] setupAchievements failed reason=non_primary_instance instance_id=%d achievements=%zu leaderboards=%zu runtime_config=%d\n",
+            instanceId,
+            achievementCount,
+            leaderboardCount,
+            hasRuntimeConfig ? 1 : 0
+        );
+        return false;
     }
+
+    retroAchievementsManager->UnloadEverything();
+    retroAchievementsManager->ConfigureRuntimeBridge(std::move(runtimeBridgeConfig));
+
+    if (!retroAchievementsManager->LoadAchievements(std::move(achievements)))
+    {
+        Log(
+            LogLevel::Warn,
+            "[RAClient] setupAchievements failed reason=load_achievements_failed instance_id=%d achievements=%zu leaderboards=%zu runtime_config=%d\n",
+            instanceId,
+            achievementCount,
+            leaderboardCount,
+            hasRuntimeConfig ? 1 : 0
+        );
+        retroAchievementsManager->UnloadEverything();
+        return false;
+    }
+    if (!retroAchievementsManager->LoadLeaderboards(std::move(leaderboards)))
+    {
+        Log(
+            LogLevel::Warn,
+            "[RAClient] setupAchievements failed reason=load_leaderboards_failed instance_id=%d achievements=%zu leaderboards=%zu runtime_config=%d\n",
+            instanceId,
+            achievementCount,
+            leaderboardCount,
+            hasRuntimeConfig ? 1 : 0
+        );
+        retroAchievementsManager->UnloadEverything();
+        return false;
+    }
+    if (richPresenceScript)
+        retroAchievementsManager->SetupRichPresence(*richPresenceScript);
+
+    const bool activated = retroAchievementsManager->ActivatePreferredRuntime();
+    if (!activated)
+    {
+        Log(
+            LogLevel::Warn,
+            "[RAClient] setupAchievements failed reason=activate_runtime_failed instance_id=%d achievements=%zu leaderboards=%zu runtime_config=%d\n",
+            instanceId,
+            achievementCount,
+            leaderboardCount,
+            hasRuntimeConfig ? 1 : 0
+        );
+        retroAchievementsManager->UnloadEverything();
+    }
+
+    return activated;
 }
 
 void MelonInstance::unloadRetroAchievementsData()

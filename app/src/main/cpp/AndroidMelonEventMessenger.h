@@ -27,7 +27,6 @@ public:
     void onRetroAchievementsServerError(std::string api, long relatedId, int result, std::string message) override;
     void onRetroAchievementsDisconnected() override;
     void onRetroAchievementsReconnected() override;
-    void onRetroAchievementsRuntimeFallback(MelonDSAndroid::RetroAchievementsRuntimeFallbackReason reason) override;
 
 private:
     // Event type constants
@@ -46,7 +45,6 @@ private:
     static constexpr int EVENT_RA_SERVER_ERROR = 206;
     static constexpr int EVENT_RA_DISCONNECTED = 207;
     static constexpr int EVENT_RA_RECONNECTED = 208;
-    static constexpr int EVENT_RA_RUNTIME_FALLBACK = 209;
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_STARTED = 210;
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_UPDATED = 211;
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_CANCELED = 212;

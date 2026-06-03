@@ -8,9 +8,15 @@ namespace MelonDSAndroid
 namespace RetroAchievements
 {
 
+enum class RARuntimeBridgeMode
+{
+    RcClientOnline = 1,
+    RcClientOffline = 2,
+};
+
 typedef struct RARuntimeBridgeConfig
 {
-    bool useRcClientRuntime;
+    RARuntimeBridgeMode runtimeMode;
     bool hardcoreEnabled;
     bool unofficialEnabled;
     bool encoreEnabled;

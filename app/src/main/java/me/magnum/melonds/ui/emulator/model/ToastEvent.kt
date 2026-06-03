@@ -29,6 +29,7 @@ sealed class ToastEvent {
     data class RetroAchievementsMode(
         val status: RetroAchievementsModeStatus,
         val offlineNoInternetAtStart: Boolean = false,
+        val hardcoreOfflineDisabled: Boolean = false,
     ) : ToastEvent()
     data class OfflineSoftcorePendingNotice(
         val pendingSoftcoreCount: Int,
