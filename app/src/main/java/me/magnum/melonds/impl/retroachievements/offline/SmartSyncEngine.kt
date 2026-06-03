@@ -42,6 +42,7 @@ class SmartSyncEngine(
 
     private companion object {
         const val RA_TRACE_TAG = "RATrace"
+        const val RA_SUBMISSION_TAG = "RASubmission"
     }
 
     suspend fun syncNow(userId: String, contentId: String): Result<SmartSyncResult> {
@@ -271,8 +272,26 @@ class SmartSyncEngine(
 
         while (true) {
             attempt++
+            logRaSubmission(
+                "smart_sync_award_submit_start",
+                "achievement_id" to achievementId,
+                "submit_path" to "smart_sync_kotlin_api",
+                "expected_api" to "awardachievement",
+                "hardcore" to isHardcore,
+                "attempt" to attempt,
+            )
             val result = raApi.awardAchievement(achievementId, isHardcore)
             result.onSuccess {
+                logRaSubmission(
+                    "smart_sync_award_submit_success",
+                    "achievement_id" to achievementId,
+                    "submit_path" to "smart_sync_kotlin_api",
+                    "expected_api" to "awardachievement",
+                    "hardcore" to isHardcore,
+                    "attempt" to attempt,
+                    "ra_awarded" to it.achievementAwarded,
+                    "remaining" to it.remainingAchievements,
+                )
                 // OK (awarded) OR already unlocked (awarded=false) -> consider acked either way.
                 return Result.success(Unit)
             }
@@ -294,6 +313,15 @@ class SmartSyncEngine(
 
             if (exception is IOException || exception.cause is IOException) {
                 if (attempt >= 5) {
+                    logRaSubmission(
+                        "smart_sync_award_submit_failed",
+                        "achievement_id" to achievementId,
+                        "submit_path" to "smart_sync_kotlin_api",
+                        "expected_api" to "awardachievement",
+                        "hardcore" to isHardcore,
+                        "attempt" to attempt,
+                        "error" to (exception.message ?: exception.javaClass.simpleName),
+                    )
                     logRaTrace(
                         "smart_sync_award_io_exhausted",
                         "achievement_id" to achievementId,
@@ -313,6 +341,15 @@ class SmartSyncEngine(
                 continue
             }
 
+            logRaSubmission(
+                "smart_sync_award_submit_failed",
+                "achievement_id" to achievementId,
+                "submit_path" to "smart_sync_kotlin_api",
+                "expected_api" to "awardachievement",
+                "hardcore" to isHardcore,
+                "attempt" to attempt,
+                "error" to (exception.message ?: exception.javaClass.simpleName),
+            )
             logRaTrace(
                 "smart_sync_award_failed",
                 "achievement_id" to achievementId,
@@ -321,6 +358,21 @@ class SmartSyncEngine(
             )
             return Result.failure(exception)
         }
+    }
+
+    private fun logRaSubmission(eventType: String, vararg fields: Pair<String, Any?>) {
+        val message = buildString {
+            append("event_type=").append(eventType)
+            fields.forEach { (key, value) ->
+                if (value != null) {
+                    append(' ')
+                    append(key)
+                    append('=')
+                    append(value.toString().replace(' ', '_'))
+                }
+            }
+        }
+        Log.i(RA_SUBMISSION_TAG, message)
     }
 
     private fun logRaTrace(eventType: String, vararg fields: Pair<String, Any?>) {

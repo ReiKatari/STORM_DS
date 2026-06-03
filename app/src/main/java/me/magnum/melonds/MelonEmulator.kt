@@ -64,7 +64,7 @@ object MelonEmulator {
         leaderboards: Array<RASimpleLeaderboard>,
         richPresenceScript: String?,
         runtimeConfig: RARuntimeBridgeConfig?,
-    )
+    ): Boolean
 
     external fun unloadRetroAchievementsData()
 

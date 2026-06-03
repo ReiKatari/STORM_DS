@@ -112,7 +112,7 @@ namespace MelonDSAndroid {
     extern void setConfiguration(EmulatorConfiguration emulatorConfiguration);
     extern void setup(AndroidCameraHandler* androidCameraHandler, std::shared_ptr<MelonEventMessenger> androidEventMessenger, u32* screenshotBufferPointer, int instanceId);
     extern void setCodeList(std::list<Cheat> cheats);
-    extern void setupAchievements(
+    extern bool setupAchievements(
         std::list<RetroAchievements::RAAchievement> achievements,
         std::list<RetroAchievements::RALeaderboard> leaderboards,
         std::optional<std::string> richPresenceScript,

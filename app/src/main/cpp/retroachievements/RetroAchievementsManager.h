@@ -40,7 +40,6 @@ public:
     void Reset();
     void FrameUpdate();
 
-    static void CheevosEventHandler(const rc_runtime_event_t* runtime_event);
     static void RcClientEventHandler(const rc_client_event_t* event, rc_client_t* client);
     static void NoopRcClientEventHandler(const rc_client_event_t* event, rc_client_t* client);
     static uint32_t RcClientReadMemory(uint32_t address, uint8_t* buffer, uint32_t numBytes, rc_client_t* client);
@@ -50,12 +49,20 @@ public:
     static std::weak_ptr<MelonEventMessenger> EventMessenger;
 
 private:
+    enum class RuntimeMode
+    {
+        Disabled,
+        RcClientOnline,
+        RcClientOffline,
+    };
+
     bool TryActivateRcClientRuntimeLocked();
     void DeactivateRcClientRuntimeLocked();
-    void NotifyRcClientRuntimeFallbackLocked(RetroAchievementsRuntimeFallbackReason reason);
     void ResetRcClientPerformanceWindowLocked();
     std::string BuildRcClientLoginResponse() const;
+    std::string BuildRcClientResolveHashResponse() const;
     std::string BuildRcClientAchievementSetsResponse() const;
+    std::string BuildRcClientOfflineResponse(const std::string& requestAction) const;
     static std::string BuildRcClientSuccessResponse();
     static std::string BuildRcClientStartSessionResponse();
     static std::string BuildRcClientErrorResponse(const std::string& message);
@@ -66,10 +73,7 @@ private:
     static int ParseIntegerOrDefault(const char* value, int fallbackValue);
     static int ParseLeaderboardScoreByFormat(int format, const char* formatted, int fallbackValue);
 
-    static std::string GetLeaderboardFormattedValue(int leaderboardId, int value);
-
     melonDS::NDS* nds;
-    rc_runtime_t rcheevosRuntime;
     rc_client_t* rcClientRuntime;
     std::mutex runtimeLock;
 
@@ -77,7 +81,7 @@ private:
     std::list<RALeaderboard> loadedLeaderboards;
     bool isRichPresenceEnabled;
     bool isRcClientRuntimeActive;
-    bool hasRcClientPerformanceFallback;
+    RuntimeMode runtimeMode;
     int rcClientSlowWindowCount;
     int rcClientWindowFrameCount;
     int rcClientWindowSlowFrameCount;
@@ -90,8 +94,6 @@ private:
     std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig;
     std::string loadedRichPresenceScript;
 
-    static RetroAchievementsManager* activeInstance;
-    static std::mutex activeInstanceLock;
     static JavaVM* javaVm;
 };
 

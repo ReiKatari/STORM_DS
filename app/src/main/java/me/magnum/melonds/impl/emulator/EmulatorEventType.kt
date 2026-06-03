@@ -92,12 +92,6 @@ enum class EmulatorEventType(val event: Int) {
     EventRAReconnected(208),
 
     /**
-     * RA runtime fallback to legacy. Data:
-     * * fallback reason (`i32`)
-     */
-    EventRARuntimeFallback(209),
-
-    /**
      * RA leaderboard attempt started. Data:
      * * leaderboard ID (`i64`)
      */

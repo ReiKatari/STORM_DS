@@ -180,9 +180,3 @@ void AndroidMelonEventMessenger::onRetroAchievementsReconnected()
 {
     MelonDSAndroid::fireEmulatorEvent(EVENT_RA_RECONNECTED);
 }
-
-void AndroidMelonEventMessenger::onRetroAchievementsRuntimeFallback(MelonDSAndroid::RetroAchievementsRuntimeFallbackReason reason)
-{
-    int32_t reasonInt = (int32_t) reason;
-    MelonDSAndroid::fireEmulatorEvent(EVENT_RA_RUNTIME_FALLBACK, sizeof(reasonInt), &reasonInt);
-}

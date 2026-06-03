@@ -7,15 +7,6 @@
 namespace MelonDSAndroid
 {
 
-enum class RetroAchievementsRuntimeFallbackReason
-{
-    LoginTimeout = 1,
-    LoginFailed = 2,
-    LoadTimeout = 3,
-    LoadFailed = 4,
-    Performance = 5,
-};
-
 class MelonEventMessenger
 {
 public:
@@ -40,7 +31,6 @@ public:
     virtual void onRetroAchievementsServerError(std::string api, long relatedId, int result, std::string message) = 0;
     virtual void onRetroAchievementsDisconnected() = 0;
     virtual void onRetroAchievementsReconnected() = 0;
-    virtual void onRetroAchievementsRuntimeFallback(RetroAchievementsRuntimeFallbackReason reason) = 0;
 };
 
 }

@@ -701,7 +701,8 @@
     <string name="offline_ra_mode_softcore">RetroAchievements mode: Softcore</string>
     <string name="offline_ra_mode_hardcore">RetroAchievements mode: Hardcore</string>
     <string name="offline_ra_mode_softcore_offline">RetroAchievements mode: Softcore Offline</string>
-    <string name="offline_ra_mode_softcore_offline_no_internet_start">Softcore Offline (Hardcore disabled: no Internet).</string>
+    <string name="offline_ra_mode_softcore_offline_hardcore_disabled">Softcore Offline enabled. Hardcore Offline is disabled.</string>
+    <string name="offline_ra_mode_softcore_offline_no_internet_start">RetroAchievements mode: Softcore Offline (no Internet).</string>
     <string name="achievements_loaded">Achievements loaded</string>
     <string name="achievements_unlocked_compact">Unlocked: %1$d/%2$d</string>
     <string name="game_has_no_achievements">This game has no achievements</string>
@@ -709,13 +710,6 @@
     <string name="achievements_failed_load_tip">Make sure you are Online</string>
     <string name="achievements_login_expired">RetroAchievements login expired!</string>
     <string name="achievements_login_expired_tip">Log in again to enable RetroAchievements</string>
-    <string name="ra_runtime_fallback_title">RetroAchievements compatibility mode</string>
-    <string name="ra_runtime_fallback_login_timeout">RetroAchievements took too long to sign in, so this session switched to the compatible runtime. Achievements can still unlock.</string>
-    <string name="ra_runtime_fallback_login_failed">RetroAchievements sign-in was not available, so this session switched to the compatible runtime. Achievements can still unlock.</string>
-    <string name="ra_runtime_fallback_load_timeout">RetroAchievements took too long to load this game, so this session switched to the compatible runtime. Achievements can still unlock.</string>
-    <string name="ra_runtime_fallback_load_failed">RetroAchievements could not finish loading with the newer runtime, so this session switched to the compatible runtime. Achievements can still unlock.</string>
-    <string name="ra_runtime_fallback_performance">RetroAchievements switched to the compatible runtime to keep gameplay smooth. Achievements can still unlock.</string>
-    <string name="ra_runtime_fallback_unknown">RetroAchievements switched to the compatible runtime for this session. Achievements can still unlock.</string>
     <string name="achievement_unlocked">Achievement unlocked!</string>
     <string name="achievement_missable">Missable</string>
     <string name="achievement_missable_description">This achievement can be missed during a playthrough</string>

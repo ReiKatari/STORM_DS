@@ -115,7 +115,7 @@ public:
     bool loadState(Savestate* state);
     RewindWindow getRewindWindow();
     bool loadRewindState(RewindSaveState rewindSaveState);
-    void setupAchievements(
+    bool setupAchievements(
         std::list<RetroAchievements::RAAchievement> achievements,
         std::list<RetroAchievements::RALeaderboard> leaderboards,
         std::optional<std::string> richPresenceScript,

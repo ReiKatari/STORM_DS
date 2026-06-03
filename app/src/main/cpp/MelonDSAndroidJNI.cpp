@@ -929,7 +929,7 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
     MelonDSAndroid::setCodeList(internalCheats);
 }
 
-JNIEXPORT void JNICALL
+JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_setupAchievements(
     JNIEnv* env,
     jobject thiz,
@@ -958,12 +958,13 @@ Java_me_magnum_melonds_MelonEmulator_setupAchievements(
 
     }
 
-    MelonDSAndroid::setupAchievements(
+    const bool setupSucceeded = MelonDSAndroid::setupAchievements(
         internalAchievements,
         internalLeaderboards,
         richPresence,
         internalRuntimeConfig
     );
+    return setupSucceeded ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL

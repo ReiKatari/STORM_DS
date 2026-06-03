@@ -26,11 +26,7 @@ namespace RetroAchievements
 {
 
 std::weak_ptr<MelonEventMessenger> RetroAchievementsManager::EventMessenger;
-RetroAchievementsManager* RetroAchievementsManager::activeInstance = nullptr;
-std::mutex RetroAchievementsManager::activeInstanceLock;
 JavaVM* RetroAchievementsManager::javaVm = nullptr;
-
-unsigned PeekMemory(unsigned address, unsigned numBytes, void* ud);
 
 namespace {
 
@@ -54,12 +50,13 @@ constexpr long long RC_CLIENT_PERF_WINDOW_AVG_US_LIMIT = 2000;
 constexpr long long RC_CLIENT_PERF_WINDOW_PEAK_US_LIMIT = 7000;
 constexpr long long RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT = 50000;
 constexpr int RC_CLIENT_PERF_WINDOW_SLOW_FRAME_COUNT_LIMIT = 12;
-constexpr int RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_FALLBACK = 2;
+constexpr int RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_WARNING = 2;
 constexpr const char* RC_CLIENT_DEFAULT_IMAGE = "https://media.retroachievements.org/Images/000001.png";
 constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "melonDualDS-android/unknown";
 constexpr int RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr int RC_CLIENT_HTTP_READ_TIMEOUT_MS = 15000;
 constexpr size_t RC_CLIENT_MAX_LOGGED_VALUE_LENGTH = 200;
+constexpr size_t RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH = 500;
 
 struct RcClientAsyncResult
 {
@@ -240,6 +237,36 @@ std::string BuildRcClientSanitizedParameters(const rc_api_request_t* request)
         AppendRcClientEncodedParameters(request->post_data, &parameters, &hasAnyParameters);
 
     return hasAnyParameters ? parameters.str() : std::string("<none>");
+}
+
+std::string BuildRcClientLoggedResponseSample(const std::string& requestAction, const std::string& responseBody)
+{
+    if (responseBody.empty())
+        return "<empty>";
+
+    if (requestAction == "login" || requestAction == "login2")
+        return "<redacted-login-response>";
+
+    std::string sanitized;
+    sanitized.reserve(std::min(responseBody.size(), RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH));
+    for (char character : responseBody)
+    {
+        switch (character)
+        {
+            case '\r': sanitized += "\\r"; break;
+            case '\n': sanitized += "\\n"; break;
+            case '\t': sanitized += "\\t"; break;
+            default: sanitized.push_back(character); break;
+        }
+
+        if (sanitized.size() >= RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH)
+            break;
+    }
+
+    if (responseBody.size() > RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH)
+        sanitized += "...(truncated)";
+
+    return sanitized;
 }
 
 std::string ResolveRcClientRequestAction(const rc_api_request_t* request)
@@ -844,13 +871,14 @@ cleanup:
         std::chrono::steady_clock::now() - requestStartedAt
     ).count();
     melonDS::Platform::Log(
-        success ? melonDS::Platform::LogLevel::Info : melonDS::Platform::LogLevel::Warn,
-        "[RAClient] HTTP %s %s status=%d elapsed=%lldms bytes=%zu\n",
+        melonDS::Platform::LogLevel::Warn,
+        "[RAClient] HTTP %s %s status=%d elapsed=%lldms bytes=%zu response_sample=%s\n",
         requestAction.c_str(),
         success ? "completed" : "failed",
         *httpStatusCode,
         elapsedMs,
-        responseBody->size()
+        responseBody->size(),
+        BuildRcClientLoggedResponseSample(requestAction, *responseBody).c_str()
     );
 
     return success;
@@ -860,11 +888,10 @@ cleanup:
 
 RetroAchievementsManager::RetroAchievementsManager(melonDS::NDS* nds) : nds(nds)
 {
-    rc_runtime_init(&rcheevosRuntime);
     rcClientRuntime = nullptr;
     isRichPresenceEnabled = false;
     isRcClientRuntimeActive = false;
-    hasRcClientPerformanceFallback = false;
+    runtimeMode = RuntimeMode::Disabled;
     rcClientSlowWindowCount = 0;
     rcClientWindowFrameCount = 0;
     rcClientWindowSlowFrameCount = 0;
@@ -880,12 +907,10 @@ RetroAchievementsManager::~RetroAchievementsManager()
 {
     std::unique_lock lock(runtimeLock);
     DeactivateRcClientRuntimeLocked();
-    rc_runtime_destroy(&rcheevosRuntime);
 }
 
 void RetroAchievementsManager::SetJavaVm(JavaVM* javaVm)
 {
-    std::lock_guard lock(activeInstanceLock);
     RetroAchievementsManager::javaVm = javaVm;
 }
 
@@ -900,10 +925,6 @@ bool RetroAchievementsManager::LoadAchievements(std::list<RAAchievement> achieve
     std::unique_lock lock(runtimeLock);
 
     for (const auto &achievement : achievements) {
-        int result = rc_runtime_activate_achievement(&rcheevosRuntime, achievement.id, achievement.memoryAddress.c_str(), nullptr, 0);
-        if (result != RC_OK)
-            return false;
-
         loadedAchievements.push_back(achievement);
     }
 
@@ -915,10 +936,6 @@ bool RetroAchievementsManager::LoadLeaderboards(std::list<RALeaderboard> leaderb
     std::unique_lock lock(runtimeLock);
 
     for (auto &leaderboard : leaderboards) {
-        int result = rc_runtime_activate_lboard(&rcheevosRuntime, leaderboard.id, leaderboard.memoryAddress.c_str(), nullptr, 0);
-        if (result != RC_OK)
-            return false;
-
         int rcheevosLeaderboardType = rc_parse_format(leaderboard.format.c_str());
         leaderboard.rcheevosFormat = rcheevosLeaderboardType;
 
@@ -931,7 +948,30 @@ bool RetroAchievementsManager::LoadLeaderboards(std::list<RALeaderboard> leaderb
 bool RetroAchievementsManager::ActivatePreferredRuntime()
 {
     std::unique_lock lock(runtimeLock);
-    return TryActivateRcClientRuntimeLocked();
+
+    if (!runtimeBridgeConfig.has_value())
+    {
+        runtimeMode = RuntimeMode::Disabled;
+        return false;
+    }
+
+    if (!IsRcClientConfiguredLocked())
+    {
+        runtimeMode = RuntimeMode::Disabled;
+        return false;
+    }
+
+    const bool activated = TryActivateRcClientRuntimeLocked();
+    if (!activated)
+    {
+        runtimeMode = RuntimeMode::Disabled;
+        return false;
+    }
+
+    runtimeMode = runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
+        ? RuntimeMode::RcClientOffline
+        : RuntimeMode::RcClientOnline;
+    return true;
 }
 
 void RetroAchievementsManager::UnloadEverything()
@@ -940,18 +980,11 @@ void RetroAchievementsManager::UnloadEverything()
 
     DeactivateRcClientRuntimeLocked();
 
-    for (const auto &achievement : loadedAchievements) {
-        rc_runtime_deactivate_achievement(&rcheevosRuntime, achievement.id);
-    }
-    for (const auto &leaderboard : loadedLeaderboards) {
-        rc_runtime_deactivate_lboard(&rcheevosRuntime, leaderboard.id);
-    }
-
     loadedAchievements.clear();
     loadedLeaderboards.clear();
     loadedRichPresenceScript.clear();
     isRichPresenceEnabled = false;
-    hasRcClientPerformanceFallback = false;
+    runtimeMode = RuntimeMode::Disabled;
     ResetRcClientPerformanceWindowLocked();
 }
 
@@ -960,7 +993,6 @@ void RetroAchievementsManager::SetupRichPresence(std::string richPresenceScript)
     std::unique_lock lock(runtimeLock);
 
     loadedRichPresenceScript = richPresenceScript;
-    rc_runtime_activate_richpresence(&rcheevosRuntime, richPresenceScript.c_str(), nullptr, 0);
     isRichPresenceEnabled = true;
 }
 
@@ -975,13 +1007,7 @@ std::string RetroAchievementsManager::GetRichPresenceStatus()
         return buffer;
     }
 
-    if (!isRichPresenceEnabled)
-        return "";
-
-    char buffer[512];
-    rc_runtime_get_richpresence(&rcheevosRuntime, buffer, 512, PeekMemory, nds, nullptr);
-
-    return buffer;
+    return "";
 }
 
 std::vector<RARuntimeAchievement> RetroAchievementsManager::GetRuntimeAchievements()
@@ -1004,10 +1030,6 @@ std::vector<RARuntimeAchievement> RetroAchievementsManager::GetRuntimeAchievemen
             const rc_client_achievement_t* achievementInfo = rc_client_get_achievement_info(rcClientRuntime, item.id);
             if (achievementInfo)
                 ParseMeasuredProgress(achievementInfo->measured_progress, &runtimeAchievement.value, &runtimeAchievement.target);
-        }
-        else
-        {
-            rc_runtime_get_achievement_measured(&rcheevosRuntime, item.id, &runtimeAchievement.value, &runtimeAchievement.target);
         }
     }
 
@@ -1080,53 +1102,67 @@ bool RetroAchievementsManager::AreSaveStatesAllowed()
     if (!runtimeBridgeConfig.has_value() || !runtimeBridgeConfig->hardcoreEnabled)
         return true;
 
-    const bool hasActiveRuntimeData = IsRcClientRuntimeActiveLocked() || !loadedAchievements.empty() || !loadedLeaderboards.empty();
-    return !hasActiveRuntimeData;
+    if (runtimeMode != RuntimeMode::RcClientOnline)
+        return true;
+
+    return !IsRcClientRuntimeActiveLocked();
 }
 
 bool RetroAchievementsManager::DoSavestate(Savestate* savestate)
 {
     std::unique_lock lock(runtimeLock);
 
-    savestate->Section("RCHV");
     if (savestate->Saving)
     {
-        u32 rcheevosStateSize = IsRcClientRuntimeActiveLocked() ?
-            (u32) rc_client_progress_size(rcClientRuntime) :
-            (u32) rc_runtime_progress_size(&rcheevosRuntime, nullptr);
-        u8* rcheevosStateBuffer = new u8[rcheevosStateSize];
-        int result = IsRcClientRuntimeActiveLocked() ?
-            rc_client_serialize_progress_sized(rcClientRuntime, rcheevosStateBuffer, rcheevosStateSize) :
-            rc_runtime_serialize_progress_sized(rcheevosStateBuffer, rcheevosStateSize, &rcheevosRuntime, nullptr);
+        if (!IsRcClientRuntimeActiveLocked())
+            return true;
+
+        u32 rcheevosStateSize = (u32) rc_client_progress_size(rcClientRuntime);
+        std::vector<u8> rcheevosStateBuffer(rcheevosStateSize);
+        int result = rc_client_serialize_progress_sized(rcClientRuntime, rcheevosStateBuffer.data(), rcheevosStateSize);
         if (result != RC_OK)
         {
-            delete[] rcheevosStateBuffer;
-            return false;
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "savestate: skipping RetroAchievements progress save, serialize failed result=%d\n",
+                result);
+            return true;
         }
 
+        savestate->Section("RCHV");
         savestate->Var32(&rcheevosStateSize);
-        savestate->VarArray(rcheevosStateBuffer, rcheevosStateSize);
-        delete[] rcheevosStateBuffer;
-    }
-    else if (savestate->Error)
-    {
-        // RCHV section was not found
-        return false;
+        savestate->VarArray(rcheevosStateBuffer.data(), rcheevosStateSize);
     }
     else
     {
+        if (!IsRcClientRuntimeActiveLocked())
+            return true;
+
+        if (!savestate->HasSection("RCHV"))
+        {
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "savestate: RetroAchievements progress section missing, loading emulator state without RA progress\n");
+            return true;
+        }
+
+        savestate->Section("RCHV");
+
         u32 rcheevosStateSize;
         savestate->Var32(&rcheevosStateSize);
-        u8* rcheevosStateBuffer = new u8[rcheevosStateSize];
-        savestate->VarArray(rcheevosStateBuffer, rcheevosStateSize);
+        std::vector<u8> rcheevosStateBuffer(rcheevosStateSize);
+        savestate->VarArray(rcheevosStateBuffer.data(), rcheevosStateSize);
 
-        int result = IsRcClientRuntimeActiveLocked() ?
-            rc_client_deserialize_progress_sized(rcClientRuntime, rcheevosStateBuffer, rcheevosStateSize) :
-            rc_runtime_deserialize_progress(&rcheevosRuntime, rcheevosStateBuffer, nullptr);
-        delete[] rcheevosStateBuffer;
+        int result = rc_client_deserialize_progress_sized(rcClientRuntime, rcheevosStateBuffer.data(), rcheevosStateSize);
 
         if (result != RC_OK)
-            return false;
+        {
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "savestate: skipping RetroAchievements progress restore, deserialize failed result=%d\n",
+                result);
+            return true;
+        }
     }
 
     return true;
@@ -1137,8 +1173,6 @@ void RetroAchievementsManager::Reset()
     std::unique_lock lock(runtimeLock);
     if (IsRcClientRuntimeActiveLocked())
         rc_client_reset(rcClientRuntime);
-    else
-        rc_runtime_reset(&rcheevosRuntime);
 }
 
 void RetroAchievementsManager::FrameUpdate()
@@ -1147,7 +1181,7 @@ void RetroAchievementsManager::FrameUpdate()
     if (!lock.owns_lock())
         return;
 
-    if (IsRcClientRuntimeActiveLocked())
+    if ((runtimeMode == RuntimeMode::RcClientOnline || runtimeMode == RuntimeMode::RcClientOffline) && IsRcClientRuntimeActiveLocked())
     {
         const auto frameStart = std::chrono::steady_clock::now();
         const long long frameCpuStartUs = GetCurrentThreadCpuTimeUs();
@@ -1190,11 +1224,17 @@ void RetroAchievementsManager::FrameUpdate()
             else
                 rcClientSlowWindowCount = 0;
 
-            if (rcClientSlowWindowCount >= RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_FALLBACK)
+            if (
+                rcClientSlowWindowCount >= RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_WARNING &&
+                (
+                    rcClientSlowWindowCount == RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_WARNING ||
+                    rcClientSlowWindowCount % 10 == 0
+                )
+            )
             {
                 melonDS::Platform::Log(
                     melonDS::Platform::LogLevel::Warn,
-                    "[RAClient] Falling back to legacy runtime due to sustained CPU cost (cpuAvg=%lldus cpuPeak=%lldus cpuSlowFrames=%d/%d wallAvg=%lldus wallPeak=%lldus wallSlowFrames=%d/%d)\n",
+                    "[RAClient] Sustained rc_client CPU cost detected; keeping rc_client active (cpuAvg=%lldus cpuPeak=%lldus cpuSlowFrames=%d/%d wallAvg=%lldus wallPeak=%lldus wallSlowFrames=%d/%d slowWindows=%d)\n",
                     avgCpuUs,
                     rcClientWindowCpuPeakUs,
                     rcClientWindowCpuSlowFrameCount,
@@ -1202,11 +1242,9 @@ void RetroAchievementsManager::FrameUpdate()
                     avgWallUs,
                     rcClientWindowPeakUs,
                     rcClientWindowSlowFrameCount,
-                    rcClientWindowFrameCount
+                    rcClientWindowFrameCount,
+                    rcClientSlowWindowCount
                 );
-                hasRcClientPerformanceFallback = true;
-                NotifyRcClientRuntimeFallbackLocked(RetroAchievementsRuntimeFallbackReason::Performance);
-                DeactivateRcClientRuntimeLocked();
             }
             else if (rcClientWindowPeakUs > RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT)
             {
@@ -1225,80 +1263,6 @@ void RetroAchievementsManager::FrameUpdate()
             }
 
             ResetRcClientPerformanceWindowLocked();
-        }
-    }
-
-    if (!IsRcClientRuntimeActiveLocked())
-    {
-        std::unique_lock instanceLock(activeInstanceLock);
-        activeInstance = this;
-        rc_runtime_do_frame(&rcheevosRuntime, &CheevosEventHandler, &PeekMemory, nds, nullptr);
-        activeInstance = nullptr;
-    }
-}
-
-void RetroAchievementsManager::CheevosEventHandler(const rc_runtime_event_t* runtime_event)
-{
-    auto eventMessenger = RetroAchievementsManager::EventMessenger.lock();
-    if (!eventMessenger)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "[RAClient] runtime_event_dropped path=legacy reason=no_messenger type=%d id=%u\n",
-            runtime_event ? (int) runtime_event->type : -1,
-            runtime_event ? runtime_event->id : 0u
-        );
-        return;
-    }
-
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "[RAClient] runtime_event_received path=legacy type=%d id=%u\n",
-        (int) runtime_event->type,
-        runtime_event->id
-    );
-
-    switch (runtime_event->type)
-    {
-        case RC_RUNTIME_EVENT_ACHIEVEMENT_TRIGGERED:
-            eventMessenger->onAchievementTriggered(runtime_event->id);
-            break;
-        case RC_RUNTIME_EVENT_ACHIEVEMENT_PRIMED:
-            eventMessenger->onAchievementPrimed(runtime_event->id);
-            break;
-        case RC_RUNTIME_EVENT_ACHIEVEMENT_UNPRIMED:
-            eventMessenger->onAchievementUnprimed(runtime_event->id);
-            break;
-        case RC_RUNTIME_EVENT_ACHIEVEMENT_PROGRESS_UPDATED:
-            unsigned int value;
-            unsigned int target;
-
-            rc_runtime_get_achievement_measured(&activeInstance->rcheevosRuntime, runtime_event->id, &value, &target);
-            // Do not notify of achievements with no progress. Weird, but it happens
-            if (value > 0)
-            {
-                char buffer[32];
-                rc_runtime_format_achievement_measured(&activeInstance->rcheevosRuntime, runtime_event->id, buffer, sizeof(buffer));
-                eventMessenger->onAchievementProgressUpdated(runtime_event->id, value, target, buffer);
-            }
-            break;
-        case RC_RUNTIME_EVENT_LBOARD_STARTED:
-            eventMessenger->onLeaderboardAttemptStarted(runtime_event->id);
-            break;
-        case RC_RUNTIME_EVENT_LBOARD_CANCELED:
-            eventMessenger->onLeaderboardAttemptCanceled(runtime_event->id);
-            break;
-        case RC_RUNTIME_EVENT_LBOARD_TRIGGERED:
-        {
-            std::string formattedValue = GetLeaderboardFormattedValue(runtime_event->id, runtime_event->value);
-            eventMessenger->onLeaderboardAttemptCompleted(runtime_event->id, runtime_event->value, formattedValue);
-            break;
-        }
-        case RC_RUNTIME_EVENT_LBOARD_UPDATED:
-        {
-            std::string formattedValue = GetLeaderboardFormattedValue(runtime_event->id, runtime_event->value);
-            eventMessenger->onLeaderboardAttemptUpdated(runtime_event->id, formattedValue);
-            break;
         }
     }
 }
@@ -1527,13 +1491,42 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         std::string();
     const std::string requestAction = ResolveRcClientRequestAction(request);
     const std::string requestParameters = BuildRcClientSanitizedParameters(request);
+
+    const bool useOfflineTransport =
+        manager->runtimeBridgeConfig.has_value() &&
+        manager->runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline;
+    if (useOfflineTransport)
+    {
+        responseBody = manager->BuildRcClientOfflineResponse(requestAction);
+        httpStatus = 200;
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RARequest] source=rc_client_offline action=%s method=%s user_agent=%s url=%s params=%s response_bytes=%zu response_sample=%s\n",
+            requestAction.c_str(),
+            ResolveRcClientRequestMethod(request),
+            runtimeUserAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : runtimeUserAgent.c_str(),
+            request && request->url ? request->url : "",
+            requestParameters.c_str(),
+            responseBody.size(),
+            BuildRcClientLoggedResponseSample(requestAction, responseBody).c_str()
+        );
+
+        rc_api_server_response_t serverResponse = {
+            .body = responseBody.c_str(),
+            .body_length = responseBody.length(),
+            .http_status_code = httpStatus,
+        };
+        callback(&serverResponse, callbackData);
+        return;
+    }
+
     melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
+        melonDS::Platform::LogLevel::Warn,
         "[RARequest] source=rc_client_http action=%s method=%s user_agent=%s url=%s params=%s\n",
         requestAction.c_str(),
         ResolveRcClientRequestMethod(request),
         runtimeUserAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : runtimeUserAgent.c_str(),
-        request->url ? request->url : "",
+        request && request->url ? request->url : "",
         requestParameters.c_str()
     );
     const bool requestSucceeded = ExecuteRcClientHttpRequest(
@@ -1570,9 +1563,6 @@ void RetroAchievementsManager::RcClientLogCallback(const char* message, const rc
 bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
 {
     DeactivateRcClientRuntimeLocked();
-
-    if (hasRcClientPerformanceFallback)
-        return false;
 
     if (!IsRcClientConfiguredLocked())
         return false;
@@ -1641,10 +1631,12 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
 
     if (!loginSucceeded)
     {
-        NotifyRcClientRuntimeFallbackLocked(
-            loginWaitResult.timedOut ?
-                RetroAchievementsRuntimeFallbackReason::LoginTimeout :
-                RetroAchievementsRuntimeFallbackReason::LoginFailed
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RAClient] rc_client activation failed stage=login timedOut=%d result=%d error=%s\n",
+            loginWaitResult.timedOut ? 1 : 0,
+            loginWaitResult.result,
+            loginWaitResult.errorMessage.c_str()
         );
         DeactivateRcClientRuntimeLocked();
         return false;
@@ -1678,10 +1670,12 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
 
     if (!loadSucceeded)
     {
-        NotifyRcClientRuntimeFallbackLocked(
-            loadWaitResult.timedOut ?
-                RetroAchievementsRuntimeFallbackReason::LoadTimeout :
-                RetroAchievementsRuntimeFallbackReason::LoadFailed
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RAClient] rc_client activation failed stage=load_game timedOut=%d result=%d error=%s\n",
+            loadWaitResult.timedOut ? 1 : 0,
+            loadWaitResult.result,
+            loadWaitResult.errorMessage.c_str()
         );
         DeactivateRcClientRuntimeLocked();
         return false;
@@ -1691,7 +1685,13 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
     if (isRcClientRuntimeActive)
         rc_client_set_allow_background_memory_reads(rcClientRuntime, 0);
     if (!isRcClientRuntimeActive)
-        NotifyRcClientRuntimeFallbackLocked(RetroAchievementsRuntimeFallbackReason::LoadFailed);
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RAClient] rc_client activation failed stage=load_game reason=game_not_loaded\n"
+        );
+        DeactivateRcClientRuntimeLocked();
+    }
     return isRcClientRuntimeActive;
 }
 
@@ -1709,15 +1709,6 @@ void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
     isRcClientRuntimeActive = false;
     rcClientSlowWindowCount = 0;
     ResetRcClientPerformanceWindowLocked();
-}
-
-void RetroAchievementsManager::NotifyRcClientRuntimeFallbackLocked(RetroAchievementsRuntimeFallbackReason reason)
-{
-    auto eventMessenger = RetroAchievementsManager::EventMessenger.lock();
-    if (!eventMessenger)
-        return;
-
-    eventMessenger->onRetroAchievementsRuntimeFallback(reason);
 }
 
 void RetroAchievementsManager::ResetRcClientPerformanceWindowLocked()
@@ -1745,6 +1736,15 @@ std::string RetroAchievementsManager::BuildRcClientLoginResponse() const
              << "\"SoftcoreScore\":0,"
              << "\"Messages\":0,"
              << "\"AvatarUrl\":\"\"}";
+    return response.str();
+}
+
+std::string RetroAchievementsManager::BuildRcClientResolveHashResponse() const
+{
+    const auto gameId = (runtimeBridgeConfig && runtimeBridgeConfig->gameId > 0) ? runtimeBridgeConfig->gameId : 1;
+
+    std::ostringstream response;
+    response << "{\"Success\":true,\"GameID\":" << gameId << "}";
     return response.str();
 }
 
@@ -1819,6 +1819,32 @@ std::string RetroAchievementsManager::BuildRcClientAchievementSetsResponse() con
     return response.str();
 }
 
+std::string RetroAchievementsManager::BuildRcClientOfflineResponse(const std::string& requestAction) const
+{
+    if (requestAction == "login2" || requestAction == "login")
+        return BuildRcClientLoginResponse();
+
+    if (requestAction == "gameid")
+        return BuildRcClientResolveHashResponse();
+
+    if (requestAction == "achievementsets")
+        return BuildRcClientAchievementSetsResponse();
+
+    if (requestAction == "startsession")
+        return BuildRcClientStartSessionResponse();
+
+    if (requestAction == "ping")
+        return BuildRcClientSuccessResponse();
+
+    if (requestAction == "awardachievement")
+        return BuildRcClientSuccessResponse();
+
+    if (requestAction == "submitlbentry")
+        return BuildRcClientErrorResponse("Offline leaderboard submission disabled");
+
+    return BuildRcClientErrorResponse("Offline RetroAchievements request not available: " + requestAction);
+}
+
 std::string RetroAchievementsManager::BuildRcClientSuccessResponse()
 {
     return "{\"Success\":true}";
@@ -1837,7 +1863,10 @@ std::string RetroAchievementsManager::BuildRcClientErrorResponse(const std::stri
 bool RetroAchievementsManager::IsRcClientConfiguredLocked() const
 {
     return runtimeBridgeConfig.has_value() &&
-        runtimeBridgeConfig->useRcClientRuntime &&
+        (
+            runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOnline ||
+            runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
+        ) &&
         !runtimeBridgeConfig->username.empty() &&
         !runtimeBridgeConfig->apiToken.empty() &&
         !runtimeBridgeConfig->gameHash.empty();
@@ -2084,42 +2113,6 @@ int RetroAchievementsManager::ParseLeaderboardScoreByFormat(int format, const ch
         default:
             return ParseIntegerOrDefault(formatted, fallbackValue);
     }
-}
-
-std::string RetroAchievementsManager::GetLeaderboardFormattedValue(int leaderboardId, int value)
-{
-    if (!activeInstance)
-        return {};
-
-    auto leaderboard = std::find_if(
-        activeInstance->loadedLeaderboards.begin(),
-        activeInstance->loadedLeaderboards.end(),
-        [=](const RALeaderboard& leaderboard) { return leaderboard.id == leaderboardId; }
-    );
-    char buffer[32];
-    if (leaderboard != activeInstance->loadedLeaderboards.end())
-        rc_runtime_format_lboard_value(buffer, sizeof(buffer), value, leaderboard->rcheevosFormat);
-    else
-        buffer[0] = '\0';
-
-    return buffer;
-}
-
-unsigned PeekMemory(unsigned address, unsigned numBytes, void* ud)
-{
-    NDS* nds = (NDS*) ud;
-
-    if (!nds)
-        return 0;
-
-    uint8_t bytes[4] = { 0 };
-    unsigned bytesRead = ReadMemoryRange(nds, address, bytes, std::min(numBytes, 4u));
-
-    unsigned value = 0;
-    for (unsigned i = 0; i < bytesRead; i++)
-        value |= (unsigned(bytes[i]) << (i * 8));
-
-    return value;
 }
 
 }

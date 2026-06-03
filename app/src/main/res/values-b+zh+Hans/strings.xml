@@ -649,7 +649,7 @@
     <string name="offline_ra_mode_softcore">RetroAchievements 模式：软核</string>
     <string name="offline_ra_mode_hardcore">RetroAchievements 模式：硬核</string>
     <string name="offline_ra_mode_softcore_offline">RetroAchievements 模式：离线软核</string>
-    <string name="offline_ra_mode_softcore_offline_no_internet_start">离线软核（硬核已禁用：无互联网连接）。</string>
+    <string name="offline_ra_mode_softcore_offline_no_internet_start">RetroAchievements 模式：离线软核（无互联网连接）。</string>
     <string name="achievements_loaded">成就已加载</string>
     <string name="achievements_unlocked_compact">已解锁：%1$d/%2$d</string>
     <string name="game_has_no_achievements">此游戏没有成就</string>
@@ -657,13 +657,6 @@
     <string name="achievements_failed_load_tip">确保您已联网</string>
     <string name="achievements_login_expired">RetroAchievements 登录已过期！</string>
     <string name="achievements_login_expired_tip">重新登录以启用 RetroAchievements</string>
-    <string name="ra_runtime_fallback_title">RetroAchievements 运行时回退</string>
-    <string name="ra_runtime_fallback_login_timeout">rc_client 登录超时。本次会话已切换到旧版运行时。</string>
-    <string name="ra_runtime_fallback_login_failed">rc_client 登录失败。本次会话已切换到旧版运行时。</string>
-    <string name="ra_runtime_fallback_load_timeout">rc_client 游戏加载超时。本次会话已切换到旧版运行时。</string>
-    <string name="ra_runtime_fallback_load_failed">rc_client 游戏加载失败。本次会话已切换到旧版运行时。</string>
-    <string name="ra_runtime_fallback_performance">rc_client 对本设备/会话开销过高。本次会话已切换到旧版运行时。</string>
-    <string name="ra_runtime_fallback_unknown">rc_client 不可用。本次会话已切换到旧版运行时。</string>
     <string name="achievement_unlocked">成就已解锁！</string>
     <string name="achievement_missable">可能错过</string>
     <string name="achievement_missable_description">在闯关过程中可能会错过该成就</string>

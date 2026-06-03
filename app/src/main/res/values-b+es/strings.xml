@@ -303,6 +303,8 @@
     <string name="retro_achievements_tab">Retro&#8203;Achievements</string> <!-- Mantén las palabras separadas para ayudar con el ajuste de palabras -->
     <string name="offline_ra_softcore_enabled">Activar RetroAchievements Softcore offline</string>
     <string name="offline_ra_softcore_enabled_summary">Guarda desbloqueos Softcore localmente cuando RetroAchievements no puede enviarlos en línea.</string>
+    <string name="offline_ra_mode_softcore_offline_hardcore_disabled">Softcore offline activado. Hardcore offline está desactivado.</string>
+    <string name="offline_ra_mode_softcore_offline_no_internet_start">Modo RetroAchievements: Softcore offline (sin Internet).</string>
 
     <string name="theme_option_light">Claro</string>
     <string name="theme_option_dark">Oscuro</string>

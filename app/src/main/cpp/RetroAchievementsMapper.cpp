@@ -104,6 +104,53 @@ std::optional<long> getOptionalLongField(JNIEnv* env, jobject sourceObject, jfie
     return longValue;
 }
 
+std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeMode> getRuntimeBridgeModeField(JNIEnv* env, jobject sourceObject, jfieldID fieldId)
+{
+    if (fieldId == nullptr)
+        return std::nullopt;
+
+    auto value = (jobject) env->GetObjectField(sourceObject, fieldId);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return std::nullopt;
+    }
+
+    if (value == nullptr)
+        return std::nullopt;
+
+    jclass modeClass = env->GetObjectClass(value);
+    if (modeClass == nullptr || env->ExceptionCheck())
+    {
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+        env->DeleteLocalRef(value);
+        return std::nullopt;
+    }
+
+    jfieldID nativeValueField = getFieldIdOrNull(env, modeClass, "nativeValue", "I");
+    if (nativeValueField == nullptr)
+    {
+        env->DeleteLocalRef(modeClass);
+        env->DeleteLocalRef(value);
+        return std::nullopt;
+    }
+
+    const int nativeValue = env->GetIntField(value, nativeValueField);
+    env->DeleteLocalRef(modeClass);
+    env->DeleteLocalRef(value);
+
+    switch (nativeValue)
+    {
+        case 1:
+            return MelonDSAndroid::RetroAchievements::RARuntimeBridgeMode::RcClientOnline;
+        case 2:
+            return MelonDSAndroid::RetroAchievements::RARuntimeBridgeMode::RcClientOffline;
+        default:
+            return std::nullopt;
+    }
+}
+
 }
 
 void mapAchievementsFromJava(JNIEnv *env, jobjectArray javaAchievements, std::list<MelonDSAndroid::RetroAchievements::RAAchievement> &outputList)
@@ -203,7 +250,7 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
             env->ExceptionClear();
         return std::nullopt;
     }
-    jfieldID useRcClientRuntimeField = getFieldIdOrNull(env, runtimeConfigClass, "useRcClientRuntime", "Z");
+    jfieldID runtimeModeField = getFieldIdOrNull(env, runtimeConfigClass, "runtimeMode", "Lme/magnum/melonds/domain/model/retroachievements/RARuntimeBridgeMode;");
     jfieldID userAgentField = getFieldIdOrNull(env, runtimeConfigClass, "userAgent", "Ljava/lang/String;");
     jfieldID usernameField = getFieldIdOrNull(env, runtimeConfigClass, "username", "Ljava/lang/String;");
     jfieldID apiTokenField = getFieldIdOrNull(env, runtimeConfigClass, "apiToken", "Ljava/lang/String;");
@@ -213,7 +260,7 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
     jfieldID unofficialEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "unofficialEnabled", "Z");
     jfieldID encoreEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "encoreEnabled", "Z");
 
-    if (useRcClientRuntimeField == nullptr ||
+    if (runtimeModeField == nullptr ||
         userAgentField == nullptr ||
         usernameField == nullptr ||
         apiTokenField == nullptr ||
@@ -227,8 +274,15 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
         return std::nullopt;
     }
 
+    auto runtimeMode = getRuntimeBridgeModeField(env, javaRuntimeConfig, runtimeModeField);
+    if (!runtimeMode.has_value())
+    {
+        env->DeleteLocalRef(runtimeConfigClass);
+        return std::nullopt;
+    }
+
     MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig runtimeBridgeConfig = {
-        .useRcClientRuntime = env->GetBooleanField(javaRuntimeConfig, useRcClientRuntimeField) == JNI_TRUE,
+        .runtimeMode = runtimeMode.value(),
         .hardcoreEnabled = env->GetBooleanField(javaRuntimeConfig, hardcoreEnabledField) == JNI_TRUE,
         .unofficialEnabled = env->GetBooleanField(javaRuntimeConfig, unofficialEnabledField) == JNI_TRUE,
         .encoreEnabled = env->GetBooleanField(javaRuntimeConfig, encoreEnabledField) == JNI_TRUE,

@@ -12,12 +12,14 @@ class EmulatorSession {
 
     private var areRetroAchievementsEnabled = false
     private var sessionHasAchievements = false
+    private var retroAchievementsOfflineModeEnabled = false
     private var sessionType: SessionType? = null
 
     fun startSession(areRetroAchievementsEnabled: Boolean, isRetroAchievementsHardcoreModeEnabled: Boolean, sessionType: SessionType) {
         this.areRetroAchievementsEnabled = areRetroAchievementsEnabled
         // Hardcore mode can only be enabled if RetroAchievements are available when the session starts
         this.isRetroAchievementsHardcoreModeEnabled = areRetroAchievementsEnabled && isRetroAchievementsHardcoreModeEnabled
+        this.retroAchievementsOfflineModeEnabled = false
         this.sessionType = sessionType
     }
 
@@ -25,6 +27,7 @@ class EmulatorSession {
         areRetroAchievementsEnabled = false
         isRetroAchievementsHardcoreModeEnabled = false
         sessionHasAchievements = false
+        retroAchievementsOfflineModeEnabled = false
         sessionType = null
     }
 
@@ -50,6 +53,13 @@ class EmulatorSession {
 
     fun updateRetroAchievementsIntegrationStatus(integrationStatus: GameAchievementData.IntegrationStatus) {
         sessionHasAchievements = integrationStatus == GameAchievementData.IntegrationStatus.ENABLED_FULL
+        if (!sessionHasAchievements) {
+            retroAchievementsOfflineModeEnabled = false
+        }
+    }
+
+    fun updateRetroAchievementsOfflineModeEnabled(enabled: Boolean) {
+        retroAchievementsOfflineModeEnabled = enabled && areRetroAchievementsEnabled()
     }
 
     fun isRetroAchievementsEnabledForSession(): Boolean {
@@ -60,19 +70,22 @@ class EmulatorSession {
         return areRetroAchievementsEnabled && sessionHasAchievements
     }
 
+    fun isRetroAchievementsOfflineModeEnabled(): Boolean {
+        return areRetroAchievementsEnabled() && retroAchievementsOfflineModeEnabled
+    }
+
     fun areLeaderboardsEnabled(): Boolean {
         // Leaderboards are only enabled in RetroAchievements hardcore mode
         return isRetroAchievementsHardcoreModeEnabled
     }
 
     fun areSaveStatesAllowed(): Boolean {
-        // Saving save-states is allowed; only save-state loading is blocked in RA hardcore mode.
         return true
     }
 
     fun areSaveStateLoadsAllowed(): Boolean {
-        // Cannot load save-states when RA hardcore is enabled
-        return !isRetroAchievementsHardcoreModeEnabled || !areRetroAchievementsEnabled
+        // Cannot load save-states when RA hardcore is enabled.
+        return !isRetroAchievementsHardcoreModeEnabled || !areRetroAchievementsEnabled()
     }
 
     fun areCheatsEnabled(): Boolean {

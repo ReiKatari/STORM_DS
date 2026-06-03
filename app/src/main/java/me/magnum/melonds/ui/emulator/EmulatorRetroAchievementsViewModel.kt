@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.model.retroachievements.RAEvent
 import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
+import me.magnum.melonds.domain.model.retroachievements.RAUserGameData
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -13,6 +14,7 @@ import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.impl.emulator.EmulatorSession
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerIntegrity
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerRepository
+import me.magnum.melonds.impl.system.NetworkStatusProvider
 import me.magnum.melonds.ui.common.achievements.ui.model.AchievementUiModel
 import me.magnum.melonds.ui.common.achievements.viewmodel.RetroAchievementsViewModel
 import me.magnum.melonds.ui.emulator.component.RetroAchievementsSubmissionHandler
@@ -29,6 +31,7 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
     private val offlineLedgerRepository: OfflineLedgerRepository,
     private val emulatorSession: EmulatorSession,
     private val emulatorManager: EmulatorManager,
+    private val networkStatusProvider: NetworkStatusProvider,
     private val achievementsSubmissionHandler: RetroAchievementsSubmissionHandler,
 ) : RetroAchievementsViewModel(retroAchievementsRepository, settingsRepository) {
 
@@ -86,6 +89,14 @@ class EmulatorRetroAchievementsViewModel @Inject constructor(
         return retroAchievementsRepository.getRuntimeSubsetIds()
             .withIndex()
             .associate { it.value to it.index }
+    }
+
+    override suspend fun getUserGameData(rom: Rom, forHardcoreMode: Boolean): Result<RAUserGameData?> {
+        if (emulatorSession.isRetroAchievementsOfflineModeEnabled() || !networkStatusProvider.isLikelyOnline()) {
+            return retroAchievementsRepository.getCachedUserGameData(rom.retroAchievementsHash, forHardcoreMode)
+        }
+
+        return super.getUserGameData(rom, forHardcoreMode)
     }
 
     override suspend fun buildAchievementBuckets(

@@ -716,7 +716,9 @@ class EmulatorActivity : AppCompatActivity() {
                                     getString(R.string.offline_ra_mode_hardcore)
                                 }
                                 ToastEvent.RetroAchievementsModeStatus.SOFTCORE_OFFLINE -> {
-                                    if (it.offlineNoInternetAtStart) {
+                                    if (it.hardcoreOfflineDisabled) {
+                                        getString(R.string.offline_ra_mode_softcore_offline_hardcore_disabled)
+                                    } else if (it.offlineNoInternetAtStart) {
                                         getString(R.string.offline_ra_mode_softcore_offline_no_internet_start)
                                     } else {
                                         getString(R.string.offline_ra_mode_softcore_offline)

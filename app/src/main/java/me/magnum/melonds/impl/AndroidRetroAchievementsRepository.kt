@@ -67,6 +67,7 @@ class AndroidRetroAchievementsRepository(
         const val PENDING_ACHIEVEMENT_SUBMISSION_WORKER_NAME = "ra_pending_achievement_submission_worker"
         const val RA_UNOFFICIAL_ENABLED = "ra_unofficial_enabled"
         const val RA_TRACE_TAG = "RATrace"
+        const val RA_SUBMISSION_TAG = "RASubmission"
     }
 
     override fun observeKnownAchievementHashes() = retroAchievementsDao.observeAllGameHashes()
@@ -221,13 +222,26 @@ class AndroidRetroAchievementsRepository(
     }
 
     override suspend fun awardAchievement(achievement: RAAchievement, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {
-        return submitAchievementAward(achievement.id, achievement.gameId, forHardcoreMode).onFailure {
+        val result = submitAchievementAward(achievement.id, achievement.gameId, forHardcoreMode)
+        if (result.isFailure && !forHardcoreMode) {
             scheduleAchievementSubmissionJob()
         }
+        return result
     }
 
     override suspend fun submitPendingAchievements(): Result<Unit> {
         retroAchievementsDao.getPendingAchievementSubmissions().forEach {
+            if (it.forHardcoreMode) {
+                retroAchievementsDao.removePendingAchievementSubmission(it)
+                logRaTrace(
+                    "pending_award_hardcore_discarded",
+                    "achievement_id" to it.achievementId,
+                    "game_id" to it.gameId,
+                    "hardcore" to true,
+                )
+                return@forEach
+            }
+
             logRaTrace(
                 "pending_award_retry_attempt",
                 "achievement_id" to it.achievementId,
@@ -328,16 +342,27 @@ class AndroidRetroAchievementsRepository(
     }
 
     private suspend fun submitAchievementAward(achievementId: Long, gameId: RAGameId, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {
-        // Award the achievement immediately locally
         val userAchievement = RAUserAchievementEntity(
             gameId = gameId.id,
             achievementId = achievementId,
             isUnlocked = true,
             isHardcore = forHardcoreMode,
         )
-        retroAchievementsDao.addUserAchievement(userAchievement)
+        if (!forHardcoreMode) {
+            // Softcore can be reflected locally before submission because failed awards are persisted for retry.
+            retroAchievementsDao.addUserAchievement(userAchievement)
+        }
 
         val gameHash = retroAchievementsDao.getAnyGameHashForGameId(gameId.id)
+        logRaSubmission(
+            "kotlin_award_submit_start",
+            "achievement_id" to achievementId,
+            "submit_path" to "kotlin_api",
+            "expected_api" to "awardachievement",
+            "game_id" to gameId.id,
+            "game_hash" to gameHash,
+            "hardcore" to forHardcoreMode,
+        )
         logRaTrace(
             "achievement_submit_attempt",
             "achievement_id" to achievementId,
@@ -347,6 +372,20 @@ class AndroidRetroAchievementsRepository(
         )
 
         return raApi.awardAchievement(achievementId, forHardcoreMode, gameHash).onSuccess { response ->
+            if (forHardcoreMode) {
+                retroAchievementsDao.addUserAchievement(userAchievement)
+            }
+            logRaSubmission(
+                "kotlin_award_submit_success",
+                "achievement_id" to achievementId,
+                "submit_path" to "kotlin_api",
+                "expected_api" to "awardachievement",
+                "game_id" to gameId.id,
+                "game_hash" to gameHash,
+                "hardcore" to forHardcoreMode,
+                "ra_awarded" to response.achievementAwarded,
+                "remaining" to response.remainingAchievements,
+            )
             logRaTrace(
                 "achievement_submit_success",
                 "achievement_id" to achievementId,
@@ -355,6 +394,16 @@ class AndroidRetroAchievementsRepository(
                 "awarded" to response.achievementAwarded,
             )
         }.onFailure { error ->
+            logRaSubmission(
+                "kotlin_award_submit_failed",
+                "achievement_id" to achievementId,
+                "submit_path" to "kotlin_api",
+                "expected_api" to "awardachievement",
+                "game_id" to gameId.id,
+                "game_hash" to gameHash,
+                "hardcore" to forHardcoreMode,
+                "error" to (error.message ?: error.javaClass.simpleName),
+            )
             logRaTrace(
                 "achievement_submit_failed",
                 "achievement_id" to achievementId,
@@ -362,19 +411,42 @@ class AndroidRetroAchievementsRepository(
                 "hardcore" to forHardcoreMode,
                 "error" to (error::class.simpleName ?: "Unknown"),
             )
-            // On failure, insert it into the pending achievements to be re-submitted later
-            val pendingAchievementSubmissionEntity = RAPendingAchievementSubmissionEntity(
-                achievementId = achievementId,
-                gameId = gameId.id,
-                forHardcoreMode = forHardcoreMode,
-            )
-            retroAchievementsDao.addPendingAchievementSubmission(pendingAchievementSubmissionEntity)
-            logRaTrace(
-                "achievement_submit_queued_pending",
-                "achievement_id" to achievementId,
-                "game_id" to gameId.id,
-                "hardcore" to forHardcoreMode,
-            )
+            if (!forHardcoreMode) {
+                // Softcore submissions can be persisted for later retry. Hardcore retries are session-memory only.
+                val pendingAchievementSubmissionEntity = RAPendingAchievementSubmissionEntity(
+                    achievementId = achievementId,
+                    gameId = gameId.id,
+                    forHardcoreMode = false,
+                )
+                retroAchievementsDao.addPendingAchievementSubmission(pendingAchievementSubmissionEntity)
+                logRaSubmission(
+                    "kotlin_award_queued_pending",
+                    "achievement_id" to achievementId,
+                    "submit_path" to "pending_submission_worker",
+                    "game_id" to gameId.id,
+                    "hardcore" to false,
+                )
+                logRaTrace(
+                    "achievement_submit_queued_pending",
+                    "achievement_id" to achievementId,
+                    "game_id" to gameId.id,
+                    "hardcore" to false,
+                )
+            } else {
+                logRaSubmission(
+                    "kotlin_award_hardcore_not_persisted",
+                    "achievement_id" to achievementId,
+                    "submit_path" to "hardcore_memory_queue",
+                    "game_id" to gameId.id,
+                    "hardcore" to true,
+                )
+                logRaTrace(
+                    "achievement_submit_hardcore_not_persisted",
+                    "achievement_id" to achievementId,
+                    "game_id" to gameId.id,
+                    "hardcore" to true,
+                )
+            }
         }
     }
 
@@ -532,6 +604,21 @@ class AndroidRetroAchievementsRepository(
             .build()
 
         WorkManager.getInstance(context).enqueueUniqueWork(PENDING_ACHIEVEMENT_SUBMISSION_WORKER_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, workRequest)
+    }
+
+    private fun logRaSubmission(eventType: String, vararg fields: Pair<String, Any?>) {
+        val message = buildString {
+            append("event_type=").append(eventType)
+            fields.forEach { (key, value) ->
+                if (value != null) {
+                    append(' ')
+                    append(key)
+                    append('=')
+                    append(value.toString().replace(' ', '_'))
+                }
+            }
+        }
+        Log.i(RA_SUBMISSION_TAG, message)
     }
 
     private fun logRaTrace(eventType: String, vararg fields: Pair<String, Any?>) {
