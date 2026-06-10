@@ -26,6 +26,7 @@ internal enum class RendererDebugCaptureKind {
     COMP4_BOTTOM_PLACEHOLDER,
     CAPTURE_FALLBACK_MASK,
     SOFT_PACKED_FRAME_META_JSON,
+    COMPOSITED_FRAME,
     RENDERER3D_FRAME,
     RENDERER3D_CAPTURE_FRAME,
     RENDERER3D_DEPTH,
@@ -49,6 +50,7 @@ internal object RendererDebugCapturePresets {
         RendererDebugCaptureKind.COMP4_BOTTOM_PLACEHOLDER,
         RendererDebugCaptureKind.CAPTURE_FALLBACK_MASK,
         RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON,
+        RendererDebugCaptureKind.COMPOSITED_FRAME,
         RendererDebugCaptureKind.RENDERER3D_FRAME,
         RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME,
     )
@@ -545,6 +547,24 @@ internal object RendererDebugCaptureLogger {
         } else {
             null
         }
+        val compositedDimensions = if (RendererDebugCaptureKind.COMPOSITED_FRAME in requestedKinds) {
+            logCaptureStep(captureId, "captureCurrentCompositedDimensions", before = true)
+            val dimensions = RendererDebugBridge.captureCurrentCompositedDimensions()
+            logCaptureStep(captureId, "captureCurrentCompositedDimensions", before = false)
+            dimensions
+        } else {
+            null
+        }
+        val compositedWidth = compositedDimensions?.getOrNull(0) ?: 0
+        val compositedHeight = compositedDimensions?.getOrNull(1) ?: 0
+        val compositedFrame = if (RendererDebugCaptureKind.COMPOSITED_FRAME in requestedKinds) {
+            logCaptureStep(captureId, "captureCurrentCompositedFrame", before = true)
+            val pixels = RendererDebugBridge.captureCurrentCompositedFrame()
+            logCaptureStep(captureId, "captureCurrentCompositedFrame", before = false)
+            pixels
+        } else {
+            null
+        }
         val canCapture3dTargets = requestedKinds.any {
             it == RendererDebugCaptureKind.RENDERER3D_FRAME
                 || it == RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME
@@ -737,6 +757,16 @@ internal object RendererDebugCaptureLogger {
                 extension = "json",
             )
         }
+        if (RendererDebugCaptureKind.COMPOSITED_FRAME in requestedKinds) {
+            saveFramePng(
+                outputDir = resolvedOutputDir,
+                captureId = captureId,
+                kind = "compositedFrame",
+                width = compositedWidth,
+                height = compositedHeight,
+                pixels = compositedFrame,
+            )
+        }
         if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
             saveFramePng(
                 outputDir = resolvedOutputDir,
@@ -793,7 +823,7 @@ internal object RendererDebugCaptureLogger {
 
         Log.w(
             TAG,
-            "captureId=$captureId kind=meta screen=${describeBufferShape(RendererDebugBridge.CAPTURE_WIDTH, RendererDebugBridge.CAPTURE_HEIGHT, screenFrame)} packedTop=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPrimary)} packedBottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPrimary)} packedTopPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPlane1)} packedTopControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopControl)} packedBottomPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPlane1)} packedBottomControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomControl)} capture3dSource=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, capture3dSourceDsFrame)} captureLineMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineUses3dMask)} comp4Top=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, comp4TopPlaceholder)} comp4Bottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, comp4BottomPlaceholder)} fallbackMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFallbackMask)} softPackedMeta=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} renderer3d=${describeBufferShape(renderer3dWidth, renderer3dHeight, frame3d)} renderer3dCapture=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFrame3d)} depth=${describeBufferShape(renderer3dWidth, renderer3dHeight, depth3d)} attr=${describeBufferShape(renderer3dWidth, renderer3dHeight, attr3d)} coverage=${describeBufferShape(renderer3dWidth, renderer3dHeight, coverage3d)}",
+            "captureId=$captureId kind=meta screen=${describeBufferShape(RendererDebugBridge.CAPTURE_WIDTH, RendererDebugBridge.CAPTURE_HEIGHT, screenFrame)} packedTop=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPrimary)} packedBottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPrimary)} packedTopPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopPlane1)} packedTopControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedTopControl)} packedBottomPlane1=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomPlane1)} packedBottomControl=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, packedBottomControl)} capture3dSource=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, capture3dSourceDsFrame)} captureLineMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureLineUses3dMask)} comp4Top=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, comp4TopPlaceholder)} comp4Bottom=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, comp4BottomPlaceholder)} fallbackMask=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFallbackMask)} softPackedMeta=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} composited=${describeBufferShape(compositedWidth, compositedHeight, compositedFrame)} renderer3d=${describeBufferShape(renderer3dWidth, renderer3dHeight, frame3d)} renderer3dCapture=${describeBufferShape(CAPTURE_3D_LINE_WIDTH, CAPTURE_3D_LINE_HEIGHT, captureFrame3d)} depth=${describeBufferShape(renderer3dWidth, renderer3dHeight, depth3d)} attr=${describeBufferShape(renderer3dWidth, renderer3dHeight, attr3d)} coverage=${describeBufferShape(renderer3dWidth, renderer3dHeight, coverage3d)}",
         )
 
         if (RendererDebugCaptureKind.SCREEN_FRAME in requestedKinds) {
@@ -910,6 +940,15 @@ internal object RendererDebugCaptureLogger {
                 "captureId=$captureId kind=softPackedFrameMetaJson available=${if (softPackedFrameMetaJson.isNullOrBlank()) 0 else 1} length=${softPackedFrameMetaJson?.length ?: 0}",
             )
         }
+        if (RendererDebugCaptureKind.COMPOSITED_FRAME in requestedKinds) {
+            logFrameSummary(
+                captureId = captureId,
+                kind = "compositedFrame",
+                width = compositedWidth,
+                height = compositedHeight,
+                pixels = compositedFrame,
+            )
+        }
         if (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds) {
             logFrameSummary(
                 captureId = captureId,
@@ -967,6 +1006,7 @@ internal object RendererDebugCaptureLogger {
                 || (RendererDebugCaptureKind.COMP4_BOTTOM_PLACEHOLDER in requestedKinds && hasData(comp4BottomPlaceholder))
                 || (RendererDebugCaptureKind.CAPTURE_FALLBACK_MASK in requestedKinds && hasData(captureFallbackMask))
                 || (RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON in requestedKinds && !softPackedFrameMetaJson.isNullOrBlank())
+                || (RendererDebugCaptureKind.COMPOSITED_FRAME in requestedKinds && hasData(compositedFrame))
                 || (RendererDebugCaptureKind.RENDERER3D_FRAME in requestedKinds && hasData(frame3d))
                 || (RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME in requestedKinds && hasData(captureFrame3d))
                 || (RendererDebugCaptureKind.RENDERER3D_DEPTH in requestedKinds && hasData(depth3d))

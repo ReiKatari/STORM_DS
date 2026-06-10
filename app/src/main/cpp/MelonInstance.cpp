@@ -4355,6 +4355,60 @@ bool MelonInstance::updateVulkanScreenshot(Frame* frame, int scale, bool clearOn
     return true;
 }
 
+std::vector<u32> MelonInstance::captureCurrentCompositedDimensionsForDebug()
+{
+    if (!areRendererDebugToolsEnabled()
+        || currentRenderer != Renderer::Vulkan
+        || lastCompletedVulkanFrame == nullptr)
+        return {};
+
+    return {
+        static_cast<u32>(lastCompletedVulkanFrame->width),
+        static_cast<u32>(lastCompletedVulkanFrame->height),
+    };
+}
+
+std::vector<u32> MelonInstance::captureCurrentCompositedFrameForDebug()
+{
+    if (!areRendererDebugToolsEnabled()
+        || currentRenderer != Renderer::Vulkan
+        || vulkanOutput == nullptr
+        || nds == nullptr
+        || currentConfiguration == nullptr
+        || currentConfiguration->renderSettings == nullptr
+        || lastCompletedVulkanFrame == nullptr
+        || lastCompletedVulkanScale < 1)
+        return {};
+
+    Frame* frame = lastCompletedVulkanFrame;
+    const size_t readbackPixels = static_cast<size_t>(frame->width) * static_cast<size_t>(frame->height);
+    if (readbackPixels == 0)
+        return {};
+
+    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+    const auto& vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*currentConfiguration->renderSettings);
+    VulkanCompositionInputs compositionInputs{};
+    if (!vulkanOutput->buildCompositionInputs(
+            frame,
+            renderer3D,
+            lastCompletedVulkanScale,
+            vulkanRenderSettings.videoFiltering,
+            true,
+            false,
+            false,
+            compositionInputs)
+        || !vulkanOutput->composeAndSubmitFrame(frame, compositionInputs))
+    {
+        return {};
+    }
+
+    vulkanReadbackFrame.resize(readbackPixels);
+    if (!vulkanOutput->readFramePixels(frame, vulkanReadbackFrame.data(), vulkanReadbackFrame.size()))
+        return {};
+
+    return vulkanReadbackFrame;
+}
+
 void MelonInstance::logVulkanPerformanceIfNeeded()
 {
     if (!areRendererDebugToolsEnabled())

@@ -80,6 +80,8 @@ public:
     std::vector<u32> captureCurrentComp4BottomPlaceholderForDebug();
     std::vector<u32> captureCurrentCaptureFallbackMaskForDebug();
     std::string captureCurrentSoftPackedFrameMetaJsonForDebug();
+    std::vector<u32> captureCurrentCompositedDimensionsForDebug();
+    std::vector<u32> captureCurrentCompositedFrameForDebug();
     std::vector<u32> captureCurrent3dDimensionsForDebug();
     std::vector<u32> captureCurrent3dFrameForDebug();
     std::vector<u32> captureCurrent3dCaptureFrameForDebug();

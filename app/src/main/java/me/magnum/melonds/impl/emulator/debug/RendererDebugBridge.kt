@@ -126,6 +126,8 @@ internal object RendererDebugBridge {
     external fun captureCurrentComp4BottomPlaceholder(): IntArray?
     external fun captureCurrentCaptureFallbackMask(): IntArray?
     external fun captureCurrentSoftPackedFrameMetaJson(): String?
+    external fun captureCurrentCompositedDimensions(): IntArray?
+    external fun captureCurrentCompositedFrame(): IntArray?
     external fun isCurrentFrameReadyForDebug(): Boolean
     external fun getCurrentFrameIndexForDebug(): Int
     external fun requestPreparedRendererSnapshot()

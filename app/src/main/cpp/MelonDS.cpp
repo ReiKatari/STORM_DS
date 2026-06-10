@@ -1007,6 +1007,22 @@ namespace MelonDSAndroid
         return instance->captureCurrentSoftPackedFrameMetaJsonForDebug();
     }
 
+    std::vector<u32> captureCurrentCompositedDimensionsForDebug()
+    {
+        if (!instance)
+            return {};
+
+        return instance->captureCurrentCompositedDimensionsForDebug();
+    }
+
+    std::vector<u32> captureCurrentCompositedFrameForDebug()
+    {
+        if (!instance)
+            return {};
+
+        return instance->captureCurrentCompositedFrameForDebug();
+    }
+
     std::vector<u32> captureCurrent3dDimensionsForDebug()
     {
         if (!instance)
