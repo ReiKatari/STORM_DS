@@ -1026,6 +1026,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
                         parsed.add(RendererDebugCaptureKind.CAPTURE_FALLBACK_MASK)
                     "softpackedmeta", "softpackedframemeta", "soft_packed_frame_meta", "softpackedframejson" ->
                         parsed.add(RendererDebugCaptureKind.SOFT_PACKED_FRAME_META_JSON)
+                    "composited", "compositedframe", "composited_frame", "vulkancomposited", "vulkan_composited_frame" ->
+                        parsed.add(RendererDebugCaptureKind.COMPOSITED_FRAME)
                     "renderer3d", "3d", "renderer3dframe" -> parsed.add(RendererDebugCaptureKind.RENDERER3D_FRAME)
                     "capture3d", "3dcapture", "renderer3dcapture", "renderer3dcaptureframe" ->
                         parsed.add(RendererDebugCaptureKind.RENDERER3D_CAPTURE_FRAME)

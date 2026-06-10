@@ -1571,6 +1571,20 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_captureCurrentSof
     return env->NewStringUTF(json.c_str());
 }
 
+JNIEXPORT jintArray JNICALL
+Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_captureCurrentCompositedDimensions(JNIEnv* env, jobject thiz)
+{
+    (void)thiz;
+    return MakeJavaIntArray(env, MelonDSAndroid::captureCurrentCompositedDimensionsForDebug());
+}
+
+JNIEXPORT jintArray JNICALL
+Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_captureCurrentCompositedFrame(JNIEnv* env, jobject thiz)
+{
+    (void)thiz;
+    return MakeJavaIntArray(env, MelonDSAndroid::captureCurrentCompositedFrameForDebug());
+}
+
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_isCurrentFrameReadyForDebug(JNIEnv* env, jobject thiz)
 {

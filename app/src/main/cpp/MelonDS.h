@@ -200,6 +200,8 @@ namespace MelonDSAndroid {
     extern std::vector<u32> captureCurrentComp4BottomPlaceholderForDebug();
     extern std::vector<u32> captureCurrentCaptureFallbackMaskForDebug();
     extern std::string captureCurrentSoftPackedFrameMetaJsonForDebug();
+    extern std::vector<u32> captureCurrentCompositedDimensionsForDebug();
+    extern std::vector<u32> captureCurrentCompositedFrameForDebug();
     extern std::vector<u32> captureCurrent3dDimensionsForDebug();
     extern std::vector<u32> captureCurrent3dFrameForDebug();
     extern std::vector<u32> captureCurrent3dCaptureFrameForDebug();
