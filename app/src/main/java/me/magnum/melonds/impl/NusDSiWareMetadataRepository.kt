@@ -3,9 +3,14 @@ package me.magnum.melonds.impl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.repositories.DSiWareMetadataRepository
+import java.io.EOFException
 import java.net.URL
 
 class NusDSiWareMetadataRepository : DSiWareMetadataRepository {
+
+    private companion object {
+        const val TMD_METADATA_SIZE = 520
+    }
 
     override suspend fun getDSiWareTitleMetadata(categoryId: UInt, titleId: UInt): ByteArray = withContext(Dispatchers.IO) {
         val categoryIdHex = categoryId.toString(16).padStart(8, '0')
@@ -15,12 +20,11 @@ class NusDSiWareMetadataRepository : DSiWareMetadataRepository {
             connectTimeout = 10_000
             readTimeout = 10_000
         }
-        // Only 520 bytes are needed
-        val tmdMetadata = ByteArray(520)
-        connection.getInputStream().use {
-            it.read(tmdMetadata)
+        val tmdMetadata = connection.getInputStream().use { it.readBytes() }
+        if (tmdMetadata.size < TMD_METADATA_SIZE) {
+            throw EOFException("TMD response is too small: ${tmdMetadata.size} bytes")
         }
 
-        tmdMetadata
+        tmdMetadata.copyOf(TMD_METADATA_SIZE)
     }
 }

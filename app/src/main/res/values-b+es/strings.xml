@@ -67,6 +67,8 @@
     <string name="dsiware_manager_import_title_error_open_file_failed">Error al abrir el archivo seleccionado</string>
     <string name="dsiware_manager_import_title_error_not_dsiware_title">No es un título de DSiWare</string>
     <string name="dsiware_manager_import_title_error_title_already_imported">Título de DSiWare ya importado</string>
+    <string name="dsiware_manager_import_title_error_title_limit_reached">El menú DSi ya tiene 39 entradas. Elimina otro título antes de instalar este.</string>
+    <string name="dsiware_manager_import_title_error_dsi_memory_full">La memoria del sistema DSi está llena. Elimina otro título de DSiWare antes de instalar este.</string>
     <string name="dsiware_manager_import_title_error_insatll_failed">Error al instalar el título</string>
     <string name="dsiware_manager_import_title_error_metadat_fetch_failed">No se pudieron descargar los metadatos del título. Verifica tu conexión a Internet.</string>
     <string name="dsiware_manager_import_title_error_unknown">Se ha producido un error desconocido</string>
