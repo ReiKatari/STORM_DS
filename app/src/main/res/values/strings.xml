@@ -78,6 +78,8 @@
     <string name="dsiware_manager_import_title_error_open_file_failed">Error opening selected file</string>
     <string name="dsiware_manager_import_title_error_not_dsiware_title">Not a DSiWare title</string>
     <string name="dsiware_manager_import_title_error_title_already_imported">DSiWare title already imported</string>
+    <string name="dsiware_manager_import_title_error_title_limit_reached">The DSi Menu already has 39 launcher entries. Delete another title before installing this one.</string>
+    <string name="dsiware_manager_import_title_error_dsi_memory_full">The DSi system memory is full. Delete another DSiWare title before installing this one.</string>
     <string name="dsiware_manager_import_title_error_insatll_failed">Failed to install title</string>
     <string name="dsiware_manager_import_title_error_metadat_fetch_failed">Failed to download title metadata. Check your internet connection</string>
     <string name="dsiware_manager_import_title_error_unknown">An unknown error occurred</string>

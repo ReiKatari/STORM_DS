@@ -364,6 +364,8 @@ private fun getImportTitleResultMessage(context: Context, result: ImportDSiWareT
         ImportDSiWareTitleResult.ERROR_OPENING_FILE -> context.getString(R.string.dsiware_manager_import_title_error_open_file_failed)
         ImportDSiWareTitleResult.NOT_DSIWARE_TITLE -> context.getString(R.string.dsiware_manager_import_title_error_not_dsiware_title)
         ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED -> context.getString(R.string.dsiware_manager_import_title_error_title_already_imported)
+        ImportDSiWareTitleResult.TITLE_LIMIT_REACHED -> context.getString(R.string.dsiware_manager_import_title_error_title_limit_reached)
+        ImportDSiWareTitleResult.DSI_MEMORY_FULL -> context.getString(R.string.dsiware_manager_import_title_error_dsi_memory_full)
         ImportDSiWareTitleResult.INSATLL_FAILED -> context.getString(R.string.dsiware_manager_import_title_error_insatll_failed)
         ImportDSiWareTitleResult.METADATA_FETCH_FAILED -> context.getString(R.string.dsiware_manager_import_title_error_metadat_fetch_failed)
         ImportDSiWareTitleResult.UNKNOWN -> context.getString(R.string.dsiware_manager_import_title_error_unknown)
