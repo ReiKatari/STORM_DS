@@ -287,6 +287,12 @@ private:
     PerfSampleWindow<120> vulkanNdsRunCpuWindow;
     PerfSampleWindow<120> vulkanPostRunCpuWindow;
     PerfSampleWindow<120> vulkanComposeCpuWindow;
+    PerfSampleWindow<120> vulkanRaFrameCpuWindow;
+    PerfSampleWindow<120> vulkanLatchSoftPackedCpuWindow;
+    PerfSampleWindow<120> vulkanPostQueueCpuWindow;
+    PerfSampleWindow<120> vulkanPostSaveCpuWindow;
+    PerfSampleWindow<120> vulkanPostDebugCaptureCpuWindow;
+    PerfSampleWindow<120> vulkanPostRewindCpuWindow;
 };
 
 }

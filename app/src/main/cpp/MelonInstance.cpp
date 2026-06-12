@@ -1593,7 +1593,10 @@ u32 MelonInstance::runFrame()
         ndsRunEndNs = PerfNowNs();
         vulkanNdsRunCpuWindow.Add(ndsRunEndNs - ndsRunStartNs);
     }
+    const u64 raFrameStartNs = measuringVulkan ? PerfNowNs() : 0;
     retroAchievementsManager->FrameUpdate();
+    if (measuringVulkan)
+        vulkanRaFrameCpuWindow.Add(PerfNowNs() - raFrameStartNs);
 
     bool hasValidFrame = false;
     int frontbuf = nds->GPU.FrontBuffer;
@@ -1604,11 +1607,13 @@ u32 MelonInstance::runFrame()
         auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
         const bool useStructuredVulkan2D =
             renderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware;
+        const u64 latchStartNs = PerfNowNs();
         hasLatchedSoftPackedFrame = latchSoftPackedFrameSnapshot(
             renderFrame,
             frontbuf,
             preparedFrameScreenSwap,
             useStructuredVulkan2D);
+        vulkanLatchSoftPackedCpuWindow.Add(PerfNowNs() - latchStartNs);
         if (vulkanRegularCaptureTransitionResyncPending)
         {
             vulkanRegularCaptureTransitionResyncPending = false;
@@ -1737,10 +1742,13 @@ u32 MelonInstance::runFrame()
     }
     if (hasValidFrame)
     {
+        const u64 debugCaptureStartNs = measuringVulkan ? PerfNowNs() : 0;
         maybeCaptureDenseScreenBurstFrame(
             currentRenderer == Renderer::Vulkan ? renderFrame : nullptr,
             currentRenderer == Renderer::Vulkan ? lastCompletedVulkanScale : 1,
             nextFrame);
+        if (measuringVulkan)
+            vulkanPostDebugCaptureCpuWindow.Add(PerfNowNs() - debugCaptureStartNs);
     }
     const bool shouldCaptureRewindState = rewindManager.ShouldCaptureState(nextFrame);
     if (currentRenderer == Renderer::Vulkan && shouldCaptureRewindState)
@@ -1750,6 +1758,7 @@ u32 MelonInstance::runFrame()
 
     if (!isSleeping && hasValidFrame) [[likely]]
     {
+        const u64 queueStartNs = measuringVulkan ? PerfNowNs() : 0;
         EGLDisplay currentDisplay = eglGetCurrentDisplay();
         if (frameBackend == FrameBackend::OpenGlTexture)
         {
@@ -1761,12 +1770,15 @@ u32 MelonInstance::runFrame()
             renderFrame->renderFence = 0;
         }
         frameQueue.pushRenderedFrame(renderFrame, frameQueuePolicy);
+        if (measuringVulkan)
+            vulkanPostQueueCpuWindow.Add(PerfNowNs() - queueStartNs);
     }
     else if (renderFrame != nullptr)
     {
         frameQueue.discardRenderedFrame(renderFrame);
     }
 
+    const u64 saveStartNs = measuringVulkan ? PerfNowNs() : 0;
     if (ndsSave)
         ndsSave->CheckFlush();
 
@@ -1775,6 +1787,8 @@ u32 MelonInstance::runFrame()
 
     if (firmwareSave)
         firmwareSave->CheckFlush();
+    if (measuringVulkan)
+        vulkanPostSaveCpuWindow.Add(PerfNowNs() - saveStartNs);
 
     frame = nextFrame;
     if (screenshotRenderer->isScreenshotPending()) [[unlikely]]
@@ -1787,8 +1801,11 @@ u32 MelonInstance::runFrame()
 
     if (shouldCaptureRewindState)
     {
+        const u64 rewindStartNs = measuringVulkan ? PerfNowNs() : 0;
         auto nextRewindState = rewindManager.GetNextRewindSaveState(frame);
         saveRewindState(nextRewindState);
+        if (measuringVulkan)
+            vulkanPostRewindCpuWindow.Add(PerfNowNs() - rewindStartNs);
     }
 
     if (currentRenderer == Renderer::Vulkan)
@@ -4517,6 +4534,12 @@ void MelonInstance::logVulkanPerformanceIfNeeded()
     const PerfSampleWindow<120>::Summary ndsRunSummary = vulkanNdsRunCpuWindow.SummarizeAndReset();
     const PerfSampleWindow<120>::Summary postRunSummary = vulkanPostRunCpuWindow.SummarizeAndReset();
     const PerfSampleWindow<120>::Summary composeSummary = vulkanComposeCpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary raFrameSummary = vulkanRaFrameCpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary latchSummary = vulkanLatchSoftPackedCpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary queueSummary = vulkanPostQueueCpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary saveSummary = vulkanPostSaveCpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary debugCaptureSummary = vulkanPostDebugCaptureCpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary rewindSummary = vulkanPostRewindCpuWindow.SummarizeAndReset();
     const FrameQueueStats queueStats = frameQueue.takeStatsSnapshotAndReset();
     const VulkanPresenterPacingStats presenterStats = vulkanSurfacePresenter
         ? vulkanSurfacePresenter->takePacingStatsSnapshotAndReset()
@@ -4587,6 +4610,24 @@ void MelonInstance::logVulkanPerformanceIfNeeded()
         PerfNsToMs(postRunSummary.MeanNs),
         PerfNsToMs(postRunSummary.P95Ns),
         PerfNsToMs(postRunSummary.MaxNs)
+    );
+    Platform::Log(
+        Platform::LogLevel::Warn,
+        "VulkanPerf[InstancePostPhases]: ra avg=%.3fms p95=%.3fms latch avg=%.3fms p95=%.3fms compose avg=%.3fms p95=%.3fms debugCapture avg=%.3fms p95=%.3fms queue avg=%.3fms p95=%.3fms save avg=%.3fms p95=%.3fms rewind avg=%.3fms p95=%.3fms",
+        PerfNsToMs(raFrameSummary.MeanNs),
+        PerfNsToMs(raFrameSummary.P95Ns),
+        PerfNsToMs(latchSummary.MeanNs),
+        PerfNsToMs(latchSummary.P95Ns),
+        PerfNsToMs(composeSummary.MeanNs),
+        PerfNsToMs(composeSummary.P95Ns),
+        PerfNsToMs(debugCaptureSummary.MeanNs),
+        PerfNsToMs(debugCaptureSummary.P95Ns),
+        PerfNsToMs(queueSummary.MeanNs),
+        PerfNsToMs(queueSummary.P95Ns),
+        PerfNsToMs(saveSummary.MeanNs),
+        PerfNsToMs(saveSummary.P95Ns),
+        PerfNsToMs(rewindSummary.MeanNs),
+        PerfNsToMs(rewindSummary.P95Ns)
     );
     Platform::Log(
         Platform::LogLevel::Warn,
@@ -4835,7 +4876,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshot(
         return false;
 
     previousSoftPackedFrameSnapshot = lastSoftPackedFrameSnapshot;
-    lastSoftPackedFrameSnapshot.clear();
+    lastSoftPackedFrameSnapshot.clearForLatch();
 
     lastSoftPackedFrameSnapshot.frameId = frame->frameId;
     lastSoftPackedFrameSnapshot.frontBufferLatched = frontBuffer;
