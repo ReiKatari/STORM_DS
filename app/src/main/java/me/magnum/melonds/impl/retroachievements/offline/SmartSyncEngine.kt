@@ -7,8 +7,9 @@ import kotlinx.coroutines.withContext
 import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.exception.UnsuccessfulRequestException
 import me.magnum.rcheevosapi.exception.UserNotAuthenticatedException
+import me.magnum.rcheevosapi.model.RAAwardAchievementResponse
 import me.magnum.rcheevosapi.model.RAAchievement
-import me.magnum.rcheevosapi.model.RAGameId
+import me.magnum.rcheevosapi.model.RAGame
 import java.io.IOException
 import kotlin.math.min
 import kotlin.time.Duration.Companion.seconds
@@ -34,15 +35,44 @@ data class SmartSyncResult(
     val skippedCount: Int get() = skipped.size
 }
 
+interface SmartSyncRaClient {
+    suspend fun getGameAchievementSets(gameHash: String): Result<RAGame>
+
+    suspend fun awardAchievement(
+        achievementId: Long,
+        forHardcoreMode: Boolean,
+        gameHash: String,
+        offsetSeconds: Long? = null,
+    ): Result<RAAwardAchievementResponse>
+}
+
+class RAApiSmartSyncRaClient(private val raApi: RAApi) : SmartSyncRaClient {
+    override suspend fun getGameAchievementSets(gameHash: String): Result<RAGame> {
+        return raApi.getGameAchievementSets(gameHash)
+    }
+
+    override suspend fun awardAchievement(
+        achievementId: Long,
+        forHardcoreMode: Boolean,
+        gameHash: String,
+        offsetSeconds: Long?,
+    ): Result<RAAwardAchievementResponse> {
+        return raApi.awardAchievement(achievementId, forHardcoreMode, gameHash, offsetSeconds)
+    }
+}
+
 class SmartSyncEngine(
-    private val raApi: RAApi,
+    private val raClient: SmartSyncRaClient,
     private val ledgerRepository: OfflineLedgerRepository,
     private val prefetchCacheRepository: OfflinePrefetchCacheRepository,
+    private val clockMillis: () -> Long = { System.currentTimeMillis() },
+    private val logSink: (String, String) -> Unit = { tag, message -> Log.i(tag, message) },
 ) {
 
     private companion object {
         const val RA_TRACE_TAG = "RATrace"
         const val RA_SUBMISSION_TAG = "RASubmission"
+        const val MAX_RA_AWARD_OFFSET_SECONDS = 14L * 24L * 60L * 60L
     }
 
     suspend fun syncNow(userId: String, contentId: String): Result<SmartSyncResult> {
@@ -65,7 +95,7 @@ class SmartSyncEngine(
         val filterTag = modeFilter?.joinToString(",") { it.name } ?: "ALL"
         logRaTrace("smart_sync_started", "filter" to filterTag, "content_id" to contentId)
 
-        val ledgerStatus = ledgerRepository.getStatus(userId, contentId)
+        var ledgerStatus = ledgerRepository.getStatus(userId, contentId)
         if (ledgerStatus.integrity != OfflineLedgerIntegrity.OK) {
             logRaTrace(
                 "smart_sync_failed",
@@ -75,8 +105,51 @@ class SmartSyncEngine(
             return@withContext Result.failure(IllegalStateException("Ledger integrity is ${ledgerStatus.integrity}"))
         }
 
+        if (ledgerStatus.isExpired) {
+            logRaTrace(
+                "smart_sync_failed",
+                "filter" to filterTag,
+                "reason" to "ledger_expired",
+                "content_id" to contentId,
+                "pending" to ledgerStatus.pendingSoftcoreUnlockCount,
+            )
+            return@withContext Result.failure(OfflineLedgerExpiredException())
+        }
+
+        val requestedHardcorePending = ledgerStatus.pendingUnlocks.count { it.unlockMode == OfflineUnlockMode.HARDCORE }
+        if (requestedHardcorePending > 0) {
+            val discardResult = ledgerRepository.discardPendingHardcoreUnlocks(userId, contentId)
+            if (discardResult.isFailure) {
+                val error = discardResult.exceptionOrNull()
+                logRaTrace(
+                    "smart_sync_failed",
+                    "filter" to filterTag,
+                    "reason" to "hardcore_discard_failed",
+                    "pending_hardcore" to requestedHardcorePending,
+                    "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+                )
+                return@withContext Result.failure(error ?: IllegalStateException("Failed to discard hardcore replay entries"))
+            }
+            logRaTrace(
+                "smart_sync_hardcore_discarded",
+                "filter" to filterTag,
+                "pending_hardcore" to requestedHardcorePending,
+                "discarded" to (discardResult.getOrNull() ?: 0),
+            )
+            ledgerStatus = ledgerRepository.getStatus(userId, contentId)
+            if (ledgerStatus.integrity != OfflineLedgerIntegrity.OK) {
+                logRaTrace(
+                    "smart_sync_failed",
+                    "filter" to filterTag,
+                    "reason" to "ledger_integrity_after_hardcore_discard_${ledgerStatus.integrity.name.lowercase()}",
+                )
+                return@withContext Result.failure(IllegalStateException("Ledger integrity is ${ledgerStatus.integrity}"))
+            }
+        }
+
         val pending = ledgerStatus.pendingUnlocks.filter { unlock ->
-            modeFilter?.contains(unlock.unlockMode) ?: true
+            (modeFilter?.contains(unlock.unlockMode) ?: true) &&
+                unlock.unlockMode == OfflineUnlockMode.SOFTCORE
         }
         if (pending.isEmpty()) {
             logRaTrace("smart_sync_no_pending", "filter" to filterTag)
@@ -102,7 +175,7 @@ class SmartSyncEngine(
 
         val cachedDefinitionById = cache.achievements.associate { it.id to it.memoryAddress }
 
-        val currentGame = raApi.getGameAchievementSets(contentId).getOrElse { error ->
+        val currentGame = raClient.getGameAchievementSets(contentId).getOrElse { error ->
             logRaTrace(
                 "smart_sync_failed",
                 "filter" to filterTag,
@@ -128,22 +201,6 @@ class SmartSyncEngine(
             .flatMap { it.achievements.asSequence() }
             .associateBy { it.id }
 
-        val startSessionResult = raApi.startSession(
-            gameId = RAGameId(cache.gameId),
-            gameHash = contentId,
-            forHardcoreMode = pending.any { it.unlockMode == OfflineUnlockMode.HARDCORE },
-        )
-        if (startSessionResult.isFailure) {
-            val error = startSessionResult.exceptionOrNull()
-            logRaTrace(
-                "smart_sync_failed",
-                "filter" to filterTag,
-                "reason" to "start_session_failed",
-                "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
-            )
-            return@withContext Result.failure(error ?: IllegalStateException("Failed to start RA session"))
-        }
-
         val plan = SmartSyncPlanner.plan(
             pendingUnlocks = pending,
             sessions = ledgerStatus.sessions,
@@ -152,7 +209,6 @@ class SmartSyncEngine(
         val skipped = mutableListOf<SmartSyncSkippedAchievement>()
         var submitted = 0
         for (item in plan) {
-            delay(item.delayBeforeMs)
             val unlock = item.unlock
 
             val cachedDefinition = cachedDefinitionById[unlock.achievementId]
@@ -189,6 +245,8 @@ class SmartSyncEngine(
                 val awardResult = retryingAward(
                     achievementId = unlock.achievementId,
                     isHardcore = unlock.unlockMode == OfflineUnlockMode.HARDCORE,
+                    gameHash = contentId,
+                    offsetSeconds = awardOffsetSeconds(unlock.localTimestampEpochMs),
                 )
                 if (awardResult.isFailure) {
                     val error = awardResult.exceptionOrNull()
@@ -266,7 +324,12 @@ class SmartSyncEngine(
         )
     }
 
-    private suspend fun retryingAward(achievementId: Long, isHardcore: Boolean): Result<Unit> {
+    private suspend fun retryingAward(
+        achievementId: Long,
+        isHardcore: Boolean,
+        gameHash: String,
+        offsetSeconds: Long?,
+    ): Result<Unit> {
         var attempt = 0
         var backoffMs = 2000L
 
@@ -279,8 +342,9 @@ class SmartSyncEngine(
                 "expected_api" to "awardachievement",
                 "hardcore" to isHardcore,
                 "attempt" to attempt,
+                "offset_seconds" to offsetSeconds,
             )
-            val result = raApi.awardAchievement(achievementId, isHardcore)
+            val result = raClient.awardAchievement(achievementId, isHardcore, gameHash, offsetSeconds)
             result.onSuccess {
                 logRaSubmission(
                     "smart_sync_award_submit_success",
@@ -289,6 +353,7 @@ class SmartSyncEngine(
                     "expected_api" to "awardachievement",
                     "hardcore" to isHardcore,
                     "attempt" to attempt,
+                    "offset_seconds" to offsetSeconds,
                     "ra_awarded" to it.achievementAwarded,
                     "remaining" to it.remainingAchievements,
                 )
@@ -320,6 +385,7 @@ class SmartSyncEngine(
                         "expected_api" to "awardachievement",
                         "hardcore" to isHardcore,
                         "attempt" to attempt,
+                        "offset_seconds" to offsetSeconds,
                         "error" to (exception.message ?: exception.javaClass.simpleName),
                     )
                     logRaTrace(
@@ -348,6 +414,7 @@ class SmartSyncEngine(
                 "expected_api" to "awardachievement",
                 "hardcore" to isHardcore,
                 "attempt" to attempt,
+                "offset_seconds" to offsetSeconds,
                 "error" to (exception.message ?: exception.javaClass.simpleName),
             )
             logRaTrace(
@@ -358,6 +425,15 @@ class SmartSyncEngine(
             )
             return Result.failure(exception)
         }
+    }
+
+    private fun awardOffsetSeconds(unlockTimestampEpochMs: Long): Long? {
+        if (unlockTimestampEpochMs <= 0L) return null
+
+        val elapsedSeconds = ((clockMillis() - unlockTimestampEpochMs) / 1000L).coerceAtLeast(0L)
+        return elapsedSeconds
+            .coerceAtMost(MAX_RA_AWARD_OFFSET_SECONDS)
+            .takeIf { it > 0L }
     }
 
     private fun logRaSubmission(eventType: String, vararg fields: Pair<String, Any?>) {
@@ -372,7 +448,7 @@ class SmartSyncEngine(
                 }
             }
         }
-        Log.i(RA_SUBMISSION_TAG, message)
+        logSink(RA_SUBMISSION_TAG, message)
     }
 
     private fun logRaTrace(eventType: String, vararg fields: Pair<String, Any?>) {
@@ -388,9 +464,11 @@ class SmartSyncEngine(
                 }
             }
         }
-        Log.i(RA_TRACE_TAG, message)
+        logSink(RA_TRACE_TAG, message)
     }
 }
+
+class OfflineLedgerExpiredException : IllegalStateException("Offline achievements ledger expired")
 
 internal fun isPermanentSmartSyncAwardRejection(error: Throwable?): Boolean {
     if (error !is UnsuccessfulRequestException) return false

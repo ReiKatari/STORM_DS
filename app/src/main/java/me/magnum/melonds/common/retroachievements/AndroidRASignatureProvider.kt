@@ -7,11 +7,20 @@ import java.security.MessageDigest
 
 class AndroidRASignatureProvider : RASignatureProvider {
 
-    override fun provideAchievementSignature(achievementId: Long, userAuth: RAUserAuth.Authenticated, forHardcoreMode: Boolean): String {
+    override fun provideAchievementSignature(
+        achievementId: Long,
+        userAuth: RAUserAuth.Authenticated,
+        forHardcoreMode: Boolean,
+        offsetSeconds: Long?,
+    ): String {
         val md5Digest = MessageDigest.getInstance("MD5")
         md5Digest.update(achievementId.toString().toByteArray())
         md5Digest.update(userAuth.username.toByteArray())
         md5Digest.update((if (forHardcoreMode) "1" else "0").toByteArray())
+        if (offsetSeconds != null && offsetSeconds > 0L) {
+            md5Digest.update(achievementId.toString().toByteArray())
+            md5Digest.update(offsetSeconds.toString().toByteArray())
+        }
 
         return BigInteger(1, md5Digest.digest()).toString(16).padStart(32, '0')
     }

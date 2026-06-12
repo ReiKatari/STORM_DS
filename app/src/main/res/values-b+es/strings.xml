@@ -549,4 +549,14 @@
         <item>Ajustar a la parte inferior</item>
         <item>Ajustar a la derecha</item>
     </string-array>
+
+    <string name="offline_ra_pending_message_with_expiration">Tienes %1$d logro(s) offline pendientes. ¿Sincronizar ahora antes de jugar online? El ledger expira en %2$s. Conéctate antes de que expire para evitar perderlos.</string>
+    <string name="offline_ra_pending_softcore_notice_with_expiration">Logros Softcore pendientes: %1$d. Sincroniza en %2$s para evitar perderlos.</string>
+    <string name="offline_ra_pending_softcore_expired_notice">Logros Softcore pendientes: %1$d. Este ledger offline expiró y ya no se puede sincronizar.</string>
+    <string name="offline_ra_ledger_expiration">Expiración del ledger: %1$s</string>
+    <string name="offline_ra_ledger_expired">Expirado</string>
+    <plurals name="offline_ra_ledger_expires_days">
+        <item quantity="one">%1$d día</item>
+        <item quantity="other">%1$d días</item>
+    </plurals>
 </resources>

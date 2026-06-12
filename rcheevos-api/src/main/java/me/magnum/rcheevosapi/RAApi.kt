@@ -91,6 +91,7 @@ class RAApi(
         private const val REQUEST_PING = "ping"
 
         private const val RCHEEVOS_VERSION = "12.3.0"
+        private const val MAX_AWARD_OFFSET_SECONDS = 14L * 24L * 60L * 60L
     }
 
     suspend fun login(username: String, password: String): Result<Unit> {
@@ -171,11 +172,21 @@ class RAApi(
         achievementId: Long,
         forHardcoreMode: Boolean,
         gameHash: String? = null,
+        offsetSeconds: Long? = null,
     ): Result<RAAwardAchievementResponse> {
         val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
             ?: return Result.failure(UserNotAuthenticatedException())
 
-        val signature = signatureProvider.provideAchievementSignature(achievementId, userAuth, forHardcoreMode)
+        val normalizedOffsetSeconds = offsetSeconds
+            ?.coerceIn(0L, MAX_AWARD_OFFSET_SECONDS)
+            ?.takeIf { it > 0L }
+
+        val signature = signatureProvider.provideAchievementSignature(
+            achievementId = achievementId,
+            userAuth = userAuth,
+            forHardcoreMode = forHardcoreMode,
+            offsetSeconds = normalizedOffsetSeconds,
+        )
 
         val parameters = mutableMapOf(
             PARAMETER_REQUEST to REQUEST_AWARD_ACHIEVEMENT,
@@ -187,6 +198,9 @@ class RAApi(
         )
         if (!gameHash.isNullOrBlank()) {
             parameters[PARAMETER_GAME_HASH] = gameHash
+        }
+        if (normalizedOffsetSeconds != null) {
+            parameters[PARAMETER_OFFSET] = normalizedOffsetSeconds.toString()
         }
 
         return get<AwardAchievementResponseDto>(

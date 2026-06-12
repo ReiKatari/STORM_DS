@@ -7,6 +7,7 @@ data class OfflineAchievementsUiState(
     val pendingSoftcoreUnlockCount: Int = 0,
     val pendingLedgerUnlockCount: Int = 0,
     val ledgerIntegrity: OfflineLedgerIntegrity = OfflineLedgerIntegrity.EMPTY,
+    val ledgerExpiresInMs: Long? = null,
     val isOnline: Boolean = false,
     val isSyncing: Boolean = false,
 ) {
@@ -19,10 +20,14 @@ data class OfflineAchievementsUiState(
     val isLedgerIntegrityOk: Boolean
         get() = ledgerIntegrity == OfflineLedgerIntegrity.OK || ledgerIntegrity == OfflineLedgerIntegrity.EMPTY
 
+    val isLedgerExpired: Boolean
+        get() = ledgerExpiresInMs?.let { it <= 0L } == true
+
     val canSyncNow: Boolean
         get() = availability == Availability.ENABLED &&
             isOnline &&
             isLedgerIntegrityOk &&
             pendingSoftcoreUnlockCount > 0 &&
+            !isLedgerExpired &&
             !isSyncing
 }

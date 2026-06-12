@@ -43,6 +43,7 @@ import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerSigner
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerStorage
 import me.magnum.melonds.impl.retroachievements.offline.OfflinePrefetchCacheRepository
 import me.magnum.melonds.impl.retroachievements.offline.OfflinePrefetchCacheStorage
+import me.magnum.melonds.impl.retroachievements.offline.RAApiSmartSyncRaClient
 import me.magnum.melonds.impl.retroachievements.offline.SmartSyncEngine
 import me.magnum.melonds.impl.romprocessors.Api24RomFileProcessorFactory
 import me.magnum.melonds.ui.romdetails.RomDetailsUiMapper
@@ -163,7 +164,7 @@ object MelonModule {
         prefetchCacheRepository: OfflinePrefetchCacheRepository,
     ): SmartSyncEngine {
         return SmartSyncEngine(
-            raApi = raApi,
+            raClient = RAApiSmartSyncRaClient(raApi),
             ledgerRepository = ledgerRepository,
             prefetchCacheRepository = prefetchCacheRepository,
         )
