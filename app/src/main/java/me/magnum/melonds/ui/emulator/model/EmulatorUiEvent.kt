@@ -31,7 +31,10 @@ sealed class EmulatorUiEvent {
         val renderer: VideoRenderer,
         val menuState: InGameRomSettingsMenuState,
     ) : EmulatorUiEvent()
-    data class ShowOfflineAchievementsSyncChoice(val pendingUnlockCount: Int) : EmulatorUiEvent()
+    data class ShowOfflineAchievementsSyncChoice(
+        val pendingUnlockCount: Int,
+        val ledgerExpiresInMs: Long?,
+    ) : EmulatorUiEvent()
     data class ShowHardcorePendingExitWarning(
         val pendingHardcoreCount: Int,
     ) : EmulatorUiEvent()

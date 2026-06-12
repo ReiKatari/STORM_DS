@@ -19,6 +19,11 @@ class OfflineLedgerRepository(
     private val clock: Clock = Clock.System,
 ) {
 
+    private companion object {
+        const val CURRENT_EXPIRATION_POLICY_VERSION = 1
+        const val MAX_RA_AWARD_OFFSET_MS = 14L * 24L * 60L * 60L * 1000L
+    }
+
     private val mutex = Mutex()
 
     suspend fun getStatus(userId: String, contentId: String): OfflineLedgerStatus {
@@ -79,10 +84,14 @@ class OfflineLedgerRepository(
             val pendingUnlocks = unlocks.filterNot { ackedSeqs.contains(it.seq) }
 
             val sessions = buildSessions(file.records)
+            val ledgerExpiresAtEpochMs = ledgerExpirationEpochMs(file, pendingUnlocks)
+            val nowEpochMs = clock.now().toEpochMilliseconds()
             OfflineLedgerStatus(
                 integrity = OfflineLedgerIntegrity.OK,
                 pendingUnlocks = pendingUnlocks,
                 sessions = sessions,
+                ledgerExpiresAtEpochMs = ledgerExpiresAtEpochMs,
+                ledgerExpiresInMs = ledgerExpiresAtEpochMs?.let { it - nowEpochMs },
             )
         }
     }
@@ -282,7 +291,16 @@ class OfflineLedgerRepository(
                     signature = signature,
                 )
 
-                val newFile = OfflineLedgerFile(records = currentFile.records + record)
+                val expirationPolicyVersion = when {
+                    currentBytes == null -> CURRENT_EXPIRATION_POLICY_VERSION
+                    currentFile.expirationPolicyVersion > 0 -> currentFile.expirationPolicyVersion
+                    else -> 0
+                }
+
+                val newFile = currentFile.copy(
+                    records = currentFile.records + record,
+                    expirationPolicyVersion = expirationPolicyVersion,
+                )
                 val newBytes = OfflineLedgerCodec.encodeFile(newFile)
                 storage.write(userId, contentId, newBytes)
                 Result.success(Unit)
@@ -399,5 +417,17 @@ class OfflineLedgerRepository(
             OfflineUnlockType.OFFLINE_AFTER_START -> payload.offlineType
             OfflineUnlockType.UNKNOWN -> OfflineUnlockType.OFFLINE_AFTER_START
         }
+    }
+
+    private fun ledgerExpirationEpochMs(file: OfflineLedgerFile, pendingUnlocks: List<OfflineUnlockEvent>): Long? {
+        if (file.expirationPolicyVersion <= 0) return null
+
+        val oldestPendingUnlockEpochMs = pendingUnlocks
+            .asSequence()
+            .map { it.localTimestampEpochMs }
+            .filter { it > 0L }
+            .minOrNull()
+
+        return oldestPendingUnlockEpochMs?.plus(MAX_RA_AWARD_OFFSET_MS)
     }
 }

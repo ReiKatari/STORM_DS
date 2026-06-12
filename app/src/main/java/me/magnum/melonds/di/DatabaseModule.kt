@@ -16,6 +16,7 @@ import me.magnum.melonds.database.migrations.Migration1to2
 import me.magnum.melonds.database.migrations.Migration4to5
 import me.magnum.melonds.database.migrations.Migration5to6
 import me.magnum.melonds.database.migrations.Migration7to8
+import me.magnum.melonds.database.migrations.Migration8to9
 import me.magnum.melonds.impl.retroachievements.NoCacheRetroAchievementsDao
 import javax.inject.Singleton
 
@@ -38,7 +39,7 @@ object DatabaseModule {
                     addCallback(it)
                 }
             }
-            .addMigrations(Migration1to2(), Migration4to5(), Migration5to6(), Migration7to8())
+            .addMigrations(Migration1to2(), Migration4to5(), Migration5to6(), Migration7to8(), Migration8to9())
             .build()
     }
 

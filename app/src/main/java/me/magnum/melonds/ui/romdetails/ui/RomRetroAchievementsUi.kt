@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -75,6 +76,7 @@ private const val HEADER_ITEM_TYPE = "header"
 private const val FILTERS_ITEM_TYPE = "filters"
 private const val BUCKET_HEADER_ITEM_TYPE = "bucket_header"
 private const val ACHIEVEMENT_ITEM_TYPE = "achievement"
+private const val LEDGER_EXPIRATION_DAY_MS = 24L * 60L * 60L * 1000L
 
 @Composable
 fun RomRetroAchievementsUi(
@@ -131,6 +133,13 @@ fun OfflineAchievementsStatusUi(
         StatusLine(text = availabilityText)
         StatusLine(text = stringResource(id = R.string.offline_ra_pending_softcore_unlocks, state.pendingSoftcoreUnlockCount))
         StatusLine(text = stringResource(id = R.string.offline_ra_pending_ledger_unlocks, state.pendingLedgerUnlockCount))
+        val expirationText = rememberLedgerExpirationText(state.ledgerExpiresInMs)
+        if (expirationText != null) {
+            StatusLine(
+                text = stringResource(id = R.string.offline_ra_ledger_expiration, expirationText),
+                highlight = state.isLedgerExpired,
+            )
+        }
         val integrityText = if (state.isLedgerIntegrityOk) {
             stringResource(id = R.string.offline_ra_ledger_integrity_ok)
         } else {
@@ -155,6 +164,23 @@ fun OfflineAchievementsStatusUi(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Text(text = stringResource(id = R.string.offline_ra_sync_now_button).uppercase())
+        }
+    }
+}
+
+@Composable
+private fun rememberLedgerExpirationText(expiresInMs: Long?): String? {
+    if (expiresInMs == null) return null
+
+    val context = LocalContext.current
+    return remember(expiresInMs, context) {
+        if (expiresInMs <= 0L) {
+            context.getString(R.string.offline_ra_ledger_expired)
+        } else {
+            val days = ((expiresInMs + LEDGER_EXPIRATION_DAY_MS - 1L) / LEDGER_EXPIRATION_DAY_MS)
+                .coerceAtLeast(1L)
+                .toInt()
+            context.resources.getQuantityString(R.plurals.offline_ra_ledger_expires_days, days, days)
         }
     }
 }

@@ -102,6 +102,7 @@ import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.impl.emulator.EmulatorSession
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerIntegrity
+import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerExpiredException
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerRepository
 import me.magnum.melonds.impl.retroachievements.offline.OfflinePrefetchCacheAchievement
 import me.magnum.melonds.impl.retroachievements.offline.OfflinePrefetchCacheFile
@@ -436,7 +437,10 @@ class EmulatorViewModel @Inject constructor(
                         hardcoreOfflineLossTracker.clearPendingUnlocks(userId, contentId)
                         if (ledgerStatus.pendingSoftcoreUnlockCount > 0) {
                             _toastEvent.tryEmit(
-                                ToastEvent.OfflineSoftcorePendingNotice(ledgerStatus.pendingSoftcoreUnlockCount)
+                                ToastEvent.OfflineSoftcorePendingNotice(
+                                    pendingSoftcoreCount = ledgerStatus.pendingSoftcoreUnlockCount,
+                                    ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
+                                )
                             )
                         }
                     }
@@ -678,6 +682,14 @@ class EmulatorViewModel @Inject constructor(
         }
 
         if (!startedOnline && offlineSoftcoreEnabled) {
+            if (ledgerStatus.integrity == OfflineLedgerIntegrity.OK && ledgerStatus.pendingSoftcoreUnlockCount > 0) {
+                _toastEvent.tryEmit(
+                    ToastEvent.OfflineSoftcorePendingNotice(
+                        pendingSoftcoreCount = ledgerStatus.pendingSoftcoreUnlockCount,
+                        ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
+                    )
+                )
+            }
             return RetroAchievementsLaunchDecision(
                 networkMode = RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING,
                 sessionMode = RetroAchievementsSessionMode.SOFTCORE,
@@ -685,6 +697,23 @@ class EmulatorViewModel @Inject constructor(
                 isHardcoreEligibleAfterOnlineStart = false,
                 offlineDueToNoInternetAtStart = true,
                 hardcoreOfflineDisabled = hardcoreSettingEnabled,
+            )
+        }
+
+        if (ledgerStatus.isExpired) {
+            _toastEvent.tryEmit(
+                ToastEvent.OfflineSoftcorePendingNotice(
+                    pendingSoftcoreCount = ledgerStatus.pendingSoftcoreUnlockCount,
+                    ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
+                )
+            )
+            return RetroAchievementsLaunchDecision(
+                networkMode = RetroAchievementsNetworkMode.ONLINE_LIVE,
+                sessionMode = if (hardcoreSettingEnabled) RetroAchievementsSessionMode.HARDCORE else RetroAchievementsSessionMode.SOFTCORE,
+                initialOfflineType = null,
+                isHardcoreEligibleAfterOnlineStart = hardcoreSettingEnabled,
+                offlineDueToNoInternetAtStart = false,
+                hardcoreOfflineDisabled = false,
             )
         }
 
@@ -699,7 +728,10 @@ class EmulatorViewModel @Inject constructor(
             )
         }
 
-        val choice = awaitOfflineAchievementsSyncChoice(ledgerStatus.pendingSoftcoreUnlockCount)
+        val choice = awaitOfflineAchievementsSyncChoice(
+            pendingUnlockCount = ledgerStatus.pendingSoftcoreUnlockCount,
+            ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
+        )
         return when (choice) {
             OfflineAchievementsSyncChoice.CONTINUE_OFFLINE -> RetroAchievementsLaunchDecision(
                 networkMode = RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING,
@@ -750,6 +782,14 @@ class EmulatorViewModel @Inject constructor(
             return true
         }
         val error = syncResult.exceptionOrNull()
+        if (error is OfflineLedgerExpiredException) {
+            _toastEvent.tryEmit(
+                ToastEvent.OfflineSoftcorePendingNotice(
+                    pendingSoftcoreCount = pendingUnlockCount,
+                    ledgerExpiresInMs = 0L,
+                )
+            )
+        }
         logRaTrace(
             "offline_sync_now_failed",
             "pending" to pendingUnlockCount,
@@ -761,6 +801,7 @@ class EmulatorViewModel @Inject constructor(
 
     private suspend fun awaitOfflineAchievementsSyncChoice(
         pendingUnlockCount: Int,
+        ledgerExpiresInMs: Long?,
     ): OfflineAchievementsSyncChoice {
         offlineSyncChoiceDeferred?.cancel()
         val deferred = CompletableDeferred<OfflineAchievementsSyncChoice>()
@@ -768,6 +809,7 @@ class EmulatorViewModel @Inject constructor(
         _uiEvent.emit(
             EmulatorUiEvent.ShowOfflineAchievementsSyncChoice(
                 pendingUnlockCount = pendingUnlockCount,
+                ledgerExpiresInMs = ledgerExpiresInMs,
             )
         )
         return deferred.await().also {
@@ -1156,7 +1198,10 @@ class EmulatorViewModel @Inject constructor(
                     hardcoreOfflineLossTracker.clearPendingUnlocks(userId, contentId)
                     if (ledgerStatus.pendingSoftcoreUnlockCount > 0) {
                         _toastEvent.tryEmit(
-                            ToastEvent.OfflineSoftcorePendingNotice(ledgerStatus.pendingSoftcoreUnlockCount)
+                            ToastEvent.OfflineSoftcorePendingNotice(
+                                pendingSoftcoreCount = ledgerStatus.pendingSoftcoreUnlockCount,
+                                ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
+                            )
                         )
                     }
                 }

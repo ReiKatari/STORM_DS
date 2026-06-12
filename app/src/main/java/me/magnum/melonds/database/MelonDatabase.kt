@@ -28,7 +28,7 @@ import me.magnum.melonds.database.entities.retroachievements.RAPendingAchievemen
 import me.magnum.melonds.database.entities.retroachievements.RAUserAchievementEntity
 
 @Database(
-    version = 8,
+    version = 9,
     exportSchema = true,
     entities = [
         CheatDatabaseEntity::class,

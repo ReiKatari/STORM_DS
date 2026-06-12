@@ -11,4 +11,5 @@ data class RAPendingAchievementSubmissionEntity(
     @ColumnInfo(name = "achievement_id") val achievementId: Long,
     @ColumnInfo(name = "game_id") val gameId: Long,
     @ColumnInfo(name = "for_hardcore_mode") val forHardcoreMode: Boolean,
+    @ColumnInfo(name = "created_at_epoch_ms", defaultValue = "0") val createdAtEpochMs: Long = 0L,
 )

@@ -69,6 +69,7 @@ class AndroidRetroAchievementsRepository(
         const val RA_UNOFFICIAL_ENABLED = "ra_unofficial_enabled"
         const val RA_TRACE_TAG = "RATrace"
         const val RA_SUBMISSION_TAG = "RASubmission"
+        const val MAX_RA_AWARD_OFFSET_SECONDS = 14L * 24L * 60L * 60L
     }
 
     override fun observeKnownAchievementHashes() = retroAchievementsDao.observeAllGameHashes()
@@ -250,7 +251,12 @@ class AndroidRetroAchievementsRepository(
                 "hardcore" to it.forHardcoreMode,
             )
             // Do not schedule resubmission if this fails. The current submission job should schedule another attempt
-            val submissionResult = submitAchievementAward(it.achievementId, RAGameId(it.gameId), it.forHardcoreMode)
+            val submissionResult = submitAchievementAward(
+                achievementId = it.achievementId,
+                gameId = RAGameId(it.gameId),
+                forHardcoreMode = it.forHardcoreMode,
+                awardTimestampEpochMs = it.createdAtEpochMs,
+            )
             if (submissionResult.isFailure) {
                 logRaTrace(
                     "pending_award_retry_failed",
@@ -346,7 +352,12 @@ class AndroidRetroAchievementsRepository(
         raApi.sendPing(gameId, gameHash, forHardcoreMode, richPresenceDescription)
     }
 
-    private suspend fun submitAchievementAward(achievementId: Long, gameId: RAGameId, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {
+    private suspend fun submitAchievementAward(
+        achievementId: Long,
+        gameId: RAGameId,
+        forHardcoreMode: Boolean,
+        awardTimestampEpochMs: Long? = null,
+    ): Result<RAAwardAchievementResponse> {
         val userAchievement = RAUserAchievementEntity(
             gameId = gameId.id,
             achievementId = achievementId,
@@ -359,6 +370,7 @@ class AndroidRetroAchievementsRepository(
         }
 
         val gameHash = retroAchievementsDao.getAnyGameHashForGameId(gameId.id)
+        val offsetSeconds = awardTimestampEpochMs?.let(::awardOffsetSeconds)
         logRaSubmission(
             "kotlin_award_submit_start",
             "achievement_id" to achievementId,
@@ -367,6 +379,7 @@ class AndroidRetroAchievementsRepository(
             "game_id" to gameId.id,
             "game_hash" to gameHash,
             "hardcore" to forHardcoreMode,
+            "offset_seconds" to offsetSeconds,
         )
         logRaTrace(
             "achievement_submit_attempt",
@@ -374,9 +387,10 @@ class AndroidRetroAchievementsRepository(
             "game_id" to gameId.id,
             "hardcore" to forHardcoreMode,
             "game_hash" to gameHash,
+            "offset_seconds" to offsetSeconds,
         )
 
-        return raApi.awardAchievement(achievementId, forHardcoreMode, gameHash).onSuccess { response ->
+        return raApi.awardAchievement(achievementId, forHardcoreMode, gameHash, offsetSeconds).onSuccess { response ->
             if (forHardcoreMode) {
                 retroAchievementsDao.addUserAchievement(userAchievement)
             }
@@ -388,6 +402,7 @@ class AndroidRetroAchievementsRepository(
                 "game_id" to gameId.id,
                 "game_hash" to gameHash,
                 "hardcore" to forHardcoreMode,
+                "offset_seconds" to offsetSeconds,
                 "ra_awarded" to response.achievementAwarded,
                 "remaining" to response.remainingAchievements,
             )
@@ -422,6 +437,7 @@ class AndroidRetroAchievementsRepository(
                     achievementId = achievementId,
                     gameId = gameId.id,
                     forHardcoreMode = false,
+                    createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
                 )
                 retroAchievementsDao.addPendingAchievementSubmission(pendingAchievementSubmissionEntity)
                 logRaSubmission(
@@ -430,6 +446,7 @@ class AndroidRetroAchievementsRepository(
                     "submit_path" to "pending_submission_worker",
                     "game_id" to gameId.id,
                     "hardcore" to false,
+                    "created_at_epoch_ms" to pendingAchievementSubmissionEntity.createdAtEpochMs,
                 )
                 logRaTrace(
                     "achievement_submit_queued_pending",
@@ -453,6 +470,15 @@ class AndroidRetroAchievementsRepository(
                 )
             }
         }
+    }
+
+    private fun awardOffsetSeconds(awardTimestampEpochMs: Long): Long? {
+        if (awardTimestampEpochMs <= 0L) return null
+
+        val elapsedSeconds = ((Clock.System.now().toEpochMilliseconds() - awardTimestampEpochMs) / 1000L).coerceAtLeast(0L)
+        return elapsedSeconds
+            .coerceAtMost(MAX_RA_AWARD_OFFSET_SECONDS)
+            .takeIf { it > 0L }
     }
 
     private suspend fun getGameIdFromGameHash(gameHash: String, forceRefreshHashLibrary: Boolean = false): Result<RAGameId?> {

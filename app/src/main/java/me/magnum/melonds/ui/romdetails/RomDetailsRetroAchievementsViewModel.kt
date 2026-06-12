@@ -170,6 +170,7 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
             pendingSoftcoreUnlockCount = if (ledgerOk) ledgerStatus.pendingSoftcoreUnlockCount else 0,
             pendingLedgerUnlockCount = if (ledgerOk) ledgerStatus.pendingSoftcoreUnlockCount else 0,
             ledgerIntegrity = ledgerStatus.integrity,
+            ledgerExpiresInMs = if (ledgerOk) ledgerStatus.ledgerExpiresInMs else null,
             isOnline = isOnline,
             isSyncing = isSyncing,
         )

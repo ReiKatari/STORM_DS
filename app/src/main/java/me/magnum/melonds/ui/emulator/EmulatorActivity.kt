@@ -151,6 +151,7 @@ class EmulatorActivity : AppCompatActivity() {
         const val KEY_BOOT_FIRMWARE_ONLY = "boot_firmware_only"
         private const val STARTUP_PRESENTATION_REFRESH_ATTEMPTS = 24
         private const val STARTUP_PRESENTATION_REFRESH_INTERVAL_MS = 100L
+        private const val LEDGER_EXPIRATION_DAY_MS = 24L * 60L * 60L * 1000L
 
         fun getRomEmulatorActivityIntent(context: Context, rom: Rom): Intent {
             return Intent(context, EmulatorActivity::class.java).apply {
@@ -728,7 +729,19 @@ class EmulatorActivity : AppCompatActivity() {
                             message to Toast.LENGTH_LONG
                         }
                         is ToastEvent.OfflineSoftcorePendingNotice -> {
-                            getString(R.string.offline_ra_pending_softcore_notice, it.pendingSoftcoreCount) to Toast.LENGTH_LONG
+                            val expirationText = getLedgerExpirationText(it.ledgerExpiresInMs)
+                            val message = when {
+                                it.ledgerExpiresInMs != null && it.ledgerExpiresInMs <= 0L -> {
+                                    getString(R.string.offline_ra_pending_softcore_expired_notice, it.pendingSoftcoreCount)
+                                }
+                                expirationText != null -> {
+                                    getString(R.string.offline_ra_pending_softcore_notice_with_expiration, it.pendingSoftcoreCount, expirationText)
+                                }
+                                else -> {
+                                    getString(R.string.offline_ra_pending_softcore_notice, it.pendingSoftcoreCount)
+                                }
+                            }
+                            message to Toast.LENGTH_LONG
                         }
                         is ToastEvent.OfflineAchievementNotSynced -> {
                             val messageRes = when (it.reason) {
@@ -828,7 +841,10 @@ class EmulatorActivity : AppCompatActivity() {
                             }
                         }
                         is EmulatorUiEvent.ShowOfflineAchievementsSyncChoice -> {
-                            showOfflineAchievementsSyncChoiceDialog(it.pendingUnlockCount)
+                            showOfflineAchievementsSyncChoiceDialog(
+                                pendingUnlockCount = it.pendingUnlockCount,
+                                ledgerExpiresInMs = it.ledgerExpiresInMs,
+                            )
                         }
                         is EmulatorUiEvent.ShowHardcorePendingExitWarning -> {
                             showHardcorePendingExitWarningDialog(it.pendingHardcoreCount)
@@ -1003,11 +1019,20 @@ class EmulatorActivity : AppCompatActivity() {
         return getString(labelRes)
     }
 
-    private fun showOfflineAchievementsSyncChoiceDialog(pendingUnlockCount: Int) {
+    private fun showOfflineAchievementsSyncChoiceDialog(
+        pendingUnlockCount: Int,
+        ledgerExpiresInMs: Long?,
+    ) {
+        val expirationText = getLedgerExpirationText(ledgerExpiresInMs)
+        val message = if (expirationText != null) {
+            getString(R.string.offline_ra_pending_message_with_expiration, pendingUnlockCount, expirationText)
+        } else {
+            getString(R.string.offline_ra_pending_message, pendingUnlockCount)
+        }
         offlineSyncChoiceDialog?.dismiss()
         offlineSyncChoiceDialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.offline_ra_pending_title))
-            .setMessage(getString(R.string.offline_ra_pending_message, pendingUnlockCount))
+            .setMessage(message)
             .setCancelable(false)
             .setPositiveButton(R.string.offline_ra_sync_now) { _, _ ->
                 viewModel.submitOfflineAchievementsSyncChoice(OfflineAchievementsSyncChoice.SYNC_NOW)
@@ -1016,6 +1041,16 @@ class EmulatorActivity : AppCompatActivity() {
                 viewModel.submitOfflineAchievementsSyncChoice(OfflineAchievementsSyncChoice.CONTINUE_OFFLINE)
             }
             .show()
+    }
+
+    private fun getLedgerExpirationText(expiresInMs: Long?): String? {
+        if (expiresInMs == null) return null
+        if (expiresInMs <= 0L) return getString(R.string.offline_ra_ledger_expired)
+
+        val days = ((expiresInMs + LEDGER_EXPIRATION_DAY_MS - 1L) / LEDGER_EXPIRATION_DAY_MS)
+            .coerceAtLeast(1L)
+            .toInt()
+        return resources.getQuantityString(R.plurals.offline_ra_ledger_expires_days, days, days)
     }
 
     private fun showHardcorePendingExitWarningDialog(pendingHardcoreCount: Int) {

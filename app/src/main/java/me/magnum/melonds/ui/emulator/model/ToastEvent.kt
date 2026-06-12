@@ -33,6 +33,7 @@ sealed class ToastEvent {
     ) : ToastEvent()
     data class OfflineSoftcorePendingNotice(
         val pendingSoftcoreCount: Int,
+        val ledgerExpiresInMs: Long? = null,
     ) : ToastEvent()
 
     enum class OfflineAchievementNotSyncedReason {

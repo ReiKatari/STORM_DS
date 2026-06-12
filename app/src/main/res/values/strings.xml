@@ -668,6 +668,7 @@
     <string name="offline_ra_softcore_enabled">Enable offline Softcore RetroAchievements</string>
     <string name="offline_ra_softcore_enabled_summary">Queue Softcore unlocks locally when RetroAchievements cannot submit online.</string>
     <string name="offline_ra_pending_message">You have %1$d offline unlock(s) pending. Sync now before playing online?</string>
+    <string name="offline_ra_pending_message_with_expiration">You have %1$d offline unlock(s) pending. Sync now before playing online? Ledger expires in %2$s. Connect before it expires to avoid losing them.</string>
     <string name="offline_ra_sync_now">Sync now and start playing</string>
     <string name="offline_ra_continue_offline">Continue playing offline</string>
     <string name="offline_ra_syncing_title">Syncing offline unlocks</string>
@@ -689,10 +690,18 @@
     <string name="offline_ra_pending_softcore_unlocks">Softcore pending: %1$d</string>
     <string name="offline_ra_pending_ledger_unlocks">Queued in ledger: %1$d</string>
     <string name="offline_ra_pending_softcore_notice">Softcore pending unlocks: %1$d. You can sync them later.</string>
+    <string name="offline_ra_pending_softcore_notice_with_expiration">Softcore pending unlocks: %1$d. Sync within %2$s to avoid losing them.</string>
+    <string name="offline_ra_pending_softcore_expired_notice">Softcore pending unlocks: %1$d. This offline ledger expired and can no longer be synced.</string>
     <string name="offline_ra_in_ledger_badge">In ledger</string>
     <string name="offline_ra_ledger_integrity">Ledger integrity: %1$s</string>
     <string name="offline_ra_ledger_integrity_ok">OK</string>
     <string name="offline_ra_ledger_integrity_tampered">TAMPERED</string>
+    <string name="offline_ra_ledger_expiration">Ledger expiration: %1$s</string>
+    <string name="offline_ra_ledger_expired">Expired</string>
+    <plurals name="offline_ra_ledger_expires_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
     <string name="offline_ra_sync_now_button">Sync now</string>
     <string name="offline_ra_continue_playing_button">Continue playing</string>
     <string name="offline_ra_exit_anyway_button">Exit anyway</string>

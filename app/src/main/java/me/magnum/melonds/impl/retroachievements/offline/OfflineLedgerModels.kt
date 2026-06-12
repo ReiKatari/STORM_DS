@@ -56,6 +56,7 @@ data class OfflineLedgerRecord(
 @Serializable
 data class OfflineLedgerFile(
     @ProtoNumber(1) val records: List<OfflineLedgerRecord> = emptyList(),
+    @ProtoNumber(2) val expirationPolicyVersion: Int = 0,
 )
 
 data class OfflineUnlockEvent(
@@ -94,9 +95,13 @@ data class OfflineLedgerStatus(
     val integrity: OfflineLedgerIntegrity,
     val pendingUnlocks: List<OfflineUnlockEvent> = emptyList(),
     val sessions: Map<String, OfflineSessionEvent> = emptyMap(),
+    val ledgerExpiresAtEpochMs: Long? = null,
+    val ledgerExpiresInMs: Long? = null,
 ) {
     val pendingUnlockCount: Int get() = pendingUnlocks.size
     val pendingSoftcoreUnlockCount: Int get() = pendingUnlocks.count { it.unlockMode == OfflineUnlockMode.SOFTCORE }
     val pendingHardcoreUnlockCount: Int get() = pendingUnlocks.count { it.unlockMode == OfflineUnlockMode.HARDCORE }
     val hasPendingHardcoreUnlocks: Boolean get() = pendingHardcoreUnlockCount > 0
+    val isExpiringLedger: Boolean get() = ledgerExpiresAtEpochMs != null
+    val isExpired: Boolean get() = ledgerExpiresInMs?.let { it <= 0L } == true
 }
