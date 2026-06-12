@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
@@ -21,6 +22,7 @@ import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.EmulatorConfiguration
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.domain.model.VideoRenderer
+import me.magnum.melonds.domain.model.dsinand.DSiWareTitleFileType
 import me.magnum.melonds.domain.model.emulator.EmulatorEvent
 import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
@@ -31,11 +33,13 @@ import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.domain.model.rom.config.RuntimeEnum
+import me.magnum.melonds.domain.services.DSiNandManager
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.impl.camera.DSiCameraSourceMultiplexer
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
 import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
+import java.io.File
 import java.nio.ByteBuffer
 
 class AndroidEmulatorManager(
@@ -47,6 +51,7 @@ class AndroidEmulatorManager(
     private val permissionHandler: PermissionHandler,
     private val cameraManager: DSiCameraSourceMultiplexer,
     private val emulatorSession: EmulatorSession,
+    private val dsiNandManager: DSiNandManager,
 ) : EmulatorManager {
     private companion object {
         private const val TAG = "AndroidEmulatorManager"
@@ -57,13 +62,18 @@ class AndroidEmulatorManager(
     }
 
     private class RetroAchievementsSetupException : RuntimeException("RetroAchievements runtime setup failed")
-
+    private data class InstalledDsiWareShortcutSession(
+        val titleId: Long,
+        val titleIdHex: String,
+        val publicSaveFile: File?,
+    )
 
     private val _emulatorEvents = MutableSharedFlow<EmulatorEvent>(extraBufferCapacity = Int.MAX_VALUE)
     override val emulatorEvents: Flow<EmulatorEvent> = _emulatorEvents.asSharedFlow()
 
     private val achievementsSharedFlow = MutableSharedFlow<RAEvent>(replay = 0, extraBufferCapacity = Int.MAX_VALUE)
     private val dldiFolderSyncManager = DldiFolderSyncManager(context, settingsRepository)
+    private var activeInstalledDsiWareShortcutSession: InstalledDsiWareShortcutSession? = null
 
     private val messageQueue = EmulatorMessageQueue { type, data ->
         when (type) {
@@ -128,20 +138,23 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
+                if (rom.isInstalledDsiWareShortcut) {
+                    return@withContext loadInstalledDsiWareShortcut(rom, cheats)
+                }
+
                 val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
                 val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
                 val romUri = fileRomProcessor?.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
-
-                val emulatorConfiguration = getRomEmulatorConfiguration(rom)
-                    .withPreparedDldiConfiguration()
-                    ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-                setupEmulator(emulatorConfiguration)
-
                 val sram = try {
                     sramProvider.getSramForRom(rom)
                 } catch (exception: SramLoadException) {
                     return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
                 }
+
+                val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+                    .withPreparedDldiConfiguration()
+                    ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                setupEmulator(emulatorConfiguration)
 
                 val gbaSlotRomConfig = rom.config.gbaSlotConfig
                 val gbaSlotType = when (gbaSlotRomConfig) {
@@ -191,6 +204,107 @@ class AndroidEmulatorManager(
                 RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
         }
+    }
+
+    private suspend fun loadInstalledDsiWareShortcut(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
+        val titleId = rom.installedDsiWareTitleId ?: return RomLaunchResult.LaunchFailedRomNotFound
+        val titleIdHex = titleId.toDsiWareTitleIdHex()
+        val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+            .copy(
+                consoleType = ConsoleType.DSi,
+                useCustomBios = true,
+                showBootScreen = false,
+                dsiWareAutoloadTitleId = titleId,
+            )
+            .withPreparedDldiConfiguration()
+            ?: return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+
+        val shortcutCacheDir = File(context.cacheDir, "installed_dsiware")
+        if (!shortcutCacheDir.exists() && !shortcutCacheDir.mkdirs()) {
+            Log.w(TAG, "DSiWareShortcut: failed to create cache dir path=${shortcutCacheDir.absolutePath}")
+            return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+        }
+        val executableFile = File(shortcutCacheDir, "$titleIdHex.app")
+        val saveFile = File(shortcutCacheDir, "$titleIdHex.public.sav")
+
+        val openNandResult = dsiNandManager.openNand()
+        if (openNandResult.isFailure()) {
+            Log.w(TAG, "DSiWareShortcut: failed to open NAND title=$titleIdHex result=$openNandResult")
+            return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+        }
+        val exportResult: Boolean
+        var hasPublicSave = false
+        try {
+            val installedTitle = dsiNandManager.listTitles()
+                .firstOrNull { (it.titleId and 0xFFFFFFFFL) == titleId }
+            if (installedTitle == null) {
+                Log.w(TAG, "DSiWareShortcut: installed title not found title=$titleIdHex")
+                return RomLaunchResult.LaunchFailedRomNotFound
+            }
+            exportResult = dsiNandManager.exportTitleExecutable(titleId, executableFile.absolutePath)
+            hasPublicSave = installedTitle.hasPublicSavFile()
+            if (hasPublicSave) {
+                val exportedSave = dsiNandManager.exportTitleFileToPath(
+                    titleId = titleId,
+                    fileType = DSiWareTitleFileType.PUBLIC_SAV,
+                    filePath = saveFile.absolutePath,
+                )
+                if (!exportedSave) {
+                    Log.w(TAG, "DSiWareShortcut: failed to export public save title=$titleIdHex")
+                    return RomLaunchResult.LaunchFailedRomNotFound
+                }
+            } else {
+                saveFile.writeBytes(ByteArray(0))
+            }
+        } finally {
+            dsiNandManager.closeNand()
+        }
+        if (!exportResult) {
+            Log.w(TAG, "DSiWareShortcut: failed to export installed executable title=$titleIdHex")
+            return RomLaunchResult.LaunchFailedRomNotFound
+        }
+
+        setupEmulator(emulatorConfiguration)
+
+        Log.i(
+            TAG,
+            "DSiWareShortcut: direct boot installed title=$titleIdHex app=${executableFile.absolutePath} publicSave=$hasPublicSave save=${saveFile.absolutePath}",
+        )
+        val loadResult = MelonEmulator.loadRom(
+            romUri = Uri.parse(executableFile.absolutePath),
+            sramUri = Uri.parse(saveFile.absolutePath),
+            gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+            gbaRomUri = null,
+            gbaSramUri = null,
+        )
+        if (loadResult.isTerminal) {
+            cameraManager.stopCurrentCameraSource()
+            MelonEmulator.stopEmulation()
+            dldiFolderSyncManager.syncBackIfNeeded()
+            Log.w(TAG, "DSiWareShortcut: direct boot load failed title=$titleIdHex result=$loadResult")
+            return RomLaunchResult.LaunchFailed(loadResult)
+        }
+
+        messageQueue.start()
+        if (!precompileVulkanPipelines(emulatorConfiguration)) {
+            cameraManager.stopCurrentCameraSource()
+            MelonEmulator.stopEmulation()
+            messageQueue.stop()
+            dldiFolderSyncManager.syncBackIfNeeded()
+            return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+        }
+        MelonEmulator.setupCheats(cheats.toTypedArray())
+        activeInstalledDsiWareShortcutSession = InstalledDsiWareShortcutSession(
+            titleId = titleId,
+            titleIdHex = titleIdHex,
+            publicSaveFile = if (hasPublicSave) saveFile else null,
+        )
+        MelonEmulator.startEmulation(startPaused = true)
+        return RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
+    }
+
+    private fun Long.toDsiWareTitleIdHex(): String {
+        return (this and 0xFFFFFFFFL).toString(16).padStart(8, '0')
     }
 
     override suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult {
@@ -330,9 +444,40 @@ class AndroidEmulatorManager(
 
     override fun stopEmulator() {
         MelonEmulator.stopEmulation()
+        syncInstalledDsiWareShortcutSaveBackIfNeeded()
         dldiFolderSyncManager.syncBackIfNeeded()
         cameraManager.stopCurrentCameraSource()
         messageQueue.stop()
+    }
+
+    private fun syncInstalledDsiWareShortcutSaveBackIfNeeded() {
+        val session = activeInstalledDsiWareShortcutSession ?: return
+        activeInstalledDsiWareShortcutSession = null
+
+        val saveFile = session.publicSaveFile ?: return
+        if (!saveFile.exists()) {
+            Log.w(TAG, "DSiWareShortcut: public save missing during sync title=${session.titleIdHex}")
+            return
+        }
+
+        runBlocking(Dispatchers.IO) {
+            val openNandResult = dsiNandManager.openNand()
+            if (openNandResult.isFailure()) {
+                Log.w(TAG, "DSiWareShortcut: failed to reopen NAND for save sync title=${session.titleIdHex} result=$openNandResult")
+                return@runBlocking
+            }
+
+            try {
+                val imported = dsiNandManager.importTitleFileFromPath(
+                    titleId = session.titleId,
+                    fileType = DSiWareTitleFileType.PUBLIC_SAV,
+                    filePath = saveFile.absolutePath,
+                )
+                Log.i(TAG, "DSiWareShortcut: synced public save title=${session.titleIdHex} imported=$imported bytes=${saveFile.length()}")
+            } finally {
+                dsiNandManager.closeNand()
+            }
+        }
     }
 
     override fun cleanEmulator() {
@@ -368,11 +513,12 @@ class AndroidEmulatorManager(
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
-            showBootScreen = baseConfiguration.showBootScreen && mustUseCustomBios,
+            showBootScreen = if (rom.isInstalledDsiWareShortcut) true else baseConfiguration.showBootScreen && mustUseCustomBios,
             frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,
-            micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource)
+            micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),
+            dsiWareAutoloadTitleId = rom.installedDsiWareTitleId ?: 0L,
         ).run { getPermissionAdjustedConfiguration(this) }
     }
 
@@ -381,6 +527,7 @@ class AndroidEmulatorManager(
             consoleType = consoleType,
             useCustomBios = true,
             showBootScreen = true,
+            dsiWareAutoloadTitleId = 0L,
         ).run { getPermissionAdjustedConfiguration(this) }
     }
 

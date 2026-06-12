@@ -17,9 +17,22 @@ data class Rom(
     val retroAchievementsHash: String,
     val totalPlayTime: Duration = Duration.ZERO,
     val isFavorite: Boolean = false,
+    val installedDsiWareTitleId: Long? = null,
+    val installedDsiWareIcon: ByteArray? = null,
 ) {
+    val isInstalledDsiWareShortcut: Boolean
+        get() = installedDsiWareTitleId != null
 
     fun hasSameFileAsRom(other: Rom): Boolean {
         return uri == other.uri
+    }
+
+    companion object {
+        const val INSTALLED_DSIWARE_URI_SCHEME = "dsiware-installed"
+
+        fun installedDsiWareUri(titleId: Long): Uri {
+            val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0')
+            return Uri.parse("$INSTALLED_DSIWARE_URI_SCHEME://00030004/$titleIdHex")
+        }
     }
 }

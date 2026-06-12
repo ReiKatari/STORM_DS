@@ -351,7 +351,11 @@ private fun GridContent(
                         coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                         showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
                         onClick = { onRomClick(entry.rom) },
-                        onLongPress = { onRomLongPress(entry.rom) },
+                        onLongPress = {
+                            if (!entry.rom.isInstalledDsiWareShortcut) {
+                                onRomLongPress(entry.rom)
+                            }
+                        },
                         modifier = rememberRomBrowserItemFocusModifier(
                             index = index,
                             focusKey = entry.focusKey(),
@@ -423,10 +427,14 @@ private fun ListContent(
                     is RomBrowserEntry.RomItem -> RomListRow(
                         rom = entry.rom,
                         coverUrl = coverByHash[entry.rom.retroAchievementsHash],
-                        allowConfiguration = allowConfiguration,
+                        allowConfiguration = allowConfiguration && !entry.rom.isInstalledDsiWareShortcut,
                         showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
                         onClick = { onRomClick(entry.rom) },
-                        onLongPress = { onRomLongPress(entry.rom) },
+                        onLongPress = {
+                            if (!entry.rom.isInstalledDsiWareShortcut) {
+                                onRomLongPress(entry.rom)
+                            }
+                        },
                         onConfigClick = { onRomConfigClick(entry.rom) },
                         modifier = rememberRomBrowserItemFocusModifier(
                             index = index,

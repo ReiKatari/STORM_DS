@@ -6,24 +6,27 @@ constexpr size_t DSI_AUTOLOAD_OFFSET = 0x300;
 // unknown bit, seems to be required to boot into games (errors otherwise?)
 constexpr uint32_t UNKNOWN_BOOT_BIT = (1 << 4);
 
-void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
+static void setupAutoLoad(melonDS::DSi* dsi, uint32_t titleIdLow, uint32_t titleIdHigh)
 {
     auto* bptwl = dsi->I2C.GetBPTWL();
 
     bptwl->SetBootFlag(true);
 
-    // setup "auto-load" feature
-    auto cart = dsi->GetNDSCart();
-    auto header = cart->GetHeader();
-    DSiAutoLoad autoLoad {};
+    MelonDSAndroid::DSiSupport::DSiAutoLoad autoLoad {};
     memcpy(autoLoad.ID, "TLNC", sizeof(autoLoad.ID));
     autoLoad.Unknown1 = 0x01;
     autoLoad.Length = 0x18;
-    memcpy(autoLoad.NewTitleID, &header.DSiTitleIDLow, sizeof(autoLoad.NewTitleID));
-    // Copy header.DSiTitleIDLow and header.DSiTitleIDHigh to autoLoad.NewTitleID
+    memcpy(autoLoad.NewTitleID, &titleIdLow, sizeof(titleIdLow));
+    memcpy(autoLoad.NewTitleID + sizeof(titleIdLow), &titleIdHigh, sizeof(titleIdHigh));
 
     autoLoad.Flags |= (0x03 << 1) | 0x01 | UNKNOWN_BOOT_BIT;
-    autoLoad.Flags |= (1 << 4);
     autoLoad.CRC16 = melonDS::CRC16((uint8_t*) &autoLoad.PrevTitleID, autoLoad.Length, 0xFFFF);
     memcpy(&dsi->MainRAM[DSI_AUTOLOAD_OFFSET], &autoLoad, sizeof(autoLoad));
+}
+
+void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
+{
+    auto cart = dsi->GetNDSCart();
+    auto header = cart->GetHeader();
+    setupAutoLoad(dsi, header.DSiTitleIDLow, header.DSiTitleIDHigh);
 }

@@ -65,6 +65,10 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private suspend fun checkDsiWarePreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
+        if (rom.isInstalledDsiWareShortcut) {
+            return checkInstalledDsiWareShortcutPreconditions(rom)
+        }
+
         val romInfo = romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)?.getRomInfo(rom)
 
         if (romInfo == null) {
@@ -81,6 +85,28 @@ class EmulatorLaunchPreconditionChecker(
         val dsiTitleId = ByteBuffer.wrap(dsiTitleIdByteData).order(ByteOrder.BIG_ENDIAN).getInt().toLong()
         val isTitleInstalled = dsiNandManager.listTitles().any { it.titleId == dsiTitleId }
         dsiNandManager.closeNand()
+
+        if (!isTitleInstalled) {
+            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.TitleNotInstalled)
+        }
+
+        return RomLaunchPreconditionCheckResult.Success(rom)
+    }
+
+    private suspend fun checkInstalledDsiWareShortcutPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
+        val installedTitleId = rom.installedDsiWareTitleId
+            ?: return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.RomParseError)
+
+        val openNandResult = dsiNandManager.openNand()
+        if (openNandResult.isFailure()) {
+            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.NandError)
+        }
+
+        val isTitleInstalled = try {
+            dsiNandManager.listTitles().any { (it.titleId and 0xFFFFFFFFL) == (installedTitleId and 0xFFFFFFFFL) }
+        } finally {
+            dsiNandManager.closeNand()
+        }
 
         if (!isTitleInstalled) {
             return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.TitleNotInstalled)

@@ -31,5 +31,6 @@ data class EmulatorConfiguration(
         val micSource: MicSource,
         val firmwareConfiguration: FirmwareConfiguration,
         val rendererConfiguration: RendererConfiguration,
-        val dldiSdCardConfiguration: DldiSdCardConfiguration
+        val dldiSdCardConfiguration: DldiSdCardConfiguration,
+        val dsiWareAutoloadTitleId: Long = 0L
 )

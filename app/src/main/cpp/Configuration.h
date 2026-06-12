@@ -1,6 +1,7 @@
 #ifndef CONFIGURATION_H
 #define CONFIGURATION_H
 
+#include <cstdint>
 #include <memory>
 #include "renderer/Renderer.h"
 #include "renderer/VulkanFilterMode.h"
@@ -117,6 +118,7 @@ typedef struct
     SdCardSettings dsiSdCardSettings;
     SdCardSettings dldiSdCardSettings;
     Renderer renderer;
+    uint32_t dsiWareAutoloadTitleId;
 } EmulatorConfiguration;
 
 }

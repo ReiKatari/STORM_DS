@@ -18,6 +18,7 @@ import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.camera.DSiCameraSourceType
 import me.magnum.melonds.domain.repositories.SettingsRepository
+import me.magnum.melonds.domain.services.DSiNandManager
 import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.impl.camera.DSiCameraSourceMultiplexer
 import me.magnum.melonds.impl.camera.PhysicalDSiCameraSource
@@ -118,6 +119,7 @@ object EmulatorRuntimeModule {
         permissionHandler: PermissionHandler,
         cameraManagerMultiplexer: DSiCameraSourceMultiplexer,
         emulatorSession: EmulatorSession,
+        dsiNandManager: DSiNandManager,
     ): EmulatorManager {
         return AndroidEmulatorManager(
             context,
@@ -128,6 +130,7 @@ object EmulatorRuntimeModule {
             permissionHandler,
             cameraManagerMultiplexer,
             emulatorSession,
+            dsiNandManager,
         )
     }
 

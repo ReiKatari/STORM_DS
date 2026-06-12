@@ -178,6 +178,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jobject firmwareConfigurationObject = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "firmwareConfiguration", "Lme/magnum/melonds/domain/model/FirmwareConfiguration;"));
     jobject rendererConfigurationObject = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "rendererConfiguration", "Lme/magnum/melonds/domain/model/RendererConfiguration;"));
     jobject dldiSdCardConfigurationObject = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dldiSdCardConfiguration", "Lme/magnum/melonds/domain/model/DldiSdCardConfiguration;");
+    jfieldID dsiWareAutoloadTitleIdField = getFieldIdOrClear(env, emulatorConfigurationClass, "dsiWareAutoloadTitleId", "J");
     jboolean useCustomBios = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "useCustomBios", "Z"));
     jboolean showBootScreen = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "showBootScreen", "Z"));
     jobject dsBios7Uri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsBios7Uri", "Landroid/net/Uri;"));
@@ -257,6 +258,10 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
     finalEmulatorConfiguration.dldiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
     finalEmulatorConfiguration.renderer = videoRenderer;
+    finalEmulatorConfiguration.dsiWareAutoloadTitleId =
+        dsiWareAutoloadTitleIdField != nullptr
+            ? static_cast<uint32_t>(env->GetLongField(emulatorConfiguration, dsiWareAutoloadTitleIdField))
+            : 0u;
     return finalEmulatorConfiguration;
 }
 

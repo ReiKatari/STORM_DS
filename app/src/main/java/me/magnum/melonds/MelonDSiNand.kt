@@ -8,6 +8,7 @@ object MelonDSiNand {
     external fun listTitles(): ArrayList<DSiWareTitle>
     external fun importTitle(titleUri: String, tmdMetadata: ByteArray): Int
     external fun deleteTitle(titleId: Int)
+    external fun exportTitleExecutable(titleId: Int, outputPath: String): Boolean
     external fun importTitleFile(titleId: Int, fileType: Int, fileUri: String): Boolean
     external fun exportTitleFile(titleId: Int, fileType: Int, fileUri: String): Boolean
     external fun closeNand()
