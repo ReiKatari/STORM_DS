@@ -62,6 +62,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX) -> handleSetRendererDebugTools(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_IR_SUFFIX) -> handleSetInternalResolution(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_ROM_RUNTIME_CONSOLE_SUFFIX) -> handleSetRomRuntimeConsole(entryPoint, intent)
+            context.debugCommandAction(ACTION_SET_RETROACHIEVEMENTS_SUFFIX) -> handleSetRetroAchievements(entryPoint, intent)
             context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX) -> handleSetFastForward(intent)
             context.debugCommandAction(ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX) -> handleSetFrameLimitSpeed(entryPoint, intent)
             context.debugCommandAction(ACTION_GET_FPS_SUFFIX) -> handleGetFps()
@@ -121,6 +122,23 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         }
         val refreshed = DebugCommandStateStore.requestSettingsRefresh()
         Log.w(TAG, "action=set_ir mode=release scale=$scale refreshed=${if (refreshed) 1 else 0}")
+    }
+
+    private fun handleSetRetroAchievements(entryPoint: DebugCommandEntryPoint, intent: Intent) {
+        val enabled = intent.firstBooleanExtra(EXTRA_RA_ENABLED, EXTRA_ENABLED)
+        val hardcoreEnabled = intent.firstBooleanExtra(EXTRA_RA_HARDCORE_ENABLED, EXTRA_HARDCORE_ENABLED, EXTRA_HARDCORE)
+        require(enabled != null || hardcoreEnabled != null) {
+            "Missing RetroAchievements setting extra"
+        }
+        entryPoint.sharedPreferences().edit(commit = true) {
+            enabled?.let { putBoolean(KEY_RA_ENABLED, it) }
+            hardcoreEnabled?.let { putBoolean(KEY_RA_HARDCORE_ENABLED, it) }
+        }
+        val refreshed = DebugCommandStateStore.requestSettingsRefresh()
+        Log.w(
+            TAG,
+            "action=set_retroachievements mode=release enabled=${enabled?.let { if (it) 1 else 0 } ?: "unchanged"} hardcore=${hardcoreEnabled?.let { if (it) 1 else 0 } ?: "unchanged"} refreshed=${if (refreshed) 1 else 0}",
+        )
     }
 
     private suspend fun handleSetRomRuntimeConsole(entryPoint: DebugCommandEntryPoint, intent: Intent) {
@@ -1047,6 +1065,8 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val KEY_VIDEO_INTERNAL_RESOLUTION = "video_internal_resolution"
         private const val KEY_FRAME_LIMIT_SPEED_MULTIPLIER = "frame_limit_speed_multiplier"
         private const val KEY_RENDERER_DEBUG_BGOBJ_ENABLED = "video_renderer_debug_bgobj_enabled"
+        private const val KEY_RA_ENABLED = "ra_enabled"
+        private const val KEY_RA_HARDCORE_ENABLED = "ra_hardcore_enabled"
         private const val RELEASE_STATE_COMMANDS_PROPERTY = "debug.melonds.release_state_commands"
         private const val GETPROP_BINARY = "/system/bin/getprop"
 
@@ -1056,6 +1076,10 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val EXTRA_RUNTIME_CONSOLE = "runtime_console"
         private const val EXTRA_CONSOLE = "console"
         private const val EXTRA_ENABLED = "enabled"
+        private const val EXTRA_RA_ENABLED = "ra_enabled"
+        private const val EXTRA_RA_HARDCORE_ENABLED = "ra_hardcore_enabled"
+        private const val EXTRA_HARDCORE_ENABLED = "hardcore_enabled"
+        private const val EXTRA_HARDCORE = "hardcore"
         private const val EXTRA_MULTIPLIER = "multiplier"
         private const val EXTRA_SPEED = "speed"
         private const val EXTRA_X = "x"
@@ -1147,6 +1171,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
         private const val ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX = "SET_RENDERER_DEBUG_TOOLS"
         private const val ACTION_SET_IR_SUFFIX = "SET_IR"
         private const val ACTION_SET_ROM_RUNTIME_CONSOLE_SUFFIX = "SET_ROM_RUNTIME_CONSOLE"
+        private const val ACTION_SET_RETROACHIEVEMENTS_SUFFIX = "SET_RETROACHIEVEMENTS"
         private const val ACTION_SET_FAST_FORWARD_SUFFIX = "SET_FAST_FORWARD"
         private const val ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX = "SET_FRAME_LIMIT_SPEED"
         private const val ACTION_GET_FPS_SUFFIX = "GET_FPS"
@@ -1176,6 +1201,7 @@ internal class ReleaseStateCommandReceiver : BroadcastReceiver() {
             || action == context.debugCommandAction(ACTION_SET_RENDERER_DEBUG_TOOLS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_IR_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_ROM_RUNTIME_CONSOLE_SUFFIX)
+            || action == context.debugCommandAction(ACTION_SET_RETROACHIEVEMENTS_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_FAST_FORWARD_SUFFIX)
             || action == context.debugCommandAction(ACTION_SET_FRAME_LIMIT_SPEED_SUFFIX)
             || action == context.debugCommandAction(ACTION_GET_FPS_SUFFIX)

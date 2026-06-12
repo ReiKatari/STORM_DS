@@ -103,6 +103,23 @@ struct SoftPackedFrameSnapshot
         topScreenStats = {};
         bottomScreenStats = {};
     }
+
+    void clearForLatch()
+    {
+        frameId = 0;
+        frontBufferLatched = -1;
+        screenSwapLatched = false;
+        valid = false;
+        hasCapture3dSource = false;
+        captureBackedClass4Only = false;
+        capture3dSourceDsFrame.fill(0);
+        captureLineUses3dMask.fill(0);
+        captureFallbackLines.fill(0);
+        comp4TopPlaceholder.fill(0);
+        comp4BottomPlaceholder.fill(0);
+        topScreenStats = {};
+        bottomScreenStats = {};
+    }
 };
 
 struct PreparedSoftPackedFrameDebugView
@@ -142,6 +159,7 @@ struct VulkanCompositionInputs
     VulkanFilterMode filtering{VulkanFilterMode::Nearest};
     bool previousTopSourceValid{};
     bool previousBottomSourceValid{};
+    bool currentSourceHasHighres3d{};
     bool capture3dSourceValid{};
     bool capture3dSourceScreenSwapValid{};
     bool capture3dSourceScreenSwap{};
