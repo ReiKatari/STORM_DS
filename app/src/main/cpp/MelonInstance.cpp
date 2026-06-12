@@ -1825,6 +1825,21 @@ void MelonInstance::handleVulkanRuntimeFailure(const char* reason)
 void MelonInstance::stop()
 {
     retroAchievementsManager = nullptr;
+    if (ndsSave)
+    {
+        ndsSave->CheckFlush();
+        ndsSave = nullptr;
+    }
+    if (gbaSave)
+    {
+        gbaSave->CheckFlush();
+        gbaSave = nullptr;
+    }
+    if (firmwareSave)
+    {
+        firmwareSave->CheckFlush();
+        firmwareSave = nullptr;
+    }
     VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
     vulkanOutput = nullptr;
     vulkanSurfacePresenter = nullptr;

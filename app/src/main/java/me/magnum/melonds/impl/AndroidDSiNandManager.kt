@@ -140,6 +140,30 @@ class AndroidDSiNandManager(
         MelonDSiNand.deleteTitle((title.titleId and 0xFFFFFFFF).toInt())
     }
 
+    override suspend fun exportTitleExecutable(titleId: Long, outputPath: String): Boolean = nandControlLock.withLock {
+        if (!isNandOpen.get()) {
+            return false
+        }
+
+        return MelonDSiNand.exportTitleExecutable((titleId and 0xFFFFFFFF).toInt(), outputPath)
+    }
+
+    override suspend fun importTitleFileFromPath(titleId: Long, fileType: DSiWareTitleFileType, filePath: String): Boolean = nandControlLock.withLock {
+        if (!isNandOpen.get()) {
+            return false
+        }
+
+        return MelonDSiNand.importTitleFile((titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, filePath)
+    }
+
+    override suspend fun exportTitleFileToPath(titleId: Long, fileType: DSiWareTitleFileType, filePath: String): Boolean = nandControlLock.withLock {
+        if (!isNandOpen.get()) {
+            return false
+        }
+
+        return MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, filePath)
+    }
+
     override suspend fun importTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean = nandControlLock.withLock {
         if (!isNandOpen.get()) {
             return false

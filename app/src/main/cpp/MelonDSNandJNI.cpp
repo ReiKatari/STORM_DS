@@ -1033,6 +1033,50 @@ Java_me_magnum_melonds_MelonDSiNand_deleteTitle(JNIEnv* env, jobject thiz, jint 
 }
 
 JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonDSiNand_exportTitleExecutable(JNIEnv* env, jobject thiz, jint titleId, jstring outputPath)
+{
+    if (!nand || !nandMount || outputPath == nullptr)
+        return false;
+
+    const char* filePath = env->GetStringUTFChars(outputPath, nullptr);
+    if (filePath == nullptr)
+        return false;
+
+    u32 version = 0xFFFFFFFF;
+    melonDS::NDSHeader header {};
+    nandMount->GetTitleInfo(DSI_NAND_FILE_CATEGORY, (u32) titleId, version, &header, nullptr);
+    if (version == 0xFFFFFFFF)
+    {
+        env->ReleaseStringUTFChars(outputPath, filePath);
+        return false;
+    }
+
+    char titlePath[128];
+    snprintf(
+        titlePath,
+        sizeof(titlePath),
+        "0:/title/%08x/%08x/content/%08x.app",
+        DSI_NAND_FILE_CATEGORY,
+        (u32) titleId,
+        version
+    );
+    bool result = nandMount->ExportFile(titlePath, filePath);
+
+    if (!result)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "DSiWareShortcut: failed to export executable title=%08x version=%08x\n",
+            (u32) titleId,
+            version
+        );
+    }
+
+    env->ReleaseStringUTFChars(outputPath, filePath);
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_importTitleFile(JNIEnv* env, jobject thiz, jint titleId, jint fileType, jstring fileUri)
 {
     const char* filePath = env->GetStringUTFChars(fileUri, nullptr);

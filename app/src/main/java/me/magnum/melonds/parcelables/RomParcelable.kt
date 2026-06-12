@@ -27,7 +27,22 @@ class RomParcelable : Parcelable {
         val isDsiWareTitle = parcel.readInt() == 1
         val retroAchievementsHash = parcel.readString()!!
         val totalPlayTime = parcel.readLong().milliseconds
-        rom = Rom(name!!, developerName, fileName!!, uri, parentTreeUri, romConfig!!.romConfig, lastPlayed, isDsiWareTitle, retroAchievementsHash, totalPlayTime)
+        val installedDsiWareTitleId = parcel.readLong().takeIf { it != -1L }
+        val installedDsiWareIcon = parcel.createByteArray()
+        rom = Rom(
+            name!!,
+            developerName,
+            fileName!!,
+            uri,
+            parentTreeUri,
+            romConfig!!.romConfig,
+            lastPlayed,
+            isDsiWareTitle,
+            retroAchievementsHash,
+            totalPlayTime,
+            installedDsiWareTitleId = installedDsiWareTitleId,
+            installedDsiWareIcon = installedDsiWareIcon,
+        )
     }
 
     override fun writeToParcel(dest: Parcel, flags: Int) {
@@ -41,6 +56,8 @@ class RomParcelable : Parcelable {
         dest.writeInt(if (rom.isDsiWareTitle) 1 else 0)
         dest.writeString(rom.retroAchievementsHash)
         dest.writeLong(rom.totalPlayTime.inWholeMilliseconds)
+        dest.writeLong(rom.installedDsiWareTitleId ?: -1L)
+        dest.writeByteArray(rom.installedDsiWareIcon)
     }
 
     override fun describeContents(): Int {

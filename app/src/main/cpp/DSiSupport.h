@@ -1,6 +1,7 @@
 #ifndef DSISUPPORT_H
 #define DSISUPPORT_H
 
+#include <cstdint>
 #include <DSi.h>
 
 namespace MelonDSAndroid

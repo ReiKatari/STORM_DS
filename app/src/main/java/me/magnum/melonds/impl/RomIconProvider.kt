@@ -3,12 +3,14 @@ package me.magnum.melonds.impl
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.createBitmap
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.domain.model.rom.Rom
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -63,6 +65,12 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
     }
 
     private fun loadIconFromDisk(hash: String, rom: Rom): Bitmap? {
+        rom.installedDsiWareIcon?.let { icon ->
+            return createBitmap(32, 32).apply {
+                copyPixelsFromBuffer(ByteBuffer.wrap(icon))
+            }
+        }
+
         val iconCacheDir = getIconCacheDir()
         if (iconCacheDir?.isDirectory == true) {
             val iconFile = File(iconCacheDir, hash)
