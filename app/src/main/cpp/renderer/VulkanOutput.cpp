@@ -4092,6 +4092,17 @@ bool VulkanOutput::buildCompositionInputs(
         resource.topScreenStats.StructuredSlotPixels > dominantStructuredSlotThreshold;
     const bool bottomUsesStructured3d =
         resource.bottomScreenStats.StructuredSlotPixels > dominantStructuredSlotThreshold;
+    const bool topUsesCurrentCapture3d = topUsesRegularCapture3d || topUsesVramCapture3d;
+    const bool bottomUsesCurrentCapture3d = bottomUsesRegularCapture3d || bottomUsesVramCapture3d;
+    const bool topHasVisibleStructured3d =
+        resource.topScreenStats.StructuredAboveVisiblePixels > 0
+        || topUsesCurrentCapture3d;
+    const bool bottomHasVisibleStructured3d =
+        resource.bottomScreenStats.StructuredAboveVisiblePixels > 0
+        || bottomUsesCurrentCapture3d;
+    outInputs.currentSourceHasHighres3d =
+        topHasVisibleStructured3d
+        || bottomHasVisibleStructured3d;
     outInputs.class4VramStructuredPair =
         resource.captureBackedClass4Only
         && !topUsesRegularCapture3d
@@ -4120,8 +4131,6 @@ bool VulkanOutput::buildCompositionInputs(
     outInputs.scale = static_cast<u32>(scale);
     outInputs.filtering = filtering;
     outInputs.capture3dSourceValid = resource.hasPreparedCapture3dSource && resource.capture3dBuffer != VK_NULL_HANDLE;
-    const bool topUsesCurrentCapture3d = topUsesRegularCapture3d || topUsesVramCapture3d;
-    const bool bottomUsesCurrentCapture3d = bottomUsesRegularCapture3d || bottomUsesVramCapture3d;
     const bool asymmetricRegularCapture3d =
         topUsesRegularCapture3d != bottomUsesRegularCapture3d
         && !topUsesVramCapture3d

@@ -991,15 +991,22 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
             return surfaceState.configured
                 && IsVulkanPostProcessFilter(surfaceState.config.filtering);
         });
+    const bool directPresentHasDualScreen3dSource =
+        !hasDualScreenSurface
+        || inputs.currentSourceHasHighres3d
+        || inputs.capture3dSourceValid;
+    const bool directPresentHasReadyDualScreenHistory =
+        !hasDualScreenSurface
+        || !inputs.capture3dSourceValid
+        || (inputs.previousTopSourceValid && inputs.previousBottomSourceValid);
     const bool directPresentRequested = !inputs.needsReadback
         && !inputs.validationMode
         && !postProcessFilterRequested
         && surfaces.size() == 1
-        && !hasDualScreenSurface
         && hasRequiredDirectHandles
-        && !inputs.capture3dSourceValid
-        && !inputs.previousTopSourceValid
-        && !inputs.previousBottomSourceValid;
+        && directPresentHasDualScreen3dSource
+        && directPresentHasReadyDualScreenHistory
+        && !inputs.capture3dSourceValid;
 
     if (!directPresentRequested)
     {
@@ -1009,7 +1016,7 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
             fallbackReasonValidationMode++;
         if (!hasRequiredDirectHandles)
             fallbackReasonMissingHandles++;
-        if (surfaces.size() > 1 || hasDualScreenSurface)
+        if (surfaces.size() > 1 || !directPresentHasDualScreen3dSource || !directPresentHasReadyDualScreenHistory || inputs.capture3dSourceValid)
             fallbackReasonSurfaceCount++;
     }
 
@@ -3498,7 +3505,7 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         );
     }
 
-    std::array<VkBufferMemoryBarrier, 3> bufferBarriers{};
+    std::array<VkBufferMemoryBarrier, 4> bufferBarriers{};
     bufferBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     bufferBarriers[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
     bufferBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -3519,12 +3526,21 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
 
     bufferBarriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     bufferBarriers[2].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bufferBarriers[2].dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    bufferBarriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     bufferBarriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     bufferBarriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[2].buffer = surfaceState.vertexBuffer;
+    bufferBarriers[2].buffer = inputs.capture3dBuffer;
     bufferBarriers[2].offset = 0;
-    bufferBarriers[2].size = surfaceState.vertexBufferSize;
+    bufferBarriers[2].size = inputs.capture3dBufferSize;
+
+    bufferBarriers[3].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    bufferBarriers[3].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    bufferBarriers[3].dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    bufferBarriers[3].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferBarriers[3].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferBarriers[3].buffer = surfaceState.vertexBuffer;
+    bufferBarriers[3].offset = 0;
+    bufferBarriers[3].size = surfaceState.vertexBufferSize;
 
     vkCmdPipelineBarrier(
         surfaceState.commandBuffer,
