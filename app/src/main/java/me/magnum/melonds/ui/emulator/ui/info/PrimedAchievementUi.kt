@@ -72,6 +72,7 @@ private fun PreviewPrimedAchievementUi() {
             AchievementPrimed(
                 achievement = mockRAAchievementPreview(description = "Do the thing without taking damage"),
                 state = AchievementInfoState { },
+                uiInstanceId = 0,
             )
         )
     }

@@ -394,7 +394,7 @@ class AndroidEmulatorManager(
         MelonEmulator.debugStepFrame()
     }
 
-    override suspend fun resetEmulator() {
+    override suspend fun resetEmulator() = withContext(Dispatchers.Default) {
         MelonEmulator.resetEmulation()
     }
 

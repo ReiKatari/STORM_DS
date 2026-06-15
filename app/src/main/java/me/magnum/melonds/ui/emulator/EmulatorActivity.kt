@@ -3209,7 +3209,7 @@ class EmulatorActivity : AppCompatActivity() {
                 onSlotPicked(it)
             },
             onDeletedSlot = {
-                viewModel.deleteSaveStateSlot(it)?.let { newSlots ->
+                viewModel.deleteSaveStateSlot(it) { newSlots ->
                     adapter?.updateSaveStateSlots(newSlots)
                 }
             },
