@@ -92,6 +92,7 @@ private fun PreviewLeaderboardAttemptUi() {
                 gameIcon = URL("https://example.com/icon.png"),
                 currentValue = "0:25.74",
                 state = AchievementInfoState { },
+                uiInstanceId = 0,
             )
         )
     }
