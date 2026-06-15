@@ -1287,16 +1287,20 @@ class EmulatorViewModel @Inject constructor(
                     RomPauseMenuOption.SAVE_STATE -> {
                         if (emulatorSession.areSaveStatesAllowed()) {
                             (_emulatorState.value as? EmulatorState.RunningRom)?.let {
-                                val saveStateSlots = getRomSaveStateSlots(it.rom)
-                                _uiEvent.tryEmit(EmulatorUiEvent.ShowRomSaveStates(saveStateSlots, EmulatorUiEvent.ShowRomSaveStates.Reason.SAVING))
+                                sessionCoroutineScope.launch {
+                                    val saveStateSlots = getRomSaveStateSlots(it.rom)
+                                    _uiEvent.emit(EmulatorUiEvent.ShowRomSaveStates(saveStateSlots, EmulatorUiEvent.ShowRomSaveStates.Reason.SAVING))
+                                }
                             }
                         }
                     }
                     RomPauseMenuOption.LOAD_STATE -> {
                         if (emulatorSession.areSaveStateLoadsAllowed()) {
                             (_emulatorState.value as? EmulatorState.RunningRom)?.let {
-                                val saveStateSlots = getRomSaveStateSlots(it.rom)
-                                _uiEvent.tryEmit(EmulatorUiEvent.ShowRomSaveStates(saveStateSlots, EmulatorUiEvent.ShowRomSaveStates.Reason.LOADING))
+                                sessionCoroutineScope.launch {
+                                    val saveStateSlots = getRomSaveStateSlots(it.rom)
+                                    _uiEvent.emit(EmulatorUiEvent.ShowRomSaveStates(saveStateSlots, EmulatorUiEvent.ShowRomSaveStates.Reason.LOADING))
+                                }
                             }
                         } else {
                             _toastEvent.tryEmit(ToastEvent.CannotLoadSaveStatesWhenRAHardcoreIsEnabled)
@@ -1440,7 +1444,7 @@ class EmulatorViewModel @Inject constructor(
             is EmulatorState.RunningRom -> {
                 sessionCoroutineScope.launch {
                     emulatorManager.pauseEmulator()
-                    val quickSlot = saveStatesRepository.getRomQuickSaveStateSlot(currentState.rom)
+                    val quickSlot = getRomQuickSaveStateSlot(currentState.rom)
                     if (saveRomState(currentState.rom, quickSlot)) {
                         _toastEvent.emit(ToastEvent.QuickSaveSuccessful)
                     }
@@ -1463,7 +1467,7 @@ class EmulatorViewModel @Inject constructor(
                 if (emulatorSession.areSaveStateLoadsAllowed()) {
                     sessionCoroutineScope.launch {
                         emulatorManager.pauseEmulator()
-                        val quickSlot = saveStatesRepository.getRomQuickSaveStateSlot(currentState.rom)
+                        val quickSlot = getRomQuickSaveStateSlot(currentState.rom)
                         if (loadRomState(currentState.rom, quickSlot)) {
                             _toastEvent.emit(ToastEvent.QuickLoadSuccessful)
                         }
@@ -1482,15 +1486,20 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    fun deleteSaveStateSlot(slot: SaveStateSlot): List<SaveStateSlot>? {
-        return (_emulatorState.value as? EmulatorState.RunningRom)?.let {
-            saveStatesRepository.deleteRomSaveState(it.rom, slot)
-            getRomSaveStateSlots(it.rom)
+    fun deleteSaveStateSlot(slot: SaveStateSlot, onSlotsUpdated: (List<SaveStateSlot>) -> Unit) {
+        (_emulatorState.value as? EmulatorState.RunningRom)?.let {
+            sessionCoroutineScope.launch {
+                val updatedSlots = withContext(Dispatchers.IO) {
+                    saveStatesRepository.deleteRomSaveState(it.rom, slot)
+                    saveStatesRepository.getRomSaveStates(it.rom)
+                }
+                onSlotsUpdated(updatedSlots)
+            }
         }
     }
 
     private suspend fun saveRomState(rom: Rom, slot: SaveStateSlot): Boolean {
-        val slotUri = saveStatesRepository.getRomSaveStateUri(rom, slot)
+        val slotUri = getRomSaveStateUri(rom, slot)
         if (!emulatorManager.saveState(slotUri)) {
             return false
         }
@@ -1509,7 +1518,7 @@ class EmulatorViewModel @Inject constructor(
             return false
         }
 
-        val slotUri = saveStatesRepository.getRomSaveStateUri(rom, slot)
+        val slotUri = getRomSaveStateUri(rom, slot)
         val success = emulatorManager.loadState(slotUri)
         if (success) {
             _achievementsEvent.emit(RAEventUi.Reset)
@@ -1529,13 +1538,13 @@ class EmulatorViewModel @Inject constructor(
             return
         }
 
-        val quickSlot = saveStatesRepository.getRomQuickSaveStateSlot(rom)
+        val quickSlot = getRomQuickSaveStateSlot(rom)
         if (!quickSlot.exists) {
             Log.i(AUTO_STATE_TAG, "auto-load skipped: quick slot missing")
             return
         }
 
-        val quickSlotUri = runCatching { saveStatesRepository.getRomSaveStateUri(rom, quickSlot) }
+        val quickSlotUri = runCatching { getRomSaveStateUri(rom, quickSlot) }
             .onFailure { Log.w(AUTO_STATE_TAG, "auto-load skipped: failed to resolve quick slot for ${rom.name}", it) }
             .getOrNull()
         if (quickSlotUri == null || !isSavestateHeaderValid(quickSlotUri)) {
@@ -1619,7 +1628,7 @@ class EmulatorViewModel @Inject constructor(
         }
 
         emulatorManager.pauseEmulator()
-        val quickSlot = saveStatesRepository.getRomQuickSaveStateSlot(rom)
+        val quickSlot = getRomQuickSaveStateSlot(rom)
         Log.i(AUTO_STATE_TAG, "auto-save start: slot=${quickSlot.slot} rom=${rom.name}")
         val didSave = saveRomState(rom, quickSlot)
         if (didSave) {
@@ -2079,8 +2088,16 @@ class EmulatorViewModel @Inject constructor(
         return fileRomProcessor?.getRomInfo(rom)
     }
 
-    private fun getRomSaveStateSlots(rom: Rom): List<SaveStateSlot> {
-        return saveStatesRepository.getRomSaveStates(rom)
+    private suspend fun getRomSaveStateSlots(rom: Rom): List<SaveStateSlot> = withContext(Dispatchers.IO) {
+        saveStatesRepository.getRomSaveStates(rom)
+    }
+
+    private suspend fun getRomQuickSaveStateSlot(rom: Rom): SaveStateSlot = withContext(Dispatchers.IO) {
+        saveStatesRepository.getRomQuickSaveStateSlot(rom)
+    }
+
+    private suspend fun getRomSaveStateUri(rom: Rom, slot: SaveStateSlot): Uri = withContext(Dispatchers.IO) {
+        saveStatesRepository.getRomSaveStateUri(rom, slot)
     }
 
     fun isSustainedPerformanceModeEnabled(): Boolean {

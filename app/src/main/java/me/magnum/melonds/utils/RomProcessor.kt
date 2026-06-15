@@ -7,7 +7,6 @@ import me.magnum.melonds.common.Crc32
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.RomMetadata
 import me.magnum.melonds.domain.model.rom.Rom
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.math.BigInteger
 import java.nio.ByteBuffer
@@ -22,7 +21,7 @@ object RomProcessor {
 
 	@Suppress("NAME_SHADOWING")
 	fun getRomMetadata(inputStream: InputStream): RomMetadata? {
-		val sectionReader = CachedRomSectionReader(inputStream)
+		val sectionReader = ForwardRomSectionReader(inputStream)
 		val header = sectionReader.readSection(0, 0x160) ?: return null
 		val gameCode = String(header, 0x0C, 4)
 
@@ -44,19 +43,37 @@ object RomProcessor {
 			false
 		}
 
-		val arm9Bootcode = sectionReader.readSection(arm9Offset, arm9Size) ?: return null
-		val arm7Bootcode = sectionReader.readSection(arm7Offset, arm7Size) ?: return null
-		val banner = sectionReader.readSection(bannerOffset, 0xA00) ?: return null
+		var arm9Bootcode: ByteArray? = null
+		var arm7Bootcode: ByteArray? = null
+		var banner: ByteArray? = null
+		val requiredSections = listOf(
+			RequiredRomSection(arm9Offset, arm9Size, RequiredRomSection.Type.ARM9),
+			RequiredRomSection(arm7Offset, arm7Size, RequiredRomSection.Type.ARM7),
+			RequiredRomSection(bannerOffset, 0xA00, RequiredRomSection.Type.BANNER),
+		).sortedBy { it.offset }
 
-		val bannerText = readBannerTitleAndDeveloper(banner)
+		for (section in requiredSections) {
+			val data = sectionReader.readSection(section.offset, section.size) ?: return null
+			when (section.type) {
+				RequiredRomSection.Type.ARM9 -> arm9Bootcode = data
+				RequiredRomSection.Type.ARM7 -> arm7Bootcode = data
+				RequiredRomSection.Type.BANNER -> banner = data
+			}
+		}
+
+		val arm9Data = arm9Bootcode ?: return null
+		val arm7Data = arm7Bootcode ?: return null
+		val bannerData = banner ?: return null
+
+		val bannerText = readBannerTitleAndDeveloper(bannerData)
 		val romName = bannerText?.first.orEmpty()
 		val developerName = bannerText?.second.orEmpty()
 
 		val retroAchievementsMd5Digest = MessageDigest.getInstance("MD5").run {
 			update(header)
-			update(arm9Bootcode)
-			update(arm7Bootcode)
-			update(banner)
+			update(arm9Data)
+			update(arm7Data)
+			update(bannerData)
 			digest()
 		}
 
@@ -235,29 +252,65 @@ object RomProcessor {
 		} while (remaining > 0)
 	}
 
-	private class CachedRomSectionReader(private val stream: InputStream) {
-		private val cache = ByteArrayOutputStream()
+	private data class RequiredRomSection(
+		val offset: Int,
+		val size: Int,
+		val type: Type,
+	) {
+		enum class Type {
+			ARM9,
+			ARM7,
+			BANNER,
+		}
+	}
+
+	private class ForwardRomSectionReader(private val stream: InputStream) {
 		private val buffer = ByteArray(8192)
+		private var position = 0L
 
 		fun readSection(offset: Int, size: Int): ByteArray? {
 			if (offset < 0 || size < 0) {
 				return null
 			}
-			val endOffset = offset + size
-			if (endOffset < offset) {
+			val targetOffset = offset.toLong()
+			if (targetOffset < position) {
+				return null
+			}
+			val endOffset = targetOffset + size
+			if (endOffset < targetOffset) {
 				return null
 			}
 
-			while (cache.size() < endOffset) {
-				val bytesToRead = min(buffer.size, endOffset - cache.size())
-				val read = stream.read(buffer, 0, bytesToRead)
+			if (!skipTo(targetOffset)) {
+				return null
+			}
+
+			val section = ByteArray(size)
+			var totalRead = 0
+			while (totalRead < size) {
+				val read = stream.read(section, totalRead, size - totalRead)
 				if (read <= 0) {
 					return null
 				}
-				cache.write(buffer, 0, read)
+				totalRead += read
+				position += read
 			}
 
-			return cache.toByteArray().copyOfRange(offset, endOffset)
+			return section
+		}
+
+		private fun skipTo(targetOffset: Long): Boolean {
+			var remaining = targetOffset - position
+			while (remaining > 0) {
+				val toRead = min(buffer.size.toLong(), remaining).toInt()
+				val read = stream.read(buffer, 0, toRead)
+				if (read <= 0) {
+					return false
+				}
+				position += read
+				remaining -= read
+			}
+			return true
 		}
 	}
 }
