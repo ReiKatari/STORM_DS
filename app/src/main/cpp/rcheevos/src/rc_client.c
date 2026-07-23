@@ -208,6 +208,7 @@ void rc_client_destroy(rc_client_t* client)
   }
   rc_mutex_unlock(&client->state.mutex);
 
+  rc_client_discard_pending_submissions(client);
   rc_client_unload_game(client);
 
 #ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
@@ -6322,6 +6323,153 @@ void rc_client_idle(rc_client_t* client)
 
   if (client->state.disconnect & ~RC_CLIENT_DISCONNECT_VISIBLE)
     rc_client_raise_disconnect_events(client);
+}
+
+int rc_client_is_submission_retry_pending_token(
+    rc_client_t* client, uintptr_t callback_data_token)
+{
+  rc_client_scheduled_callback_data_t* scheduled_callback;
+  int pending = 0;
+
+  if (!client || !callback_data_token)
+    return 0;
+
+  rc_mutex_lock(&client->state.mutex);
+
+  for (scheduled_callback = client->state.scheduled_callbacks;
+       scheduled_callback;
+       scheduled_callback = scheduled_callback->next) {
+    if ((uintptr_t)scheduled_callback->data == callback_data_token &&
+        (scheduled_callback->callback == rc_client_award_achievement_retry ||
+         scheduled_callback->callback == rc_client_submit_leaderboard_entry_retry)) {
+      pending = 1;
+      break;
+    }
+  }
+
+  rc_mutex_unlock(&client->state.mutex);
+  return pending;
+}
+
+void rc_client_get_pending_submission_counts(
+    rc_client_t* client, uint32_t* achievements, uint32_t* leaderboards)
+{
+  rc_client_scheduled_callback_data_t* scheduled_callback;
+  uint32_t achievement_count = 0;
+  uint32_t leaderboard_count = 0;
+
+  if (client) {
+    rc_mutex_lock(&client->state.mutex);
+
+    for (scheduled_callback = client->state.scheduled_callbacks;
+         scheduled_callback;
+         scheduled_callback = scheduled_callback->next) {
+      if (scheduled_callback->callback == rc_client_award_achievement_retry)
+        ++achievement_count;
+      else if (scheduled_callback->callback == rc_client_submit_leaderboard_entry_retry)
+        ++leaderboard_count;
+    }
+
+    rc_mutex_unlock(&client->state.mutex);
+  }
+
+  if (achievements)
+    *achievements = achievement_count;
+  if (leaderboards)
+    *leaderboards = leaderboard_count;
+}
+
+int rc_client_retry_pending_submission(
+    rc_client_t* client, uintptr_t callback_data_token)
+{
+  rc_client_scheduled_callback_data_t** link;
+  rc_client_scheduled_callback_data_t* scheduled_callback = NULL;
+  rc_clock_t now;
+
+  if (!client || !callback_data_token)
+    return 0;
+
+  now = client->callbacks.get_time_millisecs(client);
+  rc_mutex_lock(&client->state.mutex);
+
+  link = &client->state.scheduled_callbacks;
+  while (*link) {
+    rc_client_scheduled_callback_data_t* candidate = *link;
+    if ((uintptr_t)candidate->data == callback_data_token &&
+        (candidate->callback == rc_client_award_achievement_retry ||
+         candidate->callback == rc_client_submit_leaderboard_entry_retry)) {
+      *link = candidate->next;
+      candidate->next = NULL;
+      scheduled_callback = candidate;
+      break;
+    }
+    link = &candidate->next;
+  }
+
+  rc_mutex_unlock(&client->state.mutex);
+  if (!scheduled_callback)
+    return 0;
+
+  scheduled_callback->callback(scheduled_callback, client, now);
+  rc_client_raise_disconnect_events(client);
+  return 1;
+}
+
+uint32_t rc_client_discard_pending_submissions(rc_client_t* client)
+{
+  rc_client_scheduled_callback_data_t* discarded = NULL;
+  rc_client_scheduled_callback_data_t** discarded_tail = &discarded;
+  rc_client_scheduled_callback_data_t** link;
+  uint32_t count = 0;
+
+  if (!client)
+    return 0;
+
+  rc_mutex_lock(&client->state.mutex);
+
+  link = &client->state.scheduled_callbacks;
+  while (*link) {
+    rc_client_scheduled_callback_data_t* candidate = *link;
+    if (candidate->callback == rc_client_award_achievement_retry ||
+        candidate->callback == rc_client_submit_leaderboard_entry_retry) {
+      *link = candidate->next;
+      candidate->next = NULL;
+      *discarded_tail = candidate;
+      discarded_tail = &candidate->next;
+      ++count;
+    }
+    else {
+      link = &candidate->next;
+    }
+  }
+
+  rc_mutex_unlock(&client->state.mutex);
+
+  while (discarded) {
+    rc_client_scheduled_callback_data_t* next = discarded->next;
+    if (discarded->callback == rc_client_award_achievement_retry) {
+      rc_client_award_achievement_callback_data_t* achievement_data =
+          (rc_client_award_achievement_callback_data_t*)discarded->data;
+      if (achievement_data) {
+        achievement_data->scheduled_callback_data = NULL;
+        free(achievement_data);
+      }
+    }
+    else {
+      rc_client_submit_leaderboard_entry_callback_data_t* leaderboard_data =
+          (rc_client_submit_leaderboard_entry_callback_data_t*)discarded->data;
+      if (leaderboard_data) {
+        leaderboard_data->scheduled_callback_data = NULL;
+        free(leaderboard_data);
+      }
+    }
+    free(discarded);
+    discarded = next;
+  }
+
+  if (count)
+    rc_client_update_disconnect_state(client);
+  return count;
 }
 
 void rc_client_schedule_callback(rc_client_t* client, rc_client_scheduled_callback_data_t* scheduled_callback)

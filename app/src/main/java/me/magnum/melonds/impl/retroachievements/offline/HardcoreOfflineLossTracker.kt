@@ -15,14 +15,37 @@ class HardcoreOfflineLossTracker @Inject constructor(
         val userId: String,
         val contentId: String,
         val gameTitle: String,
-    )
+        val achievementCount: Int,
+        val leaderboardCount: Int,
+    ) {
+        val totalCount: Int
+            get() = achievementCount + leaderboardCount
+    }
 
-    fun markPendingUnlocks(userId: String, contentId: String, gameTitle: String) {
+    fun markPendingSubmissions(
+        userId: String,
+        contentId: String,
+        gameTitle: String,
+        achievementCount: Int,
+        leaderboardCount: Int,
+    ) {
+        require(achievementCount >= 0)
+        require(leaderboardCount >= 0)
+        if (achievementCount + leaderboardCount == 0) {
+            clearPendingUnlocks(userId, contentId)
+            return
+        }
         sharedPreferences.edit()
             .putString(KEY_USER_ID, userId)
             .putString(KEY_CONTENT_ID, contentId)
             .putString(KEY_GAME_TITLE, gameTitle)
-            .apply()
+            .putInt(KEY_ACHIEVEMENT_COUNT, achievementCount)
+            .putInt(KEY_LEADERBOARD_COUNT, leaderboardCount)
+            .commit()
+    }
+
+    fun markPendingUnlocks(userId: String, contentId: String, gameTitle: String) {
+        markPendingSubmissions(userId, contentId, gameTitle, 1, 0)
     }
 
     fun clearPendingUnlocks(userId: String, contentId: String) {
@@ -42,10 +65,18 @@ class HardcoreOfflineLossTracker @Inject constructor(
         val userId = sharedPreferences.getString(KEY_USER_ID, null) ?: return null
         val contentId = sharedPreferences.getString(KEY_CONTENT_ID, null) ?: return null
         val gameTitle = sharedPreferences.getString(KEY_GAME_TITLE, null).orEmpty().ifBlank { contentId }
+        val counts = resolveStoredPendingCounts(
+            hasAchievementCount = sharedPreferences.contains(KEY_ACHIEVEMENT_COUNT),
+            achievementCount = sharedPreferences.getInt(KEY_ACHIEVEMENT_COUNT, 0),
+            hasLeaderboardCount = sharedPreferences.contains(KEY_LEADERBOARD_COUNT),
+            leaderboardCount = sharedPreferences.getInt(KEY_LEADERBOARD_COUNT, 0),
+        )
         return PendingHardcoreUnlockLoss(
             userId = userId,
             contentId = contentId,
             gameTitle = gameTitle,
+            achievementCount = counts.first,
+            leaderboardCount = counts.second,
         )
     }
 
@@ -54,7 +85,9 @@ class HardcoreOfflineLossTracker @Inject constructor(
             .remove(KEY_USER_ID)
             .remove(KEY_CONTENT_ID)
             .remove(KEY_GAME_TITLE)
-            .apply()
+            .remove(KEY_ACHIEVEMENT_COUNT)
+            .remove(KEY_LEADERBOARD_COUNT)
+            .commit()
     }
 
     private companion object {
@@ -62,5 +95,19 @@ class HardcoreOfflineLossTracker @Inject constructor(
         private const val KEY_USER_ID = "user_id"
         private const val KEY_CONTENT_ID = "content_id"
         private const val KEY_GAME_TITLE = "game_title"
+        private const val KEY_ACHIEVEMENT_COUNT = "achievement_count"
+        private const val KEY_LEADERBOARD_COUNT = "leaderboard_count"
     }
+}
+
+internal fun resolveStoredPendingCounts(
+    hasAchievementCount: Boolean,
+    achievementCount: Int,
+    hasLeaderboardCount: Boolean,
+    leaderboardCount: Int,
+): Pair<Int, Int> {
+    if (!hasAchievementCount && !hasLeaderboardCount) {
+        return 1 to 0
+    }
+    return achievementCount.coerceAtLeast(0) to leaderboardCount.coerceAtLeast(0)
 }

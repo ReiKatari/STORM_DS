@@ -128,6 +128,12 @@ public:
     std::vector<RetroAchievements::RARuntimeAchievement> getRuntimeAchievements();
     std::vector<RetroAchievements::RARuntimeAchievementBucketEntry> getRuntimeAchievementBuckets();
     std::vector<long> getRuntimeSubsetIds();
+    RetroAchievements::RANativePendingRetryResult retryPendingRetroAchievementsSubmissions(
+        const std::vector<uint64_t>& expectedSubmissionIds);
+    uint64_t refreshPendingRetroAchievementsSubmissions();
+    int32_t discardPendingRetroAchievementsSubmissions(
+        const std::vector<uint64_t>& expectedSubmissionIds);
+    void setRetroAchievementsSubmissionTransportSuspended(bool suspended);
 
 private:
     struct PreparedVulkanDebugSnapshot
@@ -218,6 +224,7 @@ private:
     NDS* nds;
     std::shared_ptr<Net> net;
 
+    std::mutex retroAchievementsManagerLifetimeMutex;
     std::unique_ptr<RetroAchievements::RetroAchievementsManager> retroAchievementsManager;
     std::unique_ptr<SaveManager> ndsSave;
     std::unique_ptr<SaveManager> gbaSave;

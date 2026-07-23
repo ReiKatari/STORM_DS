@@ -1410,7 +1410,11 @@ void MelonInstance::reset()
     }
 
     rewindManager.Reset();
-    retroAchievementsManager->Reset();
+    {
+        std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+        if (retroAchievementsManager)
+            retroAchievementsManager->Reset();
+    }
     nds->Start();
     if (currentRenderer == Renderer::Vulkan)
         requestVulkanPresentationResync();
@@ -1594,7 +1598,11 @@ u32 MelonInstance::runFrame()
         vulkanNdsRunCpuWindow.Add(ndsRunEndNs - ndsRunStartNs);
     }
     const u64 raFrameStartNs = measuringVulkan ? PerfNowNs() : 0;
-    retroAchievementsManager->FrameUpdate();
+    {
+        std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+        if (retroAchievementsManager)
+            retroAchievementsManager->FrameUpdate();
+    }
     if (measuringVulkan)
         vulkanRaFrameCpuWindow.Add(PerfNowNs() - raFrameStartNs);
 
@@ -1841,7 +1849,12 @@ void MelonInstance::handleVulkanRuntimeFailure(const char* reason)
 
 void MelonInstance::stop()
 {
-    retroAchievementsManager = nullptr;
+    std::unique_ptr<RetroAchievements::RetroAchievementsManager> managerToDestroy;
+    {
+        std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+        managerToDestroy = std::move(retroAchievementsManager);
+    }
+    managerToDestroy.reset();
     if (ndsSave)
     {
         ndsSave->CheckFlush();
@@ -4023,6 +4036,7 @@ void MelonInstance::requestFirmwareSaveWrite(const u8* saveData, u32 saveLength,
 
 bool MelonInstance::areSaveStatesAllowed()
 {
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
     if (!retroAchievementsManager)
         return true;
 
@@ -4035,11 +4049,14 @@ bool MelonInstance::saveState(Savestate* state, bool refreshScreenshot)
     if (refreshedVulkanScreenshot)
         (void)updateVulkanScreenshot(lastCompletedVulkanFrame, lastCompletedVulkanScale, true);
 
-    if (!retroAchievementsManager->DoSavestate(state))
     {
-        if (refreshedVulkanScreenshot)
-            requestVulkanPresentationResync();
-        return false;
+        std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+        if (!retroAchievementsManager || !retroAchievementsManager->DoSavestate(state))
+        {
+            if (refreshedVulkanScreenshot)
+                requestVulkanPresentationResync();
+            return false;
+        }
     }
 
     const bool saved = nds->DoSavestate(state);
@@ -4050,8 +4067,11 @@ bool MelonInstance::saveState(Savestate* state, bool refreshScreenshot)
 
 bool MelonInstance::loadState(Savestate* state)
 {
-    if (!retroAchievementsManager->DoSavestate(state))
-        return false;
+    {
+        std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+        if (!retroAchievementsManager || !retroAchievementsManager->DoSavestate(state))
+            return false;
+    }
 
     const bool loaded = nds->DoSavestate(state);
     if (loaded)
@@ -4100,6 +4120,7 @@ bool MelonInstance::setupAchievements(
     std::optional<RetroAchievements::RARuntimeBridgeConfig> runtimeBridgeConfig
 )
 {
+    std::lock_guard managerLifetimeGuard(retroAchievementsManagerLifetimeMutex);
     const auto achievementCount = achievements.size();
     const auto leaderboardCount = leaderboards.size();
     const bool hasRuntimeConfig = runtimeBridgeConfig.has_value();
@@ -4116,6 +4137,8 @@ bool MelonInstance::setupAchievements(
         );
         return false;
     }
+    if (!retroAchievementsManager)
+        return false;
 
     retroAchievementsManager->UnloadEverything();
     retroAchievementsManager->ConfigureRuntimeBridge(std::move(runtimeBridgeConfig));
@@ -4168,11 +4191,14 @@ bool MelonInstance::setupAchievements(
 
 void MelonInstance::unloadRetroAchievementsData()
 {
-    retroAchievementsManager->UnloadEverything();
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    if (retroAchievementsManager)
+        retroAchievementsManager->UnloadEverything();
 }
 
 std::string MelonInstance::getRichPresenceStatus()
 {
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
     if (instanceId == 0 && retroAchievementsManager)
         return retroAchievementsManager->GetRichPresenceStatus();
     else
@@ -4181,6 +4207,7 @@ std::string MelonInstance::getRichPresenceStatus()
 
 std::vector<RetroAchievements::RARuntimeAchievement> MelonInstance::getRuntimeAchievements()
 {
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
     if (instanceId == 0 && retroAchievementsManager)
         return retroAchievementsManager->GetRuntimeAchievements();
     else
@@ -4189,6 +4216,7 @@ std::vector<RetroAchievements::RARuntimeAchievement> MelonInstance::getRuntimeAc
 
 std::vector<RetroAchievements::RARuntimeAchievementBucketEntry> MelonInstance::getRuntimeAchievementBuckets()
 {
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
     if (instanceId == 0 && retroAchievementsManager)
         return retroAchievementsManager->GetRuntimeAchievementBuckets();
     else
@@ -4197,10 +4225,47 @@ std::vector<RetroAchievements::RARuntimeAchievementBucketEntry> MelonInstance::g
 
 std::vector<long> MelonInstance::getRuntimeSubsetIds()
 {
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
     if (instanceId == 0 && retroAchievementsManager)
         return retroAchievementsManager->GetRuntimeSubsetIds();
     else
         return { };
+}
+
+RetroAchievements::RANativePendingRetryResult MelonInstance::retryPendingRetroAchievementsSubmissions(
+    const std::vector<uint64_t>& expectedSubmissionIds)
+{
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    if (instanceId == 0 && retroAchievementsManager)
+        return retroAchievementsManager->RetryPendingSubmissions(expectedSubmissionIds);
+
+    RetroAchievements::RANativePendingRetryResult result;
+    result.transportFailure = true;
+    return result;
+}
+
+uint64_t MelonInstance::refreshPendingRetroAchievementsSubmissions()
+{
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    if (instanceId == 0 && retroAchievementsManager)
+        return retroAchievementsManager->RefreshPendingSubmissions();
+    return 0;
+}
+
+int32_t MelonInstance::discardPendingRetroAchievementsSubmissions(
+    const std::vector<uint64_t>& expectedSubmissionIds)
+{
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    if (instanceId == 0 && retroAchievementsManager)
+        return retroAchievementsManager->DiscardPendingSubmissions(expectedSubmissionIds);
+    return -1;
+}
+
+void MelonInstance::setRetroAchievementsSubmissionTransportSuspended(bool suspended)
+{
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    if (instanceId == 0 && retroAchievementsManager)
+        retroAchievementsManager->SetSubmissionTransportSuspended(suspended);
 }
 
 void MelonInstance::updateRenderer()

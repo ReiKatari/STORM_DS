@@ -29,6 +29,7 @@ import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
 import me.magnum.melonds.domain.model.retroachievements.GameAchievementData
 import me.magnum.melonds.domain.model.retroachievements.RAEvent
+import me.magnum.melonds.domain.model.retroachievements.RaNativePendingRetryResult
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
@@ -263,6 +264,21 @@ class AndroidEmulatorManager(
                     )
                 }
                 achievementsSharedFlow.tryEmit(event)
+            }
+            EmulatorEventType.EventRAPendingSubmissionAdded -> {
+                RetroAchievementsEventDecoder.readPendingSubmissionAdded(data)?.let {
+                    achievementsSharedFlow.tryEmit(it)
+                }
+            }
+            EmulatorEventType.EventRAPendingSubmissionResolved -> {
+                RetroAchievementsEventDecoder.readPendingSubmissionResolved(data)?.let {
+                    achievementsSharedFlow.tryEmit(it)
+                }
+            }
+            EmulatorEventType.EventRAPendingSubmissionBarrier -> {
+                RetroAchievementsEventDecoder.readPendingSubmissionBarrier(data)?.let {
+                    achievementsSharedFlow.tryEmit(it)
+                }
             }
         }
     }
@@ -553,6 +569,40 @@ class AndroidEmulatorManager(
             if (!setupSucceeded) {
                 throw RetroAchievementsSetupException()
             }
+        }
+    }
+
+    override suspend fun retryPendingRetroAchievementsSubmissions(
+        expectedNativeSubmissionIds: List<Long>,
+    ): RaNativePendingRetryResult {
+        return withContext(Dispatchers.Default) {
+            RetroAchievementsEventDecoder.readPendingRetryResult(
+                MelonEmulator.retryPendingRetroAchievementsSubmissions(
+                    expectedNativeSubmissionIds.toLongArray(),
+                ),
+            )
+        }
+    }
+
+    override suspend fun refreshPendingRetroAchievementsSubmissions(): Long {
+        return withContext(Dispatchers.Default) {
+            MelonEmulator.refreshPendingRetroAchievementsSubmissions()
+        }
+    }
+
+    override suspend fun discardPendingRetroAchievementsSubmissions(
+        expectedNativeSubmissionIds: List<Long>,
+    ): Int {
+        return withContext(Dispatchers.Default) {
+            MelonEmulator.discardPendingRetroAchievementsSubmissions(
+                expectedNativeSubmissionIds.toLongArray(),
+            )
+        }
+    }
+
+    override suspend fun setRetroAchievementsSubmissionTransportSuspended(suspended: Boolean) {
+        withContext(Dispatchers.Default) {
+            MelonEmulator.setRetroAchievementsSubmissionTransportSuspended(suspended)
         }
     }
 
