@@ -42,10 +42,12 @@ class VersionTest {
     fun testReleaseTypeDifference() {
         val alpha = Version(Version.ReleaseType.ALPHA, 1, 0, 0)
         val beta = Version(Version.ReleaseType.BETA, 1, 0, 0)
+        val rc = Version(Version.ReleaseType.RC, 1, 0, 0, 1)
         val final = Version(Version.ReleaseType.FINAL, 1, 0, 0)
 
         assert(alpha < beta)
-        assert(beta < final)
+        assert(beta < rc)
+        assert(rc < final)
     }
 
     @Test
@@ -113,5 +115,24 @@ class VersionTest {
             fail("Did not throw")
         } catch (e: Exception) {
         }
+    }
+
+    @Test
+    fun parsesForkVersionFormats() {
+        assertEquals(Version(Version.ReleaseType.FINAL, 1, 2, 3), Version.fromString("v1.2.3"))
+        assertEquals(Version(Version.ReleaseType.RC, 1, 2, 3, 4), Version.fromString("1.2.3-rc4"))
+        assertEquals(Version(Version.ReleaseType.RC, 1, 2, 3, 4), Version.fromString("1.2.3.rc4"))
+        assertEquals(Version(Version.ReleaseType.BETA, 1, 2, 3, 2), Version.fromString("1.2.3-beta2"))
+        assertEquals(Version(Version.ReleaseType.ALPHA, 1, 2, 3, 7), Version.fromString("1.2.3-alpha7"))
+        assertEquals(Version(Version.ReleaseType.RC, 1, 2, 3, 3, 1), Version.fromString("1.2.3.rc3.fix"))
+        assertEquals(Version(Version.ReleaseType.RC, 1, 2, 3, 3, 2), Version.fromString("1.2.3.rc3.fix2"))
+    }
+
+    @Test
+    fun comparesBaseVersionBeforePrereleaseRank() {
+        val newerBaseAlpha = Version.fromString("2.0.0-alpha1")
+        val olderStable = Version.fromString("1.9.9")
+        assert(newerBaseAlpha > olderStable)
+        assert(Version.fromString("2.0.0") > Version.fromString("2.0.0-rc9"))
     }
 }

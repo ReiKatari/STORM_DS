@@ -1,92 +1,140 @@
 package me.magnum.melonds.domain.model
 
-data class Version(val type: ReleaseType, val major: Int, val minor: Int, val patch: Int) : Comparable<Version> {
+data class Version(
+    val type: ReleaseType,
+    val major: Int,
+    val minor: Int,
+    val patch: Int,
+    val qualifierNumber: Int = 0,
+    val revisionNumber: Int = 0,
+) : Comparable<Version> {
     enum class ReleaseType {
         ALPHA,
         BETA,
+        RC,
         FINAL,
         NIGHTLY,
     }
 
     companion object {
-
         val Nightly = Version(ReleaseType.NIGHTLY, -1, -1, -1)
 
-        /**
-         * Converts a version string in the format of `[alpha|beta-]major.minor.patch` to a [Version]. If a string with an invalid format is provided, an exception will be
-         * thrown.
-         */
-        fun fromString(versionString: String): Version {
-            val parts = versionString.split('-')
-            return if (parts.size == 1) {
-                val intParts = ensureMinimumVersionParts(parts[0].split('.').map { it.toInt() })
-                Version(ReleaseType.FINAL, intParts[0], intParts[1], intParts[2])
-            } else if (parts.size == 2) {
-                val versionType = releaseTypeStringToValue(parts[0])
-                if (versionType == ReleaseType.NIGHTLY) {
-                    Nightly
-                } else {
-                    val intParts = ensureMinimumVersionParts(parts[1].split('.').map { it.toInt() })
-                    Version(versionType, intParts[0], intParts[1], intParts[2])
-                }
-            } else {
-                throw Exception("Invalid version string format")
-            }
-        }
-
-        private fun releaseTypeStringToValue(typeString: String): ReleaseType {
-            val upperCaseType = typeString.uppercase()
-            return ReleaseType.valueOf(upperCaseType)
-        }
-
-        /**
-         * Ensures that the given list of version parts contains the minimum size (3). If the list has less than 3 items, 0s are added until there are 3 parts.
-         */
-        private fun ensureMinimumVersionParts(parts: List<Int>): List<Int> {
-            return if (parts.size == 3) {
-                parts
-            } else {
-                val remaining = 3 - parts.size
-                val newList = mutableListOf<Int>()
-                newList.addAll(parts)
-                for (i in 0..remaining) {
-                    newList.add(0)
-                }
-
-                newList
-            }
-        }
-    }
-
-    private fun parts(): IntArray {
-        return intArrayOf(
-            type.ordinal,
-            major,
-            minor,
-            patch
+        private val standardPattern = Regex(
+            """^v?(\d+)\.(\d+)\.(\d+)(?:[-.](alpha|beta|rc)(?:[-.]?(\d+))?)?(?:[-.]fix(\d*))?$""",
+            RegexOption.IGNORE_CASE,
         )
+        private val legacyPattern = Regex(
+            """^(alpha|beta|rc)-v?(\d+)\.(\d+)\.(\d+)(?:[-.]?(\d+))?$""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        fun fromString(versionString: String): Version {
+            val normalized = versionString.trim()
+            if (normalized.equals("nightly", true) || normalized.equals("nightly-release", true)) {
+                return Nightly
+            }
+
+            standardPattern.matchEntire(normalized)?.let { match ->
+                val qualifier = match.groupValues[4]
+                return Version(
+                    type = qualifier.toReleaseType(),
+                    major = match.groupValues[1].toInt(),
+                    minor = match.groupValues[2].toInt(),
+                    patch = match.groupValues[3].toInt(),
+                    qualifierNumber = match.groupValues[5].toIntOrNull() ?: 0,
+                    revisionNumber = match.groupValues[6].let {
+                        when {
+                            it.isEmpty() && normalized.endsWith(".fix", true) -> 1
+                            it.isEmpty() -> 0
+                            else -> it.toInt()
+                        }
+                    },
+                )
+            }
+
+            legacyPattern.matchEntire(normalized)?.let { match ->
+                return Version(
+                    type = match.groupValues[1].toReleaseType(),
+                    major = match.groupValues[2].toInt(),
+                    minor = match.groupValues[3].toInt(),
+                    patch = match.groupValues[4].toInt(),
+                    qualifierNumber = match.groupValues[5].toIntOrNull() ?: 0,
+                )
+            }
+
+            throw IllegalArgumentException("Invalid version string: $versionString")
+        }
+
+        fun parseOrNull(versionString: String?): Version? {
+            return versionString?.let { runCatching { fromString(it) }.getOrNull() }
+        }
+
+        private fun String.toReleaseType(): ReleaseType = when (lowercase()) {
+            "" -> ReleaseType.FINAL
+            "alpha" -> ReleaseType.ALPHA
+            "beta" -> ReleaseType.BETA
+            "rc" -> ReleaseType.RC
+            else -> throw IllegalArgumentException("Unknown release qualifier: $this")
+        }
     }
 
     override fun compareTo(other: Version): Int {
-        val thisParts = parts()
-        val otherParts = other.parts()
-
-        for (i in 0 until 4) {
-            val diff = thisParts[i] - otherParts[i]
-            if (diff != 0) {
-                return diff
+        if (type == ReleaseType.NIGHTLY || other.type == ReleaseType.NIGHTLY) {
+            return when {
+                type == other.type -> 0
+                type == ReleaseType.NIGHTLY -> -1
+                else -> 1
             }
         }
-        return 0
+
+        compareValuesBy(this, other, Version::major, Version::minor, Version::patch)
+            .takeIf { it != 0 }
+            ?.let { return it }
+
+        val typeComparison = releaseRank(type).compareTo(releaseRank(other.type))
+        if (typeComparison != 0) return typeComparison
+        val qualifierComparison = qualifierNumber.compareTo(other.qualifierNumber)
+        if (qualifierComparison != 0) return qualifierComparison
+        return revisionNumber.compareTo(other.revisionNumber)
     }
 
     override fun toString(): String {
-        val typeString = when(type) {
-            ReleaseType.ALPHA -> "alpha"
-            ReleaseType.BETA -> "beta"
-            ReleaseType.FINAL -> ""
-            ReleaseType.NIGHTLY -> return "nightly"
+        return when (type) {
+            ReleaseType.NIGHTLY -> "nightly"
+            ReleaseType.FINAL -> "$major.$minor.$patch"
+            ReleaseType.ALPHA -> legacyOrNumbered("alpha") + revisionSuffix()
+            ReleaseType.BETA -> legacyOrNumbered("beta") + revisionSuffix()
+            ReleaseType.RC -> "$major.$minor.$patch-rc$qualifierNumber${revisionSuffix()}"
         }
-        return "$typeString${if (typeString.isEmpty()) "" else "-"}$major.$minor.$patch"
+    }
+
+    private fun legacyOrNumbered(label: String): String {
+        return if (qualifierNumber == 0) {
+            "$label-$major.$minor.$patch"
+        } else {
+            "$major.$minor.$patch-$label$qualifierNumber"
+        }
+    }
+
+    fun isSameArtifactVersion(other: Version): Boolean {
+        return type == other.type &&
+            major == other.major &&
+            minor == other.minor &&
+            patch == other.patch &&
+            qualifierNumber == other.qualifierNumber
+    }
+
+    private fun revisionSuffix(): String = when (revisionNumber) {
+        0 -> ""
+        1 -> ".fix"
+        else -> ".fix$revisionNumber"
+    }
+
+    private fun releaseRank(type: ReleaseType): Int = when (type) {
+        ReleaseType.ALPHA -> 0
+        ReleaseType.BETA -> 1
+        ReleaseType.RC -> 2
+        ReleaseType.FINAL -> 3
+        ReleaseType.NIGHTLY -> -1
     }
 }

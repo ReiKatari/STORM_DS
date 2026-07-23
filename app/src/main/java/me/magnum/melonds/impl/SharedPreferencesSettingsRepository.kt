@@ -62,6 +62,7 @@ import me.magnum.melonds.domain.model.input.SoftInputBehaviour
 import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
+import me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.impl.dtos.input.ControllerConfigurationDto
 import me.magnum.melonds.impl.input.ControllerConfigurationFactory
@@ -1450,6 +1451,18 @@ class SharedPreferencesSettingsRepository(
 
     override fun isRetroAchievementsOfflineSoftcoreEnabled(): Boolean {
         return preferences.getBoolean("ra_offline_softcore_enabled", true)
+    }
+
+    override fun getRetroAchievementsOfflineBackend(): RetroAchievementsOfflineBackend {
+        return RetroAchievementsOfflineBackend.fromPreference(
+            preferences.getString("ra_offline_backend", RetroAchievementsOfflineBackend.BUILT_IN.preferenceValue),
+        )
+    }
+
+    override fun observeRetroAchievementsOfflineBackend(): Flow<RetroAchievementsOfflineBackend> {
+        return getOrCreatePreferenceSharedFlow("ra_offline_backend") {
+            getRetroAchievementsOfflineBackend()
+        }
     }
 
     override fun areRetroAchievementsUnofficialAchievementsEnabled(): Boolean {

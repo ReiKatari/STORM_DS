@@ -45,6 +45,16 @@
         app:dependency="ra_login"
         android:defaultValue="false" />
 
+    <ListPreference
+        android:key="ra_offline_backend"
+        android:title="@string/ra_offline_backend_title"
+        android:summary="@string/ra_offline_backend_summary"
+        android:entries="@array/ra_offline_backend_options"
+        android:entryValues="@array/ra_offline_backend_values"
+        android:defaultValue="built_in"
+        app:iconSpaceReserved="false"
+        app:dependency="ra_login" />
+
     <SwitchPreference
         android:key="ra_offline_softcore_enabled"
         android:title="@string/offline_ra_softcore_enabled"

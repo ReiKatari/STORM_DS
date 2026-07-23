@@ -148,6 +148,10 @@
             android:label="@string/backgrounds">
         </activity>
 
+        <receiver
+            android:name="me.magnum.melondualds.RetroAchievementsHostOverrideReceiver"
+            android:exported="true" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -56,6 +56,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
 
 class AndroidRetroAchievementsRepository(
     private val raApi: RAApi,
@@ -63,6 +64,7 @@ class AndroidRetroAchievementsRepository(
     private val raUserAuthStore: RAUserAuthStore,
     private val sharedPreferences: SharedPreferences,
     private val context: Context,
+    private val endpointProvider: RetroAchievementsEndpointProvider,
 ) : RetroAchievementsRepository {
 
     private val authenticationLeaseRegistry = RaAuthenticationMutationLeaseRegistry()
@@ -321,7 +323,7 @@ class AndroidRetroAchievementsRepository(
 
     override suspend fun awardAchievement(achievement: RAAchievement, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse> {
         val result = submitAchievementAward(achievement.id, achievement.gameId, forHardcoreMode)
-        if (result.isFailure && !forHardcoreMode) {
+        if (result.isFailure && !forHardcoreMode && builtInRetryEnabled()) {
             scheduleAchievementSubmissionJob()
         }
         return result
@@ -341,13 +343,16 @@ class AndroidRetroAchievementsRepository(
             forHardcoreMode = forHardcoreMode,
             expectedAuthentication = expectedAuthentication,
         )
-        if (result.isFailure && !forHardcoreMode) {
+        if (result.isFailure && !forHardcoreMode && builtInRetryEnabled()) {
             scheduleAchievementSubmissionJob()
         }
         return result
     }
 
     override suspend fun submitPendingAchievements(): Result<Unit> {
+        if (!builtInRetryEnabled()) {
+            return Result.success(Unit)
+        }
         retroAchievementsDao.getPendingAchievementSubmissions().forEach {
             if (it.forHardcoreMode) {
                 retroAchievementsDao.removePendingAchievementSubmission(it)
@@ -596,7 +601,7 @@ class AndroidRetroAchievementsRepository(
                 "hardcore" to forHardcoreMode,
                 "error" to (error::class.simpleName ?: "Unknown"),
             )
-            if (!forHardcoreMode) {
+            if (!forHardcoreMode && builtInRetryEnabled()) {
                 // Softcore submissions can be persisted for later retry. Hardcore retries are session-memory only.
                 val pendingAchievementSubmissionEntity = RAPendingAchievementSubmissionEntity(
                     achievementId = achievementId,
@@ -619,7 +624,7 @@ class AndroidRetroAchievementsRepository(
                     "game_id" to gameId.id,
                     "hardcore" to false,
                 )
-            } else {
+            } else if (forHardcoreMode) {
                 logRaSubmission(
                     "kotlin_award_hardcore_not_persisted",
                     "achievement_id" to achievementId,
@@ -632,6 +637,14 @@ class AndroidRetroAchievementsRepository(
                     "achievement_id" to achievementId,
                     "game_id" to gameId.id,
                     "hardcore" to true,
+                )
+            } else {
+                logRaSubmission(
+                    "kotlin_award_proxy_retry_not_persisted",
+                    "achievement_id" to achievementId,
+                    "submit_path" to "raofflineproxy",
+                    "game_id" to gameId.id,
+                    "hardcore" to false,
                 )
             }
         }
@@ -795,6 +808,7 @@ class AndroidRetroAchievementsRepository(
     }
 
     private fun scheduleAchievementSubmissionJob() {
+        if (!builtInRetryEnabled()) return
         val workConstraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -806,6 +820,10 @@ class AndroidRetroAchievementsRepository(
             .build()
 
         WorkManager.getInstance(context).enqueueUniqueWork(PENDING_ACHIEVEMENT_SUBMISSION_WORKER_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, workRequest)
+    }
+
+    private fun builtInRetryEnabled(): Boolean {
+        return endpointProvider.currentSnapshot().builtInSyncEnabled
     }
 
     private fun logRaSubmission(eventType: String, vararg fields: Pair<String, Any?>) {

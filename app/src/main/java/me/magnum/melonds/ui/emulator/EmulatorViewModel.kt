@@ -60,6 +60,9 @@ import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointSnapshot
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointStorage
 import me.magnum.melonds.database.daos.RetroAchievementsDao
 import me.magnum.melonds.database.entities.retroachievements.RAUserAchievementEntity
 import me.magnum.melonds.debug.DebugCommandStateStore
@@ -97,6 +100,7 @@ import me.magnum.melonds.domain.model.retroachievements.PendingRaSubmissionSnaps
 import me.magnum.melonds.domain.model.retroachievements.RAEvent
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeMode
+import me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend
 import me.magnum.melonds.domain.model.retroachievements.RaNativePendingSubmissionResolution
 import me.magnum.melonds.domain.model.retroachievements.RaNativePendingSubmissionType
 import me.magnum.melonds.domain.model.retroachievements.RaPendingCounts
@@ -226,6 +230,7 @@ private const val RA_PENDING_BARRIER_TIMEOUT_MS = 3_000L
 class EmulatorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
+    private val retroAchievementsEndpointProvider: RetroAchievementsEndpointProvider,
     private val romsRepository: RomsRepository,
     private val cheatsRepository: CheatsRepository,
     private val retroAchievementsRepository: RetroAchievementsRepository,
@@ -278,6 +283,9 @@ class EmulatorViewModel @Inject constructor(
         val isHardcoreEligibleAfterOnlineStart: Boolean,
         val offlineDueToNoInternetAtStart: Boolean,
         val hardcoreOfflineDisabled: Boolean,
+        val usesProxyBackend: Boolean = false,
+        val nativeClientHost: String = RetroAchievementsEndpointStorage.OFFICIAL_CLIENT_HOST,
+        val endpointGeneration: Long = 0L,
     )
 
     private data class OfflineRetroAchievementsSession(
@@ -494,7 +502,23 @@ class EmulatorViewModel @Inject constructor(
     val dualScreenExternalVerticalAlignmentOverride = _dualScreenExternalVerticalAlignmentOverride.asStateFlow()
 
     private var currentRom: Rom? = null
+    private var lastEndpointRestartNoticeGeneration: Long? = null
     init {
+        viewModelScope.launch {
+            retroAchievementsEndpointProvider.snapshot.collect { updated ->
+                val frozen = retroAchievementsEndpointProvider.routingSnapshot()
+                if (
+                    currentRom != null &&
+                    frozen.generation != updated.generation &&
+                    lastEndpointRestartNoticeGeneration != updated.generation
+                ) {
+                    lastEndpointRestartNoticeGeneration = updated.generation
+                    _toastEvent.tryEmit(ToastEvent.RetroAchievementsProviderChangedRestartRequired)
+                    RetroAchievementsEndpointStorage.logSnapshot(updated, "restart_required")
+                }
+            }
+        }
+
         viewModelScope.launch {
             _layout.filterNotNull().collect {
                 uiLayoutProvider.setCurrentLayoutConfiguration(it)
@@ -697,9 +721,15 @@ class EmulatorViewModel @Inject constructor(
             currentRom = rom
             activeRomConfig.value = rom
             val isRetroAchievementsEnabledForLaunch = isRetroAchievementsEnabledForLaunch(rom)
-            val launchDecision = if (isRetroAchievementsEnabledForLaunch) {
+            val endpointSnapshot = if (isRetroAchievementsEnabledForLaunch) {
+                retroAchievementsEndpointProvider.beginSession()
+            } else {
+                retroAchievementsEndpointProvider.endSession()
+                retroAchievementsEndpointProvider.currentSnapshot()
+            }
+            val launchDecision = (if (isRetroAchievementsEnabledForLaunch) {
                 runCatching {
-                    decideRetroAchievementsLaunchDecision(rom)
+                    decideRetroAchievementsLaunchDecision(rom, endpointSnapshot)
                 }.getOrElse { throwable ->
                     Log.e("EmulatorViewModel", "RetroAchievements launch decision failed for '${rom.name}'", throwable)
                     RetroAchievementsLaunchDecision(
@@ -720,7 +750,10 @@ class EmulatorViewModel @Inject constructor(
                     offlineDueToNoInternetAtStart = false,
                     hardcoreOfflineDisabled = false,
                 )
-            }
+            }).copy(
+                nativeClientHost = endpointSnapshot.nativeClientHost.orEmpty(),
+                endpointGeneration = endpointSnapshot.generation,
+            )
 
             retroAchievementsNetworkMode = launchDecision.networkMode
             retroAchievementsSessionMode = launchDecision.sessionMode
@@ -811,11 +844,32 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    private suspend fun decideRetroAchievementsLaunchDecision(rom: Rom): RetroAchievementsLaunchDecision {
+    private suspend fun decideRetroAchievementsLaunchDecision(
+        rom: Rom,
+        endpointSnapshot: RetroAchievementsEndpointSnapshot,
+    ): RetroAchievementsLaunchDecision {
         val startedOnline = networkStatusProvider.isOnline()
         val hardcoreSettingEnabled = settingsRepository.isRetroAchievementsHardcoreEnabled()
         val offlineSoftcoreEnabled = settingsRepository.isRetroAchievementsOfflineSoftcoreEnabled()
         val userAuth = retroAchievementsRepository.getUserAuthentication()
+
+        if (endpointSnapshot.backendEffective == RetroAchievementsOfflineBackend.RA_OFFLINE_PROXY) {
+            RetroAchievementsEndpointStorage.logSnapshot(endpointSnapshot, "session_frozen")
+            if (endpointSnapshot.apiUrl == null || endpointSnapshot.nativeClientHost == null) {
+                _toastEvent.tryEmit(ToastEvent.RAOfflineProxyNotActive)
+            }
+            return RetroAchievementsLaunchDecision(
+                networkMode = RetroAchievementsNetworkMode.ONLINE_LIVE,
+                sessionMode = RetroAchievementsSessionMode.SOFTCORE,
+                initialOfflineType = null,
+                isHardcoreEligibleAfterOnlineStart = false,
+                offlineDueToNoInternetAtStart = false,
+                hardcoreOfflineDisabled = hardcoreSettingEnabled,
+                usesProxyBackend = true,
+                nativeClientHost = endpointSnapshot.nativeClientHost.orEmpty(),
+                endpointGeneration = endpointSnapshot.generation,
+            )
+        }
 
         if (userAuth == null) {
             return RetroAchievementsLaunchDecision(
@@ -2562,6 +2616,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private fun resetEmulatorState(newState: EmulatorState) {
+        retroAchievementsEndpointProvider.endSession()
         raBootstrapJob?.cancel()
         raSessionJob?.cancel()
         raSessionJob = null
@@ -2583,6 +2638,7 @@ class EmulatorViewModel @Inject constructor(
         _secondaryScreenBackground.value = RuntimeBackground.None
         _layout.value = null
         currentRom = null
+        lastEndpointRestartNoticeGeneration = null
         activeRomConfig.value = null
         currentRetroAchievementsGameId = null
         offlineSyncChoiceDeferred?.cancel()
@@ -3005,7 +3061,7 @@ class EmulatorViewModel @Inject constructor(
         }
         Log.i(
             RA_IDENTITY_TAG,
-            "source=bootstrap stage=game_not_found runtime=disabled game_hash=${rom.retroAchievementsHash} rom=${rom.name.replace(' ', '_')}",
+            "source=bootstrap stage=game_not_found runtime=disabled game_hash=redacted",
         )
         return GameAchievementData.withDisabledRetroAchievementsIntegration(
             status = GameAchievementData.IntegrationStatus.DISABLED_GAME_NOT_FOUND,
@@ -3055,10 +3111,13 @@ class EmulatorViewModel @Inject constructor(
                 "source=runtime_config runtime=rc_client user_agent=$retroAchievementsUserAgent " +
                 "package=${context.packageName} version=$retroAchievementsVersionName " +
                 "game_id=${currentRetroAchievementsGameId ?: "none"} " +
-                "game_hash=${rom.retroAchievementsHash} " +
+                "game_hash=redacted " +
                 "hardcore=${launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE} " +
                 "unofficial=${settingsRepository.areRetroAchievementsUnofficialAchievementsEnabled()} " +
-                "encore=${settingsRepository.isRetroAchievementsEncoreModeEnabled()}",
+                "encore=${settingsRepository.isRetroAchievementsEncoreModeEnabled()} " +
+                "host_source=${if (launchDecision.usesProxyBackend) "raofflineproxy" else "official"} " +
+                "native_client_host_configured=${launchDecision.nativeClientHost.isNotBlank()} " +
+                "endpoint_generation=${launchDecision.endpointGeneration}",
         )
         return RARuntimeBridgeConfig(
             runtimeMode = RARuntimeBridgeMode.RC_CLIENT_ONLINE,
@@ -3071,6 +3130,9 @@ class EmulatorViewModel @Inject constructor(
             hardcoreEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
             unofficialEnabled = settingsRepository.areRetroAchievementsUnofficialAchievementsEnabled(),
             encoreEnabled = settingsRepository.isRetroAchievementsEncoreModeEnabled(),
+            apiHost = launchDecision.nativeClientHost,
+            usesProxyHost = launchDecision.usesProxyBackend,
+            endpointGeneration = launchDecision.endpointGeneration,
         )
     }
 
@@ -3086,7 +3148,7 @@ class EmulatorViewModel @Inject constructor(
             append(" stage=").append(stage)
             append(" runtime=").append(runtimePath.traceValue)
             append(" game_id=").append(runtimeConfig?.gameId ?: currentRetroAchievementsGameId ?: "none")
-            append(" game_hash=").append(runtimeConfig?.gameHash ?: currentRom?.retroAchievementsHash ?: "none")
+            append(" game_hash=redacted")
             append(" achievements=").append(achievementData.lockedAchievements.size)
             append(" leaderboards=").append(achievementData.leaderboards.size)
             append(" has_rich_presence=").append(achievementData.richPresencePatch != null)
@@ -3370,6 +3432,14 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun transitionToOfflineAccumulationIfNeeded() {
+        if (activeRuntimeBridgeConfig?.usesProxyHost == true) {
+            logRaTrace(
+                "network_transition_owned_by_raofflineproxy",
+                "built_in_ledger" to false,
+                "built_in_sync" to false,
+            )
+            return
+        }
         if (
             retroAchievementsNetworkMode == RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING ||
             retroAchievementsNetworkMode == RetroAchievementsNetworkMode.RECONCILING_RA_SUBMISSIONS
@@ -3753,7 +3823,10 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun persistFailedSoftcoreAwardToLedger(achievement: RAAchievement) {
-        if (!settingsRepository.isRetroAchievementsOfflineSoftcoreEnabled()) {
+        if (
+            !settingsRepository.isRetroAchievementsOfflineSoftcoreEnabled() ||
+            !retroAchievementsEndpointProvider.routingSnapshot().builtInLedgerEnabled
+        ) {
             return
         }
 
@@ -5446,6 +5519,7 @@ class EmulatorViewModel @Inject constructor(
                 }
 
                 if (
+                    !effectiveLaunchDecision.usesProxyBackend &&
                     RaHardcoreLaunchPolicy.mustDowngradeHardcore(
                         hardcoreRequested =
                             effectiveLaunchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
@@ -5739,6 +5813,9 @@ class EmulatorViewModel @Inject constructor(
                                     hardcoreEnabled = false,
                                     unofficialEnabled = settingsRepository.areRetroAchievementsUnofficialAchievementsEnabled(),
                                     encoreEnabled = settingsRepository.isRetroAchievementsEncoreModeEnabled(),
+                                    apiHost = effectiveLaunchDecision.nativeClientHost,
+                                    usesProxyHost = false,
+                                    endpointGeneration = effectiveLaunchDecision.endpointGeneration,
                                 )
                             } else {
                                 null
@@ -6369,6 +6446,7 @@ class EmulatorViewModel @Inject constructor(
         raSessionJob = null
         sessionCoroutineScope.cancel()
         unloadAndReleaseActiveRuntimeAuthenticationLease("view_model_cleared")
+        retroAchievementsEndpointProvider.endSession()
         emulatorManager.cleanEmulator()
     }
 

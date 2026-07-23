@@ -243,6 +243,52 @@ class SmartSyncEngineTest {
         assertFalse(status.isExpired)
     }
 
+    @Test
+    fun proxyBackendDisablesLedgerWritesAndSmartSyncWithoutDeletingExistingData() = runTest {
+        val storage = InMemoryOfflineLedgerStorage()
+        var enabled = true
+        val ledger = OfflineLedgerRepository(
+            storage = storage,
+            signer = PassthroughOfflineLedgerSigner,
+            writesEnabled = { enabled },
+        )
+        ledger.appendSessionStart(
+            userId = "user",
+            contentId = "content",
+            gameId = 1,
+            sessionId = "existing",
+            startedAtEpochMs = 1,
+            isHardcore = false,
+        ).getOrThrow()
+        val before = storage.read("user", "content")!!.copyOf()
+
+        enabled = false
+        assertTrue(
+            ledger.appendAchievementUnlock(
+                userId = "user",
+                contentId = "content",
+                gameId = 1,
+                achievementId = 2,
+                isHardcore = false,
+                sessionId = "proxy",
+                localTimestampEpochMs = 2,
+                offsetFromSessionStartMs = 1,
+                orderIndex = 0,
+            ).isFailure,
+        )
+        assertTrue(before.contentEquals(storage.read("user", "content")))
+
+        val raClient = RecordingSmartSyncRaClient(gameId = 1, achievementId = 2)
+        val sync = SmartSyncEngine(
+            raClient = raClient,
+            ledgerRepository = ledger,
+            prefetchCacheRepository = OfflinePrefetchCacheRepository(InMemoryOfflinePrefetchCacheStorage()),
+            syncEnabled = { false },
+        ).syncSoftcoreNow("user", "content")
+        assertTrue(sync.isFailure)
+        assertTrue(raClient.requestLog.isEmpty())
+    }
+
     private class RecordingSmartSyncRaClient(
         private val gameId: Long,
         private val achievementId: Long,

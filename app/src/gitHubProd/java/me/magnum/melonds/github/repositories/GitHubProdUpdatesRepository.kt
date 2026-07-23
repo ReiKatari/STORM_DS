@@ -10,20 +10,23 @@ import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.github.GitHubApi
+import me.magnum.melonds.github.GitHubReleaseSelector
+import me.magnum.melonds.github.GitHubUpdateChannel
+import me.magnum.melonds.github.GitHubUpdateCheckPolicy
 import me.magnum.melonds.github.PREF_KEY_GITHUB_CHECK_FOR_UPDATES
-import me.magnum.melonds.github.dtos.ReleaseDto
+import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
 import me.magnum.melonds.utils.PackageManagerCompat
-import me.magnum.melonds.utils.enumValueOfIgnoreCase
-import java.util.Calendar
-import java.util.concurrent.TimeUnit
-import kotlin.time.Instant
 
-class GitHubProdUpdatesRepository(private val context: Context, private val api: GitHubApi, private val preferences: SharedPreferences) : UpdatesRepository {
+class GitHubProdUpdatesRepository(
+    private val context: Context,
+    private val api: GitHubApi,
+    private val settingsPreferences: SharedPreferences,
+    private val statePreferences: SharedPreferences,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) : UpdatesRepository {
     companion object {
-        private const val APK_CONTENT_TYPE = "application/vnd.android.package-archive"
         private const val KEY_SKIP_VERSION = "github_updates_skip_version"
         private const val KEY_LAST_UPDATE_CHECK = "github_updates_last_check"
-
         private const val UPDATE_CHECK_DELAY_HOURS = 22
     }
 
@@ -32,110 +35,67 @@ class GitHubProdUpdatesRepository(private val context: Context, private val api:
             return Result.success(null)
         }
 
-        return suspendRunCatching {
-            api.getLatestRelease()
-        }.suspendMapCatching { release ->
+        return suspendRunCatching { api.getReleases() }.suspendMapCatching { releases ->
             updateLastUpdateCheckTime()
+            val packageInfo = PackageManagerCompat.getPackageInfo(
+                context.packageManager,
+                context.packageName,
+                0,
+            )
+            val currentVersion = Version.fromString(
+                requireNotNull(packageInfo.versionName) { "Installed versionName is missing" },
+            )
+            val skippedVersion = Version.parseOrNull(
+                statePreferences.getString(KEY_SKIP_VERSION, null),
+            )
+            val channel = GitHubUpdateChannel.fromPreference(
+                settingsPreferences.getString(
+                    PREF_KEY_GITHUB_UPDATE_CHANNEL,
+                    GitHubUpdateChannel.STABLE_AND_PRERELEASE.preferenceValue,
+                ),
+            )
 
-            if (isReleaseNewUpdate(release) && !shouldSkipUpdate(release)) {
-                val apkBinary = release.assets.firstOrNull { it.contentType == APK_CONTENT_TYPE }
-                if (apkBinary != null) {
-                    AppUpdate(
-                        AppUpdate.Type.PRODUCTION,
-                        apkBinary.id,
-                        apkBinary.url.toUri(),
-                        Version.fromString(release.tagName),
-                        release.body,
-                        apkBinary.size,
-                        Instant.parse(release.createdAt),
-                    )
-                } else {
-                    null
-                }
-            } else {
-                 null
+            GitHubReleaseSelector.selectProduction(
+                releases = releases,
+                currentVersion = currentVersion,
+                channel = channel,
+                skippedVersion = skippedVersion,
+            )?.let { candidate ->
+                AppUpdate(
+                    type = AppUpdate.Type.PRODUCTION,
+                    id = candidate.asset.id,
+                    downloadUri = candidate.asset.url.toUri(),
+                    newVersion = candidate.version,
+                    description = candidate.release.body,
+                    binarySize = candidate.asset.size,
+                    updateDate = candidate.publishedAt,
+                    releaseTag = candidate.release.tagName,
+                    sourceReleaseUrl = candidate.release.htmlUrl,
+                )
             }
         }
     }
 
     override fun skipUpdate(update: AppUpdate) {
-        preferences.edit {
+        statePreferences.edit {
             putString(KEY_SKIP_VERSION, update.newVersion.toString())
         }
     }
 
-    override fun notifyUpdateDownloaded(update: AppUpdate) {
-        // Do nothing
-    }
+    override fun notifyUpdateDownloaded(update: AppUpdate) = Unit
 
     private fun shouldCheckUpdates(): Boolean {
-        val updateCheckEnabled = preferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)
-        if (!updateCheckEnabled) {
-            return true
-        }
-
-        val lastCheckUpdateTimestamp = preferences.getLong(KEY_LAST_UPDATE_CHECK, -1)
-        if (lastCheckUpdateTimestamp == (-1).toLong()) {
-            return true
-        }
-
-        val currentDate = Calendar.getInstance().time
-
-        val difference = currentDate.time - lastCheckUpdateTimestamp
-        val hoursDifference = TimeUnit.HOURS.convert(difference, TimeUnit.MILLISECONDS)
-
-        return hoursDifference >= UPDATE_CHECK_DELAY_HOURS
+        return GitHubUpdateCheckPolicy.shouldCheckProduction(
+            enabled = settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true),
+            lastCheckMillis = statePreferences.getLong(KEY_LAST_UPDATE_CHECK, -1L),
+            nowMillis = nowMillis(),
+            delayHours = UPDATE_CHECK_DELAY_HOURS.toLong(),
+        )
     }
 
     private fun updateLastUpdateCheckTime() {
-        val currentDate = Calendar.getInstance().time
-        preferences.edit {
-            putLong(KEY_LAST_UPDATE_CHECK, currentDate.time)
-        }
-    }
-
-    private fun shouldSkipUpdate(releaseDto: ReleaseDto): Boolean {
-        val skipVersionString = preferences.getString(KEY_SKIP_VERSION, null) ?: return false
-
-        val releaseVersion = Version.fromString(releaseDto.tagName)
-        val skipVersion = Version.fromString(skipVersionString)
-
-        return skipVersion >= releaseVersion
-    }
-
-    private fun isReleaseNewUpdate(releaseDto: ReleaseDto): Boolean {
-        val packageInfo = PackageManagerCompat.getPackageInfo(context.packageManager, context.packageName, 0)
-
-        val currentVersion = getCurrentAppVersion(packageInfo.versionName!!)
-        val releaseVersion = Version.fromString(releaseDto.tagName)
-
-        return releaseVersion > currentVersion
-    }
-
-    private fun getCurrentAppVersion(versionString: String): Version {
-        val parts = versionString.split(' ')
-        return if (parts.size == 1) {
-            val intParts = parts[0].split('.').map { it.toInt() }.ensureMinimumSize(3, 0)
-            Version(Version.ReleaseType.FINAL, intParts[0], intParts[1], intParts[2])
-        } else {
-            val versionType = enumValueOfIgnoreCase<Version.ReleaseType>(parts[0])
-            val intParts = parts[1].split('.').map { it.toInt() }.ensureMinimumSize(3, 0)
-            Version(versionType, intParts[0], intParts[1], intParts[2])
-        }
-    }
-
-    private fun <T> List<T>.ensureMinimumSize(size: Int, filler: T): List<T> {
-        return if (this.size >= size) {
-            this
-        } else {
-            val remaining = size - this.size
-            val newList = mutableListOf<T>()
-            newList.addAll(this)
-            for (i in 0..remaining) {
-                newList.add(filler)
-            }
-
-            newList
+        statePreferences.edit {
+            putLong(KEY_LAST_UPDATE_CHECK, nowMillis())
         }
     }
 }

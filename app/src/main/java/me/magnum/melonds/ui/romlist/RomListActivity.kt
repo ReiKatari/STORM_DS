@@ -379,6 +379,7 @@ class RomListActivity : AppCompatActivity() {
         val typeString = when(version.type) {
             Version.ReleaseType.ALPHA -> getString(R.string.version_alpha)
             Version.ReleaseType.BETA -> getString(R.string.version_beta)
+            Version.ReleaseType.RC -> getString(R.string.version_rc)
             Version.ReleaseType.FINAL -> ""
             Version.ReleaseType.NIGHTLY -> return getString(R.string.version_nightly)
         }

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import me.magnum.melonds.common.network.MelonOkHttpInterceptor
 import me.magnum.melonds.common.retroachievements.AndroidRASignatureProvider
 import me.magnum.melonds.common.retroachievements.AndroidRAUserAuthStore
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
 import me.magnum.rcheevosapi.RASignatureProvider
 import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.RAUserAuthStore
@@ -32,7 +33,17 @@ object RAModule {
     fun provideRAApiOkHttpClient(melonOkHttpInterceptor: MelonOkHttpInterceptor): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(melonOkHttpInterceptor)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideRetroAchievementsEndpointProvider(
+        sharedPreferences: SharedPreferences,
+    ): RetroAchievementsEndpointProvider {
+        return RetroAchievementsEndpointProvider(sharedPreferences)
     }
 
     @Provides
@@ -49,12 +60,19 @@ object RAModule {
 
     @Provides
     @Singleton
-    fun provideRAApi(@Named("ra-api-client") client: OkHttpClient, json: Json, userAuthStore: RAUserAuthStore, achievementSignatureProvider: RASignatureProvider): RAApi {
+    fun provideRAApi(
+        @Named("ra-api-client") client: OkHttpClient,
+        json: Json,
+        userAuthStore: RAUserAuthStore,
+        achievementSignatureProvider: RASignatureProvider,
+        endpointProvider: RetroAchievementsEndpointProvider,
+    ): RAApi {
         return RAApi(
             okHttpClient = client,
             json = json,
             userAuthStore = userAuthStore,
             signatureProvider = achievementSignatureProvider,
+            hostUrlProvider = endpointProvider,
         )
     }
 }
