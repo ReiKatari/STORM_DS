@@ -96,7 +96,9 @@ class RomListFragment : Fragment() {
                         .collectAsState(initial = RomScanningStatus.NOT_SCANNING)
                     val confirmedAchievementHashes by romListViewModel.confirmedAchievementHashes.collectAsState()
                     val raCoverByHash by romListViewModel.raCoverByHash.collectAsState()
+                    val boxArtByUri by romListViewModel.boxArtByUri.collectAsState()
                     var contextRomUri by remember { mutableStateOf<String?>(null) }
+                    var searchQuery by remember { mutableStateOf("") }
 
                     backPressedCallback.isEnabled = state.canNavigateUp && !state.isSearchActive
 
@@ -110,6 +112,8 @@ class RomListFragment : Fragment() {
                     RomBrowserScreen(
                         state = state,
                         coverByHash = raCoverByHash,
+                        boxArtByUri = boxArtByUri,
+                        searchQuery = searchQuery,
                         allowConfiguration = allowRomConfiguration,
                         scanningStatus = scanningStatus,
                         confirmedAchievementHashes = confirmedAchievementHashes,
@@ -119,10 +123,24 @@ class RomListFragment : Fragment() {
                             romSelectedListener?.invoke(rom)
                         },
                         onRomLongPress = { rom -> contextRomUri = rom.uri.toString() },
-                        onRomConfigClick = { rom -> openRomDetails(rom) },
+                        onRomConfigClick = { rom -> contextRomUri = rom.uri.toString() },
                         onFilterSelected = { filter -> romListViewModel.setFilter(filter) },
+                        onSortSelected = { mode -> romListViewModel.setRomSorting(mode) },
                         onNavigateUp = { romListViewModel.navigateUp() },
                         onRefresh = { romListViewModel.refreshRoms() },
+                        onSearchQueryChanged = { query ->
+                            searchQuery = query ?: ""
+                            romListViewModel.setRomSearchQuery(query)
+                        },
+                        onToggleViewMode = { romListViewModel.toggleViewMode() },
+                        onBootFirmwareDs = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DS) },
+                        onBootFirmwareDsi = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DSi) },
+                        onOpenDsiWareManager = { (activity as? RomListActivity)?.openDsiWareManager() },
+                        onOpenSettings = { (activity as? RomListActivity)?.openSettings() },
+                        onRomVisible = { rom -> romListViewModel.requestBoxArt(rom) },
+                        onFocusedRomChanged = { rom ->
+                            (activity as? RomListActivity)?.onLibraryRomHighlighted(rom)
+                        },
                         onDpadDownGateChanged = { gate ->
                             (activity as? RomListActivity)?.setRomBrowserDpadDownGate(gate)
                         },

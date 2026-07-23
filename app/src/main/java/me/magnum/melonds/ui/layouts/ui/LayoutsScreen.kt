@@ -1,5 +1,10 @@
 package me.magnum.melonds.ui.layouts.ui
 
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -126,44 +131,32 @@ private fun LayoutsScreenContent(
         initialFocusRequester.requestFocus()
     }
 
-    Scaffold(
+    val colors = me.magnum.melonds.ui.theme.watermelon
+    me.magnum.melonds.ui.common.WatermelonScreenScaffold(
+        title = stringResource(R.string.layouts),
+        onBack = onBackClick,
         scaffoldState = scaffoldState,
-        topBar = {
-            Box(Modifier.background(MaterialTheme.colors.primaryVariant).statusBarsPadding()) {
-                TopAppBar(
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                                contentDescription = stringResource(R.string.navigate_back),
-                            )
-                        }
-                    },
-                    title = { Text(stringResource(R.string.layouts)) },
-                    backgroundColor = MaterialTheme.colors.primary,
-                    contentColor = MaterialTheme.colors.onPrimary,
-                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
-                    actions = {
-                        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.high) {
-                            IconButton(onClick = onCreateLayout) {
-                                Icon(
-                                    painter = rememberVectorPainter(Icons.Default.Add),
-                                    contentDescription = stringResource(R.string.action_layouts_new),
-                                )
-                            }
-                        }
-                    },
+        actions = {
+            IconButton(onClick = onCreateLayout) {
+                Icon(
+                    painter = rememberVectorPainter(Icons.Default.Add),
+                    contentDescription = stringResource(R.string.action_layouts_new),
+                    tint = colors.text,
                 )
             }
         },
-        backgroundColor = MaterialTheme.colors.surface,
-        contentWindowInsets = WindowInsets.safeDrawing,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize()
                 .focusRequester(initialFocusRequester)
                 .consumeWindowInsets(padding),
-            contentPadding = padding,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = padding.calculateTopPadding() + 12.dp,
+                bottom = padding.calculateBottomPadding() + 12.dp,
+            ),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
         ) {
             items(
                 items = layouts,
@@ -179,7 +172,6 @@ private fun LayoutsScreenContent(
                         onDeleteLayout(layout)
                     },
                 )
-                Divider()
             }
         }
     }
@@ -209,15 +201,22 @@ private fun LayoutItem(
     var showMenu by remember { mutableStateOf(false) }
     val (mainFocusRequester, optionsFocusRequester) = remember { FocusRequester.createRefs() }
     val isCustomLayout = layout.type == LayoutConfiguration.LayoutType.CUSTOM
+    val colors = me.magnum.melonds.ui.theme.watermelon
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
+            .background(if (focused) colors.surface3 else colors.surface2)
+            .let { if (focused) it.border(2.dp, colors.red, shape) else it }
             .focusRequester(mainFocusRequester)
             .focusProperties {
                 end = if (isCustomLayout) optionsFocusRequester else FocusRequester.Default
             }
-            .clickable(onClick = onLayoutSelected)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onLayoutSelected)
             .onKeyEvent {
                 if (it.type == KeyEventType.KeyDown && it.key == Key.Menu) {
                     showMenu = true
@@ -226,23 +225,28 @@ private fun LayoutItem(
                     false
                 }
             }
-            .padding(start = 16.dp, end = 8.dp),
+            .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(
-            selected = isSelected,
-            onClick = null,
-        )
-
         Text(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 32.dp),
+                .padding(vertical = 8.dp),
             text = layout.name.orEmpty(),
+            color = colors.text,
             style = MaterialTheme.typography.body1,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+
+        if (isSelected) {
+            Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.Check,
+                contentDescription = null,
+                tint = colors.green,
+                modifier = Modifier.padding(horizontal = 6.dp).size(20.dp),
+            )
+        }
 
         if (isCustomLayout) {
             Box {

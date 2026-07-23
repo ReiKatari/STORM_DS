@@ -45,6 +45,8 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 true
             }
         }
+
+        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency")
     }
 
     private fun updateVolumePreferenceSummary(volumePreference: SeekBarPreference, volume: Int) {

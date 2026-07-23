@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="8dp">
+
+    <TextView
+        android:id="@+id/textShaderBrowserPath"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="26dp"
+        android:layout_marginEnd="26dp"
+        android:layout_marginBottom="6dp"
+        android:fontFamily="@font/manrope"
+        android:textSize="12sp"
+        android:textColor="@color/textColorSecondary"
+        android:singleLine="true"
+        android:ellipsize="start" />
+
+    <FrameLayout
+        android:id="@+id/containerShaderBrowserList"
+        android:layout_width="match_parent"
+        android:layout_height="340dp">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/listShaderBrowser"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp"
+            android:scrollbars="vertical" />
+
+        <TextView
+            android:id="@+id/textShaderBrowserEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="24dp"
+            android:fontFamily="@font/manrope"
+            android:textSize="14sp"
+            android:textColor="@color/textColorSecondary"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>

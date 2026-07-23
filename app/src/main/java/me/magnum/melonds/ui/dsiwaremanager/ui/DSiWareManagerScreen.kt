@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,9 +24,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
@@ -45,9 +48,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -74,9 +80,11 @@ import me.magnum.melonds.ui.common.melonButtonColors
 import me.magnum.melonds.ui.dsiwaremanager.DSiWareManagerViewModel
 import me.magnum.melonds.ui.dsiwaremanager.model.DSiWareManagerUiState
 import me.magnum.melonds.ui.dsiwaremanager.model.ImportExportDSiWareTitleFileEvent
+import me.magnum.melonds.ui.common.WatermelonScreenScaffold
 import me.magnum.melonds.ui.romlist.RomIcon
 import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.theme.MelonTheme
+import me.magnum.melonds.ui.theme.watermelon
 
 private const val FAB_ITEM_FROM_FILE = 1
 private const val FAB_ITEM_FROM_ROM_LIST = 2
@@ -105,57 +113,28 @@ fun DSiWareManagerScreen(
     }
 
     val currentState = state
-    Scaffold(
-        topBar = {
-            Box(Modifier.background(MaterialTheme.colors.primaryVariant).statusBarsPadding()) {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.dsiware_manager)) },
-                    backgroundColor = MaterialTheme.colors.primary,
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                                contentDescription = null,
-                            )
-                        }
-                    },
-                    windowInsets = WindowInsets.safeDrawing.exclude(WindowInsets(bottom = Int.MAX_VALUE)),
-                )
-            }
-        },
-        floatingActionButton = {
+    var showImportMenu by remember { mutableStateOf(false) }
+    WatermelonScreenScaffold(
+        title = stringResource(R.string.dsiware_manager),
+        onBack = onBackClick,
+        actions = {
             if (currentState is DSiWareManagerUiState.Ready) {
-                MultiActionFloatingActionButton(
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars.exclude(WindowInsets(top = Int.MAX_VALUE, bottom = Int.MAX_VALUE))),
-                    actions = listOf(
-                        FabActionItem(
-                            FAB_ITEM_FROM_FILE,
-                            stringResource(id = R.string.dsiware_import_from_file),
-                            rememberVectorPainter(Icons.AutoMirrored.Filled.InsertDriveFile)
-                        ),
-                        FabActionItem(
-                            FAB_ITEM_FROM_ROM_LIST,
-                            stringResource(id = R.string.dsiware_import_from_rom_list),
-                            rememberVectorPainter(image = Icons.AutoMirrored.Filled.List)
-                        ),
-                    ),
-                    onActionClicked = {
-                        when (it.id) {
-                            FAB_ITEM_FROM_FILE -> { importTitleLauncher.launch(null to arrayOf("*/*")) }
-                            FAB_ITEM_FROM_ROM_LIST -> showingRomList.value = true
-                            else -> {}
-                        }
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .clickable { showImportMenu = true },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         painter = rememberVectorPainter(Icons.Default.Add),
                         contentDescription = stringResource(R.string.import_dsiware_title),
+                        tint = watermelon.text,
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             }
         },
-        backgroundColor = MaterialTheme.colors.surface,
-        contentWindowInsets = WindowInsets.safeDrawing,
     ) { padding ->
         when (currentState) {
             is DSiWareManagerUiState.DSiSetupInvalid -> {
@@ -181,6 +160,22 @@ fun DSiWareManagerScreen(
         }
     }
 
+    if (showImportMenu) {
+        ConsoleActionDialog(
+            title = stringResource(R.string.import_dsiware_title),
+            onDismiss = { showImportMenu = false },
+        ) {
+            ConsoleActionRow(label = stringResource(R.string.dsiware_import_from_file)) {
+                showImportMenu = false
+                importTitleLauncher.launch(null to arrayOf("*/*"))
+            }
+            ConsoleActionRow(label = stringResource(R.string.dsiware_import_from_rom_list)) {
+                showImportMenu = false
+                showingRomList.value = true
+            }
+        }
+    }
+
     if (showingRomList.value) {
         DSiWareRomListDialog(
             onDismiss = { showingRomList.value = false },
@@ -196,7 +191,7 @@ fun DSiWareManagerScreen(
             properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
             onDismissRequest = { },
         ) {
-            CircularProgressIndicator(color = MaterialTheme.colors.secondary)
+            CircularProgressIndicator(color = watermelon.red)
         }
     }
 
@@ -270,7 +265,7 @@ private fun Loading(modifier: Modifier) {
     Box(modifier) {
         CircularProgressIndicator(
             modifier = Modifier.align(Alignment.Center),
-            color = MaterialTheme.colors.secondary,
+            color = watermelon.red,
         )
     }
 }

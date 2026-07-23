@@ -12,6 +12,8 @@ class GlContext(sharedEglContext: Long? = null) {
     private var display: EGLDisplay
     private var config: EGLConfig
     private var context: Long
+    private var workerSurface: EGLSurface? = null
+    private var workerSurfaceUnavailable = false
 
     init {
         display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -40,6 +42,35 @@ class GlContext(sharedEglContext: Long? = null) {
         EGL14.eglSwapInterval(display, 0)
     }
 
+    fun useWorker(): Boolean {
+        if (workerSurfaceUnavailable) {
+            return makeCurrent(display.nativeHandle, 0L, context)
+        }
+
+        val surface = workerSurface ?: createWorkerSurface()
+        if (surface == null) {
+            workerSurfaceUnavailable = true
+            return makeCurrent(display.nativeHandle, 0L, context)
+        }
+
+        return makeCurrent(display.nativeHandle, surface.nativeHandle, context)
+    }
+
+    private fun createWorkerSurface(): EGLSurface? {
+        val attributes = intArrayOf(
+            EGL14.EGL_WIDTH, 1,
+            EGL14.EGL_HEIGHT, 1,
+            EGL14.EGL_NONE,
+        )
+        val surface = EGL14.eglCreatePbufferSurface(display, config, attributes, 0)
+        if (surface == null || surface == EGL14.EGL_NO_SURFACE) {
+            return null
+        }
+
+        workerSurface = surface
+        return surface
+    }
+
     fun swapBuffers(surface: EGLSurface) {
         EGL14.eglSwapBuffers(display, surface)
     }
@@ -49,6 +80,8 @@ class GlContext(sharedEglContext: Long? = null) {
     }
 
     fun destroy() {
+        workerSurface?.let { EGL14.eglDestroySurface(display, it) }
+        workerSurface = null
         destroyContext(display.nativeHandle, context)
         EGL14.eglTerminate(display)
         EGL14.eglReleaseThread()
@@ -71,8 +104,15 @@ class GlContext(sharedEglContext: Long? = null) {
     }
 
     private fun createGlConfig(): EGLConfig {
+        chooseConfig(EGL14.EGL_WINDOW_BIT or EGL14.EGL_PBUFFER_BIT)?.let { return it }
+        return chooseConfig(EGL14.EGL_WINDOW_BIT)
+            ?: throw GlContextException("Unable to choose config")
+    }
+
+    private fun chooseConfig(surfaceType: Int): EGLConfig? {
         val attributeList = intArrayOf(
             EGL14.EGL_RENDERABLE_TYPE, EGLExt.EGL_OPENGL_ES3_BIT_KHR,
+            EGL14.EGL_SURFACE_TYPE, surfaceType,
             EGL14.EGL_RED_SIZE, 8,
             EGL14.EGL_GREEN_SIZE, 8,
             EGL14.EGL_BLUE_SIZE, 8,
@@ -85,10 +125,13 @@ class GlContext(sharedEglContext: Long? = null) {
         val eglConfig = arrayOfNulls<EGLConfig?>(1)
         val numConfigs = IntArray(1)
         if (!EGL14.eglChooseConfig(display, attributeList, 0, eglConfig, 0, 1, numConfigs, 0)) {
-            throw GlContextException("Unable to choose config")
+            return null
+        }
+        if (numConfigs[0] < 1) {
+            return null
         }
 
-        return eglConfig[0]!!
+        return eglConfig[0]
     }
 
     // Because we need to use a shared EGL context, and we can't build an EGLContext instance from a native context instance, we need to perform context manipulation

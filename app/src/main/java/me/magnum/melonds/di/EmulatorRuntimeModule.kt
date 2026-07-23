@@ -24,6 +24,7 @@ import me.magnum.melonds.impl.camera.DSiCameraSourceMultiplexer
 import me.magnum.melonds.impl.camera.PhysicalDSiCameraSource
 import me.magnum.melonds.impl.camera.StaticImageDSiCameraSource
 import me.magnum.melonds.impl.emulator.AndroidEmulatorManager
+import me.magnum.melonds.impl.ShaderCompileTimeStore
 import me.magnum.melonds.impl.emulator.EmulatorSession
 import me.magnum.melonds.impl.emulator.LifecycleOwnerProvider
 import me.magnum.melonds.impl.emulator.SramProvider
@@ -120,6 +121,7 @@ object EmulatorRuntimeModule {
         cameraManagerMultiplexer: DSiCameraSourceMultiplexer,
         emulatorSession: EmulatorSession,
         dsiNandManager: DSiNandManager,
+        shaderCompileTimeStore: ShaderCompileTimeStore,
     ): EmulatorManager {
         return AndroidEmulatorManager(
             context,
@@ -131,6 +133,7 @@ object EmulatorRuntimeModule {
             cameraManagerMultiplexer,
             emulatorSession,
             dsiNandManager,
+            shaderCompileTimeStore,
         )
     }
 

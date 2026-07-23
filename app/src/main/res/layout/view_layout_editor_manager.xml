@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:defaultFocusHighlightEnabled="false"
+    android:descendantFocusability="blocksDescendants"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -23,7 +25,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:background="#AFFF"
+        android:background="@drawable/bg_watermelon_editor_panel"
         android:clickable="true"
         android:focusable="true"
         android:fillViewport="true">
@@ -36,6 +38,7 @@
 
             <Button
                 android:id="@+id/button_delete_button"
+                android:textColor="@color/colorPrimary"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 android:layout_width="wrap_content"
@@ -45,7 +48,7 @@
 
             <Button
                 android:id="@+id/button_edit_position"
-                app:layout_constraintTop_toTopOf="@id/button_delete_button"
+                app:layout_constraintBaseline_toBaselineOf="@id/button_delete_button"
                 app:layout_constraintStart_toEndOf="@id/button_delete_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -54,7 +57,7 @@
 
             <Button
                 android:id="@+id/button_edit_size"
-                app:layout_constraintTop_toTopOf="@id/button_delete_button"
+                app:layout_constraintBaseline_toBaselineOf="@id/button_delete_button"
                 app:layout_constraintStart_toEndOf="@id/button_edit_position"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -70,7 +73,7 @@
                 style="?android:attr/buttonStyleSmall"
                 android:background="@null"
                 android:src="@drawable/m3_split_button_chevron_avd"
-                app:tint="@color/textLayoutEditor"
+                app:tint="#f6f5f3"
                 android:contentDescription="@string/close" />
 
             <LinearLayout
@@ -280,7 +283,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:layout_constraintStart_toEndOf="@id/button_center_horizontal"
-                app:layout_constraintTop_toTopOf="@id/button_center_horizontal"
+                app:layout_constraintBaseline_toBaselineOf="@id/button_center_horizontal"
                 android:text="@string/center_vertical"
                 style="@style/Button.Editor" />
         </androidx.constraintlayout.widget.ConstraintLayout>
@@ -292,7 +295,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:orientation="horizontal"
-        android:background="#AFFF"
+        android:background="@drawable/bg_watermelon_editor_panel"
         android:clickable="true"
         android:focusable="false"
         android:gravity="center_vertical"

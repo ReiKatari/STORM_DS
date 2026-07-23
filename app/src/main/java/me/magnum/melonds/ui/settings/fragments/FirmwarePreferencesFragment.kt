@@ -20,6 +20,8 @@ class FirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFragment
         setPreferencesFromResource(R.xml.pref_internal_firmware_settings, rootKey)
         helper.bindPreferenceSummaryToValue(findPreference("firmware_settings_birthday"))
         helper.bindPreferenceSummaryToValue(findPreference("internal_mac_address"))
+
+        hideDependentsWhenInactive("internal_randomize_mac_address", "internal_mac_address", showWhenChecked = false)
     }
 
     override fun getTitle() = getString(R.string.internal_firmware_settings)

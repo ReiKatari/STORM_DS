@@ -1,11 +1,15 @@
 package me.magnum.melonds.ui.romlist.composables
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,135 +19,230 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Card
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.RomFilter
+import me.magnum.melonds.domain.model.RomViewMode
+import me.magnum.melonds.domain.model.SortingMode
+import me.magnum.melonds.domain.model.SortingOrder
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.ui.common.WatermelonMark
+import me.magnum.melonds.ui.theme.SpaceGrotesk
+import me.magnum.melonds.ui.theme.WatermelonMono
+import me.magnum.melonds.ui.theme.watermelon
 import kotlin.time.Duration
 
 @Composable
-fun ContinuePlayingShelf(
-    roms: List<Rom>,
-    coverByHash: Map<String, String>,
-    onRomClicked: (Rom) -> Unit,
-    onRomLongPressed: (Rom) -> Unit,
+fun WatermelonLibraryHeader(
+    isSearchActive: Boolean,
+    searchQuery: String,
+    viewMode: RomViewMode,
+    onSearchQueryChanged: (String?) -> Unit,
+    onToggleViewMode: () -> Unit,
+    onBootFirmwareDs: () -> Unit,
+    onBootFirmwareDsi: () -> Unit,
+    onOpenDsiWareManager: () -> Unit,
+    onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (roms.isEmpty()) return
-    Column(modifier = modifier.padding(vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-            Icon(
-                imageVector = Icons.Filled.PlayArrow,
-                contentDescription = null,
-                tint = MaterialTheme.colors.secondary,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.rom_continue_playing),
-                style = MaterialTheme.typography.subtitle1,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+    val colors = watermelon
+    var searchOpen by remember { mutableStateOf(isSearchActive) }
+    var overflowOpen by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(start = 18.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(roms, key = { it.uri.toString() }) { rom ->
-                ContinuePlayingCard(
-                    rom = rom,
-                    coverUrl = coverByHash[rom.retroAchievementsHash],
-                    onClick = { onRomClicked(rom) },
-                    onLongPress = { onRomLongPressed(rom) },
+            if (searchOpen) {
+                IconButton(
+                    onClick = {
+                        searchOpen = false
+                        onSearchQueryChanged(null)
+                    },
+                    modifier = Modifier.size(42.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = colors.text2, modifier = Modifier.size(22.dp))
+                }
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { onSearchQueryChanged(it) },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                    textStyle = TextStyle(color = colors.text, fontSize = 16.sp),
+                    cursorBrush = SolidColor(colors.red),
+                    decorationBox = { innerTextField ->
+                        Box {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.hint_search_roms),
+                                    color = colors.text3,
+                                    fontSize = 16.sp,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                        .focusRequester(searchFocusRequester),
                 )
+                LaunchedEffect(Unit) {
+                    runCatching { searchFocusRequester.requestFocus() }
+                }
+                IconButton(
+                    onClick = { onSearchQueryChanged("") },
+                    modifier = Modifier.size(42.dp),
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
+                }
+            } else {
+                WatermelonMark(height = 24.dp)
+                Spacer(Modifier.width(9.dp))
+                Row(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Watermelon",
+                        color = colors.text,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.3).sp,
+                    )
+                    Text(
+                        text = "DS",
+                        color = colors.green,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.3).sp,
+                    )
+                }
+                IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(22.dp))
+                }
+                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(42.dp)) {
+                    Icon(
+                        imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                        contentDescription = stringResource(R.string.rom_view_toggle),
+                        tint = colors.text2,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Box {
+                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(22.dp))
+                    }
+                    DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                        DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDs() }) {
+                            Text(stringResource(R.string.action_boot_firmware) + " · " + stringResource(R.string.console_ds))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDsi() }) {
+                            Text(stringResource(R.string.action_boot_firmware) + " · " + stringResource(R.string.console_dsi))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onOpenDsiWareManager() }) {
+                            Text(stringResource(R.string.dsiware_manager))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onRefresh() }) {
+                            Text(stringResource(R.string.action_refresh_rom_list))
+                        }
+                    }
+                }
+                IconButton(onClick = onOpenSettings, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.settings), tint = colors.text2, modifier = Modifier.size(22.dp))
+                }
             }
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ContinuePlayingCard(
-    rom: Rom,
-    coverUrl: String?,
+fun WatermelonChip(
+    label: String,
+    selected: Boolean,
     onClick: () -> Unit,
-    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
+    selectedBg: Color = watermelon.red,
+    fontSize: androidx.compose.ui.unit.TextUnit = 10.5.sp,
+    cornerRadius: androidx.compose.ui.unit.Dp = 20.dp,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 13.dp,
+    verticalPadding: androidx.compose.ui.unit.Dp = 7.dp,
 ) {
-    Card(
-        elevation = 4.dp,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .width(132.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongPress,
-            ),
+    val colors = watermelon
+    val shape = RoundedCornerShape(cornerRadius)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(if (selected) selectedBg else if (colors.isDark) colors.surface2 else colors.surface3)
+            .let { if (isFocused) it.border(1.dp, colors.red, shape) else it }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
     ) {
-        Column {
-            RomCover(
-                rom = rom,
-                coverUrl = coverUrl,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f),
-            )
-            Text(
-                text = rom.config.customName ?: rom.name,
-                style = MaterialTheme.typography.body2,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            )
-            if (rom.totalPlayTime != Duration.ZERO) {
-                Text(
-                    text = formatPlayTime(rom.totalPlayTime),
-                    style = MaterialTheme.typography.caption,
-                    color = MaterialTheme.colors.onBackground,
-                    modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
-                )
-            }
-        }
+        Text(
+            text = label,
+            color = if (selected) Color.White else colors.text2,
+            fontFamily = SpaceGrotesk,
+            fontSize = fontSize,
+            lineHeight = fontSize,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(horizontal = horizontalPadding, vertical = verticalPadding),
+        )
     }
 }
 
@@ -162,14 +261,265 @@ fun FilterChipsRow(
     )
     LazyRow(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         items(items) { (filter, label) ->
-            FilterChipM2(
+            val prefix = if (filter == RomFilter.FAVORITES) "★ " else ""
+            WatermelonChip(
+                label = prefix + stringResource(label).uppercase(),
                 selected = filter == selected,
                 onClick = { onFilterSelected(filter) },
-                label = stringResource(label),
+            )
+        }
+    }
+}
+
+@Composable
+fun LibrarySectionHeader(
+    title: String,
+    inFolder: Boolean,
+    sortingMode: SortingMode,
+    sortingOrder: SortingOrder,
+    gamesCount: Int,
+    onNavigateUp: () -> Unit,
+    onSortSelected: (SortingMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = watermelon
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (inFolder) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onNavigateUp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.rom_browser_navigate_up), tint = colors.text2, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(3.dp))
+                Icon(Icons.Filled.Folder, contentDescription = null, tint = colors.green, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = title,
+                    color = colors.text,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        } else {
+            Text(
+                text = title,
+                color = colors.text,
+                fontFamily = SpaceGrotesk,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.weight(2f, fill = false),
+        ) {
+            items(
+                listOf(
+                    SortingMode.ALPHABETICALLY to "A-Z",
+                    SortingMode.RECENTLY_PLAYED to null,
+                    SortingMode.MOST_PLAYED to null,
+                ),
+            ) { (mode, literal) ->
+                val base = literal ?: when (mode) {
+                    SortingMode.RECENTLY_PLAYED -> stringResource(R.string.rom_sort_recent_chip)
+                    SortingMode.MOST_PLAYED -> stringResource(R.string.rom_sort_most_played_chip)
+                    else -> ""
+                }
+                val active = sortingMode == mode
+                val arrow = if (active) {
+                    if (sortingOrder == SortingOrder.ASCENDING) " ↑" else " ↓"
+                } else {
+                    ""
+                }
+                WatermelonChip(
+                    label = base.uppercase() + arrow,
+                    selected = active,
+                    selectedBg = watermelon.green,
+                    onClick = { onSortSelected(mode) },
+                    fontSize = 8.5.sp,
+                    cornerRadius = 12.dp,
+                    horizontalPadding = 9.dp,
+                    verticalPadding = 4.dp,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.rom_games_count, gamesCount),
+            color = colors.text3,
+            fontFamily = WatermelonMono,
+            fontSize = 10.5.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+fun ContinuePlayingShelf(
+    roms: List<Rom>,
+    coverByHash: Map<String, String>,
+    boxArtByUri: Map<String, String> = emptyMap(),
+    onRomClicked: (Rom) -> Unit,
+    onRomLongPressed: (Rom) -> Unit,
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
+    onRomFocused: (Rom) -> Unit = {},
+) {
+    if (roms.isEmpty()) return
+    val colors = watermelon
+    Column(modifier = modifier.padding(top = 16.dp, bottom = 4.dp)) {
+        Text(
+            text = stringResource(R.string.rom_continue_playing),
+            color = colors.text,
+            fontFamily = SpaceGrotesk,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = horizontalPadding, end = horizontalPadding, bottom = 10.dp),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(roms, key = { it.uri.toString() }) { rom ->
+                ContinuePlayingCard(
+                    rom = rom,
+                    coverUrl = coverByHash[rom.retroAchievementsHash],
+                    boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                    boxArtLoading = boxArtByUri[rom.uri.toString()] == null,
+                    onClick = { onRomClicked(rom) },
+                    onLongPress = { onRomLongPressed(rom) },
+                    onFocused = onRomFocused,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ContinuePlayingCard(
+    rom: Rom,
+    coverUrl: String?,
+    boxArtUrl: String?,
+    boxArtLoading: Boolean = false,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    onFocused: (Rom) -> Unit = {},
+) {
+    val colors = watermelon
+    val shape = RoundedCornerShape(8.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    androidx.compose.runtime.LaunchedEffect(isFocused) {
+        if (isFocused) onFocused(rom)
+    }
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+            stiffness = 4000f,
+        ),
+        label = "press",
+    )
+
+    Column(
+        modifier = Modifier
+            .width(116.dp)
+            .scale(pressScale)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(DsBoxArtAspectRatio)
+                .shadow(6.dp, shape)
+                .clip(shape)
+                .then(if (isFocused) Modifier.border(3.dp, colors.red, shape) else Modifier),
+        ) {
+            WatermelonRomArt(
+                rom = rom,
+                boxArtUrl = boxArtUrl,
+                raCoverUrl = coverUrl,
+                initialsFontSize = 26.sp,
+                boxArtLoading = boxArtLoading,
+                modifier = Modifier.fillMaxWidth().aspectRatio(DsBoxArtAspectRatio),
+            )
+            PlatformBadge(
+                text = romPlatformLabel(rom),
+                fontSize = 8.sp,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 6.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))))
+                    .padding(start = 8.dp, end = 8.dp, top = 9.dp, bottom = 7.dp),
+            ) {
+                Text(
+                    text = romDisplayName(rom),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.5.sp,
+                    lineHeight = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 6.dp, bottom = 7.dp)
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+        }
+        val lastPlayedLabel = rom.lastPlayed?.let {
+            DateUtils.getRelativeTimeSpanString(it.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+        }
+        if (lastPlayedLabel != null) {
+            Text(
+                text = stringResource(R.string.rom_last_played_format, lastPlayedLabel),
+                color = watermelon.text3,
+                fontFamily = WatermelonMono,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 1.dp, top = 5.dp),
             )
         }
     }
@@ -184,26 +534,38 @@ fun BreadcrumbBar(
     onNavigateUp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (!isSearchActive) return
+    val colors = watermelon
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (canNavigateUp) {
-            IconButton(onClick = onNavigateUp, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.rom_browser_navigate_up))
+        if (canNavigateUp && !isSearchActive) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onNavigateUp)
+                    .padding(end = 8.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.rom_browser_navigate_up), tint = colors.text2, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(3.dp))
+                Icon(Icons.Filled.Folder, contentDescription = null, tint = colors.green, modifier = Modifier.size(17.dp))
             }
-            Spacer(Modifier.width(4.dp))
         }
         val text = when {
             isSearchActive -> stringResource(R.string.rom_browser_search_results)
-            isAtVirtualRoot || breadcrumbs.isEmpty() -> stringResource(R.string.rom_browser_virtual_root)
+            breadcrumbs.isEmpty() -> stringResource(R.string.rom_browser_virtual_root)
             else -> breadcrumbs.joinToString(" / ")
         }
         Text(
             text = text,
-            style = MaterialTheme.typography.subtitle1,
+            color = colors.text,
+            fontFamily = SpaceGrotesk,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -222,6 +584,7 @@ fun AlphabetIndexBar(
     modifier: Modifier = Modifier,
 ) {
     if (alphabetIndex.isEmpty() && !hasFolders) return
+    val colors = watermelon
     val letters = remember(alphabetIndex) { alphabetIndex.keys.toList() }
     val totalItems = letters.size + (if (hasFolders) 1 else 0)
 
@@ -254,14 +617,10 @@ fun AlphabetIndexBar(
     }
 
     Box(modifier = modifier) {
-        Surface(
-            color = MaterialTheme.colors.surface.copy(alpha = 0.92f),
-            shape = RoundedCornerShape(12.dp),
-            elevation = 2.dp,
+        Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
-                .width(36.dp)
+                .width(24.dp)
                 .fillMaxHeight()
                 .focusProperties { canFocus = false }
                 .onSizeChanged { barHeightPx = it.height }
@@ -304,8 +663,8 @@ fun AlphabetIndexBar(
                         Icon(
                             imageVector = Icons.Filled.Folder,
                             contentDescription = null,
-                            tint = if (highlighted) MaterialTheme.colors.secondary else MaterialTheme.colors.onSurface,
-                            modifier = Modifier.size(14.dp),
+                            tint = if (highlighted) colors.green else colors.text3,
+                            modifier = Modifier.size(12.dp),
                         )
                     }
                 }
@@ -332,10 +691,11 @@ fun AlphabetIndexBar(
                         Text(
                             text = ch.toString(),
                             modifier = Modifier.scale(scale),
-                            fontSize = 13.sp,
-                            lineHeight = 16.sp,
-                            color = if (highlighted) MaterialTheme.colors.secondary else MaterialTheme.colors.onSurface,
-                            fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal,
+                            fontFamily = WatermelonMono,
+                            fontSize = 8.5.sp,
+                            lineHeight = 11.sp,
+                            color = if (highlighted) colors.green else colors.text3,
+                            fontWeight = if (highlighted) FontWeight.Bold else FontWeight.SemiBold,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
@@ -344,65 +704,35 @@ fun AlphabetIndexBar(
         }
 
         if (isTouching && (hoverChar != null || isHoverFolder)) {
-            Surface(
-                color = MaterialTheme.colors.primary,
-                shape = RoundedCornerShape(50),
-                elevation = 8.dp,
+            Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(96.dp),
+                    .size(96.dp)
+                    .shadow(8.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(colors.red),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isHoverFolder) {
-                        Icon(
-                            imageVector = Icons.Filled.Folder,
-                            contentDescription = null,
-                            tint = MaterialTheme.colors.onPrimary,
-                            modifier = Modifier.size(48.dp),
+                if (isHoverFolder) {
+                    Icon(
+                        imageVector = Icons.Filled.Folder,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp),
+                    )
+                } else {
+                    hoverChar?.let { ch ->
+                        Text(
+                            text = ch.toString(),
+                            color = Color.White,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.Bold,
                         )
-                    } else {
-                        hoverChar?.let { ch ->
-                            Text(
-                                text = ch.toString(),
-                                color = MaterialTheme.colors.onPrimary,
-                                style = MaterialTheme.typography.h3,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun FilterChipM2(
-    selected: Boolean,
-    onClick: () -> Unit,
-    label: String,
-) {
-    val bg = if (selected) MaterialTheme.colors.secondary else MaterialTheme.colors.surface
-    val fg = if (selected) MaterialTheme.colors.onSecondary else MaterialTheme.colors.onSurface
-    Surface(
-        color = bg,
-        contentColor = fg,
-        shape = RoundedCornerShape(50),
-        elevation = if (selected) 2.dp else 0.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = if (selected) MaterialTheme.colors.secondary else MaterialTheme.colors.onBackground.copy(alpha = 0.3f),
-        ),
-        modifier = Modifier
-            .focusProperties { canFocus = false }
-            .clickable(onClick = onClick),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.body2,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-        )
     }
 }
 
