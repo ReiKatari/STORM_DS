@@ -741,10 +741,14 @@
     <string name="leaderboard_attempt_score_label">Score</string>
     <string name="leaderboard_attempt_value_label">Value</string>
     <string name="leaderboard_submission_success">Leaderboard submitted</string>
+    <string name="leaderboard_submission_pending">Submitting leaderboard…</string>
+    <string name="leaderboard_generic_title">Leaderboard #%1$d</string>
     <string name="leaderboard_submission_failed">Leaderboard submission failed</string>
     <string name="achievement_submission_failed">Achievement submission failed</string>
     <string name="ra_submission_retry_background">Keep playing while we retry in the background</string>
+    <string name="ra_submission_not_retrying">No further retry is available for this attempt</string>
     <string name="leaderboard_submission_info">%1$s • Rank %2$d of %3$d</string> <!-- Eg.: 01:42.95 • Rank 73 of 145 -->
+    <string name="leaderboard_best_score">Personal best: %1$s</string>
     <string name="game_completed">Completed %1$s</string>
     <string name="game_mastered">Mastered %1$s</string>
     <string name="retroachievements_unsynchronized_data">Un-synchronized RetroAchievements data</string>

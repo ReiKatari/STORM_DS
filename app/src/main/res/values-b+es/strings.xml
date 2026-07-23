@@ -418,10 +418,14 @@
     <string name="leaderboard_attempt_score_label">Puntuación</string>
     <string name="leaderboard_attempt_value_label">Valor</string>
     <string name="leaderboard_submission_success">Leaderboard enviado</string>
+    <string name="leaderboard_submission_pending">Enviando leaderboard…</string>
+    <string name="leaderboard_generic_title">Clasificación n.º %1$d</string>
     <string name="leaderboard_submission_failed">Error al enviar leaderboard</string>
     <string name="achievement_submission_failed">Error al enviar logro</string>
     <string name="ra_submission_retry_background">Sigue jugando; reintentaremos en segundo plano</string>
+    <string name="ra_submission_not_retrying">No habrá más reintentos para este intento</string>
     <string name="leaderboard_submission_info">%1$s • Puesto %2$d de %3$d</string>
+    <string name="leaderboard_best_score">Mejor marca personal: %1$s</string>
        
        <string-array name="fast_forward_speed_multiplier_options">
         <item>Ilimitado</item>

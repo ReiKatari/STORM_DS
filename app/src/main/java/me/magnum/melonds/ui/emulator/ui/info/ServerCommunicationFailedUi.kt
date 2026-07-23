@@ -27,8 +27,8 @@ import kotlin.time.Duration.Companion.seconds
 
 @Composable
 internal fun ServerCommunicationFailedUi(errorInfo: AchievementInfo.ServerCommunicationFailed) {
-    val alphaTransition = remember(errorInfo.source) { Animatable(1f) }
-    var isDescriptionVisible by remember(errorInfo.source) { mutableStateOf(false) }
+    val alphaTransition = remember(errorInfo.source, errorInfo.willRetryInBackground) { Animatable(1f) }
+    var isDescriptionVisible by remember(errorInfo.source, errorInfo.willRetryInBackground) { mutableStateOf(false) }
 
     AchievementInfoUi(
         modifier = Modifier.padding(8.dp).graphicsLayer {
@@ -38,12 +38,16 @@ internal fun ServerCommunicationFailedUi(errorInfo: AchievementInfo.ServerCommun
         state = errorInfo.state,
         accentColor = RaFailureColor,
     ) {
-        LaunchedEffect(errorInfo.source) {
+        LaunchedEffect(errorInfo.source, errorInfo.willRetryInBackground) {
             delay(500.milliseconds)
             isDescriptionVisible = true
             delay(3.seconds)
             isDescriptionVisible = false
-            alphaTransition.animateTo(0.5f)
+            if (errorInfo.willRetryInBackground) {
+                alphaTransition.animateTo(0.5f)
+            } else {
+                errorInfo.state.dismiss()
+            }
         }
 
         AnimatedVisibility(isDescriptionVisible) {
@@ -62,7 +66,13 @@ internal fun ServerCommunicationFailedUi(errorInfo: AchievementInfo.ServerCommun
                     style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
-                    text = stringResource(R.string.ra_submission_retry_background),
+                    text = stringResource(
+                        if (errorInfo.willRetryInBackground) {
+                            R.string.ra_submission_retry_background
+                        } else {
+                            R.string.ra_submission_not_retrying
+                        },
+                    ),
                     style = MaterialTheme.typography.caption,
                 )
             }

@@ -100,6 +100,7 @@ import me.magnum.melonds.domain.repositories.SaveStatesRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.impl.emulator.EmulatorSession
+import me.magnum.melonds.impl.emulator.LeaderboardTrackerUpdateLogLimiter
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerIntegrity
 import me.magnum.melonds.impl.retroachievements.offline.OfflineLedgerExpiredException
@@ -112,6 +113,9 @@ import me.magnum.melonds.impl.retroachievements.offline.OfflineUnlockMode
 import me.magnum.melonds.impl.retroachievements.offline.OfflineUnlockType
 import me.magnum.melonds.impl.retroachievements.offline.HardcoreOfflineLossTracker
 import me.magnum.melonds.ui.emulator.component.HardcoreSubmissionQueue
+import me.magnum.melonds.ui.emulator.component.LeaderboardAttemptCoordinator
+import me.magnum.melonds.ui.emulator.component.LeaderboardAttemptKey
+import me.magnum.melonds.ui.emulator.component.LeaderboardSubmissionOwnership
 import me.magnum.melonds.impl.retroachievements.offline.RetroAchievementsImageCacheWarmer
 import me.magnum.melonds.impl.retroachievements.offline.SmartSyncSkipReason
 import me.magnum.melonds.impl.retroachievements.offline.SmartSyncEngine
@@ -141,9 +145,11 @@ import me.magnum.melonds.utils.EventSharedFlow
 import me.magnum.rcheevosapi.exception.UserTokenExpiredException
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAchievementSet
+import me.magnum.rcheevosapi.model.RALeaderboard
 import me.magnum.rcheevosapi.model.RASetId
 import me.magnum.rcheevosapi.model.RAUserAuth
 import java.io.FileInputStream
+import java.net.URL
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -206,6 +212,7 @@ class EmulatorViewModel @Inject constructor(
 
     private enum class RetroAchievementsRuntimePath(val traceValue: String) {
         DISABLED("disabled"),
+        LEGACY("legacy"),
         RC_CLIENT("rc_client"),
         RC_CLIENT_OFFLINE("rc_client_offline"),
     }
@@ -240,6 +247,11 @@ class EmulatorViewModel @Inject constructor(
         val source: OnlineRetroAchievementsBootstrapSource,
     )
 
+    private data class LeaderboardUiContext(
+        val leaderboard: RALeaderboard,
+        val gameIcon: URL,
+    )
+
     private var retroAchievementsNetworkMode: RetroAchievementsNetworkMode = RetroAchievementsNetworkMode.ONLINE_LIVE
     private var retroAchievementsSessionMode: RetroAchievementsSessionMode = RetroAchievementsSessionMode.SOFTCORE
     private var isHardcoreEligibleAfterOnlineStart = false
@@ -249,10 +261,13 @@ class EmulatorViewModel @Inject constructor(
     private var offlineRetroAchievementsSession: OfflineRetroAchievementsSession? = null
     private var activeRuntimeBridgeConfig: RARuntimeBridgeConfig? = null
     private var activeRuntimePath: RetroAchievementsRuntimePath = RetroAchievementsRuntimePath.DISABLED
+    private var leaderboardDiagnosticsEnabled = false
     private var didReceiveRendererInitFailure = false
     private val announcedMasteryKeys = mutableSetOf<Pair<Long, Boolean>>()
     private val pendingRuntimeAchievementTriggers = mutableMapOf<Long, Long>()
     private val pendingRuntimeLeaderboardCompletions = mutableMapOf<Long, Long>()
+    private val leaderboardAttemptCoordinator = LeaderboardAttemptCoordinator()
+    private val leaderboardTrackerUpdateLogLimiter = LeaderboardTrackerUpdateLogLimiter()
 
     private var offlineSyncChoiceDeferred: CompletableDeferred<OfflineAchievementsSyncChoice>? = null
     private var hardcoreExitChoiceDeferred: CompletableDeferred<HardcorePendingExitChoice>? = null
@@ -1115,6 +1130,8 @@ class EmulatorViewModel @Inject constructor(
     fun resetEmulator() {
         if (_emulatorState.value.isRunning()) {
             sessionCoroutineScope.launch {
+                leaderboardAttemptCoordinator.beginRuntimeReset()
+                leaderboardTrackerUpdateLogLimiter.resetAll()
                 emulatorManager.resetEmulator()
                 _achievementsEvent.emit(RAEventUi.Reset)
             }
@@ -1122,6 +1139,8 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun stopEmulator() {
+        leaderboardAttemptCoordinator.reset()
+        leaderboardTrackerUpdateLogLimiter.resetAll()
         viewModelScope.launch {
             _achievementsEvent.emit(RAEventUi.Reset)
         }
@@ -1865,6 +1884,8 @@ class EmulatorViewModel @Inject constructor(
     private fun resetEmulatorState(newState: EmulatorState) {
         finalizeOfflineRetroAchievementsSessionIfNeeded()
         sessionCoroutineScope.notifyNewSessionStarted()
+        leaderboardAttemptCoordinator.reset()
+        leaderboardTrackerUpdateLogLimiter.resetAll()
         emulatorSession.reset()
         raSessionJob = null
         _currentFps.value = null
@@ -1886,6 +1907,7 @@ class EmulatorViewModel @Inject constructor(
         isRetroAchievementsOnlineSessionStarted = false
         activeRuntimeBridgeConfig = null
         activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
+        leaderboardDiagnosticsEnabled = false
         didReceiveRendererInitFailure = false
         announcedMasteryKeys.clear()
         pendingRuntimeAchievementTriggers.clear()
@@ -1971,12 +1993,16 @@ class EmulatorViewModel @Inject constructor(
                     is RAEvent.OnServerError -> onRuntimeServerError(it)
                     RAEvent.OnDisconnected -> onRuntimeDisconnected()
                     RAEvent.OnReconnected -> onRuntimeReconnected()
-                    is RAEvent.OnLeaderboardAttemptStarted -> onLeaderboardAttemptStarted(it)
-                    is RAEvent.OnLeaderboardAttemptUpdated -> onLeaderboardAttemptUpdated(it)
+                    is RAEvent.OnLeaderboardAttemptStarted,
+                    is RAEvent.OnLeaderboardAttemptUpdated,
+                    is RAEvent.OnLeaderboardAttemptSubmitted,
+                    is RAEvent.OnLeaderboardScoreboard,
+                    is RAEvent.OnLeaderboardSubmissionFailed,
+                    is RAEvent.OnLeaderboardAttemptCancelled,
+                    is RAEvent.OnLeaderboardTrackerHidden,
+                    is RAEvent.OnLeaderboardRuntimeReset -> onRcClientLeaderboardEvent(it)
                     is RAEvent.OnLeaderboardAttemptCompleted -> onLeaderboardAttemptCompleted(it)
-                    is RAEvent.OnLeaderboardAttemptCancelled -> onLeaderboardAttemptCancelled(it)
                     is RAEvent.OnAchievementProgressHidden -> onAchievementProgressHidden(it.achievementId)
-                    is RAEvent.OnLeaderboardTrackerHidden -> onLeaderboardTrackerHidden(it.leaderboardId)
                 }
             }
         }
@@ -2869,12 +2895,6 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    private fun onLeaderboardTrackerHidden(leaderboardId: Long) {
-        sessionCoroutineScope.launch {
-            _achievementsEvent.emit(RAEventUi.LeaderboardTrackerHidden(leaderboardId))
-        }
-    }
-
     private fun onSetCompleted(subsetId: Long) {
         sessionCoroutineScope.launch {
             showSetMastery(RASetId(subsetId), emulatorSession.isRetroAchievementsHardcoreModeEnabled)
@@ -2887,14 +2907,12 @@ class EmulatorViewModel @Inject constructor(
             "api" to event.api,
             "related_id" to event.relatedId,
             "result_code" to event.resultCode,
-            "message" to event.message,
         )
         logRaTrace(
             "runtime_server_error",
             "api" to event.api,
             "related_id" to event.relatedId,
             "result_code" to event.resultCode,
-            "message" to event.message,
         )
 
         if (event.api.equals("awardachievement", ignoreCase = true) && event.relatedId > 0L) {
@@ -3182,105 +3200,334 @@ class EmulatorViewModel @Inject constructor(
         )
     }
 
-    private fun onLeaderboardAttemptStarted(startEvent: RAEvent.OnLeaderboardAttemptStarted) {
-        sessionCoroutineScope.launch {
-            if (settingsRepository.areRetroAchievementsLeaderboardIndicatorsEnabled()) {
-                val leaderboard = retroAchievementsRepository.getLeaderboard(startEvent.leaderboardId)
-                if (leaderboard != null) {
-                    val setSummary = retroAchievementsRepository.getAchievementSetSummary(leaderboard.setId)
-                    if (setSummary != null) {
-                        _achievementsEvent.emit(RAEventUi.LeaderboardAttemptStarted(leaderboard, setSummary.iconUrl))
+    private suspend fun onRcClientLeaderboardEvent(event: RAEvent) {
+        if (event is RAEvent.OnLeaderboardRuntimeReset) {
+            leaderboardTrackerUpdateLogLimiter.resetAll()
+            leaderboardAttemptCoordinator.completeRuntimeReset(event.attemptFloor)
+            logLeaderboardDiagnostic(
+                "leaderboard_runtime_reset",
+                "attempt_floor" to event.attemptFloor,
+            )
+            _achievementsEvent.emit(RAEventUi.Reset)
+            return
+        }
+
+        if (
+            activeRuntimePath != RetroAchievementsRuntimePath.RC_CLIENT &&
+            activeRuntimePath != RetroAchievementsRuntimePath.RC_CLIENT_OFFLINE
+        ) {
+            val identity = leaderboardEventIdentity(event)
+            val trackerLogDecision = (event as? RAEvent.OnLeaderboardAttemptUpdated)
+                ?.takeUnless { it.trackerShown }
+                ?.let { leaderboardTrackerUpdateLogLimiter.observe(it.leaderboardId, it.attemptId) }
+            if (trackerLogDecision != null && !trackerLogDecision.shouldLog) {
+                return
+            }
+            logLeaderboardDiagnostic(
+                "leaderboard_event_ignored",
+                "leaderboard_id" to identity?.leaderboardId,
+                "attempt_id" to identity?.attemptId,
+                "event_sequence" to identity?.eventSequence,
+                "event" to event::class.simpleName,
+                "reason" to "runtime_not_rc_client",
+                "tracker_update_index" to trackerLogDecision?.updateIndex,
+                "suppressed_updates" to trackerLogDecision?.suppressedUpdates,
+            )
+            return
+        }
+
+        val transition = leaderboardAttemptCoordinator.reduce(event)
+        if (transition == null) {
+            val identity = leaderboardEventIdentity(event)
+            val trackerLogDecision = (event as? RAEvent.OnLeaderboardAttemptUpdated)
+                ?.takeUnless { it.trackerShown }
+                ?.let { leaderboardTrackerUpdateLogLimiter.observe(it.leaderboardId, it.attemptId) }
+            if (trackerLogDecision != null && !trackerLogDecision.shouldLog) {
+                return
+            }
+            logLeaderboardDiagnostic(
+                "leaderboard_event_ignored",
+                "leaderboard_id" to identity?.leaderboardId,
+                "attempt_id" to identity?.attemptId,
+                "event_sequence" to identity?.eventSequence,
+                "event" to event::class.simpleName,
+                "reason" to "stale_duplicate_or_terminal",
+                "tracker_update_index" to trackerLogDecision?.updateIndex,
+                "suppressed_updates" to trackerLogDecision?.suppressedUpdates,
+            )
+            return
+        }
+
+        val key = transition.key
+        when (transition) {
+            is LeaderboardAttemptCoordinator.Transition.Started -> {
+                leaderboardTrackerUpdateLogLimiter.reset(key.leaderboardId, key.attemptId)
+                logLeaderboardUiTransition(key, transition.event.eventSequence, "tracking")
+                if (settingsRepository.areRetroAchievementsLeaderboardIndicatorsEnabled()) {
+                    loadLeaderboardUiContext(key.leaderboardId)?.let { context ->
+                        _achievementsEvent.emit(RAEventUi.LeaderboardAttemptStarted(key, context.leaderboard, context.gameIcon))
                     }
                 }
             }
-        }
-    }
-
-    private fun onLeaderboardAttemptUpdated(updateEvent: RAEvent.OnLeaderboardAttemptUpdated) {
-        sessionCoroutineScope.launch {
-            if (settingsRepository.areRetroAchievementsLeaderboardIndicatorsEnabled()) {
-                _achievementsEvent.emit(RAEventUi.LeaderboardAttemptUpdated(updateEvent.leaderboardId, updateEvent.formattedValue))
-            }
-        }
-    }
-
-    private fun onLeaderboardAttemptCompleted(completionEvent: RAEvent.OnLeaderboardAttemptCompleted) {
-        sessionCoroutineScope.launch {
-            logRaTrace(
-                "leaderboard_complete_received",
-                "leaderboard_id" to completionEvent.leaderboardId,
-                "value" to completionEvent.value,
-                "network_mode" to retroAchievementsNetworkMode.name,
-                "session_mode" to retroAchievementsSessionMode.name,
-                "online" to networkStatusProvider.isOnline(),
-            )
-            if (retroAchievementsNetworkMode == RetroAchievementsNetworkMode.ONLINE_LIVE && !networkStatusProvider.isLikelyOnline()) {
-                transitionToOfflineAccumulationIfNeeded()
-            }
-
-            if (retroAchievementsNetworkMode == RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING) {
-                // Offline mode: avoid server submission (no Smart Sync support for leaderboards in this POC).
-                logRaTrace(
-                    "leaderboard_submit_skipped_offline",
-                    "leaderboard_id" to completionEvent.leaderboardId,
-                )
-                completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "offline_skipped")
-                _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(completionEvent.leaderboardId))
-                return@launch
-            }
-
-            if (!emulatorSession.areLeaderboardsEnabled()) {
-                logRaTrace(
-                    "leaderboard_submit_skipped_mode",
-                    "leaderboard_id" to completionEvent.leaderboardId,
-                    "hardcore_enabled" to emulatorSession.isRetroAchievementsHardcoreModeEnabled,
-                )
-                completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "mode_skipped")
-                _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(completionEvent.leaderboardId))
-                return@launch
-            }
-
-            if (activeRuntimePath == RetroAchievementsRuntimePath.RC_CLIENT) {
-                logRaTrace(
-                    "leaderboard_submit_owned_by_rc_client",
-                    "leaderboard_id" to completionEvent.leaderboardId,
-                    "value" to completionEvent.value,
-                )
-                retroAchievementsRepository.getLeaderboard(completionEvent.leaderboardId)?.let { leaderboard ->
-                    retroAchievementsRepository.getAchievementSetSummary(leaderboard.setId)?.let { setSummary ->
-                        _achievementsEvent.emit(
-                            RAEventUi.LeaderboardEntrySubmitted(
-                                leaderboardId = leaderboard.id,
-                                title = leaderboard.title,
-                                gameIcon = setSummary.iconUrl,
-                                formattedScore = completionEvent.formattedValue,
-                                rank = 0,
-                                numberOfEntries = 0,
-                            )
+            is LeaderboardAttemptCoordinator.Transition.Updated -> {
+                if (transition.event.trackerShown) {
+                    leaderboardTrackerUpdateLogLimiter.reset(key.leaderboardId, key.attemptId)
+                    logLeaderboardUiTransition(
+                        key,
+                        transition.event.eventSequence,
+                        "tracker_show",
+                        "tracker_display" to transition.event.formattedValue,
+                    )
+                } else {
+                    val logDecision = leaderboardTrackerUpdateLogLimiter.observe(key.leaderboardId, key.attemptId)
+                    if (logDecision.shouldLog) {
+                        logLeaderboardUiTransition(
+                            key,
+                            transition.event.eventSequence,
+                            "tracker_update",
+                            "tracker_display" to transition.event.formattedValue,
+                            "tracker_update_index" to logDecision.updateIndex,
+                            "suppressed_updates" to logDecision.suppressedUpdates,
                         )
                     }
                 }
-                completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "submitted_by_rc_client")
-                return@launch
+                if (settingsRepository.areRetroAchievementsLeaderboardIndicatorsEnabled()) {
+                    _achievementsEvent.emit(RAEventUi.LeaderboardAttemptUpdated(key, transition.event.formattedValue))
+                }
             }
-
-            if (!ensureLeaderboardSubmitContext(completionEvent.leaderboardId)) {
-                completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "context_mismatch")
-                _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(completionEvent.leaderboardId))
-                return@launch
+            is LeaderboardAttemptCoordinator.Transition.TrackerHidden -> {
+                leaderboardTrackerUpdateLogLimiter.reset(key.leaderboardId, key.attemptId)
+                logLeaderboardUiTransition(key, transition.event.eventSequence, "tracker_hidden")
+                if (settingsRepository.areRetroAchievementsLeaderboardIndicatorsEnabled()) {
+                    _achievementsEvent.emit(RAEventUi.LeaderboardTrackerHidden(key))
+                }
             }
-
-            if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
-                attemptSilentHardcoreReplayBeforeOnlineSubmission()
-            }
-
-            retroAchievementsRepository.getLeaderboard(completionEvent.leaderboardId)?.let { leaderboard ->
-                retroAchievementsSubmissionHandler.addPendingLeaderboardSubmission(
-                    leaderboard = leaderboard,
-                    value = completionEvent.value,
-                    formattedValue = completionEvent.formattedValue,
+            is LeaderboardAttemptCoordinator.Transition.Canceled -> {
+                leaderboardTrackerUpdateLogLimiter.reset(key.leaderboardId, key.attemptId)
+                logLeaderboardUiTransition(key, transition.event.eventSequence, "canceled")
+                _achievementsEvent.emit(
+                    RAEventUi.LeaderboardAttemptCancelled(
+                        leaderboardId = key.leaderboardId,
+                        attemptKey = key,
+                    )
                 )
             }
+            is LeaderboardAttemptCoordinator.Transition.Pending -> {
+                logLeaderboardUiTransition(
+                    key,
+                    transition.event.eventSequence,
+                    "pending",
+                    "tracker_display" to transition.event.trackerDisplay,
+                    "submit_owner" to "rc_client",
+                    "kotlin_submit" to false,
+                )
+                val context = loadLeaderboardUiContext(key.leaderboardId)
+                if (context == null) {
+                    logLeaderboardUiTransition(
+                        key,
+                        transition.event.eventSequence,
+                        "pending_metadata_unavailable",
+                    )
+                }
+                _achievementsEvent.emit(
+                    RAEventUi.LeaderboardSubmissionPending(
+                        key = key,
+                        title = context?.leaderboard?.title
+                            ?: this@EmulatorViewModel.context.getString(R.string.leaderboard_generic_title, key.leaderboardId),
+                        gameIcon = context?.gameIcon,
+                        trackerDisplay = transition.event.trackerDisplay,
+                    )
+                )
+            }
+            is LeaderboardAttemptCoordinator.Transition.Scoreboard -> {
+                val scoreboard = transition.event
+                leaderboardTrackerUpdateLogLimiter.reset(key.leaderboardId, key.attemptId)
+                logLeaderboardUiTransition(
+                    key,
+                    scoreboard.eventSequence,
+                    "scoreboard_final",
+                    "submitted_score" to scoreboard.submittedScore,
+                    "best_score" to scoreboard.bestScore,
+                    "rank" to scoreboard.newRank,
+                    "num_entries" to scoreboard.numEntries,
+                    "submit_owner" to "rc_client",
+                    "kotlin_submit" to false,
+                )
+                val context = loadLeaderboardUiContext(key.leaderboardId)
+                if (context == null) {
+                    logLeaderboardUiTransition(
+                        key,
+                        scoreboard.eventSequence,
+                        "scoreboard_metadata_unavailable",
+                    )
+                }
+                _achievementsEvent.emit(
+                    RAEventUi.LeaderboardEntrySubmitted(
+                        leaderboardId = key.leaderboardId,
+                        attemptKey = key,
+                        title = context?.leaderboard?.title
+                            ?: this@EmulatorViewModel.context.getString(R.string.leaderboard_generic_title, key.leaderboardId),
+                        gameIcon = context?.gameIcon,
+                        submittedScore = scoreboard.submittedScore,
+                        bestScore = scoreboard.bestScore.takeIf(String::isNotEmpty),
+                        rank = scoreboard.newRank,
+                        numberOfEntries = scoreboard.numEntries,
+                    )
+                )
+            }
+            is LeaderboardAttemptCoordinator.Transition.Failed -> {
+                leaderboardTrackerUpdateLogLimiter.reset(key.leaderboardId, key.attemptId)
+                logLeaderboardUiTransition(
+                    key,
+                    transition.event.eventSequence,
+                    "server_error",
+                    "result_code" to transition.event.resultCode,
+                    "submit_owner" to "rc_client",
+                    "kotlin_submit" to false,
+                )
+                _achievementsEvent.emit(
+                    RAEventUi.LeaderboardEntrySubmitError(
+                        leaderboardId = key.leaderboardId,
+                        attemptKey = key,
+                        willRetryInBackground = false,
+                    )
+                )
+            }
+        }
+    }
+
+    private suspend fun loadLeaderboardUiContext(leaderboardId: Long): LeaderboardUiContext? {
+        val leaderboard = retroAchievementsRepository.getLeaderboard(leaderboardId) ?: return null
+        val setSummary = retroAchievementsRepository.getAchievementSetSummary(leaderboard.setId) ?: return null
+        return LeaderboardUiContext(leaderboard, setSummary.iconUrl)
+    }
+
+    private data class LeaderboardEventIdentity(
+        val leaderboardId: Long,
+        val attemptId: Long,
+        val eventSequence: Long,
+    )
+
+    private fun leaderboardEventIdentity(event: RAEvent): LeaderboardEventIdentity? {
+        return when (event) {
+            is RAEvent.OnLeaderboardAttemptStarted -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            is RAEvent.OnLeaderboardAttemptUpdated -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            is RAEvent.OnLeaderboardAttemptSubmitted -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            is RAEvent.OnLeaderboardScoreboard -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            is RAEvent.OnLeaderboardSubmissionFailed -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            is RAEvent.OnLeaderboardAttemptCancelled -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            is RAEvent.OnLeaderboardTrackerHidden -> LeaderboardEventIdentity(event.leaderboardId, event.attemptId, event.eventSequence)
+            else -> null
+        }
+    }
+
+    private fun logLeaderboardUiTransition(
+        key: LeaderboardAttemptKey,
+        eventSequence: Long,
+        uiState: String,
+        vararg fields: Pair<String, Any?>,
+    ) {
+        logLeaderboardDiagnostic(
+            "leaderboard_ui_transition",
+            "leaderboard_id" to key.leaderboardId,
+            "attempt_id" to key.attemptId,
+            "event_sequence" to eventSequence,
+            "ui_state" to uiState,
+            *fields,
+        )
+    }
+
+    private fun logLeaderboardDiagnostic(eventType: String, vararg fields: Pair<String, Any?>) {
+        if (!leaderboardDiagnosticsEnabled) return
+        logRaSubmission(eventType, *fields)
+    }
+
+    private fun onLeaderboardAttemptCompleted(completionEvent: RAEvent.OnLeaderboardAttemptCompleted) {
+        val owner = when (activeRuntimePath) {
+            RetroAchievementsRuntimePath.RC_CLIENT,
+            RetroAchievementsRuntimePath.RC_CLIENT_OFFLINE -> LeaderboardSubmissionOwnership.Owner.RC_CLIENT
+            RetroAchievementsRuntimePath.LEGACY -> LeaderboardSubmissionOwnership.Owner.LEGACY
+            RetroAchievementsRuntimePath.DISABLED -> LeaderboardSubmissionOwnership.Owner.NONE
+        }
+        val ownership = LeaderboardSubmissionOwnership.dispatch(owner, completionEvent) { legacySubmission ->
+            sessionCoroutineScope.launch {
+                submitLegacyLeaderboardCompletion(completionEvent, legacySubmission)
+            }
+        }
+        when (ownership) {
+            LeaderboardSubmissionOwnership.Action.RuntimeOwnsSubmit,
+            LeaderboardSubmissionOwnership.Action.IgnoreProtocolMismatch -> {
+                logLeaderboardDiagnostic(
+                    "leaderboard_legacy_completion_ignored",
+                    "leaderboard_id" to completionEvent.leaderboardId,
+                    "runtime_path" to activeRuntimePath.traceValue,
+                    "reason" to if (owner == LeaderboardSubmissionOwnership.Owner.RC_CLIENT) {
+                        "rc_client_owns_submit"
+                    } else {
+                        "no_submit_owner"
+                    },
+                    "kotlin_submit" to false,
+                )
+                return
+            }
+            is LeaderboardSubmissionOwnership.Action.SubmitLegacy -> Unit
+        }
+    }
+
+    private suspend fun submitLegacyLeaderboardCompletion(
+        completionEvent: RAEvent.OnLeaderboardAttemptCompleted,
+        ownership: LeaderboardSubmissionOwnership.Action.SubmitLegacy,
+    ) {
+
+        logRaTrace(
+            "leaderboard_complete_received",
+            "leaderboard_id" to completionEvent.leaderboardId,
+            "value" to completionEvent.value,
+            "network_mode" to retroAchievementsNetworkMode.name,
+            "session_mode" to retroAchievementsSessionMode.name,
+            "online" to networkStatusProvider.isOnline(),
+        )
+        if (retroAchievementsNetworkMode == RetroAchievementsNetworkMode.ONLINE_LIVE && !networkStatusProvider.isLikelyOnline()) {
+            transitionToOfflineAccumulationIfNeeded()
+        }
+
+        if (retroAchievementsNetworkMode == RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING) {
+            logRaTrace(
+                "leaderboard_submit_skipped_offline",
+                "leaderboard_id" to completionEvent.leaderboardId,
+            )
+            completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "offline_skipped")
+            _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(completionEvent.leaderboardId))
+            return
+        }
+
+        if (!emulatorSession.areLeaderboardsEnabled()) {
+            logRaTrace(
+                "leaderboard_submit_skipped_mode",
+                "leaderboard_id" to completionEvent.leaderboardId,
+                "hardcore_enabled" to emulatorSession.isRetroAchievementsHardcoreModeEnabled,
+            )
+            completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "mode_skipped")
+            _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(completionEvent.leaderboardId))
+            return
+        }
+
+        if (!ensureLeaderboardSubmitContext(completionEvent.leaderboardId)) {
+            completeLeaderboardSubmissionTrace(completionEvent.leaderboardId, "context_mismatch")
+            _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(completionEvent.leaderboardId))
+            return
+        }
+
+        if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
+            attemptSilentHardcoreReplayBeforeOnlineSubmission()
+        }
+
+        retroAchievementsRepository.getLeaderboard(completionEvent.leaderboardId)?.let { leaderboard ->
+            retroAchievementsSubmissionHandler.addPendingLegacyLeaderboardSubmission(
+                leaderboard = leaderboard,
+                value = ownership.value,
+                formattedValue = ownership.formattedValue,
+            )
         }
     }
 
@@ -3307,12 +3554,6 @@ class EmulatorViewModel @Inject constructor(
                 "submitted" to drainResult.submittedCount,
                 "remaining" to drainResult.remainingCount,
             )
-        }
-    }
-
-    private fun onLeaderboardAttemptCancelled(cancelEvent: RAEvent.OnLeaderboardAttemptCancelled) {
-        sessionCoroutineScope.launch {
-            _achievementsEvent.emit(RAEventUi.LeaderboardAttemptCancelled(cancelEvent.leaderboardId))
         }
     }
 
@@ -3358,6 +3599,9 @@ class EmulatorViewModel @Inject constructor(
         val bootstrapReady = CompletableDeferred<Unit>()
         sessionCoroutineScope.launch {
             try {
+                leaderboardAttemptCoordinator.beginRuntimeReset()
+                leaderboardTrackerUpdateLogLimiter.resetAll()
+                leaderboardDiagnosticsEnabled = settingsRepository.isRendererDebugToolsEnabled().firstOrNull() == true
                 offlineRetroAchievementsSession = null
                 activeRuntimeBridgeConfig = null
                 activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
@@ -3899,6 +4143,8 @@ class EmulatorViewModel @Inject constructor(
         actions.forEach {
             when (it) {
                 EmulatorSessionUpdateAction.DisableRetroAchievements -> {
+                    leaderboardAttemptCoordinator.reset()
+                    leaderboardTrackerUpdateLogLimiter.resetAll()
                     _achievementsEvent.tryEmit(RAEventUi.Reset)
                     emulatorManager.unloadRetroAchievementsData()
                     raSessionJob?.cancel()
@@ -3980,8 +4226,12 @@ class EmulatorViewModel @Inject constructor(
             is RAEvent.OnAchievementProgressHidden,
             is RAEvent.OnLeaderboardAttemptStarted,
             is RAEvent.OnLeaderboardAttemptUpdated,
+            is RAEvent.OnLeaderboardAttemptSubmitted,
+            is RAEvent.OnLeaderboardScoreboard,
+            is RAEvent.OnLeaderboardSubmissionFailed,
             is RAEvent.OnLeaderboardAttemptCancelled,
-            is RAEvent.OnLeaderboardTrackerHidden -> {
+            is RAEvent.OnLeaderboardTrackerHidden,
+            is RAEvent.OnLeaderboardRuntimeReset -> {
                 // Keep high-volume runtime events out of structured trace logs.
             }
         }

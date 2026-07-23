@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.emulator.component
 
+import android.util.Log
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.domain.repositories.RomsRepository
+import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.impl.emulator.EmulatorSession
 import me.magnum.melonds.impl.network.NetworkConnectivityObserver
 import me.magnum.melonds.ui.emulator.model.RAEventUi
@@ -33,6 +35,7 @@ import kotlin.time.Duration.Companion.minutes
 class RetroAchievementsSubmissionHandler @Inject constructor(
     private val retroAchievementsRepository: RetroAchievementsRepository,
     private val romsRepository: RomsRepository,
+    private val settingsRepository: SettingsRepository,
     private val emulatorSession: EmulatorSession,
     private val networkConnectivityObserver: NetworkConnectivityObserver,
 ) {
@@ -84,7 +87,7 @@ class RetroAchievementsSubmissionHandler @Inject constructor(
         pendingSubmissionsChannel?.trySend(Unit)
     }
 
-    fun addPendingLeaderboardSubmission(leaderboard: RALeaderboard, value: Int, formattedValue: String) {
+    fun addPendingLegacyLeaderboardSubmission(leaderboard: RALeaderboard, value: Int, formattedValue: String) {
         pendingSubmissions.update {
             it + PendingSubmission.LeaderboardEntrySubmission(leaderboard, value, formattedValue, true)
         }
@@ -168,16 +171,25 @@ class RetroAchievementsSubmissionHandler @Inject constructor(
     }
 
     private suspend fun submitLeaderboardEntry(leaderboardSubmission: PendingSubmission.LeaderboardEntrySubmission): PendingSubmissionResult {
+        if (settingsRepository.isRendererDebugToolsEnabled().firstOrNull() == true) {
+            Log.i(
+                "RASubmission",
+                "event_type=kotlin_leaderboard_submit_start submit_path=kotlin_api " +
+                    "leaderboard_id=${leaderboardSubmission.leaderboard.id} request_score=${leaderboardSubmission.value}",
+            )
+        }
         return retroAchievementsRepository.submitLeaderboardEntry(leaderboardSubmission.leaderboard.id, leaderboardSubmission.value).fold(
             onSuccess = { submissionResponse ->
                 val events = retroAchievementsRepository.getAchievementSetSummary(leaderboardSubmission.leaderboard.setId)?.let { setSummary ->
                     val submissionEvent = RAEventUi.LeaderboardEntrySubmitted(
                         leaderboardId = leaderboardSubmission.leaderboard.id,
+                        attemptKey = null,
                         title = leaderboardSubmission.leaderboard.title,
                         gameIcon = setSummary.iconUrl,
-                        formattedScore = leaderboardSubmission.formattedValue,
-                        rank = submissionResponse.rank,
-                        numberOfEntries = submissionResponse.numEntries,
+                        submittedScore = leaderboardSubmission.formattedValue,
+                        bestScore = null,
+                        rank = submissionResponse.rank.toLong(),
+                        numberOfEntries = submissionResponse.numEntries.toLong(),
                     )
                     listOf(submissionEvent)
                 }.orEmpty()

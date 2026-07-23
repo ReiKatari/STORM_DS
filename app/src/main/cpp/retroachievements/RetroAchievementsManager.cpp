@@ -1,6 +1,9 @@
 #include "NDS.h"
 #include "rcheevos.h"
 #include "RetroAchievementsManager.h"
+#include "LeaderboardAttemptCorrelation.h"
+#include "LeaderboardScoreboardResponse.h"
+#include "MelonDS.h"
 #include "Platform.h"
 #include "rc_consoles.h"
 #include "types.h"
@@ -57,6 +60,18 @@ constexpr int RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr int RC_CLIENT_HTTP_READ_TIMEOUT_MS = 15000;
 constexpr size_t RC_CLIENT_MAX_LOGGED_VALUE_LENGTH = 200;
 constexpr size_t RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH = 500;
+
+bool AreLeaderboardDiagnosticsEnabled()
+{
+    return MelonDSAndroid::areRendererDebugToolsEnabled();
+}
+
+int64_t LeaderboardDiagnosticNowMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()
+    ).count();
+}
 
 struct RcClientAsyncResult
 {
@@ -155,7 +170,7 @@ std::string DecodeRcClientFormComponent(const char* value, size_t length)
 
 bool IsSensitiveRcClientParameter(const std::string& key)
 {
-    return key == "p" || key == "t" || key == "v";
+    return key == "p" || key == "t" || key == "u" || key == "v";
 }
 
 std::string SanitizeRcClientParameterValue(const std::string& key, const std::string& value)
@@ -246,6 +261,8 @@ std::string BuildRcClientLoggedResponseSample(const std::string& requestAction, 
 
     if (requestAction == "login" || requestAction == "login2")
         return "<redacted-login-response>";
+    if (requestAction == "submitlbentry")
+        return "<redacted-leaderboard-response>";
 
     std::string sanitized;
     sanitized.reserve(std::min(responseBody.size(), RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH));
@@ -269,6 +286,79 @@ std::string BuildRcClientLoggedResponseSample(const std::string& requestAction, 
     return sanitized;
 }
 
+std::string BuildRcClientSafeUrl(const char* url)
+{
+    if (!url)
+        return "";
+
+    const char* queryStart = strchr(url, '?');
+    return queryStart ? std::string(url, static_cast<size_t>(queryStart - url)) : std::string(url);
+}
+
+bool TryExtractRcClientFormParameter(const char* encodedParameters, const char* expectedKey, std::string* output)
+{
+    if (!encodedParameters || !expectedKey || !output)
+        return false;
+
+    const char* currentParameter = encodedParameters;
+    while (*currentParameter != '\0')
+    {
+        const char* parameterEnd = strchr(currentParameter, '&');
+        if (!parameterEnd)
+            parameterEnd = currentParameter + strlen(currentParameter);
+
+        const char* separator = static_cast<const char*>(memchr(currentParameter, '=', parameterEnd - currentParameter));
+        const size_t keyLength = separator ? static_cast<size_t>(separator - currentParameter) : static_cast<size_t>(parameterEnd - currentParameter);
+        const std::string key = DecodeRcClientFormComponent(currentParameter, keyLength);
+        if (key == expectedKey)
+        {
+            const char* valueStart = separator ? separator + 1 : parameterEnd;
+            *output = DecodeRcClientFormComponent(valueStart, static_cast<size_t>(parameterEnd - valueStart));
+            return true;
+        }
+
+        if (*parameterEnd == '\0')
+            break;
+        currentParameter = parameterEnd + 1;
+    }
+
+    return false;
+}
+
+std::optional<std::string> GetRcClientFormParameter(const rc_api_request_t* request, const char* key)
+{
+    if (!request || !key)
+        return std::nullopt;
+
+    std::string value;
+    if (TryExtractRcClientFormParameter(request->post_data, key, &value))
+        return value;
+
+    if (request->url)
+    {
+        const char* queryStart = strchr(request->url, '?');
+        if (queryStart && TryExtractRcClientFormParameter(queryStart + 1, key, &value))
+            return value;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<int64_t> ParseRcClientIntegerParameter(const rc_api_request_t* request, const char* key)
+{
+    const auto value = GetRcClientFormParameter(request, key);
+    if (!value.has_value() || value->empty())
+        return std::nullopt;
+
+    char* end = nullptr;
+    errno = 0;
+    const long long parsed = std::strtoll(value->c_str(), &end, 10);
+    if (errno == ERANGE || end == value->c_str() || !end || *end != '\0')
+        return std::nullopt;
+
+    return static_cast<int64_t>(parsed);
+}
+
 std::string ResolveRcClientRequestAction(const rc_api_request_t* request)
 {
     if (!request)
@@ -287,7 +377,8 @@ std::string ResolveRcClientRequestAction(const rc_api_request_t* request)
         }
     }
 
-    return request->url ? request->url : "unknown";
+    const std::string safeUrl = BuildRcClientSafeUrl(request->url);
+    return safeUrl.empty() ? "unknown" : safeUrl;
 }
 
 const char* ResolveRcClientRequestMethod(const rc_api_request_t* request)
@@ -549,19 +640,18 @@ bool ReadJavaInputStream(JNIEnv* env, jobject inputStream, std::string* response
         return false;
 
     jclass inputStreamClass = env->FindClass("java/io/InputStream");
-    if (!inputStreamClass || LogAndClearJavaException(env, "FindClass(InputStream)", httpStatusCode))
+    if (LogAndClearJavaException(env, "FindClass(InputStream)", httpStatusCode) || !inputStreamClass)
         return false;
 
     jmethodID readMethod = env->GetMethodID(inputStreamClass, "read", "([B)I");
-    jmethodID closeMethod = env->GetMethodID(inputStreamClass, "close", "()V");
-    if (!readMethod || !closeMethod || LogAndClearJavaException(env, "GetMethodID(InputStream)", httpStatusCode))
+    if (LogAndClearJavaException(env, "GetMethodID(InputStream.read)", httpStatusCode) || !readMethod)
     {
         env->DeleteLocalRef(inputStreamClass);
         return false;
     }
 
     jbyteArray buffer = env->NewByteArray(8192);
-    if (!buffer || LogAndClearJavaException(env, "NewByteArray(InputStream)", httpStatusCode))
+    if (LogAndClearJavaException(env, "NewByteArray(InputStream)", httpStatusCode) || !buffer)
     {
         env->DeleteLocalRef(inputStreamClass);
         return false;
@@ -590,9 +680,6 @@ bool ReadJavaInputStream(JNIEnv* env, jobject inputStream, std::string* response
 
         responseBody->append(reinterpret_cast<const char*>(chunk.data()), (size_t) bytesRead);
     }
-
-    env->CallVoidMethod(inputStream, closeMethod);
-    LogAndClearJavaException(env, "InputStream.close", httpStatusCode);
 
     env->DeleteLocalRef(buffer);
     env->DeleteLocalRef(inputStreamClass);
@@ -676,113 +763,194 @@ bool ExecuteRcClientHttpRequest(
     *httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
 
     urlClass = env->FindClass("java/net/URL");
+    if (LogAndClearJavaException(env, "FindClass(URL)", httpStatusCode) || !urlClass)
+        goto cleanup;
+
     urlConnectionClass = env->FindClass("java/net/URLConnection");
+    if (LogAndClearJavaException(env, "FindClass(URLConnection)", httpStatusCode) || !urlConnectionClass)
+        goto cleanup;
+
     httpURLConnectionClass = env->FindClass("java/net/HttpURLConnection");
+    if (LogAndClearJavaException(env, "FindClass(HttpURLConnection)", httpStatusCode) || !httpURLConnectionClass)
+        goto cleanup;
+
     outputStreamClass = env->FindClass("java/io/OutputStream");
+    if (LogAndClearJavaException(env, "FindClass(OutputStream)", httpStatusCode) || !outputStreamClass)
+        goto cleanup;
+
     closeableClass = env->FindClass("java/io/Closeable");
-    if (!urlClass || !urlConnectionClass || !httpURLConnectionClass || !outputStreamClass || !closeableClass ||
-        LogAndClearJavaException(env, "FindClass(URL/URLConnection)", httpStatusCode))
+    if (LogAndClearJavaException(env, "FindClass(Closeable)", httpStatusCode) || !closeableClass)
         goto cleanup;
 
     urlConstructor = env->GetMethodID(urlClass, "<init>", "(Ljava/lang/String;)V");
-    openConnectionMethod = env->GetMethodID(urlClass, "openConnection", "()Ljava/net/URLConnection;");
-    setConnectTimeoutMethod = env->GetMethodID(urlConnectionClass, "setConnectTimeout", "(I)V");
-    setReadTimeoutMethod = env->GetMethodID(urlConnectionClass, "setReadTimeout", "(I)V");
-    setRequestPropertyMethod = env->GetMethodID(urlConnectionClass, "setRequestProperty", "(Ljava/lang/String;Ljava/lang/String;)V");
-    setDoOutputMethod = env->GetMethodID(urlConnectionClass, "setDoOutput", "(Z)V");
-    getInputStreamMethod = env->GetMethodID(urlConnectionClass, "getInputStream", "()Ljava/io/InputStream;");
-    setRequestMethodMethod = env->GetMethodID(httpURLConnectionClass, "setRequestMethod", "(Ljava/lang/String;)V");
-    getOutputStreamMethod = env->GetMethodID(urlConnectionClass, "getOutputStream", "()Ljava/io/OutputStream;");
-    getResponseCodeMethod = env->GetMethodID(httpURLConnectionClass, "getResponseCode", "()I");
-    getErrorStreamMethod = env->GetMethodID(httpURLConnectionClass, "getErrorStream", "()Ljava/io/InputStream;");
-    disconnectMethod = env->GetMethodID(httpURLConnectionClass, "disconnect", "()V");
-    outputStreamWriteMethod = env->GetMethodID(outputStreamClass, "write", "([B)V");
-    outputStreamFlushMethod = env->GetMethodID(outputStreamClass, "flush", "()V");
-    outputStreamCloseMethod = env->GetMethodID(outputStreamClass, "close", "()V");
-    closeableCloseMethod = env->GetMethodID(closeableClass, "close", "()V");
-    if (!urlConstructor || !openConnectionMethod || !setConnectTimeoutMethod || !setReadTimeoutMethod ||
-        !setRequestPropertyMethod || !setDoOutputMethod || !getInputStreamMethod || !setRequestMethodMethod ||
-        !getOutputStreamMethod || !getResponseCodeMethod || !getErrorStreamMethod || !disconnectMethod ||
-        !outputStreamWriteMethod || !outputStreamFlushMethod || !outputStreamCloseMethod || !closeableCloseMethod ||
-        LogAndClearJavaException(env, "GetMethodID(URLConnection)", httpStatusCode))
-    {
+    if (LogAndClearJavaException(env, "GetMethodID(URL.<init>)", httpStatusCode) || !urlConstructor)
         goto cleanup;
-    }
+
+    openConnectionMethod = env->GetMethodID(urlClass, "openConnection", "()Ljava/net/URLConnection;");
+    if (LogAndClearJavaException(env, "GetMethodID(URL.openConnection)", httpStatusCode) || !openConnectionMethod)
+        goto cleanup;
+
+    setConnectTimeoutMethod = env->GetMethodID(urlConnectionClass, "setConnectTimeout", "(I)V");
+    if (LogAndClearJavaException(env, "GetMethodID(URLConnection.setConnectTimeout)", httpStatusCode) || !setConnectTimeoutMethod)
+        goto cleanup;
+
+    setReadTimeoutMethod = env->GetMethodID(urlConnectionClass, "setReadTimeout", "(I)V");
+    if (LogAndClearJavaException(env, "GetMethodID(URLConnection.setReadTimeout)", httpStatusCode) || !setReadTimeoutMethod)
+        goto cleanup;
+
+    setRequestPropertyMethod = env->GetMethodID(urlConnectionClass, "setRequestProperty", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (LogAndClearJavaException(env, "GetMethodID(URLConnection.setRequestProperty)", httpStatusCode) || !setRequestPropertyMethod)
+        goto cleanup;
+
+    setDoOutputMethod = env->GetMethodID(urlConnectionClass, "setDoOutput", "(Z)V");
+    if (LogAndClearJavaException(env, "GetMethodID(URLConnection.setDoOutput)", httpStatusCode) || !setDoOutputMethod)
+        goto cleanup;
+
+    getInputStreamMethod = env->GetMethodID(urlConnectionClass, "getInputStream", "()Ljava/io/InputStream;");
+    if (LogAndClearJavaException(env, "GetMethodID(URLConnection.getInputStream)", httpStatusCode) || !getInputStreamMethod)
+        goto cleanup;
+
+    setRequestMethodMethod = env->GetMethodID(httpURLConnectionClass, "setRequestMethod", "(Ljava/lang/String;)V");
+    if (LogAndClearJavaException(env, "GetMethodID(HttpURLConnection.setRequestMethod)", httpStatusCode) || !setRequestMethodMethod)
+        goto cleanup;
+
+    getOutputStreamMethod = env->GetMethodID(urlConnectionClass, "getOutputStream", "()Ljava/io/OutputStream;");
+    if (LogAndClearJavaException(env, "GetMethodID(URLConnection.getOutputStream)", httpStatusCode) || !getOutputStreamMethod)
+        goto cleanup;
+
+    getResponseCodeMethod = env->GetMethodID(httpURLConnectionClass, "getResponseCode", "()I");
+    if (LogAndClearJavaException(env, "GetMethodID(HttpURLConnection.getResponseCode)", httpStatusCode) || !getResponseCodeMethod)
+        goto cleanup;
+
+    getErrorStreamMethod = env->GetMethodID(httpURLConnectionClass, "getErrorStream", "()Ljava/io/InputStream;");
+    if (LogAndClearJavaException(env, "GetMethodID(HttpURLConnection.getErrorStream)", httpStatusCode) || !getErrorStreamMethod)
+        goto cleanup;
+
+    disconnectMethod = env->GetMethodID(httpURLConnectionClass, "disconnect", "()V");
+    if (LogAndClearJavaException(env, "GetMethodID(HttpURLConnection.disconnect)", httpStatusCode) || !disconnectMethod)
+        goto cleanup;
+
+    outputStreamWriteMethod = env->GetMethodID(outputStreamClass, "write", "([B)V");
+    if (LogAndClearJavaException(env, "GetMethodID(OutputStream.write)", httpStatusCode) || !outputStreamWriteMethod)
+        goto cleanup;
+
+    outputStreamFlushMethod = env->GetMethodID(outputStreamClass, "flush", "()V");
+    if (LogAndClearJavaException(env, "GetMethodID(OutputStream.flush)", httpStatusCode) || !outputStreamFlushMethod)
+        goto cleanup;
+
+    outputStreamCloseMethod = env->GetMethodID(outputStreamClass, "close", "()V");
+    if (LogAndClearJavaException(env, "GetMethodID(OutputStream.close)", httpStatusCode) || !outputStreamCloseMethod)
+        goto cleanup;
+
+    closeableCloseMethod = env->GetMethodID(closeableClass, "close", "()V");
+    if (LogAndClearJavaException(env, "GetMethodID(Closeable.close)", httpStatusCode) || !closeableCloseMethod)
+        goto cleanup;
 
     urlString = env->NewStringUTF(request->url);
 
-    if (!urlString || LogAndClearJavaException(env, "NewStringUTF(url)", httpStatusCode))
+    if (LogAndClearJavaException(env, "NewStringUTF(url)", httpStatusCode) || !urlString)
         goto cleanup;
 
     urlObject = env->NewObject(urlClass, urlConstructor, urlString);
-    if (!urlObject || LogAndClearJavaException(env, "new URL()", httpStatusCode))
+    if (LogAndClearJavaException(env, "new URL()", httpStatusCode) || !urlObject)
         goto cleanup;
 
     connection = env->CallObjectMethod(urlObject, openConnectionMethod);
-    if (!connection || LogAndClearJavaException(env, "URL.openConnection", httpStatusCode))
+    if (LogAndClearJavaException(env, "URL.openConnection", httpStatusCode) || !connection)
         goto cleanup;
 
     env->CallVoidMethod(connection, setConnectTimeoutMethod, RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS);
+    if (LogAndClearJavaException(env, "URLConnection.setConnectTimeout", httpStatusCode))
+        goto cleanup;
+
     env->CallVoidMethod(connection, setReadTimeoutMethod, RC_CLIENT_HTTP_READ_TIMEOUT_MS);
-    if (LogAndClearJavaException(env, "set timeouts", httpStatusCode))
+    if (LogAndClearJavaException(env, "URLConnection.setReadTimeout", httpStatusCode))
         goto cleanup;
 
     {
         const char* resolvedUserAgent = (userAgent && userAgent[0] != '\0') ? userAgent : RC_CLIENT_DEFAULT_USER_AGENT;
         jstring userAgentHeaderName = env->NewStringUTF("User-Agent");
-        jstring userAgentHeaderValue = env->NewStringUTF(resolvedUserAgent);
-        if (!userAgentHeaderName || !userAgentHeaderValue)
+        if (LogAndClearJavaException(env, "NewStringUTF(User-Agent name)", httpStatusCode) || !userAgentHeaderName)
         {
-            LogAndClearJavaException(env, "NewStringUTF(User-Agent)", httpStatusCode);
             if (userAgentHeaderName) env->DeleteLocalRef(userAgentHeaderName);
+            goto cleanup;
+        }
+
+        jstring userAgentHeaderValue = env->NewStringUTF(resolvedUserAgent);
+        if (LogAndClearJavaException(env, "NewStringUTF(User-Agent value)", httpStatusCode) || !userAgentHeaderValue)
+        {
+            env->DeleteLocalRef(userAgentHeaderName);
             if (userAgentHeaderValue) env->DeleteLocalRef(userAgentHeaderValue);
             goto cleanup;
         }
 
         env->CallVoidMethod(connection, setRequestPropertyMethod, userAgentHeaderName, userAgentHeaderValue);
+        const bool setUserAgentFailed = LogAndClearJavaException(
+            env,
+            "URLConnection.setRequestProperty(User-Agent)",
+            httpStatusCode
+        );
         env->DeleteLocalRef(userAgentHeaderName);
         env->DeleteLocalRef(userAgentHeaderValue);
-        if (LogAndClearJavaException(env, "setRequestProperty(User-Agent)", httpStatusCode))
+        if (setUserAgentFailed)
             goto cleanup;
     }
 
     if (request->post_data && request->post_data[0] != '\0')
     {
         jstring postMethod = env->NewStringUTF("POST");
-        if (!postMethod || LogAndClearJavaException(env, "NewStringUTF(POST)", httpStatusCode))
+        if (LogAndClearJavaException(env, "NewStringUTF(POST)", httpStatusCode) || !postMethod)
             goto cleanup;
 
         env->CallVoidMethod(connection, setRequestMethodMethod, postMethod);
+        const bool setPostMethodFailed = LogAndClearJavaException(
+            env,
+            "HttpURLConnection.setRequestMethod(POST)",
+            httpStatusCode
+        );
         env->DeleteLocalRef(postMethod);
+        if (setPostMethodFailed)
+            goto cleanup;
+
         env->CallVoidMethod(connection, setDoOutputMethod, JNI_TRUE);
-        if (LogAndClearJavaException(env, "setup POST", httpStatusCode))
+        if (LogAndClearJavaException(env, "URLConnection.setDoOutput", httpStatusCode))
             goto cleanup;
 
         if (request->content_type && request->content_type[0] != '\0')
         {
             jstring contentTypeHeader = env->NewStringUTF("Content-Type");
-            jstring contentTypeValue = env->NewStringUTF(request->content_type);
-            if (!contentTypeHeader || !contentTypeValue)
+            if (LogAndClearJavaException(env, "NewStringUTF(Content-Type name)", httpStatusCode) || !contentTypeHeader)
             {
-                LogAndClearJavaException(env, "NewStringUTF(Content-Type)", httpStatusCode);
                 if (contentTypeHeader) env->DeleteLocalRef(contentTypeHeader);
+                goto cleanup;
+            }
+
+            jstring contentTypeValue = env->NewStringUTF(request->content_type);
+            if (LogAndClearJavaException(env, "NewStringUTF(Content-Type value)", httpStatusCode) || !contentTypeValue)
+            {
+                env->DeleteLocalRef(contentTypeHeader);
                 if (contentTypeValue) env->DeleteLocalRef(contentTypeValue);
                 goto cleanup;
             }
             env->CallVoidMethod(connection, setRequestPropertyMethod, contentTypeHeader, contentTypeValue);
+            const bool setContentTypeFailed = LogAndClearJavaException(
+                env,
+                "URLConnection.setRequestProperty(Content-Type)",
+                httpStatusCode
+            );
             env->DeleteLocalRef(contentTypeHeader);
             env->DeleteLocalRef(contentTypeValue);
-            if (LogAndClearJavaException(env, "setRequestProperty(Content-Type)", httpStatusCode))
+            if (setContentTypeFailed)
                 goto cleanup;
         }
 
         outputStream = env->CallObjectMethod(connection, getOutputStreamMethod);
-        if (!outputStream || LogAndClearJavaException(env, "getOutputStream", httpStatusCode))
+        if (LogAndClearJavaException(env, "getOutputStream", httpStatusCode) || !outputStream)
             goto cleanup;
 
         const size_t postDataLength = strlen(request->post_data);
         postDataBytes = env->NewByteArray((jsize) postDataLength);
-        if (!postDataBytes || LogAndClearJavaException(env, "NewByteArray(postData)", httpStatusCode))
+        if (LogAndClearJavaException(env, "NewByteArray(postData)", httpStatusCode) || !postDataBytes)
             goto cleanup;
 
         env->SetByteArrayRegion(postDataBytes, 0, (jsize) postDataLength, reinterpret_cast<const jbyte*>(request->post_data));
@@ -790,20 +958,31 @@ bool ExecuteRcClientHttpRequest(
             goto cleanup;
 
         env->CallVoidMethod(outputStream, outputStreamWriteMethod, postDataBytes);
+        if (LogAndClearJavaException(env, "OutputStream.write(POST body)", httpStatusCode))
+            goto cleanup;
+
         env->CallVoidMethod(outputStream, outputStreamFlushMethod);
+        if (LogAndClearJavaException(env, "OutputStream.flush(POST body)", httpStatusCode))
+            goto cleanup;
+
         env->CallVoidMethod(outputStream, outputStreamCloseMethod);
-        if (LogAndClearJavaException(env, "write/flush/close POST body", httpStatusCode))
+        if (LogAndClearJavaException(env, "OutputStream.close(POST body)", httpStatusCode))
             goto cleanup;
     }
     else
     {
         jstring getMethod = env->NewStringUTF("GET");
-        if (!getMethod || LogAndClearJavaException(env, "NewStringUTF(GET)", httpStatusCode))
+        if (LogAndClearJavaException(env, "NewStringUTF(GET)", httpStatusCode) || !getMethod)
             goto cleanup;
 
         env->CallVoidMethod(connection, setRequestMethodMethod, getMethod);
+        const bool setGetMethodFailed = LogAndClearJavaException(
+            env,
+            "HttpURLConnection.setRequestMethod(GET)",
+            httpStatusCode
+        );
         env->DeleteLocalRef(getMethod);
-        if (LogAndClearJavaException(env, "setRequestMethod(GET)", httpStatusCode))
+        if (setGetMethodFailed)
             goto cleanup;
     }
 
@@ -814,15 +993,15 @@ bool ExecuteRcClientHttpRequest(
     if (*httpStatusCode >= 200 && *httpStatusCode < 400)
     {
         inputStream = env->CallObjectMethod(connection, getInputStreamMethod);
+        if (LogAndClearJavaException(env, "URLConnection.getInputStream", httpStatusCode))
+            goto cleanup;
     }
     else
     {
         inputStream = env->CallObjectMethod(connection, getErrorStreamMethod);
-        if (inputStream == nullptr)
-            inputStream = env->CallObjectMethod(connection, getInputStreamMethod);
+        if (LogAndClearJavaException(env, "HttpURLConnection.getErrorStream", httpStatusCode))
+            goto cleanup;
     }
-    if (LogAndClearJavaException(env, "getInputStream/getErrorStream", httpStatusCode))
-        goto cleanup;
 
     if (inputStream)
     {
@@ -1173,6 +1352,7 @@ void RetroAchievementsManager::Reset()
     std::unique_lock lock(runtimeLock);
     if (IsRcClientRuntimeActiveLocked())
         rc_client_reset(rcClientRuntime);
+    PublishLeaderboardResetBarrierLocked();
 }
 
 void RetroAchievementsManager::FrameUpdate()
@@ -1301,13 +1481,50 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
         return;
     }
 
+    if (
+        AreLeaderboardDiagnosticsEnabled() &&
+        event->type != RC_CLIENT_EVENT_LEADERBOARD_TRACKER_UPDATE
+    )
     {
         uint32_t entityId = 0;
-        if (event->achievement) entityId = event->achievement->id;
-        else if (event->leaderboard) entityId = event->leaderboard->id;
-        else if (event->leaderboard_tracker) entityId = event->leaderboard_tracker->id;
-        else if (event->leaderboard_scoreboard) entityId = event->leaderboard_scoreboard->leaderboard_id;
-        else if (event->subset) entityId = event->subset->id;
+        switch (event->type)
+        {
+            case RC_CLIENT_EVENT_ACHIEVEMENT_TRIGGERED:
+            case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_SHOW:
+            case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_HIDE:
+            case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_SHOW:
+            case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_HIDE:
+            case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_UPDATE:
+                if (event->achievement)
+                    entityId = event->achievement->id;
+                break;
+            case RC_CLIENT_EVENT_LEADERBOARD_STARTED:
+            case RC_CLIENT_EVENT_LEADERBOARD_FAILED:
+            case RC_CLIENT_EVENT_LEADERBOARD_SUBMITTED:
+                if (event->leaderboard)
+                    entityId = event->leaderboard->id;
+                break;
+            case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_SHOW:
+            case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_HIDE:
+                if (event->leaderboard_tracker)
+                    entityId = event->leaderboard_tracker->id;
+                break;
+            case RC_CLIENT_EVENT_LEADERBOARD_SCOREBOARD:
+                if (event->leaderboard_scoreboard)
+                    entityId = event->leaderboard_scoreboard->leaderboard_id;
+                break;
+            case RC_CLIENT_EVENT_GAME_COMPLETED:
+            case RC_CLIENT_EVENT_SUBSET_COMPLETED:
+                if (event->subset)
+                    entityId = event->subset->id;
+                break;
+            case RC_CLIENT_EVENT_SERVER_ERROR:
+                if (event->server_error)
+                    entityId = event->server_error->related_id;
+                break;
+            default:
+                break;
+        }
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Info,
             "[RAClient] runtime_event_received path=rc_client type=%d id=%u\n",
@@ -1347,105 +1564,116 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
         case RC_CLIENT_EVENT_LEADERBOARD_STARTED:
             if (event->leaderboard)
             {
-                manager->RememberLeaderboardTrackerValue(event->leaderboard->id, event->leaderboard->tracker_value);
-                eventMessenger->onLeaderboardAttemptStarted(event->leaderboard->id);
-                if (event->leaderboard->tracker_value && event->leaderboard->tracker_value[0] != '\0')
-                    eventMessenger->onLeaderboardAttemptUpdated(event->leaderboard->id, event->leaderboard->tracker_value);
+                auto& attempt = manager->BeginLeaderboardAttempt(event->leaderboard->id);
+                const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
+                if (AreLeaderboardDiagnosticsEnabled())
+                {
+                    melonDS::Platform::Log(
+                        melonDS::Platform::LogLevel::Info,
+                        "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=STARTED tracker_display=%s\n",
+                        (unsigned long long) attempt.attemptId,
+                        event->leaderboard->id,
+                        manager->RuntimePathTraceValue(),
+                        (unsigned long long) sequence,
+                        event->leaderboard->tracker_value ? event->leaderboard->tracker_value : ""
+                    );
+                }
+                eventMessenger->onLeaderboardAttemptStarted(event->leaderboard->id, attempt.attemptId, sequence);
             }
             break;
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_SHOW:
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_UPDATE:
-            if (event->leaderboard_tracker)
-            {
-                const auto leaderboardIds = manager->ResolveLeaderboardIdsForTrackerValue(event->leaderboard_tracker->display);
-                for (const uint32_t leaderboardId : leaderboardIds)
-                    eventMessenger->onLeaderboardAttemptUpdated(leaderboardId, event->leaderboard_tracker->display);
-            }
-            break;
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_HIDE:
-            if (event->leaderboard_tracker)
-            {
-                const auto leaderboardIds = manager->ResolveLeaderboardIdsForTrackerValue(event->leaderboard_tracker->display);
-                for (const uint32_t leaderboardId : leaderboardIds)
-                    eventMessenger->onLeaderboardTrackerHidden(leaderboardId);
-                manager->ForgetLeaderboardTrackerValue(event->leaderboard_tracker->display);
-            }
             break;
         case RC_CLIENT_EVENT_LEADERBOARD_FAILED:
             if (event->leaderboard)
             {
-                eventMessenger->onLeaderboardAttemptCanceled(event->leaderboard->id);
-                manager->ForgetLeaderboardTrackerValue(event->leaderboard->id, event->leaderboard->tracker_value);
+                auto& attempt = manager->EnsureLeaderboardAttempt(event->leaderboard->id, false);
+                if (!attempt.terminal)
+                {
+                    attempt.terminal = true;
+                    const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
+                    if (AreLeaderboardDiagnosticsEnabled())
+                    {
+                        melonDS::Platform::Log(
+                            melonDS::Platform::LogLevel::Info,
+                            "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=CANCELED tracker_display=%s\n",
+                            (unsigned long long) attempt.attemptId,
+                            event->leaderboard->id,
+                            manager->RuntimePathTraceValue(),
+                            (unsigned long long) sequence,
+                            event->leaderboard->tracker_value ? event->leaderboard->tracker_value : ""
+                        );
+                    }
+                    eventMessenger->onLeaderboardAttemptCanceled(event->leaderboard->id, attempt.attemptId, sequence);
+                }
             }
             break;
         case RC_CLIENT_EVENT_LEADERBOARD_SUBMITTED:
-        {
-            const int defaultInvalidScore = std::numeric_limits<int>::min();
-            int leaderboardId = 0;
-            int leaderboardFormat = RC_FORMAT_VALUE;
-            bool hasLeaderboardFormat = false;
-            const char* submittedScore = "";
-            const char* bestScore = "";
-
             if (event->leaderboard)
             {
-                leaderboardId = event->leaderboard->id;
-                leaderboardFormat = event->leaderboard->format;
-                hasLeaderboardFormat = true;
-            }
-            else if (event->leaderboard_scoreboard)
-            {
-                leaderboardId = event->leaderboard_scoreboard->leaderboard_id;
-            }
-
-            if (!hasLeaderboardFormat && leaderboardId != 0 && client)
-            {
-                const rc_client_leaderboard_t* leaderboardInfo = rc_client_get_leaderboard_info(client, leaderboardId);
-                if (leaderboardInfo)
+                auto& attempt = manager->EnsureLeaderboardAttempt(event->leaderboard->id, false);
+                if (!attempt.submittedSeen)
                 {
-                    leaderboardFormat = leaderboardInfo->format;
-                    hasLeaderboardFormat = true;
+                    attempt.submittedSeen = true;
+                    const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
+                    const std::string trackerDisplay = event->leaderboard->tracker_value ? event->leaderboard->tracker_value : "";
+                    const std::string requestScore = attempt.requestScore.has_value()
+                        ? std::to_string(*attempt.requestScore)
+                        : "unknown";
+                    if (AreLeaderboardDiagnosticsEnabled())
+                    {
+                        melonDS::Platform::Log(
+                            melonDS::Platform::LogLevel::Info,
+                            "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=SUBMITTED tracker_display=%s request_score=%s logical_submit_count=%u transport_attempt_count=%u terminal_before_event=%d\n",
+                            (unsigned long long) attempt.attemptId,
+                            event->leaderboard->id,
+                            manager->RuntimePathTraceValue(),
+                            (unsigned long long) sequence,
+                            trackerDisplay.c_str(),
+                            requestScore.c_str(),
+                            attempt.logicalSubmitCount,
+                            attempt.transportAttemptCount,
+                            attempt.terminal ? 1 : 0
+                        );
+                    }
+                    if (attempt.transportAttemptCount == 0)
+                    {
+                        attempt.terminal = true;
+                        eventMessenger->onLeaderboardAttemptCanceled(
+                            event->leaderboard->id,
+                            attempt.attemptId,
+                            sequence
+                        );
+                    }
+                    else
+                    {
+                        eventMessenger->onLeaderboardAttemptSubmitted(
+                            event->leaderboard->id,
+                            attempt.attemptId,
+                            sequence,
+                            trackerDisplay
+                        );
+                    }
                 }
             }
-
+            break;
+        case RC_CLIENT_EVENT_LEADERBOARD_SCOREBOARD:
             if (event->leaderboard_scoreboard)
             {
-                if (event->leaderboard_scoreboard->submitted_score[0] != '\0')
-                    submittedScore = event->leaderboard_scoreboard->submitted_score;
-                else if (event->leaderboard_scoreboard->best_score[0] != '\0')
-                    submittedScore = event->leaderboard_scoreboard->best_score;
-
-                bestScore = event->leaderboard_scoreboard->best_score;
-            }
-
-            int submittedValue = ParseLeaderboardScoreByFormat(leaderboardFormat, submittedScore, defaultInvalidScore);
-            if (submittedValue == defaultInvalidScore && bestScore[0] != '\0' && bestScore != submittedScore)
-            {
-                submittedValue = ParseLeaderboardScoreByFormat(leaderboardFormat, bestScore, defaultInvalidScore);
-            }
-
-            if (submittedValue == defaultInvalidScore)
-            {
-                melonDS::Platform::Log(
-                    melonDS::Platform::LogLevel::Warn,
-                    "[RAClient] leaderboard_score_parse_failed lb_id=%d format=%d submitted='%s' best='%s'\n",
-                    leaderboardId,
-                    hasLeaderboardFormat ? leaderboardFormat : -1,
-                    submittedScore ? submittedScore : "",
-                    bestScore ? bestScore : ""
+                const auto* scoreboard = event->leaderboard_scoreboard;
+                auto& attempt = manager->ResolveLeaderboardResponseAttempt(scoreboard->leaderboard_id);
+                manager->PublishLeaderboardScoreboard(
+                    attempt,
+                    scoreboard->leaderboard_id,
+                    scoreboard->submitted_score,
+                    scoreboard->best_score,
+                    scoreboard->new_rank,
+                    scoreboard->num_entries,
+                    "rc_client_event"
                 );
-                submittedValue = 0;
-            }
-
-            const char* formattedValue = submittedScore[0] != '\0' ? submittedScore : "0";
-            if (leaderboardId != 0)
-            {
-                eventMessenger->onLeaderboardAttemptCompleted(leaderboardId, submittedValue, formattedValue);
-                if (event->leaderboard)
-                    manager->ForgetLeaderboardTrackerValue((uint32_t) leaderboardId, event->leaderboard->tracker_value);
             }
             break;
-        }
         case RC_CLIENT_EVENT_GAME_COMPLETED:
             if (event->subset)
                 eventMessenger->onAchievementGameCompleted(event->subset->id);
@@ -1457,11 +1685,48 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
         case RC_CLIENT_EVENT_SERVER_ERROR:
             if (event->server_error)
             {
+                const std::string api = event->server_error->api ? event->server_error->api : "";
+                const std::string message = event->server_error->error_message ? event->server_error->error_message : "";
+                if (api == "submit_lboard_entry" && event->server_error->related_id != 0)
+                {
+                    auto& attempt = manager->ResolveLeaderboardResponseAttempt(event->server_error->related_id);
+                    if (!attempt.terminal)
+                    {
+                        attempt.terminal = true;
+                        const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
+                        const std::string requestScore = attempt.requestScore.has_value()
+                            ? std::to_string(*attempt.requestScore)
+                            : "unknown";
+                        if (AreLeaderboardDiagnosticsEnabled())
+                        {
+                            melonDS::Platform::Log(
+                                melonDS::Platform::LogLevel::Warn,
+                                "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=SERVER_ERROR result=%d request_score=%s logical_submit_count=%u transport_attempt_count=%u\n",
+                                (unsigned long long) attempt.attemptId,
+                                event->server_error->related_id,
+                                manager->RuntimePathTraceValue(),
+                                (unsigned long long) sequence,
+                                event->server_error->result,
+                                requestScore.c_str(),
+                                attempt.logicalSubmitCount,
+                                attempt.transportAttemptCount
+                            );
+                        }
+                        eventMessenger->onLeaderboardSubmissionFailed(
+                            event->server_error->related_id,
+                            attempt.attemptId,
+                            sequence,
+                            event->server_error->result,
+                            message
+                        );
+                        manager->ForgetLeaderboardSubmissionCallback(attempt.attemptId);
+                    }
+                }
                 eventMessenger->onRetroAchievementsServerError(
-                    event->server_error->api ? event->server_error->api : "",
+                    api,
                     event->server_error->related_id,
                     event->server_error->result,
-                    event->server_error->error_message ? event->server_error->error_message : ""
+                    message
                 );
             }
             break;
@@ -1513,6 +1778,122 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         std::string();
     const std::string requestAction = ResolveRcClientRequestAction(request);
     const std::string requestParameters = BuildRcClientSanitizedParameters(request);
+    const std::string safeRequestUrl = BuildRcClientSafeUrl(request ? request->url : nullptr);
+    std::optional<uint64_t> leaderboardAttemptId;
+    std::optional<uint32_t> submittedLeaderboardId;
+
+    if (requestAction == "submitlbentry")
+    {
+        const auto leaderboardIdParameter = ParseRcClientIntegerParameter(request, "i");
+        const auto scoreParameter = ParseRcClientIntegerParameter(request, "s");
+        if (
+            leaderboardIdParameter.has_value() &&
+            *leaderboardIdParameter > 0 &&
+            *leaderboardIdParameter <= std::numeric_limits<uint32_t>::max() &&
+            scoreParameter.has_value() &&
+            *scoreParameter >= std::numeric_limits<int32_t>::min() &&
+            *scoreParameter <= std::numeric_limits<int32_t>::max()
+        )
+        {
+            const uint32_t leaderboardId = static_cast<uint32_t>(*leaderboardIdParameter);
+            const bool hasRetryParameter = GetRcClientFormParameter(request, "o").has_value();
+            const bool isImmediateRetry = callbackData &&
+                manager->activeLeaderboardResponseCallbackData == callbackData;
+            const bool isRetry = LeaderboardAttemptCorrelation::IsTransportRetry(
+                callbackData,
+                manager->activeLeaderboardResponseCallbackData,
+                hasRetryParameter
+            );
+            auto& attempt = manager->ResolveLeaderboardRequestAttempt(
+                leaderboardId,
+                callbackData,
+                isRetry
+            );
+            attempt.requestScore = static_cast<int32_t>(*scoreParameter);
+            attempt.transportAttemptCount++;
+            leaderboardAttemptId = attempt.attemptId;
+            submittedLeaderboardId = leaderboardId;
+            const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
+            if (AreLeaderboardDiagnosticsEnabled())
+            {
+                melonDS::Platform::Log(
+                    melonDS::Platform::LogLevel::Info,
+                    "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=REQUEST request_score=%d logical_submit_count=%u transport_attempt_count=%u retry=%d retry_source=%s\n",
+                    (unsigned long long) attempt.attemptId,
+                    leaderboardId,
+                    manager->RuntimePathTraceValue(),
+                    (unsigned long long) sequence,
+                    *attempt.requestScore,
+                    attempt.logicalSubmitCount,
+                    attempt.transportAttemptCount,
+                    isRetry ? 1 : 0,
+                    isImmediateRetry ? "response_callback" : (hasRetryParameter ? "elapsed_parameter" : "none")
+                );
+            }
+        }
+        else
+        {
+            if (AreLeaderboardDiagnosticsEnabled())
+            {
+                melonDS::Platform::Log(
+                    melonDS::Platform::LogLevel::Warn,
+                    "[RALeaderboard] runtime_path=%s event_type=REQUEST_INVALID reason=missing_or_out_of_range_id_or_score\n",
+                    manager->RuntimePathTraceValue()
+                );
+            }
+        }
+    }
+
+    const auto invokeServerCallback = [&](const rc_api_server_response_t* serverResponse) {
+        const auto previousAttemptId = manager->activeLeaderboardResponseAttemptId;
+        const void* previousCallbackData = manager->activeLeaderboardResponseCallbackData;
+        MelonDSAndroidLeaderboardScoreboardResponse transportScoreboard{};
+        const bool hasTransportScoreboard =
+            leaderboardAttemptId.has_value() &&
+            submittedLeaderboardId.has_value() &&
+            MelonDSAndroidParseLeaderboardScoreboardResponse(
+                serverResponse,
+                client,
+                *submittedLeaderboardId,
+                &transportScoreboard
+            );
+        if (leaderboardAttemptId.has_value())
+        {
+            manager->activeLeaderboardResponseAttemptId = leaderboardAttemptId;
+            manager->activeLeaderboardResponseCallbackData = callbackData;
+        }
+
+        callback(serverResponse, callbackData);
+
+        if (hasTransportScoreboard)
+        {
+            auto* attempt = manager->FindLeaderboardAttempt(*leaderboardAttemptId);
+            if (
+                attempt &&
+                attempt->leaderboardId == *submittedLeaderboardId &&
+                MelonDSAndroidShouldPublishLeaderboardScoreboardFallback(
+                    1,
+                    attempt->scoreboardSeen ? 1 : 0,
+                    attempt->terminal ? 1 : 0
+                )
+            )
+            {
+                manager->PublishLeaderboardScoreboard(
+                    *attempt,
+                    *submittedLeaderboardId,
+                    transportScoreboard.submittedScore,
+                    transportScoreboard.bestScore,
+                    transportScoreboard.newRank,
+                    transportScoreboard.numEntries,
+                    "transport_callback"
+                );
+            }
+        }
+
+        manager->activeLeaderboardResponseAttemptId = previousAttemptId;
+        manager->activeLeaderboardResponseCallbackData = previousCallbackData;
+        manager->PruneUnreferencedLeaderboardAttempts();
+    };
 
     const bool useOfflineTransport =
         manager->runtimeBridgeConfig.has_value() &&
@@ -1527,7 +1908,7 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
             requestAction.c_str(),
             ResolveRcClientRequestMethod(request),
             runtimeUserAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : runtimeUserAgent.c_str(),
-            request && request->url ? request->url : "",
+            safeRequestUrl.c_str(),
             requestParameters.c_str(),
             responseBody.size(),
             BuildRcClientLoggedResponseSample(requestAction, responseBody).c_str()
@@ -1538,7 +1919,7 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
             .body_length = responseBody.length(),
             .http_status_code = httpStatus,
         };
-        callback(&serverResponse, callbackData);
+        invokeServerCallback(&serverResponse);
         return;
     }
 
@@ -1548,7 +1929,7 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         requestAction.c_str(),
         ResolveRcClientRequestMethod(request),
         runtimeUserAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : runtimeUserAgent.c_str(),
-        request && request->url ? request->url : "",
+        safeRequestUrl.c_str(),
         requestParameters.c_str()
     );
     const bool requestSucceeded = ExecuteRcClientHttpRequest(
@@ -1570,7 +1951,7 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         .http_status_code = httpStatus,
     };
 
-    callback(&serverResponse, callbackData);
+    invokeServerCallback(&serverResponse);
 }
 
 void RetroAchievementsManager::RcClientLogCallback(const char* message, const rc_client_t* client)
@@ -1616,12 +1997,15 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
     rc_client_set_hardcore_enabled(rcClientRuntime, config.hardcoreEnabled ? 1 : 0);
     rc_client_set_unofficial_enabled(rcClientRuntime, config.unofficialEnabled ? 1 : 0);
     rc_client_set_encore_mode_enabled(rcClientRuntime, config.encoreEnabled ? 1 : 0);
+    const bool isOfflineRuntime = config.runtimeMode == RARuntimeBridgeMode::RcClientOffline;
+    rc_client_set_spectator_mode_enabled(rcClientRuntime, isOfflineRuntime ? 1 : 0);
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Info,
-        "[RAClient] runtime_flags_applied hardcore=%d unofficial=%d encore=%d\n",
+        "[RAClient] runtime_flags_applied hardcore=%d unofficial=%d encore=%d spectator=%d\n",
         config.hardcoreEnabled ? 1 : 0,
         config.unofficialEnabled ? 1 : 0,
-        config.encoreEnabled ? 1 : 0
+        config.encoreEnabled ? 1 : 0,
+        isOfflineRuntime ? 1 : 0
     );
 
     RcClientWaitResult loginWaitResult;
@@ -1705,7 +2089,10 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
 
     isRcClientRuntimeActive = rc_client_is_game_loaded(rcClientRuntime) != 0;
     if (isRcClientRuntimeActive)
+    {
         rc_client_set_allow_background_memory_reads(rcClientRuntime, 0);
+        PublishLeaderboardResetBarrierLocked();
+    }
     if (!isRcClientRuntimeActive)
     {
         melonDS::Platform::Log(
@@ -1728,7 +2115,11 @@ void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
         rcClientRuntime = nullptr;
     }
 
-    activeLeaderboardIdsByTrackerValue.clear();
+    leaderboardAttemptsById.clear();
+    activeLeaderboardAttemptIds.clear();
+    leaderboardAttemptIdsByCallbackData.clear();
+    activeLeaderboardResponseAttemptId.reset();
+    activeLeaderboardResponseCallbackData = nullptr;
     lastPublishedLeaderboardTrackerValues.clear();
     isRcClientRuntimeActive = false;
     rcClientSlowWindowCount = 0;
@@ -1994,149 +2385,210 @@ int RetroAchievementsManager::ParseIntegerOrDefault(const char* value, int fallb
     return (int) parsedValue;
 }
 
-int RetroAchievementsManager::ParseLeaderboardScoreByFormat(int format, const char* formatted, int fallbackValue)
+RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::BeginLeaderboardAttempt(uint32_t leaderboardId)
 {
-    if (!formatted || formatted[0] == '\0')
-        return fallbackValue;
+    LeaderboardAttemptState attempt;
+    attempt.leaderboardId = leaderboardId;
+    attempt.attemptId = LeaderboardAttemptCorrelation::AllocateAttemptId();
 
-    switch (format)
+    const uint64_t attemptId = attempt.attemptId;
+    auto iterator = leaderboardAttemptsById.insert_or_assign(attemptId, attempt).first;
+    activeLeaderboardAttemptIds.insert_or_assign(leaderboardId, attemptId);
+    lastPublishedLeaderboardTrackerValues.erase(leaderboardId);
+    PruneUnreferencedLeaderboardAttempts();
+    return iterator->second;
+}
+
+RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::EnsureLeaderboardAttempt(
+    uint32_t leaderboardId,
+    bool startNewIfTerminal
+)
+{
+    const auto activeIterator = activeLeaderboardAttemptIds.find(leaderboardId);
+    if (activeIterator == activeLeaderboardAttemptIds.end())
+        return BeginLeaderboardAttempt(leaderboardId);
+
+    auto* attempt = FindLeaderboardAttempt(activeIterator->second);
+    if (!attempt || (startNewIfTerminal && attempt->terminal))
+        return BeginLeaderboardAttempt(leaderboardId);
+
+    return *attempt;
+}
+
+RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::ResolveLeaderboardRequestAttempt(
+    uint32_t leaderboardId,
+    const void* callbackData,
+    bool isRetry
+)
+{
+    if (isRetry && callbackData)
     {
-        case RC_FORMAT_VALUE:
-        case RC_FORMAT_SCORE:
-        case RC_FORMAT_UNSIGNED_VALUE:
-        case RC_FORMAT_UNFORMATTED:
-        case RC_FORMAT_TENS:
-        case RC_FORMAT_HUNDREDS:
-        case RC_FORMAT_THOUSANDS:
-            return ParseIntegerOrDefault(formatted, fallbackValue);
-
-        case RC_FORMAT_FRAMES:
-        case RC_FORMAT_CENTISECS:
+        const auto callbackIterator = leaderboardAttemptIdsByCallbackData.find(callbackData);
+        if (callbackIterator != leaderboardAttemptIdsByCallbackData.end())
         {
-            int hours = 0, minutes = 0, seconds = 0, centiseconds = 0;
-            bool parsed = false;
-            if (sscanf(formatted, "%dh%d:%d.%d", &hours, &minutes, &seconds, &centiseconds) == 4)
-                parsed = true;
-            else if (sscanf(formatted, "%d:%d:%d.%d", &hours, &minutes, &seconds, &centiseconds) == 4)
-                parsed = true;
-            else if (sscanf(formatted, "%d:%d.%d", &minutes, &seconds, &centiseconds) == 3)
-            {
-                hours = 0;
-                parsed = true;
-            }
-
-            if (!parsed)
-                return fallbackValue;
-
-            long long totalCentiseconds = (long long) hours * 360000 + (long long) minutes * 6000 + (long long) seconds * 100 + centiseconds;
-            long long resultValue = totalCentiseconds;
-            if (format == RC_FORMAT_FRAMES)
-                resultValue = totalCentiseconds * 6 / 10;
-
-            if (resultValue > std::numeric_limits<int>::max() || resultValue < 0)
-                return fallbackValue;
-            return (int) resultValue;
+            auto* mappedAttempt = FindLeaderboardAttempt(callbackIterator->second);
+            if (mappedAttempt && mappedAttempt->leaderboardId == leaderboardId)
+                return *mappedAttempt;
         }
-
-        case RC_FORMAT_SECONDS:
-        {
-            int hours = 0, minutes = 0, seconds = 0;
-            if (sscanf(formatted, "%dh%d:%d", &hours, &minutes, &seconds) == 3 ||
-                sscanf(formatted, "%d:%d:%d", &hours, &minutes, &seconds) == 3)
-            {
-                long long total = (long long) hours * 3600 + (long long) minutes * 60 + seconds;
-                if (total > std::numeric_limits<int>::max() || total < 0)
-                    return fallbackValue;
-                return (int) total;
-            }
-            if (sscanf(formatted, "%d:%d", &minutes, &seconds) == 2)
-            {
-                long long total = (long long) minutes * 60 + seconds;
-                if (total > std::numeric_limits<int>::max() || total < 0)
-                    return fallbackValue;
-                return (int) total;
-            }
-            return fallbackValue;
-        }
-
-        case RC_FORMAT_MINUTES:
-        {
-            int hours = 0, minutes = 0;
-            if (sscanf(formatted, "%dh%d", &hours, &minutes) == 2 ||
-                sscanf(formatted, "%d:%d", &hours, &minutes) == 2)
-            {
-                long long total = (long long) hours * 60 + minutes;
-                if (total > std::numeric_limits<int>::max() || total < 0)
-                    return fallbackValue;
-                return (int) total;
-            }
-            return ParseIntegerOrDefault(formatted, fallbackValue);
-        }
-
-        case RC_FORMAT_SECONDS_AS_MINUTES:
-        {
-            int hours = 0, minutes = 0;
-            if (sscanf(formatted, "%dh%d", &hours, &minutes) == 2 ||
-                sscanf(formatted, "%d:%d", &hours, &minutes) == 2)
-            {
-                long long totalMinutes = (long long) hours * 60 + minutes;
-                long long total = totalMinutes * 60;
-                if (total > std::numeric_limits<int>::max() || total < 0)
-                    return fallbackValue;
-                return (int) total;
-            }
-            return fallbackValue;
-        }
-
-        case RC_FORMAT_FLOAT1:
-        case RC_FORMAT_FIXED1:
-        {
-            double parsedDouble = 0.0;
-            if (sscanf(formatted, "%lf", &parsedDouble) == 1)
-                return (int) (parsedDouble * 10.0);
-            return fallbackValue;
-        }
-        case RC_FORMAT_FLOAT2:
-        case RC_FORMAT_FIXED2:
-        {
-            double parsedDouble = 0.0;
-            if (sscanf(formatted, "%lf", &parsedDouble) == 1)
-                return (int) (parsedDouble * 100.0);
-            return fallbackValue;
-        }
-        case RC_FORMAT_FLOAT3:
-        case RC_FORMAT_FIXED3:
-        {
-            double parsedDouble = 0.0;
-            if (sscanf(formatted, "%lf", &parsedDouble) == 1)
-                return (int) (parsedDouble * 1000.0);
-            return fallbackValue;
-        }
-        case RC_FORMAT_FLOAT4:
-        {
-            double parsedDouble = 0.0;
-            if (sscanf(formatted, "%lf", &parsedDouble) == 1)
-                return (int) (parsedDouble * 10000.0);
-            return fallbackValue;
-        }
-        case RC_FORMAT_FLOAT5:
-        {
-            double parsedDouble = 0.0;
-            if (sscanf(formatted, "%lf", &parsedDouble) == 1)
-                return (int) (parsedDouble * 100000.0);
-            return fallbackValue;
-        }
-        case RC_FORMAT_FLOAT6:
-        {
-            double parsedDouble = 0.0;
-            if (sscanf(formatted, "%lf", &parsedDouble) == 1)
-                return (int) (parsedDouble * 1000000.0);
-            return fallbackValue;
-        }
-
-        default:
-            return ParseIntegerOrDefault(formatted, fallbackValue);
     }
+
+    auto& attempt = EnsureLeaderboardAttempt(leaderboardId, true);
+    attempt.logicalSubmitCount++;
+    if (callbackData)
+        leaderboardAttemptIdsByCallbackData.insert_or_assign(callbackData, attempt.attemptId);
+    return attempt;
+}
+
+RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::ResolveLeaderboardResponseAttempt(
+    uint32_t leaderboardId
+)
+{
+    if (activeLeaderboardResponseAttemptId.has_value())
+    {
+        auto* attempt = FindLeaderboardAttempt(*activeLeaderboardResponseAttemptId);
+        if (attempt && attempt->leaderboardId == leaderboardId)
+            return *attempt;
+    }
+
+    return EnsureLeaderboardAttempt(leaderboardId, false);
+}
+
+RetroAchievementsManager::LeaderboardAttemptState* RetroAchievementsManager::FindLeaderboardAttempt(uint64_t attemptId)
+{
+    const auto iterator = leaderboardAttemptsById.find(attemptId);
+    return iterator != leaderboardAttemptsById.end() ? &iterator->second : nullptr;
+}
+
+void RetroAchievementsManager::PublishLeaderboardScoreboard(
+    LeaderboardAttemptState& attempt,
+    uint32_t leaderboardId,
+    const std::string& submittedScore,
+    const std::string& bestScore,
+    uint32_t newRank,
+    uint32_t numEntries,
+    const char* source
+)
+{
+    if (attempt.scoreboardSeen || attempt.terminal)
+        return;
+
+    auto eventMessenger = RetroAchievementsManager::EventMessenger.lock();
+    if (!eventMessenger)
+        return;
+
+    const std::string ownedSubmittedScore(submittedScore);
+    const std::string ownedBestScore(bestScore);
+    attempt.scoreboardSeen = true;
+    attempt.terminal = true;
+    const uint64_t sequence = NextLeaderboardEventSequence(attempt);
+    const std::string requestScore = attempt.requestScore.has_value()
+        ? std::to_string(*attempt.requestScore)
+        : "unknown";
+
+    if (AreLeaderboardDiagnosticsEnabled())
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Info,
+            "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=SCOREBOARD scoreboard_source=%s response_submitted_score=%s best_score=%s rank=%u num_entries=%u request_score=%s logical_submit_count=%u transport_attempt_count=%u\n",
+            (unsigned long long) attempt.attemptId,
+            leaderboardId,
+            RuntimePathTraceValue(),
+            (unsigned long long) sequence,
+            source ? source : "unknown",
+            ownedSubmittedScore.c_str(),
+            ownedBestScore.c_str(),
+            newRank,
+            numEntries,
+            requestScore.c_str(),
+            attempt.logicalSubmitCount,
+            attempt.transportAttemptCount
+        );
+    }
+
+    eventMessenger->onLeaderboardScoreboard(
+        leaderboardId,
+        attempt.attemptId,
+        sequence,
+        ownedSubmittedScore,
+        ownedBestScore,
+        newRank,
+        numEntries
+    );
+    ForgetLeaderboardSubmissionCallback(attempt.attemptId);
+}
+
+void RetroAchievementsManager::ForgetLeaderboardSubmissionCallback(uint64_t attemptId)
+{
+    for (auto iterator = leaderboardAttemptIdsByCallbackData.begin(); iterator != leaderboardAttemptIdsByCallbackData.end();)
+    {
+        if (iterator->second == attemptId)
+            iterator = leaderboardAttemptIdsByCallbackData.erase(iterator);
+        else
+            ++iterator;
+    }
+}
+
+bool RetroAchievementsManager::IsLeaderboardAttemptReferenced(uint64_t attemptId) const
+{
+    if (activeLeaderboardResponseAttemptId == attemptId)
+        return true;
+
+    for (const auto& activeAttempt : activeLeaderboardAttemptIds)
+    {
+        if (activeAttempt.second == attemptId)
+            return true;
+    }
+
+    for (const auto& callbackAttempt : leaderboardAttemptIdsByCallbackData)
+    {
+        if (callbackAttempt.second == attemptId)
+            return true;
+    }
+
+    return false;
+}
+
+void RetroAchievementsManager::PruneUnreferencedLeaderboardAttempts()
+{
+    for (auto iterator = leaderboardAttemptsById.begin(); iterator != leaderboardAttemptsById.end();)
+    {
+        if (IsLeaderboardAttemptReferenced(iterator->first))
+            ++iterator;
+        else
+            iterator = leaderboardAttemptsById.erase(iterator);
+    }
+}
+
+void RetroAchievementsManager::PublishLeaderboardResetBarrierLocked()
+{
+    activeLeaderboardAttemptIds.clear();
+    lastPublishedLeaderboardTrackerValues.clear();
+    PruneUnreferencedLeaderboardAttempts();
+    const uint64_t attemptFloor = LeaderboardAttemptCorrelation::AllocateAttemptId();
+
+    if (AreLeaderboardDiagnosticsEnabled())
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Info,
+            "[RALeaderboard] event_type=RUNTIME_RESET attempt_floor=%llu\n",
+            (unsigned long long) attemptFloor
+        );
+    }
+
+    if (auto eventMessenger = RetroAchievementsManager::EventMessenger.lock())
+        eventMessenger->onLeaderboardRuntimeReset(attemptFloor);
+}
+
+uint64_t RetroAchievementsManager::NextLeaderboardEventSequence(LeaderboardAttemptState& attempt)
+{
+    return ++attempt.eventSequence;
+}
+
+const char* RetroAchievementsManager::RuntimePathTraceValue() const
+{
+    return runtimeBridgeConfig.has_value() && runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
+        ? "rc_client_offline"
+        : "rc_client_online";
 }
 
 void RetroAchievementsManager::PublishLeaderboardTrackerValuesLocked()
@@ -2154,7 +2606,27 @@ void RetroAchievementsManager::PublishLeaderboardTrackerValuesLocked()
         const rc_client_leaderboard_t* leaderboardInfo = rc_client_get_leaderboard_info(rcClientRuntime, leaderboardId);
         if (!leaderboardInfo || leaderboardInfo->state != RC_CLIENT_LEADERBOARD_STATE_TRACKING)
         {
-            lastPublishedLeaderboardTrackerValues.erase(leaderboardId);
+            const auto publishedValue = lastPublishedLeaderboardTrackerValues.find(leaderboardId);
+            if (publishedValue != lastPublishedLeaderboardTrackerValues.end())
+            {
+                auto& attempt = EnsureLeaderboardAttempt(leaderboardId, false);
+                attempt.trackerUpdateLogLimiter.Reset();
+                const uint64_t sequence = NextLeaderboardEventSequence(attempt);
+                if (AreLeaderboardDiagnosticsEnabled())
+                {
+                    melonDS::Platform::Log(
+                        melonDS::Platform::LogLevel::Info,
+                        "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=TRACKER_HIDE tracker_display=%s\n",
+                        (unsigned long long) attempt.attemptId,
+                        leaderboardId,
+                        RuntimePathTraceValue(),
+                        (unsigned long long) sequence,
+                        publishedValue->second.c_str()
+                    );
+                }
+                eventMessenger->onLeaderboardTrackerHidden(leaderboardId, attempt.attemptId, sequence);
+                lastPublishedLeaderboardTrackerValues.erase(publishedValue);
+            }
             continue;
         }
 
@@ -2162,58 +2634,42 @@ void RetroAchievementsManager::PublishLeaderboardTrackerValuesLocked()
         if (!trackerValue || trackerValue[0] == '\0')
             continue;
 
-        RememberLeaderboardTrackerValue(leaderboardId, trackerValue);
-
-        auto& lastPublishedValue = lastPublishedLeaderboardTrackerValues[leaderboardId];
-        if (lastPublishedValue == trackerValue)
+        const auto lastPublishedIterator = lastPublishedLeaderboardTrackerValues.find(leaderboardId);
+        const bool isFirstPublishedValue = lastPublishedIterator == lastPublishedLeaderboardTrackerValues.end();
+        if (!isFirstPublishedValue && lastPublishedIterator->second == trackerValue)
             continue;
 
-        lastPublishedValue = trackerValue;
-        eventMessenger->onLeaderboardAttemptUpdated(leaderboardId, trackerValue);
+        lastPublishedLeaderboardTrackerValues.insert_or_assign(leaderboardId, trackerValue);
+        auto& attempt = EnsureLeaderboardAttempt(leaderboardId, false);
+        const uint64_t sequence = NextLeaderboardEventSequence(attempt);
+        if (isFirstPublishedValue)
+            attempt.trackerUpdateLogLimiter.Reset();
+        const auto trackerLogDecision = isFirstPublishedValue
+            ? LeaderboardTrackerUpdateLogLimiter::Decision{true, 0, 0}
+            : attempt.trackerUpdateLogLimiter.Observe(LeaderboardDiagnosticNowMs());
+        if (AreLeaderboardDiagnosticsEnabled() && trackerLogDecision.shouldLog)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Info,
+                "[RALeaderboard] attempt_id=%llu leaderboard_id=%u runtime_path=%s event_sequence=%llu event_type=%s tracker_display=%s tracker_update_index=%llu suppressed_updates=%llu\n",
+                (unsigned long long) attempt.attemptId,
+                leaderboardId,
+                RuntimePathTraceValue(),
+                (unsigned long long) sequence,
+                isFirstPublishedValue ? "TRACKER_SHOW" : "TRACKER_UPDATE",
+                trackerValue,
+                (unsigned long long) trackerLogDecision.updateIndex,
+                (unsigned long long) trackerLogDecision.suppressedUpdates
+            );
+        }
+        eventMessenger->onLeaderboardAttemptUpdated(
+            leaderboardId,
+            attempt.attemptId,
+            sequence,
+            isFirstPublishedValue,
+            trackerValue
+        );
     }
-}
-
-void RetroAchievementsManager::RememberLeaderboardTrackerValue(uint32_t leaderboardId, const char* trackerValue)
-{
-    if (!trackerValue)
-        return;
-
-    auto& leaderboardIds = activeLeaderboardIdsByTrackerValue[trackerValue];
-    if (std::find(leaderboardIds.begin(), leaderboardIds.end(), leaderboardId) == leaderboardIds.end())
-        leaderboardIds.push_back(leaderboardId);
-}
-
-std::vector<uint32_t> RetroAchievementsManager::ResolveLeaderboardIdsForTrackerValue(const char* trackerValue) const
-{
-    if (!trackerValue)
-        return {};
-
-    const auto iterator = activeLeaderboardIdsByTrackerValue.find(trackerValue);
-    if (iterator == activeLeaderboardIdsByTrackerValue.end())
-        return {};
-
-    return iterator->second;
-}
-
-void RetroAchievementsManager::ForgetLeaderboardTrackerValue(uint32_t leaderboardId, const char* trackerValue)
-{
-    if (!trackerValue)
-        return;
-
-    auto iterator = activeLeaderboardIdsByTrackerValue.find(trackerValue);
-    if (iterator == activeLeaderboardIdsByTrackerValue.end())
-        return;
-
-    auto& leaderboardIds = iterator->second;
-    leaderboardIds.erase(std::remove(leaderboardIds.begin(), leaderboardIds.end(), leaderboardId), leaderboardIds.end());
-    if (leaderboardIds.empty())
-        activeLeaderboardIdsByTrackerValue.erase(iterator);
-}
-
-void RetroAchievementsManager::ForgetLeaderboardTrackerValue(const char* trackerValue)
-{
-    if (trackerValue)
-        activeLeaderboardIdsByTrackerValue.erase(trackerValue);
 }
 
 }

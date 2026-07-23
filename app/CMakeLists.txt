@@ -196,6 +196,10 @@ target_include_directories(melonDS-android-frontend PUBLIC
         "${LIBRASHADER_INCLUDE_DIR}"
 )
 
+target_include_directories(melonDS-android-frontend PRIVATE
+        "${ANDROID_CPP_DIR}/rcheevos/src"
+)
+
 find_library(android-lib android)
 find_library(jnigraphics-lib jnigraphics)
 

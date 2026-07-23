@@ -32,11 +32,12 @@ internal fun LeaderboardEntrySubmissionUi(
         accentColor = RaSuccessColor,
     ) {
         var isDescriptionVisible by remember { mutableStateOf(false) }
-        val submissionInfo = if (info.rank > 0 && info.numberOfEntries > 0) {
-            stringResource(R.string.leaderboard_submission_info, info.formattedScore, info.rank, info.numberOfEntries)
-        } else {
-            info.formattedScore
-        }
+        val submissionInfo = stringResource(
+            R.string.leaderboard_submission_info,
+            info.submittedScore,
+            info.rank,
+            info.numberOfEntries,
+        )
 
         LaunchedEffect(Unit) {
             delay(500.milliseconds)
@@ -62,6 +63,13 @@ internal fun LeaderboardEntrySubmissionUi(
                     style = MaterialTheme.typography.caption,
                     maxLines = 1,
                 )
+                info.bestScore?.let { bestScore ->
+                    Text(
+                        text = stringResource(R.string.leaderboard_best_score, bestScore),
+                        style = MaterialTheme.typography.caption,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
