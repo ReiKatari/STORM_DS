@@ -17,10 +17,34 @@ public:
     void onAchievementUnprimed(long achievementId) override;
     void onAchievementProgressUpdated(long achievementId, unsigned int current, unsigned int target, std::string progress) override;
     void onAchievementProgressHidden(long achievementId) override;
-    void onLeaderboardAttemptStarted(long leaderboardId) override;
-    void onLeaderboardAttemptUpdated(long leaderboardId, std::string formattedValue) override;
-    void onLeaderboardAttemptCanceled(long leaderboardId) override;
-    void onLeaderboardTrackerHidden(long leaderboardId) override;
+    void onLeaderboardAttemptStarted(long leaderboardId, uint64_t attemptId, uint64_t eventSequence) override;
+    void onLeaderboardAttemptUpdated(
+        long leaderboardId,
+        uint64_t attemptId,
+        uint64_t eventSequence,
+        bool trackerShown,
+        std::string formattedValue
+    ) override;
+    void onLeaderboardAttemptCanceled(long leaderboardId, uint64_t attemptId, uint64_t eventSequence) override;
+    void onLeaderboardTrackerHidden(long leaderboardId, uint64_t attemptId, uint64_t eventSequence) override;
+    void onLeaderboardAttemptSubmitted(long leaderboardId, uint64_t attemptId, uint64_t eventSequence, std::string trackerDisplay) override;
+    void onLeaderboardScoreboard(
+        long leaderboardId,
+        uint64_t attemptId,
+        uint64_t eventSequence,
+        std::string submittedScore,
+        std::string bestScore,
+        uint32_t newRank,
+        uint32_t numEntries
+    ) override;
+    void onLeaderboardSubmissionFailed(
+        long leaderboardId,
+        uint64_t attemptId,
+        uint64_t eventSequence,
+        int result,
+        std::string message
+    ) override;
+    void onLeaderboardRuntimeReset(uint64_t attemptFloor) override;
     void onLeaderboardAttemptCompleted(long leaderboardId, int value, std::string formattedValue) override;
     void onAchievementGameCompleted(long subsetId) override;
     void onAchievementSubsetCompleted(long subsetId) override;
@@ -51,6 +75,10 @@ private:
     static constexpr int EVENT_RA_LBOARD_ATTEMPT_COMPLETED = 213;
     static constexpr int EVENT_RA_ACHIEVEMENT_PROGRESS_HIDDEN = 214;
     static constexpr int EVENT_RA_LBOARD_TRACKER_HIDDEN = 215;
+    static constexpr int EVENT_RA_LBOARD_ATTEMPT_SUBMITTED = 216;
+    static constexpr int EVENT_RA_LBOARD_SCOREBOARD = 217;
+    static constexpr int EVENT_RA_LBOARD_SUBMISSION_FAILED = 218;
+    static constexpr int EVENT_RA_LBOARD_RUNTIME_RESET = 219;
 };
 
 #endif // ANDROIDMELONEVENTMESSENGER_H

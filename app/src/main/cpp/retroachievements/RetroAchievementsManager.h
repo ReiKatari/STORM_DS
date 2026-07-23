@@ -2,12 +2,14 @@
 #define RETROACHIEVEMENTSMANAGER_H
 
 #include <list>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <jni.h>
 #include "MelonEventMessenger.h"
+#include "LeaderboardTrackerUpdateLogLimiter.h"
 #include "NDS.h"
 #include "RAAchievement.h"
 #include "RALeaderboard.h"
@@ -73,12 +75,46 @@ private:
     static std::string EscapeJson(const std::string& value);
     static void ParseMeasuredProgress(const char* measuredProgress, unsigned int* value, unsigned int* target);
     static int ParseIntegerOrDefault(const char* value, int fallbackValue);
-    static int ParseLeaderboardScoreByFormat(int format, const char* formatted, int fallbackValue);
     void PublishLeaderboardTrackerValuesLocked();
-    void RememberLeaderboardTrackerValue(uint32_t leaderboardId, const char* trackerValue);
-    std::vector<uint32_t> ResolveLeaderboardIdsForTrackerValue(const char* trackerValue) const;
-    void ForgetLeaderboardTrackerValue(uint32_t leaderboardId, const char* trackerValue);
-    void ForgetLeaderboardTrackerValue(const char* trackerValue);
+
+    struct LeaderboardAttemptState
+    {
+        uint32_t leaderboardId = 0;
+        uint64_t attemptId = 0;
+        uint64_t eventSequence = 0;
+        uint32_t logicalSubmitCount = 0;
+        uint32_t transportAttemptCount = 0;
+        std::optional<int32_t> requestScore;
+        bool submittedSeen = false;
+        bool scoreboardSeen = false;
+        bool terminal = false;
+        LeaderboardTrackerUpdateLogLimiter trackerUpdateLogLimiter;
+    };
+
+    LeaderboardAttemptState& BeginLeaderboardAttempt(uint32_t leaderboardId);
+    LeaderboardAttemptState& EnsureLeaderboardAttempt(uint32_t leaderboardId, bool startNewIfTerminal);
+    LeaderboardAttemptState& ResolveLeaderboardRequestAttempt(
+        uint32_t leaderboardId,
+        const void* callbackData,
+        bool isRetry
+    );
+    LeaderboardAttemptState& ResolveLeaderboardResponseAttempt(uint32_t leaderboardId);
+    LeaderboardAttemptState* FindLeaderboardAttempt(uint64_t attemptId);
+    void PublishLeaderboardScoreboard(
+        LeaderboardAttemptState& attempt,
+        uint32_t leaderboardId,
+        const std::string& submittedScore,
+        const std::string& bestScore,
+        uint32_t newRank,
+        uint32_t numEntries,
+        const char* source
+    );
+    void ForgetLeaderboardSubmissionCallback(uint64_t attemptId);
+    bool IsLeaderboardAttemptReferenced(uint64_t attemptId) const;
+    void PruneUnreferencedLeaderboardAttempts();
+    void PublishLeaderboardResetBarrierLocked();
+    uint64_t NextLeaderboardEventSequence(LeaderboardAttemptState& attempt);
+    const char* RuntimePathTraceValue() const;
 
     melonDS::NDS* nds;
     rc_client_t* rcClientRuntime;
@@ -100,7 +136,11 @@ private:
     long long rcClientWindowCpuPeakUs;
     std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig;
     std::string loadedRichPresenceScript;
-    std::unordered_map<const char*, std::vector<uint32_t>> activeLeaderboardIdsByTrackerValue;
+    std::unordered_map<uint64_t, LeaderboardAttemptState> leaderboardAttemptsById;
+    std::unordered_map<uint32_t, uint64_t> activeLeaderboardAttemptIds;
+    std::unordered_map<const void*, uint64_t> leaderboardAttemptIdsByCallbackData;
+    std::optional<uint64_t> activeLeaderboardResponseAttemptId;
+    const void* activeLeaderboardResponseCallbackData = nullptr;
     std::unordered_map<uint32_t, std::string> lastPublishedLeaderboardTrackerValues;
 
     static JavaVM* javaVm;

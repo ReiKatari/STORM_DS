@@ -40,7 +40,7 @@ import coil.request.ImageRequest
 @Composable
 internal fun AchievementInfoUi(
     modifier: Modifier = Modifier,
-    iconData: Any,
+    iconData: Any?,
     state: AchievementInfoState,
     accentColor: Color? = null,
     body: (@Composable RowScope.() -> Unit)? = null,
