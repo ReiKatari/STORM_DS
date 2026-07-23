@@ -124,9 +124,8 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         val dldiDirectoryPreference = findPreference<StoragePickerPreference>("system_dldi_sd_card_dir")!!
 
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
-            jitPreference.isEnabled = false
             jitPreference.isChecked = false
-            jitPreference.setSummary(R.string.jit_not_supported)
+            jitPreference.isVisible = false
         }
 
         helper.setupStoragePickerPreference(dldiDirectoryPreference)

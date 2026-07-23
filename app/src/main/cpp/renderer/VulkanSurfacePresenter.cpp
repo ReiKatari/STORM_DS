@@ -12,6 +12,7 @@
 #include "VulkanOutput.h"
 #include "VulkanSurfacePresenterFragmentShaderData.h"
 #include "VulkanSurfacePresenterVertexShaderData.h"
+#include "renderer/RetroArchOutputScale.h"
 
 namespace MelonDSAndroid
 {
@@ -30,11 +31,10 @@ constexpr u32 kDrawModeBottomScreen = 3u;
 constexpr u32 kDrawModeFilteredCompositeTop = 4u;
 constexpr u32 kDrawModeFilteredCompositeBottom = 5u;
 constexpr u32 kDrawModeRetroArchCompositeFrame = 6u;
+constexpr u64 kRetroArchFenceTimeoutNs = 2'000'000'000ull;
 constexpr u32 kNativeScreenWidth = 256u;
 constexpr u32 kNativeScreenHeight = 192u;
-constexpr u32 kNativeAtlasHeight = 386u;
-constexpr u32 kMaxRetroArchNativeDisplayScale = 8u;
-constexpr size_t kPrewarmedRetroArchSurfaceCount = 2u;
+constexpr size_t kPrewarmedRetroArchSurfaceCount = 3u;
 constexpr std::array<VkFormat, 7> kPreferredSurfaceFormats = {
     VK_FORMAT_R8G8B8A8_UNORM,
     VK_FORMAT_B8G8R8A8_UNORM,
@@ -123,22 +123,9 @@ bool retroArchConfigEqual(const VulkanSurfaceConfig& left, const VulkanSurfaceCo
         && left.retroShaderClearHistory == right.retroShaderClearHistory;
 }
 
-std::string makeRetroArchConfigKey(
-    const VulkanSurfaceConfig& config,
-    u32 sourceScreenWidth,
-    u32 sourceScreenHeight,
-    u32 outputScreenWidth,
-    u32 outputScreenHeight)
+std::string makeRetroArchConfigKey(const VulkanSurfaceConfig& config)
 {
-    std::string configKey = config.retroShaderPresetPath
-        + "|"
-        + std::to_string(sourceScreenWidth)
-        + "x"
-        + std::to_string(sourceScreenHeight)
-        + ">"
-        + std::to_string(outputScreenWidth)
-        + "x"
-        + std::to_string(outputScreenHeight);
+    std::string configKey = config.retroShaderPresetPath;
     for (const auto& [name, value] : config.retroShaderParameterOverrides)
     {
         configKey += "|";
@@ -498,12 +485,7 @@ bool VulkanSurfacePresenter::prewarmRetroArchFilter(
     const bool nativeSourcePreset = config.retroShaderSourceResolution == RetroArchSourceResolution::Native;
     const u32 sourceScreenWidth = nativeSourcePreset ? kNativeScreenWidth : outputScreenWidth;
     const u32 sourceScreenHeight = nativeSourcePreset ? kNativeScreenHeight : outputScreenHeight;
-    const std::string configKey = makeRetroArchConfigKey(
-        config,
-        sourceScreenWidth,
-        sourceScreenHeight,
-        outputScreenWidth,
-        outputScreenHeight);
+    const std::string configKey = makeRetroArchConfigKey(config);
 
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Info,
@@ -915,6 +897,9 @@ bool VulkanSurfacePresenter::configureSurface(int surfaceId, const VulkanSurface
         surfaceState.configured && !retroArchConfigEqual(surfaceState.config, config);
     if (retroArchConfigChanged)
         destroyRetroArchResources(surfaceState);
+
+    if (config.retroShaderClearHistory)
+        surfaceState.retroArch.pendingClearHistory = true;
 
     surfaceState.config = config;
     surfaceState.configured = true;
@@ -2211,35 +2196,23 @@ VulkanSurfacePresenter::RetroArchSizing VulkanSurfacePresenter::calculateRetroAr
     includeRect(surfaceState.config.hybridTopScreen, surfaceState.config.hybridAlpha);
     includeRect(surfaceState.config.hybridBottomScreen, surfaceState.config.hybridAlpha);
 
-    auto ceilDiv = [](u32 value, u32 divisor) -> u32 {
-        if (value == 0 || divisor == 0)
-            return 0;
-        return (value + divisor - 1u) / divisor;
-    };
-
-    u32 requestedOutputScale = sizing.inputScale;
-    if (sizing.nativeDisplayMode)
-    {
-        const u32 layoutScale = std::max(
-            ceilDiv(sizing.maxLayoutWidth, kNativeScreenWidth),
-            ceilDiv(sizing.maxLayoutHeight, kNativeScreenHeight));
-        requestedOutputScale = std::max(sizing.inputScale, std::max(1u, layoutScale));
-    }
-
-    const u32 maxAllowedScale = std::max(sizing.inputScale, kMaxRetroArchNativeDisplayScale);
-    sizing.requestedOutputScale = requestedOutputScale;
-    sizing.outputScale = std::min(requestedOutputScale, maxAllowedScale);
-    sizing.clamped = sizing.outputScale != requestedOutputScale;
+    const RetroArchOutputSize output = computeRetroArchOutputSize(
+        sizing.maxLayoutWidth,
+        sizing.maxLayoutHeight,
+        sizing.inputScreenWidth,
+        sizing.inputScreenHeight,
+        surfaceState.config.retroShaderPassCount);
 
     sizing.sourceScreenWidth = sizing.nativeDisplayMode ? kNativeScreenWidth : sizing.inputScreenWidth;
     sizing.sourceScreenHeight = sizing.nativeDisplayMode ? kNativeScreenHeight : sizing.inputScreenHeight;
-    sizing.outputScreenWidth = kNativeScreenWidth * sizing.outputScale;
-    sizing.outputScreenHeight = kNativeScreenHeight * sizing.outputScale;
-    sizing.outputAtlasWidth = sizing.outputScreenWidth;
-    sizing.outputAtlasHeight = kNativeAtlasHeight * sizing.outputScale;
-    sizing.outputBottomOffsetY = sizing.outputAtlasHeight > sizing.outputScreenHeight
-        ? sizing.outputAtlasHeight - sizing.outputScreenHeight
-        : 0u;
+    sizing.outputScreenWidth = output.screenWidth;
+    sizing.outputScreenHeight = output.screenHeight;
+    sizing.outputAtlasWidth = output.atlasWidth;
+    sizing.outputAtlasHeight = output.atlasHeight;
+    sizing.outputBottomOffsetY = output.bottomOffsetY;
+    sizing.requestedOutputWidth = output.requestedWidth;
+    sizing.requestedOutputHeight = output.requestedHeight;
+    sizing.clamped = output.clamped;
 
     return sizing;
 }
@@ -2270,15 +2243,17 @@ void VulkanSurfacePresenter::logRetroArchSizingIfNeeded(
         + std::to_string(sizing.outputAtlasWidth)
         + "x"
         + std::to_string(sizing.outputAtlasHeight)
-        + "|scale="
-        + std::to_string(sizing.outputScale);
+        + "|requested="
+        + std::to_string(sizing.requestedOutputWidth)
+        + "x"
+        + std::to_string(sizing.requestedOutputHeight);
     if (retro.lastSizingLogKey == logKey)
         return;
 
     retro.lastSizingLogKey = std::move(logKey);
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Info,
-        "VulkanPresenter[RetroArchSizing]: preset=%s mode=%s source=%ux%u inputAtlas=%ux%u inputScreen=%ux%u outputScreen=%ux%u outputAtlas=%ux%u layoutMax=%ux%u scale=%u requestedScale=%u clamped=%d surface=%ux%u passes=%u",
+        "VulkanPresenter[RetroArchSizing]: preset=%s mode=%s source=%ux%u inputAtlas=%ux%u inputScreen=%ux%u outputScreen=%ux%u outputAtlas=%ux%u layoutMax=%ux%u requested=%ux%u clamped=%d surface=%ux%u passes=%u",
         surfaceState.config.retroShaderPresetPath.c_str(),
         sizing.nativeDisplayMode ? "native_display" : "vulkan_ir",
         sizing.sourceScreenWidth,
@@ -2293,8 +2268,8 @@ void VulkanSurfacePresenter::logRetroArchSizingIfNeeded(
         sizing.outputAtlasHeight,
         sizing.maxLayoutWidth,
         sizing.maxLayoutHeight,
-        sizing.outputScale,
-        sizing.requestedOutputScale,
+        sizing.requestedOutputWidth,
+        sizing.requestedOutputHeight,
         sizing.clamped ? 1 : 0,
         surfaceState.extent.width,
         surfaceState.extent.height,
@@ -2321,7 +2296,11 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
     if (retro.initialized && sizeMatches)
         return true;
 
+    VulkanRetroArchFilterChain topChain = std::move(retro.topChain);
+    VulkanRetroArchFilterChain bottomChain = std::move(retro.bottomChain);
     destroyRetroArchResources(surfaceState);
+    retro.topChain = std::move(topChain);
+    retro.bottomChain = std::move(bottomChain);
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -2340,7 +2319,13 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
 
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     if (vkCreateFence(device, &fenceInfo, nullptr, &retro.fence) != VK_SUCCESS)
+        return false;
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &retro.filterFinishedSemaphore) != VK_SUCCESS)
         return false;
 
     if (!createRetroArchImage(retro.topInput, sourceScreenWidth, sourceScreenHeight)
@@ -2360,6 +2345,8 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
 void VulkanSurfacePresenter::destroyRetroArchResources(SurfaceState& surfaceState)
 {
     RetroArchResources& retro = surfaceState.retroArch;
+    if (retro.fence != VK_NULL_HANDLE)
+        (void)vkWaitForFences(device, 1, &retro.fence, VK_TRUE, kRetroArchFenceTimeoutNs);
     retro.topChain.shutdown();
     retro.bottomChain.shutdown();
     destroyRetroArchImage(retro.topInput);
@@ -2370,6 +2357,8 @@ void VulkanSurfacePresenter::destroyRetroArchResources(SurfaceState& surfaceStat
 
     if (retro.commandBuffer != VK_NULL_HANDLE && retro.commandPool != VK_NULL_HANDLE)
         vkFreeCommandBuffers(device, retro.commandPool, 1, &retro.commandBuffer);
+    if (retro.filterFinishedSemaphore != VK_NULL_HANDLE)
+        vkDestroySemaphore(device, retro.filterFinishedSemaphore, nullptr);
     if (retro.fence != VK_NULL_HANDLE)
         vkDestroyFence(device, retro.fence, nullptr);
     if (retro.commandPool != VK_NULL_HANDLE)
@@ -2462,27 +2451,14 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
 
     RetroArchResources& retro = surfaceState.retroArch;
     logRetroArchSizingIfNeeded(surfaceState, sizing, atlasWidth, atlasHeight);
-    std::string configKey = makeRetroArchConfigKey(
-        surfaceState.config,
-        sizing.sourceScreenWidth,
-        sizing.sourceScreenHeight,
-        sizing.outputScreenWidth,
-        sizing.outputScreenHeight);
+    std::string configKey = makeRetroArchConfigKey(surfaceState.config);
     if (retro.failedConfigKey == configKey)
         return false;
 
     const bool chainConfigMatches =
         retro.topChain.getPresetPath() == surfaceState.config.retroShaderPresetPath
-        && retro.topChain.getSourceWidth() == sizing.sourceScreenWidth
-        && retro.topChain.getSourceHeight() == sizing.sourceScreenHeight
-        && retro.topChain.getOutputWidth() == sizing.outputScreenWidth
-        && retro.topChain.getOutputHeight() == sizing.outputScreenHeight
         && retro.topChain.getParameterOverrides() == surfaceState.config.retroShaderParameterOverrides
         && retro.bottomChain.getPresetPath() == surfaceState.config.retroShaderPresetPath
-        && retro.bottomChain.getSourceWidth() == sizing.sourceScreenWidth
-        && retro.bottomChain.getSourceHeight() == sizing.sourceScreenHeight
-        && retro.bottomChain.getOutputWidth() == sizing.outputScreenWidth
-        && retro.bottomChain.getOutputHeight() == sizing.outputScreenHeight
         && retro.bottomChain.getParameterOverrides() == surfaceState.config.retroShaderParameterOverrides;
     if (!chainConfigMatches)
     {
@@ -2529,7 +2505,7 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
     }
     retro.failedConfigKey.clear();
 
-    auto submitAndWait = [&]() -> bool {
+    auto submitFilter = [&]() -> bool {
         if (vkEndCommandBuffer(retro.commandBuffer) != VK_SUCCESS)
             return false;
 
@@ -2537,16 +2513,36 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &retro.commandBuffer;
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &retro.filterFinishedSemaphore;
         {
             std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
             if (vkQueueSubmit(queue, 1, &submitInfo, retro.fence) != VK_SUCCESS)
                 return false;
         }
-        const VkResult waitResult = vkWaitForFences(device, 1, &retro.fence, VK_TRUE, UINT64_MAX);
-        return waitResult == VK_SUCCESS;
+        retro.filterSignalPending = true;
+        return true;
     };
 
     auto begin = [&]() -> bool {
+        if (vkWaitForFences(device, 1, &retro.fence, VK_TRUE, kRetroArchFenceTimeoutNs) != VK_SUCCESS)
+            return false;
+
+        if (retro.filterSignalPending)
+        {
+            const VkPipelineStageFlags drainStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkSubmitInfo drainInfo{};
+            drainInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            drainInfo.waitSemaphoreCount = 1;
+            drainInfo.pWaitSemaphores = &retro.filterFinishedSemaphore;
+            drainInfo.pWaitDstStageMask = &drainStage;
+            {
+                std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
+                (void)vkQueueSubmit(queue, 1, &drainInfo, VK_NULL_HANDLE);
+            }
+            retro.filterSignalPending = false;
+        }
+
         vkResetFences(device, 1, &retro.fence);
         if (vkResetCommandBuffer(retro.commandBuffer, 0) != VK_SUCCESS)
             return false;
@@ -2627,7 +2623,8 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
     };
 
     retro.frameCount++;
-    const bool clearHistory = surfaceState.config.retroShaderClearHistory || retro.frameCount <= 1;
+    const bool clearHistory = retro.pendingClearHistory || retro.frameCount <= 1;
+    retro.pendingClearHistory = false;
 
     if (!begin())
         return false;
@@ -2698,7 +2695,7 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
     imageBarrier(retro.topOutput, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
     imageBarrier(retro.bottomOutput, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-    if (!submitAndWait())
+    if (!submitFilter())
         return false;
 
     outputImage = retro.atlasOutput.image;
@@ -3669,13 +3666,22 @@ bool VulkanSurfacePresenter::submitSurfaceCommands(
     u64& presentTimelineValueOut)
 {
     presentTimelineValueOut = 0;
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    RetroArchResources& retro = surfaceState.retroArch;
+    const bool waitsForFilter = retro.filterSignalPending;
+    std::array<VkSemaphore, 2> waitSemaphores = {
+        surfaceState.imageAvailableSemaphore,
+        retro.filterFinishedSemaphore,
+    };
+    std::array<VkPipelineStageFlags, 2> waitStages = {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    };
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &surfaceState.imageAvailableSemaphore;
-    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.waitSemaphoreCount = waitsForFilter ? 2u : 1u;
+    submitInfo.pWaitSemaphores = waitSemaphores.data();
+    submitInfo.pWaitDstStageMask = waitStages.data();
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &surfaceState.commandBuffer;
 
@@ -3718,6 +3724,8 @@ bool VulkanSurfacePresenter::submitSurfaceCommands(
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
         submitResult = vkQueueSubmit(queue, 1, &submitInfo, surfaceState.inFlightFence);
+        if (submitResult == VK_SUCCESS && waitsForFilter)
+            retro.filterSignalPending = false;
         if (submitResult == VK_SUCCESS)
         {
             const u64 presentStartNs = PerfNowNs();

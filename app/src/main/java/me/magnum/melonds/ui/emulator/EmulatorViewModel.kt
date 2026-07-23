@@ -113,6 +113,7 @@ import me.magnum.melonds.domain.model.input.SoftInputBehaviour
 import me.magnum.melonds.domain.model.retroachievements.RASimpleLeaderboard
 import me.magnum.melonds.domain.model.retroachievements.exception.RAGameNotExist
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.domain.model.ui.Orientation
 import me.magnum.melonds.domain.repositories.BackgroundRepository
@@ -123,6 +124,7 @@ import me.magnum.melonds.domain.repositories.RomsRepository
 import me.magnum.melonds.domain.repositories.SaveStatesRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.EmulatorManager
+import me.magnum.melonds.impl.ShaderCompileTimeStore
 import me.magnum.melonds.impl.emulator.EmulatorSession
 import me.magnum.melonds.impl.emulator.LeaderboardTrackerUpdateLogLimiter
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
@@ -252,10 +254,26 @@ class EmulatorViewModel @Inject constructor(
     private val emulatorManager: EmulatorManager,
     private val emulatorSession: EmulatorSession,
     private val retroAchievementsSubmissionHandler: RetroAchievementsSubmissionHandler,
+    private val shaderCompileTimeStore: ShaderCompileTimeStore,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val sessionCoroutineScope = EmulatorSessionCoroutineScope()
+
+    data class HeavyShaderCompileRequest(
+        val presetName: String,
+        val estimatedMillis: Long,
+        val isMeasured: Boolean,
+        val response: CompletableDeferred<Boolean>,
+    )
+
+    private val heavyShaderCompileThresholdMs = 60_000L
+
+    private val _heavyShaderCompileRequest = MutableSharedFlow<HeavyShaderCompileRequest>(extraBufferCapacity = 1)
+    val heavyShaderCompileRequest = _heavyShaderCompileRequest.asSharedFlow()
+
+    private val isRetroArchShaderDeclinedForSession = MutableStateFlow(false)
+
     private var raBootstrapJob: Job? = null
     private var raSessionJob: Job? = null
 
@@ -783,6 +801,7 @@ class EmulatorViewModel @Inject constructor(
             }
 
             val cheats = getRomInfo(rom)?.let { getRomEnabledCheats(it) } ?: emptyList()
+            confirmRetroArchShaderCompile(rom.config)
             val result = emulatorManager.loadRom(rom, cheats)
             when (result) {
                 is RomLaunchResult.LaunchFailedRomNotFound,
@@ -1130,6 +1149,7 @@ class EmulatorViewModel @Inject constructor(
                 startObservingLayoutForFirmware()
                 startObservingEmulatorEvents()
 
+                confirmRetroArchShaderCompile(romConfig = null)
                 val result = emulatorManager.loadFirmware(consoleType)
                 when (result) {
                     is FirmwareLaunchResult.LaunchFailed -> {
@@ -2820,14 +2840,61 @@ class EmulatorViewModel @Inject constructor(
                 } else {
                     settingsRepository.observeRenderConfiguration(romConfig)
                 }
-            }.collectLatest {
+            }.combine(isRetroArchShaderDeclinedForSession) { configuration, declined ->
+                configuration to declined
+            }.collectLatest { (it, declined) ->
+                val dropShader = declined && it.videoFiltering == VideoFiltering.RETROARCH
                 _runtimeRendererConfiguration.value = RuntimeRendererConfiguration(
                     renderer = it.renderer,
-                    videoFiltering = it.videoFiltering,
+                    videoFiltering = if (dropShader) VideoFiltering.NONE else it.videoFiltering,
                     resolutionScaling = it.resolutionScaling,
-                    retroArchShader = it.retroArchShader,
+                    retroArchShader = if (dropShader) it.retroArchShader.copy(presetPath = null) else it.retroArchShader,
                 )
             }
+        }
+    }
+
+    private suspend fun confirmRetroArchShaderCompile(romConfig: RomConfig?) {
+        if (isRetroArchShaderDeclinedForSession.value) {
+            return
+        }
+
+        val configuration = runCatching {
+            if (romConfig == null) {
+                settingsRepository.observeRenderConfiguration().first()
+            } else {
+                settingsRepository.observeRenderConfiguration(romConfig).first()
+            }
+        }.getOrNull() ?: return
+
+        if (configuration.videoFiltering != VideoFiltering.RETROARCH) {
+            return
+        }
+        val presetPath = configuration.retroArchShader.presetPath?.takeIf { it.isNotBlank() } ?: return
+
+        val backend = if (configuration.renderer == VideoRenderer.VULKAN) {
+            ShaderCompileTimeStore.Backend.VULKAN
+        } else {
+            ShaderCompileTimeStore.Backend.OPEN_GL
+        }
+        val measured = shaderCompileTimeStore.measured(presetPath, backend)
+        val expectedMillis = measured ?: configuration.retroArchShader.estimatedCompileMillis
+        if (expectedMillis < heavyShaderCompileThresholdMs) {
+            return
+        }
+
+        val response = CompletableDeferred<Boolean>()
+        val request = HeavyShaderCompileRequest(
+            presetName = presetPath.substringAfterLast('/'),
+            estimatedMillis = expectedMillis,
+            isMeasured = measured != null,
+            response = response,
+        )
+        if (!_heavyShaderCompileRequest.tryEmit(request)) {
+            return
+        }
+        if (!response.await()) {
+            isRetroArchShaderDeclinedForSession.value = true
         }
     }
 

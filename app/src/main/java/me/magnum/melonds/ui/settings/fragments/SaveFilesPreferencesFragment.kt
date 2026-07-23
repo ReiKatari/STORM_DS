@@ -29,6 +29,8 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
         helper.setupStoragePickerPreference(findPreference<StoragePickerPreference>("sram_dir")!!) { uri, persistDirectory ->
             handleSettingsMirror(uri, persistDirectory)
         }
+
+        hideDependentsWhenInactive("use_rom_dir", "sram_dir", showWhenChecked = false)
     }
 
     private fun handleSettingsMirror(uri: Uri, persistDirectory: () -> Unit) {

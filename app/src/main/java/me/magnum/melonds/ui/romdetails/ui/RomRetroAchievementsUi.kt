@@ -88,6 +88,9 @@ fun RomRetroAchievementsUi(
     onRetryLoad: () -> Unit,
     onViewAchievement: (RAAchievement) -> Unit,
     onSyncOfflineNow: () -> Unit,
+    onViewLeaderboard: (me.magnum.rcheevosapi.model.RALeaderboard) -> Unit = {},
+    onLoadLeaderboardRanking: suspend (me.magnum.rcheevosapi.model.RALeaderboard) -> Result<me.magnum.rcheevosapi.model.RALeaderboardRanking> = { Result.failure(UnsupportedOperationException()) },
+    onAchievementFocused: (AchievementUiModel) -> Unit = {},
 ) {
     Column(modifier = modifier.padding(contentPadding)) {
         when (retroAchievementsUiState) {
@@ -101,12 +104,28 @@ fun RomRetroAchievementsUi(
                 if (!retroAchievementsUiState.hasAchievements()) {
                     NoAchievements(Modifier.weight(1f).fillMaxWidth())
                 } else {
-                    Ready(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(0.dp),
-                        content = retroAchievementsUiState,
-                        onViewAchievement = onViewAchievement,
-                    )
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        var detailAchievement by remember {
+                            mutableStateOf<Pair<AchievementUiModel, Boolean>?>(null)
+                        }
+                        me.magnum.melonds.ui.emulator.ui.AchievementList(
+                            modifier = Modifier.fillMaxSize(),
+                            state = retroAchievementsUiState,
+                            onAchievementSelected = { model, inLedger -> detailAchievement = model to inLedger },
+                            onViewLeaderboard = onViewLeaderboard,
+                            onLoadLeaderboardRanking = onLoadLeaderboardRanking,
+                            onRetry = onRetryLoad,
+                            onDismiss = {},
+                            onAchievementFocused = onAchievementFocused,
+                        )
+                        detailAchievement?.let { (model, inLedger) ->
+                            me.magnum.melonds.ui.emulator.ui.AchievementDetailOverlay(
+                                achievementModel = model,
+                                isInOfflineLedger = inLedger,
+                                onClose = { detailAchievement = null },
+                            )
+                        }
+                    }
                 }
             }
             is RomRetroAchievementsUiState.LoginError -> LoginError(modifier = Modifier.weight(1f).fillMaxWidth(), onLogin = onLogin)

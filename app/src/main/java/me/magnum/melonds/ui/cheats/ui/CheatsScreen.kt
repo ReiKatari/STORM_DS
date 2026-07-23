@@ -4,12 +4,22 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -117,41 +127,74 @@ fun CheatsScreen(
         modifier = Modifier.fillMaxSize(),
         scaffoldState = scaffoldState,
         topBar = {
-            Box(Modifier.background(MaterialTheme.colors.primaryVariant).statusBarsPadding()) {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = appBarTitle ?: stringResource(R.string.cheats),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+            val colors = me.magnum.melonds.ui.theme.watermelon
+            androidx.compose.foundation.layout.Column(
+                Modifier.background(colors.bg).statusBarsPadding(),
+            ) {
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .clickable { navigateBack() },
+                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
+                            contentDescription = null,
+                            tint = colors.text,
+                            modifier = Modifier.size(20.dp),
                         )
-                    },
-                    backgroundColor = MaterialTheme.colors.primary,
-                    navigationIcon = {
-                        IconButton(onClick = { navigateBack() }) {
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = appBarTitle ?: stringResource(R.string.cheats),
+                        color = colors.text,
+                        fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                        fontSize = 16.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (showEnabledCheatsButton) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .clickable { viewModel.openEnabledCheats() },
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
                             Icon(
-                                painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                                contentDescription = null,
+                                painter = rememberVectorPainter(Icons.Outlined.CheckBox),
+                                contentDescription = stringResource(R.string.enabled_cheats),
+                                tint = colors.text2,
+                                modifier = Modifier.size(20.dp),
                             )
                         }
-                    },
-                    actions = {
-                        if (showEnabledCheatsButton) {
-                            CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.high) {
-                                IconButton(onClick = { viewModel.openEnabledCheats() }) {
-                                    Icon(
-                                        painter = rememberVectorPainter(Icons.Outlined.CheckBox),
-                                        contentDescription = stringResource(R.string.enabled_cheats),
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    windowInsets = WindowInsets.safeDrawing.exclude(WindowInsets(bottom = Int.MAX_VALUE)),
-                )
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
             }
         },
-        backgroundColor = MaterialTheme.colors.surface,
+        bottomBar = {
+            me.magnum.melonds.ui.common.GamepadHintsFooter(
+                modifier = Modifier
+                    .background(me.magnum.melonds.ui.theme.watermelon.bg)
+                    .navigationBarsPadding(),
+                hints = listOf(
+                    me.magnum.melonds.ui.common.GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
+                    me.magnum.melonds.ui.common.GamepadHint("A", stringResource(R.string.pause_hint_accept)),
+                    me.magnum.melonds.ui.common.GamepadHint("B", stringResource(R.string.pause_hint_back)),
+                ),
+            )
+        },
+        backgroundColor = me.magnum.melonds.ui.theme.watermelon.bg,
         contentWindowInsets = WindowInsets.safeDrawing,
     ) { padding ->
         NavHost(

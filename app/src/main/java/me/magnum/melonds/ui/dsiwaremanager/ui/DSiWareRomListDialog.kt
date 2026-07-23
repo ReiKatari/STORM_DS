@@ -125,7 +125,8 @@ private fun FullScreenDialog(
                                 )
                             }
                         },
-                        backgroundColor = MaterialTheme.colors.primary,
+                        backgroundColor = MaterialTheme.colors.background,
+                    contentColor = MaterialTheme.colors.onBackground,
                         windowInsets = WindowInsets.safeDrawing.exclude(WindowInsets(bottom = Int.MAX_VALUE)),
                     )
                 }

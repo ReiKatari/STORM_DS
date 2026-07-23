@@ -6,6 +6,7 @@
 #include "Platform.h"
 #include "VulkanContext.h"
 #include "VulkanDispatch.h"
+#include "renderer/ShaderDiagnostics.h"
 
 namespace MelonDSAndroid
 {
@@ -88,12 +89,12 @@ bool VulkanRetroArchFilterChain::configure(
 
     if (chain != nullptr
         && currentPresetPath == presetPath
-        && currentSourceWidth == sourceWidth
-        && currentSourceHeight == sourceHeight
-        && currentOutputWidth == outputWidth
-        && currentOutputHeight == outputHeight
         && currentParameterOverrides == parameterOverrides)
     {
+        currentSourceWidth = sourceWidth;
+        currentSourceHeight = sourceHeight;
+        currentOutputWidth = outputWidth;
+        currentOutputHeight = outputHeight;
         return true;
     }
 
@@ -135,11 +136,24 @@ bool VulkanRetroArchFilterChain::createChain(
     presetOptions.original_aspect_uniforms = true;
     presetOptions.frametime_uniforms = true;
 
+    auto reportFailure = [&](const char* context, libra_error_t failure) {
+        ShaderDiagnostics::Entry entry;
+        entry.backend = "Vulkan";
+        entry.presetPath = presetPath;
+        entry.succeeded = false;
+        entry.sourceWidth = sourceWidth;
+        entry.sourceHeight = sourceHeight;
+        entry.outputWidth = outputWidth;
+        entry.outputHeight = outputHeight;
+        entry.reason = describeError(context, failure);
+        ShaderDiagnostics::get().record(entry);
+    };
+
     libra_shader_preset_t preset = nullptr;
     error = libra_preset_create_with_options(presetPath.c_str(), &presetContext, &presetOptions, &preset);
     if (error != nullptr)
     {
-        logError("libra_preset_create_with_options", error);
+        reportFailure("libra_preset_create_with_options", error);
         if (presetContext != nullptr)
             (void)libra_preset_ctx_free(&presetContext);
         return false;
@@ -155,7 +169,7 @@ bool VulkanRetroArchFilterChain::createChain(
     error = libra_vk_filter_chain_create(&preset, deviceInfo, &options, &chain);
     if (error != nullptr)
     {
-        logError("libra_vk_filter_chain_create", error);
+        reportFailure("libra_vk_filter_chain_create", error);
         if (preset != nullptr)
             (void)libra_preset_free(&preset);
         return false;
@@ -176,6 +190,17 @@ bool VulkanRetroArchFilterChain::createChain(
     currentOutputWidth = outputWidth;
     currentOutputHeight = outputHeight;
     currentParameterOverrides = parameterOverrides;
+
+    ShaderDiagnostics::Entry successEntry;
+    successEntry.backend = "Vulkan";
+    successEntry.presetPath = presetPath;
+    successEntry.succeeded = true;
+    successEntry.sourceWidth = sourceWidth;
+    successEntry.sourceHeight = sourceHeight;
+    successEntry.outputWidth = outputWidth;
+    successEntry.outputHeight = outputHeight;
+    ShaderDiagnostics::get().record(successEntry);
+
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Info,
         "VulkanPresenter[RetroArch]: preset=%s source=%ux%u output=%ux%u sourceFormat=B8G8R8A8_UNORM outputFormat=R8G8B8A8_UNORM params=%zu",
@@ -257,9 +282,16 @@ bool VulkanRetroArchFilterChain::recordFrame(
 
 void VulkanRetroArchFilterChain::logError(const char* context, libra_error_t error)
 {
+    (void)describeError(context, error);
+}
+
+std::string VulkanRetroArchFilterChain::describeError(const char* context, libra_error_t error)
+{
+    std::string description;
     char* message = nullptr;
     if (libra_error_write(error, &message) == 0 && message != nullptr)
     {
+        description = message;
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "%s failed: %s", context, message);
         (void)libra_error_free_string(&message);
     }
@@ -268,6 +300,10 @@ void VulkanRetroArchFilterChain::logError(const char* context, libra_error_t err
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "%s failed", context);
     }
     (void)libra_error_free(&error);
+
+    if (description.empty())
+        description = std::string(context) + " failed";
+    return description;
 }
 
 }

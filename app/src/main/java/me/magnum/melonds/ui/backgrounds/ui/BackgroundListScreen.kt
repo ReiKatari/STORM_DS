@@ -60,9 +60,15 @@ import me.magnum.melonds.common.contracts.FilePickerContract
 import me.magnum.melonds.domain.model.Background
 import me.magnum.melonds.extensions.nameWithoutExtension
 import me.magnum.melonds.ui.backgrounds.BackgroundsViewModel
+import me.magnum.melonds.ui.common.WatermelonScreenScaffold
 import me.magnum.melonds.ui.common.component.dialog.TextInputDialog
 import me.magnum.melonds.ui.common.component.dialog.rememberTextInputDialogState
+import me.magnum.melonds.ui.theme.watermelon
 import me.magnum.melonds.utils.BitmapRegionDecoderCompat
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import java.util.UUID
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -103,41 +109,28 @@ fun BackgroundListScreen(
     val scaffoldState = rememberScaffoldState()
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
+    WatermelonScreenScaffold(
+        title = stringResource(R.string.backgrounds),
+        onBack = onBackClick,
         scaffoldState = scaffoldState,
-        topBar = {
-            Box(Modifier.background(MaterialTheme.colors.primaryVariant).statusBarsPadding()) {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.backgrounds)) },
-                    backgroundColor = MaterialTheme.colors.primary,
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                                contentDescription = null,
-                            )
-                        }
+        actions = {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .clickable {
+                        addBackgroundLauncher.launch(Pair(null, arrayOf("image/png", "image/jpeg")))
                     },
-                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
-                )
-            }
-        },
-        floatingActionButton = {
-            // Manually apply navigation bar insets due to a bug in Scaffold. Scaffold does not apply horizontal insets to FABs
-            FloatingActionButton(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)),
-                onClick = {
-                    addBackgroundLauncher.launch(Pair(null, arrayOf("image/png", "image/jpeg")))
-                },
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_add),
                     contentDescription = stringResource(R.string.action_backgrounds_new),
+                    tint = watermelon.text,
+                    modifier = Modifier.size(24.dp),
                 )
             }
         },
-        backgroundColor = MaterialTheme.colors.surface,
-        contentWindowInsets = WindowInsets.safeDrawing,
     ) { padding ->
         if (backgrounds == null) {
             Loading(Modifier
@@ -188,7 +181,7 @@ private fun Loading(modifier: Modifier) {
     Box(modifier) {
         CircularProgressIndicator(
             modifier = Modifier.align(Alignment.Center),
-            color = MaterialTheme.colors.secondary,
+            color = watermelon.red,
         )
     }
 }

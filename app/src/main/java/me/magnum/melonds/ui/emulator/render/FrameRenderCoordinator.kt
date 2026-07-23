@@ -9,5 +9,8 @@ interface FrameRenderCoordinator {
     fun removeSurface(surface: EmulatorSurfaceView)
     fun updateSurfacePresentation(surface: EmulatorSurfaceView, config: VulkanPresentationConfig?, background: RuntimeBackground)
     fun renderFrame(frameDeadlineNanos: Long?)
+
+    fun prewarmShaders(atlasWidth: Int, atlasHeight: Int): Long = 0L
+
     fun stop()
 }

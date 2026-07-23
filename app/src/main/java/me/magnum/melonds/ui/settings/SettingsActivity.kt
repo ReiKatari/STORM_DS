@@ -8,14 +8,19 @@ import android.view.ViewGroup
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.collectAsState
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.commit
 import androidx.fragment.app.commitNow
+import androidx.core.os.bundleOf
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceScreen
 import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.R
 import me.magnum.melonds.databinding.ActivitySettingsBinding
@@ -23,7 +28,54 @@ import me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.MainPreferencesFragment
 
 @AndroidEntryPoint
-class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+class SettingsActivity :
+    AppCompatActivity(),
+    PreferenceFragmentCompat.OnPreferenceStartFragmentCallback,
+    PreferenceFragmentCompat.OnPreferenceStartScreenCallback {
+
+    private val externalInfoController by lazy { me.magnum.melonds.ui.common.ExternalInfoDisplayController(this) }
+    private val externalSettingsTitle = kotlinx.coroutines.flow.MutableStateFlow("")
+
+    data class FocusedPref(val title: String, val summary: String?, val icon: android.graphics.drawable.Drawable?)
+    private val focusedPreference = kotlinx.coroutines.flow.MutableStateFlow<FocusedPref?>(null)
+
+    fun onPreferenceFocused(preference: androidx.preference.Preference) {
+        focusedPreference.value = FocusedPref(
+            title = preference.title?.toString() ?: "",
+            summary = preference.summary?.toString(),
+            icon = preference.icon,
+        )
+    }
+
+    override fun onStart() {
+        super.onStart()
+        externalInfoController.attach()
+        externalSettingsTitle.value = supportActionBar?.title?.toString() ?: getString(me.magnum.melonds.R.string.settings)
+        supportFragmentManager.addOnBackStackChangedListener(externalTitleListener)
+        externalInfoController.setContent {
+            val title = externalSettingsTitle.collectAsState().value
+            val focused = focusedPreference.collectAsState().value
+            me.magnum.melonds.ui.common.ExternalSettingInfo(
+                iconDrawable = focused?.icon,
+                title = focused?.title?.takeIf { it.isNotBlank() } ?: title,
+                description = focused?.summary,
+                crumb = getString(me.magnum.melonds.R.string.settings) + " › " + title,
+            )
+        }
+    }
+
+    override fun onStop() {
+        supportFragmentManager.removeOnBackStackChangedListener(externalTitleListener)
+        externalInfoController.detach()
+        super.onStop()
+    }
+
+    private val externalTitleListener = androidx.fragment.app.FragmentManager.OnBackStackChangedListener {
+        binding.root.post {
+            externalSettingsTitle.value = supportActionBar?.title?.toString() ?: ""
+            focusedPreference.value = null
+        }
+    }
 
     companion object {
         const val KEY_ENTRY_POINT = "entry_point"
@@ -68,9 +120,13 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                 leftMargin = insets.left
                 rightMargin = insets.right
             }
+            binding.settingsFooter.root.updatePadding(
+                left = insets.left,
+                right = insets.right,
+                bottom = insets.bottom,
+            )
 
-            // Leave bottom insets to be consumed by the content fragments
-            windowInsets.inset(insets.left, insets.top, insets.right, 0)
+            windowInsets.inset(insets.left, insets.top, insets.right, insets.bottom)
         }
 
         supportFragmentManager.addOnBackStackChangedListener {
@@ -106,6 +162,22 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         if (fragment is PreferenceFragmentTitleProvider) {
             supportActionBar?.title = fragment.getTitle()
         }
+    }
+
+    override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat, pref: PreferenceScreen): Boolean {
+        val fragment = supportFragmentManager.fragmentFactory.instantiate(
+            ClassLoader.getSystemClassLoader(),
+            caller::class.java.name,
+        ).apply {
+            arguments = bundleOf(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT to pref.key)
+        }
+
+        supportFragmentManager.commit {
+            setCustomAnimations(R.anim.fragment_translate_enter_push, R.anim.fragment_translate_exit_push, R.anim.fragment_translate_enter_pop, R.anim.fragment_translate_exit_pop)
+            replace(binding.settingsContainer.id, fragment)
+            addToBackStack(null)
+        }
+        return true
     }
 
     override fun onPreferenceStartFragment(caller: PreferenceFragmentCompat, pref: Preference): Boolean {

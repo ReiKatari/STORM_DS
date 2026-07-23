@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.emulator.ui
 
 import androidx.compose.animation.core.animate
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
@@ -77,12 +78,16 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
-import me.magnum.melonds.ui.common.achievements.ui.AchievementFiltersRow
 import me.magnum.melonds.ui.common.achievements.ui.AchievementStateFilter
 import me.magnum.melonds.ui.common.achievements.ui.AchievementTypeFilter
+import me.magnum.melonds.ui.common.achievements.ui.model.AchievementUiModel
 import me.magnum.melonds.ui.common.melonButtonColors
+import me.magnum.melonds.ui.theme.watermelon
 import me.magnum.melonds.ui.romdetails.model.AchievementBucketUiModel
 import me.magnum.melonds.ui.romdetails.model.AchievementSetUiModel
 import me.magnum.melonds.ui.romdetails.model.RomRetroAchievementsUiState
@@ -110,80 +115,18 @@ private val CONTENT_TYPE_LEADERBOARD_HEADER = "leaderboard-header"
 fun AchievementList(
     modifier: Modifier,
     state: RomRetroAchievementsUiState,
-    onViewAchievement: (RAAchievement) -> Unit,
+    onAchievementSelected: (AchievementUiModel, Boolean) -> Unit,
     onViewLeaderboard: (RALeaderboard) -> Unit,
     onLoadLeaderboardRanking: suspend (RALeaderboard) -> Result<RALeaderboardRanking>,
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
+    onAchievementFocused: (AchievementUiModel) -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState()
-    var offsetY by remember { mutableFloatStateOf(0f) }
-    val listAtTop by remember {
-        derivedStateOf { lazyListState.firstVisibleItemIndex == 0 && lazyListState.firstVisibleItemScrollOffset == 0 }
-    }
-
-    val (dismissDistanceThresholdPx, flingDismissVelocityThresholdPx) = with(LocalDensity.current) {
-        DISMISS_DISTANCE_THRESHOLD.toPx() to FLING_DISMISS_VELOCITY_THRESHOLD.toPx()
-    }
-
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Only handle downward scrolling when at the top of the list
-                return if (listAtTop) {
-                    if (available.y > 0) {
-                        // Scroll down
-                        val delta = available.y
-                        offsetY += delta
-
-                        Offset(0f, delta)
-                    } else if (available.y < 0 && offsetY > 0) {
-                        // Scroll up, but only if the list was being dismissed (offsetY > 0)
-                        val delta = max(available.y, -offsetY)
-                        offsetY += delta
-
-                        Offset(0f, delta)
-                    } else {
-                        Offset.Zero
-                    }
-                } else {
-                    Offset.Zero
-                }
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                // Handle drag release
-                if (offsetY > 0f) {
-                    coroutineScope.launch {
-                        if (available.y > flingDismissVelocityThresholdPx) {
-                            // High downwards flight velocity. Animate and dismiss
-                            animate(initialValue = offsetY, targetValue = dismissDistanceThresholdPx, initialVelocity = available.y) { value, _ ->
-                                offsetY = value
-                            }
-                            onDismiss()
-                        } else if (offsetY > dismissDistanceThresholdPx) {
-                            // User has scrolled being the dismiss threshold
-                            onDismiss()
-                        } else {
-                            // Dismiss criteria not met. Animate back to original position
-                            animate(initialValue = offsetY, targetValue = 0f) { value, _ ->
-                                offsetY = value
-                            }
-                        }
-                    }
-                    return available
-                }
-                return Velocity.Zero
-            }
-        }
-    }
 
     Column(
-        modifier = modifier.fillMaxSize()
-            .nestedScroll(nestedScrollConnection)
-            .offset { IntOffset(0, offsetY.roundToInt()) }
-            .alpha( (1f - (offsetY / dismissDistanceThresholdPx)).coerceIn(0f, 1f) ),
+        modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -199,13 +142,14 @@ fun AchievementList(
                 // elements at the top of the list
                 Box(Modifier.focusable())
                 Content(
-                    modifier = Modifier.widthIn(max = 640.dp).weight(1f),
+                    modifier = Modifier.widthIn(max = 760.dp).weight(1f),
                     sets = state.sets,
                     pendingLedgerAchievementIds = state.pendingLedgerAchievementIds,
-                    onViewAchievement = onViewAchievement,
+                    onAchievementSelected = onAchievementSelected,
                     onViewLeaderboard = onViewLeaderboard,
                     onLoadLeaderboardRanking = onLoadLeaderboardRanking,
                     lazyListState = lazyListState,
+                    onAchievementFocused = onAchievementFocused,
                 )
             }
             RomRetroAchievementsUiState.AchievementLoadError,
@@ -226,10 +170,11 @@ private fun Content(
     modifier: Modifier,
     sets: List<AchievementSetUiModel>,
     pendingLedgerAchievementIds: Set<Long>,
-    onViewAchievement: (RAAchievement) -> Unit,
+    onAchievementSelected: (AchievementUiModel, Boolean) -> Unit,
     onViewLeaderboard: (RALeaderboard) -> Unit,
     onLoadLeaderboardRanking: suspend (RALeaderboard) -> Result<RALeaderboardRanking>,
     lazyListState: LazyListState,
+    onAchievementFocused: (AchievementUiModel) -> Unit = {},
 ) {
     if (sets.isEmpty()) {
         EmptyAchievements(modifier)
@@ -275,6 +220,9 @@ private fun Content(
     var selectedStateFilter by rememberSaveable {
         mutableStateOf(AchievementStateFilter.All)
     }
+    var missableOnly by rememberSaveable {
+        mutableStateOf(false)
+    }
     LaunchedEffect(sets) {
         if (sets.none { it.setId == selectedSetId }) {
             selectedSetId = sets.first().setId
@@ -314,7 +262,7 @@ private fun Content(
             selectedStateFilter = AchievementStateFilter.All
         }
     }
-    val filteredBuckets = remember(selectedSet, selectedTypeFilter, selectedStateFilter) {
+    val filteredBuckets = remember(selectedSet, selectedTypeFilter, selectedStateFilter, missableOnly) {
         if (selectedTypeFilter == AchievementTypeFilter.Leaderboards) {
             emptyList()
         } else {
@@ -324,7 +272,8 @@ private fun Content(
                 .map { bucket ->
                     bucket.copy(
                         achievements = bucket.achievements.filter {
-                            selectedTypeFilter.matches(it.actualAchievement().type)
+                            selectedTypeFilter.matches(it.actualAchievement().type) &&
+                                (!missableOnly || it.actualAchievement().isMissable())
                         },
                     )
                 }
@@ -346,179 +295,312 @@ private fun Content(
         with(density) { 80.dp.toPx() }
     }
 
+    val summary = selectedSet.setSummary
     CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoViewSpec) {
-        LazyColumn(
-            modifier = modifier
-                .focusProperties {
-                    onExit = {
-                        when (requestedFocusDirection) {
-                            FocusDirection.Up -> {
-                                if (lazyListState.canScrollBackward) {
-                                    cancelFocusChange()
-                                    coroutineScope.launch {
-                                        lazyListState.animateScrollBy(-scrollAmountByKeyboard)
+        Column(modifier = modifier.fillMaxSize()) {
+            AchievementsHeader(
+                summary = summary,
+                typeFilter = selectedTypeFilter,
+                availableTypeFilters = availableTypeFilters,
+                onTypeFilterChanged = { selectedTypeFilter = it },
+            )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .focusProperties {
+                        onExit = {
+                            when (requestedFocusDirection) {
+                                FocusDirection.Up -> {
+                                    if (lazyListState.canScrollBackward) {
+                                        cancelFocusChange()
+                                        coroutineScope.launch {
+                                            lazyListState.animateScrollBy(-scrollAmountByKeyboard)
+                                        }
+                                    } else if (lazyListState.firstVisibleItemIndex == 0) {
+                                        cancelFocusChange()
                                     }
-                                } else if (lazyListState.firstVisibleItemIndex == 0) {
-                                    // User is already at the top of the list. Prevent navigation out of the list
-                                    cancelFocusChange()
                                 }
-                            }
-                            FocusDirection.Down -> {
-                                if (lazyListState.canScrollForward) {
-                                    cancelFocusChange()
-                                    coroutineScope.launch {
-                                        lazyListState.animateScrollBy(scrollAmountByKeyboard)
+                                FocusDirection.Down -> {
+                                    if (lazyListState.canScrollForward) {
+                                        cancelFocusChange()
+                                        coroutineScope.launch {
+                                            lazyListState.animateScrollBy(scrollAmountByKeyboard)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                .onKeyEvent { keyEvent ->
-                    if (keyEvent.type == KeyEventType.KeyDown) {
-                        val indexOffset = when (keyEvent.key) {
-                            Key.ButtonL2 -> -1
-                            Key.ButtonR2 -> 1
-                            else -> 0
-                        }.let {
-                            // Flip offset direction for RTL layouts
-                            if (layoutDirection == LayoutDirection.Ltr) it else -it
-                        }
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyDown) {
+                            val indexOffset = when (keyEvent.key) {
+                                Key.ButtonL2 -> -1
+                                Key.ButtonR2 -> 1
+                                else -> 0
+                            }.let {
+                                if (layoutDirection == LayoutDirection.Ltr) it else -it
+                            }
 
-                        val selectedSetIndex = sets.indexOfFirst { it.setId == selectedSetId }
-                        if (indexOffset != 0 && selectedSetIndex + indexOffset in sets.indices) {
-                            selectedSetId = sets[selectedSetIndex + indexOffset].setId
-                            true
+                            val selectedSetIndex = sets.indexOfFirst { it.setId == selectedSetId }
+                            if (indexOffset != 0 && selectedSetIndex + indexOffset in sets.indices) {
+                                selectedSetId = sets[selectedSetIndex + indexOffset].setId
+                                true
+                            } else {
+                                false
+                            }
                         } else {
                             false
                         }
-                    } else {
-                        false
+                    }
+                    .drawWithCache {
+                        val fadeHeight = LIST_CONTENT_PADDING.value * this@drawWithCache.density
+                        val bottomBrush = Brush.verticalGradient(
+                            listOf(backgroundColor, backgroundColor.copy(alpha = 0f)),
+                            startY = size.height - fadeHeight,
+                            endY = size.height
+                        )
+
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = bottomBrush,
+                                blendMode = BlendMode.DstIn,
+                                topLeft = Offset(0f, size.height - fadeHeight),
+                                size = Size(size.width, fadeHeight),
+                            )
+                        }
+                    },
+                state = lazyListState,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 2.dp, bottom = LIST_CONTENT_PADDING),
+            ) {
+                if (sets.size > 1) {
+                    item {
+                        AchievementsMultiSetTabRow(
+                            sets = sets,
+                            selectedSetId = selectedSetId,
+                            onSetSelected = { selectedSetId = it },
+                        )
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
-                .drawWithCache {
-                    val fadeHeight = LIST_CONTENT_PADDING.value * this@drawWithCache.density
-                    val topBrush = Brush.verticalGradient(
-                        listOf(backgroundColor.copy(alpha = 0f), backgroundColor),
-                        endY = fadeHeight,
-                    )
-                    val bottomBrush = Brush.verticalGradient(
-                        listOf(backgroundColor, backgroundColor.copy(alpha = 0f)),
-                        startY = size.height - fadeHeight,
-                        endY = size.height
-                    )
 
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(
-                            brush = topBrush,
-                            blendMode = BlendMode.DstIn,
-                            size = Size(size.width, fadeHeight),
-                        )
-                        drawRect(
-                            brush = bottomBrush,
-                            blendMode = BlendMode.DstIn,
-                            topLeft = Offset(0f, size.height - fadeHeight),
-                            size = Size(size.width, fadeHeight),
+                if (selectedTypeFilter != AchievementTypeFilter.Leaderboards) {
+                    item(contentType = CONTENT_TYPE_FILTERS) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) {
+                            ConsoleChipRow(
+                                options = availableStateFilters,
+                                selected = selectedStateFilter,
+                                onSelected = { selectedStateFilter = it },
+                                label = { getStateFilterLabelText(it) },
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            MissableToggleChip(active = missableOnly, onToggle = { missableOnly = !missableOnly })
+                        }
+                    }
+                }
+
+                if (filteredBuckets.isEmpty() && !showLeaderboards) {
+                    item(contentType = CONTENT_TYPE_ACHIEVEMENT) {
+                        Text(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            text = stringResource(id = R.string.retro_achievements_filter_no_results),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.body2,
                         )
                     }
-                },
-            state = lazyListState,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            contentPadding = PaddingValues(vertical = LIST_CONTENT_PADDING),
-        ) {
-            if (sets.size > 1) {
-                item {
-                    AchievementsMultiSetTabRow(
-                        sets = sets,
-                        selectedSetId = selectedSetId,
-                        onSetSelected = { selectedSetId = it },
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-            }
-
-            item(contentType = CONTENT_TYPE_FILTERS) {
-                AchievementFiltersRow(
-                    typeFilter = selectedTypeFilter,
-                    availableTypeFilters = availableTypeFilters,
-                    onTypeFilterChanged = { selectedTypeFilter = it },
-                    stateFilter = selectedStateFilter,
-                    availableStateFilters = availableStateFilters,
-                    onStateFilterChanged = { selectedStateFilter = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    showStateFilter = selectedTypeFilter != AchievementTypeFilter.Leaderboards,
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
-            if (filteredBuckets.isEmpty() && !showLeaderboards) {
-                item(contentType = CONTENT_TYPE_ACHIEVEMENT) {
-                    Text(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
-                        text = stringResource(id = R.string.retro_achievements_filter_no_results),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.body2,
-                    )
-                }
-            }
-
-            filteredBuckets.forEachIndexed { index, bucket ->
-                item(contentType = CONTENT_TYPE_BUCKET_HEADER) {
-                    Text(
-                        modifier = Modifier.padding(start = 16.dp, top = if (index == 0) 0.dp else 16.dp, end = 16.dp, bottom = 4.dp).fillMaxWidth(),
-                        text = getBucketTitle(bucket.bucket),
-                        style = MaterialTheme.typography.h6,
-                    )
-                    Divider(
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                        color = MaterialTheme.colors.onSurface,
-                    )
                 }
 
-                items(
-                    items = bucket.achievements,
-                    contentType = { CONTENT_TYPE_ACHIEVEMENT },
-                ) {
-                    RomAchievementUi(
-                        modifier = Modifier.fillMaxWidth(),
-                        achievementModel = it,
-                        isInOfflineLedger = pendingLedgerAchievementIds.contains(it.actualAchievement().id),
-                        onViewAchievement = { onViewAchievement(it.actualAchievement()) },
-                        badgeSize = 52.dp,
-                    )
-                }
-            }
+                filteredBuckets.forEach { bucket ->
+                    item(contentType = CONTENT_TYPE_BUCKET_HEADER) {
+                        BucketLabel(getBucketTitle(bucket.bucket))
+                    }
 
-            if (showLeaderboards) {
-                item(contentType = CONTENT_TYPE_LEADERBOARD_HEADER) {
-                    Text(
-                        modifier = Modifier
-                            .padding(start = 16.dp, top = if (filteredBuckets.isEmpty()) 0.dp else 16.dp, end = 16.dp, bottom = 4.dp)
-                            .fillMaxWidth(),
-                        text = stringResource(R.string.retro_achievements_leaderboards),
-                        style = MaterialTheme.typography.h6,
-                    )
-                    Divider(
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                        color = MaterialTheme.colors.onSurface,
-                    )
+                    items(
+                        items = bucket.achievements,
+                        contentType = { CONTENT_TYPE_ACHIEVEMENT },
+                    ) { achievementModel ->
+                        val inLedger = pendingLedgerAchievementIds.contains(achievementModel.actualAchievement().id)
+                        WatermelonAchievementCard(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            achievementModel = achievementModel,
+                            isInOfflineLedger = inLedger,
+                            onClick = { onAchievementSelected(achievementModel, inLedger) },
+                            onFocused = onAchievementFocused,
+                        )
+                    }
                 }
 
-                items(
-                    items = selectedSet.leaderboards,
-                    key = { "leaderboard-${it.id}" },
-                    contentType = { CONTENT_TYPE_LEADERBOARD },
-                ) {
-                    LeaderboardUi(
-                        modifier = Modifier.fillMaxWidth(),
-                        leaderboard = it,
-                        onClick = { selectedLeaderboard = it },
-                    )
+                if (showLeaderboards) {
+                    item(contentType = CONTENT_TYPE_LEADERBOARD_HEADER) {
+                        BucketLabel(stringResource(R.string.retro_achievements_leaderboards))
+                    }
+
+                    items(
+                        items = selectedSet.leaderboards,
+                        key = { "leaderboard-${it.id}" },
+                        contentType = { CONTENT_TYPE_LEADERBOARD },
+                    ) {
+                        LeaderboardUi(
+                            modifier = Modifier.fillMaxWidth(),
+                            leaderboard = it,
+                            onClick = { selectedLeaderboard = it },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AchievementsHeader(
+    summary: me.magnum.melonds.ui.romdetails.model.RomAchievementsSummary,
+    typeFilter: AchievementTypeFilter,
+    availableTypeFilters: List<AchievementTypeFilter>,
+    onTypeFilterChanged: (AchievementTypeFilter) -> Unit,
+) {
+    val colors = watermelon
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 16.dp, top = 7.dp, bottom = 7.dp),
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = stringResource(R.string.achievements),
+                    color = colors.text,
+                    fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "${summary.completedAchievements}/${summary.totalAchievements} · ${summary.totalPoints} ${stringResource(R.string.points_abbreviated)}",
+                    color = colors.text3,
+                    fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                    fontSize = 9.5.sp,
+                    modifier = Modifier.padding(bottom = 1.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            ConsoleChipRow(
+                options = availableTypeFilters.sortedBy { it.displayOrder },
+                selected = typeFilter,
+                onSelected = onTypeFilterChanged,
+                label = { getTypeFilterLabelText(it) },
+                modifier = Modifier.widthIn(max = 360.dp),
+            )
+        }
+        androidx.compose.material.Divider(color = colors.line)
+    }
+}
+
+@Composable
+private fun BucketLabel(text: String) {
+    val colors = watermelon
+    Text(
+        text = text.uppercase(),
+        color = colors.text3,
+        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+        fontSize = 9.5.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.8.sp,
+        modifier = Modifier.fillMaxWidth().padding(start = 2.dp, top = 15.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun <T> ConsoleChipRow(
+    options: List<T>,
+    selected: T,
+    onSelected: (T) -> Unit,
+    label: @Composable (T) -> String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = watermelon
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        items(options) { option ->
+            val isSelected = option == selected
+            Text(
+                text = label(option),
+                color = if (isSelected) androidx.compose.ui.graphics.Color.White else colors.text3,
+                fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.4.sp,
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(if (isSelected) colors.red else colors.surface2)
+                    .clickable { onSelected(option) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MissableToggleChip(active: Boolean, onToggle: () -> Unit) {
+    val colors = watermelon
+    val gold = me.magnum.melonds.ui.theme.WatermelonColors.gold
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(13.dp))
+            .background(if (active) gold else colors.surface2)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Icon(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_status_warn),
+            contentDescription = null,
+            tint = if (active) androidx.compose.ui.graphics.Color.Black else gold,
+            modifier = Modifier.size(11.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = stringResource(R.string.retro_achievements_filter_missable),
+            color = if (active) androidx.compose.ui.graphics.Color.Black else colors.text3,
+            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.4.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun getTypeFilterLabelText(filter: AchievementTypeFilter): String = when (filter) {
+    AchievementTypeFilter.All -> stringResource(id = R.string.retro_achievements_filter_all)
+    AchievementTypeFilter.Core -> stringResource(id = R.string.retro_achievements_filter_core)
+    AchievementTypeFilter.Leaderboards -> stringResource(id = R.string.retro_achievements_leaderboards)
+    AchievementTypeFilter.Unofficial -> stringResource(id = R.string.retro_achievements_filter_unofficial)
+}
+
+@Composable
+private fun getStateFilterLabelText(filter: AchievementStateFilter): String = when (filter) {
+    AchievementStateFilter.All -> stringResource(id = R.string.retro_achievements_filter_all)
+    AchievementStateFilter.PendingSubmissions -> stringResource(id = R.string.retro_achievements_pending_unlocks)
+    AchievementStateFilter.ActiveChallenges -> stringResource(id = R.string.retro_achievements_active_challenges)
+    AchievementStateFilter.RecentlyUnlocked -> stringResource(id = R.string.retro_achievements_recently_unlokced)
+    AchievementStateFilter.Unsynced -> stringResource(id = R.string.retro_achievements_unsynced)
+    AchievementStateFilter.AlmostThere -> stringResource(id = R.string.retro_achievements_almost_there)
+    AchievementStateFilter.Locked -> stringResource(id = R.string.retro_achievements_locked)
+    AchievementStateFilter.Unsupported -> stringResource(id = R.string.retro_achievements_unsupported)
+    AchievementStateFilter.Unofficial -> stringResource(id = R.string.retro_achievements_unofficial)
+    AchievementStateFilter.Unlocked -> stringResource(id = R.string.retro_achievements_unlocked)
 }
 
 @Composable

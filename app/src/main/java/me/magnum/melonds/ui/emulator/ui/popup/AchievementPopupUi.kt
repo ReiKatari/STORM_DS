@@ -26,9 +26,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -67,27 +71,38 @@ fun AchievementPopupUi(
         popupState = PopupState.SHOW_DESCRIPTION
     }
 
-    Card(
+    val colors = me.magnum.melonds.ui.theme.DarkWatermelonColors
+    Box(
         modifier = modifier
             .padding(16.dp)
-            .shadow(8.dp, RoundedCornerShape(8.dp))
-            .widthIn(max = 400.dp),
-        shape = RoundedCornerShape(8.dp),
+            .shadow(12.dp, RoundedCornerShape(13.dp))
+            .widthIn(max = 400.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(colors.surface2)
+            .border(1.dp, colors.green.copy(alpha = 0.55f), RoundedCornerShape(13.dp)),
     ) {
         Row(
             modifier = Modifier.padding(8.dp).height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AsyncImage(
-                modifier = Modifier.size(40.dp),
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(achievement.badgeUrlUnlocked.toString())
-                    .crossfade(false)
-                    .build(),
-                placeholder = painterResource(id = R.drawable.ic_trophy),
-                error = painterResource(id = R.drawable.ic_trophy),
-                contentDescription = null,
-            )
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.greenDim)
+                    .border(1.dp, colors.green, RoundedCornerShape(10.dp)),
+            ) {
+                AsyncImage(
+                    modifier = Modifier.size(42.dp),
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(achievement.badgeUrlUnlocked.toString())
+                        .crossfade(false)
+                        .build(),
+                    placeholder = painterResource(id = R.drawable.ic_trophy),
+                    error = painterResource(id = R.drawable.ic_trophy),
+                    contentDescription = null,
+                )
+            }
 
             AnimatedContent(
                 modifier = Modifier.fillMaxHeight(),
@@ -106,25 +121,44 @@ fun AchievementPopupUi(
                         Box(Modifier.fillMaxHeight())
                     }
                     PopupState.SHOW_TITLE -> {
-                        Column(Modifier.padding(start = 8.dp)) {
+                        Column(Modifier.padding(start = 10.dp, end = 6.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
                             Text(
-                                text = stringResource(id = R.string.achievement_unlocked),
-                                style = MaterialTheme.typography.body2,
-                                fontWeight = FontWeight.Bold,
+                                text = stringResource(id = R.string.achievement_unlocked).uppercase(),
+                                color = colors.green,
+                                fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp,
                                 maxLines = 1,
                             )
-                            Text(
-                                text = achievement.getCleanTitle(),
-                                style = MaterialTheme.typography.body2,
-                                maxLines = 1,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = achievement.getCleanTitle(),
+                                    color = colors.text,
+                                    fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                Text(
+                                    text = "+${achievement.points}",
+                                    color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
+                                    fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
                         }
                     }
                     PopupState.SHOW_DESCRIPTION -> {
                         Text(
-                            modifier = Modifier.padding(start = 8.dp),
+                            modifier = Modifier.padding(start = 10.dp, end = 6.dp),
                             text = achievement.description,
-                            style = MaterialTheme.typography.body2,
+                            color = colors.text2,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
                         )
                     }
                 }

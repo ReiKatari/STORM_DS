@@ -64,6 +64,12 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
             DEFAULT_FRAG_SHADER
         )
 
+        val RetroArchPassthroughShader = ShaderProgramSource(
+            TextureFiltering.LINEAR,
+            DEFAULT_VERT_SHADER,
+            DEFAULT_FRAG_SHADER
+        )
+
         // Author: Gigaherz
         // License: Public domain
         val LcdShader = ShaderProgramSource(

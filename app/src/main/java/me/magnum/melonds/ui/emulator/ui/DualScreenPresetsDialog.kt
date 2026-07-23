@@ -4,7 +4,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import me.magnum.melonds.ui.theme.SpaceGrotesk
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -13,7 +28,9 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.Button
-import androidx.compose.material.Card
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Surface
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.RadioButton
 import androidx.compose.material.Switch
@@ -78,8 +95,66 @@ fun DualScreenPresetsDialog(
     var internalVerticalAlignmentState by remember(internalVerticalAlignmentOverride) { mutableStateOf(internalVerticalAlignmentOverride) }
     var externalVerticalAlignmentState by remember(externalVerticalAlignmentOverride) { mutableStateOf(externalVerticalAlignmentOverride) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        (LocalView.current.parent as DialogWindowProvider).window.setDimAmount(0.8f)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        (LocalView.current.parent as DialogWindowProvider).window.setDimAmount(0.88f)
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xE008070A))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                ) { onDismiss() },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .systemBarsPadding()
+                .widthIn(max = 640.dp)
+                .fillMaxWidth(),
+        ) {
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp),
+        ) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.material.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = stringResource(R.string.dual_screen_presets),
+                color = Color.White,
+                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.09f)))
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                ) { },
+        ) {
         DualScreenPresetsContent(
             dualScreenPreset = dualScreenPreset,
             onDualScreenPresetSelected = onDualScreenPresetSelected,
@@ -101,6 +176,9 @@ fun DualScreenPresetsDialog(
                 showVerticalAlignmentDialog = true
             },
         )
+        }
+        }
+        }
     }
 
     if (showFillAreaDialog) {
@@ -166,25 +244,22 @@ private fun DualScreenPresetsContent(
     externalVerticalAlignmentOverride: ScreenAlignment?,
     onVerticalAlignmentOptionsClick: () -> Unit,
 ) {
-    Card {
+    androidx.compose.foundation.layout.Box {
         var selectedPreset by remember(dualScreenPreset) { mutableStateOf(dualScreenPreset) }
         var keepAspect by remember(keepAspectRatio) { mutableStateOf(keepAspectRatio) }
         var integerScale by remember(isDualScreenIntegerScaleEnabled) { mutableStateOf(isDualScreenIntegerScaleEnabled) }
 
-        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
-            Text(
-                modifier = Modifier.padding(horizontal = 24.dp),
-                text = stringResource(R.string.presets),
-                style = MaterialTheme.typography.h6,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                modifier = Modifier.padding(horizontal = 24.dp),
-                text = stringResource(R.string.dual_screen_presets),
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(8.dp))
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
+            val presetSelected = selectedPreset != DualScreenPreset.OFF
+            if (!presetSelected) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    text = stringResource(R.string.dual_screen_presets_disabled_hint),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             val presetOptions = listOf(
                 DualScreenPreset.OFF,
                 DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM,
@@ -229,10 +304,15 @@ private fun DualScreenPresetsContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .toggleable(value = keepAspect, onValueChange = {
-                        keepAspect = it
-                        onKeepAspectRatioChanged(it)
-                    }),
+                    .alpha(if (presetSelected) 1f else 0.5f)
+                    .toggleable(
+                        value = keepAspect,
+                        enabled = presetSelected,
+                        onValueChange = {
+                            keepAspect = it
+                            onKeepAspectRatioChanged(it)
+                        }
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -242,16 +322,16 @@ private fun DualScreenPresetsContent(
                         .padding(vertical = 8.dp),
                     text = stringResource(R.string.keep_ds_ratio),
                 )
-                Switch(checked = keepAspect, onCheckedChange = null)
+                Switch(checked = keepAspect, onCheckedChange = null, enabled = presetSelected)
             }
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .alpha(if (selectedPreset == DualScreenPreset.OFF) 0.5f else 1f)
+                    .alpha(if (presetSelected) 1f else 0.5f)
                     .toggleable(
                         value = integerScale,
-                        enabled = selectedPreset != DualScreenPreset.OFF,
+                        enabled = presetSelected,
                         onValueChange = {
                             integerScale = it
                             onDualScreenIntegerScaleChanged(it)
@@ -271,11 +351,11 @@ private fun DualScreenPresetsContent(
                 Switch(
                     checked = integerScale,
                     onCheckedChange = null,
-                    enabled = selectedPreset != DualScreenPreset.OFF,
+                    enabled = presetSelected,
                 )
             }
             Spacer(Modifier.height(16.dp))
-            val fillAreaEnabled = selectedPreset != DualScreenPreset.OFF && (integerScale || keepAspect)
+            val fillAreaEnabled = presetSelected && (integerScale || keepAspect)
             Button(
                 modifier = Modifier
                     .padding(horizontal = 24.dp)
@@ -321,7 +401,7 @@ private fun DualScreenFillAreaDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         (LocalView.current.parent as DialogWindowProvider).window.setDimAmount(0.8f)
-        Card(modifier = Modifier.widthIn(min = DualScreenDialogMinWidth)) {
+        Surface(shape = RoundedCornerShape(17.dp), color = me.magnum.melonds.ui.theme.watermelon.surface, border = BorderStroke(1.dp, me.magnum.melonds.ui.theme.watermelon.line), modifier = Modifier.widthIn(min = DualScreenDialogMinWidth)) {
             var internalHeight by rememberSaveable { mutableStateOf(internalFillHeight) }
             var internalWidth by rememberSaveable { mutableStateOf(internalFillWidth) }
             var externalHeight by rememberSaveable { mutableStateOf(externalFillHeight) }
@@ -502,7 +582,7 @@ private fun DualScreenVerticalAlignmentDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         (LocalView.current.parent as DialogWindowProvider).window.setDimAmount(0.8f)
-        Card {
+        Surface(shape = RoundedCornerShape(17.dp), color = me.magnum.melonds.ui.theme.watermelon.surface, border = BorderStroke(1.dp, me.magnum.melonds.ui.theme.watermelon.line)) {
             var internalSelection by remember(preset, internalAlignment) {
                 mutableStateOf(internalAlignment ?: preset.defaultInternalAlignment())
             }

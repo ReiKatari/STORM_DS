@@ -5,11 +5,49 @@
         <item name="colorAccent">@color/colorAccent</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorOnSecondary">@color/colorOnSecondary</item>
+        <item name="android:colorBackground">@color/colorBackground</item>
+        <item name="android:windowBackground">@color/colorBackground</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@color/colorBackground</item>
+        <item name="android:windowLightStatusBar">@bool/lightNavigationBar</item>
         <item name="android:windowLightNavigationBar">@bool/lightNavigationBar</item>
         <item name="toolbarNavigationButtonStyle">@style/Toolbar.Button.Navigation</item>
         <item name="actionOverflowMenuStyle">@style/Menu.OverflowUnder</item>
         <item name="preferenceTheme">@style/Preference</item>
+        <item name="alertDialogTheme">@style/WatermelonAlertDialog</item>
+        <item name="android:alertDialogTheme">@style/WatermelonAlertDialog</item>
+    </style>
+
+    <style name="WatermelonAlertDialog" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_watermelon_dialog</item>
+        <item name="colorAccent">@color/melonMain</item>
+        <item name="android:textColorPrimary">@color/textColorPrimary</item>
+        <item name="android:textColorSecondary">@color/textColorSecondary</item>
+        <item name="android:windowTitleStyle">@style/WatermelonAlertDialog.Title</item>
+        <item name="buttonBarPositiveButtonStyle">@style/WatermelonAlertDialog.Button</item>
+        <item name="buttonBarNegativeButtonStyle">@style/WatermelonAlertDialog.Button</item>
+        <item name="buttonBarNeutralButtonStyle">@style/WatermelonAlertDialog.Button</item>
+        <item name="alertDialogStyle">@style/WatermelonAlertDialog.Layout</item>
+        <item name="android:listChoiceBackgroundIndicator">@drawable/bg_watermelon_dialog_selection</item>
+        <item name="android:listSelector">@drawable/bg_watermelon_dialog_selection</item>
+    </style>
+
+    <style name="WatermelonAlertDialog.Layout" parent="AlertDialog.AppCompat">
+        <item name="singleChoiceItemLayout">@layout/watermelon_dialog_single_choice</item>
+        <item name="listItemLayout">@layout/watermelon_dialog_list_item</item>
+    </style>
+
+    <style name="WatermelonAlertDialog.Title" parent="Base.DialogWindowTitle.AppCompat">
+        <item name="android:fontFamily">@font/space_grotesk</item>
+        <item name="android:textFontWeight">700</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/textColorPrimary</item>
+    </style>
+
+    <style name="WatermelonAlertDialog.Button" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/melonMain</item>
+        <item name="android:fontFamily">@font/manrope</item>
+        <item name="android:textFontWeight">700</item>
     </style>
 
     <style name="SplashTheme" parent="Theme.SplashScreen">
@@ -29,6 +67,8 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <item name="alertDialogTheme">@style/WatermelonAlertDialog</item>
+        <item name="android:alertDialogTheme">@style/WatermelonAlertDialog</item>
     </style>
 
     <style name="MaterialDialog" parent="Theme.MaterialComponents.DayNight.Dialog">
@@ -36,23 +76,27 @@
         <item name="colorAccent">@color/colorAccent</item>
         <item name="android:colorBackground">@color/colorBackground</item>
         <item name="colorSurface">@color/colorSurface</item>
+        <item name="android:windowBackground">@drawable/bg_watermelon_dialog</item>
+        <item name="android:windowTitleStyle">@style/WatermelonAlertDialog.Title</item>
     </style>
 
     <style name="Toolbar">
-        <item name="android:background">@color/colorPrimary</item>
-        <item name="android:elevation">4dp</item>
-        <item name="android:theme">@style/ThemeOverlay.AppCompat.Dark.ActionBar</item>
+        <item name="android:background">@color/toolbarBackground</item>
+        <item name="android:elevation">0dp</item>
         <item name="popupTheme">@style/ThemeOverlay.AppCompat.DayNight</item>
         <item name="titleTextAppearance">@style/Toolbar.TitleText</item>
     </style>
 
     <style name="Toolbar.Button.Navigation" parent="Widget.AppCompat.Toolbar.Button.Navigation">
-        <item name="tint">@color/colorOnPrimary</item>
+        <item name="tint">@color/textColorPrimary</item>
     </style>
 
     <style name="Toolbar.TitleText" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">19sp</item>
         <item name="lineHeight">24sp</item>
+        <item name="android:fontFamily">@font/space_grotesk</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:textColor">@color/textColorPrimary</item>
     </style>
 
     <style name="FullscreenDialog">
@@ -66,6 +110,52 @@
 
     <style name="Preference" parent="@style/PreferenceThemeOverlay">
         <item name="android:tint">@color/buttonContrasted</item>
+        <item name="preferenceStyle">@style/Watermelon.Preference</item>
+        <item name="preferenceCategoryStyle">@style/Watermelon.Preference.Category</item>
+        <item name="switchPreferenceCompatStyle">@style/Watermelon.Preference.Switch</item>
+        <item name="switchPreferenceStyle">@style/Watermelon.Preference.SwitchLegacy</item>
+        <item name="checkBoxPreferenceStyle">@style/Watermelon.Preference.CheckBox</item>
+        <item name="dropdownPreferenceStyle">@style/Watermelon.Preference.DropDown</item>
+        <item name="editTextPreferenceStyle">@style/Watermelon.Preference.EditText</item>
+        <item name="dialogPreferenceStyle">@style/Watermelon.Preference.Dialog</item>
+        <item name="seekBarPreferenceStyle">@style/Watermelon.Preference.SeekBar</item>
+    </style>
+
+    <style name="Watermelon.Preference" parent="@style/Preference.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.Category" parent="@style/Preference.Category.Material">
+        <item name="android:layout">@layout/watermelon_preference_category</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="Watermelon.Preference.Switch" parent="@style/Preference.SwitchPreferenceCompat.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.SwitchLegacy" parent="@style/Preference.SwitchPreference.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.CheckBox" parent="@style/Preference.CheckBoxPreference.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.DropDown" parent="@style/Preference.DropDown.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.EditText" parent="@style/Preference.DialogPreference.EditTextPreference.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.Dialog" parent="@style/Preference.DialogPreference.Material">
+        <item name="android:layout">@layout/watermelon_preference</item>
+    </style>
+
+    <style name="Watermelon.Preference.SeekBar" parent="@style/Preference.SeekBarPreference.Material">
+        <item name="android:layout">@layout/watermelon_preference_seekbar</item>
     </style>
 
     <style name="Button.Ripple" parent="android:Widget.ImageButton">
@@ -80,6 +170,17 @@
 
     <style name="Button.Editor" parent="Widget.AppCompat.Button.Borderless">
         <item name="android:textColor">@color/textLayoutEditor</item>
+        <item name="android:background">@drawable/bg_watermelon_editor_chip</item>
+        <item name="android:paddingLeft">14dp</item>
+        <item name="android:paddingRight">14dp</item>
+        <item name="android:layout_marginLeft">3dp</item>
+        <item name="android:layout_marginRight">3dp</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:layout_marginBottom">2dp</item>
+        <item name="android:minHeight">40dp</item>
+        <item name="android:height">40dp</item>
+        <item name="android:fontFamily">@font/manrope</item>
+        <item name="android:textFontWeight">600</item>
     </style>
 
     <style name="Menu.OverflowUnder" parent="Widget.AppCompat.PopupMenu.Overflow">

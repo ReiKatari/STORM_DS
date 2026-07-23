@@ -124,14 +124,45 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     fun handleKeyDown(event: KeyEvent): Boolean {
         val currentlySelectedView = selectedView ?: return false
 
+        val stepX = (width / 100f).coerceAtLeast(3f)
+        val stepY = (height / 100f).coerceAtLeast(3f)
         when (event.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> dragView(currentlySelectedView, 0f, -1f)
-            KeyEvent.KEYCODE_DPAD_DOWN -> dragView(currentlySelectedView, 0f, 1f)
-            KeyEvent.KEYCODE_DPAD_LEFT -> dragView(currentlySelectedView, -1f, 0f)
-            KeyEvent.KEYCODE_DPAD_RIGHT -> dragView(currentlySelectedView, 1f, 0f)
+            KeyEvent.KEYCODE_DPAD_UP -> dragView(currentlySelectedView, 0f, -stepY)
+            KeyEvent.KEYCODE_DPAD_DOWN -> dragView(currentlySelectedView, 0f, stepY)
+            KeyEvent.KEYCODE_DPAD_LEFT -> dragView(currentlySelectedView, -stepX, 0f)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> dragView(currentlySelectedView, stepX, 0f)
             else -> return false
         }
 
+        return true
+    }
+
+    fun hasSelectedComponent(): Boolean = selectedView != null
+
+    fun deselectComponent() {
+        deselectCurrentView()
+    }
+
+    fun cycleSelectedComponent(forward: Boolean): Boolean {
+        val ordered = views.values.toList()
+        if (ordered.isEmpty()) {
+            return false
+        }
+
+        val currentIndex = selectedView?.let { ordered.indexOf(it) } ?: -1
+        val nextIndex = when {
+            currentIndex < 0 -> if (forward) 0 else ordered.lastIndex
+            else -> ((currentIndex + if (forward) 1 else -1) + ordered.size) % ordered.size
+        }
+        val next = ordered[nextIndex]
+
+        selectedView?.takeIf { it != next }?.let {
+            it.view.alpha = 0.5f
+            it.setHighlighted(false)
+        }
+        selectView(next)
+        next.view.alpha = 1f
+        next.setHighlighted(true)
         return true
     }
 

@@ -117,8 +117,8 @@ class LayoutEditorManagerView(
 
     init {
         val layoutInflater = LayoutInflater.from(context)
-        isFocusable = true
-        isFocusableInTouchMode = true
+        isFocusable = false
+        isFocusableInTouchMode = false
         binding = ViewLayoutEditorManagerBinding.inflate(layoutInflater)
         val composeView = ComposeView(context).apply {
             setContent {
@@ -430,11 +430,122 @@ class LayoutEditorManagerView(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        return if (binding.viewLayoutEditor.handleKeyDown(event)) {
+        return if (handleControllerKeyDown(event)) {
             true
         } else {
             super.onKeyDown(keyCode, event)
         }
+    }
+
+    fun handleControllerKeyDown(event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN) {
+            return false
+        }
+        if (isEditDialogShown()) {
+            return false
+        }
+
+        val editor = binding.viewLayoutEditor
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_BUTTON_R1 -> return editor.cycleSelectedComponent(true)
+            KeyEvent.KEYCODE_BUTTON_L1 -> return editor.cycleSelectedComponent(false)
+            KeyEvent.KEYCODE_BUTTON_R2 -> {
+                adjustSelectedComponentSize(increase = true)
+                return true
+            }
+            KeyEvent.KEYCODE_BUTTON_L2 -> {
+                adjustSelectedComponentSize(increase = false)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (editor.hasSelectedComponent()) {
+                    editor.handleKeyDown(event)
+                } else {
+                    editor.cycleSelectedComponent(true)
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (editor.hasSelectedComponent()) {
+                    showComponentActionsMenu()
+                } else {
+                    openButtonsMenu()
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_BUTTON_B -> {
+                if (editor.hasSelectedComponent()) {
+                    editor.deselectComponent()
+                } else {
+                    handleBackNavigation()
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_MENU -> {
+                openMenu()
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun adjustSelectedComponentSize(increase: Boolean) {
+        val editor = binding.viewLayoutEditor
+        if (!editor.hasSelectedComponent() || !areScalingControlsShown) {
+            return
+        }
+
+        val dir = if (increase) 1 else -1
+        val widthStep = (binding.seekBarWidth.max / 40).coerceAtLeast(1)
+        updatingScalingControls = true
+        try {
+            binding.seekBarWidth.progress = (binding.seekBarWidth.progress + dir * widthStep).coerceIn(0, binding.seekBarWidth.max)
+            currentWidthScale = binding.seekBarWidth.progress / binding.seekBarWidth.max.toFloat()
+            binding.textWidth.text = (binding.seekBarWidth.max * currentWidthScale + selectedViewMinSize).toInt().toString()
+
+            if (selectedViewIsScreen && selectedAspectRatio.ratio != null) {
+                enforceAspectRatio(selectedAspectRatio, WIDTH)
+            } else {
+                val heightStep = (binding.seekBarHeight.max / 40).coerceAtLeast(1)
+                binding.seekBarHeight.progress = (binding.seekBarHeight.progress + dir * heightStep).coerceIn(0, binding.seekBarHeight.max)
+                currentHeightScale = binding.seekBarHeight.progress / binding.seekBarHeight.max.toFloat()
+                binding.textHeight.text = (binding.seekBarHeight.max * currentHeightScale + selectedViewMinSize).toInt().toString()
+            }
+        } finally {
+            updatingScalingControls = false
+        }
+
+        binding.viewLayoutEditor.scaleSelectedView(currentWidthScale, currentHeightScale)
+    }
+
+    private fun showComponentActionsMenu() {
+        val editor = binding.viewLayoutEditor
+        if (!editor.hasSelectedComponent()) {
+            return
+        }
+
+        val actionLabels = listOf(
+            R.string.label_position,
+            R.string.label_size,
+            R.string.center_horizontal,
+            R.string.center_vertical,
+            R.string.delete,
+        )
+        val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
+        AlertDialog.Builder(themedContext)
+            .setTitle(R.string.edit)
+            .setItems(actionLabels.map { resources.getString(it) }.toTypedArray()) { _, which ->
+                when (actionLabels[which]) {
+                    R.string.label_position -> openSelectedViewPositionDialog()
+                    R.string.label_size -> openSelectedViewSizeDialog()
+                    R.string.center_horizontal -> editor.centerSelectedViewHorizontally()
+                    R.string.center_vertical -> editor.centerSelectedViewVertically()
+                    R.string.delete -> editor.deleteSelectedView()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .showInCurrentWindow()
     }
 
     fun handleBackNavigation() {
