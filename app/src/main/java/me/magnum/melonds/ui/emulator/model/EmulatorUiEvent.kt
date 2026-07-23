@@ -9,7 +9,11 @@ import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
 
 sealed class EmulatorUiEvent {
     sealed class OpenScreen : EmulatorUiEvent() {
-        data class SettingsScreen(val romSettingsOverrides: InGameRomSettingsOverrides = InGameRomSettingsOverrides()) : OpenScreen()
+        data class SettingsScreen(
+            val romSettingsOverrides: InGameRomSettingsOverrides = InGameRomSettingsOverrides(),
+            val retroAchievementsRuntimeIdentityLocked: Boolean = false,
+            val retroAchievementsInGameLogoutSupported: Boolean = false,
+        ) : OpenScreen()
         data class CheatsScreen(val romInfo: RomInfo) : OpenScreen()
     }
     data class ShowPauseMenu(val pauseMenu: PauseMenu) : EmulatorUiEvent()
@@ -35,9 +39,12 @@ sealed class EmulatorUiEvent {
         val pendingUnlockCount: Int,
         val ledgerExpiresInMs: Long?,
     ) : EmulatorUiEvent()
-    data class ShowHardcorePendingExitWarning(
-        val pendingHardcoreCount: Int,
-    ) : EmulatorUiEvent()
     data class ShowOfflineAchievementsSyncProgress(val totalUnlockCount: Int) : EmulatorUiEvent()
     data object HideOfflineAchievementsSyncProgress : EmulatorUiEvent()
+}
+
+enum class RaPendingSyncResultAction {
+    REOPEN_PAUSE_MENU,
+    RESUME_SESSION,
+    REOPEN_TERMINAL_EXIT,
 }

@@ -32,6 +32,7 @@
 #include "net/Net.h"
 #include "net/Net_Slirp.h"
 #include <fstream>
+#include <mutex>
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
 #define MELONDS_ANDROID_DEBUG_BUILD 0
@@ -365,6 +366,19 @@ namespace MelonDSAndroid
     std::shared_ptr<Net> net;
 
     std::shared_ptr<MelonInstance> instance;
+    std::mutex instanceLifetimeMutex;
+
+    std::shared_ptr<MelonInstance> GetInstanceSnapshot()
+    {
+        std::lock_guard lock(instanceLifetimeMutex);
+        return instance;
+    }
+
+    void ReplaceInstance(std::shared_ptr<MelonInstance> replacement)
+    {
+        std::lock_guard lock(instanceLifetimeMutex);
+        instance = std::move(replacement);
+    }
 
     bool ensureOpenGlContext()
     {
@@ -416,13 +430,13 @@ namespace MelonDSAndroid
         if (!instanceArgs.has_value())
         {
             // TODO: Handle this somehow?
-            instance = nullptr;
+            ReplaceInstance(nullptr);
             return;
         }
 
         auto args = std::move(instanceArgs.value());
         LogEffectiveJitConfiguration(*currentConfiguration, *args);
-        instance = std::make_shared<MelonInstance>(
+        auto newInstance = std::make_shared<MelonInstance>(
             instanceId,
             currentConfiguration,
             std::move(args),
@@ -430,9 +444,10 @@ namespace MelonDSAndroid
             std::make_unique<ScreenshotRenderer>(screenshotBufferPointer),
             currentConfiguration->consoleType
         );
+        ReplaceInstance(newInstance);
 
         setupAudio(currentConfiguration->audioSettings);
-        setAudioActiveInstance(instance);
+        setAudioActiveInstance(newInstance);
     }
 
     void setCodeList(std::list<Cheat> cheats)
@@ -449,7 +464,8 @@ namespace MelonDSAndroid
         std::optional<RetroAchievements::RARuntimeBridgeConfig> runtimeBridgeConfig
     )
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
         {
             melonDS::Platform::Log(
                 melonDS::Platform::LogLevel::Warn,
@@ -457,7 +473,7 @@ namespace MelonDSAndroid
             );
             return false;
         }
-        return instance->setupAchievements(
+        return currentInstance->setupAchievements(
             std::move(achievements),
             std::move(leaderboards),
             std::move(richPresenceScript),
@@ -467,37 +483,87 @@ namespace MelonDSAndroid
 
     void unloadRetroAchievementsData()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return;
-        instance->unloadRetroAchievementsData();
+        currentInstance->unloadRetroAchievementsData();
     }
 
     std::string getRichPresenceStatus()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return "";
-        return instance->getRichPresenceStatus();
+        return currentInstance->getRichPresenceStatus();
     }
 
     std::vector<RetroAchievements::RARuntimeAchievement> getRuntimeAchievements()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return { };
-        return instance->getRuntimeAchievements();
+        return currentInstance->getRuntimeAchievements();
     }
 
     std::vector<RetroAchievements::RARuntimeAchievementBucketEntry> getRuntimeAchievementBuckets()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return { };
-        return instance->getRuntimeAchievementBuckets();
+        return currentInstance->getRuntimeAchievementBuckets();
     }
 
     std::vector<long> getRuntimeSubsetIds()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return { };
-        return instance->getRuntimeSubsetIds();
+        return currentInstance->getRuntimeSubsetIds();
+    }
+
+    RetroAchievements::RANativePendingRetryResult retryPendingRetroAchievementsSubmissions(
+        const std::vector<uint64_t>& expectedSubmissionIds)
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
+        {
+            RetroAchievements::RANativePendingRetryResult result;
+            result.transportFailure = true;
+            return result;
+        }
+        return currentInstance->retryPendingRetroAchievementsSubmissions(
+            expectedSubmissionIds
+        );
+    }
+
+    uint64_t refreshPendingRetroAchievementsSubmissions()
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
+            return 0;
+        return currentInstance->refreshPendingRetroAchievementsSubmissions();
+    }
+
+    int32_t discardPendingRetroAchievementsSubmissions(
+        const std::vector<uint64_t>& expectedSubmissionIds)
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
+            return -1;
+        return currentInstance->discardPendingRetroAchievementsSubmissions(
+            expectedSubmissionIds
+        );
+    }
+
+    void setRetroAchievementsSubmissionTransportSuspended(bool suspended)
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (currentInstance)
+        {
+            currentInstance->setRetroAchievementsSubmissionTransportSuspended(
+                suspended
+            );
+        }
     }
 
     Renderer getCurrentRenderer()
@@ -1424,7 +1490,7 @@ namespace MelonDSAndroid
     {
         cleanupAudio();
 
-        instance = nullptr;
+        ReplaceInstance(nullptr);
         eventMessenger = nullptr;
     }
 

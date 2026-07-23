@@ -8,6 +8,7 @@
 #include "rc_consoles.h"
 #include "types.h"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
@@ -19,6 +20,7 @@
 #include <sstream>
 #include <thread>
 #include <ctime>
+#include <unordered_set>
 #include <vector>
 
 using namespace melonDS;
@@ -59,7 +61,24 @@ constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "melonDualDS-android/unknow
 constexpr int RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr int RC_CLIENT_HTTP_READ_TIMEOUT_MS = 15000;
 constexpr size_t RC_CLIENT_MAX_LOGGED_VALUE_LENGTH = 200;
-constexpr size_t RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH = 500;
+
+uint64_t AllocatePendingSubmissionId()
+{
+    static std::atomic<uint64_t> nextId{1};
+    uint64_t id = nextId.fetch_add(1, std::memory_order_relaxed);
+    while (id == 0)
+        id = nextId.fetch_add(1, std::memory_order_relaxed);
+    return id;
+}
+
+uint64_t AllocatePendingSubmissionSequence()
+{
+    static std::atomic<uint64_t> nextSequence{1};
+    uint64_t sequence = nextSequence.fetch_add(1, std::memory_order_relaxed);
+    while (sequence == 0)
+        sequence = nextSequence.fetch_add(1, std::memory_order_relaxed);
+    return sequence;
+}
 
 bool AreLeaderboardDiagnosticsEnabled()
 {
@@ -170,7 +189,7 @@ std::string DecodeRcClientFormComponent(const char* value, size_t length)
 
 bool IsSensitiveRcClientParameter(const std::string& key)
 {
-    return key == "p" || key == "t" || key == "u" || key == "v";
+    return key == "m" || key == "p" || key == "t" || key == "u" || key == "v" || key == "x";
 }
 
 std::string SanitizeRcClientParameterValue(const std::string& key, const std::string& value)
@@ -256,34 +275,11 @@ std::string BuildRcClientSanitizedParameters(const rc_api_request_t* request)
 
 std::string BuildRcClientLoggedResponseSample(const std::string& requestAction, const std::string& responseBody)
 {
+    (void) requestAction;
     if (responseBody.empty())
         return "<empty>";
 
-    if (requestAction == "login" || requestAction == "login2")
-        return "<redacted-login-response>";
-    if (requestAction == "submitlbentry")
-        return "<redacted-leaderboard-response>";
-
-    std::string sanitized;
-    sanitized.reserve(std::min(responseBody.size(), RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH));
-    for (char character : responseBody)
-    {
-        switch (character)
-        {
-            case '\r': sanitized += "\\r"; break;
-            case '\n': sanitized += "\\n"; break;
-            case '\t': sanitized += "\\t"; break;
-            default: sanitized.push_back(character); break;
-        }
-
-        if (sanitized.size() >= RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH)
-            break;
-    }
-
-    if (responseBody.size() > RC_CLIENT_MAX_LOGGED_RESPONSE_LENGTH)
-        sanitized += "...(truncated)";
-
-    return sanitized;
+    return "<redacted-response>";
 }
 
 std::string BuildRcClientSafeUrl(const char* url)
@@ -610,9 +606,6 @@ void LogRcClientBootstrapFailure(const char* stage, int attempt, const RcClientW
         builder << " (timeout)";
     else
         builder << " (result=" << waitResult.result << ")";
-
-    if (!waitResult.errorMessage.empty())
-        builder << ": " << waitResult.errorMessage;
 
     builder << "\n";
     melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "%s", builder.str().c_str());
@@ -1096,6 +1089,7 @@ void RetroAchievementsManager::SetJavaVm(JavaVM* javaVm)
 void RetroAchievementsManager::ConfigureRuntimeBridge(std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig)
 {
     std::unique_lock lock(runtimeLock);
+    submissionTransportSuspended.store(false, std::memory_order_release);
     this->runtimeBridgeConfig = std::move(runtimeBridgeConfig);
 }
 
@@ -1448,6 +1442,454 @@ void RetroAchievementsManager::FrameUpdate()
     }
 }
 
+RANativePendingRetryResult RetroAchievementsManager::RetryPendingSubmissions(
+    const std::vector<uint64_t>& expectedSubmissionIds)
+{
+    std::unique_lock lock(runtimeLock);
+    RANativePendingRetryResult result;
+    if (
+        runtimeMode != RuntimeMode::RcClientOnline ||
+        !IsRcClientRuntimeActiveLocked() ||
+        !runtimeBridgeConfig.has_value() ||
+        runtimeBridgeConfig->submissionSessionId == 0
+    )
+    {
+        result.transportFailure = true;
+        return result;
+    }
+
+    result.submissionSessionId = runtimeBridgeConfig->submissionSessionId;
+
+    struct RetryPlanEntry
+    {
+        uint64_t submissionId;
+        RANativePendingSubmissionType submissionType;
+        uintptr_t callbackDataToken;
+        bool isTerminal;
+    };
+
+    std::vector<RetryPlanEntry> retryPlan;
+    retryPlan.reserve(expectedSubmissionIds.size());
+    std::unordered_set<uint64_t> seenSubmissionIds;
+
+    for (const uint64_t submissionId : expectedSubmissionIds)
+    {
+        if (submissionId == 0 || !seenSubmissionIds.insert(submissionId).second)
+        {
+            result.transportFailure = true;
+            break;
+        }
+
+        const auto terminal = terminalPendingSubmissionsById.find(submissionId);
+        if (terminal != terminalPendingSubmissionsById.end())
+        {
+            const PendingSubmissionState& submission = terminal->second;
+            if (
+                !submission.published ||
+                submission.submissionSessionId != result.submissionSessionId ||
+                !submission.terminalResolution.has_value() ||
+                !submission.terminalResult.has_value()
+            )
+            {
+                result.transportFailure = true;
+                break;
+            }
+
+            retryPlan.push_back({
+                .submissionId = submission.submissionId,
+                .submissionType = submission.type,
+                .callbackDataToken = 0,
+                .isTerminal = true,
+            });
+            continue;
+        }
+
+        const auto pending = std::find_if(
+            pendingSubmissionsByCallbackData.begin(),
+            pendingSubmissionsByCallbackData.end(),
+            [submissionId](const auto& entry) {
+                return entry.second.submissionId == submissionId;
+            }
+        );
+        if (
+            pending == pendingSubmissionsByCallbackData.end() ||
+            !pending->second.published ||
+            pending->second.status != PendingSubmissionStatus::RetryPending ||
+            pending->second.submissionSessionId != result.submissionSessionId ||
+            pending->second.callbackDataToken == 0 ||
+            !rc_client_is_submission_retry_pending_token(
+                rcClientRuntime,
+                pending->second.callbackDataToken
+            )
+        )
+        {
+            result.transportFailure = true;
+            break;
+        }
+
+        retryPlan.push_back({
+            .submissionId = submissionId,
+            .submissionType = pending->second.type,
+            .callbackDataToken = pending->second.callbackDataToken,
+            .isTerminal = false,
+        });
+    }
+
+    if (result.transportFailure)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RAPending] event_type=ra_native_retry_cycle submission_session_id=%llu forced=0 resolutions=0 transport_failure=1 runtime_path=%s\n",
+            static_cast<unsigned long long>(result.submissionSessionId),
+            RuntimePathTraceValue()
+        );
+        return result;
+    }
+
+    const auto appendTerminalResolution = [&](uint64_t submissionId) {
+        const auto terminal = terminalPendingSubmissionsById.find(submissionId);
+        if (terminal == terminalPendingSubmissionsById.end())
+            return false;
+
+        const PendingSubmissionState& submission = terminal->second;
+        if (
+            submission.submissionSessionId != result.submissionSessionId ||
+            !submission.terminalResolution.has_value() ||
+            !submission.terminalResult.has_value()
+        )
+        {
+            return false;
+        }
+
+        result.resolutions.push_back({
+            .submissionId = submission.submissionId,
+            .submissionType = submission.type,
+            .resolution = *submission.terminalResolution,
+            .result = *submission.terminalResult,
+        });
+        return true;
+    };
+
+    for (const RetryPlanEntry& entry : retryPlan)
+    {
+        if (entry.isTerminal)
+        {
+            if (!appendTerminalResolution(entry.submissionId))
+            {
+                result.resolutions.push_back({
+                    .submissionId = entry.submissionId,
+                    .submissionType = entry.submissionType,
+                    .resolution = RANativePendingSubmissionResolution::RetryableFailure,
+                    .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
+                });
+            }
+            continue;
+        }
+
+        if (!rc_client_retry_pending_submission(rcClientRuntime, entry.callbackDataToken))
+        {
+            result.resolutions.push_back({
+                .submissionId = entry.submissionId,
+                .submissionType = entry.submissionType,
+                .resolution = RANativePendingSubmissionResolution::RetryableFailure,
+                .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
+            });
+            continue;
+        }
+        result.forcedRetryCount++;
+
+        if (appendTerminalResolution(entry.submissionId))
+            continue;
+
+        const auto pending = pendingSubmissionsByCallbackData.find(entry.callbackDataToken);
+        if (
+            pending != pendingSubmissionsByCallbackData.end() &&
+            pending->second.submissionId == entry.submissionId &&
+            pending->second.status == PendingSubmissionStatus::RetryPending &&
+            pending->second.submissionSessionId == result.submissionSessionId
+        )
+        {
+            result.resolutions.push_back({
+                .submissionId = entry.submissionId,
+                .submissionType = entry.submissionType,
+                .resolution = RANativePendingSubmissionResolution::RetryableFailure,
+                .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
+            });
+        }
+        else
+        {
+            result.resolutions.push_back({
+                .submissionId = entry.submissionId,
+                .submissionType = entry.submissionType,
+                .resolution = RANativePendingSubmissionResolution::RetryableFailure,
+                .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
+            });
+        }
+    }
+
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Info,
+        "[RAPending] event_type=ra_native_retry_cycle submission_session_id=%llu forced=%u resolutions=%zu transport_failure=%d runtime_path=%s\n",
+        static_cast<unsigned long long>(result.submissionSessionId),
+        result.forcedRetryCount,
+        result.resolutions.size(),
+        result.transportFailure ? 1 : 0,
+        RuntimePathTraceValue()
+    );
+    return result;
+}
+
+uint64_t RetroAchievementsManager::RefreshPendingSubmissions()
+{
+    std::unique_lock lock(runtimeLock);
+    if (
+        runtimeMode != RuntimeMode::RcClientOnline ||
+        !IsRcClientRuntimeActiveLocked() ||
+        !runtimeBridgeConfig.has_value() ||
+        runtimeBridgeConfig->submissionSessionId == 0
+    )
+    {
+        return 0;
+    }
+
+    auto eventMessenger = EventMessenger.lock();
+    if (!eventMessenger)
+        return 0;
+
+    const uint64_t submissionSessionId = runtimeBridgeConfig->submissionSessionId;
+    std::vector<PendingSubmissionState*> activeSubmissions;
+    std::vector<const PendingSubmissionState*> terminalSubmissions;
+    activeSubmissions.reserve(pendingSubmissionsByCallbackData.size());
+    terminalSubmissions.reserve(terminalPendingSubmissionsById.size());
+
+    for (auto& entry : pendingSubmissionsByCallbackData)
+    {
+        auto& submission = entry.second;
+        if (
+            submission.submissionSessionId == submissionSessionId &&
+            IsPendingSubmissionPublishable(submission)
+        )
+        {
+            submission.published = true;
+            activeSubmissions.push_back(&submission);
+        }
+    }
+
+    for (const auto& entry : terminalPendingSubmissionsById)
+    {
+        const auto& submission = entry.second;
+        if (
+            submission.submissionSessionId == submissionSessionId &&
+            submission.published &&
+            submission.terminalResolution.has_value() &&
+            submission.terminalResult.has_value()
+        )
+        {
+            terminalSubmissions.push_back(&submission);
+        }
+    }
+
+    struct ReplayEntry
+    {
+        const PendingSubmissionState* submission;
+        bool terminal;
+    };
+    std::vector<ReplayEntry> replayEntries;
+    replayEntries.reserve(activeSubmissions.size() + terminalSubmissions.size());
+    for (const auto* submission : activeSubmissions)
+        replayEntries.push_back({submission, false});
+    for (const auto* submission : terminalSubmissions)
+        replayEntries.push_back({submission, true});
+    std::sort(
+        replayEntries.begin(),
+        replayEntries.end(),
+        [](const ReplayEntry& left, const ReplayEntry& right) {
+            if (left.submission->sequence != right.submission->sequence)
+                return left.submission->sequence < right.submission->sequence;
+            return left.submission->submissionId < right.submission->submissionId;
+        }
+    );
+
+    for (const auto& entry : replayEntries)
+    {
+        SendPendingSubmissionAdded(*entry.submission);
+        if (entry.terminal)
+            SendPendingSubmissionResolution(*entry.submission);
+    }
+
+    const uint64_t maxWireBarrierId =
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+    if (
+        nextPendingSubmissionBarrierId == 0 ||
+        nextPendingSubmissionBarrierId > maxWireBarrierId
+    )
+    {
+        nextPendingSubmissionBarrierId = 1;
+    }
+    const uint64_t barrierId = nextPendingSubmissionBarrierId++;
+    eventMessenger->onRetroAchievementsPendingSubmissionBarrier(
+        submissionSessionId,
+        barrierId
+    );
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Info,
+        "[RAPending] event_type=ra_pending_refresh submission_session_id=%llu barrier_id=%llu replayed=%zu active=%zu terminal=%zu runtime_path=%s\n",
+        static_cast<unsigned long long>(submissionSessionId),
+        static_cast<unsigned long long>(barrierId),
+        replayEntries.size(),
+        activeSubmissions.size(),
+        terminalSubmissions.size(),
+        RuntimePathTraceValue()
+    );
+    return barrierId;
+}
+
+int32_t RetroAchievementsManager::DiscardPendingSubmissions(
+    const std::vector<uint64_t>& expectedSubmissionIds)
+{
+    std::unique_lock lock(runtimeLock);
+    if (
+        runtimeMode != RuntimeMode::RcClientOnline ||
+        !IsRcClientRuntimeActiveLocked() ||
+        !runtimeBridgeConfig.has_value() ||
+        runtimeBridgeConfig->submissionSessionId == 0 ||
+        expectedSubmissionIds.size() >
+            static_cast<size_t>(std::numeric_limits<int32_t>::max())
+    )
+    {
+        return -1;
+    }
+
+    const uint64_t submissionSessionId = runtimeBridgeConfig->submissionSessionId;
+    std::unordered_set<uint64_t> expectedIds;
+    expectedIds.reserve(expectedSubmissionIds.size());
+    for (const uint64_t submissionId : expectedSubmissionIds)
+    {
+        if (submissionId == 0 || !expectedIds.insert(submissionId).second)
+            return -1;
+    }
+
+    std::unordered_set<uint64_t> discardableIds;
+    std::vector<uintptr_t> activeCallbackDataTokens;
+    discardableIds.reserve(
+        pendingSubmissionsByCallbackData.size() +
+        terminalPendingSubmissionsById.size()
+    );
+    activeCallbackDataTokens.reserve(pendingSubmissionsByCallbackData.size());
+
+    for (const auto& entry : pendingSubmissionsByCallbackData)
+    {
+        const auto& submission = entry.second;
+        if (
+            submission.submissionSessionId != submissionSessionId ||
+            !submission.published ||
+            !IsPendingSubmissionPublishable(submission) ||
+            submission.callbackDataToken == 0 ||
+            !rc_client_is_submission_retry_pending_token(
+                rcClientRuntime,
+                submission.callbackDataToken
+            )
+        )
+        {
+            continue;
+        }
+        discardableIds.insert(submission.submissionId);
+        activeCallbackDataTokens.push_back(submission.callbackDataToken);
+    }
+
+    for (const auto& entry : terminalPendingSubmissionsById)
+    {
+        const auto& submission = entry.second;
+        if (
+            submission.submissionSessionId == submissionSessionId &&
+            submission.published &&
+            submission.terminalResolution ==
+                RANativePendingSubmissionResolution::PermanentFailure
+        )
+        {
+            discardableIds.insert(submission.submissionId);
+        }
+    }
+
+    if (discardableIds.size() != expectedIds.size())
+        return -1;
+    for (const uint64_t submissionId : expectedIds)
+    {
+        if (discardableIds.find(submissionId) == discardableIds.end())
+            return -1;
+    }
+
+    uint32_t pendingAchievementCount = 0;
+    uint32_t pendingLeaderboardCount = 0;
+    rc_client_get_pending_submission_counts(
+        rcClientRuntime,
+        &pendingAchievementCount,
+        &pendingLeaderboardCount
+    );
+    const uint64_t rcClientPendingCount =
+        static_cast<uint64_t>(pendingAchievementCount) +
+        static_cast<uint64_t>(pendingLeaderboardCount);
+    if (rcClientPendingCount != activeCallbackDataTokens.size())
+        return -1;
+
+    const uint32_t discardedByRcClient =
+        rc_client_discard_pending_submissions(rcClientRuntime);
+    if (discardedByRcClient != activeCallbackDataTokens.size())
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RAPending] event_type=ra_pending_discard_failed submission_session_id=%llu expected_active=%zu discarded_active=%u runtime_path=%s\n",
+            static_cast<unsigned long long>(submissionSessionId),
+            activeCallbackDataTokens.size(),
+            discardedByRcClient,
+            RuntimePathTraceValue()
+        );
+        return -1;
+    }
+
+    for (const uintptr_t callbackDataToken : activeCallbackDataTokens)
+    {
+        const auto pending = pendingSubmissionsByCallbackData.find(callbackDataToken);
+        if (pending == pendingSubmissionsByCallbackData.end())
+            continue;
+        if (pending->second.type == RANativePendingSubmissionType::Leaderboard)
+        {
+            auto* attempt = FindLeaderboardAttempt(pending->second.attemptId);
+            if (attempt)
+                attempt->terminal = true;
+            ForgetLeaderboardSubmissionCallback(pending->second.attemptId);
+        }
+        if (activeSubmissionResponseCallbackData == callbackDataToken)
+            activeSubmissionResponseCallbackData = 0;
+        pendingSubmissionsByCallbackData.erase(pending);
+    }
+
+    for (auto iterator = terminalPendingSubmissionsById.begin();
+         iterator != terminalPendingSubmissionsById.end();)
+    {
+        if (expectedIds.find(iterator->first) != expectedIds.end())
+            iterator = terminalPendingSubmissionsById.erase(iterator);
+        else
+            ++iterator;
+    }
+    PruneUnreferencedLeaderboardAttempts();
+
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Info,
+        "[RAPending] event_type=ra_pending_discard_confirmed submission_session_id=%llu discarded_total=%zu discarded_active=%u runtime_path=%s\n",
+        static_cast<unsigned long long>(submissionSessionId),
+        expectedIds.size(),
+        discardedByRcClient,
+        RuntimePathTraceValue()
+    );
+    return static_cast<int32_t>(expectedIds.size());
+}
+
+void RetroAchievementsManager::SetSubmissionTransportSuspended(bool suspended)
+{
+    submissionTransportSuspended.store(suspended, std::memory_order_release);
+}
+
 void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* event, rc_client_t* client)
 {
     if (!event || !client)
@@ -1537,7 +1979,15 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
     {
         case RC_CLIENT_EVENT_ACHIEVEMENT_TRIGGERED:
             if (event->achievement)
+            {
+                manager->MarkPendingSubmissionPresentationReady(
+                    RANativePendingSubmissionType::Achievement,
+                    event->achievement->id,
+                    0,
+                    ""
+                );
                 eventMessenger->onAchievementTriggered(event->achievement->id);
+            }
             break;
         case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_SHOW:
             if (event->achievement)
@@ -1618,6 +2068,12 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
                     attempt.submittedSeen = true;
                     const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
                     const std::string trackerDisplay = event->leaderboard->tracker_value ? event->leaderboard->tracker_value : "";
+                    manager->MarkPendingSubmissionPresentationReady(
+                        RANativePendingSubmissionType::Leaderboard,
+                        event->leaderboard->id,
+                        attempt.attemptId,
+                        trackerDisplay
+                    );
                     const std::string requestScore = attempt.requestScore.has_value()
                         ? std::to_string(*attempt.requestScore)
                         : "unknown";
@@ -1687,6 +2143,7 @@ void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* eve
             {
                 const std::string api = event->server_error->api ? event->server_error->api : "";
                 const std::string message = event->server_error->error_message ? event->server_error->error_message : "";
+                manager->MarkActivePendingSubmissionPermanentFailure(event->server_error->result);
                 if (api == "submit_lboard_entry" && event->server_error->related_id != 0)
                 {
                     auto& attempt = manager->ResolveLeaderboardResponseAttempt(event->server_error->related_id);
@@ -1779,6 +2236,7 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
     const std::string requestAction = ResolveRcClientRequestAction(request);
     const std::string requestParameters = BuildRcClientSanitizedParameters(request);
     const std::string safeRequestUrl = BuildRcClientSafeUrl(request ? request->url : nullptr);
+    const uintptr_t callbackDataToken = reinterpret_cast<uintptr_t>(callbackData);
     std::optional<uint64_t> leaderboardAttemptId;
     std::optional<uint32_t> submittedLeaderboardId;
 
@@ -1797,16 +2255,12 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         {
             const uint32_t leaderboardId = static_cast<uint32_t>(*leaderboardIdParameter);
             const bool hasRetryParameter = GetRcClientFormParameter(request, "o").has_value();
-            const bool isImmediateRetry = callbackData &&
-                manager->activeLeaderboardResponseCallbackData == callbackData;
-            const bool isRetry = LeaderboardAttemptCorrelation::IsTransportRetry(
-                callbackData,
-                manager->activeLeaderboardResponseCallbackData,
-                hasRetryParameter
-            );
+            const bool isImmediateRetry = callbackDataToken != 0 &&
+                manager->activeLeaderboardResponseCallbackData == callbackDataToken;
+            const bool isRetry = hasRetryParameter || isImmediateRetry;
             auto& attempt = manager->ResolveLeaderboardRequestAttempt(
                 leaderboardId,
-                callbackData,
+                callbackDataToken,
                 isRetry
             );
             attempt.requestScore = static_cast<int32_t>(*scoreParameter);
@@ -1844,9 +2298,17 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         }
     }
 
+    manager->PreparePendingSubmission(
+        requestAction,
+        request,
+        callbackDataToken,
+        leaderboardAttemptId
+    );
+
     const auto invokeServerCallback = [&](const rc_api_server_response_t* serverResponse) {
         const auto previousAttemptId = manager->activeLeaderboardResponseAttemptId;
-        const void* previousCallbackData = manager->activeLeaderboardResponseCallbackData;
+        const uintptr_t previousCallbackData = manager->activeLeaderboardResponseCallbackData;
+        const uintptr_t previousSubmissionCallbackData = manager->activeSubmissionResponseCallbackData;
         MelonDSAndroidLeaderboardScoreboardResponse transportScoreboard{};
         const bool hasTransportScoreboard =
             leaderboardAttemptId.has_value() &&
@@ -1857,11 +2319,26 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
                 *submittedLeaderboardId,
                 &transportScoreboard
             );
+        bool alreadyAccepted = false;
+        if (requestAction == "awardachievement")
+        {
+            rc_api_award_achievement_response_t awardResponse{};
+            const int parseResult = rc_api_process_award_achievement_server_response(
+                &awardResponse,
+                serverResponse
+            );
+            alreadyAccepted =
+                parseResult == RC_OK &&
+                awardResponse.response.succeeded &&
+                awardResponse.response.error_message != nullptr;
+            rc_api_destroy_award_achievement_response(&awardResponse);
+        }
         if (leaderboardAttemptId.has_value())
         {
             manager->activeLeaderboardResponseAttemptId = leaderboardAttemptId;
-            manager->activeLeaderboardResponseCallbackData = callbackData;
+            manager->activeLeaderboardResponseCallbackData = callbackDataToken;
         }
+        manager->activeSubmissionResponseCallbackData = callbackDataToken;
 
         callback(serverResponse, callbackData);
 
@@ -1890,10 +2367,46 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
             }
         }
 
+        const bool retryPending =
+            rc_client_is_submission_retry_pending_token(client, callbackDataToken) != 0;
+        manager->FinalizePendingSubmissionTransport(
+            callbackDataToken,
+            retryPending,
+            alreadyAccepted
+        );
         manager->activeLeaderboardResponseAttemptId = previousAttemptId;
         manager->activeLeaderboardResponseCallbackData = previousCallbackData;
+        manager->activeSubmissionResponseCallbackData = previousSubmissionCallbackData;
         manager->PruneUnreferencedLeaderboardAttempts();
     };
+
+    const bool isSubmissionRequest =
+        requestAction == "awardachievement" ||
+        requestAction == "submitlbentry";
+    if (
+        isSubmissionRequest &&
+        manager->submissionTransportSuspended.load(std::memory_order_acquire)
+    )
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Info,
+            "[RAPending] event_type=ra_submission_transport_suspended action=%s submission_session_id=%llu runtime_path=%s\n",
+            requestAction.c_str(),
+            static_cast<unsigned long long>(
+                manager->runtimeBridgeConfig.has_value()
+                    ? manager->runtimeBridgeConfig->submissionSessionId
+                    : 0
+            ),
+            manager->RuntimePathTraceValue()
+        );
+        const rc_api_server_response_t serverResponse = {
+            .body = "",
+            .body_length = 0,
+            .http_status_code = 503,
+        };
+        invokeServerCallback(&serverResponse);
+        return;
+    }
 
     const bool useOfflineTransport =
         manager->runtimeBridgeConfig.has_value() &&
@@ -1966,6 +2479,7 @@ void RetroAchievementsManager::RcClientLogCallback(const char* message, const rc
 bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
 {
     DeactivateRcClientRuntimeLocked();
+    submissionTransportSuspended.store(false, std::memory_order_release);
 
     if (!IsRcClientConfiguredLocked())
         return false;
@@ -2039,10 +2553,9 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
     {
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
-            "[RAClient] rc_client activation failed stage=login timedOut=%d result=%d error=%s\n",
+            "[RAClient] rc_client activation failed stage=login timedOut=%d result=%d\n",
             loginWaitResult.timedOut ? 1 : 0,
-            loginWaitResult.result,
-            loginWaitResult.errorMessage.c_str()
+            loginWaitResult.result
         );
         DeactivateRcClientRuntimeLocked();
         return false;
@@ -2078,10 +2591,9 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
     {
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
-            "[RAClient] rc_client activation failed stage=load_game timedOut=%d result=%d error=%s\n",
+            "[RAClient] rc_client activation failed stage=load_game timedOut=%d result=%d\n",
             loadWaitResult.timedOut ? 1 : 0,
-            loadWaitResult.result,
-            loadWaitResult.errorMessage.c_str()
+            loadWaitResult.result
         );
         DeactivateRcClientRuntimeLocked();
         return false;
@@ -2106,9 +2618,26 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
 
 void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
 {
+    submissionTransportSuspended.store(false, std::memory_order_release);
     if (rcClientRuntime)
     {
         rc_client_set_event_handler(rcClientRuntime, &NoopRcClientEventHandler);
+        const uint32_t discardedSubmissions =
+            rc_client_discard_pending_submissions(rcClientRuntime);
+        if (discardedSubmissions > 0)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Info,
+                "[RAPending] event_type=ra_pending_native_discarded submission_session_id=%llu count=%u runtime_path=%s\n",
+                static_cast<unsigned long long>(
+                    runtimeBridgeConfig.has_value()
+                        ? runtimeBridgeConfig->submissionSessionId
+                        : 0
+                ),
+                discardedSubmissions,
+                RuntimePathTraceValue()
+            );
+        }
         rc_client_unload_game(rcClientRuntime);
         rc_client_logout(rcClientRuntime);
         rc_client_destroy(rcClientRuntime);
@@ -2119,8 +2648,12 @@ void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
     activeLeaderboardAttemptIds.clear();
     leaderboardAttemptIdsByCallbackData.clear();
     activeLeaderboardResponseAttemptId.reset();
-    activeLeaderboardResponseCallbackData = nullptr;
+    activeLeaderboardResponseCallbackData = 0;
     lastPublishedLeaderboardTrackerValues.clear();
+    pendingSubmissionsByCallbackData.clear();
+    terminalPendingSubmissionsById.clear();
+    activeSubmissionResponseCallbackData = 0;
+    nextPendingSubmissionBarrierId = 1;
     isRcClientRuntimeActive = false;
     rcClientSlowWindowCount = 0;
     ResetRcClientPerformanceWindowLocked();
@@ -2282,6 +2815,14 @@ bool RetroAchievementsManager::IsRcClientConfiguredLocked() const
             runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOnline ||
             runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
         ) &&
+        (
+            runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline ||
+            (
+                runtimeBridgeConfig->submissionSessionId != 0 &&
+                runtimeBridgeConfig->submissionSessionId <=
+                    static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
+            )
+        ) &&
         !runtimeBridgeConfig->username.empty() &&
         !runtimeBridgeConfig->apiToken.empty() &&
         !runtimeBridgeConfig->gameHash.empty();
@@ -2417,13 +2958,13 @@ RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::Ens
 
 RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::ResolveLeaderboardRequestAttempt(
     uint32_t leaderboardId,
-    const void* callbackData,
+    uintptr_t callbackDataToken,
     bool isRetry
 )
 {
-    if (isRetry && callbackData)
+    if (isRetry && callbackDataToken != 0)
     {
-        const auto callbackIterator = leaderboardAttemptIdsByCallbackData.find(callbackData);
+        const auto callbackIterator = leaderboardAttemptIdsByCallbackData.find(callbackDataToken);
         if (callbackIterator != leaderboardAttemptIdsByCallbackData.end())
         {
             auto* mappedAttempt = FindLeaderboardAttempt(callbackIterator->second);
@@ -2434,8 +2975,8 @@ RetroAchievementsManager::LeaderboardAttemptState& RetroAchievementsManager::Res
 
     auto& attempt = EnsureLeaderboardAttempt(leaderboardId, true);
     attempt.logicalSubmitCount++;
-    if (callbackData)
-        leaderboardAttemptIdsByCallbackData.insert_or_assign(callbackData, attempt.attemptId);
+    if (callbackDataToken != 0)
+        leaderboardAttemptIdsByCallbackData.insert_or_assign(callbackDataToken, attempt.attemptId);
     return attempt;
 }
 
@@ -2503,6 +3044,32 @@ void RetroAchievementsManager::PublishLeaderboardScoreboard(
             attempt.logicalSubmitCount,
             attempt.transportAttemptCount
         );
+    }
+
+    for (const auto& entry : pendingSubmissionsByCallbackData)
+    {
+        const auto& submission = entry.second;
+        if (
+            submission.published &&
+            submission.type == RANativePendingSubmissionType::Leaderboard &&
+            submission.leaderboardId == leaderboardId &&
+            submission.attemptId == attempt.attemptId &&
+            submission.rawScore.has_value()
+        )
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Info,
+                "[RAPending] event_type=leaderboard_retry_scoreboard leaderboard_id=%u attempt_id=%llu original_raw_score=%d submitted_score=%s best_score=%s rank=%u num_entries=%u submit_owner=rc_client\n",
+                leaderboardId,
+                static_cast<unsigned long long>(attempt.attemptId),
+                *submission.rawScore,
+                ownedSubmittedScore.c_str(),
+                ownedBestScore.c_str(),
+                newRank,
+                numEntries
+            );
+            break;
+        }
     }
 
     eventMessenger->onLeaderboardScoreboard(
@@ -2589,6 +3156,296 @@ const char* RetroAchievementsManager::RuntimePathTraceValue() const
     return runtimeBridgeConfig.has_value() && runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
         ? "rc_client_offline"
         : "rc_client_online";
+}
+
+RetroAchievementsManager::PendingSubmissionState* RetroAchievementsManager::PreparePendingSubmission(
+    const std::string& requestAction,
+    const rc_api_request_t* request,
+    uintptr_t callbackDataToken,
+    std::optional<uint64_t> leaderboardAttemptId
+)
+{
+    if (
+        callbackDataToken == 0 ||
+        runtimeMode != RuntimeMode::RcClientOnline ||
+        !runtimeBridgeConfig.has_value() ||
+        runtimeBridgeConfig->submissionSessionId == 0 ||
+        !runtimeBridgeConfig->hardcoreEnabled
+    )
+    {
+        return nullptr;
+    }
+
+    const auto existing = pendingSubmissionsByCallbackData.find(callbackDataToken);
+    if (existing != pendingSubmissionsByCallbackData.end())
+        return &existing->second;
+
+    PendingSubmissionState submission;
+    if (requestAction == "awardachievement")
+    {
+        const auto achievementId = ParseRcClientIntegerParameter(request, "a");
+        const auto hardcore = ParseRcClientIntegerParameter(request, "h");
+        if (
+            !achievementId.has_value() ||
+            *achievementId <= 0 ||
+            *achievementId > std::numeric_limits<uint32_t>::max() ||
+            !hardcore.has_value() ||
+            *hardcore != 1
+        )
+        {
+            return nullptr;
+        }
+        submission.type = RANativePendingSubmissionType::Achievement;
+        submission.achievementId = static_cast<uint32_t>(*achievementId);
+        submission.hardcore = true;
+    }
+    else if (requestAction == "submitlbentry")
+    {
+        const auto leaderboardId = ParseRcClientIntegerParameter(request, "i");
+        const auto rawScore = ParseRcClientIntegerParameter(request, "s");
+        if (
+            !leaderboardId.has_value() ||
+            *leaderboardId <= 0 ||
+            *leaderboardId > std::numeric_limits<uint32_t>::max() ||
+            !rawScore.has_value() ||
+            *rawScore < std::numeric_limits<int32_t>::min() ||
+            *rawScore > std::numeric_limits<int32_t>::max() ||
+            !leaderboardAttemptId.has_value()
+        )
+        {
+            return nullptr;
+        }
+        submission.type = RANativePendingSubmissionType::Leaderboard;
+        submission.leaderboardId = static_cast<uint32_t>(*leaderboardId);
+        submission.attemptId = *leaderboardAttemptId;
+        submission.rawScore = static_cast<int32_t>(*rawScore);
+        submission.hardcore = true;
+    }
+    else
+    {
+        return nullptr;
+    }
+
+    submission.submissionId = AllocatePendingSubmissionId();
+    submission.sequence = AllocatePendingSubmissionSequence();
+    submission.submissionSessionId = runtimeBridgeConfig->submissionSessionId;
+    submission.callbackDataToken = callbackDataToken;
+    submission.createdAtEpochMs = PendingSubmissionNowEpochMs();
+    auto iterator = pendingSubmissionsByCallbackData.emplace(
+        callbackDataToken,
+        std::move(submission)
+    ).first;
+    return &iterator->second;
+}
+
+void RetroAchievementsManager::MarkPendingSubmissionPresentationReady(
+    RANativePendingSubmissionType type,
+    uint32_t relatedId,
+    uint64_t attemptId,
+    const std::string& formattedScore
+)
+{
+    for (auto& entry : pendingSubmissionsByCallbackData)
+    {
+        auto& submission = entry.second;
+        const bool matches =
+            submission.type == type &&
+            (
+                (type == RANativePendingSubmissionType::Achievement &&
+                    submission.achievementId == relatedId) ||
+                (type == RANativePendingSubmissionType::Leaderboard &&
+                    submission.leaderboardId == relatedId &&
+                    submission.attemptId == attemptId)
+            );
+        if (!matches)
+            continue;
+
+        submission.presentationReady = true;
+        if (type == RANativePendingSubmissionType::Leaderboard)
+            submission.formattedScore = formattedScore;
+        MaybePublishPendingSubmission(submission);
+    }
+}
+
+void RetroAchievementsManager::MarkActivePendingSubmissionPermanentFailure(int32_t result)
+{
+    if (!activeSubmissionResponseCallbackData)
+        return;
+
+    const auto iterator = pendingSubmissionsByCallbackData.find(activeSubmissionResponseCallbackData);
+    if (iterator == pendingSubmissionsByCallbackData.end())
+        return;
+
+    iterator->second.permanentFailureResult = result;
+}
+
+void RetroAchievementsManager::FinalizePendingSubmissionTransport(
+    uintptr_t callbackDataToken,
+    bool retryPending,
+    bool alreadyAccepted
+)
+{
+    const auto iterator = pendingSubmissionsByCallbackData.find(callbackDataToken);
+    if (iterator == pendingSubmissionsByCallbackData.end())
+        return;
+
+    if (retryPending)
+    {
+        iterator->second.status = PendingSubmissionStatus::RetryPending;
+        MaybePublishPendingSubmission(iterator->second);
+        return;
+    }
+
+    PendingSubmissionState submission = iterator->second;
+    pendingSubmissionsByCallbackData.erase(iterator);
+
+    if (!submission.published)
+        return;
+
+    const RANativePendingSubmissionResolution resolution =
+        submission.permanentFailureResult.has_value()
+            ? RANativePendingSubmissionResolution::PermanentFailure
+            : (
+                alreadyAccepted
+                    ? RANativePendingSubmissionResolution::AlreadyAccepted
+                    : RANativePendingSubmissionResolution::Accepted
+            );
+    const int32_t result = submission.permanentFailureResult.value_or(RC_OK);
+    submission.terminalResolution = resolution;
+    submission.terminalResult = result;
+    terminalPendingSubmissionsById.insert_or_assign(
+        submission.submissionId,
+        submission
+    );
+    PublishPendingSubmissionResolution(
+        submission,
+        resolution,
+        result
+    );
+}
+
+void RetroAchievementsManager::MaybePublishPendingSubmission(PendingSubmissionState& submission)
+{
+    if (submission.published || !IsPendingSubmissionPublishable(submission))
+        return;
+
+    submission.published = true;
+    uint32_t pendingCount = 0;
+    for (const auto& entry : pendingSubmissionsByCallbackData)
+    {
+        if (entry.second.published)
+            pendingCount++;
+    }
+    const int32_t rawScore =
+        submission.type == RANativePendingSubmissionType::Leaderboard &&
+            submission.rawScore.has_value()
+            ? *submission.rawScore
+            : 0;
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Info,
+        "[RAPending] event_type=ra_pending_added submission_session_id=%llu submission_type=%s submission_id=%llu achievement_id=%u leaderboard_id=%u attempt_id=%llu raw_score=%d hardcore=%d submit_owner=rc_client pending_total=%u\n",
+        static_cast<unsigned long long>(submission.submissionSessionId),
+        submission.type == RANativePendingSubmissionType::Achievement ? "achievement" : "leaderboard",
+        static_cast<unsigned long long>(submission.submissionId),
+        submission.achievementId,
+        submission.leaderboardId,
+        static_cast<unsigned long long>(submission.attemptId),
+        rawScore,
+        submission.hardcore ? 1 : 0,
+        pendingCount
+    );
+    SendPendingSubmissionAdded(submission);
+}
+
+bool RetroAchievementsManager::IsPendingSubmissionPublishable(
+    const PendingSubmissionState& submission
+) const
+{
+    return
+        submission.presentationReady &&
+        submission.status == PendingSubmissionStatus::RetryPending &&
+        (
+            submission.type != RANativePendingSubmissionType::Leaderboard ||
+            submission.rawScore.has_value()
+        );
+}
+
+void RetroAchievementsManager::SendPendingSubmissionAdded(
+    const PendingSubmissionState& submission
+)
+{
+    const int32_t rawScore =
+        submission.type == RANativePendingSubmissionType::Leaderboard &&
+            submission.rawScore.has_value()
+            ? *submission.rawScore
+            : 0;
+    if (auto eventMessenger = EventMessenger.lock())
+    {
+        eventMessenger->onRetroAchievementsPendingSubmissionAdded(
+            submission.submissionSessionId,
+            submission.submissionId,
+            submission.sequence,
+            submission.createdAtEpochMs,
+            static_cast<int>(submission.type),
+            submission.achievementId,
+            submission.leaderboardId,
+            submission.attemptId,
+            rawScore,
+            submission.hardcore,
+            submission.formattedScore
+        );
+    }
+}
+
+void RetroAchievementsManager::SendPendingSubmissionResolution(
+    const PendingSubmissionState& submission
+)
+{
+    if (
+        !submission.terminalResolution.has_value() ||
+        !submission.terminalResult.has_value()
+    )
+    {
+        return;
+    }
+
+    if (auto eventMessenger = EventMessenger.lock())
+    {
+        eventMessenger->onRetroAchievementsPendingSubmissionResolved(
+            submission.submissionSessionId,
+            submission.submissionId,
+            static_cast<int>(submission.type),
+            static_cast<int>(*submission.terminalResolution),
+            *submission.terminalResult
+        );
+    }
+}
+
+void RetroAchievementsManager::PublishPendingSubmissionResolution(
+    const PendingSubmissionState& submission,
+    RANativePendingSubmissionResolution resolution,
+    int32_t result
+)
+{
+    melonDS::Platform::Log(
+        resolution == RANativePendingSubmissionResolution::PermanentFailure
+            ? melonDS::Platform::LogLevel::Warn
+            : melonDS::Platform::LogLevel::Info,
+        "[RAPending] event_type=ra_pending_resolved submission_session_id=%llu submission_type=%s submission_id=%llu resolution=%d result=%d submit_owner=rc_client\n",
+        static_cast<unsigned long long>(submission.submissionSessionId),
+        submission.type == RANativePendingSubmissionType::Achievement ? "achievement" : "leaderboard",
+        static_cast<unsigned long long>(submission.submissionId),
+        static_cast<int>(resolution),
+        result
+    );
+    SendPendingSubmissionResolution(submission);
+}
+
+int64_t RetroAchievementsManager::PendingSubmissionNowEpochMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
 }
 
 void RetroAchievementsManager::PublishLeaderboardTrackerValuesLocked()

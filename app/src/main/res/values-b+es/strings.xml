@@ -379,6 +379,10 @@
     <string name="retroachievements_login_status">Sesión iniciada como %1$s</string>
     <string name="retroachievements_logout">Cerrar sesión</string>
     <string name="retroachievements_logout_confirmation">¿Estás seguro de que quieres cerrar sesión en RetroAchievements? No podrás desbloquear logros mientras juegas.</string>
+    <string name="retroachievements_logout_confirmation_in_game">Cerrar sesión mientras hay un juego abierto descartará permanentemente los logros y las entradas de leaderboard pendientes de esta sesión y cerrará el juego. No podrán enviarse después de iniciar sesión con otro usuario. ¿Deseas continuar?</string>
+    <string name="retroachievements_account_change_blocked_in_game">La identidad de RetroAchievements queda fijada durante la sesión actual del juego. Cierra el juego antes de cerrar sesión o iniciar sesión con otro usuario.</string>
+    <string name="retroachievements_account_changed_in_game">La cuenta de RetroAchievements ya no coincide con la sesión activa. Los envíos permanecen pausados y ligados a la cuenta original; cierra el juego antes de cambiar de cuenta.</string>
+    <string name="retroachievements_logout_failed">No se pudo completar el cierre de sesión de RetroAchievements. El juego se cerró para proteger la identidad de los envíos.</string>
     <string name="retro_achievements_login_error">Hubo un problema al intentar iniciar sesión. Asegúrate de que tu nombre de usuario y contraseña sean correctos y de que estés conectado a Internet</string>
     <string name="retro_achievements_login_error_short">Se produjo un problema al intentar iniciar sesión</string>
     <string name="retro_achievements_load_error">Se produjo un problema al intentar cargar los logros de este juego. Asegúrate de estar conectado a Internet e intenta de nuevo más tarde</string>

@@ -76,7 +76,19 @@ object MelonEmulator {
 
     external fun getRuntimeSubsetIds(): LongArray
 
-	fun loadRom(romUri: Uri, sramUri: Uri, gbaSlotType: GbaSlotType, gbaRomUri: Uri?, gbaSramUri: Uri?): LoadResult {
+    external fun retryPendingRetroAchievementsSubmissions(
+        expectedNativeSubmissionIds: LongArray,
+    ): LongArray?
+
+    external fun refreshPendingRetroAchievementsSubmissions(): Long
+
+    external fun discardPendingRetroAchievementsSubmissions(
+        expectedNativeSubmissionIds: LongArray,
+    ): Int
+
+    external fun setRetroAchievementsSubmissionTransportSuspended(suspended: Boolean)
+
+    fun loadRom(romUri: Uri, sramUri: Uri, gbaSlotType: GbaSlotType, gbaRomUri: Uri?, gbaSramUri: Uri?): LoadResult {
         val loadResult = loadRomInternal(romUri.toString(), sramUri.toString(), gbaSlotType.ordinal, gbaRomUri?.toString(), gbaSramUri?.toString())
         return when (loadResult) {
             0 -> LoadResult.SUCCESS

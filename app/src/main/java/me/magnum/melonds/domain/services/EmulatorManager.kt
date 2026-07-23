@@ -9,6 +9,7 @@ import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
 import me.magnum.melonds.domain.model.retroachievements.GameAchievementData
 import me.magnum.melonds.domain.model.retroachievements.RAEvent
+import me.magnum.melonds.domain.model.retroachievements.RaNativePendingRetryResult
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
@@ -40,6 +41,14 @@ interface EmulatorManager {
 
     suspend fun updateCheats(cheats: List<Cheat>)
     suspend fun setupRetroAchievements(achievementData: GameAchievementData, runtimeConfig: RARuntimeBridgeConfig?)
+    suspend fun retryPendingRetroAchievementsSubmissions(
+        expectedNativeSubmissionIds: List<Long>,
+    ): RaNativePendingRetryResult
+    suspend fun refreshPendingRetroAchievementsSubmissions(): Long
+    suspend fun discardPendingRetroAchievementsSubmissions(
+        expectedNativeSubmissionIds: List<Long>,
+    ): Int
+    suspend fun setRetroAchievementsSubmissionTransportSuspended(suspended: Boolean)
     fun unloadRetroAchievementsData()
 
     suspend fun loadRewindState(rewindSaveState: RewindSaveState): Boolean

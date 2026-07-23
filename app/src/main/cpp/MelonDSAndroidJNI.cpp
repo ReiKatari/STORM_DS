@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <cstdint>
 #include <chrono>
+#include <limits>
 #include <pthread.h>
 #include <unistd.h>
 #include <cstdlib>
@@ -1098,6 +1099,169 @@ Java_me_magnum_melonds_MelonEmulator_getRuntimeSubsetIds(JNIEnv* env, jobject th
 
     env->SetLongArrayRegion(subsetIds, 0, values.size(), values.data());
     return subsetIds;
+}
+
+JNIEXPORT jlongArray JNICALL
+Java_me_magnum_melonds_MelonEmulator_retryPendingRetroAchievementsSubmissions(
+    JNIEnv* env,
+    jobject thiz,
+    jlongArray expectedNativeSubmissionIds)
+{
+    (void)thiz;
+    if (expectedNativeSubmissionIds == nullptr)
+        return nullptr;
+
+    const jsize expectedCount = env->GetArrayLength(expectedNativeSubmissionIds);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return nullptr;
+    }
+    constexpr size_t headerSize = 4;
+    constexpr size_t resolutionSize = 4;
+    if (
+        static_cast<size_t>(expectedCount) >
+        (static_cast<size_t>(std::numeric_limits<jsize>::max()) - headerSize) /
+            resolutionSize
+    )
+    {
+        return nullptr;
+    }
+
+    std::vector<jlong> expectedWireIds(static_cast<size_t>(expectedCount));
+    if (expectedCount > 0)
+    {
+        env->GetLongArrayRegion(
+            expectedNativeSubmissionIds,
+            0,
+            expectedCount,
+            expectedWireIds.data()
+        );
+        if (env->ExceptionCheck())
+        {
+            clearPendingJniException(env);
+            return nullptr;
+        }
+    }
+
+    std::vector<uint64_t> expectedSubmissionIds;
+    expectedSubmissionIds.reserve(expectedWireIds.size());
+    for (const jlong submissionId : expectedWireIds)
+        expectedSubmissionIds.push_back(static_cast<uint64_t>(submissionId));
+
+    const auto result =
+        MelonDSAndroid::retryPendingRetroAchievementsSubmissions(
+            expectedSubmissionIds
+        );
+    if (
+        result.resolutions.size() >
+        (static_cast<size_t>(std::numeric_limits<jsize>::max()) - headerSize) /
+            resolutionSize
+    )
+    {
+        return nullptr;
+    }
+
+    std::vector<jlong> encoded;
+    encoded.reserve(headerSize + result.resolutions.size() * resolutionSize);
+    encoded.push_back(static_cast<jlong>(result.submissionSessionId));
+    encoded.push_back(static_cast<jlong>(result.forcedRetryCount));
+    encoded.push_back(static_cast<jlong>(result.resolutions.size()));
+    encoded.push_back(result.transportFailure ? 1 : 0);
+    for (const auto& resolution : result.resolutions)
+    {
+        encoded.push_back(static_cast<jlong>(resolution.submissionId));
+        encoded.push_back(static_cast<jlong>(resolution.submissionType));
+        encoded.push_back(static_cast<jlong>(resolution.resolution));
+        encoded.push_back(static_cast<jlong>(resolution.result));
+    }
+
+    jlongArray array = env->NewLongArray(static_cast<jsize>(encoded.size()));
+    if (array == nullptr || env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return nullptr;
+    }
+    env->SetLongArrayRegion(array, 0, static_cast<jsize>(encoded.size()), encoded.data());
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        env->DeleteLocalRef(array);
+        return nullptr;
+    }
+    return array;
+}
+
+JNIEXPORT jlong JNICALL
+Java_me_magnum_melonds_MelonEmulator_refreshPendingRetroAchievementsSubmissions(
+    JNIEnv* env,
+    jobject thiz)
+{
+    (void)env;
+    (void)thiz;
+    return static_cast<jlong>(
+        MelonDSAndroid::refreshPendingRetroAchievementsSubmissions()
+    );
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_discardPendingRetroAchievementsSubmissions(
+    JNIEnv* env,
+    jobject thiz,
+    jlongArray expectedNativeSubmissionIds)
+{
+    (void)thiz;
+    if (expectedNativeSubmissionIds == nullptr)
+        return -1;
+
+    const jsize expectedCount = env->GetArrayLength(expectedNativeSubmissionIds);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return -1;
+    }
+
+    std::vector<jlong> expectedWireIds(static_cast<size_t>(expectedCount));
+    if (expectedCount > 0)
+    {
+        env->GetLongArrayRegion(
+            expectedNativeSubmissionIds,
+            0,
+            expectedCount,
+            expectedWireIds.data()
+        );
+        if (env->ExceptionCheck())
+        {
+            clearPendingJniException(env);
+            return -1;
+        }
+    }
+
+    std::vector<uint64_t> expectedSubmissionIds;
+    expectedSubmissionIds.reserve(expectedWireIds.size());
+    for (const jlong submissionId : expectedWireIds)
+    {
+        if (submissionId <= 0)
+            return -1;
+        expectedSubmissionIds.push_back(static_cast<uint64_t>(submissionId));
+    }
+
+    return MelonDSAndroid::discardPendingRetroAchievementsSubmissions(
+        expectedSubmissionIds
+    );
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setRetroAchievementsSubmissionTransportSuspended(
+    JNIEnv* env,
+    jobject thiz,
+    jboolean suspended)
+{
+    (void)env;
+    (void)thiz;
+    MelonDSAndroid::setRetroAchievementsSubmissionTransportSuspended(
+        suspended == JNI_TRUE
+    );
 }
 
 JNIEXPORT jint JNICALL

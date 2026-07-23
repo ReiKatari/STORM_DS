@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonEmulator
+import me.magnum.melonds.common.retroachievements.RaAuthenticationMutationLeaseRegistry
 import me.magnum.melonds.common.suspendMapCatching
 import me.magnum.melonds.common.suspendRecoverCatching
 import me.magnum.melonds.common.suspendRunCatching
@@ -40,6 +41,7 @@ import me.magnum.melonds.impl.mappers.retroachievements.mapToModel
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
 import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.RAUserAuthStore
+import me.magnum.rcheevosapi.exception.UserNotAuthenticatedException
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAwardAchievementResponse
 import me.magnum.rcheevosapi.model.RAGame
@@ -62,6 +64,8 @@ class AndroidRetroAchievementsRepository(
     private val sharedPreferences: SharedPreferences,
     private val context: Context,
 ) : RetroAchievementsRepository {
+
+    private val authenticationLeaseRegistry = RaAuthenticationMutationLeaseRegistry()
 
     private companion object {
         const val RA_HASH_LIBRARY_LAST_UPDATED = "ra_hash_library_last_updated"
@@ -90,22 +94,114 @@ class AndroidRetroAchievementsRepository(
             Log.w(RA_TRACE_TAG, "login skipped: blank username or password")
             return Result.failure(IllegalArgumentException("Username and password cannot be blank"))
         }
-
-        Log.i(RA_TRACE_TAG, "login start")
-        val result = raApi.login(username, password)
-        if (result.isFailure) {
-            val exception = result.exceptionOrNull()
-            Log.w(RA_TRACE_TAG, "login failed: ${exception?.javaClass?.simpleName ?: "unknown"} message=${exception?.message ?: "none"}", exception)
-            raUserAuthStore.clearUserAuth()
-        } else {
-            Log.i(RA_TRACE_TAG, "login success")
+        if (!authenticationLeaseRegistry.tryBeginMutation()) {
+            return Result.failure(IllegalStateException("RetroAchievements authentication is locked by an active session"))
         }
-        return result
+        return try {
+            Log.i(RA_TRACE_TAG, "login start")
+            raApi.login(username, password).also { result ->
+                if (result.isFailure) {
+                    val exception = result.exceptionOrNull()
+                    Log.w(RA_TRACE_TAG, "login failed: ${exception?.javaClass?.simpleName ?: "unknown"}")
+                    raUserAuthStore.clearUserAuth()
+                } else {
+                    Log.i(RA_TRACE_TAG, "login success")
+                }
+            }
+        } finally {
+            authenticationLeaseRegistry.endMutation()
+        }
     }
 
-    override suspend fun logout() {
-        retroAchievementsDao.deleteAllAchievementUserData()
-        raUserAuthStore.clearUserAuth()
+    override suspend fun logout(): Boolean {
+        if (!authenticationLeaseRegistry.tryBeginMutation()) {
+            return false
+        }
+        return try {
+            retroAchievementsDao.deleteAllAchievementUserData()
+            raUserAuthStore.clearUserAuth()
+            true
+        } finally {
+            authenticationLeaseRegistry.endMutation()
+        }
+    }
+
+    override suspend fun logoutIfAuthenticationMatches(
+        expectedUsername: String,
+        expectedToken: String,
+    ): Boolean {
+        if (!authenticationLeaseRegistry.tryBeginMutation()) {
+            return false
+        }
+        return try {
+            val currentAuthentication =
+                raUserAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            if (
+                currentAuthentication?.username != expectedUsername ||
+                currentAuthentication.token != expectedToken
+            ) {
+                return false
+            }
+            retroAchievementsDao.deleteAllAchievementUserData()
+            raUserAuthStore.clearUserAuthIfMatches(expectedUsername, expectedToken)
+        } finally {
+            authenticationLeaseRegistry.endMutation()
+        }
+    }
+
+    override suspend fun acquireRuntimeAuthenticationLease(
+        leaseId: String,
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Boolean {
+        if (
+            leaseId.isBlank() ||
+            !authenticationLeaseRegistry.tryAcquire(leaseId, expectedAuthentication)
+        ) {
+            return false
+        }
+        return try {
+            if (raUserAuthStore.getUserAuth() == expectedAuthentication) {
+                true
+            } else {
+                authenticationLeaseRegistry.release(leaseId)
+                false
+            }
+        } catch (throwable: Throwable) {
+            authenticationLeaseRegistry.release(leaseId)
+            throw throwable
+        }
+    }
+
+    override fun releaseRuntimeAuthenticationLease(leaseId: String): Boolean {
+        return authenticationLeaseRegistry.release(leaseId)
+    }
+
+    override fun handoffRuntimeAuthenticationLeaseToLogout(leaseId: String): Boolean {
+        return authenticationLeaseRegistry.tryHandoffLeaseToMutation(leaseId)
+    }
+
+    override suspend fun completeRuntimeAuthenticationLogout(
+        leaseId: String,
+        expectedUsername: String,
+        expectedToken: String,
+    ): Boolean {
+        if (!authenticationLeaseRegistry.ownsHandedOffMutation(leaseId)) {
+            return false
+        }
+        return try {
+            val currentAuthentication =
+                raUserAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            if (
+                currentAuthentication?.username != expectedUsername ||
+                currentAuthentication.token != expectedToken
+            ) {
+                return false
+            }
+            retroAchievementsDao.deleteAllAchievementUserData()
+            raUserAuthStore.clearUserAuthIfMatches(expectedUsername, expectedToken)
+        } finally {
+            authenticationLeaseRegistry.endMutation()
+        }
     }
 
     override suspend fun getCachedUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?> = suspendRunCatching {
@@ -231,6 +327,26 @@ class AndroidRetroAchievementsRepository(
         return result
     }
 
+    override suspend fun awardAchievementForAuthentication(
+        achievement: RAAchievement,
+        forHardcoreMode: Boolean,
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Result<RAAwardAchievementResponse> {
+        if (!authenticationMatches(expectedAuthentication)) {
+            return Result.failure(UserNotAuthenticatedException())
+        }
+        val result = submitAchievementAward(
+            achievementId = achievement.id,
+            gameId = achievement.gameId,
+            forHardcoreMode = forHardcoreMode,
+            expectedAuthentication = expectedAuthentication,
+        )
+        if (result.isFailure && !forHardcoreMode) {
+            scheduleAchievementSubmissionJob()
+        }
+        return result
+    }
+
     override suspend fun submitPendingAchievements(): Result<Unit> {
         retroAchievementsDao.getPendingAchievementSubmissions().forEach {
             if (it.forHardcoreMode) {
@@ -289,6 +405,33 @@ class AndroidRetroAchievementsRepository(
     }
 
     override suspend fun submitLeaderboardEntry(leaderboardId: Long, value: Int): Result<RASubmitLeaderboardEntryResponse> {
+        return submitLeaderboardEntryInternal(
+            leaderboardId = leaderboardId,
+            value = value,
+            expectedAuthentication = null,
+        )
+    }
+
+    override suspend fun submitLeaderboardEntryForAuthentication(
+        leaderboardId: Long,
+        value: Int,
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Result<RASubmitLeaderboardEntryResponse> {
+        if (!authenticationMatches(expectedAuthentication)) {
+            return Result.failure(UserNotAuthenticatedException())
+        }
+        return submitLeaderboardEntryInternal(
+            leaderboardId = leaderboardId,
+            value = value,
+            expectedAuthentication = expectedAuthentication,
+        )
+    }
+
+    private suspend fun submitLeaderboardEntryInternal(
+        leaderboardId: Long,
+        value: Int,
+        expectedAuthentication: RAUserAuth.Authenticated?,
+    ): Result<RASubmitLeaderboardEntryResponse> {
         val gameHash = retroAchievementsDao.getLeaderboard(leaderboardId)
             ?.gameId
             ?.let { retroAchievementsDao.getAnyGameHashForGameId(it) }
@@ -298,7 +441,17 @@ class AndroidRetroAchievementsRepository(
             "value" to value,
             "game_hash" to gameHash,
         )
-        return raApi.submitLeaderboardEntry(leaderboardId, value, gameHash).onSuccess {
+        val result = if (expectedAuthentication == null) {
+            raApi.submitLeaderboardEntry(leaderboardId, value, gameHash)
+        } else {
+            raApi.submitLeaderboardEntryForAuthentication(
+                leaderboardId = leaderboardId,
+                value = value,
+                userAuth = expectedAuthentication,
+                gameHash = gameHash,
+            )
+        }
+        return result.onSuccess {
             logRaTrace(
                 "leaderboard_submit_success",
                 "leaderboard_id" to leaderboardId,
@@ -357,6 +510,7 @@ class AndroidRetroAchievementsRepository(
         gameId: RAGameId,
         forHardcoreMode: Boolean,
         awardTimestampEpochMs: Long? = null,
+        expectedAuthentication: RAUserAuth.Authenticated? = null,
     ): Result<RAAwardAchievementResponse> {
         val userAchievement = RAUserAchievementEntity(
             gameId = gameId.id,
@@ -390,7 +544,18 @@ class AndroidRetroAchievementsRepository(
             "offset_seconds" to offsetSeconds,
         )
 
-        return raApi.awardAchievement(achievementId, forHardcoreMode, gameHash, offsetSeconds).onSuccess { response ->
+        val submissionResult = if (expectedAuthentication == null) {
+            raApi.awardAchievement(achievementId, forHardcoreMode, gameHash, offsetSeconds)
+        } else {
+            raApi.awardAchievementForAuthentication(
+                achievementId = achievementId,
+                forHardcoreMode = forHardcoreMode,
+                userAuth = expectedAuthentication,
+                gameHash = gameHash,
+                offsetSeconds = offsetSeconds,
+            )
+        }
+        return submissionResult.onSuccess { response ->
             if (forHardcoreMode) {
                 retroAchievementsDao.addUserAchievement(userAchievement)
             }
@@ -422,7 +587,7 @@ class AndroidRetroAchievementsRepository(
                 "game_id" to gameId.id,
                 "game_hash" to gameHash,
                 "hardcore" to forHardcoreMode,
-                "error" to (error.message ?: error.javaClass.simpleName),
+                "error" to error.javaClass.simpleName,
             )
             logRaTrace(
                 "achievement_submit_failed",
@@ -470,6 +635,12 @@ class AndroidRetroAchievementsRepository(
                 )
             }
         }
+    }
+
+    private suspend fun authenticationMatches(
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Boolean {
+        return raUserAuthStore.getUserAuth() == expectedAuthentication
     }
 
     private fun awardOffsetSeconds(awardTimestampEpochMs: Long): Long? {

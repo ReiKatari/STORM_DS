@@ -51,6 +51,30 @@ public:
     void onRetroAchievementsServerError(std::string api, long relatedId, int result, std::string message) override;
     void onRetroAchievementsDisconnected() override;
     void onRetroAchievementsReconnected() override;
+    void onRetroAchievementsPendingSubmissionAdded(
+        uint64_t submissionSessionId,
+        uint64_t submissionId,
+        uint64_t sequence,
+        int64_t createdAtEpochMs,
+        int submissionType,
+        long achievementId,
+        long leaderboardId,
+        uint64_t attemptId,
+        int32_t rawScore,
+        bool hardcore,
+        std::string formattedScore
+    ) override;
+    void onRetroAchievementsPendingSubmissionResolved(
+        uint64_t submissionSessionId,
+        uint64_t submissionId,
+        int submissionType,
+        int resolution,
+        int result
+    ) override;
+    void onRetroAchievementsPendingSubmissionBarrier(
+        uint64_t submissionSessionId,
+        uint64_t barrierId
+    ) override;
 
 private:
     // Event type constants
@@ -79,6 +103,9 @@ private:
     static constexpr int EVENT_RA_LBOARD_SCOREBOARD = 217;
     static constexpr int EVENT_RA_LBOARD_SUBMISSION_FAILED = 218;
     static constexpr int EVENT_RA_LBOARD_RUNTIME_RESET = 219;
+    static constexpr int EVENT_RA_PENDING_SUBMISSION_ADDED = 220;
+    static constexpr int EVENT_RA_PENDING_SUBMISSION_RESOLVED = 221;
+    static constexpr int EVENT_RA_PENDING_SUBMISSION_BARRIER = 222;
 };
 
 #endif // ANDROIDMELONEVENTMESSENGER_H
