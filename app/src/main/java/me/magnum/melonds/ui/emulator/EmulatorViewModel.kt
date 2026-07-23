@@ -60,6 +60,7 @@ import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
+import me.magnum.melonds.common.network.RETROACHIEVEMENTS_USER_AGENT
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointSnapshot
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointStorage
@@ -457,9 +458,7 @@ class EmulatorViewModel @Inject constructor(
         }.getOrNull().orEmpty().ifBlank { "unknown" }
     }
 
-    private val retroAchievementsUserAgent: String by lazy {
-        "melonDualDS-android/$retroAchievementsVersionName"
-    }
+    private val retroAchievementsUserAgent = RETROACHIEVEMENTS_USER_AGENT
 
     private val _raIntegrationEvent = EventSharedFlow<RAIntegrationEvent>()
     val integrationEvent = _raIntegrationEvent.asSharedFlow()
