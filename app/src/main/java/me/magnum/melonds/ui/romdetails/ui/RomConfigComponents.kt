@@ -1,6 +1,13 @@
 package me.magnum.melonds.ui.romdetails.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,31 +17,31 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.ContentAlpha
-import androidx.compose.material.Divider
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Icon
-import androidx.compose.material.LocalContentAlpha
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
-import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import me.magnum.melonds.ui.common.melonSwitchColors
+import androidx.compose.ui.unit.sp
+import me.magnum.melonds.ui.common.WatermelonCard
+import me.magnum.melonds.ui.common.WatermelonRowSeparator
+import me.magnum.melonds.ui.common.WatermelonSectionLabel
+import me.magnum.melonds.ui.common.WatermelonSwitch
+import me.magnum.melonds.ui.theme.watermelon
+
+val LocalConfigFocusReporter = compositionLocalOf<(String, String?) -> Unit> { { _, _ -> } }
 
 /**
- * A grouping container for related ROM configuration rows. Renders as a Surface card with rounded
- * corners and a subtle elevation, matching the visual language of the new ROM browser cards.
- *
- * The optional [title] is rendered above the card in caption style.
+ * A grouping container for related ROM configuration rows, styled per the WatermelonDS
+ * redesign: monospace section label above a rounded surface card.
  */
 @Composable
 fun ConfigSection(
@@ -42,30 +49,19 @@ fun ConfigSection(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         if (title != null) {
-            Text(
-                text = title.uppercase(),
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colors.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp, end = 16.dp),
-            )
+            WatermelonSectionLabel(title)
+        } else {
+            Spacer(Modifier.size(12.dp))
         }
-        // No background fill so cards blend visually with the screen surface (matches the ROM
-        // list cards). Rounded shape + thin separator from siblings via outer padding.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            content = content,
-        )
+        WatermelonCard(content = content)
     }
 }
 
 /**
- * A single ROM configuration row showing a title + current value. Tapping the row triggers
- * [onClick] (e.g. opens a chooser dialog or navigates).
+ * A single ROM configuration row: title (13.5/500) with the current value + chevron on
+ * the right, as in the redesign.
  */
 @Composable
 fun ConfigRow(
@@ -75,48 +71,70 @@ fun ConfigRow(
     showDivider: Boolean = false,
     onClick: () -> Unit,
 ) {
-    CompositionLocalProvider(LocalContentAlpha provides if (enabled) ContentAlpha.high else ContentAlpha.disabled) {
+    val colors = watermelon
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val focusReporter = LocalConfigFocusReporter.current
+    androidx.compose.runtime.LaunchedEffect(isFocused) {
+        if (isFocused) focusReporter(title, value)
+    }
+    if (showDivider) {
+        WatermelonRowSeparator()
+    }
+    val rowShape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(rowShape)
+            .then(
+                if (isFocused) {
+                    Modifier
+                        .background(colors.surface3)
+                        .border(2.dp, colors.red, rowShape)
+                } else {
+                    Modifier
+                },
+            )
+            .let { if (enabled) it.clickable(interactionSource = interactionSource, indication = null, onClick = onClick) else it }
+            .alpha(if (enabled) 1f else 0.45f)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 15.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            color = colors.text,
+            fontSize = 13.5.sp,
+            lineHeight = 17.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .let { if (enabled) it.clickable(onClick = onClick) else it }
-                .heightIn(min = 64.dp)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.widthIn(max = 200.dp),
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.body1,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.size(2.dp))
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.body2,
-                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.65f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = value,
+                color = colors.text2,
+                fontSize = 12.5.sp,
+                lineHeight = 15.sp,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
+                tint = colors.text3,
+                modifier = Modifier.size(17.dp).padding(start = 1.dp),
             )
         }
     }
-    if (showDivider) {
-        Divider(
-            modifier = Modifier.padding(start = 16.dp),
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.10f),
-        )
-    }
 }
 
-/** A switch row: title with optional caption + a toggle on the right. */
 @Composable
 fun ConfigToggleRow(
     title: String,
@@ -126,46 +144,46 @@ fun ConfigToggleRow(
     showDivider: Boolean = false,
     onToggle: (Boolean) -> Unit,
 ) {
-    CompositionLocalProvider(LocalContentAlpha provides if (enabled) ContentAlpha.high else ContentAlpha.disabled) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .let { if (enabled) it.clickable { onToggle(!isOn) } else it }
-                .heightIn(min = 64.dp)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.body1,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (subtitle != null) {
-                    Spacer(Modifier.size(2.dp))
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.body2,
-                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.65f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Switch(
-                checked = isOn,
-                onCheckedChange = if (enabled) onToggle else null,
-                colors = melonSwitchColors(),
-            )
-        }
-    }
+    val colors = watermelon
     if (showDivider) {
-        Divider(
-            modifier = Modifier.padding(start = 16.dp),
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.10f),
+        WatermelonRowSeparator()
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (enabled) it.clickable { onToggle(!isOn) } else it }
+            .alpha(if (enabled) 1f else 0.45f)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 15.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            Text(
+                text = title,
+                color = colors.text,
+                fontSize = 13.5.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    color = colors.text3,
+                    fontSize = 11.5.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        WatermelonSwitch(
+            checked = isOn,
+            onCheckedChange = if (enabled) onToggle else null,
+            enabled = enabled,
         )
     }
 }

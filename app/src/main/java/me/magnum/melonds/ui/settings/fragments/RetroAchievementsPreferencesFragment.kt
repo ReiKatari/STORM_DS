@@ -72,8 +72,7 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                 return@addOnPreferenceChangeListener false
             }
 
-            // Rich preference must be on when hardcore mode is enabled. As such, when hardcore is enabled, disable the preference and force it to be checked
-            richPresencePreference.isEnabled = !isEnabled
+            richPresencePreference.isVisible = !isEnabled
             if (isEnabled) {
                 richPresencePreference.isChecked = true
             }
@@ -175,14 +174,14 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                     val isHardcoreEnabled = state.isHardcoreEnabled
                     val integrationOptionsEnabled = isLoggedIn && isRetroAchievementsEnabled
                     integrationPreferences.forEach { preference ->
-                        preference.isEnabled = integrationOptionsEnabled
+                        preference.isVisible = integrationOptionsEnabled
                     }
                     val builtInEffective =
                         state.endpoint.backendEffective ==
                             me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend.BUILT_IN
-                    hardcoreModePreference.isEnabled = integrationOptionsEnabled && builtInEffective
-                    builtInOfflinePreference.isEnabled = integrationOptionsEnabled && builtInEffective
-                    richPresencePreference.isEnabled =
+                    hardcoreModePreference.isVisible = integrationOptionsEnabled && builtInEffective
+                    builtInOfflinePreference.isVisible = integrationOptionsEnabled && builtInEffective
+                    richPresencePreference.isVisible =
                         integrationOptionsEnabled && !isHardcoreEnabled && builtInEffective
                     offlineBackendPreference.summary = when (state.endpoint.hostSource) {
                         RetroAchievementsEndpointSnapshot.HostSource.OFFICIAL ->

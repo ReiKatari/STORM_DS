@@ -52,6 +52,8 @@ class ExternalPresentation(
     val layoutView = RuntimeLayoutView(context)
     private val container = FrameLayout(context)
     private val pauseOverlay = View(context)
+    private val infoOverlayContent = androidx.compose.runtime.mutableStateOf<(@androidx.compose.runtime.Composable () -> Unit)?>(null)
+    private val infoOverlayView = androidx.compose.ui.platform.ComposeView(context)
     private val emulatorRenderer: DSRenderer
     private val surfaceView: EmulatorSurfaceView
     private var currentBackground: RuntimeBackground? = null
@@ -77,6 +79,13 @@ class ExternalPresentation(
         container.addView(surfaceView)
         container.addView(layoutView)
         container.addView(pauseOverlay)
+        container.addView(infoOverlayView)
+
+        infoOverlayView.setContent {
+            me.magnum.melonds.ui.theme.MelonTheme(isDarkTheme = true) {
+                infoOverlayContent.value?.invoke()
+            }
+        }
 
         pauseOverlay.apply {
             setBackgroundColor(Color.BLACK)
@@ -183,6 +192,10 @@ class ExternalPresentation(
     fun setTouchScreenSystemGestureExclusionEnabled(enabled: Boolean) {
         excludeTouchScreenFromSystemGestures = enabled
         updateRendererScreenAreas()
+    }
+
+    fun setInfoOverlayContent(content: (@androidx.compose.runtime.Composable () -> Unit)?) {
+        infoOverlayContent.value = content
     }
 
     fun setPauseOverlayVisibility(visible: Boolean) {

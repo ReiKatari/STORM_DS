@@ -8,6 +8,7 @@
 #include "UriFileHandler.h"
 #include "MelonDS.h"
 #include "GPU3D_Vulkan.h"
+#include "renderer/VulkanSurfacePresenter.h"
 #include "OpenGLContext.h"
 #include "Platform.h"
 #include "renderer/FrameQueue.h"
@@ -73,6 +74,9 @@ void configureVulkanDriver(
     vulkanDriverConfiguration.CustomDriverDir = jStringToString(env, customVulkanDriverDir);
     vulkanDriverConfiguration.CustomDriverName = jStringToString(env, customVulkanDriverName);
     vulkanDriverConfiguration.DisplayName = jStringToString(env, customVulkanDriverDisplayName);
+
+    MelonDSAndroid::VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
+
     melonDS::VulkanDispatch::ConfigureDriver(vulkanDriverConfiguration);
 }
 

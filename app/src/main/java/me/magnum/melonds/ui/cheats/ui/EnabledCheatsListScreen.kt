@@ -2,6 +2,8 @@ package me.magnum.melonds.ui.cheats.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -55,7 +57,13 @@ private fun List(
     } else {
         LazyColumn(
             modifier = modifier.consumeWindowInsets(contentPadding),
-            contentPadding = contentPadding,
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(
+                start = contentPadding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current) + 16.dp,
+                top = contentPadding.calculateTopPadding() + 12.dp,
+                end = contentPadding.calculateEndPadding(androidx.compose.ui.platform.LocalLayoutDirection.current) + 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 16.dp,
+            ),
         ) {
             items(
                 items = cheats,

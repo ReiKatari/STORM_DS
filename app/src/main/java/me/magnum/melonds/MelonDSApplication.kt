@@ -22,6 +22,9 @@ import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.impl.AppLogFileRecorder
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.impl.retroachievements.offline.HardcoreOfflineLossTracker
+import android.system.Os
+import android.util.Log
+import java.io.File
 import me.magnum.melonds.migrations.Migrator
 import javax.inject.Inject
 
@@ -46,6 +49,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        giveLibrashaderACacheDirectory()
         createNotificationChannels()
         applyTheme()
         performMigrations()
@@ -56,6 +60,15 @@ class MelonDSApplication : Application(), Configuration.Provider {
             UriFileHandler(this, uriHandler),
             settingsRepository.getVulkanDriverConfiguration(applicationInfo.nativeLibraryDir),
         )
+    }
+
+    private fun giveLibrashaderACacheDirectory() {
+        runCatching {
+            Os.setenv("HOME", filesDir.absolutePath, false)
+            Os.setenv("XDG_CACHE_HOME", File(filesDir, "cache").absolutePath, false)
+        }.onFailure {
+            Log.w("MelonDSApplication", "Could not point librashader at a cache directory", it)
+        }
     }
 
     private fun createNotificationChannels() {

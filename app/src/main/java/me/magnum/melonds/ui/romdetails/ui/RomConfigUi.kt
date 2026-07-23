@@ -66,17 +66,20 @@ fun RomConfigUi(
     romConfigUiState: RomConfigUiState,
     onConfigUpdate: (RomConfigUpdateEvent) -> Unit,
     onCustomInputConfigEdited: () -> Unit,
+    onSettingFocused: (String, String?) -> Unit = { _, _ -> },
 ) {
-    when (romConfigUiState) {
-        is RomConfigUiState.Loading -> Loading(modifier.padding(contentPadding))
-        is RomConfigUiState.Ready -> Content(
-            modifier = modifier,
-            contentPadding = contentPadding,
-            rom = rom,
-            romConfig = romConfigUiState.romConfigUiModel,
-            onConfigUpdate = onConfigUpdate,
-            onCustomInputConfigEdited = onCustomInputConfigEdited,
-        )
+    androidx.compose.runtime.CompositionLocalProvider(LocalConfigFocusReporter provides onSettingFocused) {
+        when (romConfigUiState) {
+            is RomConfigUiState.Loading -> Loading(modifier.padding(contentPadding))
+            is RomConfigUiState.Ready -> Content(
+                modifier = modifier,
+                contentPadding = contentPadding,
+                rom = rom,
+                romConfig = romConfigUiState.romConfigUiModel,
+                onConfigUpdate = onConfigUpdate,
+                onCustomInputConfigEdited = onCustomInputConfigEdited,
+            )
+        }
     }
 }
 

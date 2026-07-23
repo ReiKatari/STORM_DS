@@ -62,6 +62,8 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
             true
         }
+
+        hideDependentsWhenInactive("use_custom_bios", "show_bios")
     }
 
     override fun getTitle() = getString(R.string.custom_bios_firmware)

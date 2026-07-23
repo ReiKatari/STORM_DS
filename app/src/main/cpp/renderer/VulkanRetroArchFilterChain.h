@@ -6,10 +6,8 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+#include "renderer/LibrashaderApi.h"
 #include "types.h"
-
-#define LIBRA_RUNTIME_VULKAN 1
-#include "librashader.h"
 
 namespace MelonDSAndroid
 {
@@ -57,6 +55,7 @@ private:
         melonDS::u32 outputHeight,
         const std::vector<std::pair<std::string, float>>& parameterOverrides);
     static void logError(const char* context, libra_error_t error);
+    static std::string describeError(const char* context, libra_error_t error);
 
 private:
     libra_vk_filter_chain_t chain = nullptr;

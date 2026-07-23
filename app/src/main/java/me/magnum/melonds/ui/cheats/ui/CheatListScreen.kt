@@ -81,27 +81,36 @@ private fun List(
         } else {
             LazyColumn(
                 modifier = modifier.consumeWindowInsets(contentPadding),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(
-                    start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
-                    top = contentPadding.calculateTopPadding(),
-                    end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
+                    start = contentPadding.calculateStartPadding(LocalLayoutDirection.current) + 16.dp,
+                    top = contentPadding.calculateTopPadding() + 12.dp,
+                    end = contentPadding.calculateEndPadding(LocalLayoutDirection.current) + 16.dp,
                     bottom = contentPadding.calculateBottomPadding() + 16.dp + 56.dp + 16.dp, // Take FAB into consideration
                 ),
             ) {
                 itemsIndexed(
                     items = cheats,
                     key = { _, item -> item.id ?: item.code },
-                ) { index, item ->
-                    if (index > 0) {
-                        Divider()
-                    }
-
+                ) { _, item ->
                     CheatItem(
                         modifier = Modifier.fillMaxWidth(),
                         cheat = item,
                         onClick = { onCheatClick(item) },
                         onEditClick = { cheatFormDialogState = CheatFormDialogState.EditCheat(item) },
                         onDeleteClick = { onDeleteCheatClick(item) },
+                    )
+                }
+
+                item(key = "cheats_footer_note") {
+                    Text(
+                        text = stringResource(R.string.cheats_footer_note),
+                        color = me.magnum.melonds.ui.theme.watermelon.text3,
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, start = 16.dp, end = 16.dp),
                     )
                 }
             }

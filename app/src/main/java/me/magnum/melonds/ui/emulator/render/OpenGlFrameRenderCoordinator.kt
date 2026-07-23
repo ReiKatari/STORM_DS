@@ -3,7 +3,10 @@ package me.magnum.melonds.ui.emulator.render
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Message
+import android.util.Log
 import androidx.core.os.bundleOf
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.RuntimeBackground
@@ -51,6 +54,13 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
             return
         }
         frameRenderThread.requestFrameRender(frameDeadlineNanos)
+    }
+
+    override fun prewarmShaders(atlasWidth: Int, atlasHeight: Int): Long {
+        if (stopped) {
+            return 0L
+        }
+        return frameRenderThread.prewarmShaders(atlasWidth, atlasHeight)
     }
 
     override fun updateSurfacePresentation(
@@ -102,6 +112,7 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
                     when (msg.what) {
                         MSG_RENDER_FRAME -> renderFrame(msg.data.getLong(MSG_RENDER_FRAME_FRAME_DEADLINE_NS))
                         MSG_DESTROY_SURFACES -> destroySurfaces()
+                        MSG_PREWARM_SHADERS -> prewarmShaders(msg.arg1, msg.arg2, msg.obj as PrewarmRequest)
                         MSG_STOP -> stopThread()
                     }
                 }
@@ -117,6 +128,23 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
                 it.data = bundleOf(MSG_RENDER_FRAME_FRAME_DEADLINE_NS to (frameDeadlineNanos ?: 0L))
                 handler?.sendMessage(it)
             }
+        }
+
+        fun prewarmShaders(atlasWidth: Int, atlasHeight: Int): Long {
+            val handler = this.handler ?: return 0L
+            if (!running) {
+                return 0L
+            }
+            val request = PrewarmRequest(CountDownLatch(1))
+            val message = Message.obtain(handler, MSG_PREWARM_SHADERS, atlasWidth, atlasHeight, request)
+            if (!handler.sendMessageAtFrontOfQueue(message)) {
+                return 0L
+            }
+            if (!request.latch.await(PREWARM_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
+                Log.w(TAG, "Shader prewarm timed out; the first frames may stutter while it finishes")
+                return 0L
+            }
+            return request.elapsedMillis
         }
 
         fun requestSurfaceDestruction() {
@@ -145,7 +173,25 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
                 } else {
                     0L
                 }
+                glContext.useWorker()
                 MelonEmulator.presentFrame(deadline, frameRenderCallback)
+            }
+        }
+
+        private fun prewarmShaders(atlasWidth: Int, atlasHeight: Int, request: PrewarmRequest) {
+            try {
+                if (!running || !glContext.useWorker()) {
+                    return
+                }
+                val started = System.nanoTime()
+                val succeeded = runCatching {
+                    MelonEmulator.prewarmOpenGlRetroArchFilter(atlasWidth, atlasHeight)
+                }.getOrDefault(false)
+                val elapsedMs = (System.nanoTime() - started) / 1_000_000
+                request.elapsedMillis = if (succeeded) elapsedMs else 0L
+                Log.i(TAG, "Shader prewarm ${if (succeeded) "ready" else "failed"} in ${elapsedMs}ms (atlas ${atlasWidth}x$atlasHeight)")
+            } finally {
+                request.latch.countDown()
             }
         }
 
@@ -176,9 +222,16 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
                 surfacesPendingRemoval.clear()
             }
 
+            if (glContext.useWorker()) {
+                runCatching { MelonEmulator.releaseOpenGlRetroArchFilter() }
+            }
             glContext.release()
             glContext.destroy()
         }
+    }
+
+    private class PrewarmRequest(val latch: CountDownLatch) {
+        @Volatile var elapsedMillis: Long = 0L
     }
 
     private class RenderStatistics {
@@ -199,10 +252,15 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
     }
 
     private companion object {
+        const val TAG = "OpenGlFrameRenderCoordinator"
+
         const val MSG_RENDER_FRAME = 1
         const val MSG_DESTROY_SURFACES = 2
         const val MSG_STOP = 3
+        const val MSG_PREWARM_SHADERS = 4
 
         const val MSG_RENDER_FRAME_FRAME_DEADLINE_NS = "frame-deadline"
+
+        const val PREWARM_TIMEOUT_MINUTES = 10L
     }
 }

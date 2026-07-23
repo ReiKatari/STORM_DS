@@ -1,6 +1,5 @@
 package me.magnum.melonds.ui.romlist.composables
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.MutatePriority
@@ -8,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -24,7 +26,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.LinearProgressIndicator
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -37,17 +38,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -59,9 +60,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.RomFilter
 import me.magnum.melonds.domain.model.RomScanningStatus
@@ -70,12 +71,15 @@ import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romlist.RomBrowserEntry
 import me.magnum.melonds.ui.romlist.RomBrowserUiState
+import me.magnum.melonds.ui.theme.watermelon
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun RomBrowserScreen(
     state: RomBrowserUiState,
     coverByHash: Map<String, String>,
+    boxArtByUri: Map<String, String>,
+    searchQuery: String,
     allowConfiguration: Boolean,
     scanningStatus: RomScanningStatus,
     confirmedAchievementHashes: Set<String>,
@@ -84,10 +88,20 @@ fun RomBrowserScreen(
     onRomLongPress: (Rom) -> Unit,
     onRomConfigClick: (Rom) -> Unit,
     onFilterSelected: (RomFilter) -> Unit,
+    onSortSelected: (SortingMode) -> Unit,
     onNavigateUp: () -> Unit,
     onRefresh: () -> Unit,
+    onSearchQueryChanged: (String?) -> Unit,
+    onToggleViewMode: () -> Unit,
+    onBootFirmwareDs: () -> Unit,
+    onBootFirmwareDsi: () -> Unit,
+    onOpenDsiWareManager: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onRomVisible: (Rom) -> Unit = {},
+    onFocusedRomChanged: (Rom?) -> Unit = {},
     onDpadDownGateChanged: ((() -> Boolean)?) -> Unit = {},
 ) {
+    val colors = watermelon
     val refreshState = rememberPullRefreshState(
         refreshing = scanningStatus == RomScanningStatus.SCANNING,
         onRefresh = onRefresh,
@@ -100,7 +114,15 @@ fun RomBrowserScreen(
 
     val folderCount = remember(state.entries) { state.entries.takeWhile { it is RomBrowserEntry.Folder }.size }
     val hasFolders = folderCount > 0
+    val romCount = state.entries.size - folderCount
     val showAlphabetBar = (state.alphabetIndex.isNotEmpty() || hasFolders) && state.sortingMode == SortingMode.ALPHABETICALLY
+
+    val isAtLibraryTop = state.isAtVirtualRoot || !state.canNavigateUp
+    val showContinueShelf = isAtLibraryTop && !state.isSearchActive && state.filter == RomFilter.ALL && state.continuePlaying.isNotEmpty()
+    val showSectionHeader = !state.isSearchActive
+
+    val gridLeadingItems = 1 + (if (showContinueShelf) 1 else 0) + (if (showSectionHeader) 1 else 0) + (if (hasFolders) 1 else 0)
+    val listLeadingItems = 1 + (if (showContinueShelf) 1 else 0) + (if (showSectionHeader) 1 else 0)
 
     LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive) {
         focusedEntryIndex = -1
@@ -108,15 +130,24 @@ fun RomBrowserScreen(
         listState.scrollToItem(0)
     }
 
-    val gridColumnCount by remember { derivedStateOf { gridState.currentColumnCount() } }
-    val firstIndexInLastGridRow = remember(state.entries.size, gridColumnCount) {
-        firstIndexInLastGridRow(totalItems = state.entries.size, columnCount = gridColumnCount)
+    LaunchedEffect(focusedEntryIndex, state.entries) {
+        val focusedRom = (state.entries.getOrNull(focusedEntryIndex) as? RomBrowserEntry.RomItem)?.rom
+        onFocusedRomChanged(focusedRom)
     }
 
-    DisposableEffect(state.viewMode, focusedEntryIndex, firstIndexInLastGridRow, state.entries.size, onDpadDownGateChanged) {
+    val gridColumnCount by remember { derivedStateOf { gridState.currentColumnCount() } }
+    val firstRomEntryIndexInLastGridRow = remember(romCount, folderCount, gridColumnCount) {
+        if (romCount <= 0) {
+            Int.MAX_VALUE
+        } else {
+            folderCount + firstIndexInLastGridRow(totalItems = romCount, columnCount = gridColumnCount)
+        }
+    }
+
+    DisposableEffect(state.viewMode, focusedEntryIndex, firstRomEntryIndexInLastGridRow, state.entries.size, onDpadDownGateChanged) {
         onDpadDownGateChanged {
             when (state.viewMode) {
-                RomViewMode.GRID -> focusedEntryIndex >= firstIndexInLastGridRow
+                RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
                 RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
             }
         }
@@ -125,10 +156,10 @@ fun RomBrowserScreen(
         }
     }
 
-    LaunchedEffect(state.viewMode, firstIndexInLastGridRow) {
+    LaunchedEffect(state.viewMode, firstRomEntryIndexInLastGridRow) {
         snapshotFlow {
             when (state.viewMode) {
-                RomViewMode.GRID -> focusedEntryIndex >= firstIndexInLastGridRow
+                RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
                 RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
             }
         }
@@ -142,229 +173,318 @@ fun RomBrowserScreen(
             }
     }
 
-    Surface(color = MaterialTheme.colors.surface, modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                BreadcrumbBar(
-                    breadcrumbs = state.breadcrumbs,
-                    canNavigateUp = state.canNavigateUp,
-                    isAtVirtualRoot = state.isAtVirtualRoot,
-                    isSearchActive = state.isSearchActive,
-                    onNavigateUp = onNavigateUp,
+    Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            WatermelonLibraryHeader(
+                isSearchActive = state.isSearchActive,
+                searchQuery = searchQuery,
+                viewMode = state.viewMode,
+                onSearchQueryChanged = onSearchQueryChanged,
+                onToggleViewMode = onToggleViewMode,
+                onBootFirmwareDs = onBootFirmwareDs,
+                onBootFirmwareDsi = onBootFirmwareDsi,
+                onOpenDsiWareManager = onOpenDsiWareManager,
+                onRefresh = onRefresh,
+                onOpenSettings = onOpenSettings,
+            )
+
+            if (scanningStatus == RomScanningStatus.SCANNING) {
+                LinearProgressIndicator(
+                    color = colors.green,
+                    backgroundColor = colors.surface2,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-
-                if (scanningStatus == RomScanningStatus.SCANNING) {
-                    LinearProgressIndicator(
-                        color = MaterialTheme.colors.secondary,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                AnimatedVisibility(visible = state.isAtVirtualRoot && !state.isSearchActive && state.continuePlaying.isNotEmpty()) {
-                    ContinuePlayingShelf(
-                        roms = state.continuePlaying,
-                        coverByHash = coverByHash,
-                        onRomClicked = onRomClick,
-                        onRomLongPressed = onRomLongPress,
-                    )
-                }
-
-                FilterChipsRow(
-                    selected = state.filter,
-                    onFilterSelected = onFilterSelected,
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .pullRefresh(refreshState),
-                ) {
-                    if (state.entries.isEmpty()) {
-                        EmptyState(filter = state.filter)
-                    } else {
-                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                            Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
-                                when (mode) {
-                                    RomViewMode.GRID -> GridContent(
-                                        state = state,
-                                        gridState = gridState,
-                                        coverByHash = coverByHash,
-                                        confirmedAchievementHashes = confirmedAchievementHashes,
-                                        showAlphabetBar = showAlphabetBar,
-                                        viewportHeight = maxHeight,
-                                        itemFocusRequesters = itemFocusRequesters,
-                                        focusedEntryIndex = focusedEntryIndex,
-                                        onFocusedEntryIndexChanged = { focusedEntryIndex = it },
-                                        onFolderClick = onFolderClick,
-                                        onRomClick = onRomClick,
-                                        onRomLongPress = onRomLongPress,
-                                    )
-                                    RomViewMode.LIST -> ListContent(
-                                        state = state,
-                                        listState = listState,
-                                        coverByHash = coverByHash,
-                                        allowConfiguration = allowConfiguration,
-                                        confirmedAchievementHashes = confirmedAchievementHashes,
-                                        showAlphabetBar = showAlphabetBar,
-                                        viewportHeight = maxHeight,
-                                        itemFocusRequesters = itemFocusRequesters,
-                                        focusedEntryIndex = focusedEntryIndex,
-                                        onFocusedEntryIndexChanged = { focusedEntryIndex = it },
-                                        onFolderClick = onFolderClick,
-                                        onRomClick = onRomClick,
-                                        onRomLongPress = onRomLongPress,
-                                        onRomConfigClick = onRomConfigClick,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    PullRefreshIndicator(
-                        refreshing = scanningStatus == RomScanningStatus.SCANNING,
-                        state = refreshState,
-                        modifier = Modifier.align(Alignment.TopCenter),
-                        backgroundColor = MaterialTheme.colors.surface,
-                        contentColor = MaterialTheme.colors.secondary,
-                    )
-                }
             }
 
-            if (showAlphabetBar) {
-                val activeFirstVis by remember(state.viewMode) {
-                    derivedStateOf {
-                        when (state.viewMode) {
-                            RomViewMode.GRID -> gridState.firstVisibleItemIndex
-                            RomViewMode.LIST -> listState.firstVisibleItemIndex
+            BreadcrumbBar(
+                breadcrumbs = state.breadcrumbs,
+                canNavigateUp = state.canNavigateUp,
+                isAtVirtualRoot = state.isAtVirtualRoot,
+                isSearchActive = state.isSearchActive,
+                onNavigateUp = onNavigateUp,
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .pullRefresh(refreshState),
+            ) {
+                if (state.entries.isEmpty() && !showContinueShelf) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        FilterChipsRow(
+                            selected = state.filter,
+                            onFilterSelected = onFilterSelected,
+                        )
+                        EmptyState(filter = state.filter)
+                    }
+                } else {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
+                            when (mode) {
+                                RomViewMode.GRID -> GridContent(
+                                    state = state,
+                                    gridState = gridState,
+                                    coverByHash = coverByHash,
+                                    boxArtByUri = boxArtByUri,
+                                    confirmedAchievementHashes = confirmedAchievementHashes,
+                                    showAlphabetBar = showAlphabetBar,
+                                    showContinueShelf = showContinueShelf,
+                                    showSectionHeader = showSectionHeader,
+                                    folderCount = folderCount,
+                                    viewportHeight = maxHeight,
+                                    itemFocusRequesters = itemFocusRequesters,
+                                    focusedEntryIndex = focusedEntryIndex,
+                                    firstRomEntryIndexInLastGridRow = firstRomEntryIndexInLastGridRow,
+                                    onFocusedEntryIndexChanged = { focusedEntryIndex = it },
+                                    onRomFocused = onFocusedRomChanged,
+                                    onFolderClick = onFolderClick,
+                                    onRomClick = onRomClick,
+                                    onRomLongPress = onRomLongPress,
+                                    onFilterSelected = onFilterSelected,
+                                    onSortSelected = onSortSelected,
+                                    onNavigateUp = onNavigateUp,
+                                    onRomVisible = onRomVisible,
+                                )
+                                RomViewMode.LIST -> ListContent(
+                                    state = state,
+                                    listState = listState,
+                                    coverByHash = coverByHash,
+                                    boxArtByUri = boxArtByUri,
+                                    allowConfiguration = allowConfiguration,
+                                    confirmedAchievementHashes = confirmedAchievementHashes,
+                                    showAlphabetBar = showAlphabetBar,
+                                    showContinueShelf = showContinueShelf,
+                                    showSectionHeader = showSectionHeader,
+                                    folderCount = folderCount,
+                                    viewportHeight = maxHeight,
+                                    itemFocusRequesters = itemFocusRequesters,
+                                    focusedEntryIndex = focusedEntryIndex,
+                                    onFocusedEntryIndexChanged = { focusedEntryIndex = it },
+                                    onRomFocused = onFocusedRomChanged,
+                                    onFolderClick = onFolderClick,
+                                    onRomClick = onRomClick,
+                                    onRomLongPress = onRomLongPress,
+                                    onRomConfigClick = onRomConfigClick,
+                                    onFilterSelected = onFilterSelected,
+                                    onSortSelected = onSortSelected,
+                                    onNavigateUp = onNavigateUp,
+                                    onRomVisible = onRomVisible,
+                                )
+                            }
                         }
                     }
                 }
-                val activeLetter by remember(state.alphabetIndex, state.viewMode) {
-                    derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
-                }
-                val isInFolderSection by remember(folderCount, state.viewMode) {
-                    derivedStateOf { hasFolders && activeFirstVis < folderCount }
-                }
-                AlphabetIndexBar(
-                    alphabetIndex = state.alphabetIndex,
-                    activeLetter = activeLetter,
-                    hasFolders = hasFolders,
-                    isInFolderSection = isInFolderSection,
-                    onFoldersClicked = {
-                        coroutineScope.launch {
-                            when (state.viewMode) {
-                                RomViewMode.GRID -> gridState.scrollToItem(0)
-                                RomViewMode.LIST -> listState.scrollToItem(0)
-                            }
-                            requestFirstVisibleRomFocus(
-                                state = state,
-                                gridState = gridState,
-                                listState = listState,
-                                itemFocusRequesters = itemFocusRequesters,
-                            )
-                        }
-                    },
-                    onLetterTouched = { idx, letter ->
-                        coroutineScope.launch {
-                            when (state.viewMode) {
-                                RomViewMode.GRID -> smartScrollGrid(gridState, idx, letter, state.alphabetIndex)
-                                RomViewMode.LIST -> smartScrollList(listState, idx, letter, state.alphabetIndex)
-                            }
-                            requestRomFocusAtIndex(
-                                state = state,
-                                targetIndex = idx,
-                                gridState = gridState,
-                                listState = listState,
-                                itemFocusRequesters = itemFocusRequesters,
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
+                PullRefreshIndicator(
+                    refreshing = scanningStatus == RomScanningStatus.SCANNING,
+                    state = refreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    backgroundColor = colors.surface,
+                    contentColor = colors.green,
                 )
+
+                if (showAlphabetBar) {
+                    val leadingItems = when (state.viewMode) {
+                        RomViewMode.GRID -> gridLeadingItems
+                        RomViewMode.LIST -> listLeadingItems
+                    }
+                    val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
+                        derivedStateOf {
+                            val firstVisItem = when (state.viewMode) {
+                                RomViewMode.GRID -> gridState.firstVisibleItemIndex
+                                RomViewMode.LIST -> listState.firstVisibleItemIndex
+                            }
+                            when (state.viewMode) {
+                                RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
+                                RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
+                            }
+                        }
+                    }
+                    val activeLetter by remember(state.alphabetIndex, state.viewMode) {
+                        derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
+                    }
+                    val isInFolderSection by remember(folderCount, state.viewMode) {
+                        derivedStateOf { hasFolders && activeFirstVis < folderCount }
+                    }
+                    AlphabetIndexBar(
+                        alphabetIndex = state.alphabetIndex,
+                        activeLetter = activeLetter,
+                        hasFolders = hasFolders,
+                        isInFolderSection = isInFolderSection,
+                        onFoldersClicked = {
+                            coroutineScope.launch {
+                                when (state.viewMode) {
+                                    RomViewMode.GRID -> gridState.scrollToItem(0)
+                                    RomViewMode.LIST -> listState.scrollToItem(0)
+                                }
+                                requestFirstVisibleRomFocus(
+                                    state = state,
+                                    gridState = gridState,
+                                    listState = listState,
+                                    itemFocusRequesters = itemFocusRequesters,
+                                )
+                            }
+                        },
+                        onLetterTouched = { idx, letter ->
+                            coroutineScope.launch {
+                                val targetItemIndex = when (state.viewMode) {
+                                    RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
+                                    RomViewMode.LIST -> leadingItems + idx
+                                }
+                                when (state.viewMode) {
+                                    RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex)
+                                    RomViewMode.LIST -> listState.scrollToItem(targetItemIndex)
+                                }
+                                requestRomFocusAtIndex(
+                                    state = state,
+                                    targetIndex = idx,
+                                    gridState = gridState,
+                                    listState = listState,
+                                    itemFocusRequesters = itemFocusRequesters,
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GridContent(
     state: RomBrowserUiState,
     gridState: LazyGridState,
     coverByHash: Map<String, String>,
+    boxArtByUri: Map<String, String>,
     confirmedAchievementHashes: Set<String>,
     showAlphabetBar: Boolean,
+    showContinueShelf: Boolean,
+    showSectionHeader: Boolean,
+    folderCount: Int,
     viewportHeight: Dp,
     itemFocusRequesters: MutableMap<String, FocusRequester>,
     focusedEntryIndex: Int,
+    firstRomEntryIndexInLastGridRow: Int,
     onFocusedEntryIndexChanged: (Int) -> Unit,
+    onRomFocused: (Rom) -> Unit = {},
     onFolderClick: (RomBrowserEntry.Folder) -> Unit,
     onRomClick: (Rom) -> Unit,
     onRomLongPress: (Rom) -> Unit,
+    onFilterSelected: (RomFilter) -> Unit,
+    onSortSelected: (SortingMode) -> Unit,
+    onNavigateUp: () -> Unit,
+    onRomVisible: (Rom) -> Unit,
 ) {
-    val columnCount by remember { derivedStateOf { gridState.currentColumnCount() } }
-    val firstIndexInLastRow = remember(state.entries.size, columnCount) {
-        firstIndexInLastGridRow(totalItems = state.entries.size, columnCount = columnCount)
-    }
+    val folders = state.entries.take(folderCount).filterIsInstance<RomBrowserEntry.Folder>()
+    val roms = state.entries.drop(folderCount).filterIsInstance<RomBrowserEntry.RomItem>()
 
     RomListOverscrollProvider {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 120.dp),
+            columns = GridCells.Adaptive(minSize = 104.dp),
             state = gridState,
             contentPadding = PaddingValues(
-                start = 12.dp,
-                end = if (showAlphabetBar) 36.dp else 12.dp,
-                top = 8.dp,
+                start = 16.dp,
+                end = if (showAlphabetBar) 28.dp else 16.dp,
+                top = 0.dp,
                 bottom = rememberTrailingLetterScrollPadding(
                     viewportHeight = viewportHeight,
                     visibleItemHeightPx = gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { item -> item.size.height } ?: 0,
                     minimumPadding = if (state.filter == RomFilter.FAVORITES) 96.dp else 32.dp,
                 ),
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            itemsIndexed(
-                items = state.entries,
-                key = { _, entry ->
-                    when (entry) {
-                        is RomBrowserEntry.Folder -> "folder:${entry.docId}"
-                        is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
-                    }
-                },
-            ) { index, entry ->
-                when (entry) {
-                    is RomBrowserEntry.Folder -> FolderGridCard(
-                        name = entry.name,
-                        relativePath = entry.relativePath,
-                        onClick = { onFolderClick(entry) },
-                        modifier = rememberRomBrowserItemFocusModifier(
-                            index = index,
-                            focusKey = entry.focusKey(),
-                            itemFocusRequesters = itemFocusRequesters,
-                            focusedEntryIndex = focusedEntryIndex,
-                            onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
-                        ).cancelDpadDownIf(index >= firstIndexInLastRow),
-                    )
-                    is RomBrowserEntry.RomItem -> RomGridCard(
-                        rom = entry.rom,
-                        coverUrl = coverByHash[entry.rom.retroAchievementsHash],
-                        showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
-                        onClick = { onRomClick(entry.rom) },
-                        onLongPress = {
-                            if (!entry.rom.isInstalledDsiWareShortcut) {
-                                onRomLongPress(entry.rom)
-                            }
-                        },
-                        modifier = rememberRomBrowserItemFocusModifier(
-                            index = index,
-                            focusKey = entry.focusKey(),
-                            itemFocusRequesters = itemFocusRequesters,
-                            focusedEntryIndex = focusedEntryIndex,
-                            onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
-                        ).cancelDpadDownIf(index >= firstIndexInLastRow),
+            item(key = "filters", span = { GridItemSpan(maxLineSpan) }) {
+                FilterChipsRow(
+                    selected = state.filter,
+                    onFilterSelected = onFilterSelected,
+                    modifier = Modifier.padding(start = 0.dp),
+                )
+            }
+            if (showContinueShelf) {
+                item(key = "continue", span = { GridItemSpan(maxLineSpan) }) {
+                    ContinuePlayingShelf(
+                        roms = state.continuePlaying,
+                        coverByHash = coverByHash,
+                        boxArtByUri = boxArtByUri,
+                        onRomClicked = onRomClick,
+                        onRomLongPressed = onRomLongPress,
+                        horizontalPadding = 0.dp,
+                        onRomFocused = onRomFocused,
                     )
                 }
+            }
+            if (showSectionHeader) {
+                item(key = "section_header", span = { GridItemSpan(maxLineSpan) }) {
+                    LibrarySectionHeader(
+                        title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
+                        inFolder = state.canNavigateUp,
+                        sortingMode = state.sortingMode,
+                        sortingOrder = state.sortingOrder,
+                        gamesCount = roms.size,
+                        onNavigateUp = onNavigateUp,
+                        onSortSelected = onSortSelected,
+                        modifier = Modifier.padding(horizontal = 0.dp),
+                    )
+                }
+            }
+            if (folders.isNotEmpty()) {
+                item(key = "folders", span = { GridItemSpan(maxLineSpan) }) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                    ) {
+                        folders.forEachIndexed { folderIdx, folder ->
+                            FolderGridCard(
+                                name = folder.name,
+                                relativePath = folder.relativePath,
+                                onClick = { onFolderClick(folder) },
+                                modifier = rememberRomBrowserItemFocusModifier(
+                                    index = folderIdx,
+                                    focusKey = "folder:${folder.docId}",
+                                    itemFocusRequesters = itemFocusRequesters,
+                                    focusedEntryIndex = focusedEntryIndex,
+                                    onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            itemsIndexed(
+                items = roms,
+                key = { _, entry -> "rom:${entry.rom.uri}" },
+            ) { romIdx, entry ->
+                val entryIndex = folderCount + romIdx
+                LaunchedEffect(entry.rom.uri) {
+                    onRomVisible(entry.rom)
+                }
+                RomGridCard(
+                    rom = entry.rom,
+                    coverUrl = coverByHash[entry.rom.retroAchievementsHash],
+                    boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                    boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
+                    showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                    onClick = { onRomClick(entry.rom) },
+                    onLongPress = {
+                        if (!entry.rom.isInstalledDsiWareShortcut) {
+                            onRomLongPress(entry.rom)
+                        }
+                    },
+                    modifier = rememberRomBrowserItemFocusModifier(
+                        index = entryIndex,
+                        focusKey = "rom:${entry.rom.uri}",
+                        itemFocusRequesters = itemFocusRequesters,
+                        focusedEntryIndex = focusedEntryIndex,
+                        onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
+                    ).cancelDpadDownIf(entryIndex >= firstRomEntryIndexInLastGridRow),
+                )
             }
         }
     }
@@ -375,17 +495,26 @@ private fun ListContent(
     state: RomBrowserUiState,
     listState: LazyListState,
     coverByHash: Map<String, String>,
+    boxArtByUri: Map<String, String>,
     allowConfiguration: Boolean,
     confirmedAchievementHashes: Set<String>,
     showAlphabetBar: Boolean,
+    showContinueShelf: Boolean,
+    showSectionHeader: Boolean,
+    folderCount: Int,
     viewportHeight: Dp,
     itemFocusRequesters: MutableMap<String, FocusRequester>,
     focusedEntryIndex: Int,
     onFocusedEntryIndexChanged: (Int) -> Unit,
+    onRomFocused: (Rom) -> Unit = {},
     onFolderClick: (RomBrowserEntry.Folder) -> Unit,
     onRomClick: (Rom) -> Unit,
     onRomLongPress: (Rom) -> Unit,
     onRomConfigClick: (Rom) -> Unit,
+    onFilterSelected: (RomFilter) -> Unit,
+    onSortSelected: (SortingMode) -> Unit,
+    onNavigateUp: () -> Unit,
+    onRomVisible: (Rom) -> Unit,
 ) {
     RomListOverscrollProvider {
         LazyColumn(
@@ -393,8 +522,8 @@ private fun ListContent(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 0.dp,
-                end = if (showAlphabetBar) 36.dp else 0.dp,
-                top = 4.dp,
+                end = if (showAlphabetBar) 28.dp else 0.dp,
+                top = 0.dp,
                 bottom = rememberTrailingLetterScrollPadding(
                     viewportHeight = viewportHeight,
                     visibleItemHeightPx = listState.layoutInfo.visibleItemsInfo.maxOfOrNull { item -> item.size } ?: 0,
@@ -402,6 +531,37 @@ private fun ListContent(
                 ),
             ),
         ) {
+            item(key = "filters") {
+                FilterChipsRow(
+                    selected = state.filter,
+                    onFilterSelected = onFilterSelected,
+                )
+            }
+            if (showContinueShelf) {
+                item(key = "continue") {
+                    ContinuePlayingShelf(
+                        roms = state.continuePlaying,
+                        coverByHash = coverByHash,
+                        boxArtByUri = boxArtByUri,
+                        onRomClicked = onRomClick,
+                        onRomLongPressed = onRomLongPress,
+                        onRomFocused = onRomFocused,
+                    )
+                }
+            }
+            if (showSectionHeader) {
+                item(key = "section_header") {
+                    LibrarySectionHeader(
+                        title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
+                        inFolder = state.canNavigateUp,
+                        sortingMode = state.sortingMode,
+                        sortingOrder = state.sortingOrder,
+                        gamesCount = state.entries.size - folderCount,
+                        onNavigateUp = onNavigateUp,
+                        onSortSelected = onSortSelected,
+                    )
+                }
+            }
             itemsIndexed(
                 items = state.entries,
                 key = { _, entry ->
@@ -424,26 +584,33 @@ private fun ListContent(
                             onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
                         ).cancelDpadDownIf(index == state.entries.lastIndex),
                     )
-                    is RomBrowserEntry.RomItem -> RomListRow(
-                        rom = entry.rom,
-                        coverUrl = coverByHash[entry.rom.retroAchievementsHash],
-                        allowConfiguration = allowConfiguration && !entry.rom.isInstalledDsiWareShortcut,
-                        showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
-                        onClick = { onRomClick(entry.rom) },
-                        onLongPress = {
-                            if (!entry.rom.isInstalledDsiWareShortcut) {
-                                onRomLongPress(entry.rom)
-                            }
-                        },
-                        onConfigClick = { onRomConfigClick(entry.rom) },
-                        modifier = rememberRomBrowserItemFocusModifier(
-                            index = index,
-                            focusKey = entry.focusKey(),
-                            itemFocusRequesters = itemFocusRequesters,
-                            focusedEntryIndex = focusedEntryIndex,
-                            onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
-                        ).cancelDpadDownIf(index == state.entries.lastIndex),
-                    )
+                    is RomBrowserEntry.RomItem -> {
+                        LaunchedEffect(entry.rom.uri) {
+                            onRomVisible(entry.rom)
+                        }
+                        RomListRow(
+                            rom = entry.rom,
+                            coverUrl = coverByHash[entry.rom.retroAchievementsHash],
+                            boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                            boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
+                            allowConfiguration = allowConfiguration && !entry.rom.isInstalledDsiWareShortcut,
+                            showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                            onClick = { onRomClick(entry.rom) },
+                            onLongPress = {
+                                if (!entry.rom.isInstalledDsiWareShortcut) {
+                                    onRomLongPress(entry.rom)
+                                }
+                            },
+                            onConfigClick = { onRomConfigClick(entry.rom) },
+                            modifier = rememberRomBrowserItemFocusModifier(
+                                index = index,
+                                focusKey = entry.focusKey(),
+                                itemFocusRequesters = itemFocusRequesters,
+                                focusedEntryIndex = focusedEntryIndex,
+                                onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
+                            ).cancelDpadDownIf(index == state.entries.lastIndex),
+                        )
+                    }
                 }
             }
         }
@@ -522,6 +689,7 @@ private suspend fun requestFirstVisibleRomFocus(
             .asSequence()
             .mapNotNull { index -> state.entries.getOrNull(index) as? RomBrowserEntry.RomItem }
             .firstOrNull()
+            ?: state.entries.filterIsInstance<RomBrowserEntry.RomItem>().firstOrNull()
         val focusRequester = targetEntry?.let { itemFocusRequesters[it.focusKey()] }
         if (focusRequester != null) {
             runCatching { focusRequester.requestFocus() }
@@ -587,24 +755,6 @@ private fun RomListOverscrollProvider(
     }
 }
 
-private suspend fun smartScrollGrid(
-    state: LazyGridState,
-    idx: Int,
-    @Suppress("UNUSED_PARAMETER") letter: Char,
-    @Suppress("UNUSED_PARAMETER") alphabetIndex: Map<Char, Int>,
-) {
-    state.scrollToItem(idx)
-}
-
-private suspend fun smartScrollList(
-    state: LazyListState,
-    idx: Int,
-    @Suppress("UNUSED_PARAMETER") letter: Char,
-    @Suppress("UNUSED_PARAMETER") alphabetIndex: Map<Char, Int>,
-) {
-    state.scrollToItem(idx)
-}
-
 private fun letterForIndex(alphabetIndex: Map<Char, Int>, currentIndex: Int): Char? {
     if (alphabetIndex.isEmpty()) return null
     var match: Char? = null
@@ -620,6 +770,7 @@ private fun letterForIndex(alphabetIndex: Map<Char, Int>, currentIndex: Int): Ch
 
 @Composable
 private fun EmptyState(filter: RomFilter) {
+    val colors = watermelon
     Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         val msg = when (filter) {
             RomFilter.ALL -> stringResource(R.string.no_roms_found)
@@ -628,8 +779,7 @@ private fun EmptyState(filter: RomFilter) {
         }
         Text(
             text = msg,
-            style = MaterialTheme.typography.body1,
-            color = MaterialTheme.colors.onSurface,
+            color = colors.text2,
             textAlign = TextAlign.Center,
         )
     }

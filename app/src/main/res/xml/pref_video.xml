@@ -37,14 +37,11 @@
             android:entryValues="@array/video_filtering_values"
             android:defaultValue="none"/>
 
-    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
-            android:key="video_retroarch_shader_root"
-            android:title="@string/video_retroarch_shader_root_title"
-            android:summary="@string/video_retroarch_shader_root_summary"
+    <Preference
+            android:key="video_retroarch_shader_source"
+            android:title="@string/video_retroarch_shader_source_title"
             app:iconSpaceReserved="false"
-            app:type="directory"
-            app:permissions="read"
-            app:persistPermissions="true" />
+            android:persistent="false" />
 
     <ListPreference
             android:key="video_retroarch_shader_preset"
@@ -52,18 +49,51 @@
             android:summary="@string/video_retroarch_shader_preset_summary"
             app:iconSpaceReserved="false" />
 
-    <EditTextPreference
-            android:key="video_retroarch_shader_parameters"
-            android:title="@string/video_retroarch_shader_parameters_title"
-            android:summary="@string/video_retroarch_shader_parameters_summary"
-            app:iconSpaceReserved="false" />
-
-    <SwitchPreference
-            android:key="video_retroarch_shader_clear_history"
-            android:title="@string/video_retroarch_shader_clear_history_title"
-            android:summary="@string/video_retroarch_shader_clear_history_summary"
+    <PreferenceScreen
+            android:key="video_retroarch_shader_settings"
+            android:title="@string/video_retroarch_shader_settings_title"
+            android:summary="@string/video_retroarch_shader_settings_summary"
             app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+            android:persistent="false"
+            android:layout="@layout/watermelon_preference">
+
+        <Preference
+                android:key="video_retroarch_shader_report"
+                android:title="@string/shader_compatibility_report_title"
+                android:summary="@string/shader_compatibility_report_summary"
+                app:iconSpaceReserved="false"
+                android:persistent="false" />
+
+        <Preference
+                android:key="video_retroarch_shader_manage"
+                android:title="@string/video_retroarch_shader_install_title"
+                android:summary="@string/video_retroarch_shader_install_summary"
+                app:iconSpaceReserved="false"
+                android:persistent="false" />
+
+        <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+                android:key="video_retroarch_shader_root"
+                android:title="@string/video_retroarch_shader_root_title"
+                android:summary="@string/video_retroarch_shader_root_summary"
+                app:iconSpaceReserved="false"
+                app:type="directory"
+                app:permissions="read"
+                app:persistPermissions="true" />
+
+        <EditTextPreference
+                android:key="video_retroarch_shader_parameters"
+                android:title="@string/video_retroarch_shader_parameters_title"
+                android:summary="@string/video_retroarch_shader_parameters_summary"
+                app:iconSpaceReserved="false" />
+
+        <SwitchPreference
+                android:key="video_retroarch_shader_clear_history"
+                android:title="@string/video_retroarch_shader_clear_history_title"
+                android:summary="@string/video_retroarch_shader_clear_history_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+    </PreferenceScreen>
 
     <Preference
             android:key="dual_screen_presets"

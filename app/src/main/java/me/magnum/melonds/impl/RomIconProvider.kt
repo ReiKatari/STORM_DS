@@ -24,9 +24,12 @@ import kotlin.concurrent.withLock
 class RomIconProvider(private val context: Context, private val romFileProcessorFactory: RomFileProcessorFactory) {
     companion object {
         private const val ICON_CACHE_DIR = "rom_icons"
+        private const val MAX_MEMORY_CACHE_BYTES = 16 * 1024 * 1024
     }
 
-    private val memoryIconCache = mutableMapOf<String, Bitmap>()
+    private val memoryIconCache = object : android.util.LruCache<String, Bitmap>(MAX_MEMORY_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount.coerceAtLeast(1)
+    }
     private val romIconLocks = Collections.synchronizedMap(mutableMapOf<String, ReentrantLock>())
 
     suspend fun getRomIcon(rom: Rom): Bitmap? = withContext(Dispatchers.IO) {
@@ -37,7 +40,7 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
     }
 
     fun clearIconCache() {
-        memoryIconCache.clear()
+        memoryIconCache.evictAll()
         val iconCacheDir = getIconCacheDir() ?: return
         if (iconCacheDir.isDirectory) {
             iconCacheDir.deleteRecursively()
@@ -53,13 +56,13 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
     }
 
     private fun loadIconFromMemory(hash: String, rom: Rom): Bitmap? {
-        var bitmap = memoryIconCache[hash]
+        var bitmap = memoryIconCache.get(hash)
         if (bitmap != null)
             return bitmap
 
         bitmap = loadIconFromDisk(hash, rom)
         if (bitmap != null)
-            memoryIconCache[hash] = bitmap
+            memoryIconCache.put(hash, bitmap)
 
         return bitmap
     }

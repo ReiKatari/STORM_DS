@@ -1,5 +1,9 @@
 package me.magnum.melonds.ui.inputsetup.ui
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
@@ -117,31 +121,20 @@ private fun InputSetupScreenContent(
         }
     }
 
-    Scaffold(
-        topBar = {
-            Box(Modifier.background(MaterialTheme.colors.primaryVariant).statusBarsPadding()) {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.key_mapping)) },
-                    backgroundColor = MaterialTheme.colors.primary,
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                                contentDescription = stringResource(R.string.clear),
-                            )
-                        }
-                    },
-                    windowInsets = WindowInsets.safeDrawing.exclude(WindowInsets(bottom = Int.MAX_VALUE)),
-                )
-            }
-        },
-        backgroundColor = MaterialTheme.colors.surface,
-        contentWindowInsets = WindowInsets.safeDrawing,
+    me.magnum.melonds.ui.common.WatermelonScreenScaffold(
+        title = stringResource(R.string.key_mapping),
+        onBack = onBackClick,
     ) { padding ->
         Box(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = padding,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = padding.calculateTopPadding() + 12.dp,
+                    bottom = padding.calculateBottomPadding() + 12.dp,
+                ),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
             ) {
                 items(
                     items = inputConfig,
@@ -370,12 +363,22 @@ private fun Input(
     onClearClick: () -> Unit,
 ) {
     val (main, clear) = remember { FocusRequester.createRefs() }
+    val colors = me.magnum.melonds.ui.theme.watermelon
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp)
 
     Row(
-        modifier = Modifier.focusRequester(main)
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (isFocused || isBeingConfigured) colors.surface3 else colors.surface2)
+            .let { if (isFocused || isBeingConfigured) it.border(2.dp, colors.red, shape) else it }
+            .focusRequester(main)
             .focusProperties { end = if (config.hasKeyAssigned()) clear else FocusRequester.Default }
-            .clickable(onClick = onClick)
-            .padding(start = 16.dp, top = 16.dp, end = 8.dp, bottom = 16.dp),
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(start = 14.dp, top = 11.dp, end = 6.dp, bottom = 11.dp),
     ) {
         Column(Modifier.weight(1f)) {
             val inputString = if (isBeingConfigured) {

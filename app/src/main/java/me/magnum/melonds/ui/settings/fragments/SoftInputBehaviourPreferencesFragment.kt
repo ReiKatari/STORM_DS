@@ -1,5 +1,13 @@
 package me.magnum.melonds.ui.settings.fragments
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -79,17 +87,17 @@ private fun SoftInputBehaviourPreferencesScreen() {
         mutableStateOf(initialBehaviour)
     }
 
+    val colors = me.magnum.melonds.ui.theme.watermelon
     Column(
         modifier = Modifier.fillMaxSize()
+            .background(colors.bg)
             .verticalScroll(rememberScrollState())
             .selectableGroup()
-            .safeDrawingPadding(),
+            .safeDrawingPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SoftInputBehaviour.entries.forEachIndexed { index, behaviour ->
-            if (index > 0) {
-                Divider(modifier = Modifier.padding(start = 68.dp, end = 16.dp))
-            }
-
             SoftInputBehaviourEntry(
                 modifier = Modifier.fillMaxWidth(),
                 title = behaviourOptions[index],
@@ -114,26 +122,42 @@ private fun SoftInputBehaviourEntry(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val colors = me.magnum.melonds.ui.theme.watermelon
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp)
     Row(
-        modifier = modifier.clickable(onClick = onClick).padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(32.dp),
+        modifier = modifier
+            .clip(shape)
+            .background(if (isFocused) colors.surface3 else colors.surface2)
+            .let { if (isFocused) it.border(2.dp, colors.red, shape) else it }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(
-            selected = selected,
-            onClick = null,
-        )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.body1,
+                color = colors.text,
+                fontSize = 13.5.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             )
-            CaptionText(
+            Text(
                 text = description,
-                style = MaterialTheme.typography.body2,
+                color = colors.text3,
+                fontSize = 11.5.sp,
+                lineHeight = 16.sp,
+            )
+        }
+        if (selected) {
+            androidx.compose.material.Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.Check,
+                contentDescription = null,
+                tint = colors.green,
+                modifier = Modifier.padding(start = 12.dp).size(22.dp),
             )
         }
     }

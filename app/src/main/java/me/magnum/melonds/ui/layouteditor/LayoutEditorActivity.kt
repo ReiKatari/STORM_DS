@@ -7,6 +7,7 @@ import android.hardware.display.DisplayManager
 import android.os.Bundle
 import android.os.Handler
 import android.view.Display
+import android.view.KeyEvent
 import android.widget.RelativeLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -129,6 +130,15 @@ class LayoutEditorActivity : AppCompatActivity() {
         override fun onExit() {
             finish()
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && ::layoutEditorManager.isInitialized &&
+            layoutEditorManager.handleControllerKeyDown(event)
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

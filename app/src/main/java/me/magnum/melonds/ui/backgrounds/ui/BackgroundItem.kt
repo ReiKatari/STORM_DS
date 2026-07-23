@@ -110,8 +110,8 @@ private fun BackgroundItemBase(
     Card(
         modifier = if (isSelected) {
             Modifier.border(
-                width = 4.dp,
-                color = MaterialTheme.colors.secondary,
+                width = 3.dp,
+                color = me.magnum.melonds.ui.theme.watermelon.red,
                 shape = MaterialTheme.shapes.medium,
             )
         } else {

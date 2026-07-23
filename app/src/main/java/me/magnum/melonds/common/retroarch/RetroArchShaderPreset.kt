@@ -3,6 +3,9 @@ package me.magnum.melonds.common.retroarch
 object RetroArchShaderPreset {
     private val ShaderKeyRegex = Regex("""shader\d+""", RegexOption.IGNORE_CASE)
     private val IncludeRegex = Regex("""^\s*#\s*include\s+"([^"]+)"""", setOf(RegexOption.MULTILINE))
+    private val ReferenceRegex = Regex("""^\s*#\s*reference\s+"?([^"\r\n]+)"?""", setOf(RegexOption.MULTILINE))
+    private const val MaxReferenceChain = 16
+    private const val ChainsPerFrame = 2
     private val SourceOutputRatioRegex = Regex(
         """sourcesize\.(?:xy|x|y)\s*[^;\n]*outputsize\.zw|outputsize\.zw\s*[^;\n]*sourcesize\.(?:xy|x|y)""",
         RegexOption.IGNORE_CASE,
@@ -100,6 +103,82 @@ object RetroArchShaderPreset {
     fun passCount(assignments: Map<String, String>): Int {
         return assignments["shaders"]?.toIntOrNull()?.coerceAtLeast(0)
             ?: shaderReferences(assignments).size
+    }
+
+    fun referencePaths(text: String): List<String> {
+        return ReferenceRegex.findAll(text)
+            .mapNotNull { it.groupValues.getOrNull(1)?.trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+    }
+
+    private data class ChainEntry(val path: String, val assignments: Map<String, String>)
+
+    private fun referenceChain(presetRelativePath: String, readText: (String) -> String?): List<ChainEntry> {
+        val chain = mutableListOf<ChainEntry>()
+        val queue = ArrayDeque(listOf(presetRelativePath))
+        val visited = mutableSetOf<String>()
+        while (queue.isNotEmpty() && chain.size < MaxReferenceChain) {
+            val path = queue.removeFirst()
+            if (!visited.add(path)) {
+                continue
+            }
+            val text = readText(path) ?: continue
+            chain += ChainEntry(path, parseAssignments(text))
+            referencePaths(text).forEach { reference ->
+                resolveRelativePath(path, reference)?.let { queue.addLast(it) }
+            }
+        }
+        return chain
+    }
+
+    fun resolvePasses(presetRelativePath: String, readText: (String) -> String?): List<String> {
+        val chain = referenceChain(presetRelativePath, readText)
+        if (chain.isEmpty()) {
+            return emptyList()
+        }
+
+        val merged = linkedMapOf<String, Pair<String, String>>()
+        chain.forEach { entry ->
+            entry.assignments.forEach { (key, value) ->
+                merged.putIfAbsent(key, value to entry.path)
+            }
+        }
+
+        val declaredCount = merged["shaders"]?.first?.toIntOrNull()?.coerceAtLeast(0)
+        val shaderKeys = merged.keys
+            .filter { ShaderKeyRegex.matches(it) }
+            .sortedBy { it.filter(Char::isDigit).toIntOrNull() ?: Int.MAX_VALUE }
+            .let { keys -> if (declaredCount != null) keys.take(declaredCount) else keys }
+
+        return shaderKeys.mapNotNull { key ->
+            val (value, definingPath) = merged.getValue(key)
+            value.takeIf { it.isNotBlank() }?.let { resolveRelativePath(definingPath, it) }
+        }
+    }
+
+    data class Weight(val passCount: Int, val sourceBytes: Long) {
+        val estimatedCompileMillis: Long
+            get() = ChainsPerFrame * (sourceBytes * 15 / 100 + passCount * 40L)
+    }
+
+    fun weigh(presetRelativePath: String, readText: (String) -> String?): Weight {
+        val passes = resolvePasses(presetRelativePath, readText)
+        var sourceBytes = 0L
+        val queue = ArrayDeque(passes)
+        val visited = mutableSetOf<String>()
+        while (queue.isNotEmpty()) {
+            val shaderPath = queue.removeFirst()
+            if (!visited.add(shaderPath)) {
+                continue
+            }
+            val shaderText = readText(shaderPath) ?: continue
+            sourceBytes += shaderText.length
+            includeReferences(shaderText).forEach { reference ->
+                resolveRelativePath(shaderPath, reference)?.let { queue.addLast(it) }
+            }
+        }
+        return Weight(passCount = passes.size, sourceBytes = sourceBytes)
     }
 
     fun includeReferences(shaderText: String): List<String> {

@@ -124,11 +124,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     private fun updateFrameLimitSpeedPreferenceState() {
         val preferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
         val hardcoreEnabled = preferences.getBoolean("ra_hardcore_enabled", false)
-        frameLimitSpeedPreference.isEnabled = !hardcoreEnabled
-        frameLimitSpeedPreference.summary = if (hardcoreEnabled) {
-            getString(R.string.frame_limit_speed_disabled_hardcore)
-        } else {
-            frameLimitSpeedPreference.entry ?: getString(R.string.not_set)
+        frameLimitSpeedPreference.isVisible = !hardcoreEnabled
+        if (!hardcoreEnabled) {
+            frameLimitSpeedPreference.summary = frameLimitSpeedPreference.entry ?: getString(R.string.not_set)
         }
     }
 }

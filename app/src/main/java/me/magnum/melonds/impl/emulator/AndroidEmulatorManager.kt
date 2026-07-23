@@ -1,6 +1,7 @@
 package me.magnum.melonds.impl.emulator
 
 import android.content.Context
+import android.os.SystemClock
 import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
@@ -38,6 +39,7 @@ import me.magnum.melonds.domain.model.rom.config.RuntimeEnum
 import me.magnum.melonds.domain.services.DSiNandManager
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.EmulatorManager
+import me.magnum.melonds.impl.ShaderCompileTimeStore
 import me.magnum.melonds.impl.camera.DSiCameraSourceMultiplexer
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
 import me.magnum.melonds.ui.emulator.rewind.model.RewindWindow
@@ -54,6 +56,7 @@ class AndroidEmulatorManager(
     private val cameraManager: DSiCameraSourceMultiplexer,
     private val emulatorSession: EmulatorSession,
     private val dsiNandManager: DSiNandManager,
+    private val shaderCompileTimeStore: ShaderCompileTimeStore,
 ) : EmulatorManager {
     private companion object {
         private const val TAG = "AndroidEmulatorManager"
@@ -494,27 +497,45 @@ class AndroidEmulatorManager(
         MelonEmulator.updateEmulatorConfiguration(configuration)
     }
 
+    private fun logRetroArchShaderLaunchState(configuration: EmulatorConfiguration) {
+        val renderer = configuration.rendererConfiguration
+        val retroShader = renderer.retroArchShader
+        Log.i(
+            TAG,
+            "RetroArchShaderLaunch: renderer=${renderer.renderer} " +
+                "filter=${renderer.videoFiltering} " +
+                "preset=${retroShader.presetPath ?: "<none>"} " +
+                "source=${retroShader.sourceResolution} " +
+                "passes=${retroShader.passCount} " +
+                "sourceBytes=${retroShader.sourceBytes} " +
+                "clearHistory=${retroShader.clearHistory}",
+        )
+    }
+
     private fun precompileVulkanPipelines(configuration: EmulatorConfiguration): Boolean {
+        logRetroArchShaderLaunchState(configuration)
         if (configuration.rendererConfiguration.renderer != VideoRenderer.VULKAN) {
             return true
         }
 
         val retroShader = configuration.rendererConfiguration.retroArchShader
-        Log.i(
-            TAG,
-            "precompileVulkanPipelines: renderer=${configuration.rendererConfiguration.renderer} " +
-                "filter=${configuration.rendererConfiguration.videoFiltering} " +
-                "retroPreset=${retroShader.presetPath} " +
-                "retroSource=${retroShader.sourceResolution} " +
-                "retroPasses=${retroShader.passCount}",
-        )
-        return MelonEmulator.precompileVulkanPipelines(
+        val startedAt = SystemClock.elapsedRealtime()
+        val succeeded = MelonEmulator.precompileVulkanPipelines(
             videoFilteringOrdinal = configuration.rendererConfiguration.videoFiltering.ordinal,
             retroShaderPresetPath = retroShader.presetPath,
             retroShaderSourceResolution = retroShader.sourceResolution.name.lowercase(),
             retroShaderPassCount = retroShader.passCount,
             retroShaderParameterOverrides = retroShader.parameterOverrides,
         )
+        val presetPath = retroShader.presetPath
+        if (succeeded && presetPath != null) {
+            shaderCompileTimeStore.record(
+                presetPath = presetPath,
+                backend = ShaderCompileTimeStore.Backend.VULKAN,
+                millis = SystemClock.elapsedRealtime() - startedAt,
+            )
+        }
+        return succeeded
     }
 
     override suspend fun updateFirmwareEmulatorConfiguration(consoleType: ConsoleType) {

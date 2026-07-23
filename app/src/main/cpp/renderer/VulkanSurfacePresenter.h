@@ -178,11 +178,14 @@ private:
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkFence fence = VK_NULL_HANDLE;
+        VkSemaphore filterFinishedSemaphore = VK_NULL_HANDLE;
+        bool filterSignalPending = false;
         VulkanRetroArchFilterChain topChain;
         VulkanRetroArchFilterChain bottomChain;
         std::string failedConfigKey;
         std::string lastSizingLogKey;
         u64 frameCount = 0;
+        bool pendingClearHistory = false;
         bool initialized = false;
     };
 
@@ -191,8 +194,8 @@ private:
         bool nativeDisplayMode = false;
         bool clamped = false;
         u32 inputScale = 1;
-        u32 outputScale = 1;
-        u32 requestedOutputScale = 1;
+        u32 requestedOutputWidth = 0;
+        u32 requestedOutputHeight = 0;
         u32 maxLayoutWidth = 0;
         u32 maxLayoutHeight = 0;
         u32 sourceScreenWidth = 0;

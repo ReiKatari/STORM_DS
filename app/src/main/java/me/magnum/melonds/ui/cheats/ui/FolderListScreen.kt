@@ -72,10 +72,11 @@ private fun List(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().consumeWindowInsets(contentPadding),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(
-                    start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
-                    top = contentPadding.calculateTopPadding(),
-                    end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
+                    start = contentPadding.calculateStartPadding(LocalLayoutDirection.current) + 16.dp,
+                    top = contentPadding.calculateTopPadding() + 12.dp,
+                    end = contentPadding.calculateEndPadding(LocalLayoutDirection.current) + 16.dp,
                     bottom = contentPadding.calculateBottomPadding() + 16.dp + 56.dp + 16.dp, // Take FAB into consideration
                 ),
             ) {

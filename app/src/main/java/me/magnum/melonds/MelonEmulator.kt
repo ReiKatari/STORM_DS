@@ -117,6 +117,23 @@ object MelonEmulator {
         retroShaderParameterOverrides: Map<String, Float>,
     ): Boolean
 
+    external fun configureOpenGlRetroArchFilter(
+        enabled: Boolean,
+        presetPath: String?,
+        parameterOverrides: String?,
+        clearHistory: Boolean,
+        sourceResolution: String,
+        maxLayoutWidth: Int,
+        maxLayoutHeight: Int,
+        passCount: Int,
+    )
+
+    external fun prewarmOpenGlRetroArchFilter(atlasWidth: Int, atlasHeight: Int): Boolean
+
+    external fun releaseOpenGlRetroArchFilter()
+
+    external fun consumeShaderDiagnostics(): Array<String>?
+
     external fun presentFrame(deadlineNs: Long, frameRenderCallback: FrameRenderCallback)
     external fun attachVulkanSurface(surface: Surface, width: Int, height: Int): Int
     external fun resizeVulkanSurface(surfaceId: Int, width: Int, height: Int)

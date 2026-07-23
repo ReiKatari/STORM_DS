@@ -18,6 +18,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import androidx.core.content.getSystemService
+import androidx.compose.runtime.collectAsState
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -61,11 +62,16 @@ class RomListActivity : AppCompatActivity() {
     private var downloadProgressDialog: AlertDialog? = null
     private var romBrowserDpadDownGate: (() -> Boolean)? = null
 
+    private val externalInfoController by lazy { me.magnum.melonds.ui.common.ExternalInfoDisplayController(this) }
+    private val highlightedRom = kotlinx.coroutines.flow.MutableStateFlow<Rom?>(null)
+
+    private lateinit var binding: ActivityRomListBinding
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        val binding = ActivityRomListBinding.inflate(layoutInflater)
+        binding = ActivityRomListBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
 
@@ -96,11 +102,13 @@ class RomListActivity : AppCompatActivity() {
             override fun onRomValidated(rom: Rom) {
                 val intent = EmulatorActivity.getRomEmulatorActivityIntent(this@RomListActivity, rom)
                 startActivity(intent)
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
 
             override fun onFirmwareValidated(consoleType: ConsoleType) {
                 val intent = EmulatorActivity.getFirmwareEmulatorActivityIntent(this@RomListActivity, consoleType)
                 startActivity(intent)
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
 
             override fun onValidationAborted() {
@@ -199,6 +207,34 @@ class RomListActivity : AppCompatActivity() {
         romBrowserDpadDownGate = gate
     }
 
+    internal fun onLibraryRomHighlighted(rom: Rom?) {
+        if (rom != null) {
+            highlightedRom.value = rom
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        externalInfoController.attach()
+        externalInfoController.setContent {
+            val rom = highlightedRom.collectAsState().value
+            if (rom != null) {
+                val boxArtByUri = viewModel.boxArtByUri.collectAsState().value
+                val raCoverByHash = viewModel.raCoverByHash.collectAsState().value
+                me.magnum.melonds.ui.common.ExternalLibraryGameInfo(
+                    rom = rom,
+                    boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                    raCoverUrl = raCoverByHash[rom.retroAchievementsHash],
+                )
+            }
+        }
+    }
+
+    override fun onStop() {
+        externalInfoController.detach()
+        super.onStop()
+    }
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.rom_list_menu, menu)
 
@@ -280,7 +316,22 @@ class RomListActivity : AppCompatActivity() {
         return false
     }
 
+    internal fun bootFirmware(consoleType: ConsoleType) {
+        launchFirmware(consoleType)
+    }
+
+    internal fun openDsiWareManager() {
+        val intent = Intent(this, DSiWareManagerActivity::class.java)
+        startActivity(intent)
+    }
+
+    internal fun openSettings() {
+        val intent = Intent(this, SettingsActivity::class.java)
+        startActivity(intent)
+    }
+
     private fun addNoSearchDirectoriesFragment() {
+        supportActionBar?.show()
         var noRomDirectoriesFragment = supportFragmentManager.findFragmentByTag(FRAGMENT_NO_ROM_DIRECTORIES) as NoRomSearchDirectoriesFragment?
         if (noRomDirectoriesFragment == null) {
             noRomDirectoriesFragment = NoRomSearchDirectoriesFragment.newInstance()
@@ -291,6 +342,7 @@ class RomListActivity : AppCompatActivity() {
     }
 
     private fun addRomListFragment() {
+        supportActionBar?.hide()
         var romListFragment = supportFragmentManager.findFragmentByTag(FRAGMENT_ROM_LIST) as RomListFragment?
         if (romListFragment == null) {
             romListFragment = RomListFragment.newInstance(true, RomListFragment.RomEnableCriteria.ENABLE_ALL)

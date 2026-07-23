@@ -41,6 +41,17 @@ object CoilModule {
                 add(coilBackgroundThumbnailFetcherFactory)
                 add(coilRomIconFetcherFactory)
             }
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(context)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(96L * 1024 * 1024)
+                    .build()
+            }
             .crossfade(true)
             .build()
     }

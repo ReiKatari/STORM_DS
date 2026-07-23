@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,9 +54,33 @@ class RomListViewModel @Inject constructor(
     private val directoryAccessValidator: DirectoryAccessValidator,
     private val dsiNandManager: DSiNandManager,
     retroAchievementsRepository: RetroAchievementsRepository,
+    private val boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
+
+    private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    val boxArtByUri: StateFlow<Map<String, String>> = _boxArtByUri.asStateFlow()
+    private val boxArtRequestsInFlight = mutableSetOf<String>()
+    private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(4)
+
+    fun requestBoxArt(rom: Rom) {
+        val key = rom.uri.toString()
+        if (_boxArtByUri.value.containsKey(key)) return
+        synchronized(boxArtRequestsInFlight) {
+            if (!boxArtRequestsInFlight.add(key)) return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val url = boxArtSemaphore.withPermit {
+                runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+            }
+            _boxArtByUri.update { it + (key to (url ?: "")) }
+            synchronized(boxArtRequestsInFlight) {
+                boxArtRequestsInFlight.remove(key)
+            }
+        }
+    }
     private val _sortingMode = MutableStateFlow(settingsRepository.getRomSortingMode())
     private val _sortingOrder = MutableStateFlow(settingsRepository.getRomSortingOrder())
     private val _filter = MutableStateFlow(RomFilter.ALL)
