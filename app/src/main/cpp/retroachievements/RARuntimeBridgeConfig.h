@@ -21,12 +21,15 @@ typedef struct RARuntimeBridgeConfig
     bool hardcoreEnabled;
     bool unofficialEnabled;
     bool encoreEnabled;
+    bool usesProxyHost;
     long gameId;
     uint64_t submissionSessionId;
+    uint64_t endpointGeneration;
     std::string userAgent;
     std::string username;
     std::string apiToken;
     std::string gameHash;
+    std::string apiHost;
 } RARuntimeBridgeConfig;
 
 }

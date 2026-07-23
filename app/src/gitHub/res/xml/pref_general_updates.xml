@@ -9,4 +9,14 @@
         android:summary="@string/check_for_updates_summary"
         app:iconSpaceReserved="false"
         android:defaultValue="true" />
+
+    <ListPreference
+        android:key="github_update_channel"
+        android:title="@string/update_channel_title"
+        android:summary="%s"
+        android:entries="@array/update_channel_options"
+        android:entryValues="@array/update_channel_values"
+        android:defaultValue="stable_and_prerelease"
+        app:iconSpaceReserved="false"
+        app:dependency="github_check_for_updates" />
 </PreferenceScreen>

@@ -16,4 +16,7 @@ data class RARuntimeBridgeConfig(
     val hardcoreEnabled: Boolean,
     val unofficialEnabled: Boolean,
     val encoreEnabled: Boolean,
+    val apiHost: String,
+    val usesProxyHost: Boolean,
+    val endpointGeneration: Long,
 )

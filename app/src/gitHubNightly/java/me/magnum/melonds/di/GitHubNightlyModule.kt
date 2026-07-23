@@ -10,6 +10,7 @@ import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.github.GitHubApi
 import me.magnum.melonds.github.repositories.GitHubNightlyUpdatesRepository
 import javax.inject.Singleton
+import android.content.SharedPreferences
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -17,8 +18,12 @@ object GitHubNightlyModule {
 
     @Provides
     @Singleton
-    fun provideUpdatesRepository(@ApplicationContext context: Context, gitHubApi: GitHubApi): UpdatesRepository {
-        val gitHubPreferences = context.getSharedPreferences("preferences-github", Context.MODE_PRIVATE)
-        return GitHubNightlyUpdatesRepository(gitHubApi, gitHubPreferences)
+    fun provideUpdatesRepository(
+        @ApplicationContext context: Context,
+        gitHubApi: GitHubApi,
+        sharedPreferences: SharedPreferences,
+    ): UpdatesRepository {
+        val statePreferences = context.getSharedPreferences("preferences-github", Context.MODE_PRIVATE)
+        return GitHubNightlyUpdatesRepository(gitHubApi, sharedPreferences, statePreferences)
     }
 }
