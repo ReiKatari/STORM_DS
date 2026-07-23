@@ -22,6 +22,8 @@ sealed class ToastEvent {
     data object PendingRaStateVerificationFailed : ToastEvent()
     data object RetroAchievementsAccountChangedInGame : ToastEvent()
     data object RetroAchievementsLogoutFailed : ToastEvent()
+    data object RAOfflineProxyNotActive : ToastEvent()
+    data object RetroAchievementsProviderChangedRestartRequired : ToastEvent()
     data class HardcoreOfflineUnsyncedWarning(
         val pendingHardcoreCount: Int,
     ) : ToastEvent()

@@ -12,6 +12,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.Preference
+import androidx.preference.ListPreference
 import androidx.preference.SwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
@@ -26,11 +27,17 @@ import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.settings.flow.observeAsFlow
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
 import me.magnum.melonds.ui.settings.viewmodel.RetroAchievementsSettingsViewModel
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
+import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointSnapshot
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
     private val viewModel by viewModels<RetroAchievementsSettingsViewModel>()
+
+    @Inject
+    lateinit var endpointProvider: RetroAchievementsEndpointProvider
 
     private var loginProgressDialog: LoadingDialog? = null
 
@@ -41,11 +48,14 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         val retroAchievementsEnabledPreference = findPreference<SwitchPreference>("ra_enabled")!!
         val hardcoreModePreference = findPreference<SwitchPreference>("ra_hardcore_enabled")!!
         val richPresencePreference = findPreference<SwitchPreference>("ra_rich_presence")!!
+        val offlineBackendPreference = findPreference<ListPreference>("ra_offline_backend")!!
+        val builtInOfflinePreference = findPreference<SwitchPreference>("ra_offline_softcore_enabled")!!
         val integrationPreferences = listOf(
             hardcoreModePreference,
             findPreference<SwitchPreference>("ra_unofficial_enabled")!!,
             findPreference<SwitchPreference>("ra_encore_enabled")!!,
-            findPreference<SwitchPreference>("ra_offline_softcore_enabled")!!,
+            offlineBackendPreference,
+            builtInOfflinePreference,
             findPreference<SwitchPreference>("ra_active_challenge_indicators")!!,
             findPreference<SwitchPreference>("ra_progress_indicators")!!,
             findPreference<SwitchPreference>("ra_leaderboard_indicators")!!,
@@ -53,11 +63,35 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
 
         hardcoreModePreference.addOnPreferenceChangeListener { _, newValue ->
             val isEnabled = newValue as Boolean
+            if (!endpointProvider.allowHardcoreUserChoice(isEnabled)) {
+                Toast.makeText(
+                    requireContext(),
+                    R.string.ra_offline_proxy_hardcore_not_supported,
+                    Toast.LENGTH_LONG,
+                ).show()
+                return@addOnPreferenceChangeListener false
+            }
 
             // Rich preference must be on when hardcore mode is enabled. As such, when hardcore is enabled, disable the preference and force it to be checked
             richPresencePreference.isEnabled = !isEnabled
             if (isEnabled) {
                 richPresencePreference.isChecked = true
+            }
+            true
+        }
+
+        offlineBackendPreference.addOnPreferenceChangeListener { _, newValue ->
+            val backend = me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend
+                .fromPreference(newValue as? String)
+            endpointProvider.setSelectedBackend(backend)
+            if (backend == me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend.RA_OFFLINE_PROXY &&
+                endpointProvider.currentSnapshot().apiUrl == null
+            ) {
+                Toast.makeText(
+                    requireContext(),
+                    R.string.ra_offline_proxy_not_active,
+                    Toast.LENGTH_LONG,
+                ).show()
             }
             true
         }
@@ -127,14 +161,37 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                     isLoggedInFlow,
                     retroAchievementsEnabledPreference.observeAsFlow(),
                     hardcoreModePreference.observeAsFlow(),
-                ) { isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled ->
-                    Triple(isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled)
-                }.collect { (isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled) ->
+                    endpointProvider.snapshot,
+                ) { isLoggedIn, isRetroAchievementsEnabled, isHardcoreEnabled, endpoint ->
+                    EndpointPreferenceState(
+                        isLoggedIn,
+                        isRetroAchievementsEnabled,
+                        isHardcoreEnabled,
+                        endpoint,
+                    )
+                }.collect { state ->
+                    val isLoggedIn = state.isLoggedIn
+                    val isRetroAchievementsEnabled = state.isRetroAchievementsEnabled
+                    val isHardcoreEnabled = state.isHardcoreEnabled
                     val integrationOptionsEnabled = isLoggedIn && isRetroAchievementsEnabled
                     integrationPreferences.forEach { preference ->
                         preference.isEnabled = integrationOptionsEnabled
                     }
-                    richPresencePreference.isEnabled = integrationOptionsEnabled && !isHardcoreEnabled
+                    val builtInEffective =
+                        state.endpoint.backendEffective ==
+                            me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend.BUILT_IN
+                    hardcoreModePreference.isEnabled = integrationOptionsEnabled && builtInEffective
+                    builtInOfflinePreference.isEnabled = integrationOptionsEnabled && builtInEffective
+                    richPresencePreference.isEnabled =
+                        integrationOptionsEnabled && !isHardcoreEnabled && builtInEffective
+                    offlineBackendPreference.summary = when (state.endpoint.hostSource) {
+                        RetroAchievementsEndpointSnapshot.HostSource.OFFICIAL ->
+                            getString(R.string.ra_offline_backend_summary)
+                        RetroAchievementsEndpointSnapshot.HostSource.RA_OFFLINE_PROXY ->
+                            getString(R.string.ra_offline_proxy_active_summary)
+                        RetroAchievementsEndpointSnapshot.HostSource.RA_OFFLINE_PROXY_UNAVAILABLE ->
+                            getString(R.string.ra_offline_proxy_not_active)
+                    }
                 }
             }
         }
@@ -239,4 +296,11 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
     }
 
     override fun getTitle() = getString(R.string.retroachievements)
+
+    private data class EndpointPreferenceState(
+        val isLoggedIn: Boolean,
+        val isRetroAchievementsEnabled: Boolean,
+        val isHardcoreEnabled: Boolean,
+        val endpoint: RetroAchievementsEndpointSnapshot,
+    )
 }

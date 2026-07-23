@@ -738,6 +738,7 @@ bool ExecuteRcClientHttpRequest(
     jmethodID setDoOutputMethod = nullptr;
     jmethodID getInputStreamMethod = nullptr;
     jmethodID setRequestMethodMethod = nullptr;
+    jmethodID setInstanceFollowRedirectsMethod = nullptr;
     jmethodID getOutputStreamMethod = nullptr;
     jmethodID getResponseCodeMethod = nullptr;
     jmethodID getErrorStreamMethod = nullptr;
@@ -807,6 +808,10 @@ bool ExecuteRcClientHttpRequest(
     if (LogAndClearJavaException(env, "GetMethodID(HttpURLConnection.setRequestMethod)", httpStatusCode) || !setRequestMethodMethod)
         goto cleanup;
 
+    setInstanceFollowRedirectsMethod = env->GetMethodID(httpURLConnectionClass, "setInstanceFollowRedirects", "(Z)V");
+    if (LogAndClearJavaException(env, "GetMethodID(HttpURLConnection.setInstanceFollowRedirects)", httpStatusCode) || !setInstanceFollowRedirectsMethod)
+        goto cleanup;
+
     getOutputStreamMethod = env->GetMethodID(urlConnectionClass, "getOutputStream", "()Ljava/io/OutputStream;");
     if (LogAndClearJavaException(env, "GetMethodID(URLConnection.getOutputStream)", httpStatusCode) || !getOutputStreamMethod)
         goto cleanup;
@@ -850,6 +855,10 @@ bool ExecuteRcClientHttpRequest(
 
     connection = env->CallObjectMethod(urlObject, openConnectionMethod);
     if (LogAndClearJavaException(env, "URL.openConnection", httpStatusCode) || !connection)
+        goto cleanup;
+
+    env->CallVoidMethod(connection, setInstanceFollowRedirectsMethod, JNI_FALSE);
+    if (LogAndClearJavaException(env, "HttpURLConnection.setInstanceFollowRedirects", httpStatusCode))
         goto cleanup;
 
     env->CallVoidMethod(connection, setConnectTimeoutMethod, RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS);
@@ -983,7 +992,7 @@ bool ExecuteRcClientHttpRequest(
     if (LogAndClearJavaException(env, "getResponseCode", httpStatusCode))
         goto cleanup;
 
-    if (*httpStatusCode >= 200 && *httpStatusCode < 400)
+    if (*httpStatusCode >= 200 && *httpStatusCode < 300)
     {
         inputStream = env->CallObjectMethod(connection, getInputStreamMethod);
         if (LogAndClearJavaException(env, "URLConnection.getInputStream", httpStatusCode))
@@ -2498,15 +2507,18 @@ bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
     rc_client_set_allow_background_memory_reads(rcClientRuntime, 1);
 
     const auto& config = *runtimeBridgeConfig;
+    rc_client_set_host(rcClientRuntime, config.apiHost.c_str());
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Info,
-        "[RAIdentity] source=rc_client_bootstrap user_agent=%s game_id=%lld game_hash=%s hardcore=%d unofficial=%d encore=%d\n",
+        "[RAIdentity] source=rc_client_bootstrap user_agent=%s game_id=%lld game_hash=redacted hardcore=%d unofficial=%d encore=%d host_source=%s native_client_host_configured=%d endpoint_generation=%llu\n",
         config.userAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : config.userAgent.c_str(),
         (long long) config.gameId,
-        config.gameHash.c_str(),
         config.hardcoreEnabled ? 1 : 0,
         config.unofficialEnabled ? 1 : 0,
-        config.encoreEnabled ? 1 : 0
+        config.encoreEnabled ? 1 : 0,
+        config.usesProxyHost ? "raofflineproxy" : "official",
+        config.apiHost.empty() ? 0 : 1,
+        (unsigned long long) config.endpointGeneration
     );
     rc_client_set_hardcore_enabled(rcClientRuntime, config.hardcoreEnabled ? 1 : 0);
     rc_client_set_unofficial_enabled(rcClientRuntime, config.unofficialEnabled ? 1 : 0);
@@ -2825,7 +2837,8 @@ bool RetroAchievementsManager::IsRcClientConfiguredLocked() const
         ) &&
         !runtimeBridgeConfig->username.empty() &&
         !runtimeBridgeConfig->apiToken.empty() &&
-        !runtimeBridgeConfig->gameHash.empty();
+        !runtimeBridgeConfig->gameHash.empty() &&
+        !runtimeBridgeConfig->apiHost.empty();
 }
 
 bool RetroAchievementsManager::IsRcClientRuntimeActiveLocked() const

@@ -104,6 +104,21 @@ std::optional<long> getOptionalLongField(JNIEnv* env, jobject sourceObject, jfie
     return longValue;
 }
 
+std::optional<bool> getBooleanField(JNIEnv* env, jobject sourceObject, jfieldID fieldId)
+{
+    if (fieldId == nullptr)
+        return std::nullopt;
+
+    const jboolean value = env->GetBooleanField(sourceObject, fieldId);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return std::nullopt;
+    }
+
+    return value == JNI_TRUE;
+}
+
 std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeMode> getRuntimeBridgeModeField(JNIEnv* env, jobject sourceObject, jfieldID fieldId)
 {
     if (fieldId == nullptr)
@@ -137,6 +152,13 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeMode> getRuntime
     }
 
     const int nativeValue = env->GetIntField(value, nativeValueField);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(modeClass);
+        env->DeleteLocalRef(value);
+        return std::nullopt;
+    }
     env->DeleteLocalRef(modeClass);
     env->DeleteLocalRef(value);
 
@@ -260,6 +282,9 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
     jfieldID hardcoreEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "hardcoreEnabled", "Z");
     jfieldID unofficialEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "unofficialEnabled", "Z");
     jfieldID encoreEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "encoreEnabled", "Z");
+    jfieldID apiHostField = getFieldIdOrNull(env, runtimeConfigClass, "apiHost", "Ljava/lang/String;");
+    jfieldID usesProxyHostField = getFieldIdOrNull(env, runtimeConfigClass, "usesProxyHost", "Z");
+    jfieldID endpointGenerationField = getFieldIdOrNull(env, runtimeConfigClass, "endpointGeneration", "J");
 
     if (runtimeModeField == nullptr ||
         userAgentField == nullptr ||
@@ -270,7 +295,10 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
         submissionSessionIdField == nullptr ||
         hardcoreEnabledField == nullptr ||
         unofficialEnabledField == nullptr ||
-        encoreEnabledField == nullptr)
+        encoreEnabledField == nullptr ||
+        apiHostField == nullptr ||
+        usesProxyHostField == nullptr ||
+        endpointGenerationField == nullptr)
     {
         env->DeleteLocalRef(runtimeConfigClass);
         return std::nullopt;
@@ -282,7 +310,26 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
         env->DeleteLocalRef(runtimeConfigClass);
         return std::nullopt;
     }
+    const auto hardcoreEnabled = getBooleanField(env, javaRuntimeConfig, hardcoreEnabledField);
+    const auto unofficialEnabled = getBooleanField(env, javaRuntimeConfig, unofficialEnabledField);
+    const auto encoreEnabled = getBooleanField(env, javaRuntimeConfig, encoreEnabledField);
+    const auto usesProxyHost = getBooleanField(env, javaRuntimeConfig, usesProxyHostField);
+    if (!hardcoreEnabled.has_value() ||
+        !unofficialEnabled.has_value() ||
+        !encoreEnabled.has_value() ||
+        !usesProxyHost.has_value())
+    {
+        env->DeleteLocalRef(runtimeConfigClass);
+        return std::nullopt;
+    }
     const jlong submissionSessionId = env->GetLongField(javaRuntimeConfig, submissionSessionIdField);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(runtimeConfigClass);
+        return std::nullopt;
+    }
+    const jlong endpointGeneration = env->GetLongField(javaRuntimeConfig, endpointGenerationField);
     if (env->ExceptionCheck())
     {
         env->ExceptionClear();
@@ -292,15 +339,18 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
 
     MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig runtimeBridgeConfig = {
         .runtimeMode = runtimeMode.value(),
-        .hardcoreEnabled = env->GetBooleanField(javaRuntimeConfig, hardcoreEnabledField) == JNI_TRUE,
-        .unofficialEnabled = env->GetBooleanField(javaRuntimeConfig, unofficialEnabledField) == JNI_TRUE,
-        .encoreEnabled = env->GetBooleanField(javaRuntimeConfig, encoreEnabledField) == JNI_TRUE,
+        .hardcoreEnabled = hardcoreEnabled.value(),
+        .unofficialEnabled = unofficialEnabled.value(),
+        .encoreEnabled = encoreEnabled.value(),
+        .usesProxyHost = usesProxyHost.value(),
         .gameId = getOptionalLongField(env, javaRuntimeConfig, gameIdField).value_or(0),
         .submissionSessionId = static_cast<uint64_t>(submissionSessionId),
+        .endpointGeneration = static_cast<uint64_t>(endpointGeneration),
         .userAgent = getOptionalStringField(env, javaRuntimeConfig, userAgentField).value_or(""),
         .username = getOptionalStringField(env, javaRuntimeConfig, usernameField).value_or(""),
         .apiToken = getOptionalStringField(env, javaRuntimeConfig, apiTokenField).value_or(""),
         .gameHash = getOptionalStringField(env, javaRuntimeConfig, gameHashField).value_or(""),
+        .apiHost = getOptionalStringField(env, javaRuntimeConfig, apiHostField).value_or(""),
     };
 
     env->DeleteLocalRef(runtimeConfigClass);

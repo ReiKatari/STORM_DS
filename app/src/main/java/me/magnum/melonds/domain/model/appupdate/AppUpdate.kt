@@ -12,6 +12,8 @@ data class AppUpdate(
     val description: String,
     val binarySize: Long,
     val updateDate: Instant,
+    val releaseTag: String,
+    val sourceReleaseUrl: String,
 ) {
 
     enum class Type {

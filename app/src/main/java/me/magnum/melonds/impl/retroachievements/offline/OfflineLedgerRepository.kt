@@ -17,6 +17,7 @@ class OfflineLedgerRepository(
     private val storage: OfflineLedgerStorage,
     private val signer: OfflineLedgerSigner,
     private val clock: Clock = Clock.System,
+    private val writesEnabled: () -> Boolean = { true },
 ) {
 
     private companion object {
@@ -260,52 +261,57 @@ class OfflineLedgerRepository(
         userId: String,
         contentId: String,
         payload: OfflineLedgerPayload,
-    ): Result<Unit> = mutex.withLock {
-        return@withLock withContext(Dispatchers.IO) {
-            try {
-                val currentBytes = storage.read(userId, contentId)
-                val currentFile = currentBytes?.let { OfflineLedgerCodec.decodeFile(it) } ?: OfflineLedgerFile()
+    ): Result<Unit> {
+        if (!writesEnabled()) {
+            return Result.failure(IllegalStateException("Built-in offline ledger is disabled for the effective RA backend"))
+        }
+        return mutex.withLock {
+            return@withLock withContext(Dispatchers.IO) {
+                try {
+                    val currentBytes = storage.read(userId, contentId)
+                    val currentFile = currentBytes?.let { OfflineLedgerCodec.decodeFile(it) } ?: OfflineLedgerFile()
 
-                val verification = verify(currentFile.records)
-                when (verification.integrity) {
-                    OfflineLedgerIntegrity.OK,
-                    OfflineLedgerIntegrity.EMPTY -> Unit
-                    else -> return@withContext Result.failure(IllegalStateException("Offline ledger integrity is ${verification.integrity}"))
+                    val verification = verify(currentFile.records)
+                    when (verification.integrity) {
+                        OfflineLedgerIntegrity.OK,
+                        OfflineLedgerIntegrity.EMPTY -> Unit
+                        else -> return@withContext Result.failure(IllegalStateException("Offline ledger integrity is ${verification.integrity}"))
+                    }
+
+                    val nextSeq = (verification.lastSeq ?: 0L) + 1L
+                    val prevHash = verification.lastPayloadHash ?: ByteArray(0)
+
+                    val payloadWithChain = payload.copy(
+                        seq = nextSeq,
+                        prevHash = prevHash,
+                    )
+
+                    val payloadBytes = OfflineLedgerCodec.encodePayload(payloadWithChain)
+                    val payloadHash = sha256(payloadBytes)
+                    val signature = signer.sign(payloadHash)
+
+                    val record = OfflineLedgerRecord(
+                        payload = payloadWithChain,
+                        payloadHash = payloadHash,
+                        signature = signature,
+                    )
+
+                    val expirationPolicyVersion = when {
+                        currentBytes == null -> CURRENT_EXPIRATION_POLICY_VERSION
+                        currentFile.expirationPolicyVersion > 0 -> currentFile.expirationPolicyVersion
+                        else -> 0
+                    }
+
+                    val newFile = currentFile.copy(
+                        records = currentFile.records + record,
+                        expirationPolicyVersion = expirationPolicyVersion,
+                    )
+                    val newBytes = OfflineLedgerCodec.encodeFile(newFile)
+                    storage.write(userId, contentId, newBytes)
+                    Result.success(Unit)
+                } catch (e: Exception) {
+                    Result.failure(e)
                 }
-
-                val nextSeq = (verification.lastSeq ?: 0L) + 1L
-                val prevHash = verification.lastPayloadHash ?: ByteArray(0)
-
-                val payloadWithChain = payload.copy(
-                    seq = nextSeq,
-                    prevHash = prevHash,
-                )
-
-                val payloadBytes = OfflineLedgerCodec.encodePayload(payloadWithChain)
-                val payloadHash = sha256(payloadBytes)
-                val signature = signer.sign(payloadHash)
-
-                val record = OfflineLedgerRecord(
-                    payload = payloadWithChain,
-                    payloadHash = payloadHash,
-                    signature = signature,
-                )
-
-                val expirationPolicyVersion = when {
-                    currentBytes == null -> CURRENT_EXPIRATION_POLICY_VERSION
-                    currentFile.expirationPolicyVersion > 0 -> currentFile.expirationPolicyVersion
-                    else -> 0
-                }
-
-                val newFile = currentFile.copy(
-                    records = currentFile.records + record,
-                    expirationPolicyVersion = expirationPolicyVersion,
-                )
-                val newBytes = OfflineLedgerCodec.encodeFile(newFile)
-                storage.write(userId, contentId, newBytes)
-                Result.success(Unit)
-            } catch (e: Exception) {
-                Result.failure(e)
             }
         }
     }

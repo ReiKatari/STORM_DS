@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="ra_offline_backend_options">
+        <item>@string/ra_offline_backend_built_in</item>
+        <item>@string/ra_offline_backend_proxy</item>
+    </string-array>
+    <string-array name="ra_offline_backend_values">
+        <item>built_in</item>
+        <item>ra_offline_proxy</item>
+    </string-array>
+    <string-array name="update_channel_options">
+        <item>@string/update_channel_stable</item>
+        <item>@string/update_channel_prerelease</item>
+    </string-array>
+    <string-array name="update_channel_values">
+        <item>stable</item>
+        <item>stable_and_prerelease</item>
+    </string-array>
     <string-array name="rom_icon_filtering_values">
         <item>none</item>
         <item>linear</item>

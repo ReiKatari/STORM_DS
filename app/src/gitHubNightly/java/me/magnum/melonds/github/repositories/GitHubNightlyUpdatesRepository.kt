@@ -5,18 +5,19 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import me.magnum.melonds.common.suspendMapCatching
 import me.magnum.melonds.common.suspendRunCatching
-import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.repositories.UpdatesRepository
-import me.magnum.melonds.github.APK_CONTENT_TYPE
 import me.magnum.melonds.github.GitHubApi
+import me.magnum.melonds.github.GitHubReleaseSelector
 import me.magnum.melonds.github.PREF_KEY_GITHUB_CHECK_FOR_UPDATES
-import me.magnum.melonds.github.dtos.ReleaseDto
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
-import kotlin.time.Instant
 
-class GitHubNightlyUpdatesRepository(private val api: GitHubApi, private val preferences: SharedPreferences) : UpdatesRepository {
+class GitHubNightlyUpdatesRepository(
+    private val api: GitHubApi,
+    private val settingsPreferences: SharedPreferences,
+    private val statePreferences: SharedPreferences,
+) : UpdatesRepository {
     companion object {
         private const val KEY_NEXT_CHECK_DATE = "github_updates_nightly_next_check_date"
         private const val KEY_LAST_RELEASE_DATE = "github_updates_nightly_last_release_date"
@@ -27,82 +28,55 @@ class GitHubNightlyUpdatesRepository(private val api: GitHubApi, private val pre
             return Result.success(null)
         }
 
-        return suspendRunCatching {
-            api.getLatestNightlyRelease()
-        }.suspendMapCatching { release ->
-            if (shouldUpdate(release)) {
-                val apkBinary = release.assets.firstOrNull { it.contentType == APK_CONTENT_TYPE }
-                if (apkBinary != null) {
-                    AppUpdate(
-                        AppUpdate.Type.NIGHTLY,
-                        apkBinary.id,
-                        apkBinary.url.toUri(),
-                        Version.fromString(release.tagName),
-                        release.body,
-                        apkBinary.size,
-                        Instant.parse(release.createdAt),
-                    )
-                } else {
-                    null
-                }
-            } else {
-                null
+        return suspendRunCatching { api.getReleases() }.suspendMapCatching { releases ->
+            val candidate = GitHubReleaseSelector.selectNightly(releases) ?: return@suspendMapCatching null
+            if (!shouldUpdate(candidate.publishedAt.toEpochMilliseconds())) {
+                return@suspendMapCatching null
             }
+
+            AppUpdate(
+                type = AppUpdate.Type.NIGHTLY,
+                id = candidate.asset.id,
+                downloadUri = candidate.asset.url.toUri(),
+                newVersion = candidate.version,
+                description = candidate.release.body,
+                binarySize = candidate.asset.size,
+                updateDate = candidate.publishedAt,
+                releaseTag = candidate.release.tagName,
+                sourceReleaseUrl = candidate.release.htmlUrl,
+            )
         }
     }
 
-    override fun skipUpdate(update: AppUpdate) {
-        scheduleNextUpdate()
-    }
+    override fun skipUpdate(update: AppUpdate) = scheduleNextUpdate()
 
     override fun notifyUpdateDownloaded(update: AppUpdate) {
-        // This doesn't mean that the user has actually installed the update, but we have no way to determine that. As such, just assume that the update will be installed and
-        // store the date of the update
-        preferences.edit {
+        statePreferences.edit {
             putLong(KEY_LAST_RELEASE_DATE, update.updateDate.toEpochMilliseconds())
         }
     }
 
     private fun shouldCheckUpdates(): Boolean {
-        val updateCheckEnabled = preferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)
-        if (!updateCheckEnabled) {
+        if (!settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)) {
             return false
         }
-
-        val nextUpdateCheckTime = preferences.getLong(KEY_NEXT_CHECK_DATE, -1)
-        if (nextUpdateCheckTime == (-1).toLong()) {
-            return true
-        }
-
-        val now = Clock.System.now()
-        return now.toEpochMilliseconds() > nextUpdateCheckTime
+        val nextCheck = statePreferences.getLong(KEY_NEXT_CHECK_DATE, -1L)
+        return nextCheck == -1L || Clock.System.now().toEpochMilliseconds() > nextCheck
     }
 
     private fun scheduleNextUpdate() {
-        val now = Clock.System.now()
-        val nextUpdateDate = now + 1.days
-
-        preferences.edit {
-            putLong(KEY_NEXT_CHECK_DATE, nextUpdateDate.toEpochMilliseconds())
+        statePreferences.edit {
+            putLong(KEY_NEXT_CHECK_DATE, (Clock.System.now() + 1.days).toEpochMilliseconds())
         }
     }
 
-    private fun shouldUpdate(releaseDto: ReleaseDto): Boolean {
-        val lastReleaseDate = preferences.getLong(KEY_LAST_RELEASE_DATE, -1)
+    private fun shouldUpdate(releaseDateMillis: Long): Boolean {
+        val lastReleaseDate = statePreferences.getLong(KEY_LAST_RELEASE_DATE, -1L)
         if (lastReleaseDate == -1L) {
-            // If there is no last release date, then it's the first time the user is running the app and checking for updates. Ignore this release since we can't check if
-            // it's actually different from the one the user has installed, and save the release date in the preferences so that we can have a future reference
-
-            val releaseDate = Instant.parse(releaseDto.createdAt)
-            preferences.edit {
-                putLong(KEY_LAST_RELEASE_DATE, releaseDate.toEpochMilliseconds())
-            }
+            statePreferences.edit { putLong(KEY_LAST_RELEASE_DATE, releaseDateMillis) }
             scheduleNextUpdate()
             return false
         }
-
-        val thisReleaseDate = Instant.parse(releaseDto.createdAt)
-
-        return thisReleaseDate.toEpochMilliseconds() > lastReleaseDate
+        return releaseDateMillis > lastReleaseDate
     }
 }

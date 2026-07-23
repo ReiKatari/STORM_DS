@@ -70,6 +70,7 @@ class SmartSyncEngine(
     private val prefetchCacheRepository: OfflinePrefetchCacheRepository,
     private val clockMillis: () -> Long = { System.currentTimeMillis() },
     private val logSink: (String, String) -> Unit = { tag, message -> Log.i(tag, message) },
+    private val syncEnabled: () -> Boolean = { true },
 ) {
 
     private companion object {
@@ -108,6 +109,11 @@ class SmartSyncEngine(
         contentId: String,
         modeFilter: Set<OfflineUnlockMode>?,
     ): Result<SmartSyncResult> = withContext(Dispatchers.IO) {
+        if (!syncEnabled()) {
+            return@withContext Result.failure(
+                IllegalStateException("Built-in SmartSync is disabled for the effective RA backend"),
+            )
+        }
         val filterTag = modeFilter?.joinToString(",") { it.name } ?: "ALL"
         logRaTrace("smart_sync_started", "filter" to filterTag, "content_id" to contentId)
 

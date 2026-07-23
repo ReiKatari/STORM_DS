@@ -716,6 +716,10 @@ class EmulatorActivity : AppCompatActivity() {
                             getString(R.string.retroachievements_account_changed_in_game) to Toast.LENGTH_LONG
                         ToastEvent.RetroAchievementsLogoutFailed ->
                             getString(R.string.retroachievements_logout_failed) to Toast.LENGTH_LONG
+                        ToastEvent.RAOfflineProxyNotActive ->
+                            getString(R.string.ra_offline_proxy_not_active) to Toast.LENGTH_LONG
+                        ToastEvent.RetroAchievementsProviderChangedRestartRequired ->
+                            getString(R.string.ra_offline_proxy_restart_required) to Toast.LENGTH_LONG
                         is ToastEvent.HardcoreOfflineUnsyncedWarning -> {
                             getString(R.string.offline_ra_hardcore_unsynced_warning_toast, it.pendingHardcoreCount) to Toast.LENGTH_LONG
                         }
