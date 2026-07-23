@@ -315,3 +315,91 @@ void AndroidMelonEventMessenger::onRetroAchievementsReconnected()
 {
     MelonDSAndroid::fireEmulatorEvent(EVENT_RA_RECONNECTED);
 }
+
+void AndroidMelonEventMessenger::onRetroAchievementsPendingSubmissionAdded(
+    uint64_t submissionSessionId,
+    uint64_t submissionId,
+    uint64_t sequence,
+    int64_t createdAtEpochMs,
+    int submissionType,
+    long achievementId,
+    long leaderboardId,
+    uint64_t attemptId,
+    int32_t rawScore,
+    bool hardcore,
+    std::string formattedScore
+)
+{
+    struct {
+        int64_t submissionSessionId;
+        int64_t submissionId;
+        int64_t sequence;
+        int64_t createdAtEpochMs;
+        int64_t achievementId;
+        int64_t leaderboardId;
+        int64_t attemptId;
+        int32_t submissionType;
+        int32_t rawScore;
+        int32_t hardcore;
+        int32_t formattedScoreSize;
+        char formattedScore[32];
+    } data = {
+        .submissionSessionId = static_cast<int64_t>(submissionSessionId),
+        .submissionId = static_cast<int64_t>(submissionId),
+        .sequence = static_cast<int64_t>(sequence),
+        .createdAtEpochMs = createdAtEpochMs,
+        .achievementId = static_cast<int64_t>(achievementId),
+        .leaderboardId = static_cast<int64_t>(leaderboardId),
+        .attemptId = static_cast<int64_t>(attemptId),
+        .submissionType = static_cast<int32_t>(submissionType),
+        .rawScore = rawScore,
+        .hardcore = hardcore ? 1 : 0,
+        .formattedScoreSize = static_cast<int32_t>(std::min(formattedScore.size(), sizeof(data.formattedScore))),
+    };
+    static_assert(sizeof(data) == 104, "RA pending submission wire layout changed");
+    static_assert(sizeof(data) <= 128, "RA pending submission event exceeds message queue payload");
+    std::memset(data.formattedScore, 0, sizeof(data.formattedScore));
+    std::memcpy(data.formattedScore, formattedScore.c_str(), static_cast<size_t>(data.formattedScoreSize));
+    MelonDSAndroid::fireEmulatorEvent(EVENT_RA_PENDING_SUBMISSION_ADDED, sizeof(data), &data);
+}
+
+void AndroidMelonEventMessenger::onRetroAchievementsPendingSubmissionResolved(
+    uint64_t submissionSessionId,
+    uint64_t submissionId,
+    int submissionType,
+    int resolution,
+    int result
+)
+{
+    struct {
+        int64_t submissionSessionId;
+        int64_t submissionId;
+        int32_t submissionType;
+        int32_t resolution;
+        int32_t result;
+    } data = {
+        .submissionSessionId = static_cast<int64_t>(submissionSessionId),
+        .submissionId = static_cast<int64_t>(submissionId),
+        .submissionType = static_cast<int32_t>(submissionType),
+        .resolution = static_cast<int32_t>(resolution),
+        .result = static_cast<int32_t>(result),
+    };
+    static_assert(sizeof(data) == 32, "RA pending resolution wire layout changed");
+    MelonDSAndroid::fireEmulatorEvent(EVENT_RA_PENDING_SUBMISSION_RESOLVED, sizeof(data), &data);
+}
+
+void AndroidMelonEventMessenger::onRetroAchievementsPendingSubmissionBarrier(
+    uint64_t submissionSessionId,
+    uint64_t barrierId
+)
+{
+    struct {
+        int64_t submissionSessionId;
+        int64_t barrierId;
+    } data = {
+        .submissionSessionId = static_cast<int64_t>(submissionSessionId),
+        .barrierId = static_cast<int64_t>(barrierId),
+    };
+    static_assert(sizeof(data) == 16, "RA pending barrier wire layout changed");
+    MelonDSAndroid::fireEmulatorEvent(EVENT_RA_PENDING_SUBMISSION_BARRIER, sizeof(data), &data);
+}

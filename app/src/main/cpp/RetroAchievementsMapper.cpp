@@ -256,6 +256,7 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
     jfieldID apiTokenField = getFieldIdOrNull(env, runtimeConfigClass, "apiToken", "Ljava/lang/String;");
     jfieldID gameHashField = getFieldIdOrNull(env, runtimeConfigClass, "gameHash", "Ljava/lang/String;");
     jfieldID gameIdField = getFieldIdOrNull(env, runtimeConfigClass, "gameId", "Ljava/lang/Long;");
+    jfieldID submissionSessionIdField = getFieldIdOrNull(env, runtimeConfigClass, "submissionSessionId", "J");
     jfieldID hardcoreEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "hardcoreEnabled", "Z");
     jfieldID unofficialEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "unofficialEnabled", "Z");
     jfieldID encoreEnabledField = getFieldIdOrNull(env, runtimeConfigClass, "encoreEnabled", "Z");
@@ -266,6 +267,7 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
         apiTokenField == nullptr ||
         gameHashField == nullptr ||
         gameIdField == nullptr ||
+        submissionSessionIdField == nullptr ||
         hardcoreEnabledField == nullptr ||
         unofficialEnabledField == nullptr ||
         encoreEnabledField == nullptr)
@@ -280,6 +282,13 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
         env->DeleteLocalRef(runtimeConfigClass);
         return std::nullopt;
     }
+    const jlong submissionSessionId = env->GetLongField(javaRuntimeConfig, submissionSessionIdField);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(runtimeConfigClass);
+        return std::nullopt;
+    }
 
     MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig runtimeBridgeConfig = {
         .runtimeMode = runtimeMode.value(),
@@ -287,6 +296,7 @@ std::optional<MelonDSAndroid::RetroAchievements::RARuntimeBridgeConfig> mapRunti
         .unofficialEnabled = env->GetBooleanField(javaRuntimeConfig, unofficialEnabledField) == JNI_TRUE,
         .encoreEnabled = env->GetBooleanField(javaRuntimeConfig, encoreEnabledField) == JNI_TRUE,
         .gameId = getOptionalLongField(env, javaRuntimeConfig, gameIdField).value_or(0),
+        .submissionSessionId = static_cast<uint64_t>(submissionSessionId),
         .userAgent = getOptionalStringField(env, javaRuntimeConfig, userAgentField).value_or(""),
         .username = getOptionalStringField(env, javaRuntimeConfig, usernameField).value_or(""),
         .apiToken = getOptionalStringField(env, javaRuntimeConfig, apiTokenField).value_or(""),

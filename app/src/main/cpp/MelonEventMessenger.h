@@ -56,6 +56,30 @@ public:
     virtual void onRetroAchievementsServerError(std::string api, long relatedId, int result, std::string message) = 0;
     virtual void onRetroAchievementsDisconnected() = 0;
     virtual void onRetroAchievementsReconnected() = 0;
+    virtual void onRetroAchievementsPendingSubmissionAdded(
+        uint64_t submissionSessionId,
+        uint64_t submissionId,
+        uint64_t sequence,
+        int64_t createdAtEpochMs,
+        int submissionType,
+        long achievementId,
+        long leaderboardId,
+        uint64_t attemptId,
+        int32_t rawScore,
+        bool hardcore,
+        std::string formattedScore
+    ) = 0;
+    virtual void onRetroAchievementsPendingSubmissionResolved(
+        uint64_t submissionSessionId,
+        uint64_t submissionId,
+        int submissionType,
+        int resolution,
+        int result
+    ) = 0;
+    virtual void onRetroAchievementsPendingSubmissionBarrier(
+        uint64_t submissionSessionId,
+        uint64_t barrierId
+    ) = 0;
 };
 
 }

@@ -14,6 +14,7 @@
 #include "retroachievements/RAAchievement.h"
 #include "retroachievements/RALeaderboard.h"
 #include "retroachievements/RARuntimeBridgeConfig.h"
+#include "retroachievements/RetroAchievementsManager.h"
 #include "renderer/FrameQueue.h"
 #include "types.h"
 #include "../GPU.h"
@@ -123,6 +124,12 @@ namespace MelonDSAndroid {
     extern std::vector<RetroAchievements::RARuntimeAchievement> getRuntimeAchievements();
     extern std::vector<RetroAchievements::RARuntimeAchievementBucketEntry> getRuntimeAchievementBuckets();
     extern std::vector<long> getRuntimeSubsetIds();
+    extern RetroAchievements::RANativePendingRetryResult retryPendingRetroAchievementsSubmissions(
+        const std::vector<uint64_t>& expectedSubmissionIds);
+    extern uint64_t refreshPendingRetroAchievementsSubmissions();
+    extern int32_t discardPendingRetroAchievementsSubmissions(
+        const std::vector<uint64_t>& expectedSubmissionIds);
+    extern void setRetroAchievementsSubmissionTransportSuspended(bool suspended);
     extern Renderer getCurrentRenderer();
     extern void updateEmulatorConfiguration(std::unique_ptr<EmulatorConfiguration> emulatorConfiguration);
 

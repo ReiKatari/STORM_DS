@@ -35,6 +35,9 @@ data class SmartSyncResult(
     val skippedCount: Int get() = skipped.size
 }
 
+class HardcoreSameSessionSyncRequiredException :
+    IllegalStateException("Hardcore submissions can only be synchronized by their live rc_client session")
+
 interface SmartSyncRaClient {
     suspend fun getGameAchievementSets(gameHash: String): Result<RAGame>
 
@@ -84,7 +87,20 @@ class SmartSyncEngine(
     }
 
     suspend fun syncHardcoreNow(userId: String, contentId: String): Result<SmartSyncResult> {
-        return syncFiltered(userId = userId, contentId = contentId, modeFilter = setOf(OfflineUnlockMode.HARDCORE))
+        val status = withContext(Dispatchers.IO) {
+            ledgerRepository.getStatus(userId, contentId)
+        }
+        if (status.integrity != OfflineLedgerIntegrity.OK) {
+            return Result.failure(IllegalStateException("Ledger integrity is ${status.integrity}"))
+        }
+        val pendingHardcore = status.pendingUnlocks.count {
+            it.unlockMode == OfflineUnlockMode.HARDCORE
+        }
+        return if (pendingHardcore == 0) {
+            Result.success(SmartSyncResult(0, emptyList(), 0))
+        } else {
+            Result.failure(HardcoreSameSessionSyncRequiredException())
+        }
     }
 
     private suspend fun syncFiltered(
@@ -95,7 +111,7 @@ class SmartSyncEngine(
         val filterTag = modeFilter?.joinToString(",") { it.name } ?: "ALL"
         logRaTrace("smart_sync_started", "filter" to filterTag, "content_id" to contentId)
 
-        var ledgerStatus = ledgerRepository.getStatus(userId, contentId)
+        val ledgerStatus = ledgerRepository.getStatus(userId, contentId)
         if (ledgerStatus.integrity != OfflineLedgerIntegrity.OK) {
             logRaTrace(
                 "smart_sync_failed",
@@ -114,37 +130,6 @@ class SmartSyncEngine(
                 "pending" to ledgerStatus.pendingSoftcoreUnlockCount,
             )
             return@withContext Result.failure(OfflineLedgerExpiredException())
-        }
-
-        val requestedHardcorePending = ledgerStatus.pendingUnlocks.count { it.unlockMode == OfflineUnlockMode.HARDCORE }
-        if (requestedHardcorePending > 0) {
-            val discardResult = ledgerRepository.discardPendingHardcoreUnlocks(userId, contentId)
-            if (discardResult.isFailure) {
-                val error = discardResult.exceptionOrNull()
-                logRaTrace(
-                    "smart_sync_failed",
-                    "filter" to filterTag,
-                    "reason" to "hardcore_discard_failed",
-                    "pending_hardcore" to requestedHardcorePending,
-                    "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
-                )
-                return@withContext Result.failure(error ?: IllegalStateException("Failed to discard hardcore replay entries"))
-            }
-            logRaTrace(
-                "smart_sync_hardcore_discarded",
-                "filter" to filterTag,
-                "pending_hardcore" to requestedHardcorePending,
-                "discarded" to (discardResult.getOrNull() ?: 0),
-            )
-            ledgerStatus = ledgerRepository.getStatus(userId, contentId)
-            if (ledgerStatus.integrity != OfflineLedgerIntegrity.OK) {
-                logRaTrace(
-                    "smart_sync_failed",
-                    "filter" to filterTag,
-                    "reason" to "ledger_integrity_after_hardcore_discard_${ledgerStatus.integrity.name.lowercase()}",
-                )
-                return@withContext Result.failure(IllegalStateException("Ledger integrity is ${ledgerStatus.integrity}"))
-            }
         }
 
         val pending = ledgerStatus.pendingUnlocks.filter { unlock ->
@@ -180,7 +165,7 @@ class SmartSyncEngine(
                 "smart_sync_failed",
                 "filter" to filterTag,
                 "reason" to "fetch_current_set_failed",
-                "error" to (error.message ?: error.javaClass.simpleName),
+                "error" to error.javaClass.simpleName,
             )
             return@withContext Result.failure(error)
         }
@@ -256,9 +241,8 @@ class SmartSyncEngine(
                             "smart_sync_unlock_skipped",
                             "achievement_id" to unlock.achievementId,
                             "reason" to SmartSyncSkipReason.SERVER_REJECTED.name,
-                            "detail" to reasonDetail,
                             "hardcore" to (unlock.unlockMode == OfflineUnlockMode.HARDCORE),
-                            "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+                            "error" to (error?.javaClass?.simpleName ?: "unknown"),
                         )
                         skipped += SmartSyncSkippedAchievement(
                             achievementId = unlock.achievementId,
@@ -271,7 +255,7 @@ class SmartSyncEngine(
                             "filter" to filterTag,
                             "reason" to "award_failed",
                             "achievement_id" to unlock.achievementId,
-                            "error" to (error?.message ?: error?.javaClass?.simpleName ?: "unknown"),
+                            "error" to (error?.javaClass?.simpleName ?: "unknown"),
                             "submitted_so_far" to submitted,
                         )
                         return@withContext Result.failure(error ?: IllegalStateException("Award failed"))
@@ -386,7 +370,7 @@ class SmartSyncEngine(
                         "hardcore" to isHardcore,
                         "attempt" to attempt,
                         "offset_seconds" to offsetSeconds,
-                        "error" to (exception.message ?: exception.javaClass.simpleName),
+                        "error" to exception.javaClass.simpleName,
                     )
                     logRaTrace(
                         "smart_sync_award_io_exhausted",
@@ -415,13 +399,13 @@ class SmartSyncEngine(
                 "hardcore" to isHardcore,
                 "attempt" to attempt,
                 "offset_seconds" to offsetSeconds,
-                "error" to (exception.message ?: exception.javaClass.simpleName),
+                "error" to exception.javaClass.simpleName,
             )
             logRaTrace(
                 "smart_sync_award_failed",
                 "achievement_id" to achievementId,
                 "hardcore" to isHardcore,
-                "error" to (exception.message ?: exception.javaClass.simpleName),
+                "error" to exception.javaClass.simpleName,
             )
             return Result.failure(exception)
         }

@@ -12,6 +12,7 @@ data class RARuntimeBridgeConfig(
     val apiToken: String?,
     val gameHash: String?,
     val gameId: Long?,
+    val submissionSessionId: Long,
     val hardcoreEnabled: Boolean,
     val unofficialEnabled: Boolean,
     val encoreEnabled: Boolean,

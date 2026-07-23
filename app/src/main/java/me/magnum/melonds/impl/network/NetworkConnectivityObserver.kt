@@ -52,6 +52,14 @@ class NetworkConnectivityObserver @Inject constructor(@ApplicationContext contex
                             trySend(NetworkState.DISCONNECTED)
                         }
                     }
+
+                    override fun onLost(network: Network) {
+                        trySend(NetworkState.DISCONNECTED)
+                    }
+
+                    override fun onUnavailable() {
+                        trySend(NetworkState.DISCONNECTED)
+                    }
                 }
                 connectivityManager.registerDefaultNetworkCallback(callback)
 

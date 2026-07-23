@@ -1,5 +1,7 @@
 package me.magnum.melonds.ui.settings.fragments
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
@@ -20,6 +22,7 @@ import me.magnum.melonds.databinding.DialogRetroachievementsLoginBinding
 import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.ui.common.LoadingDialog
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.settings.flow.observeAsFlow
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
 import me.magnum.melonds.ui.settings.viewmodel.RetroAchievementsSettingsViewModel
@@ -61,10 +64,26 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
 
         accountPreference.setOnPreferenceClickListener {
             val accountState = viewModel.accountState.value
+            val runtimeIdentityLocked = requireActivity().intent.getBooleanExtra(
+                SettingsActivity.KEY_RA_RUNTIME_IDENTITY_LOCKED,
+                false,
+            )
             when (accountState) {
                 is RetroAchievementsAccountState.LoggedIn -> showLogoutConfirmationDialog()
-                is RetroAchievementsAccountState.LoginExpired -> showLoginDialog(accountState.existingUsername)
-                RetroAchievementsAccountState.LoggedOut -> showLoginDialog(null)
+                is RetroAchievementsAccountState.LoginExpired -> {
+                    if (runtimeIdentityLocked) {
+                        showInGameAccountChangeBlockedDialog()
+                    } else {
+                        showLoginDialog(accountState.existingUsername)
+                    }
+                }
+                RetroAchievementsAccountState.LoggedOut -> {
+                    if (runtimeIdentityLocked) {
+                        showInGameAccountChangeBlockedDialog()
+                    } else {
+                        showLoginDialog(null)
+                    }
+                }
                 RetroAchievementsAccountState.Unknown -> {
                     // Do nothing until a proper state is known
                 }
@@ -168,16 +187,54 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
     }
 
     private fun showLogoutConfirmationDialog() {
+        val inGameRuntimeIdentityLocked =
+            requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false) &&
+                requireActivity().intent.getBooleanExtra(
+                    SettingsActivity.KEY_RA_RUNTIME_IDENTITY_LOCKED,
+                    false,
+                )
+        val inGameLogoutSupported =
+            inGameRuntimeIdentityLocked &&
+                requireActivity().intent.getBooleanExtra(
+                    SettingsActivity.KEY_RA_IN_GAME_LOGOUT_SUPPORTED,
+                    false,
+                )
+        if (inGameRuntimeIdentityLocked && !inGameLogoutSupported) {
+            showInGameAccountChangeBlockedDialog()
+            return
+        }
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.retroachievements_logout)
-            .setMessage(R.string.retroachievements_logout_confirmation)
+            .setMessage(
+                if (inGameLogoutSupported) {
+                    R.string.retroachievements_logout_confirmation_in_game
+                } else {
+                    R.string.retroachievements_logout_confirmation
+                },
+            )
             .setPositiveButton(R.string.retroachievements_logout) { dialog, _ ->
-                viewModel.logoutFromRetroAchievements()
+                if (inGameLogoutSupported) {
+                    requireActivity().setResult(
+                        Activity.RESULT_OK,
+                        Intent().putExtra(SettingsActivity.KEY_RA_LOGOUT_REQUESTED, true),
+                    )
+                    requireActivity().finish()
+                } else {
+                    viewModel.logoutFromRetroAchievements()
+                }
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel) { dialog, _ ->
                 dialog.dismiss()
             }
+            .show()
+    }
+
+    private fun showInGameAccountChangeBlockedDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.retroachievements)
+            .setMessage(R.string.retroachievements_account_change_blocked_in_game)
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 

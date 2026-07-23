@@ -827,6 +827,14 @@ RC_EXPORT void RC_CCONV rc_client_do_frame(rc_client_t* client);
  */
 RC_EXPORT void RC_CCONV rc_client_idle(rc_client_t* client);
 
+RC_EXPORT int RC_CCONV rc_client_is_submission_retry_pending_token(
+    rc_client_t* client, uintptr_t callback_data_token);
+RC_EXPORT void RC_CCONV rc_client_get_pending_submission_counts(
+    rc_client_t* client, uint32_t* achievements, uint32_t* leaderboards);
+RC_EXPORT int RC_CCONV rc_client_retry_pending_submission(
+    rc_client_t* client, uintptr_t callback_data_token);
+RC_EXPORT uint32_t RC_CCONV rc_client_discard_pending_submissions(rc_client_t* client);
+
 /**
  * Determines if a sufficient amount of frames have been processed since the last call to rc_client_can_pause.
  * Should not be called unless the client is trying to pause.

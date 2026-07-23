@@ -6,5 +6,6 @@ interface RAUserAuthStore {
     suspend fun storeUserAuth(userAuth: RAUserAuth.Authenticated)
     suspend fun getUserAuth(): RAUserAuth?
     suspend fun clearUserAuth()
-    suspend fun clearUserToken()
+    suspend fun clearUserAuthIfMatches(expectedUsername: String, expectedToken: String): Boolean
+    suspend fun clearUserTokenIfMatches(expectedUsername: String, expectedToken: String): Boolean
 }

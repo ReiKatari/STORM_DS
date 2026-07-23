@@ -35,8 +35,11 @@ class RetroAchievementsSettingsViewModel @Inject constructor(
 
     fun logoutFromRetroAchievements() {
         viewModelScope.launch {
-            retroAchievementsRepository.logout()
-            _accountState.value = RetroAchievementsAccountState.LoggedOut
+            if (retroAchievementsRepository.logout()) {
+                _accountState.value = RetroAchievementsAccountState.LoggedOut
+            } else {
+                updateLoggedInState()
+            }
         }
     }
 
@@ -47,7 +50,7 @@ class RetroAchievementsSettingsViewModel @Inject constructor(
             if (result.isSuccess) {
                 updateLoggedInState()
             } else {
-                _accountState.value = RetroAchievementsAccountState.LoggedOut
+                updateLoggedInState()
                 _loginErrorEvent.tryEmit(Unit)
             }
             _loggingIn.value = false

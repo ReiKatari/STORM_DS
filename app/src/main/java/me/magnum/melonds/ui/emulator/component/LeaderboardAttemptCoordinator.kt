@@ -62,13 +62,13 @@ internal class LeaderboardAttemptCoordinator {
     }
 
     fun beginRuntimeReset() {
-        statesByKey.clear()
+        retainPendingAttempts()
         latestAttemptIdByLeaderboard.clear()
         awaitingRuntimeResetBarrier = true
     }
 
     fun completeRuntimeReset(attemptFloor: Long) {
-        statesByKey.clear()
+        retainPendingAttempts()
         latestAttemptIdByLeaderboard.clear()
         highestObservedAttemptId = maxOf(highestObservedAttemptId, attemptFloor)
         resetAttemptFloor = maxOf(resetAttemptFloor, attemptFloor)
@@ -76,7 +76,12 @@ internal class LeaderboardAttemptCoordinator {
     }
 
     fun reduce(event: RAEvent): Transition? {
-        if (awaitingRuntimeResetBarrier) return null
+        if (
+            awaitingRuntimeResetBarrier &&
+            !isRetainedPendingResponse(event)
+        ) {
+            return null
+        }
 
         return when (event) {
             is RAEvent.OnLeaderboardAttemptStarted -> reduceStarted(event)
@@ -90,10 +95,20 @@ internal class LeaderboardAttemptCoordinator {
                 Transition.Canceled(event)
             }
             is RAEvent.OnLeaderboardAttemptSubmitted -> reducePending(event)
-            is RAEvent.OnLeaderboardScoreboard -> reduceTerminal(event.key(), event.eventSequence, Phase.SCOREBOARD) {
+            is RAEvent.OnLeaderboardScoreboard -> reduceTerminal(
+                event.key(),
+                event.eventSequence,
+                Phase.SCOREBOARD,
+                allowRetainedPendingBeforeReset = true,
+            ) {
                 Transition.Scoreboard(event)
             }
-            is RAEvent.OnLeaderboardSubmissionFailed -> reduceTerminal(event.key(), event.eventSequence, Phase.FAILED) {
+            is RAEvent.OnLeaderboardSubmissionFailed -> reduceTerminal(
+                event.key(),
+                event.eventSequence,
+                Phase.FAILED,
+                allowRetainedPendingBeforeReset = true,
+            ) {
                 Transition.Failed(event)
             }
             is RAEvent.OnLeaderboardRuntimeReset -> null
@@ -158,9 +173,10 @@ internal class LeaderboardAttemptCoordinator {
         key: LeaderboardAttemptKey,
         eventSequence: Long,
         phase: Phase,
+        allowRetainedPendingBeforeReset: Boolean = false,
         transition: () -> Transition,
     ): Transition? {
-        if (!acceptAttempt(key)) return null
+        if (!acceptAttempt(key, allowRetainedPendingBeforeReset)) return null
 
         val current = statesByKey[key]
         if (current != null && (current.phase.isTerminal() || eventSequence <= current.lastSequence)) {
@@ -171,15 +187,39 @@ internal class LeaderboardAttemptCoordinator {
         return transition()
     }
 
-    private fun acceptAttempt(key: LeaderboardAttemptKey): Boolean {
-        if (key.attemptId <= resetAttemptFloor) return false
+    private fun acceptAttempt(
+        key: LeaderboardAttemptKey,
+        allowRetainedPendingBeforeReset: Boolean = false,
+    ): Boolean {
+        val retainedPendingAttempt =
+            allowRetainedPendingBeforeReset &&
+                statesByKey[key]?.phase == Phase.PENDING
+        if (key.attemptId <= resetAttemptFloor && !retainedPendingAttempt) return false
         val latestAttemptId = latestAttemptIdByLeaderboard[key.leaderboardId]
-        if (statesByKey[key] == null && latestAttemptId != null && key.attemptId < latestAttemptId) {
+        if (
+            statesByKey[key] == null &&
+            latestAttemptId != null &&
+            key.attemptId < latestAttemptId
+        ) {
             return false
         }
-        latestAttemptIdByLeaderboard[key.leaderboardId] = maxOf(latestAttemptId ?: 0L, key.attemptId)
+        latestAttemptIdByLeaderboard[key.leaderboardId] =
+            maxOf(latestAttemptId ?: 0L, key.attemptId)
         highestObservedAttemptId = maxOf(highestObservedAttemptId, key.attemptId)
         return true
+    }
+
+    private fun isRetainedPendingResponse(event: RAEvent): Boolean {
+        val key = when (event) {
+            is RAEvent.OnLeaderboardScoreboard -> event.key()
+            is RAEvent.OnLeaderboardSubmissionFailed -> event.key()
+            else -> return false
+        }
+        return statesByKey[key]?.phase == Phase.PENDING
+    }
+
+    private fun retainPendingAttempts() {
+        statesByKey.entries.removeAll { it.value.phase != Phase.PENDING }
     }
 
     internal fun trackedAttemptCount(): Int = statesByKey.size
@@ -234,6 +274,31 @@ internal object LeaderboardSubmissionOwnership {
         return resolve(owner, event).also { action ->
             if (action is Action.SubmitLegacy) {
                 submitLegacy(action)
+            }
+        }
+    }
+}
+
+internal object AchievementSubmissionOwnership {
+    enum class Owner {
+        RC_CLIENT,
+        LEGACY_KOTLIN,
+    }
+
+    enum class Action {
+        RUNTIME_OWNS_SUBMIT,
+        SUBMIT_FROM_KOTLIN,
+    }
+
+    fun dispatch(
+        owner: Owner,
+        submitFromKotlin: () -> Unit,
+    ): Action {
+        return when (owner) {
+            Owner.RC_CLIENT -> Action.RUNTIME_OWNS_SUBMIT
+            Owner.LEGACY_KOTLIN -> {
+                submitFromKotlin()
+                Action.SUBMIT_FROM_KOTLIN
             }
         }
     }

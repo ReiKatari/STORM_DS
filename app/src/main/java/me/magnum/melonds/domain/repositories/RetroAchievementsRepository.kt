@@ -24,7 +24,19 @@ interface RetroAchievementsRepository {
     suspend fun isUserAuthenticated(): Boolean
     suspend fun getUserAuthentication(): RAUserAuth?
     suspend fun login(username: String, password: String): Result<Unit>
-    suspend fun logout()
+    suspend fun logout(): Boolean
+    suspend fun logoutIfAuthenticationMatches(expectedUsername: String, expectedToken: String): Boolean
+    suspend fun acquireRuntimeAuthenticationLease(
+        leaseId: String,
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Boolean
+    fun releaseRuntimeAuthenticationLease(leaseId: String): Boolean
+    fun handoffRuntimeAuthenticationLeaseToLogout(leaseId: String): Boolean
+    suspend fun completeRuntimeAuthenticationLogout(
+        leaseId: String,
+        expectedUsername: String,
+        expectedToken: String,
+    ): Boolean
     suspend fun getCachedUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?>
     suspend fun getUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?>
     suspend fun refreshUserGameData(gameHash: String, forHardcoreMode: Boolean): Result<RAUserGameData?>
@@ -37,10 +49,20 @@ interface RetroAchievementsRepository {
     suspend fun getAchievement(achievementId: Long): Result<RAAchievement?>
     suspend fun isAchievementUnlocked(gameId: Long, achievementId: Long, forHardcoreMode: Boolean): Boolean
     suspend fun awardAchievement(achievement: RAAchievement, forHardcoreMode: Boolean): Result<RAAwardAchievementResponse>
+    suspend fun awardAchievementForAuthentication(
+        achievement: RAAchievement,
+        forHardcoreMode: Boolean,
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Result<RAAwardAchievementResponse>
     suspend fun submitPendingAchievements(): Result<Unit>
     suspend fun getLeaderboard(leaderboardId: Long): RALeaderboard?
     suspend fun getLeaderboardRanking(leaderboardId: Long, firstEntry: Int = 1, count: Int = 25): Result<RALeaderboardRanking>
     suspend fun submitLeaderboardEntry(leaderboardId: Long, value: Int): Result<RASubmitLeaderboardEntryResponse>
+    suspend fun submitLeaderboardEntryForAuthentication(
+        leaderboardId: Long,
+        value: Int,
+        expectedAuthentication: RAUserAuth.Authenticated,
+    ): Result<RASubmitLeaderboardEntryResponse>
     suspend fun startSession(gameHash: String, forHardcoreMode: Boolean): Result<Unit>
     suspend fun sendSessionHeartbeat(gameHash: String, forHardcoreMode: Boolean, richPresenceDescription: String?)
 }

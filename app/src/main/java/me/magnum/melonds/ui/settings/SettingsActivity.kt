@@ -31,6 +31,9 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         const val KEY_LOCK_INPUT_MAPPING = "lock_input_mapping"
         const val KEY_LOCK_INPUT_LAYOUT = "lock_input_layout"
         const val KEY_LOCK_VIDEO_FILTERING = "lock_video_filtering"
+        const val KEY_RA_RUNTIME_IDENTITY_LOCKED = "ra_runtime_identity_locked"
+        const val KEY_RA_IN_GAME_LOGOUT_SUPPORTED = "ra_in_game_logout_supported"
+        const val KEY_RA_LOGOUT_REQUESTED = "ra_logout_requested"
 
         const val CUSTOM_FIRMWARE_ENTRY_POINT = "custom_firmware_entry_point"
     }

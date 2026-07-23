@@ -45,4 +45,28 @@ sealed class RAEvent {
     data class OnLeaderboardAttemptCancelled(val leaderboardId: Long, val attemptId: Long, val eventSequence: Long) : RAEvent()
     data class OnAchievementProgressHidden(val achievementId: Long) : RAEvent()
     data class OnLeaderboardTrackerHidden(val leaderboardId: Long, val attemptId: Long, val eventSequence: Long) : RAEvent()
+    data class OnPendingSubmissionAdded(
+        val submissionSessionId: Long,
+        val nativeSubmissionId: Long,
+        val sequence: Long,
+        val createdAtEpochMs: Long,
+        val submissionType: RaNativePendingSubmissionType,
+        val achievementId: Long,
+        val leaderboardId: Long,
+        val attemptId: Long,
+        val rawScore: Int,
+        val hardcore: Boolean,
+        val formattedScore: String,
+    ) : RAEvent()
+    data class OnPendingSubmissionResolved(
+        val submissionSessionId: Long,
+        val nativeSubmissionId: Long,
+        val submissionType: RaNativePendingSubmissionType,
+        val resolution: RaNativePendingSubmissionResolution,
+        val resultCode: Int,
+    ) : RAEvent()
+    data class OnPendingSubmissionBarrier(
+        val submissionSessionId: Long,
+        val barrierId: Long,
+    ) : RAEvent()
 }

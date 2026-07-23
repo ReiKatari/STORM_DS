@@ -114,7 +114,7 @@ class SmartSyncEngineTest {
     }
 
     @Test
-    fun smartSyncDiscardsLegacyHardcoreLedgerEntriesWithoutRaRequests() = runTest {
+    fun smartSyncRejectsLegacyHardcoreReplayWithoutDiscardingOrSendingRequests() = runTest {
         val userId = "player"
         val gameHash = "abc123"
         val gameId = 42L
@@ -158,10 +158,10 @@ class SmartSyncEngineTest {
             logSink = { _, _ -> },
         ).syncHardcoreNow(userId, gameHash)
 
-        assertTrue(result.isSuccess)
-        assertEquals(0, result.getOrThrow().submittedCount)
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is HardcoreSameSessionSyncRequiredException)
         assertTrue(raClient.requestLog.isEmpty())
-        assertEquals(0, ledgerRepository.getStatus(userId, gameHash).pendingHardcoreUnlockCount)
+        assertEquals(1, ledgerRepository.getStatus(userId, gameHash).pendingHardcoreUnlockCount)
     }
 
     @Test

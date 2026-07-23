@@ -76,6 +76,7 @@ import me.magnum.melonds.domain.model.Rect
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.VideoFiltering
 import me.magnum.melonds.domain.model.VideoRenderer
+import me.magnum.melonds.domain.model.retroachievements.RaPendingCounts
 import me.magnum.melonds.domain.model.layout.Insets
 import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.domain.model.layout.ScreenFold
@@ -95,6 +96,9 @@ import me.magnum.melonds.parcelables.RomParcelable
 import me.magnum.melonds.ui.cheats.CheatsActivity
 import me.magnum.melonds.ui.common.rom.EmulatorLaunchValidatorDelegate
 import me.magnum.melonds.ui.emulator.component.EmulatorOverlayTracker
+import me.magnum.melonds.ui.emulator.component.RaPendingExitContext
+import me.magnum.melonds.ui.emulator.component.RaPendingModalState
+import me.magnum.melonds.ui.emulator.component.RaPendingSyncResult
 import me.magnum.melonds.ui.emulator.input.ConnectedControllerManager
 import me.magnum.melonds.ui.emulator.input.EmulatorRumbleManager
 import me.magnum.melonds.ui.emulator.input.FrontendInputHandler
@@ -105,6 +109,7 @@ import me.magnum.melonds.ui.emulator.model.EmulatorOverlay
 import me.magnum.melonds.ui.emulator.model.EmulatorState
 import me.magnum.melonds.ui.emulator.model.EmulatorUiEvent
 import me.magnum.melonds.ui.emulator.model.HardcorePendingExitChoice
+import me.magnum.melonds.ui.emulator.model.RaPendingSyncResultAction
 import me.magnum.melonds.ui.emulator.model.LaunchArgs
 import me.magnum.melonds.ui.emulator.model.OfflineAchievementsSyncChoice
 import me.magnum.melonds.ui.emulator.model.InGameRomSettingsMenuState
@@ -323,13 +328,19 @@ class EmulatorActivity : AppCompatActivity() {
             MelonEmulator.setFastForwardEnabled(fastForwardEnabled || fastForwardHoldPressed)
         }
     }
-    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        viewModel.onSettingsChanged()
+    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val logoutRequested =
+            result.resultCode == RESULT_OK &&
+                result.data?.getBooleanExtra(SettingsActivity.KEY_RA_LOGOUT_REQUESTED, false) == true
+        if (logoutRequested) {
+            viewModel.onRetroAchievementsLogoutRequested()
+        } else {
+            viewModel.onSettingsChanged(resumeWhenFinished = true)
+        }
         setupSustainedPerformanceMode()
         setupFpsCounter()
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         updateDisplays()
-        viewModel.resumeEmulator()
     }
     private val romInputSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         viewModel.onRomCustomInputConfigEdited()
@@ -364,6 +375,8 @@ class EmulatorActivity : AppCompatActivity() {
     private var offlineSyncChoiceDialog: AlertDialog? = null
     private var offlineSyncProgressDialog: AlertDialog? = null
     private var hardcorePendingExitDialog: AlertDialog? = null
+    private var raPendingSyncProgressDialog: AlertDialog? = null
+    private var raPendingSyncResultDialog: AlertDialog? = null
 
     private enum class PresentationBackend {
         OPEN_GL,
@@ -697,6 +710,12 @@ class EmulatorActivity : AppCompatActivity() {
                         ToastEvent.InternalError -> getString(R.string.emulator_stop_internal_error) to Toast.LENGTH_LONG
                         ToastEvent.OfflineAchievementsLedgerTampered -> getString(R.string.offline_ra_ledger_tampered_toast) to Toast.LENGTH_LONG
                         ToastEvent.OfflineAchievementsSyncFailed -> getString(R.string.offline_ra_sync_failed_toast) to Toast.LENGTH_LONG
+                        ToastEvent.PendingRaStateVerificationFailed ->
+                            getString(R.string.ra_pending_state_verification_failed) to Toast.LENGTH_LONG
+                        ToastEvent.RetroAchievementsAccountChangedInGame ->
+                            getString(R.string.retroachievements_account_changed_in_game) to Toast.LENGTH_LONG
+                        ToastEvent.RetroAchievementsLogoutFailed ->
+                            getString(R.string.retroachievements_logout_failed) to Toast.LENGTH_LONG
                         is ToastEvent.HardcoreOfflineUnsyncedWarning -> {
                             getString(R.string.offline_ra_hardcore_unsynced_warning_toast, it.pendingHardcoreCount) to Toast.LENGTH_LONG
                         }
@@ -803,6 +822,14 @@ class EmulatorActivity : AppCompatActivity() {
                                 putExtra(SettingsActivity.KEY_LOCK_INPUT_MAPPING, it.romSettingsOverrides.controllerMapping)
                                 putExtra(SettingsActivity.KEY_LOCK_INPUT_LAYOUT, it.romSettingsOverrides.controllerLayout)
                                 putExtra(SettingsActivity.KEY_LOCK_VIDEO_FILTERING, it.romSettingsOverrides.videoFiltering)
+                                putExtra(
+                                    SettingsActivity.KEY_RA_RUNTIME_IDENTITY_LOCKED,
+                                    it.retroAchievementsRuntimeIdentityLocked,
+                                )
+                                putExtra(
+                                    SettingsActivity.KEY_RA_IN_GAME_LOGOUT_SUPPORTED,
+                                    it.retroAchievementsInGameLogoutSupported,
+                                )
                             }
                             settingsLauncher.launch(settingsIntent)
                         }
@@ -846,9 +873,6 @@ class EmulatorActivity : AppCompatActivity() {
                                 ledgerExpiresInMs = it.ledgerExpiresInMs,
                             )
                         }
-                        is EmulatorUiEvent.ShowHardcorePendingExitWarning -> {
-                            showHardcorePendingExitWarningDialog(it.pendingHardcoreCount)
-                        }
                         is EmulatorUiEvent.ShowOfflineAchievementsSyncProgress -> {
                             showOfflineAchievementsSyncProgressDialog(it.totalUnlockCount)
                         }
@@ -858,6 +882,11 @@ class EmulatorActivity : AppCompatActivity() {
                         }
                     }
                 }
+            }
+        }
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.CREATED) {
+                viewModel.pendingRaModalState.collectLatest(::renderRaPendingModalState)
             }
         }
         lifecycleScope.launch {
@@ -909,7 +938,10 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.viewLayoutControls.isVisible = true
                             backPressedCallback.isEnabled = true
                             scheduleStartupPresentationRefreshes()
-                            if (!activeOverlays.hasActiveOverlays()) {
+                            if (
+                                !activeOverlays.hasActiveOverlays() &&
+                                viewModel.canResumeEmulatorFromLifecycle()
+                            ) {
                                 viewModel.resumeEmulator()
                             }
                         }
@@ -1053,19 +1085,161 @@ class EmulatorActivity : AppCompatActivity() {
         return resources.getQuantityString(R.plurals.offline_ra_ledger_expires_days, days, days)
     }
 
-    private fun showHardcorePendingExitWarningDialog(pendingHardcoreCount: Int) {
+    private fun showHardcorePendingExitWarningDialog(
+        requestId: Long,
+        pending: RaPendingCounts,
+        allowContinuePlaying: Boolean,
+    ) {
         hardcorePendingExitDialog?.dismiss()
-        hardcorePendingExitDialog = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.offline_ra_hardcore_pending_exit_title))
-            .setMessage(getString(R.string.offline_ra_hardcore_pending_exit_message, pendingHardcoreCount))
+        activeOverlays.addActiveOverlay(EmulatorOverlay.RA_PENDING_EXIT)
+        val builder = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.ra_pending_exit_title))
+            .setMessage(
+                getString(
+                    R.string.ra_pending_exit_message,
+                    pending.total,
+                    pending.achievementUnlocks,
+                    pending.leaderboardEntries,
+                ),
+            )
             .setCancelable(false)
-            .setPositiveButton(R.string.offline_ra_hardcore_try_sync_button) { _, _ ->
-                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.TRY_SYNC_NOW)
+            .setPositiveButton(R.string.ra_pending_sync_and_exit) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(
+                    requestId,
+                    HardcorePendingExitChoice.SYNC_AND_EXIT,
+                )
             }
-            .setNegativeButton(R.string.offline_ra_hardcore_discard_exit_button) { _, _ ->
-                viewModel.submitHardcorePendingExitChoice(HardcorePendingExitChoice.DISCARD_AND_EXIT)
+            .setNegativeButton(R.string.ra_pending_discard_and_exit) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(
+                    requestId,
+                    HardcorePendingExitChoice.DISCARD_AND_EXIT,
+                )
             }
-            .show()
+        if (allowContinuePlaying) {
+            builder.setNeutralButton(R.string.offline_ra_continue_playing_button) { _, _ ->
+                viewModel.submitHardcorePendingExitChoice(
+                    requestId,
+                    HardcorePendingExitChoice.CONTINUE_PLAYING,
+                )
+            }
+        }
+        val dialog = builder.create()
+        dialog.setOnDismissListener {
+            if (hardcorePendingExitDialog === dialog) {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_PENDING_EXIT)
+                hardcorePendingExitDialog = null
+            }
+        }
+        hardcorePendingExitDialog = dialog
+        dialog.show()
+    }
+
+    private fun showRaPendingSyncProgressDialog(pending: RaPendingCounts) {
+        raPendingSyncResultDialog?.dismiss()
+        raPendingSyncProgressDialog?.dismiss()
+        activeOverlays.addActiveOverlay(EmulatorOverlay.RA_PENDING_SYNC)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.ra_pending_syncing_title)
+            .setMessage(
+                getString(
+                    R.string.ra_pending_syncing_message,
+                    pending.total,
+                    pending.achievementUnlocks,
+                    pending.leaderboardEntries,
+                ),
+            )
+            .setCancelable(false)
+            .create()
+        dialog.setOnDismissListener {
+            if (raPendingSyncProgressDialog === dialog) {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_PENDING_SYNC)
+                raPendingSyncProgressDialog = null
+            }
+        }
+        raPendingSyncProgressDialog = dialog
+        dialog.show()
+    }
+
+    private fun showRaPendingSyncResultDialog(
+        requestId: Long,
+        result: RaPendingSyncResult,
+        action: RaPendingSyncResultAction,
+    ) {
+        raPendingSyncProgressDialog?.dismiss()
+        raPendingSyncProgressDialog = null
+        raPendingSyncResultDialog?.dismiss()
+        activeOverlays.addActiveOverlay(EmulatorOverlay.RA_PENDING_SYNC)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.ra_pending_sync_result_title)
+            .setMessage(
+                getString(
+                    R.string.ra_pending_sync_result_message,
+                    result.submittedAchievements,
+                    result.submittedLeaderboardEntries,
+                    result.alreadyAccepted,
+                    result.failedAchievements,
+                    result.failedLeaderboardEntries,
+                    result.remaining.total,
+                    result.remaining.permanentFailures,
+                ),
+            )
+            .setCancelable(false)
+            .setPositiveButton(
+                when (action) {
+                    RaPendingSyncResultAction.REOPEN_PAUSE_MENU -> R.string.pause
+                    RaPendingSyncResultAction.RESUME_SESSION ->
+                        R.string.offline_ra_continue_playing_button
+                    RaPendingSyncResultAction.REOPEN_TERMINAL_EXIT ->
+                        R.string.ra_pending_review_submissions
+                },
+            ) { _, _ ->
+                viewModel.submitRaPendingSyncResultAction(requestId, action)
+            }
+            .create()
+        dialog.setOnDismissListener {
+            if (raPendingSyncResultDialog === dialog) {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_PENDING_SYNC)
+                raPendingSyncResultDialog = null
+            }
+        }
+        raPendingSyncResultDialog = dialog
+        dialog.show()
+    }
+
+    private fun renderRaPendingModalState(state: RaPendingModalState) {
+        hardcorePendingExitDialog?.setOnDismissListener(null)
+        hardcorePendingExitDialog?.dismiss()
+        hardcorePendingExitDialog = null
+        raPendingSyncProgressDialog?.setOnDismissListener(null)
+        raPendingSyncProgressDialog?.dismiss()
+        raPendingSyncProgressDialog = null
+        raPendingSyncResultDialog?.setOnDismissListener(null)
+        raPendingSyncResultDialog?.dismiss()
+        raPendingSyncResultDialog = null
+        activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_PENDING_EXIT)
+        activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_PENDING_SYNC)
+
+        when (state) {
+            RaPendingModalState.None -> Unit
+            is RaPendingModalState.ExitPrompt -> {
+                showHardcorePendingExitWarningDialog(
+                    requestId = state.requestId,
+                    pending = state.pending,
+                    allowContinuePlaying =
+                        state.exitContext == RaPendingExitContext.RESUMABLE_SESSION,
+                )
+            }
+            is RaPendingModalState.Syncing -> {
+                showRaPendingSyncProgressDialog(state.pending)
+            }
+            is RaPendingModalState.Result -> {
+                showRaPendingSyncResultDialog(
+                    requestId = state.requestId,
+                    result = state.result,
+                    action = state.action,
+                )
+            }
+        }
     }
 
     private fun showOfflineAchievementsSyncProgressDialog(totalUnlockCount: Int) {
@@ -1187,7 +1361,10 @@ class EmulatorActivity : AppCompatActivity() {
         super.onResume()
         choreographerFrameRenderer.startRendering()
 
-        if (!activeOverlays.hasActiveOverlays()) {
+        if (
+            !activeOverlays.hasActiveOverlays() &&
+            viewModel.canResumeEmulatorFromLifecycle()
+        ) {
             disableScreenTimeOut()
             viewModel.resumeEmulator()
         }
@@ -1557,6 +1734,10 @@ class EmulatorActivity : AppCompatActivity() {
         offlineSyncProgressDialog = null
         hardcorePendingExitDialog?.dismiss()
         hardcorePendingExitDialog = null
+        raPendingSyncProgressDialog?.dismiss()
+        raPendingSyncProgressDialog = null
+        raPendingSyncResultDialog?.dismiss()
+        raPendingSyncResultDialog = null
         showAchievementList.value = false
         showPendingSubmissionsDialog.value = false
         showDualScreenPresets.value = false
@@ -1610,7 +1791,8 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun showPauseMenu(pauseMenu: PauseMenu) {
         val options = Array(pauseMenu.options.size) {
-            getString(pauseMenu.options[it].textResource)
+            pauseMenu.labelOverride(pauseMenu.options[it])
+                ?: getString(pauseMenu.options[it].textResource)
         }
 
         activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)

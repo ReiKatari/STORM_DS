@@ -18,6 +18,8 @@ data class LibrashaderAbiTarget(
 )
 
 android {
+    testBuildType = "release"
+
     signingConfigs {
         create("release") {
             val props = gradleLocalProperties(rootDir, providers)

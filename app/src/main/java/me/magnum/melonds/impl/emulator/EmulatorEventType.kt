@@ -131,4 +131,10 @@ enum class EmulatorEventType(val event: Int) {
     EventRALeaderboardSubmissionFailed(218),
 
     EventRALeaderboardRuntimeReset(219),
+
+    EventRAPendingSubmissionAdded(220),
+
+    EventRAPendingSubmissionResolved(221),
+
+    EventRAPendingSubmissionBarrier(222),
 }
