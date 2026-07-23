@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import me.magnum.melonds.R
 import me.magnum.melonds.ui.emulator.ui.AchievementInfo
+import me.magnum.melonds.ui.emulator.component.LeaderboardAttemptKey
 import me.magnum.melonds.ui.theme.MelonTheme
 import me.magnum.rcheevosapi.model.RAGameId
 import me.magnum.rcheevosapi.model.RALeaderboard
@@ -78,6 +79,7 @@ private fun PreviewLeaderboardAttemptUi() {
     MelonTheme {
         LeaderboardAttemptUi(
             info = AchievementInfo.LeaderboardAttempt(
+                key = LeaderboardAttemptKey(leaderboardId = 0, attemptId = 0),
                 leaderboard = RALeaderboard(
                     id = 0,
                     gameId = RAGameId(0),

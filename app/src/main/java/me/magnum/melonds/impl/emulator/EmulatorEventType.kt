@@ -123,4 +123,12 @@ enum class EmulatorEventType(val event: Int) {
     EventRAAchievementProgressIndicatorHidden(214),
 
     EventRALeaderboardTrackerHidden(215),
+
+    EventRALeaderboardAttemptSubmitted(216),
+
+    EventRALeaderboardScoreboard(217),
+
+    EventRALeaderboardSubmissionFailed(218),
+
+    EventRALeaderboardRuntimeReset(219),
 }
