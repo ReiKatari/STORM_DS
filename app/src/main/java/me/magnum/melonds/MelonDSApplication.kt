@@ -2,6 +2,7 @@ package me.magnum.melonds
 
 import android.Manifest
 import android.app.Application
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
@@ -33,10 +34,6 @@ class MelonDSApplication : Application(), Configuration.Provider {
     companion object {
         const val NOTIFICATION_CHANNEL_ID_BACKGROUND_TASKS = "channel_cheat_importing"
         private const val NOTIFICATION_ID_HARDCORE_OFFLINE_LOSS = 2002
-
-        init {
-            System.loadLibrary("melonDS-android-frontend")
-        }
     }
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
@@ -46,6 +43,11 @@ class MelonDSApplication : Application(), Configuration.Provider {
     @Inject lateinit var hardcoreOfflineLossTracker: HardcoreOfflineLossTracker
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
     @Inject lateinit var appLogFileRecorder: AppLogFileRecorder
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        NativeCoreLoader.load()
+    }
 
     override fun onCreate() {
         super.onCreate()
