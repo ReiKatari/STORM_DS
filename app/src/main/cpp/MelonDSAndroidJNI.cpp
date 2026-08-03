@@ -1934,6 +1934,7 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_startDenseScreenB
     jobject thiz,
     jint frameCount,
     jint stepFrames,
+    jint warmupFrames,
     jint captureKindsMask)
 {
     (void)env;
@@ -1941,6 +1942,7 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_startDenseScreenB
     MelonDSAndroid::startDenseScreenBurstCaptureForDebug(
         static_cast<int>(frameCount),
         static_cast<int>(stepFrames),
+        static_cast<int>(warmupFrames),
         static_cast<melonDS::u32>(captureKindsMask));
 }
 
@@ -1950,6 +1952,15 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_isDenseScreenBurs
     (void)env;
     (void)thiz;
     return MelonDSAndroid::isDenseScreenBurstCaptureCompleteForDebug() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jintArray JNICALL
+Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_getDenseScreenBurstScheduleStats(
+    JNIEnv* env,
+    jobject thiz)
+{
+    (void)thiz;
+    return MakeJavaIntArray(env, MelonDSAndroid::getDenseScreenBurstScheduleStatsForDebug());
 }
 
 JNIEXPORT jint JNICALL
