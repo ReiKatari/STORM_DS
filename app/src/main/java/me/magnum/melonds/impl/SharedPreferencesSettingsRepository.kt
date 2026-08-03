@@ -56,6 +56,8 @@ import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.SortingOrder
 import me.magnum.melonds.domain.model.VideoFiltering
 import me.magnum.melonds.domain.model.VideoRenderer
+import me.magnum.melonds.domain.model.VulkanPipelineProfile
+import me.magnum.melonds.domain.model.resolveThreadedRendering
 import me.magnum.melonds.domain.model.VulkanDriverConfiguration
 import me.magnum.melonds.domain.model.VulkanDriverInfo
 import me.magnum.melonds.domain.model.VulkanDriverMode
@@ -170,6 +172,7 @@ class SharedPreferencesSettingsRepository(
         val filtering: VideoFiltering,
         val threadedRenderingEnabled: Boolean,
         val resolutionScaling: Int,
+        val vulkanPipelineProfile: VulkanPipelineProfile,
         val rendererDebugToolsEnabled: Boolean,
         val rendererDebugBgObjEnabled: Boolean,
         val rendererDebugLatchTraceEnabled: Boolean,
@@ -198,12 +201,14 @@ class SharedPreferencesSettingsRepository(
                 getVideoFiltering(),
                 isThreadedRenderingEnabled(),
                 getVideoInternalResolutionScaling(),
-            ) { renderer, filtering, threadedRenderingEnabled, resolutionScaling ->
+                isVulkanFastPathEnabled(),
+            ) { renderer, filtering, threadedRenderingEnabled, resolutionScaling, vulkanFastPathEnabled ->
                 CoreRenderConfigurationInputs(
                     renderer,
                     filtering,
                     threadedRenderingEnabled,
                     resolutionScaling,
+                    VulkanPipelineProfile.fromFastPathPreference(vulkanFastPathEnabled),
                     rendererDebugToolsEnabled = false,
                     rendererDebugBgObjEnabled = false,
                     rendererDebugLatchTraceEnabled = false,
@@ -265,13 +270,20 @@ class SharedPreferencesSettingsRepository(
                     retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.NONE
                 else -> renderInputs.core.filtering
             }
-            val effectiveThreadedRendering = renderInputs.core.threadedRenderingEnabled &&
-                (renderInputs.core.renderer == VideoRenderer.SOFTWARE || renderInputs.core.renderer == VideoRenderer.VULKAN)
+            val effectiveThreadedRendering = resolveThreadedRendering(
+                renderInputs.core.renderer,
+                renderInputs.core.threadedRenderingEnabled,
+            )
             val coverageFixEnabled = renderInputs.core.renderer == VideoRenderer.OPENGL && renderInputs.coverageFix.enabled
             RendererConfiguration(
                 renderInputs.core.renderer,
                 effectiveFiltering,
                 effectiveThreadedRendering,
+                if (renderInputs.core.renderer == VideoRenderer.VULKAN) {
+                    renderInputs.core.vulkanPipelineProfile
+                } else {
+                    VulkanPipelineProfile.COMPATIBILITY
+                },
                 renderInputs.core.resolutionScaling,
                 renderInputs.core.rendererDebugToolsEnabled,
                 renderInputs.core.rendererDebugBgObjEnabled,
@@ -1185,6 +1197,12 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    override fun isVulkanFastPathEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("video_vulkan_fastpath_enabled") {
+            preferences.getBoolean("video_vulkan_fastpath_enabled", false)
+        }
+    }
+
     override fun isRendererDebugToolsEnabled(): Flow<Boolean> {
         return getOrCreatePreferenceSharedFlow("video_renderer_debug_tools_enabled") {
             preferences.getBoolean("video_renderer_debug_tools_enabled", false)
@@ -1810,8 +1828,10 @@ class SharedPreferencesSettingsRepository(
                 retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.NONE
             else -> requestedFiltering
         }
-        val threadedRendering = (romConfig.threadedRendering ?: baseConfiguration.threadedRendering) &&
-            (renderer == VideoRenderer.SOFTWARE || renderer == VideoRenderer.VULKAN)
+        val threadedRendering = resolveThreadedRendering(
+            renderer,
+            romConfig.threadedRendering ?: baseConfiguration.threadedRendering,
+        )
 
         return baseConfiguration.copy(
             renderer = renderer,
