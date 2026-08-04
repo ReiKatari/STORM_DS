@@ -1,0 +1,100 @@
+diff --git a/librashader-runtime-vk/src/filter_chain.rs b/librashader-runtime-vk/src/filter_chain.rs
+index 4f9d849..b685f08 100644
+--- a/librashader-runtime-vk/src/filter_chain.rs
++++ b/librashader-runtime-vk/src/filter_chain.rs
+@@ -588,7 +588,12 @@ impl FilterChainVulkan {
+                 // old back will get dropped.. do we need to defer?
+                 let old_back = std::mem::replace(
+                     &mut back,
+-                    OwnedImage::new(&self.vulkan, input.size, input.format.into(), 1)?,
++                    // Not `new`: routing through ImageFormat drops formats it cannot name, so a
++                    // B8G8R8A8_UNORM input silently produced an R8G8B8A8_UNORM history image. The
++                    // copy below is a raw image copy, so the bytes landed with red and blue
++                    // swapped, and the format comparison above never matched again either, which
++                    // reallocated the history image on every single frame.
++                    OwnedImage::new_with_vk_format(&self.vulkan, input.size, input.format, 1)?,
+                 );
+                 self.residuals[self.common.internal_frame_count % self.residuals.len()]
+                     .dispose_owned(old_back);
+diff --git a/librashader-runtime-vk/src/texture.rs b/librashader-runtime-vk/src/texture.rs
+index a1d2631..1e4c6e0 100644
+--- a/librashader-runtime-vk/src/texture.rs
++++ b/librashader-runtime-vk/src/texture.rs
+@@ -35,16 +35,16 @@ impl OwnedImage {
+         device: Arc<ash::Device>,
+         alloc: &Arc<Mutex<Allocator>>,
+         size: Size<u32>,
+-        mut format: ImageFormat,
++        mut format: vk::Format,
+         max_miplevels: u32,
+     ) -> error::Result<OwnedImage> {
+         // default to something sane
+-        if format == ImageFormat::Unknown {
+-            format = ImageFormat::R8G8B8A8Unorm
++        if format == vk::Format::UNDEFINED {
++            format = vk::Format::R8G8B8A8_UNORM
+         }
+         let image_create_info = vk::ImageCreateInfo::default()
+             .image_type(vk::ImageType::TYPE_2D)
+-            .format(format.into())
++            .format(format)
+             .extent(size.into())
+             .mip_levels(std::cmp::min(max_miplevels, size.calculate_miplevels()))
+             .array_layers(1)
+@@ -79,7 +79,7 @@ impl OwnedImage {
+ 
+         let view_info = vk::ImageViewCreateInfo::default()
+             .view_type(vk::ImageViewType::TYPE_2D)
+-            .format(format.into())
++            .format(format)
+             .image(image)
+             .subresource_range(image_subresource)
+             .components(swizzle_components);
+@@ -93,7 +93,7 @@ impl OwnedImage {
+             image: VulkanImage {
+                 image,
+                 size,
+-                format: format.into(),
++                format,
+             },
+             _memory: memory,
+             max_miplevels,
+@@ -106,6 +106,24 @@ impl OwnedImage {
+         size: Size<u32>,
+         format: ImageFormat,
+         max_miplevels: u32,
++    ) -> error::Result<OwnedImage> {
++        Self::new_internal(
++            vulkan.device.clone(),
++            &vulkan.alloc,
++            size,
++            format.into(),
++            max_miplevels,
++        )
++    }
++
++    /// Like `new`, but keeps a raw Vulkan format that has no `ImageFormat` equivalent — such as
++    /// `B8G8R8A8_UNORM`, which round-trips to `Unknown` and would otherwise silently become
++    /// `R8G8B8A8_UNORM`, swapping red and blue in whatever gets copied into the image.
++    pub fn new_with_vk_format(
++        vulkan: &VulkanObjects,
++        size: Size<u32>,
++        format: vk::Format,
++        max_miplevels: u32,
+     ) -> error::Result<OwnedImage> {
+         Self::new_internal(
+             vulkan.device.clone(),
+@@ -138,11 +156,8 @@ impl OwnedImage {
+                 self.device.clone(),
+                 &self.allocator,
+                 size,
+-                if format == ImageFormat::Unknown {
+-                    ImageFormat::R8G8B8A8Unorm
+-                } else {
+-                    format
+-                },
++                // new_internal already substitutes R8G8B8A8_UNORM for UNDEFINED.
++                vk::Format::from(format),
+                 max_levels,
+             )?;
+ 
