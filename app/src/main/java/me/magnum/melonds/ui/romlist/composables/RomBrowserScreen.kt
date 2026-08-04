@@ -416,6 +416,7 @@ private fun GridContent(
                         onRomLongPressed = onRomLongPress,
                         horizontalPadding = 0.dp,
                         onRomFocused = onRomFocused,
+                        onRomVisible = onRomVisible,
                     )
                 }
             }
@@ -546,6 +547,7 @@ private fun ListContent(
                         onRomClicked = onRomClick,
                         onRomLongPressed = onRomLongPress,
                         onRomFocused = onRomFocused,
+                        onRomVisible = onRomVisible,
                     )
                 }
             }
