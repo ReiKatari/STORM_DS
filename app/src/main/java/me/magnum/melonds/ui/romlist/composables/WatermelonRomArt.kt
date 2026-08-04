@@ -211,7 +211,7 @@ fun WatermelonRomArt(
                     AsyncImage(
                         model = romIconRequest(context, rom),
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.FillBounds,
                         filterQuality = FilterQuality.None,
                         modifier = Modifier
                             .align(Alignment.Center)

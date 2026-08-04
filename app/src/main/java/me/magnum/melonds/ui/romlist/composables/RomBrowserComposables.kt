@@ -381,6 +381,7 @@ fun ContinuePlayingShelf(
     modifier: Modifier = Modifier,
     horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     onRomFocused: (Rom) -> Unit = {},
+    onRomVisible: (Rom) -> Unit = {},
 ) {
     if (roms.isEmpty()) return
     val colors = watermelon
@@ -398,6 +399,9 @@ fun ContinuePlayingShelf(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(roms, key = { it.uri.toString() }) { rom ->
+                LaunchedEffect(rom.uri) {
+                    onRomVisible(rom)
+                }
                 ContinuePlayingCard(
                     rom = rom,
                     coverUrl = coverByHash[rom.retroAchievementsHash],
