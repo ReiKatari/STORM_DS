@@ -41,6 +41,7 @@ import me.magnum.melonds.impl.mappers.retroachievements.mapToModel
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
 import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.RAUserAuthStore
+import me.magnum.rcheevosapi.RAUserProfileStore
 import me.magnum.rcheevosapi.exception.UserNotAuthenticatedException
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAwardAchievementResponse
@@ -62,6 +63,7 @@ class AndroidRetroAchievementsRepository(
     private val raApi: RAApi,
     private val retroAchievementsDao: RetroAchievementsDao,
     private val raUserAuthStore: RAUserAuthStore,
+    private val raUserProfileStore: RAUserProfileStore,
     private val sharedPreferences: SharedPreferences,
     private val context: Context,
     private val endpointProvider: RetroAchievementsEndpointProvider,
@@ -82,6 +84,17 @@ class AndroidRetroAchievementsRepository(
 
     override fun observeRomCoverIcons() = retroAchievementsDao.observeRomCoverIcons()
         .map { rows -> rows.associate { it.hash to it.iconUrl } }
+
+    override fun observeUserProfile() = raUserProfileStore.observeUserProfile()
+
+    override suspend fun refreshUserProfile() {
+        if (raUserAuthStore.getUserAuth() !is RAUserAuth.Authenticated) {
+            return
+        }
+        raApi.refreshUserProfile().onFailure {
+            Log.w(RA_TRACE_TAG, "profile refresh failed: ${it.javaClass.simpleName}")
+        }
+    }
 
     override suspend fun isUserAuthenticated(): Boolean {
         return raUserAuthStore.getUserAuth() is RAUserAuth.Authenticated
@@ -106,6 +119,7 @@ class AndroidRetroAchievementsRepository(
                     val exception = result.exceptionOrNull()
                     Log.w(RA_TRACE_TAG, "login failed: ${exception?.javaClass?.simpleName ?: "unknown"}")
                     raUserAuthStore.clearUserAuth()
+                    raUserProfileStore.clearUserProfile()
                 } else {
                     Log.i(RA_TRACE_TAG, "login success")
                 }
@@ -122,6 +136,7 @@ class AndroidRetroAchievementsRepository(
         return try {
             retroAchievementsDao.deleteAllAchievementUserData()
             raUserAuthStore.clearUserAuth()
+            raUserProfileStore.clearUserProfile()
             true
         } finally {
             authenticationLeaseRegistry.endMutation()
@@ -145,7 +160,11 @@ class AndroidRetroAchievementsRepository(
                 return false
             }
             retroAchievementsDao.deleteAllAchievementUserData()
-            raUserAuthStore.clearUserAuthIfMatches(expectedUsername, expectedToken)
+            raUserAuthStore.clearUserAuthIfMatches(expectedUsername, expectedToken).also { cleared ->
+                if (cleared) {
+                    raUserProfileStore.clearUserProfile()
+                }
+            }
         } finally {
             authenticationLeaseRegistry.endMutation()
         }
@@ -200,7 +219,11 @@ class AndroidRetroAchievementsRepository(
                 return false
             }
             retroAchievementsDao.deleteAllAchievementUserData()
-            raUserAuthStore.clearUserAuthIfMatches(expectedUsername, expectedToken)
+            raUserAuthStore.clearUserAuthIfMatches(expectedUsername, expectedToken).also { cleared ->
+                if (cleared) {
+                    raUserProfileStore.clearUserProfile()
+                }
+            }
         } finally {
             authenticationLeaseRegistry.endMutation()
         }

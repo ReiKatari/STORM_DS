@@ -5811,7 +5811,10 @@ class EmulatorViewModel @Inject constructor(
                                     ToastEvent.RetroAchievementsModeStatus.SOFTCORE
                                 }
                             )
-                            emitRetroAchievementsLoadedPopup(achievementData)
+                            emitRetroAchievementsLoadedPopup(
+                                achievementData,
+                                hardcore = effectiveLaunchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
+                            )
 
                             while (isActive) {
                                 if (!networkStatusProvider.isLikelyOnline()) {
@@ -5987,7 +5990,7 @@ class EmulatorViewModel @Inject constructor(
                                 offlineNoInternetAtStart = effectiveLaunchDecision.offlineDueToNoInternetAtStart,
                                 hardcoreOfflineDisabled = effectiveLaunchDecision.hardcoreOfflineDisabled,
                             )
-                            emitRetroAchievementsLoadedPopup(achievementData)
+                            emitRetroAchievementsLoadedPopup(achievementData, hardcore = false)
                             awaitCancellation()
                         }
                     }
@@ -6091,7 +6094,24 @@ class EmulatorViewModel @Inject constructor(
         )
     }
 
-    private fun emitRetroAchievementsLoadedPopup(achievementData: GameAchievementData) {
+    private suspend fun emitRetroAchievementsLoadedPopup(
+        achievementData: GameAchievementData,
+        hardcore: Boolean,
+    ) {
+        val username = runCatching { retroAchievementsRepository.getUserAuthentication()?.username }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+        if (username != null) {
+            _raIntegrationEvent.tryEmit(
+                RAIntegrationEvent.Welcome(
+                    icon = runCatching { URL("https://media.retroachievements.org/UserPic/$username.png") }.getOrNull(),
+                    username = username,
+                    hardcore = hardcore,
+                )
+            )
+            delay(250)
+        }
+
         if (achievementData.hasAchievements) {
             _raIntegrationEvent.tryEmit(
                 RAIntegrationEvent.Loaded(

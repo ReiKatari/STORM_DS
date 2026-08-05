@@ -796,6 +796,15 @@
     <string name="offline_ra_mode_softcore_offline_hardcore_disabled">Softcore Offline enabled. Hardcore Offline is disabled.</string>
     <string name="offline_ra_mode_softcore_offline_no_internet_start">RetroAchievements mode: Softcore Offline (no Internet).</string>
     <string name="achievements_loaded">Achievements loaded</string>
+    <string name="ra_welcome_eyebrow">RETROACHIEVEMENTS</string>
+    <string name="ra_welcome_title">Welcome, %1$s!</string>
+    <string name="ra_welcome_hardcore">Hardcore mode</string>
+    <string name="ra_welcome_softcore">Softcore mode</string>
+    <string name="ra_now_playing">NOW PLAYING</string>
+    <string name="ra_achievements_progress">%1$d / %2$d achievements</string>
+    <string name="ra_no_achievements">No achievements for this game</string>
+    <string name="ra_profile_hardcore_points">%1$s HARDCORE</string>
+    <string name="ra_profile_casual_points">%1$s CASUAL</string>
     <string name="achievements_unlocked_compact">Unlocked: %1$d/%2$d</string>
     <string name="game_has_no_achievements">This game has no achievements</string>
     <string name="achievements_failed_load">Failed to load achievements!</string>
