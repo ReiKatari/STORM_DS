@@ -6,8 +6,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
@@ -26,6 +28,9 @@ class RetroAchievementsSettingsViewModel @Inject constructor(
         }
         _accountState.asStateFlow()
     }
+
+    val userProfile = retroAchievementsRepository.observeUserProfile()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _loggingIn = MutableStateFlow(false)
     val loggingIn = _loggingIn.asStateFlow()
@@ -60,7 +65,10 @@ class RetroAchievementsSettingsViewModel @Inject constructor(
     private suspend fun updateLoggedInState() {
         val userAuth = retroAchievementsRepository.getUserAuthentication()
         _accountState.value = when (userAuth) {
-            is RAUserAuth.Authenticated -> RetroAchievementsAccountState.LoggedIn(userAuth.username)
+            is RAUserAuth.Authenticated -> {
+                viewModelScope.launch { retroAchievementsRepository.refreshUserProfile() }
+                RetroAchievementsAccountState.LoggedIn(userAuth.username)
+            }
             is RAUserAuth.AuthenticationExpired -> RetroAchievementsAccountState.LoginExpired(userAuth.username)
             null -> RetroAchievementsAccountState.LoggedOut
         }

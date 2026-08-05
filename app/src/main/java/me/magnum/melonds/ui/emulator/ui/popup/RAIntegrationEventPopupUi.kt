@@ -1,125 +1,92 @@
 package me.magnum.melonds.ui.emulator.ui.popup
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Card
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import me.magnum.melonds.R
 import me.magnum.melonds.ui.emulator.model.RAIntegrationEvent
+import me.magnum.melonds.ui.theme.DarkWatermelonColors
 
 @Composable
 fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
-    Card(
-        modifier = modifier
-            .padding(16.dp)
-            .shadow(8.dp, RoundedCornerShape(8.dp))
-            .widthIn(max = 400.dp),
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            event.icon?.let {
-                AsyncImage(
-                    modifier = Modifier.size(40.dp),
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(it.toString())
-                        .crossfade(false)
-                        .build(),
-                    contentDescription = null,
-                )
-            }
-
-            when (event) {
-                is RAIntegrationEvent.Failed -> {
-                    Column {
-                        Text(
-                            text = stringResource(id = R.string.achievements_failed_load),
-                            style = MaterialTheme.typography.body2,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colors.error,
-                            maxLines = 1,
-                        )
-                        Text(
-                            text = stringResource(id = R.string.achievements_failed_load_tip),
-                            style = MaterialTheme.typography.body2,
-                            maxLines = 1,
-                        )
-                    }
-                }
-                is RAIntegrationEvent.OfflineDisabledNoCache -> {
-                    Column {
-                        Text(
-                            text = stringResource(id = R.string.offline_ra_disabled_no_cache_title),
-                            style = MaterialTheme.typography.body2,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colors.error,
-                            maxLines = 2,
-                        )
-                        Text(
-                            text = stringResource(id = R.string.offline_ra_disabled_no_cache_message),
-                            style = MaterialTheme.typography.body2,
-                            maxLines = 2,
-                        )
-                    }
-                }
-                is RAIntegrationEvent.LoginExpired -> {
-                    Column {
-                        Text(
-                            text = stringResource(id = R.string.achievements_login_expired),
-                            style = MaterialTheme.typography.body2,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colors.error,
-                            maxLines = 1,
-                        )
-                        Text(
-                            text = stringResource(id = R.string.achievements_login_expired_tip),
-                            style = MaterialTheme.typography.body2,
-                            maxLines = 1,
-                        )
-                    }
-                }
-                is RAIntegrationEvent.LoadedNoAchievements -> {
-                    Text(
-                        text = stringResource(id = R.string.game_has_no_achievements),
-                        style = MaterialTheme.typography.body2,
-                        maxLines = 1,
-                    )
-                }
-                is RAIntegrationEvent.Loaded -> {
-                    Column {
-                        Text(
-                            text = stringResource(id = R.string.achievements_loaded),
-                            style = MaterialTheme.typography.body2,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
-                        Text(
-                            text = stringResource(id = R.string.achievements_unlocked_compact, event.unlockedAchievements, event.totalAchievements),
-                            style = MaterialTheme.typography.body2,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
+    val icon = event.icon?.toString()
+    when (event) {
+        is RAIntegrationEvent.Welcome -> {
+            WatermelonRaCard(
+                modifier = modifier,
+                iconUrl = icon,
+                iconShape = RaAvatarShape,
+                eyebrowIcon = Icons.Filled.EmojiEvents,
+                eyebrow = stringResource(R.string.ra_welcome_eyebrow),
+                title = stringResource(R.string.ra_welcome_title, event.username),
+                subtitle = stringResource(
+                    if (event.hardcore) R.string.ra_welcome_hardcore else R.string.ra_welcome_softcore,
+                ),
+            )
+        }
+        is RAIntegrationEvent.Loaded -> {
+            WatermelonRaCard(
+                modifier = modifier,
+                iconUrl = icon,
+                eyebrowIcon = Icons.Filled.SportsEsports,
+                eyebrow = stringResource(R.string.ra_now_playing),
+                title = stringResource(R.string.achievements_loaded),
+                subtitle = stringResource(
+                    R.string.ra_achievements_progress,
+                    event.unlockedAchievements,
+                    event.totalAchievements,
+                ),
+            )
+        }
+        is RAIntegrationEvent.LoadedNoAchievements -> {
+            WatermelonRaCard(
+                modifier = modifier,
+                iconUrl = icon,
+                eyebrowIcon = Icons.Filled.SportsEsports,
+                eyebrow = stringResource(R.string.ra_now_playing),
+                title = stringResource(R.string.game_has_no_achievements),
+                subtitle = stringResource(R.string.ra_no_achievements),
+            )
+        }
+        is RAIntegrationEvent.Failed -> {
+            WatermelonRaCard(
+                modifier = modifier,
+                iconUrl = icon,
+                eyebrowIcon = Icons.Filled.Warning,
+                eyebrow = stringResource(R.string.ra_welcome_eyebrow),
+                title = stringResource(R.string.achievements_failed_load),
+                subtitle = stringResource(R.string.achievements_failed_load_tip),
+                subtitleMaxLines = 2,
+                accent = DarkWatermelonColors.red,
+            )
+        }
+        is RAIntegrationEvent.LoginExpired -> {
+            WatermelonRaCard(
+                modifier = modifier,
+                iconUrl = icon,
+                eyebrowIcon = Icons.Filled.Warning,
+                eyebrow = stringResource(R.string.ra_welcome_eyebrow),
+                title = stringResource(R.string.achievements_login_expired),
+                subtitle = stringResource(R.string.achievements_login_expired_tip),
+                subtitleMaxLines = 2,
+                accent = DarkWatermelonColors.red,
+            )
+        }
+        is RAIntegrationEvent.OfflineDisabledNoCache -> {
+            WatermelonRaCard(
+                modifier = modifier,
+                iconUrl = icon,
+                eyebrowIcon = Icons.Filled.Warning,
+                eyebrow = stringResource(R.string.ra_welcome_eyebrow),
+                title = stringResource(R.string.offline_ra_disabled_no_cache_title),
+                subtitle = stringResource(R.string.offline_ra_disabled_no_cache_message),
+                subtitleMaxLines = 2,
+                accent = DarkWatermelonColors.red,
+            )
         }
     }
 }

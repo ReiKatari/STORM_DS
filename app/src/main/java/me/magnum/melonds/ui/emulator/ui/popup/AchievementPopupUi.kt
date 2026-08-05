@@ -79,7 +79,7 @@ fun AchievementPopupUi(
             .widthIn(max = 400.dp)
             .clip(RoundedCornerShape(13.dp))
             .background(colors.surface2)
-            .border(1.dp, colors.green.copy(alpha = 0.55f), RoundedCornerShape(13.dp)),
+            .border(1.dp, me.magnum.melonds.ui.theme.WatermelonColors.gold.copy(alpha = 0.35f), RoundedCornerShape(13.dp)),
     ) {
         Row(
             modifier = Modifier.padding(8.dp).height(IntrinsicSize.Min),
@@ -124,7 +124,7 @@ fun AchievementPopupUi(
                         Column(Modifier.padding(start = 10.dp, end = 6.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
                             Text(
                                 text = stringResource(id = R.string.achievement_unlocked).uppercase(),
-                                color = colors.green,
+                                color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
                                 fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.SemiBold,

@@ -50,6 +50,7 @@ import me.magnum.melonds.impl.romprocessors.Api24RomFileProcessorFactory
 import me.magnum.melonds.ui.romdetails.RomDetailsUiMapper
 import me.magnum.rcheevosapi.RAApi
 import me.magnum.rcheevosapi.RAUserAuthStore
+import me.magnum.rcheevosapi.RAUserProfileStore
 import javax.inject.Singleton
 
 @Module
@@ -121,6 +122,7 @@ object MelonModule {
         raApi: RAApi,
         retroAchievementsDao: RetroAchievementsDao,
         raUserAuthStore: RAUserAuthStore,
+        raUserProfileStore: RAUserProfileStore,
         sharedPreferences: SharedPreferences,
         endpointProvider: RetroAchievementsEndpointProvider,
         @ApplicationContext context: Context,
@@ -129,6 +131,7 @@ object MelonModule {
             raApi,
             retroAchievementsDao,
             raUserAuthStore,
+            raUserProfileStore,
             sharedPreferences,
             context,
             endpointProvider,
