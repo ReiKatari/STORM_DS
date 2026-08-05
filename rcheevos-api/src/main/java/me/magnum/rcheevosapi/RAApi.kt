@@ -34,6 +34,7 @@ import me.magnum.rcheevosapi.model.RALeaderboardRanking
 import me.magnum.rcheevosapi.model.RALeaderboardRankingEntry
 import me.magnum.rcheevosapi.model.RASubmitLeaderboardEntryResponse
 import me.magnum.rcheevosapi.model.RAUserAuth
+import me.magnum.rcheevosapi.model.RAUserProfile
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -54,6 +55,7 @@ class RAApi(
     private val okHttpClient: OkHttpClient,
     private val json: Json,
     private val userAuthStore: RAUserAuthStore,
+    private val userProfileStore: RAUserProfileStore,
     private val signatureProvider: RASignatureProvider,
     private val hostUrlProvider: RAHostUrlProvider,
 ) {
@@ -95,6 +97,7 @@ class RAApi(
 
     suspend fun login(username: String, password: String): Result<Unit> {
         userAuthStore.clearUserAuth()
+        userProfileStore.clearUserProfile()
         return get<UserLoginDto>(
             mapOf(
                 PARAMETER_REQUEST to REQUEST_LOGIN,
@@ -104,7 +107,26 @@ class RAApi(
             clearTokenOnUnauthorized = false,
         ).onSuccess {
             userAuthStore.storeUserAuth(RAUserAuth.Authenticated(it.user, it.token))
+            userProfileStore.storeUserProfile(RAUserProfile(it.user, it.score, it.softcoreScore))
         }.map { }
+    }
+
+    suspend fun refreshUserProfile(): Result<RAUserProfile> {
+        val userAuth = userAuthStore.getUserAuth() as? RAUserAuth.Authenticated
+            ?: return Result.failure(UserNotAuthenticatedException())
+
+        return get<UserLoginDto>(
+            mapOf(
+                PARAMETER_REQUEST to REQUEST_LOGIN,
+                PARAMETER_USER to userAuth.username,
+                PARAMETER_TOKEN to userAuth.token,
+            ),
+            clearTokenOnUnauthorized = false,
+        ).map {
+            RAUserProfile(it.user, it.score, it.softcoreScore)
+        }.onSuccess {
+            userProfileStore.storeUserProfile(it)
+        }
     }
 
     suspend fun getGameHashList(): Result<Map<String, RAGameId>> {
@@ -229,7 +251,11 @@ class RAApi(
             RAAwardAchievementResponse(
                 achievementAwarded = it.success,
                 remainingAchievements = it.achievementsRemaining,
+                score = it.score.toLong(),
+                softcoreScore = it.softcoreScore.toLong(),
             )
+        }.onSuccess {
+            userProfileStore.updateUserScores(userAuth.username, it.score, it.softcoreScore)
         }
     }
 

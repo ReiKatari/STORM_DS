@@ -26,6 +26,7 @@ import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.settings.flow.observeAsFlow
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
+import me.magnum.melonds.ui.settings.preferences.RetroAchievementsProfilePreference
 import me.magnum.melonds.ui.settings.viewmodel.RetroAchievementsSettingsViewModel
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointSnapshot
@@ -45,6 +46,7 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         setPreferencesFromResource(R.xml.pref_retroachievements, rootKey)
 
         val accountPreference = findPreference<Preference>("ra_login")!!
+        val profilePreference = findPreference<RetroAchievementsProfilePreference>("ra_profile")!!
         val retroAchievementsEnabledPreference = findPreference<SwitchPreference>("ra_enabled")!!
         val hardcoreModePreference = findPreference<SwitchPreference>("ra_hardcore_enabled")!!
         val richPresencePreference = findPreference<SwitchPreference>("ra_rich_presence")!!
@@ -150,6 +152,17 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                         }
                     }
                 }
+            }
+        }
+
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.accountState.combine(viewModel.userProfile) { accountState, profile ->
+                    profile?.takeIf {
+                        accountState is RetroAchievementsAccountState.LoggedIn &&
+                            accountState.accountName == it.username
+                    }
+                }.collect(profilePreference::setProfile)
             }
         }
 

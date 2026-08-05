@@ -15,11 +15,15 @@ import me.magnum.rcheevosapi.model.RALeaderboardRanking
 import me.magnum.rcheevosapi.model.RASetId
 import me.magnum.rcheevosapi.model.RASubmitLeaderboardEntryResponse
 import me.magnum.rcheevosapi.model.RAUserAuth
+import me.magnum.rcheevosapi.model.RAUserProfile
 
 interface RetroAchievementsRepository {
     fun observeKnownAchievementHashes(): Flow<List<String>>
 
     fun observeRomCoverIcons(): Flow<Map<String, String>>
+
+    fun observeUserProfile(): Flow<RAUserProfile?>
+    suspend fun refreshUserProfile()
 
     suspend fun isUserAuthenticated(): Boolean
     suspend fun getUserAuthentication(): RAUserAuth?
