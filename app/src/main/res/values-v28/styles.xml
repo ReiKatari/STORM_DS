@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="WatermelonAlertDialog.Title" parent="@style/WatermelonAlertDialogTitleBase">
+        <item name="android:textFontWeight">700</item>
+    </style>
+
+    <style name="WatermelonAlertDialog.Button" parent="@style/WatermelonAlertDialogButtonBase">
+        <item name="android:textFontWeight">700</item>
+    </style>
+
+    <style name="Toolbar.TitleText" parent="@style/ToolbarTitleTextBase">
+        <item name="android:textFontWeight">600</item>
+    </style>
+
+    <style name="Button.Editor" parent="@style/ButtonEditorBase">
+        <item name="android:textFontWeight">600</item>
+    </style>
+</resources>
