@@ -1,5 +1,5 @@
 <resources>
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="AppThemeBase" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
@@ -10,13 +10,14 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@color/colorBackground</item>
         <item name="android:windowLightStatusBar">@bool/lightNavigationBar</item>
-        <item name="android:windowLightNavigationBar">@bool/lightNavigationBar</item>
         <item name="toolbarNavigationButtonStyle">@style/Toolbar.Button.Navigation</item>
         <item name="actionOverflowMenuStyle">@style/Menu.OverflowUnder</item>
         <item name="preferenceTheme">@style/Preference</item>
         <item name="alertDialogTheme">@style/WatermelonAlertDialog</item>
         <item name="android:alertDialogTheme">@style/WatermelonAlertDialog</item>
     </style>
+
+    <style name="AppTheme" parent="@style/AppThemeBase" />
 
     <style name="WatermelonAlertDialog" parent="ThemeOverlay.AppCompat.Dialog.Alert">
         <item name="android:windowBackground">@drawable/bg_watermelon_dialog</item>
@@ -37,22 +38,24 @@
         <item name="listItemLayout">@layout/watermelon_dialog_list_item</item>
     </style>
 
-    <style name="WatermelonAlertDialog.Title" parent="Base.DialogWindowTitle.AppCompat">
+    <style name="WatermelonAlertDialogTitleBase" parent="Base.DialogWindowTitle.AppCompat">
         <item name="android:fontFamily">@font/space_grotesk</item>
-        <item name="android:textFontWeight">700</item>
         <item name="android:textSize">17sp</item>
         <item name="android:textColor">@color/textColorPrimary</item>
     </style>
 
-    <style name="WatermelonAlertDialog.Button" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+    <style name="WatermelonAlertDialog.Title" parent="@style/WatermelonAlertDialogTitleBase" />
+
+    <style name="WatermelonAlertDialogButtonBase" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
         <item name="android:textColor">@color/melonMain</item>
         <item name="android:fontFamily">@font/manrope</item>
-        <item name="android:textFontWeight">700</item>
     </style>
+
+    <style name="WatermelonAlertDialog.Button" parent="@style/WatermelonAlertDialogButtonBase" />
 
     <style name="SplashTheme" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splashBackground</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/logo_splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
 
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
@@ -91,13 +94,14 @@
         <item name="tint">@color/textColorPrimary</item>
     </style>
 
-    <style name="Toolbar.TitleText" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
+    <style name="ToolbarTitleTextBase" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
         <item name="android:textSize">19sp</item>
         <item name="lineHeight">24sp</item>
         <item name="android:fontFamily">@font/space_grotesk</item>
-        <item name="android:textFontWeight">600</item>
         <item name="android:textColor">@color/textColorPrimary</item>
     </style>
+
+    <style name="Toolbar.TitleText" parent="@style/ToolbarTitleTextBase" />
 
     <style name="FullscreenDialog">
         <item name="android:windowEnterAnimation">@anim/dialog_slide_in</item>
@@ -168,7 +172,7 @@
         <item name="android:scaleType">fitCenter</item>
     </style>
 
-    <style name="Button.Editor" parent="Widget.AppCompat.Button.Borderless">
+    <style name="ButtonEditorBase" parent="Widget.AppCompat.Button.Borderless">
         <item name="android:textColor">@color/textLayoutEditor</item>
         <item name="android:background">@drawable/bg_watermelon_editor_chip</item>
         <item name="android:paddingLeft">14dp</item>
@@ -180,8 +184,9 @@
         <item name="android:minHeight">40dp</item>
         <item name="android:height">40dp</item>
         <item name="android:fontFamily">@font/manrope</item>
-        <item name="android:textFontWeight">600</item>
     </style>
+
+    <style name="Button.Editor" parent="@style/ButtonEditorBase" />
 
     <style name="Menu.OverflowUnder" parent="Widget.AppCompat.PopupMenu.Overflow">
         <item name="overlapAnchor">false</item>
