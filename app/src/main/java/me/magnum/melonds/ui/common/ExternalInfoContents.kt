@@ -389,6 +389,35 @@ fun ExternalAchievementInfo(achievementModel: AchievementUiModel) {
 }
 
 @Composable
+fun ExternalIdleInfo() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize().padding(horizontal = 60.dp, vertical = 30.dp),
+    ) {
+        WatermelonMark(height = 48.dp)
+        Row(modifier = Modifier.padding(top = 16.dp)) {
+            Text(
+                text = stringResource(R.string.app_brand_watermelon),
+                color = Color.White,
+                fontFamily = SpaceGrotesk,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+            )
+            Text(
+                text = stringResource(R.string.app_brand_ds),
+                color = Color(0xFF6FBF4A),
+                fontFamily = SpaceGrotesk,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+            )
+        }
+    }
+}
+
+@Composable
 fun ExternalCrumbInfo(
     icon: ImageVector,
     title: String,
