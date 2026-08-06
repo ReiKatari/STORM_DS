@@ -226,6 +226,8 @@ class RomListActivity : AppCompatActivity() {
                     boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                     raCoverUrl = raCoverByHash[rom.retroAchievementsHash],
                 )
+            } else {
+                me.magnum.melonds.ui.common.ExternalIdleInfo()
             }
         }
     }
