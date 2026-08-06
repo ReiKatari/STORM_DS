@@ -50,7 +50,7 @@ class ExternalInfoPresentation(
                             .fillMaxSize()
                             .background(WatermelonColors.tvBg),
                     ) {
-                        content.value?.invoke()
+                        content.value?.invoke() ?: ExternalIdleInfo()
                     }
                 }
             }
