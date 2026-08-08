@@ -5,8 +5,15 @@ A Nintendo DS and DSi emulator for Android, built on top of [melonDS](https://me
 WatermelonDS is a fork that keeps up with upstream while adding RetroAchievements (including offline play), a Vulkan
 renderer, RetroArch shader presets and full external display support, wrapped in its own visual identity.
 
+
+
 [<img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" alt="Get it on GitHub" height="80">](https://github.com/SapphireRhodonite/melonDS-android/releases/latest)
 
+<p align="center">
+   <img width="450" height="400" alt="WaterMelon1" src="https://github.com/user-attachments/assets/187ea254-877e-4efd-a8dd-93a6023684ad" />
+   <img width="450" height="400" alt="WaterMelon1" src="https://github.com/user-attachments/assets/01e82877-a138-44a3-bc71-c24d48cabab6" />
+   <img width="450" height="400" alt="WaterMelon1" src="https://github.com/user-attachments/assets/27868058-ce89-470d-afac-b812dea5d1de" />
+</p>
 
 
 # What WatermelonDS adds
