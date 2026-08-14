@@ -2,10 +2,7 @@ package me.magnum.melonds.ui.common.views
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Path
+import android.graphics.*
 import android.util.AttributeSet
 import android.view.View
 import me.magnum.melonds.domain.model.Input
@@ -17,31 +14,69 @@ class ModernDpadView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr), IAnimatedInputView {
 
-    private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    // Background well / shadow
+    private val wellPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.parseColor("#441A1C23")
+        color = Color.parseColor("#330F1117")
     }
 
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val wellStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 5f
-        color = Color.parseColor("#B3FFFFFF")
+        strokeWidth = 3f
+        color = Color.parseColor("#33FFFFFF")
     }
 
+    // Main D-Pad Body
+    private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#E6232730")
+    }
+
+    private val bevelLightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        color = Color.parseColor("#66FFFFFF")
+    }
+
+    private val bevelDarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        color = Color.parseColor("#80000000")
+    }
+
+    // Center concave dish
+    private val centerDishPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#CC1A1C22")
+    }
+
+    private val centerDishRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f
+        color = Color.parseColor("#4DFFFFFF")
+    }
+
+    // Active Arm Press Glow
     private val activeGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.parseColor("#9900E5FF")
+        color = Color.parseColor("#6600E5FF")
     }
 
     private val activeStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 7f
+        strokeWidth = 5f
         color = Color.parseColor("#FF00E5FF")
     }
 
+    // Directional Arrow Indicators
     private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.WHITE
+        color = Color.parseColor("#F0F4F8")
+    }
+
+    private val arrowShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#80000000")
     }
 
     private val dpadInputs = listOf(Input.UP, Input.LEFT, Input.DOWN, Input.RIGHT)
@@ -76,7 +111,7 @@ class ModernDpadView @JvmOverloads constructor(
         val startGlow = directionGlows[input] ?: 0.0f
 
         val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 100L
+            duration = 90L
             addUpdateListener { anim ->
                 val fraction = anim.animatedFraction
                 directionScales[input] = startScale + (targetScale - startScale) * fraction
@@ -98,40 +133,57 @@ class ModernDpadView @JvmOverloads constructor(
         val size = min(w, h)
         val cx = w / 2f
         val cy = h / 2f
-        val armWidth = size * 0.28f
-        val armLength = size * 0.45f
-        val cornerRadius = size * 0.04f
+        val armWidth = size * 0.32f
+        val armLength = size * 0.46f
+        val cornerRadius = size * 0.06f
 
-        val dpadPath = Path().apply {
-            // Draw cross path shape
-            val hw = armWidth / 2f
-            val hl = armLength
+        // Draw circular well depression in background
+        canvas.drawCircle(cx, cy, armLength * 1.05f, wellPaint)
+        canvas.drawCircle(cx, cy, armLength * 1.05f, wellStrokePaint)
 
-            moveTo(cx - hw, cy - hl)
-            lineTo(cx + hw, cy - hl)
+        // Build authentic cross path
+        val hw = armWidth / 2f
+        val hl = armLength
+
+        val crossPath = Path().apply {
+            moveTo(cx - hw + cornerRadius, cy - hl)
+            lineTo(cx + hw - cornerRadius, cy - hl)
+            quadTo(cx + hw, cy - hl, cx + hw, cy - hl + cornerRadius)
             lineTo(cx + hw, cy - hw)
-            lineTo(cx + hl, cy - hw)
-            lineTo(cx + hl, cy + hw)
+            lineTo(cx + hl - cornerRadius, cy - hw)
+            quadTo(cx + hl, cy - hw, cx + hl, cy - hw + cornerRadius)
+            lineTo(cx + hl, cy + hw - cornerRadius)
+            quadTo(cx + hl, cy + hw, cx + hl - cornerRadius, cy + hw)
             lineTo(cx + hw, cy + hw)
-            lineTo(cx + hw, cy + hl)
-            lineTo(cx - hw, cy + hl)
+            lineTo(cx + hw, cy + hl - cornerRadius)
+            quadTo(cx + hw, cy + hl, cx + hw - cornerRadius, cy + hl)
+            lineTo(cx - hw + cornerRadius, cy + hl)
+            quadTo(cx - hw, cy + hl, cx - hw, cy + hl - cornerRadius)
             lineTo(cx - hw, cy + hw)
-            lineTo(cx - hl, cy + hw)
-            lineTo(cx - hl, cy - hw)
+            lineTo(cx - hl + cornerRadius, cy + hw)
+            quadTo(cx - hl, cy + hw, cx - hl, cy + hw - cornerRadius)
+            lineTo(cx - hl, cy - hw + cornerRadius)
+            quadTo(cx - hl, cy - hw, cx - hl + cornerRadius, cy - hw)
             lineTo(cx - hw, cy - hw)
+            lineTo(cx - hw, cy - hl + cornerRadius)
+            quadTo(cx - hw, cy - hl, cx - hw + cornerRadius, cy - hl)
             close()
         }
 
-        // Draw base D-pad background and stroke
-        canvas.drawPath(dpadPath, basePaint)
-        canvas.drawPath(dpadPath, strokePaint)
+        // Draw main body and bevels
+        canvas.drawPath(crossPath, bodyPaint)
+        canvas.drawPath(crossPath, bevelLightPaint)
 
-        // Draw directional arms with press animations
+        // Center concave pivot dish
+        val dishRadius = armWidth * 0.42f
+        canvas.drawCircle(cx, cy, dishRadius, centerDishPaint)
+        canvas.drawCircle(cx, cy, dishRadius, centerDishRimPaint)
+
         val armOffsets = mapOf(
-            Input.UP to Pair(0f, -size * 0.25f),
-            Input.DOWN to Pair(0f, size * 0.25f),
-            Input.LEFT to Pair(-size * 0.25f, 0f),
-            Input.RIGHT to Pair(size * 0.25f, 0f)
+            Input.UP to Pair(0f, -size * 0.28f),
+            Input.DOWN to Pair(0f, size * 0.28f),
+            Input.LEFT to Pair(-size * 0.28f, 0f),
+            Input.RIGHT to Pair(size * 0.28f, 0f)
         )
 
         val arrowAngles = mapOf(
@@ -154,28 +206,39 @@ class ModernDpadView @JvmOverloads constructor(
             canvas.scale(scale, scale, ax, ay)
 
             if (glow > 0f) {
-                activeGlowPaint.alpha = (glow * 180).toInt()
-                canvas.drawCircle(ax, ay, armWidth * 0.65f, activeGlowPaint)
-                canvas.drawCircle(ax, ay, armWidth * 0.55f, activeStrokePaint)
+                activeGlowPaint.alpha = (glow * 170).toInt()
+                canvas.drawCircle(ax, ay, armWidth * 0.52f, activeGlowPaint)
+                canvas.drawCircle(ax, ay, armWidth * 0.46f, activeStrokePaint)
             }
 
-            // Draw directional arrow triangle
-            canvas.save()
-            canvas.rotate(angle, ax, ay)
+            // Draw crisp Nintendo DS Directional Triangle (Arrow)
+            val arrowSize = armWidth * 0.24f
             val arrowPath = Path().apply {
-                val arrowSize = armWidth * 0.35f
-                moveTo(ax, ay - arrowSize)
-                lineTo(ax + arrowSize, ay + arrowSize * 0.6f)
-                lineTo(ax - arrowSize, ay + arrowSize * 0.6f)
+                moveTo(0f, -arrowSize)
+                lineTo(arrowSize * 0.86f, arrowSize * 0.7f)
+                lineTo(-arrowSize * 0.86f, arrowSize * 0.7f)
                 close()
             }
-            canvas.drawPath(arrowPath, arrowPaint)
+
+            canvas.save()
+            canvas.translate(ax, ay)
+            canvas.rotate(angle)
+
+            // Arrow shadow
+            canvas.save()
+            canvas.translate(0f, 1.5f)
+            canvas.drawPath(arrowPath, arrowShadowPaint)
             canvas.restore()
 
+            if (glow > 0f) {
+                arrowPaint.color = Color.parseColor("#00E5FF")
+            } else {
+                arrowPaint.color = Color.parseColor("#F0F4F8")
+            }
+            canvas.drawPath(arrowPath, arrowPaint)
+
+            canvas.restore()
             canvas.restore()
         }
-
-        // Center pivot circle
-        canvas.drawCircle(cx, cy, armWidth * 0.35f, strokePaint)
     }
 }
