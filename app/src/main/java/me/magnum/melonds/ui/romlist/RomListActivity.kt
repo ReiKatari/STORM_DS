@@ -74,6 +74,11 @@ class RomListActivity : AppCompatActivity() {
         binding = ActivityRomListBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
+        supportActionBar?.apply {
+            setDisplayShowHomeEnabled(true)
+            setLogo(R.drawable.ic_watermelon_mark)
+            setDisplayUseLogoEnabled(true)
+        }
 
         var defaultContentInsetLeft = -1
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
