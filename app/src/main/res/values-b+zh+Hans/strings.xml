@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">melonDualDS</string>
+    <string name="app_name">STORM DS</string>
 
     <string name="ok">确定</string>
     <string name="yes">是</string>
@@ -255,7 +255,7 @@
     <string name="enable_jit_summary">提高性能，但可能会导致定格或崩溃。</string>
     <string name="jit_not_supported">JIT 仅支持64位设备。</string>
     <string name="save_internal_config_as_file">将内部配置保存为文件</string>
-    <string name="save_internal_config_as_file_summary">使 melonDualDS.opts 与存档文件目录保持同步；未配置存档文件目录时，则与 ROM 目录保持同步。</string>
+    <string name="save_internal_config_as_file_summary">使 STORM DS.opts 与存档文件目录保持同步；未配置存档文件目录时，则与 ROM 目录保持同步。</string>
     <string name="system_app_log_file_enabled">将应用日志写入 ROM 文件夹</string>
     <string name="system_app_log_file_enabled_summary">在第一个 ROM 文件夹中创建 melonDualLog.log，并记录应用、原生代码和核心的 logcat 日志用于调试。仅在复现问题时启用。</string>
     <string name="backup_settings">备份设置</string>
@@ -265,7 +265,7 @@
     <string name="settings_restore_success">设置已恢复。\n\n下列设置未改变：\n&#8226; RetroAchievements 会话\n&#8226; ROM/存档目录\n&#8226; DS BIOS 目录\n&#8226; DSi BIOS 目录</string>
     <string name="settings_restore_error">恢复设置失败</string>
     <string name="settings_mirror_detected_title">检测到之前的设置</string>
-    <string name="settings_mirror_detected_message">在此目录中找到了 melonDualDS.opts 文件。是否从之前的安装恢复设置？</string>
+    <string name="settings_mirror_detected_message">在此目录中找到了 STORM DS.opts 文件。是否从之前的安装恢复设置？</string>
     <string name="settings_mirror_restore">恢复</string>
     <string name="settings_mirror_ignore">不使用</string>
     <string name="backup_internal_layout">备份内部布局</string>

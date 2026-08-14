@@ -1,9 +1,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">WatermelonDS</string>
+    <string name="app_name">STORM DS</string>
 
     <string name="ok">OK</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
+    <string name="video_retroarch_shader_browser_passes">Passes: %1$d</string>
     <string name="on">On</string>
     <string name="off">Off</string>
     <string name="cancel">Cancel</string>
@@ -53,6 +54,93 @@
     <string name="renderer_init_failed_message">%1$s renderer could not be initialized. Change Video renderer in Settings.</string>
     <string name="action_search_roms">Search ROMs</string>
     <string name="action_sort_roms">Sort ROMs</string>
+    <string name="action_boot_firmware_ds">Nintendo DS (BIOS)</string>
+    <string name="action_boot_firmware_dsi">Nintendo DSi (NAND)</string>
+    <string name="audio">Audio</string>
+    <string name="general">General</string>
+    <string name="save_files">Save files</string>
+    <string name="system">System</string>
+    <string name="video">Video</string>
+
+    <string name="action_add">Add</string>
+    <string name="action_rescan">Rescan</string>
+    <string name="action_search">Search</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_sort">Sort</string>
+    <string name="search_roms_hint">Search ROMs…</string>
+    <string name="shortcut_rom_not_found">Shortcut ROM not found in library</string>
+    <string name="shortcut_rom_not_found_info">ROM \"%1$s\" not found in library.</string>
+
+    <string name="rom_context_menu_launch">Launch ROM</string>
+    <string name="rom_context_menu_details">ROM details</string>
+
+    <string name="rom_search_directories">ROM search directories</string>
+    <string name="rom_search_directories_summary">Add directories to scan and search for ROMs</string>
+
+    <string name="rom_view_mode_summary">Choose how ROMs are displayed</string>
+    <string name="rom_grid_columns">Grid columns</string>
+    <string name="rom_grid_columns_summary">Number of columns in grid view</string>
+
+    <string name="rom_card_size">Card size</string>
+    <string name="rom_card_size_summary">Size of ROM artwork cards</string>
+
+    <string name="rom_sort_by">Sort by</string>
+    <string name="rom_sort_by_title">Title</string>
+    <string name="rom_sort_by_last_played">Last played</string>
+    <string name="rom_sort_by_play_time">Play time</string>
+
+    <string name="rom_sort_order">Sort order</string>
+    <string name="rom_sort_order_ascending">Ascending</string>
+    <string name="rom_sort_order_descending">Descending</string>
+
+    <string name="settings_category_general">General</string>
+    <string name="settings_category_video">Video</string>
+    <string name="settings_category_audio">Audio</string>
+    <string name="settings_category_input">Input</string>
+    <string name="settings_category_system">System</string>
+    <string name="settings_category_retroachievements">RetroAchievements</string>
+
+    <string name="pref_theme">Theme</string>
+    <string name="pref_theme_summary">Choose user interface theme</string>
+
+    <string name="video_renderer">Video renderer</string>
+    <string name="video_renderer_summary">Choose graphics backend renderer</string>
+    <string name="video_internal_resolution">Internal 3D resolution</string>
+    <string name="video_internal_resolution_summary">3D resolution scaling factor</string>
+
+    <string name="video_filtering">Texture filtering</string>
+    <string name="video_filtering_summary">Smoothing and shader filtering</string>
+
+    <string name="video_fps_counter">FPS counter</string>
+    <string name="video_fps_counter_summary">Show frames per second overlay</string>
+
+    <string name="fast_forward_speed">Fast forward speed</string>
+    <string name="fast_forward_speed_summary">Speed multiplier when fast forward is active</string>
+
+    <string name="frame_limit_speed_summary">Frame limit multiplier</string>
+
+    <string name="audio_enabled">Audio enabled</string>
+    <string name="audio_enabled_summary">Play emulator sound output</string>
+    <string name="audio_interpolation">Audio interpolation</string>
+    <string name="audio_interpolation_summary">Audio stream quality and interpolation</string>
+    <string name="audio_bitrate">Audio bitrate</string>
+    <string name="audio_bitrate_summary">Audio output resolution</string>
+    <string name="audio_latency_summary">Audio output buffer latency</string>
+
+    <string name="mic_source">Microphone source</string>
+    <string name="mic_source_summary">Select microphone device or simulation</string>
+
+    <string name="input_layout">On-screen layout</string>
+    <string name="input_layout_summary">Customize touch control overlay layout</string>
+    <string name="input_haptic_feedback">Haptic feedback</string>
+    <string name="input_haptic_feedback_summary">Vibrate on touch control press</string>
+    <string name="input_haptic_feedback_strength">Vibration strength</string>
+
+    <string name="soft_input_behaviour_summary">Hide controls when controller connected</string>
+
+    <string name="firmware_ds_bios">DS BIOS &amp; Firmware</string>
+    <string name="firmware_dsi_bios">DSi BIOS &amp; NAND</string>
+    <string name="dsi_sd_card">DSi SD card emulation</string>
     <string name="action_boot_firmware">Boot firmware</string>
     <string name="action_refresh_rom_list">Refresh ROM list</string>
     <string name="hint_search_roms">Search ROMs…</string>
@@ -272,7 +360,7 @@
     <string name="pause_hint_accept">Accept</string>
     <string name="pause_hint_resume">Resume</string>
     <string name="pause_hint_back">Back</string>
-    <string name="app_brand_watermelon" translatable="false">Watermelon</string>
+    <string name="app_brand_watermelon" translatable="false">STORM</string>
     <string name="app_brand_ds" translatable="false">DS</string>
     <string name="external_hint_open">Open</string>
     <string name="external_hint_favorite">Favorite</string>
@@ -309,7 +397,7 @@
     <string name="enable_jit_summary">Improves performance but may cause freezes or crashes.</string>
     <string name="jit_not_supported">JIT is only supported in 64 bit devices.</string>
     <string name="save_internal_config_as_file">Save internal config as a file</string>
-    <string name="save_internal_config_as_file_summary">Keeps melonDualDS.opts synchronized in the save-file directory, or in a ROM directory when no save-file directory is configured.</string>
+    <string name="save_internal_config_as_file_summary">Keeps STORM DS.opts synchronized in the save-file directory, or in a ROM directory when no save-file directory is configured.</string>
     <string name="system_app_log_file_enabled">Write app log to ROM folder</string>
     <string name="system_app_log_file_enabled_summary">Creates melonDualLog.log in the first ROM folder and records app, native, and core logcat lines for debugging. Enable only while reproducing an issue.</string>
     <string name="system_dldi_sd_card_enabled">Enable DLDI / Homebrew SD</string>
@@ -327,7 +415,7 @@
     <string name="settings_restore_success">Settings restored.\n\nThe following were unchanged:\n&#8226; RetroAchievements session token\n&#8226; ROM search directories\n&#8226; DS BIOS directory\n&#8226; DSi BIOS directory</string>
     <string name="settings_restore_error">Failed to restore settings</string>
     <string name="settings_mirror_detected_title">Previous settings detected</string>
-    <string name="settings_mirror_detected_message">A melonDualDS.opts file was found in this directory. Restore settings from the previous installation?</string>
+    <string name="settings_mirror_detected_message">A STORM DS.opts file was found in this directory. Restore settings from the previous installation?</string>
     <string name="settings_mirror_restore">Restore</string>
     <string name="settings_mirror_ignore">Do not use</string>
     <string name="backup_internal_layout">Backup internal layout</string>
@@ -468,8 +556,8 @@
     <string name="hardcore_mode">Hardcore mode</string>
     <string name="hardcore_mode_summary">Allows hardcore achievements to be earned. Cheats, save states, slow-motion, and rewind are disabled</string>
     <string name="ra_offline_backend_title">Offline achievements provider</string>
-    <string name="ra_offline_backend_summary">Choose the built-in WatermelonDS provider or RAOfflineProxy</string>
-    <string name="ra_offline_backend_built_in">Built into WatermelonDS</string>
+    <string name="ra_offline_backend_summary">Choose the built-in STORM DS provider or RAOfflineProxy</string>
+    <string name="ra_offline_backend_built_in">Built into STORM DS</string>
     <string name="ra_offline_backend_proxy">RAOfflineProxy</string>
     <string name="ra_offline_proxy_active_summary">RAOfflineProxy is active. Restart the current game session after a provider change.</string>
     <string name="ra_offline_proxy_not_active">RAOfflineProxy is selected but is not active. Start RAOfflineProxy before starting a game.</string>
@@ -1034,7 +1122,7 @@
 
     <string-array name="external_display_mode_options">
         <item>Mirror</item>
-        <item>WatermelonDS</item>
+        <item>STORM DS</item>
     </string-array>
 
     <string-array name="audio_interpolation_options">

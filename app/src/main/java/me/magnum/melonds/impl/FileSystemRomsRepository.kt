@@ -508,43 +508,50 @@ class FileSystemRomsRepository(
 
     private suspend fun loadCachedRoms() {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
-
-        val searchDirectories = settingsRepository.getRomSearchDirectories()
-        val unavailableDirectories = updateUnavailableSearchDirectories(searchDirectories)
-        val cacheReadResult = getCachedRoms()
-        val cachedRoms = if (unavailableDirectories.isEmpty()) {
-            cacheReadResult.roms
-        } else {
-            cacheReadResult.roms.filterNot { rom ->
-                unavailableDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) }
+        try {
+            val searchDirectories = settingsRepository.getRomSearchDirectories()
+            val unavailableDirectories = updateUnavailableSearchDirectories(searchDirectories)
+            val cacheReadResult = getCachedRoms()
+            val cachedRoms = if (unavailableDirectories.isEmpty()) {
+                cacheReadResult.roms
+            } else {
+                cacheReadResult.roms.filterNot { rom ->
+                    unavailableDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) }
+                }
             }
-        }
 
-        if (cachedRoms.isEmpty() && searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty()) {
-            Log.w(TAG, "ROM cache is empty but search directories exist; forcing full rescan")
-            synchronized(directoryStatesLock) {
-                directoryStates.clear()
-                directoryScanStatuses.clear()
-                emitDirectoryScanStatusesLocked()
+            if (cachedRoms.isEmpty() && searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty()) {
+                Log.w(TAG, "ROM cache is empty but search directories exist; forcing full rescan")
+                synchronized(directoryStatesLock) {
+                    directoryStates.clear()
+                    directoryScanStatuses.clear()
+                    emitDirectoryScanStatusesLocked()
+                }
+                saveDirectoryStates()
             }
-            saveDirectoryStates()
-        }
 
-        roms.addAll(cachedRoms)
-        if (cachedRoms.isNotEmpty() || cacheReadResult.isValid) {
-            onRomsChanged(persist = unavailableDirectories.isEmpty())
-        }
+            roms.addAll(cachedRoms)
+            if (cachedRoms.isNotEmpty() || cacheReadResult.isValid) {
+                onRomsChanged(persist = unavailableDirectories.isEmpty())
+            }
 
-        var scannedRom = false
-        scanForNewRoms().collect {
-            scannedRom = true
-            addRom(it)
+            var scannedRom = false
+            try {
+                scanForNewRoms().collect {
+                    scannedRom = true
+                    addRom(it)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during scanForNewRoms", e)
+            }
+            if (!cacheReadResult.isValid && !scannedRom) {
+                onRomsChanged(persist = false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in loadCachedRoms", e)
+        } finally {
+            scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
         }
-        if (!cacheReadResult.isValid && !scannedRom) {
-            onRomsChanged(persist = false)
-        }
-
-        scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
     }
 
     private fun scanForNewRoms(targetDirectories: Set<String>? = null): Flow<Rom> = flow {
@@ -624,13 +631,17 @@ class FileSystemRomsRepository(
         val updatedFileUris = updatedFiles.map { it.uri.toString() }.toSet()
         val processedUpdatedFileUris = mutableSetOf<String>()
         for (fileState in updatedFiles) {
-            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
-                ?: continue
-            val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
-                ?: continue
+            runCatching {
+                val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
+                    ?: fileState.documentFile.name?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
+                    ?: fileState.uri.lastPathSegment?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
+                    ?: return@runCatching
+                val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
+                    ?: return@runCatching
 
-            processedUpdatedFileUris.add(fileState.uri.toString())
-            collector.emit(rom)
+                processedUpdatedFileUris.add(fileState.uri.toString())
+                collector.emit(rom)
+            }.onFailure { Log.e(TAG, "Failed to process file at ${fileState.uri}", it) }
         }
 
         val cacheableFiles = currentFiles.filterKeys { uri ->
@@ -661,10 +672,83 @@ class FileSystemRomsRepository(
 
     private fun collectDirectoryFileStates(rootDirectory: DocumentFile): List<DirectoryFileState>? {
         val files = mutableListOf<DirectoryFileState>()
+        if (collectDirectoryFileStatesFromSaf(rootDirectory.uri, files) && files.isNotEmpty()) {
+            return files
+        }
+        files.clear()
         if (!collectDirectoryFileStatesRecursive(rootDirectory, files)) {
             return null
         }
         return files
+    }
+
+    private fun collectDirectoryFileStatesFromSaf(directoryUri: Uri, accumulator: MutableList<DirectoryFileState>): Boolean {
+        return try {
+            val treeDocumentId = DocumentsContract.getTreeDocumentId(directoryUri)
+            val parentDocumentId = if (DocumentsContract.isDocumentUri(context, directoryUri)) {
+                DocumentsContract.getDocumentId(directoryUri)
+            } else {
+                treeDocumentId
+            }
+            collectDirectoryFileStatesFromSafRecursive(directoryUri, parentDocumentId, accumulator)
+        } catch (e: Exception) {
+            Log.w(TAG, "Fast SAF scan failed, falling back to DocumentFile", e)
+            false
+        }
+    }
+
+    private fun collectDirectoryFileStatesFromSafRecursive(directoryUri: Uri, parentDocId: String, accumulator: MutableList<DirectoryFileState>): Boolean {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(directoryUri, parentDocId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_SIZE
+        )
+        context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val modIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            val sizeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+
+            while (cursor.moveToNext()) {
+                val docId = cursor.getString(idIndex)
+                val displayName = cursor.getString(nameIndex) ?: ""
+                val mimeType = cursor.getString(mimeIndex)
+                val lastModified = cursor.getLong(modIndex).coerceAtLeast(0)
+                val size = cursor.getLong(sizeIndex).coerceAtLeast(0)
+
+                val fileUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, docId)
+                val parentUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, parentDocId)
+
+                if (DocumentsContract.Document.MIME_TYPE_DIR == mimeType) {
+                    if (!collectDirectoryFileStatesFromSafRecursive(directoryUri, docId, accumulator)) {
+                        return false
+                    }
+                } else {
+                    val processor = romFileProcessorFactory.getFileRomProcessorForFileName(displayName)
+                        ?: (DocumentFile.fromSingleUri(context, fileUri)?.let { romFileProcessorFactory.getFileRomProcessorForDocument(it) })
+
+                    if (processor != null) {
+                        val docFile = DocumentFile.fromSingleUri(context, fileUri)
+                            ?: DocumentFile.fromTreeUri(context, fileUri)
+                            ?: DocumentFile.fromFile(java.io.File(displayName))
+                        accumulator.add(
+                            DirectoryFileState(
+                                uri = fileUri,
+                                parentUri = parentUri,
+                                lastModified = lastModified,
+                                size = size,
+                                documentFile = docFile
+                            )
+                        )
+                    }
+                }
+            }
+        } ?: return false
+        return true
     }
 
     private fun collectDirectoryFileStatesRecursive(currentDirectory: DocumentFile, accumulator: MutableList<DirectoryFileState>): Boolean {
@@ -688,6 +772,7 @@ class FileSystemRomsRepository(
             }
 
             val fileProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(file)
+                ?: file.name?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
             if (fileProcessor != null) {
                 accumulator.add(
                     DirectoryFileState(

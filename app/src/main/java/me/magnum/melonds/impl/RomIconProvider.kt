@@ -82,8 +82,10 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
             }
         }
 
-        val romDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return null
-        val romProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(romDocument) ?: return null
+        val romProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
+            ?: (DocumentFile.fromSingleUri(context, rom.uri)?.let { romFileProcessorFactory.getFileRomProcessorForDocument(it) })
+            ?: romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)
+            ?: return null
         val bitmap = romProcessor.getRomIcon(rom)
         if (bitmap != null && iconCacheDir != null) {
             saveRomIcon(hash, bitmap)

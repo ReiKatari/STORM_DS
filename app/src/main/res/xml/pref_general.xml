@@ -10,7 +10,7 @@
             app:iconSpaceReserved="false"
             android:entries="@array/theme_options"
             android:entryValues="@array/theme_values"
-            android:defaultValue="light" />
+            android:defaultValue="dark" />
 
     <ListPreference
             android:key="fast_forward_speed_multiplier"

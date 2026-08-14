@@ -1,3 +1,5 @@
+rootProject.name = "STORM_DS"
+
 pluginManagement {
     repositories {
         gradlePluginPortal()

@@ -303,9 +303,8 @@ class SharedPreferencesSettingsRepository(
         if (preferences.getString("theme", null) != null)
             return
 
-        val defaultTheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "system" else "light"
         preferences.edit {
-            putString("theme", defaultTheme)
+            putString("theme", "dark")
         }
     }
 
@@ -384,7 +383,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getTheme(): Theme {
-        return getEnumPreference("theme", Theme.LIGHT)
+        return getEnumPreference("theme", Theme.DARK)
     }
 
     override fun getFastForwardSpeedMultiplier(): Float {

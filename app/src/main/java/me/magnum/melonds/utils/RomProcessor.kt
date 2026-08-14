@@ -21,73 +21,77 @@ object RomProcessor {
 
 	@Suppress("NAME_SHADOWING")
 	fun getRomMetadata(inputStream: InputStream): RomMetadata? {
-		val sectionReader = ForwardRomSectionReader(inputStream)
-		val header = sectionReader.readSection(0, 0x160) ?: return null
-		val gameCode = String(header, 0x0C, 4)
+		return runCatching {
+			val sectionReader = ForwardRomSectionReader(inputStream)
+			val header = sectionReader.readSection(0, 0x160) ?: return null
+			val gameCode = String(header, 0x0C, 4)
 
-		val arm9Offset = byteArrayToInt(header, 0x20)
-		val arm9Size = byteArrayToInt(header, 0x2C)
-		if (arm9Size !in 0..MAX_ARM_BOOTCODE_SIZE) return null
+			val arm9Offset = byteArrayToInt(header, 0x20)
+			val arm9Size = byteArrayToInt(header, 0x2C)
+			if (arm9Size !in 0..MAX_ARM_BOOTCODE_SIZE) return null
 
-		val arm7Offset = byteArrayToInt(header, 0x30)
-		val arm7Size = byteArrayToInt(header, 0x3C)
-		if (arm7Size !in 0..MAX_ARM_BOOTCODE_SIZE) return null
+			val arm7Offset = byteArrayToInt(header, 0x30)
+			val arm7Size = byteArrayToInt(header, 0x3C)
+			if (arm7Size !in 0..MAX_ARM_BOOTCODE_SIZE) return null
 
-		val bannerOffset = byteArrayToInt(header, 0x68)
+			val bannerOffset = byteArrayToInt(header, 0x68)
 
-		val isDsiWareTitle = if (gameCode[0] == 'H' || gameCode[0] == 'K') {
-			// This is probably a DSi Ware game. Confirm with the title category field.
-			val categoryData = sectionReader.readSection(0x234, 4) ?: return null
-			byteArrayToInt(categoryData).toUInt() == DSIWARE_CATEGORY
-		} else {
-			false
-		}
-
-		var arm9Bootcode: ByteArray? = null
-		var arm7Bootcode: ByteArray? = null
-		var banner: ByteArray? = null
-		val requiredSections = listOf(
-			RequiredRomSection(arm9Offset, arm9Size, RequiredRomSection.Type.ARM9),
-			RequiredRomSection(arm7Offset, arm7Size, RequiredRomSection.Type.ARM7),
-			RequiredRomSection(bannerOffset, 0xA00, RequiredRomSection.Type.BANNER),
-		).sortedBy { it.offset }
-
-		for (section in requiredSections) {
-			val data = sectionReader.readSection(section.offset, section.size) ?: return null
-			when (section.type) {
-				RequiredRomSection.Type.ARM9 -> arm9Bootcode = data
-				RequiredRomSection.Type.ARM7 -> arm7Bootcode = data
-				RequiredRomSection.Type.BANNER -> banner = data
+			val isDsiWareTitle = if (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K')) {
+				val categoryData = sectionReader.readSection(0x234, 4) ?: return null
+				byteArrayToInt(categoryData).toUInt() == DSIWARE_CATEGORY
+			} else {
+				false
 			}
-		}
 
-		val arm9Data = arm9Bootcode ?: return null
-		val arm7Data = arm7Bootcode ?: return null
-		val bannerData = banner ?: return null
+			var arm9Bootcode: ByteArray? = null
+			var arm7Bootcode: ByteArray? = null
+			var banner: ByteArray? = null
+			val requiredSections = listOf(
+				RequiredRomSection(arm9Offset, arm9Size, RequiredRomSection.Type.ARM9),
+				RequiredRomSection(arm7Offset, arm7Size, RequiredRomSection.Type.ARM7),
+				RequiredRomSection(bannerOffset, 0xA00, RequiredRomSection.Type.BANNER),
+			).sortedBy { it.offset }
 
-		val bannerText = readBannerTitleAndDeveloper(bannerData)
-		val romName = bannerText?.first.orEmpty()
-		val developerName = bannerText?.second.orEmpty()
+			for (section in requiredSections) {
+				val data = sectionReader.readSection(section.offset, section.size) ?: return null
+				when (section.type) {
+					RequiredRomSection.Type.ARM9 -> arm9Bootcode = data
+					RequiredRomSection.Type.ARM7 -> arm7Bootcode = data
+					RequiredRomSection.Type.BANNER -> banner = data
+				}
+			}
 
-		val retroAchievementsMd5Digest = MessageDigest.getInstance("MD5").run {
-			update(header)
-			update(arm9Data)
-			update(arm7Data)
-			update(bannerData)
-			digest()
-		}
+			val arm9Data = arm9Bootcode ?: return null
+			val arm7Data = arm7Bootcode ?: return null
+			val bannerData = banner ?: return null
 
-		val retroAchievementsHash = BigInteger(1, retroAchievementsMd5Digest).toString(16).padStart(32, '0')
+			val bannerText = readBannerTitleAndDeveloper(bannerData)
+			val romName = bannerText?.first.orEmpty()
+			val developerName = bannerText?.second.orEmpty()
 
-		return RomMetadata(
-			romName,
-			developerName,
-			isDsiWareTitle,
-			retroAchievementsHash,
-		)
+			val retroAchievementsMd5Digest = MessageDigest.getInstance("MD5").run {
+				update(header)
+				update(arm9Data)
+				update(arm7Data)
+				update(bannerData)
+				digest()
+			}
+
+			val retroAchievementsHash = BigInteger(1, retroAchievementsMd5Digest).toString(16).padStart(32, '0')
+
+			RomMetadata(
+				romName,
+				developerName,
+				isDsiWareTitle,
+				retroAchievementsHash,
+			)
+		}.getOrNull()
 	}
 
 	private fun readBannerTitleAndDeveloper(banner: ByteArray): Pair<String, String>? {
+		if (banner.size < 0x340 + 256) {
+			return null
+		}
 		val version = byteArrayToShort(banner, 0).toInt()
 		if (version !in 1..3) {
 			return null
@@ -104,50 +108,59 @@ object RomProcessor {
 		return title to developer
 	}
 
-	fun getRomIcon(inputStream: InputStream): Bitmap {
-		// Banner offset is at header offset 0x68
-		inputStream.skipStreamBytes(0x68)
-		// Obtain the banner offset
-		val offsetData = ByteArray(4)
-		inputStream.read(offsetData)
+	fun getRomIcon(inputStream: InputStream): Bitmap? {
+		return runCatching {
+			// Banner offset is at header offset 0x68
+			inputStream.skipStreamBytes(0x68)
+			// Obtain the banner offset
+			val offsetData = ByteArray(4)
+			if (inputStream.read(offsetData) < 4) return null
 
-		val bannerOffset = byteArrayToInt(offsetData)
-		inputStream.skipStreamBytes(bannerOffset.toLong() + 32 - (0x68 + 4))
-		val tileData = ByteArray(512)
-		inputStream.read(tileData)
+			val bannerOffset = byteArrayToInt(offsetData)
+			if (bannerOffset <= 0) return null
 
-		val paletteData = ByteArray(16 * 2)
-		inputStream.read(paletteData)
+			val toSkip = bannerOffset.toLong() + 32 - (0x68 + 4)
+			if (toSkip < 0) return null
+			inputStream.skipStreamBytes(toSkip)
 
-		val palette = UShortArray(16)
-		for (i in 0 until 16) {
-			// Each palette color is 16 bits. Join pairs of bytes to create the correct color
-			val lower = paletteData[i * 2]
-			val upper = paletteData[(i * 2) + 1]
+			val tileData = ByteArray(512)
+			if (inputStream.read(tileData) < 512) return null
 
-			val value = ((upper.toInt() and 0xFF).shl(8) or (lower.toInt() and 0xFF)).toUShort()
-			palette[i] = value
-		}
+			val paletteData = ByteArray(16 * 2)
+			if (inputStream.read(paletteData) < 32) return null
 
-		val argbPalette = paletteToArgb(palette)
-		val icon = processTiles(tileData, argbPalette)
-		val bitmapData = iconToBitmapArray(icon)
+			val palette = UShortArray(16)
+			for (i in 0 until 16) {
+				// Each palette color is 16 bits. Join pairs of bytes to create the correct color
+				val lower = paletteData[i * 2]
+				val upper = paletteData[(i * 2) + 1]
 
-		val bitmap = createBitmap(32, 32)
-		bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bitmapData))
-		return bitmap
+				val value = ((upper.toInt() and 0xFF).shl(8) or (lower.toInt() and 0xFF)).toUShort()
+				palette[i] = value
+			}
+
+			val argbPalette = paletteToArgb(palette)
+			val icon = processTiles(tileData, argbPalette)
+			val bitmapData = iconToBitmapArray(icon)
+
+			val bitmap = createBitmap(32, 32)
+			bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bitmapData))
+			bitmap
+		}.getOrNull()
 	}
 
 	fun getRomInfo(rom: Rom, inputStream: InputStream): RomInfo? {
-		val romHeader = ByteArray(0x200)
-		if (inputStream.read(romHeader) < 0x200) {
-			return null
-		}
+		return runCatching {
+			val romHeader = ByteArray(0x200)
+			if (inputStream.read(romHeader) < 0x200) {
+				return null
+			}
 
-		val gameTitle = romHeader.decodeToString(endIndex = 12)
-		val gameCode = romHeader.decodeToString(startIndex = 12, endIndex = 12 + 4)
-		val headerChecksum = Crc32.compute(romHeader)
-		return RomInfo(gameCode, headerChecksum, gameTitle, rom.name)
+			val gameTitle = romHeader.decodeToString(endIndex = 12)
+			val gameCode = romHeader.decodeToString(startIndex = 12, endIndex = 12 + 4)
+			val headerChecksum = Crc32.compute(romHeader)
+			RomInfo(gameCode, headerChecksum, gameTitle, rom.name)
+		}.getOrNull()
 	}
 
 	private fun byteArrayToInt(intData: ByteArray, offset: Int = 0): Int {

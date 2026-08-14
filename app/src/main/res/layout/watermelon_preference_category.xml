@@ -7,9 +7,9 @@
     android:paddingEnd="20dp"
     android:paddingTop="20dp"
     android:paddingBottom="8dp"
-    android:textSize="10sp"
-    android:textFontWeight="600"
-    android:fontFamily="monospace"
+    android:textSize="12.5sp"
+    android:textFontWeight="700"
+    android:fontFamily="@font/space_grotesk"
     android:textAllCaps="true"
     android:letterSpacing="0.08"
-    android:textColor="@color/textColorSecondary" />
+    android:textColor="@color/colorPrimary" />

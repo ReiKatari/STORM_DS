@@ -245,8 +245,8 @@ private fun DsWordmark(alpha: Float) {
         modifier = Modifier.alpha(alpha),
     ) {
         Text(
-            text = "Watermelon",
-            color = Color(0xFFC8D0DC),
+            text = "STORM ",
+            color = Color(0xFFE2E8F0),
             fontFamily = SpaceGrotesk,
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
@@ -254,7 +254,7 @@ private fun DsWordmark(alpha: Float) {
         )
         Text(
             text = "DS",
-            color = watermelon.green,
+            color = Color(0xFF00E5FF),
             fontFamily = SpaceGrotesk,
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,

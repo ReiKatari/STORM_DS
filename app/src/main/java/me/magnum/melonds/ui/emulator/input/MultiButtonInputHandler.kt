@@ -58,6 +58,8 @@ abstract class MultiButtonInputHandler(inputListener: IInputListener, enableHapt
         pressedInputs.clear()
         pressedInputs.addAll(newPressedInputs)
 
+        (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(newPressedInputs.toSet())
+
         return true
     }
 
