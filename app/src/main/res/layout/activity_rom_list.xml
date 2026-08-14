@@ -20,6 +20,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         style="@style/Toolbar"
+        app:logo="@drawable/ic_watermelon_mark"
+        app:title="@string/app_name"
         app:layout_constraintTop_toBottomOf="@id/view_status_bar_background" />
 
     <androidx.fragment.app.FragmentContainerView
