@@ -2,7 +2,10 @@ package me.magnum.melonds.ui.romlist.boxart
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,12 +16,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
 import java.text.Normalizer
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BoxArtRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
     companion object {
         private const val BASE_URL = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/"
@@ -26,22 +30,47 @@ class BoxArtRepository @Inject constructor(
         private const val NO_MATCH = "-"
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cacheDir = File(context.filesDir, "boxart").apply { mkdirs() }
     private val indexFile = File(cacheDir, "named_boxarts_index.txt")
     private val matchesFile = File(cacheDir, "matches.json")
 
     private val mutex = Mutex()
+    private val memoryCache = ConcurrentHashMap<String, String>()
     private var indexEntries: List<IndexEntry>? = null
-    private var matches: JSONObject? = null
+    private var isMatchesLoaded = false
+    private var isDirty = false
 
     private data class IndexEntry(val encodedName: String, val normalized: String, val tokens: Set<String>)
 
+    init {
+        scope.launch {
+            loadMatches()
+        }
+    }
+
     suspend fun getBoxArtUrl(rom: Rom): String? = withContext(Dispatchers.IO) {
         val key = rom.uri.toString()
+
+        // 1. Fast in-memory check without lock
+        val cached = memoryCache[key]
+        if (cached != null) {
+            return@withContext if (cached == NO_MATCH) null else BASE_URL + cached
+        }
+
         mutex.withLock {
-            val storedMatches = loadMatches()
-            val stored = storedMatches.optString(key, "")
-            if (stored.isNotEmpty()) {
+            // Double check inside lock
+            val secondCheck = memoryCache[key]
+            if (secondCheck != null) {
+                return@withContext if (secondCheck == NO_MATCH) null else BASE_URL + secondCheck
+            }
+
+            if (!isMatchesLoaded) {
+                loadMatches()
+            }
+
+            val stored = memoryCache[key]
+            if (stored != null) {
                 return@withContext if (stored == NO_MATCH) null else BASE_URL + stored
             }
 
@@ -53,23 +82,42 @@ class BoxArtRepository @Inject constructor(
             }.filter { it.isNotBlank() }
 
             val match = findBestMatch(candidates, entries)
-            storedMatches.put(key, match?.encodedName ?: NO_MATCH)
-            persistMatches(storedMatches)
-            match?.let { BASE_URL + it.encodedName }
+            val matchValue = match?.encodedName ?: NO_MATCH
+            memoryCache[key] = matchValue
+            schedulePersistMatches()
+
+            if (matchValue == NO_MATCH) null else BASE_URL + matchValue
         }
     }
 
-    private fun loadMatches(): JSONObject {
-        matches?.let { return it }
-        val loaded = runCatching {
-            if (matchesFile.isFile) JSONObject(matchesFile.readText()) else JSONObject()
-        }.getOrDefault(JSONObject())
-        matches = loaded
-        return loaded
+    private fun loadMatches() {
+        if (isMatchesLoaded) return
+        runCatching {
+            if (matchesFile.isFile) {
+                val json = JSONObject(matchesFile.readText())
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    memoryCache[k] = json.optString(k, NO_MATCH)
+                }
+            }
+        }
+        isMatchesLoaded = true
     }
 
-    private fun persistMatches(json: JSONObject) {
-        runCatching { matchesFile.writeText(json.toString()) }
+    private fun schedulePersistMatches() {
+        isDirty = true
+        scope.launch {
+            if (!isDirty) return@launch
+            isDirty = false
+            runCatching {
+                val json = JSONObject()
+                memoryCache.forEach { (k, v) ->
+                    json.put(k, v)
+                }
+                matchesFile.writeText(json.toString())
+            }
+        }
     }
 
     private fun loadIndex(): List<IndexEntry>? {
@@ -99,8 +147,8 @@ class BoxArtRepository @Inject constructor(
     private fun downloadIndex(): String? {
         return runCatching {
             val connection = URL(BASE_URL).openConnection() as HttpURLConnection
-            connection.connectTimeout = 10000
-            connection.readTimeout = 30000
+            connection.connectTimeout = 8000
+            connection.readTimeout = 20000
             connection.setRequestProperty("User-Agent", "melonDS-android-boxart")
             try {
                 val html = connection.inputStream.bufferedReader().readText()
@@ -148,9 +196,5 @@ class BoxArtRepository @Inject constructor(
         return decomposed
             .replace(Regex("\\p{M}+"), "")
             .lowercase()
-            .replace(Regex("\\(.*?\\)|\\[.*?]"), " ")
-            .replace(Regex("[^a-z0-9]+"), " ")
-            .trim()
-            .replace(Regex("\\s+"), " ")
     }
 }

@@ -876,12 +876,12 @@ class LayoutEditorManagerView(
         binding.seekBarWidth.isVisible = isScreen
         binding.layoutHeightLabels.isVisible = isScreen
         binding.seekBarHeight.isVisible = isScreen
-        binding.layoutAlphaLabels.isVisible = isScreen
-        binding.seekBarAlpha.isVisible = isScreen
+        binding.layoutAlphaLabels.isVisible = true
+        binding.seekBarAlpha.isVisible = true
         binding.layoutAspectRatio.isVisible = selectedViewSupportsAspectRatio
         binding.checkboxAboveScreen.isVisible = isScreen
-        binding.buttonCenterHorizontal.isVisible = isScreen
-        binding.buttonCenterVertical.isVisible = isScreen
+        binding.buttonCenterHorizontal.isVisible = true
+        binding.buttonCenterVertical.isVisible = true
 
         if (!areScalingControlsShown) {
             if (animate) {
