@@ -155,7 +155,7 @@ fun WatermelonLibraryHeader(
                 Spacer(Modifier.width(9.dp))
                 Row(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Watermelon",
+                        text = "STORM ",
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
                         fontSize = 21.sp,
@@ -164,7 +164,7 @@ fun WatermelonLibraryHeader(
                     )
                     Text(
                         text = "DS",
-                        color = colors.green,
+                        color = Color(0xFF00E5FF),
                         fontFamily = SpaceGrotesk,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,

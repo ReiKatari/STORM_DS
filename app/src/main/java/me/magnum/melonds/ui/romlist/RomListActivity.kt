@@ -337,7 +337,7 @@ class RomListActivity : AppCompatActivity() {
         var noRomDirectoriesFragment = supportFragmentManager.findFragmentByTag(FRAGMENT_NO_ROM_DIRECTORIES) as NoRomSearchDirectoriesFragment?
         if (noRomDirectoriesFragment == null) {
             noRomDirectoriesFragment = NoRomSearchDirectoriesFragment.newInstance()
-            supportFragmentManager.commit {
+            supportFragmentManager.commit(allowStateLoss = true) {
                 replace(R.id.layout_main, noRomDirectoriesFragment, FRAGMENT_NO_ROM_DIRECTORIES)
             }
         }
@@ -348,7 +348,7 @@ class RomListActivity : AppCompatActivity() {
         var romListFragment = supportFragmentManager.findFragmentByTag(FRAGMENT_ROM_LIST) as RomListFragment?
         if (romListFragment == null) {
             romListFragment = RomListFragment.newInstance(true, RomListFragment.RomEnableCriteria.ENABLE_ALL)
-            supportFragmentManager.commit {
+            supportFragmentManager.commit(allowStateLoss = true) {
                 replace(R.id.layout_main, romListFragment, FRAGMENT_ROM_LIST)
             }
         }

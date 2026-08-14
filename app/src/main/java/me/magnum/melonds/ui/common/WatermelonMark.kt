@@ -7,42 +7,61 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import me.magnum.melonds.ui.theme.watermelon
-
-private val SeedColor = Color(0xFF2E0F0C)
-
-private val Seeds = listOf(
-    3.7f to 5.8f,
-    7.0f to 7.2f,
-    10.0f to 7.2f,
-    13.3f to 5.8f,
-)
-private const val SeedRx = 0.8f
-private const val SeedRy = 1.1f
 
 @Composable
 fun WatermelonMark(
     modifier: Modifier = Modifier,
     height: Dp = 24.dp,
 ) {
-    val colors = watermelon
-    Canvas(modifier.size(width = height * 17f / 24f, height = height)) {
+    Canvas(modifier = modifier.size(width = height * 18f / 24f, height = height)) {
         val u = size.height / 24f
-        val barSize = Size(17f * u, 11f * u)
-        val corner = CornerRadius(3f * u, 3f * u)
+        val screenWidth = 18f * u
+        val screenHeight = 11f * u
+        val corner = CornerRadius(2.8f * u, 2.8f * u)
 
-        drawRoundRect(color = colors.red, topLeft = Offset.Zero, size = barSize, cornerRadius = corner)
-        drawRoundRect(color = colors.green, topLeft = Offset(0f, 13f * u), size = barSize, cornerRadius = corner)
+        val topBrush = Brush.linearGradient(
+            colors = listOf(Color(0xFF00E5FF), Color(0xFF0066FF)),
+            start = Offset(0f, 0f),
+            end = Offset(screenWidth, screenHeight),
+        )
+        val bottomBrush = Brush.linearGradient(
+            colors = listOf(Color(0xFF0066FF), Color(0xFF7B2CBF)),
+            start = Offset(0f, 13f * u),
+            end = Offset(screenWidth, 24f * u),
+        )
 
-        Seeds.forEach { (cx, cy) ->
-            drawOval(
-                color = SeedColor,
-                topLeft = Offset((cx - SeedRx) * u, (cy - SeedRy) * u),
-                size = Size(SeedRx * 2f * u, SeedRy * 2f * u),
-            )
+        // Top DS Screen
+        drawRoundRect(
+            brush = topBrush,
+            topLeft = Offset.Zero,
+            size = Size(screenWidth, screenHeight),
+            cornerRadius = corner,
+        )
+
+        // Bottom DS Screen
+        drawRoundRect(
+            brush = bottomBrush,
+            topLeft = Offset(0f, 13f * u),
+            size = Size(screenWidth, screenHeight),
+            cornerRadius = corner,
+        )
+
+        // STORM Lightning Bolt Path
+        val lightningPath = Path().apply {
+            moveTo(10.5f * u, 1.5f * u)
+            lineTo(5.5f * u, 11.5f * u)
+            lineTo(9.5f * u, 11.5f * u)
+            lineTo(6.5f * u, 22.5f * u)
+            lineTo(13.5f * u, 10.5f * u)
+            lineTo(9.5f * u, 10.5f * u)
+            close()
         }
+
+        drawPath(path = lightningPath, color = Color.White)
     }
 }

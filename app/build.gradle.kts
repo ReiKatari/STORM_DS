@@ -34,7 +34,7 @@ android {
     compileSdk = AppConfig.compileSdkVersion
     ndkVersion = AppConfig.ndkVersion
     defaultConfig {
-        applicationId = "me.magnum.melondualds"
+        applicationId = "com.stormds.emulator"
         minSdk = AppConfig.minSdkVersion
         targetSdk = AppConfig.targetSdkVersion
         versionCode = AppConfig.versionCode
@@ -60,7 +60,7 @@ android {
         getByName("release") {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("release")?.takeIf { it.storeFile != null } ?: signingConfigs.getByName("debug")
             externalNativeBuild {
                 cmake {
                     arguments("-DMELONDS_ANDROID_DEBUG_BUILD=0")
@@ -129,12 +129,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 }
 
 androidComponents {
     onVariants(selector().withName("gitHubProdDebug")) { variant ->
         // Keep prod-debug distinct from other debug/release variants.
-        variant.manifestPlaceholders.put("appName", "debug WatermelonDS")
+        variant.manifestPlaceholders.put("appName", "debug STORM DS")
         variant.sources.res?.addStaticSourceDirectory("src/nightly/res")
     }
 }

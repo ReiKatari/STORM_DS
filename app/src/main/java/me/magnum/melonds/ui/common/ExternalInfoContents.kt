@@ -407,7 +407,7 @@ fun ExternalIdleInfo() {
             )
             Text(
                 text = stringResource(R.string.app_brand_ds),
-                color = Color(0xFF6FBF4A),
+                color = Color(0xFF00E5FF),
                 fontFamily = SpaceGrotesk,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,

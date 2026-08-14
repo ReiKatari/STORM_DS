@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string-array name="theme_options" tools:ignore="InconsistentArrays">
-        <item>STORM DAY (Light)</item>
-        <item>STORM NIGHT (OLED Dark)</item>
+        <item>STORM DAY (Светлая)</item>
+        <item>STORM NIGHT (Тёмная OLED)</item>
     </string-array>
 </resources>
