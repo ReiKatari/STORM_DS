@@ -223,12 +223,6 @@ class RomListViewModel @Inject constructor(
                 rootDirectories,
                 romsRepository.observeRomDirectoryScanStatuses()
             ) { roots, statuses ->
-                statuses
-                    .filter { it.result == RomDirectoryScanStatus.ScanResult.NOT_SCANNED }
-                    .map { it.directoryUri.toString() }
-                    .filter { reportedUnavailableDirectories.add(it) }
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { _romDirectoryPermissionMissingEvent.tryEmit(Unit) }
                 buildDirectoryStatusUi(roots, statuses)
             }.collect { statusUi ->
                 _directoryStatusUi.value = statusUi
