@@ -707,18 +707,20 @@ class FileSystemRomsRepository(
             DocumentsContract.Document.COLUMN_SIZE
         )
         context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val modIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-            val sizeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+            val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val modIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            val sizeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+
+            if (idIndex < 0) return false
 
             while (cursor.moveToNext()) {
-                val docId = cursor.getString(idIndex)
-                val displayName = cursor.getString(nameIndex) ?: ""
-                val mimeType = cursor.getString(mimeIndex)
-                val lastModified = cursor.getLong(modIndex).coerceAtLeast(0)
-                val size = cursor.getLong(sizeIndex).coerceAtLeast(0)
+                val docId = cursor.getString(idIndex) ?: continue
+                val displayName = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
+                val mimeType = if (mimeIndex >= 0) cursor.getString(mimeIndex) else null
+                val lastModified = if (modIndex >= 0) cursor.getLong(modIndex).coerceAtLeast(0) else 0L
+                val size = if (sizeIndex >= 0) cursor.getLong(sizeIndex).coerceAtLeast(0) else 0L
 
                 val fileUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, docId)
                 val parentUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, parentDocId)

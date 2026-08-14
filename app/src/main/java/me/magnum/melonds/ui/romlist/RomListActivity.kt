@@ -76,29 +76,6 @@ class RomListActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.hide()
 
-        var defaultContentInsetLeft = -1
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            if (defaultContentInsetLeft == -1) {
-                defaultContentInsetLeft = binding.toolbar.contentInsetLeft
-            }
-
-            binding.toolbar.setContentInsetsAbsolute(defaultContentInsetLeft + insets.left, binding.toolbar.contentInsetRight)
-            binding.toolbar.updatePadding(
-                left = insets.left,
-                right = insets.right,
-            )
-            binding.viewStatusBarBackground.updateLayoutParams {
-                height = insets.top
-            }
-            binding.layoutMain.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-                leftMargin = insets.left
-                rightMargin = insets.right
-            }
-
-            windowInsets.inset(insets.left, insets.top, insets.right, 0)
-        }
-
         emulatorLauncherValidatorDelegate = EmulatorLaunchValidatorDelegate(this, object : EmulatorLaunchValidatorDelegate.Callback {
             override fun onRomValidated(rom: Rom) {
                 val intent = EmulatorActivity.getRomEmulatorActivityIntent(this@RomListActivity, rom)
