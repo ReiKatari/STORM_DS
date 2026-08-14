@@ -32,8 +32,15 @@ class DirectoryAccessValidator(private val context: Context) {
     }
 
     fun getDirectoryAccessForPermission(directoryUri: Uri, permission: Permission): DirectoryAccessResult {
-        val directoryDocument = DocumentFile.fromTreeUri(context, directoryUri) ?: return DirectoryAccessResult.NOT_FOUND
-        val directoryName = directoryDocument.name ?: return DirectoryAccessResult.NOT_FOUND
+        val directoryDocument = DocumentFile.fromTreeUri(context, directoryUri)
+            ?: DocumentFile.fromSingleUri(context, directoryUri)
+            ?: return DirectoryAccessResult.NOT_FOUND
+
+        if (!directoryDocument.exists() && !directoryDocument.canRead()) {
+            return DirectoryAccessResult.NOT_FOUND
+        }
+
+        val directoryName = directoryDocument.name ?: directoryUri.lastPathSegment ?: ""
 
         // If only read access is required, we don't need to check if we might be dealing with unwanted directories
         if (permission == Permission.READ) {
