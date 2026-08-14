@@ -5,21 +5,22 @@ import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.ListPreference
-import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SeekBarPreference
+import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.extensions.isMicrophonePermissionGranted
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
 
+@AndroidEntryPoint
 class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
-    private lateinit var micSourcePreference: ListPreference
+    private var micSourcePreference: ListPreference? = null
 
     private val microphonePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            micSourcePreference.value = MicSource.DEVICE.name.lowercase()
+            micSourcePreference?.value = MicSource.DEVICE.name.lowercase()
         }
     }
 
@@ -27,16 +28,18 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_audio, rootKey)
-        val volumePreference = findPreference<SeekBarPreference>("volume")!!
-        micSourcePreference = findPreference("mic_source")!!
+        val volumePreference = findPreference<SeekBarPreference>("volume")
+        micSourcePreference = findPreference("mic_source")
 
-        updateVolumePreferenceSummary(volumePreference, volumePreference.value)
-
-        volumePreference.setOnPreferenceChangeListener { _, newValue ->
-            updateVolumePreferenceSummary(volumePreference, newValue as Int)
-            true
+        volumePreference?.let {
+            updateVolumePreferenceSummary(it, it.value)
+            it.setOnPreferenceChangeListener { _, newValue ->
+                updateVolumePreferenceSummary(it, newValue as Int)
+                true
+            }
         }
-        micSourcePreference.setOnPreferenceChangeListener { _, newValue ->
+
+        micSourcePreference?.setOnPreferenceChangeListener { _, newValue ->
             val newMicSource = enumValueOfIgnoreCase<MicSource>(newValue as String)
             if (newMicSource == MicSource.DEVICE && !requireContext().isMicrophonePermissionGranted()) {
                 requestMicrophonePermission(false)

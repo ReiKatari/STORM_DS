@@ -164,7 +164,11 @@ class RomListViewModel @Inject constructor(
             romsRepository.getRoms().collect { romList ->
                 val romsWithDocIds = withContext(Dispatchers.Default) {
                     romList.map { rom ->
-                        val parentDocId = rom.parentTreeUri?.let { runCatching { DocumentsContract.getDocumentId(it) }.getOrNull() }
+                        val parentDocId = rom.parentTreeUri?.let { uri ->
+                            runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+                                ?: runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+                                ?: uri.lastPathSegment
+                        }
                         buildRomWithParent(rom, parentDocId)
                     }
                 }
@@ -419,12 +423,17 @@ class RomListViewModel @Inject constructor(
             }
             val romEntries = sortedRoms
                 .filter { matchesFilter(it.rom, filter) }
-                .filter {
+                .filter { romWithParent ->
                     if (filter == RomFilter.ALL) {
-                        it.parentDocId == docId
+                        romWithParent.parentDocId == docId ||
+                        matchesRoot(romWithParent.parentDocId ?: "", docId) ||
+                        (roots.size == 1 && (romWithParent.parentDocId == null || matchesRoot(romWithParent.parentDocId, roots.first().docId)))
                     } else {
                         // When filtering, show all matching ROMs in the current root, regardless of subfolder
-                        it.rom.isInstalledDsiWareShortcut || it.parentDocId?.startsWith(node.root.docId) == true
+                        romWithParent.rom.isInstalledDsiWareShortcut ||
+                        romWithParent.parentDocId == null ||
+                        romWithParent.parentDocId.startsWith(node.root.docId) ||
+                        roots.size == 1
                     }
                 }
                 .map { RomBrowserEntry.RomItem(it.rom) }
@@ -568,8 +577,8 @@ class RomListViewModel @Inject constructor(
         }
 
         roms.forEach { rom ->
-            val parentDocId = rom.parentDocId ?: return@forEach
-            val root = findRootForDocId(parentDocId, roots) ?: return@forEach
+            val parentDocId = rom.parentDocId ?: roots.firstOrNull()?.docId ?: return@forEach
+            val root = findRootForDocId(parentDocId, roots) ?: roots.firstOrNull() ?: return@forEach
 
             var currentDocId: String? = parentDocId
             while (currentDocId != null) {

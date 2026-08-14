@@ -1,50 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#e8392c</color>
-    <color name="colorPrimaryDark">#f4f3f0</color>
-    <color name="colorAccent">@color/melonMain</color>
-    <color name="colorOnPrimary">#fff</color>
-    <color name="colorOnSecondary">#fff</color>
-    <color name="colorSurface">#ffffff</color>
-    <color name="colorBackground">#f4f3f0</color>
+    <!-- STORM DAY Palette (STORM Suite Clean Light Theme) -->
+    <color name="colorPrimary">#0066FF</color>
+    <color name="colorPrimaryDark">#F3F4F8</color>
+    <color name="colorAccent">#0066FF</color>
+    <color name="colorSecondary">#00B4D8</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+    <color name="colorOnSecondary">#FFFFFF</color>
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorBackground">#F3F4F8</color>
 
-    <color name="textColorPrimary">#1b1a1f</color>
-    <color name="textColorSecondary">#5b5962</color>
+    <color name="textColorPrimary">#111827</color>
+    <color name="textColorSecondary">#334155</color>
 
     <color name="toolbarBackground">@color/colorBackground</color>
-    <color name="switchThumbUnselected">#ececec</color>
+    <color name="switchThumbUnselected">#D1D5DB</color>
 
-    <color name="itemSelected">#AAA</color>
+    <color name="itemSelected">#EAEFF5</color>
 
-    <color name="romConfigButtonDefault">#555</color>
-    <color name="romConfigButtonEnabled">#4f8a2f</color>
-    <color name="romConfigPrefSeparator">#DDD</color>
+    <color name="romConfigButtonDefault">#4B5563</color>
+    <color name="romConfigButtonEnabled">#0066FF</color>
+    <color name="romConfigPrefSeparator">#D1D5DB</color>
 
-    <color name="buttonContrasted">#D000</color>
-    <color name="divider">#e3e1db</color>
+    <color name="buttonContrasted">#111827</color>
+    <color name="divider">#D1D5DB</color>
 
-    <color name="textLayoutEditor">#f6f5f3</color>
+    <color name="textLayoutEditor">#111827</color>
 
-    <color name="navigationBarBackground">#f4f3f0</color>
-    <color name="prefSwitchRailColor">#804f8a2f</color>
-    <color name="prefSwitchBackground">#FCCC</color>
+    <color name="navigationBarBackground">#F3F4F8</color>
+    <color name="prefSwitchRailColor">#800066FF</color>
+    <color name="prefSwitchBackground">#EAEFF5</color>
 
-    <color name="melonMain">#4f8a2f</color>
-    <color name="melonDark">#3f6f26</color>
+    <color name="melonMain">#0066FF</color>
+    <color name="melonDark">#0052CC</color>
 
-    <color name="splashBackground">#f4f3f0</color>
-    <color name="splashToolbar">#c72d22</color>
+    <color name="splashBackground">#F3F4F8</color>
+    <color name="splashToolbar">#0066FF</color>
 
-    <color name="statusOk">#4f8a2f</color>
-    <color name="statusWarn">#FF9800</color>
-    <color name="statusError">#e8392c</color>
+    <color name="statusOk">#10B981</color>
+    <color name="statusWarn">#F59E0B</color>
+    <color name="statusError">#EF4444</color>
 
-    <color name="white">#FFF</color>
+    <color name="white">#FFFFFF</color>
 
-    <color name="watermelonGold">#d4a017</color>
-    <color name="watermelonFavorite">#ffd23f</color>
-    <color name="watermelonEmulationBg">#0b0a0d</color>
-    <color name="watermelonGreenDim">#214f8a2f</color>
-    <color name="watermelonSurface2">#eeece7</color>
-    <color name="watermelonSurface3">#e3e1db</color>
+    <color name="watermelonGold">#D97706</color>
+    <color name="watermelonFavorite">#F59E0B</color>
+    <color name="watermelonEmulationBg">#111827</color>
+    <color name="watermelonGreenDim">#220066FF</color>
+    <color name="watermelonSurface2">#EAEFF5</color>
+    <color name="watermelonSurface3">#D1D5DB</color>
 </resources>

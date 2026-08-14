@@ -11,10 +11,12 @@ class SingleButtonInputHandler(inputListener: IInputListener, private val input:
             MotionEvent.ACTION_DOWN -> {
                 inputListener.onKeyPress(input)
                 performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
+                (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(setOf(input))
             }
-            MotionEvent.ACTION_UP -> {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 inputListener.onKeyReleased(input)
                 performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
+                (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(emptySet())
             }
         }
         return true

@@ -1,32 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#f44336</color>
-    <color name="colorPrimaryDark">#141317</color>
-    <color name="colorAccent">#6fbf4a</color>
-    <color name="colorSurface">#1e1d24</color>
-    <color name="colorBackground">#141317</color>
+    <!-- STORM NIGHT Palette (STORM Suite OLED Cyber Black Theme) -->
+    <color name="colorPrimary">#00E5FF</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorAccent">#00E5FF</color>
+    <color name="colorSecondary">#7B2CBF</color>
+    <color name="colorSurface">#0D0D10</color>
+    <color name="colorBackground">#000000</color>
 
-    <color name="textColorPrimary">#f6f5f3</color>
-    <color name="textColorSecondary">#b3b1bd</color>
+    <color name="textColorPrimary">#FFFFFF</color>
+    <color name="textColorSecondary">#A5A5B5</color>
 
     <color name="toolbarBackground">@color/colorBackground</color>
-    <color name="switchThumbUnselected">#b9b9b9</color>
+    <color name="switchThumbUnselected">#757585</color>
 
-    <color name="romConfigButtonDefault">#AAA</color>
+    <color name="romConfigButtonDefault">#757585</color>
 
-    <color name="navigationBarBackground">#141317</color>
-    <color name="prefSwitchRailColor">#806fbf4a</color>
+    <color name="navigationBarBackground">#000000</color>
+    <color name="prefSwitchRailColor">#8000E5FF</color>
 
-    <color name="buttonContrasted">#DFFF</color>
-    <color name="divider">#2a2833</color>
+    <color name="buttonContrasted">#FFFFFF</color>
+    <color name="divider">#252530</color>
 
-    <color name="romConfigButtonEnabled">#6fbf4a</color>
-    <color name="statusOk">#6fbf4a</color>
-    <color name="statusError">#f44336</color>
+    <color name="romConfigButtonEnabled">#00E5FF</color>
+    <color name="statusOk">#00E676</color>
+    <color name="statusError">#FF1744</color>
+    <color name="statusWarn">#FF9100</color>
 
-    <color name="splashBackground">#141317</color>
-    <color name="splashToolbar">#141317</color>
-    <color name="watermelonGreenDim">#2E6FBF4A</color>
-    <color name="watermelonSurface2">#2a2833</color>
-    <color name="watermelonSurface3">#343240</color>
+    <color name="splashBackground">#000000</color>
+    <color name="splashToolbar">#000000</color>
+    <color name="watermelonGreenDim">#3300E5FF</color>
+    <color name="watermelonSurface2">#16161C</color>
+    <color name="watermelonSurface3">#252530</color>
 </resources>

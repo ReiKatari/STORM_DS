@@ -16,21 +16,26 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
 
     override fun getRomFromUri(romUri: Uri, parentUri: Uri?): Rom? {
         return try {
-            getRomMetadata(romUri)?.let { metadata ->
-                val romDocument = uriHandler.getUriDocument(romUri)
-                val romName = metadata.romTitle.takeUnless { it.isBlank() } ?: romDocument?.nameWithoutExtension ?: ""
-                Rom(
-                    name = romName,
-                    developerName = metadata.developerName,
-                    fileName = romDocument?.name ?: "",
-                    uri = romUri,
-                    parentTreeUri = parentUri,
-                    config = if (metadata.isDSiWareTitle) RomConfig.forDsiWareTitle() else RomConfig.default(),
-                    lastPlayed = null,
-                    isDsiWareTitle = metadata.isDSiWareTitle,
-                    retroAchievementsHash = metadata.retroAchievementsHash
-                )
-            }
+            val metadata = getRomMetadata(romUri)
+            val romDocument = uriHandler.getUriDocument(romUri)
+            val fallbackName = romDocument?.nameWithoutExtension?.takeUnless { it.isBlank() }
+                ?: romUri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
+                ?: "NDS Game"
+            val romName = metadata?.romTitle?.takeUnless { it.isBlank() } ?: fallbackName
+            val fileName = romDocument?.name ?: "$fallbackName.nds"
+            val isDsi = metadata?.isDSiWareTitle ?: false
+
+            Rom(
+                name = romName,
+                developerName = metadata?.developerName ?: "",
+                fileName = fileName,
+                uri = romUri,
+                parentTreeUri = parentUri,
+                config = if (isDsi) RomConfig.forDsiWareTitle() else RomConfig.default(),
+                lastPlayed = null,
+                isDsiWareTitle = isDsi,
+                retroAchievementsHash = metadata?.retroAchievementsHash ?: ""
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null

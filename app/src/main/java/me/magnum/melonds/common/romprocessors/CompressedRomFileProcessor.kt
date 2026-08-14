@@ -35,25 +35,30 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
 
     override fun getRomFromUri(romUri: Uri, parentUri: Uri?): Rom? {
         return try {
-            context.contentResolver.openInputStream(romUri)?.use { stream ->
+            val romDocument = uriHandler.getUriDocument(romUri)
+            val fallbackName = romDocument?.nameWithoutExtension?.takeUnless { it.isBlank() }
+                ?: romUri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
+                ?: "Compressed Game"
+            val fileName = romDocument?.name ?: fallbackName
+            val metadata = context.contentResolver.openInputStream(romUri)?.use { stream ->
                 getNdsEntryStreamInFileStream(stream)?.use { romFileStream ->
-                    val romDocument = uriHandler.getUriDocument(romUri)
-                    getRomMetadataInZipEntry(romFileStream)?.let { romMetadata ->
-                        val romName = romMetadata.romTitle.takeUnless { it.isBlank() } ?: romDocument?.nameWithoutExtension ?: ""
-                        Rom(
-                            name = romName,
-                            developerName = romMetadata.developerName,
-                            fileName = romDocument?.name ?: "",
-                            uri = romUri,
-                            parentTreeUri = parentUri,
-                            config = if (romMetadata.isDSiWareTitle) RomConfig.forDsiWareTitle() else RomConfig.default(),
-                            lastPlayed = null,
-                            isDsiWareTitle = romMetadata.isDSiWareTitle,
-                            retroAchievementsHash = romMetadata.retroAchievementsHash
-                        )
-                    }
+                    getRomMetadataInZipEntry(romFileStream)
                 }
             }
+            val romName = metadata?.romTitle?.takeUnless { it.isBlank() } ?: fallbackName
+            val isDsi = metadata?.isDSiWareTitle ?: false
+
+            Rom(
+                name = romName,
+                developerName = metadata?.developerName ?: "",
+                fileName = fileName,
+                uri = romUri,
+                parentTreeUri = parentUri,
+                config = if (isDsi) RomConfig.forDsiWareTitle() else RomConfig.default(),
+                lastPlayed = null,
+                isDsiWareTitle = isDsi,
+                retroAchievementsHash = metadata?.retroAchievementsHash ?: ""
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null
