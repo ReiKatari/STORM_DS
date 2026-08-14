@@ -498,12 +498,16 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun sortRoms(roms: List<RomWithParent>, sortingMode: SortingMode, sortingOrder: SortingOrder): List<RomWithParent> {
-        val comparator = when (sortingMode) {
-            SortingMode.ALPHABETICALLY -> buildAlphabeticalRomComparator(sortingOrder)
-            SortingMode.RECENTLY_PLAYED -> buildRecentlyPlayedRomComparator(sortingOrder)
-            SortingMode.MOST_PLAYED -> buildMostPlayedRomComparator(sortingOrder)
+        return runCatching {
+            val comparator = when (sortingMode) {
+                SortingMode.ALPHABETICALLY -> buildAlphabeticalRomComparator(sortingOrder)
+                SortingMode.RECENTLY_PLAYED -> buildRecentlyPlayedRomComparator(sortingOrder)
+                SortingMode.MOST_PLAYED -> buildMostPlayedRomComparator(sortingOrder)
+            }
+            roms.sortedWith { o1, o2 -> comparator.compare(o1.rom, o2.rom) }
+        }.getOrElse {
+            roms
         }
-        return roms.sortedWith { o1, o2 -> comparator.compare(o1.rom, o2.rom) }
     }
 
     private fun filterRoms(roms: List<RomWithParent>, query: String): List<RomWithParent> {
@@ -725,44 +729,38 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun buildAlphabeticalRomComparator(sortingOrder: SortingOrder): Comparator<Rom> {
-        // Case-insensitive comparison so titles like "iCarly" sort with the I letters instead of
-        // landing after "Z" (ASCII lowercase 'i' has a higher code than uppercase letters).
-        return if (sortingOrder == SortingOrder.ASCENDING) {
-            Comparator { o1: Rom, o2: Rom ->
-                o1.name.compareTo(o2.name, ignoreCase = true)
-            }
-        } else {
-            Comparator { o1: Rom, o2: Rom ->
-                o2.name.compareTo(o1.name, ignoreCase = true)
-            }
+        return Comparator { o1: Rom, o2: Rom ->
+            val name1 = o1.config.customName ?: o1.name
+            val name2 = o2.config.customName ?: o2.name
+            val result = name1.compareTo(name2, ignoreCase = true)
+            if (sortingOrder == SortingOrder.ASCENDING) result else -result
         }
     }
 
     private fun buildRecentlyPlayedRomComparator(sortingOrder: SortingOrder): Comparator<Rom> {
-        return if (sortingOrder == SortingOrder.ASCENDING) {
-            Comparator { o1: Rom, o2: Rom ->
-                when {
-                    o1.lastPlayed == null -> -1
-                    o2.lastPlayed == null -> 1
-                    else -> o1.lastPlayed!!.compareTo(o2.lastPlayed)
-                }
+        val nameComparator = buildAlphabeticalRomComparator(SortingOrder.ASCENDING)
+        return Comparator { o1: Rom, o2: Rom ->
+            val date1 = o1.lastPlayed
+            val date2 = o2.lastPlayed
+            val dateComparison = when {
+                date1 == null && date2 == null -> 0
+                date1 == null -> 1
+                date2 == null -> -1
+                else -> if (sortingOrder == SortingOrder.ASCENDING) date1.compareTo(date2) else date2.compareTo(date1)
             }
-        } else {
-            Comparator { o1: Rom, o2: Rom ->
-                when {
-                    o2.lastPlayed == null -> -1
-                    o1.lastPlayed == null -> 1
-                    else -> o2.lastPlayed!!.compareTo(o1.lastPlayed)
-                }
-            }
+            if (dateComparison != 0) dateComparison else nameComparator.compare(o1, o2)
         }
     }
 
     private fun buildMostPlayedRomComparator(sortingOrder: SortingOrder): Comparator<Rom> {
-        return if (sortingOrder == SortingOrder.ASCENDING) {
-            Comparator { o1, o2 -> o1.totalPlayTime.compareTo(o2.totalPlayTime) }
-        } else {
-            Comparator { o1, o2 -> o2.totalPlayTime.compareTo(o1.totalPlayTime) }
+        val nameComparator = buildAlphabeticalRomComparator(SortingOrder.ASCENDING)
+        return Comparator { o1, o2 ->
+            val playTimeComparison = if (sortingOrder == SortingOrder.ASCENDING) {
+                o1.totalPlayTime.compareTo(o2.totalPlayTime)
+            } else {
+                o2.totalPlayTime.compareTo(o1.totalPlayTime)
+            }
+            if (playTimeComparison != 0) playTimeComparison else nameComparator.compare(o1, o2)
         }
     }
 
