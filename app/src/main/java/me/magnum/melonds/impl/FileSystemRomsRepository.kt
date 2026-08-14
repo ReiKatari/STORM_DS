@@ -73,7 +73,7 @@ class FileSystemRomsRepository(
     private val directoryStateListType: Type = object : TypeToken<List<RomDirectoryStateDto>>(){}.type
     private val romsChannel = SubjectSharedFlow<List<Rom>>()
     private val scanningStatusSubject = MutableStateFlow(RomScanningStatus.NOT_SCANNING)
-    private val roms: ArrayList<Rom> = ArrayList()
+    private val roms: java.util.concurrent.CopyOnWriteArrayList<Rom> = java.util.concurrent.CopyOnWriteArrayList()
     private var areRomsLoaded = AtomicBoolean(false)
     private val directoryStatesLock = Any()
     private val directoryStates: MutableMap<String, DirectoryCacheState> = mutableMapOf()
