@@ -11,5 +11,11 @@ class SingleButtonLayoutComponentViewBuilder(private val layoutComponent: Layout
         return ModernSingleButtonView(context, layoutComponent)
     }
 
-    override fun getAspectRatio() = 1f
+    override fun getAspectRatio(): Float {
+        return when (layoutComponent) {
+            LayoutComponent.BUTTON_START, LayoutComponent.BUTTON_SELECT -> 1.8f
+            LayoutComponent.BUTTON_L, LayoutComponent.BUTTON_R -> 1.25f
+            else -> 1.0f
+        }
+    }
 }

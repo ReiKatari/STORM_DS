@@ -33,7 +33,7 @@ class BoxArtRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cacheDir = File(context.filesDir, "boxart").apply { mkdirs() }
     private val indexFile = File(cacheDir, "named_boxarts_index.txt")
-    private val matchesFile = File(cacheDir, "matches.json")
+    private val matchesFile = File(cacheDir, "matches_v2.json")
 
     private val mutex = Mutex()
     private val memoryCache = ConcurrentHashMap<String, String>()
@@ -52,14 +52,13 @@ class BoxArtRepository @Inject constructor(
     suspend fun getBoxArtUrl(rom: Rom): String? = withContext(Dispatchers.IO) {
         val key = rom.uri.toString()
 
-        // 1. Fast in-memory check without lock
+        // 1. Instant in-memory check without mutex
         val cached = memoryCache[key]
         if (cached != null) {
             return@withContext if (cached == NO_MATCH) null else BASE_URL + cached
         }
 
         mutex.withLock {
-            // Double check inside lock
             val secondCheck = memoryCache[key]
             if (secondCheck != null) {
                 return@withContext if (secondCheck == NO_MATCH) null else BASE_URL + secondCheck
@@ -147,8 +146,8 @@ class BoxArtRepository @Inject constructor(
     private fun downloadIndex(): String? {
         return runCatching {
             val connection = URL(BASE_URL).openConnection() as HttpURLConnection
-            connection.connectTimeout = 8000
-            connection.readTimeout = 20000
+            connection.connectTimeout = 10000
+            connection.readTimeout = 30000
             connection.setRequestProperty("User-Agent", "melonDS-android-boxart")
             try {
                 val html = connection.inputStream.bufferedReader().readText()
@@ -164,6 +163,7 @@ class BoxArtRepository @Inject constructor(
     }
 
     private fun findBestMatch(candidates: List<String>, entries: List<IndexEntry>): IndexEntry? {
+        // Pass 1: Direct normalized match
         for (candidate in candidates) {
             val fullNormalized = normalize(candidate.substringBefore(" (").ifBlank { candidate })
             if (fullNormalized.isBlank()) continue
@@ -171,6 +171,7 @@ class BoxArtRepository @Inject constructor(
             entries.firstOrNull { it.normalized == fullNormalized }?.let { return it }
         }
 
+        // Pass 2: Token Jaccard similarity
         var best: IndexEntry? = null
         var bestScore = 0.0
         for (candidate in candidates) {
@@ -188,7 +189,7 @@ class BoxArtRepository @Inject constructor(
                 }
             }
         }
-        return best.takeIf { bestScore >= 0.65 }
+        return best.takeIf { bestScore >= 0.70 }
     }
 
     private fun normalize(value: String): String {
@@ -196,5 +197,9 @@ class BoxArtRepository @Inject constructor(
         return decomposed
             .replace(Regex("\\p{M}+"), "")
             .lowercase()
+            .replace(Regex("\\(.*?\\)|\\[.*?]"), " ")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
     }
 }

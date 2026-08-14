@@ -38,6 +38,22 @@ class ModernSingleButtonView @JvmOverloads constructor(
         color = Color.parseColor("#FF00E5FF")
     }
 
+    private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL_AND_STROKE
+        strokeWidth = 3f
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        color = Color.parseColor("#F0F4F8")
+    }
+
+    private val iconShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL_AND_STROKE
+        strokeWidth = 3f
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        color = Color.parseColor("#99000000")
+    }
+
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#F0F4F8")
         textAlign = Paint.Align.CENTER
@@ -83,17 +99,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
             LayoutComponent.BUTTON_R -> "R"
             LayoutComponent.BUTTON_START -> "START"
             LayoutComponent.BUTTON_SELECT -> "SELECT"
-            LayoutComponent.BUTTON_PAUSE -> "PAUSE"
-            LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> "FF"
-            LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> "MIC"
-            LayoutComponent.BUTTON_HINGE -> "LID"
-            LayoutComponent.BUTTON_RESET -> "RESET"
-            LayoutComponent.BUTTON_SWAP_SCREENS -> "SWAP"
             LayoutComponent.BUTTON_QUICK_SAVE -> "SAVE"
             LayoutComponent.BUTTON_QUICK_LOAD -> "LOAD"
-            LayoutComponent.BUTTON_REWIND -> "REW"
-            LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> "TOUCH"
-            else -> "BTN"
+            LayoutComponent.BUTTON_RESET -> "RESET"
+            else -> ""
         }
     }
 
@@ -110,7 +119,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
         canvas.save()
         canvas.scale(buttonScale, buttonScale, cx, cy)
 
-        val padding = 5f
+        val padding = 4f
         val rect = RectF(padding, padding, w - padding, h - padding)
 
         val isShoulder = component == LayoutComponent.BUTTON_L || component == LayoutComponent.BUTTON_R
@@ -121,21 +130,19 @@ class ModernSingleButtonView @JvmOverloads constructor(
             val cornerRadius = min(w, h) * 0.45f
             val shoulderPath = Path()
             if (component == LayoutComponent.BUTTON_L) {
-                // Curved on left, flat on right
                 val radii = floatArrayOf(
-                    cornerRadius, cornerRadius, // Top-left
-                    cornerRadius * 0.3f, cornerRadius * 0.3f, // Top-right
-                    cornerRadius * 0.3f, cornerRadius * 0.3f, // Bottom-right
-                    cornerRadius * 0.7f, cornerRadius * 0.7f  // Bottom-left
+                    cornerRadius, cornerRadius,
+                    cornerRadius * 0.25f, cornerRadius * 0.25f,
+                    cornerRadius * 0.25f, cornerRadius * 0.25f,
+                    cornerRadius * 0.75f, cornerRadius * 0.75f
                 )
                 shoulderPath.addRoundRect(rect, radii, Path.Direction.CW)
             } else {
-                // Curved on right, flat on left
                 val radii = floatArrayOf(
-                    cornerRadius * 0.3f, cornerRadius * 0.3f, // Top-left
-                    cornerRadius, cornerRadius, // Top-right
-                    cornerRadius * 0.7f, cornerRadius * 0.7f, // Bottom-right
-                    cornerRadius * 0.3f, cornerRadius * 0.3f  // Bottom-left
+                    cornerRadius * 0.25f, cornerRadius * 0.25f,
+                    cornerRadius, cornerRadius,
+                    cornerRadius * 0.75f, cornerRadius * 0.75f,
+                    cornerRadius * 0.25f, cornerRadius * 0.25f
                 )
                 shoulderPath.addRoundRect(rect, radii, Path.Direction.CW)
             }
@@ -152,12 +159,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 canvas.drawPath(shoulderPath, strokePaint)
             }
 
-            // Shoulder Label
-            textPaint.textSize = min(w, h) * 0.48f
-            textShadowPaint.textSize = min(w, h) * 0.48f
+            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.52f, w - padding * 2)
         } else if (isStartSelect) {
-            // Authentic angled/capsule Nintendo DS Start / Select pill button
-            val rx = min(w, h) * 0.42f
+            // Authentic oblong pill for Start & Select (never clipped)
+            val rx = min(w, h) * 0.44f
             if (buttonGlow > 0f) {
                 bgPaint.color = Color.parseColor("#E61A3A4D")
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
@@ -171,11 +176,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
 
-            textPaint.textSize = min(w, h) * 0.38f
-            textShadowPaint.textSize = min(w, h) * 0.38f
+            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.42f, w - padding * 3)
         } else {
-            // Compact circular/pill utility buttons (FF, MIC, REW, LID, etc.)
-            val rx = min(w, h) * 0.35f
+            // Sleek circular / rounded utility buttons with vector icons
+            val rx = min(w, h) * 0.38f
             if (buttonGlow > 0f) {
                 bgPaint.color = Color.parseColor("#E61A3A4D")
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
@@ -189,22 +193,167 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
 
-            textPaint.textSize = min(w, h) * 0.36f
-            textShadowPaint.textSize = min(w, h) * 0.36f
+            if (buttonGlow > 0f) {
+                iconPaint.color = Color.parseColor("#00E5FF")
+                textPaint.color = Color.parseColor("#00E5FF")
+            } else {
+                iconPaint.color = Color.parseColor("#F0F4F8")
+                textPaint.color = Color.WHITE
+            }
+
+            val iconSize = min(w, h) * 0.45f
+            when (component) {
+                LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> drawFastForwardIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_REWIND -> drawRewindIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> drawMicrophoneIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_PAUSE -> drawPauseIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_HINGE -> drawHingeIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_SWAP_SCREENS -> drawSwapIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> drawTouchIcon(canvas, cx, cy, iconSize)
+                else -> {
+                    val label = getLabel().ifBlank { "BTN" }
+                    drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.38f, w - padding * 2)
+                }
+            }
         }
 
-        // Draw centered text with subtle drop shadow
-        val label = getLabel()
-        val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
-        canvas.drawText(label, cx, textY + 1.5f, textShadowPaint)
+        canvas.restore()
+    }
 
+    private fun drawTextLabel(canvas: Canvas, cx: Float, cy: Float, text: String, baseSize: Float, maxWidth: Float) {
+        textPaint.textSize = baseSize
+        var measured = textPaint.measureText(text)
+        if (measured > maxWidth && maxWidth > 0f) {
+            textPaint.textSize = baseSize * (maxWidth / measured)
+        }
+        textShadowPaint.textSize = textPaint.textSize
+
+        val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(text, cx, textY + 1.5f, textShadowPaint)
         if (buttonGlow > 0f) {
             textPaint.color = Color.parseColor("#00E5FF")
         } else {
             textPaint.color = Color.WHITE
         }
-        canvas.drawText(label, cx, textY, textPaint)
+        canvas.drawText(text, cx, textY, textPaint)
+    }
 
-        canvas.restore()
+    private fun drawFastForwardIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val half = size / 2f
+        val path = Path().apply {
+            // First triangle
+            moveTo(cx - half * 0.8f, cy - half * 0.8f)
+            lineTo(cx, cy)
+            lineTo(cx - half * 0.8f, cy + half * 0.8f)
+            close()
+            // Second triangle
+            moveTo(cx, cy - half * 0.8f)
+            lineTo(cx + half * 0.8f, cy)
+            lineTo(cx, cy + half * 0.8f)
+            close()
+        }
+        canvas.drawPath(path, iconShadowPaint)
+        canvas.drawPath(path, iconPaint)
+    }
+
+    private fun drawRewindIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val half = size / 2f
+        val path = Path().apply {
+            // First triangle
+            moveTo(cx, cy - half * 0.8f)
+            lineTo(cx - half * 0.8f, cy)
+            lineTo(cx, cy + half * 0.8f)
+            close()
+            // Second triangle
+            moveTo(cx + half * 0.8f, cy - half * 0.8f)
+            lineTo(cx, cy)
+            lineTo(cx + half * 0.8f, cy + half * 0.8f)
+            close()
+        }
+        canvas.drawPath(path, iconShadowPaint)
+        canvas.drawPath(path, iconPaint)
+    }
+
+    private fun drawMicrophoneIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val r = size * 0.22f
+        val bodyH = size * 0.48f
+
+        // Microphone capsule body
+        val capsuleRect = RectF(cx - r, cy - bodyH * 0.65f, cx + r, cy + bodyH * 0.15f)
+        canvas.drawRoundRect(capsuleRect, r, r, iconPaint)
+
+        // Cradle arc
+        val cradlePaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        val cradleRect = RectF(cx - r * 1.55f, cy - bodyH * 0.35f, cx + r * 1.55f, cy + bodyH * 0.35f)
+        canvas.drawArc(cradleRect, 0f, 180f, false, cradlePaint)
+
+        // Stand stem
+        canvas.drawLine(cx, cy + bodyH * 0.35f, cx, cy + bodyH * 0.65f, cradlePaint)
+        // Stand base
+        canvas.drawLine(cx - r * 1.2f, cy + bodyH * 0.65f, cx + r * 1.2f, cy + bodyH * 0.65f, cradlePaint)
+    }
+
+    private fun drawPauseIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val barW = size * 0.22f
+        val barH = size * 0.7f
+        val gap = size * 0.16f
+
+        val leftRect = RectF(cx - gap / 2f - barW, cy - barH / 2f, cx - gap / 2f, cy + barH / 2f)
+        val rightRect = RectF(cx + gap / 2f, cy - barH / 2f, cx + gap / 2f + barW, cy + barH / 2f)
+
+        canvas.drawRoundRect(leftRect, 3f, 3f, iconPaint)
+        canvas.drawRoundRect(rightRect, 3f, 3f, iconPaint)
+    }
+
+    private fun drawHingeIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        // Clamshell DS fold icon
+        val w = size * 0.75f
+        val h = size * 0.35f
+        val gap = size * 0.12f
+
+        val topRect = RectF(cx - w / 2f, cy - h - gap / 2f, cx + w / 2f, cy - gap / 2f)
+        val bottomRect = RectF(cx - w / 2f, cy + gap / 2f, cx + w / 2f, cy + h + gap / 2f)
+
+        val stroke = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawRoundRect(topRect, 4f, 4f, stroke)
+        canvas.drawRoundRect(bottomRect, 4f, 4f, stroke)
+    }
+
+    private fun drawSwapIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        // Dual screen vertical swap arrows
+        val h = size * 0.7f
+        val off = size * 0.22f
+
+        val arrowPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3.5f
+        }
+        // Up arrow on left
+        canvas.drawLine(cx - off, cy + h / 2f, cx - off, cy - h / 2f, arrowPaint)
+        canvas.drawLine(cx - off, cy - h / 2f, cx - off - size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
+        canvas.drawLine(cx - off, cy - h / 2f, cx - off + size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
+
+        // Down arrow on right
+        canvas.drawLine(cx + off, cy - h / 2f, cx + off, cy + h / 2f, arrowPaint)
+        canvas.drawLine(cx + off, cy + h / 2f, cx + off - size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
+        canvas.drawLine(cx + off, cy + h / 2f, cx + off + size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
+    }
+
+    private fun drawTouchIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        // Touch target icon (stylus dot & pulse rings)
+        val r = size * 0.18f
+        canvas.drawCircle(cx, cy, r, iconPaint)
+
+        val ringPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawCircle(cx, cy, size * 0.40f, ringPaint)
     }
 }
