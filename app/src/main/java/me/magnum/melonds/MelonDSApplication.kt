@@ -51,6 +51,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        installCrashHandler()
         giveLibrashaderACacheDirectory()
         createNotificationChannels()
         applyTheme()
@@ -62,6 +63,30 @@ class MelonDSApplication : Application(), Configuration.Provider {
             UriFileHandler(this, uriHandler),
             settingsRepository.getVulkanDriverConfiguration(applicationInfo.nativeLibraryDir),
         )
+    }
+
+    private fun installCrashHandler() {
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                val report = buildString {
+                    appendLine("================ STORM DS CRASH REPORT ================")
+                    appendLine("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", java.util.Locale.US).format(java.util.Date())}")
+                    appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT})")
+                    appendLine("Thread: ${thread.name} (id=${thread.id})")
+                    appendLine("Exception: ${throwable.javaClass.name}: ${throwable.message}")
+                    appendLine("Stacktrace:")
+                    appendLine(Log.getStackTraceString(throwable))
+                    appendLine("========================================================")
+                }
+
+                getExternalFilesDir(null)?.let { externalDir ->
+                    File(externalDir, "storm_crash.log").writeText(report)
+                }
+                File(filesDir, "storm_crash.log").writeText(report)
+            }
+            previousHandler?.uncaughtException(thread, throwable)
+        }
     }
 
     private fun giveLibrashaderACacheDirectory() {
