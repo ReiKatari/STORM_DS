@@ -71,6 +71,12 @@ class NoRomSearchDirectoriesFragment : Fragment() {
 
     private val romListViewModel: RomListViewModel by activityViewModels()
 
+    private val romPickerLauncher = registerForActivityResult(DirectoryPickerContract(Permission.READ_WRITE)) { uri ->
+        if (uri != null) {
+            romListViewModel.addRomSearchDirectory(uri)
+        }
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val packageManager = requireActivity().packageManager
         val directoryPickerContract = DirectoryPickerContract(Permission.READ_WRITE)
@@ -80,12 +86,6 @@ class NoRomSearchDirectoriesFragment : Fragment() {
         val disabledFilePicker = if (directoryPickerComponent == null) findDisabledFilePicker() else null
         val pickerNotFound = directoryPickerComponent == null && disabledFilePicker == null
         val isPickerDisabled = disabledFilePicker != null
-
-        val romPickerLauncher = registerForActivityResult(directoryPickerContract) { uri ->
-            if (uri != null) {
-                romListViewModel.addRomSearchDirectory(uri)
-            }
-        }
 
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
