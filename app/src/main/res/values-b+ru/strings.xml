@@ -705,7 +705,7 @@
   <string name="load_state">Загрузить состояние</string>
   <string name="rewind">Перемотка назад</string>
   <string name="save_slot">Слот сохранения</string>
-  <string name="empty_slot">%1. &lt;Пусто&gt;</string>
+  <string name="empty_slot">%1$d. &lt;Пусто&gt;</string>
   <string name="quick_slot">Быстрый слот</string>
   <string name="saved">Сохранено</string>
   <string name="loaded">Загружено</string>
@@ -777,15 +777,15 @@
   <string name="external_hint_open">Запустить</string>
   <string name="external_hint_favorite">Избранное</string>
   <string name="save_state_slot_quick">Быстрое сохранение</string>
-  <string name="save_state_slot_number">Слот %1</string>
+  <string name="save_state_slot_number">Слот %1$d</string>
   <string name="save_state_empty_slot">Пустой слот</string>
   <string name="cheats_footer_note">Читы применяются мгновенно во время игры.</string>
   <string name="external_choose_on_device">Выбрать на устройстве</string>
   <string name="rom_sort_recent_chip">Недавние</string>
   <string name="rom_sort_most_played_chip">Частые</string>
-  <string name="rom_games_count">Всего игр: %1</string>
-  <string name="rom_total_play_time_format">Время игры: %1</string>
-  <string name="rom_last_played_format">Запускалось: %1</string>
+  <string name="rom_games_count">Всего игр: %1$d</string>
+  <string name="rom_total_play_time_format">Время игры: %1$s</string>
+  <string name="rom_last_played_format">Запускалось: %1$s</string>
   <string name="max_rom_cache_size">Максимальный размер кэша</string>
   <string name="clear_extracted_rom_cache">Очистить кэш распакованных РОМов</string>
   <string name="cache_size">Размер кэша</string>
@@ -866,7 +866,7 @@
   <string name="video_vulkan_driver_unsupported">Пользовательские драйверы не поддерживаются</string>
   <string name="video_vulkan_driver_no_custom">Кастомный драйвер не установлен</string>
   <string name="video_vulkan_driver_active_system">Активен системный драйвер</string>
-  <string name="video_vulkan_driver_active_custom">Активен кастомный драйвер: %1</string>
+  <string name="video_vulkan_driver_active_custom">Активен кастомный драйвер: %1$s</string>
   <string name="video_vulkan_driver_import_success">Драйвер успешно установлен</string>
   <string name="video_vulkan_driver_import_failed">Ошибка установки драйвера</string>
   <string name="video_vulkan_driver_import_not_zip">Файл должен быть ZIP-архивом</string>
@@ -908,7 +908,7 @@
   <string name="interpolation">Интерполяция звука</string>
   <string name="bitrate">Разрядность вывода</string>
   <string name="volume">Громкость</string>
-  <string name="volume_percentage">Громкость: %1%%</string>
+  <string name="volume_percentage">Громкость: %1$d%%</string>
   <string name="microphone_source">Источник микрофона</string>
   <string name="controller_layout">Макет кнопок управления</string>
   <string name="save_next_rom">Автосохранение следующей игры</string>
