@@ -874,15 +874,22 @@ class FileSystemRomsRepository(
         if (directoryUri.scheme != "content") {
             return true
         }
+        val document = DocumentFile.fromTreeUri(context, directoryUri)
+        if (document?.canRead() == true) {
+            return true
+        }
         return context.contentResolver.persistedUriPermissions.any { permission ->
-            permission.isReadPermission && permission.uri == directoryUri
+            permission.isReadPermission && (permission.uri == directoryUri || permission.uri.toString() == directoryUri.toString())
         }
     }
 
     private fun isRomInDirectory(rom: Rom, directoryUri: Uri): Boolean {
         val parentUri = rom.parentTreeUri ?: return true
         val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull() ?: return true
-        val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull() ?: return true
+        val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull()
+            ?: runCatching { DocumentsContract.getTreeDocumentId(parentUri) }.getOrNull()
+            ?: parentUri.lastPathSegment
+            ?: return true
         return parentDocId.startsWith(directoryDocId)
     }
 

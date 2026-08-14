@@ -146,9 +146,13 @@ fun RomBrowserScreen(
 
     DisposableEffect(state.viewMode, focusedEntryIndex, firstRomEntryIndexInLastGridRow, state.entries.size, onDpadDownGateChanged) {
         onDpadDownGateChanged {
-            when (state.viewMode) {
-                RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
-                RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
+            if (state.entries.isEmpty() || focusedEntryIndex < 0) {
+                false
+            } else {
+                when (state.viewMode) {
+                    RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
+                    RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
+                }
             }
         }
         onDispose {
@@ -156,21 +160,25 @@ fun RomBrowserScreen(
         }
     }
 
-    LaunchedEffect(state.viewMode, firstRomEntryIndexInLastGridRow) {
-        snapshotFlow {
-            when (state.viewMode) {
-                RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
-                RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
-            }
-        }
-            .distinctUntilChanged()
-            .filter { atBottom -> atBottom }
-            .collect {
+    LaunchedEffect(state.viewMode, firstRomEntryIndexInLastGridRow, state.entries.size, focusedEntryIndex) {
+        if (state.entries.isNotEmpty() && focusedEntryIndex >= 0) {
+            snapshotFlow {
                 when (state.viewMode) {
-                    RomViewMode.GRID -> gridState.scroll(MutatePriority.PreventUserInput) {}
-                    RomViewMode.LIST -> listState.scroll(MutatePriority.PreventUserInput) {}
+                    RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
+                    RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
                 }
             }
+                .distinctUntilChanged()
+                .filter { atBottom -> atBottom }
+                .collect {
+                    runCatching {
+                        when (state.viewMode) {
+                            RomViewMode.GRID -> gridState.scroll(MutatePriority.PreventUserInput) {}
+                            RomViewMode.LIST -> listState.scroll(MutatePriority.PreventUserInput) {}
+                        }
+                    }
+                }
+        }
     }
 
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
