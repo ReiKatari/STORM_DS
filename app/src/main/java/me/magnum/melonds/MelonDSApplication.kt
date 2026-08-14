@@ -80,10 +80,25 @@ class MelonDSApplication : Application(), Configuration.Provider {
                     appendLine("========================================================")
                 }
 
-                getExternalFilesDir(null)?.let { externalDir ->
-                    File(externalDir, "storm_crash.log").writeText(report)
+                // 1. Write to public Downloads directory (visible directly in MTP on PC!)
+                runCatching {
+                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    if (downloadsDir != null && (downloadsDir.exists() || downloadsDir.mkdirs())) {
+                        File(downloadsDir, "STORM_DS_CRASH.txt").writeText(report)
+                    }
                 }
-                File(filesDir, "storm_crash.log").writeText(report)
+
+                // 2. Write to external app files dir (Android/data/com.stormds.emulator/files/storm_crash.log)
+                runCatching {
+                    getExternalFilesDir(null)?.let { externalDir ->
+                        File(externalDir, "storm_crash.log").writeText(report)
+                    }
+                }
+
+                // 3. Write to internal app files dir
+                runCatching {
+                    File(filesDir, "storm_crash.log").writeText(report)
+                }
             }
             previousHandler?.uncaughtException(thread, throwable)
         }
