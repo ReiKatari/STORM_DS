@@ -56,6 +56,15 @@
             android:summary="@string/video_retroarch_shader_preset_summary"
             app:iconSpaceReserved="false" />
 
+    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+            android:key="video_retroarch_shader_root"
+            android:title="@string/video_retroarch_shader_root_title"
+            android:summary="@string/video_retroarch_shader_root_summary"
+            app:iconSpaceReserved="false"
+            app:type="directory"
+            app:permissions="read"
+            app:persistPermissions="true" />
+
     <PreferenceScreen
             android:key="video_retroarch_shader_settings"
             android:title="@string/video_retroarch_shader_settings_title"
@@ -77,15 +86,6 @@
                 android:summary="@string/video_retroarch_shader_install_summary"
                 app:iconSpaceReserved="false"
                 android:persistent="false" />
-
-        <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
-                android:key="video_retroarch_shader_root"
-                android:title="@string/video_retroarch_shader_root_title"
-                android:summary="@string/video_retroarch_shader_root_summary"
-                app:iconSpaceReserved="false"
-                app:type="directory"
-                app:permissions="read"
-                app:persistPermissions="true" />
 
         <EditTextPreference
                 android:key="video_retroarch_shader_parameters"

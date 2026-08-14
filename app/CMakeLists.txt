@@ -134,16 +134,20 @@ set(VULKAN_SHADER_HEADERS
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterCompatibilityFragmentShaderData.h"
 )
 
-add_custom_command(
-        OUTPUT ${VULKAN_SHADER_HEADERS}
-        COMMAND bash "${VULKAN_SPIRV_REGEN_SCRIPT}"
-        DEPENDS "${VULKAN_SPIRV_REGEN_SCRIPT}" ${VULKAN_SHADER_SOURCES}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
-        COMMENT "Regenerating Vulkan SPIR-V headers"
-        VERBATIM
-)
-
-add_custom_target(regenerate_vulkan_spirv_headers DEPENDS ${VULKAN_SHADER_HEADERS})
+find_program(BASH_EXECUTABLE bash)
+if (BASH_EXECUTABLE AND NOT CMAKE_HOST_WIN32 AND NOT WIN32)
+    add_custom_command(
+            OUTPUT ${VULKAN_SHADER_HEADERS}
+            COMMAND ${BASH_EXECUTABLE} "${VULKAN_SPIRV_REGEN_SCRIPT}"
+            DEPENDS "${VULKAN_SPIRV_REGEN_SCRIPT}" ${VULKAN_SHADER_SOURCES}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+            COMMENT "Regenerating Vulkan SPIR-V headers"
+            VERBATIM
+    )
+    add_custom_target(regenerate_vulkan_spirv_headers DEPENDS ${VULKAN_SHADER_HEADERS})
+else()
+    add_custom_target(regenerate_vulkan_spirv_headers COMMENT "Vulkan SPIR-V headers pre-generated")
+endif()
 
 add_subdirectory("${CORE_LIB_DIR}" ./melonDS-android-lib)
 if (TARGET core)
