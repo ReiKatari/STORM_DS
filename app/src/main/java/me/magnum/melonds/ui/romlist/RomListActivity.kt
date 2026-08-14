@@ -74,11 +74,7 @@ class RomListActivity : AppCompatActivity() {
         binding = ActivityRomListBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
-        supportActionBar?.apply {
-            setDisplayShowHomeEnabled(true)
-            setLogo(R.drawable.ic_watermelon_mark)
-            setDisplayUseLogoEnabled(true)
-        }
+        supportActionBar?.hide()
 
         var defaultContentInsetLeft = -1
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
@@ -338,7 +334,7 @@ class RomListActivity : AppCompatActivity() {
     }
 
     private fun addNoSearchDirectoriesFragment() {
-        supportActionBar?.show()
+        supportActionBar?.hide()
         var noRomDirectoriesFragment = supportFragmentManager.findFragmentByTag(FRAGMENT_NO_ROM_DIRECTORIES) as NoRomSearchDirectoriesFragment?
         if (noRomDirectoriesFragment == null) {
             noRomDirectoriesFragment = NoRomSearchDirectoriesFragment.newInstance()
