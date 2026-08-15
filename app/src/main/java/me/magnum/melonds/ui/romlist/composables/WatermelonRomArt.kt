@@ -70,6 +70,25 @@ fun romGradient(title: String): Brush {
 
 fun romPlatformLabel(rom: Rom): String = if (rom.isDsiWareTitle) "DSi" else "DS"
 
+fun resolveRomRegionFlag(rom: Rom): String {
+    val name = rom.fileName.uppercase()
+    return when {
+        "(USA)" in name || "(US)" in name || " (U)" in name || "(USA," in name || "(US," in name -> "🇺🇸"
+        "(EUROPE)" in name || "(EUR)" in name || " (E)" in name || "(EU)" in name || "(EN," in name || "(EN)" in name -> "🇪🇺"
+        "(JAPAN)" in name || "(JAP)" in name || "(JPN)" in name || " (J)" in name -> "🇯🇵"
+        "(KOREA)" in name || "(KOR)" in name || " (K)" in name -> "🇰🇷"
+        "(CHINA)" in name || "(CHN)" in name || " (C)" in name -> "🇨🇳"
+        "(GERMANY)" in name || "(GER)" in name || " (DE)" in name || "(DE," in name -> "🇩🇪"
+        "(FRANCE)" in name || "(FRA)" in name || " (FR)" in name || "(FR," in name -> "🇫🇷"
+        "(ITALY)" in name || "(ITA)" in name || " (IT)" in name || "(IT," in name -> "🇮🇹"
+        "(SPAIN)" in name || "(SPA)" in name || " (ES)" in name || "(ES," in name -> "🇪🇸"
+        "(RUSSIA)" in name || "(RUS)" in name || " (RU)" in name || "(RU," in name -> "🇷🇺"
+        "(AUSTRALIA)" in name || "(AUS)" in name || "(AU)" in name -> "🇦🇺"
+        "(WORLD)" in name || "(GLOBAL)" in name -> "🌐"
+        else -> ""
+    }
+}
+
 fun formatHoursLabel(duration: Duration): String {
     if (duration == Duration.ZERO) return ""
     val hours = duration.inWholeHours

@@ -11,9 +11,8 @@
     <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/layoutGridColours"
             android:layout_width="0dp"
-            android:layout_height="0dp"
+            android:layout_height="wrap_content"
             android:padding="8dp"
-            app:layout_constraintDimensionRatio="1:1"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -22,11 +21,10 @@
         <LinearLayout
                 android:id="@+id/layoutColourRow0"
                 android:layout_width="0dp"
-                android:layout_height="0dp"
+                android:layout_height="48dp"
                 android:orientation="horizontal"
                 app:layout_constraintBottom_toTopOf="@+id/layoutColourRow1"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
 
@@ -58,10 +56,9 @@
         <LinearLayout
                 android:id="@+id/layoutColourRow1"
                 android:layout_width="0dp"
-                android:layout_height="0dp"
+                android:layout_height="48dp"
                 app:layout_constraintBottom_toTopOf="@+id/layoutColourRow2"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/layoutColourRow0">
 
@@ -93,10 +90,9 @@
         <LinearLayout
                 android:id="@+id/layoutColourRow2"
                 android:layout_width="0dp"
-                android:layout_height="0dp"
+                android:layout_height="48dp"
                 app:layout_constraintBottom_toTopOf="@+id/layoutColourRow3"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/layoutColourRow1">
 
@@ -128,10 +124,9 @@
         <LinearLayout
                 android:id="@+id/layoutColourRow3"
                 android:layout_width="0dp"
-                android:layout_height="0dp"
-                app:layout_constraintBottom_toBottomOf="parent"
+                android:layout_height="48dp"
+                app:layout_constraintBottom_toTopOf="@+id/layoutColourRow4"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/layoutColourRow2">
 
@@ -158,6 +153,74 @@
                     style="@style/ColourTile"
                     android:backgroundTint="#FB0092"
                     android:tag="15" />
+        </LinearLayout>
+
+        <LinearLayout
+                android:id="@+id/layoutColourRow4"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                app:layout_constraintBottom_toTopOf="@+id/layoutColourRow5"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/layoutColourRow3">
+
+            <View
+                    android:id="@+id/viewColour40"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#FFFFFF"
+                    android:tag="16" />
+
+            <View
+                    android:id="@+id/viewColour41"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#121418"
+                    android:tag="17" />
+
+            <View
+                    android:id="@+id/viewColour42"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#00E5FF"
+                    android:tag="18" />
+
+            <View
+                    android:id="@+id/viewColour43"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#FFD700"
+                    android:tag="19" />
+        </LinearLayout>
+
+        <LinearLayout
+                android:id="@+id/layoutColourRow5"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/layoutColourRow4">
+
+            <View
+                    android:id="@+id/viewColour50"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#E0115F"
+                    android:tag="20" />
+
+            <View
+                    android:id="@+id/viewColour51"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#00E676"
+                    android:tag="21" />
+
+            <View
+                    android:id="@+id/viewColour52"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#FF6E40"
+                    android:tag="22" />
+
+            <View
+                    android:id="@+id/viewColour53"
+                    style="@style/ColourTile"
+                    android:backgroundTint="#651FFF"
+                    android:tag="23" />
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
