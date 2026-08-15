@@ -297,6 +297,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 LayoutComponent.BUTTON_QUICK_SAVE -> drawQuickSaveIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_QUICK_LOAD -> drawQuickLoadIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_HINGE -> drawHingeIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_TRANSLATE -> drawTranslateIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
                     drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.35f, w - padding * 2, style)
@@ -521,5 +522,18 @@ class ModernSingleButtonView @JvmOverloads constructor(
             }
             canvas.drawLine(cx - size * 0.35f, cy + size * 0.35f, cx + size * 0.35f, cy - size * 0.35f, slashPaint)
         }
+    }
+
+    private fun drawTranslateIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val r = size * 0.38f
+        val globePaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.6f
+        }
+        canvas.drawCircle(cx, cy, r, globePaint)
+        canvas.drawLine(cx - r, cy, cx + r, cy, globePaint)
+        canvas.drawLine(cx, cy - r, cx, cy + r, globePaint)
+        val ovalRect = RectF(cx - r * 0.48f, cy - r, cx + r * 0.48f, cy + r)
+        canvas.drawOval(ovalRect, globePaint)
     }
 }

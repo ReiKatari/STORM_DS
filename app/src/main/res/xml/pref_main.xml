@@ -74,6 +74,14 @@
             android:fragment="me.magnum.melonds.ui.settings.fragments.CheatsPreferencesFragment" />
 
     <Preference
+            android:key="settings_home_translator"
+            android:title="@string/category_translator"
+            android:summary="@string/category_translator_summary"
+            app:icon="@drawable/ic_translate"
+            android:layout="@layout/preference_main_card"
+            android:fragment="me.magnum.melonds.ui.settings.fragments.TranslatorPreferencesFragment" />
+
+    <Preference
             android:key="settings_home_about"
             android:title="@string/about_app_title"
             android:summary="@string/about_app_summary"
