@@ -159,13 +159,13 @@ fun RomListRow(
             }
         }
         Spacer(Modifier.width(8.dp))
-        val regionFlag = resolveRomRegionFlag(rom)
+        val regionBadge = resolveRomRegionBadge(rom)
         Column(horizontalAlignment = Alignment.End) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (regionFlag.isNotEmpty()) {
-                    Text(
-                        text = regionFlag,
-                        fontSize = 12.sp,
+                if (regionBadge != null) {
+                    RegionBadge(
+                        flag = regionBadge.first,
+                        code = regionBadge.second,
                         modifier = Modifier.padding(end = 5.dp),
                     )
                 }

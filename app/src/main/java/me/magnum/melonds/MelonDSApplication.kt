@@ -20,6 +20,9 @@ import kotlinx.coroutines.launch
 import me.magnum.melonds.common.UriFileHandler
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.repositories.SettingsRepository
+import me.magnum.melonds.ui.common.views.ButtonThemeManager
+import me.magnum.melonds.ui.romlist.RomDisplayNameManager
+import me.magnum.melonds.ui.theme.AppThemeManager
 import me.magnum.melonds.impl.AppLogFileRecorder
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.impl.retroachievements.offline.HardcoreOfflineLossTracker
@@ -53,6 +56,9 @@ class MelonDSApplication : Application(), Configuration.Provider {
         super.onCreate()
         installCrashHandler()
         giveLibrashaderACacheDirectory()
+        ButtonThemeManager.init(this)
+        AppThemeManager.init(this)
+        RomDisplayNameManager.init(this)
         createNotificationChannels()
         applyTheme()
         performMigrations()

@@ -1209,4 +1209,7 @@
         <item>classic_grey</item>
         <item>snes_super</item>
     </string-array>
+    <string name="rom_display_name_mode">Game Title Display</string>
+    <string name="rom_display_name_mode_file_name">File name (without extension)</string>
+    <string name="rom_display_name_mode_internal">Internal game title (from ROM/Database)</string>
 </resources>
