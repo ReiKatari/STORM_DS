@@ -228,19 +228,19 @@ class ModernButtonsView @JvmOverloads constructor(
 
             // Authentic 3D Nintendo DS Cap Gradient Shading
             val (cTop, cBottom) = when (style) {
-                ButtonColorStyle.CLASSIC_WHITE -> Pair(Color.parseColor("#FFFFFF"), Color.parseColor("#D4D8E2"))
-                ButtonColorStyle.CLASSIC_GREY -> Pair(Color.parseColor("#717E91"), Color.parseColor("#444E5E"))
-                ButtonColorStyle.CRIMSON_RUBY -> Pair(Color.parseColor("#FF2A37"), Color.parseColor("#99060E"))
-                ButtonColorStyle.MIDNIGHT_PURPLE -> Pair(Color.parseColor("#A855F7"), Color.parseColor("#581C87"))
-                ButtonColorStyle.GOLD_LUXURY -> Pair(Color.parseColor("#FBBF24"), Color.parseColor("#92400E"))
-                ButtonColorStyle.EMERALD_MATRIX -> Pair(Color.parseColor("#00E676"), Color.parseColor("#006932"))
+                ButtonColorStyle.CLASSIC_WHITE -> Pair(Color.parseColor("#FFFFFF"), Color.parseColor("#CBD5E1"))
+                ButtonColorStyle.CLASSIC_GREY -> Pair(Color.parseColor("#64748B"), Color.parseColor("#334155"))
+                ButtonColorStyle.CRIMSON_RUBY -> Pair(Color.parseColor("#DC2626"), Color.parseColor("#5B090E"))
+                ButtonColorStyle.MIDNIGHT_PURPLE -> Pair(Color.parseColor("#9333EA"), Color.parseColor("#3B0764"))
+                ButtonColorStyle.GOLD_LUXURY -> Pair(Color.parseColor("#D97706"), Color.parseColor("#5C2B05"))
+                ButtonColorStyle.EMERALD_MATRIX -> Pair(Color.parseColor("#059669"), Color.parseColor("#022C22"))
                 ButtonColorStyle.SNES_SUPER -> when (input) {
-                    Input.A -> Pair(Color.parseColor("#FF5252"), Color.parseColor("#C62828"))
-                    Input.B -> Pair(Color.parseColor("#FFD54F"), Color.parseColor("#F57F17"))
-                    Input.X -> Pair(Color.parseColor("#42A5F5"), Color.parseColor("#1565C0"))
-                    else -> Pair(Color.parseColor("#26A69A"), Color.parseColor("#00695C"))
+                    Input.A -> Pair(Color.parseColor("#DC2626"), Color.parseColor("#7F1D1D"))
+                    Input.B -> Pair(Color.parseColor("#F59E0B"), Color.parseColor("#78350F"))
+                    Input.X -> Pair(Color.parseColor("#2563EB"), Color.parseColor("#1E3A8A"))
+                    else -> Pair(Color.parseColor("#059669"), Color.parseColor("#064E3B"))
                 }
-                else -> Pair(Color.parseColor("#2E3846"), Color.parseColor("#151A22"))
+                else -> Pair(Color.parseColor("#334155"), Color.parseColor("#0F172A"))
             }
 
             val capGradient = RadialGradient(
@@ -268,6 +268,12 @@ class ModernButtonsView @JvmOverloads constructor(
                     ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
                     ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
                     ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
+                    ButtonColorStyle.SNES_SUPER -> when (input) {
+                        Input.A -> Color.parseColor("#FF1744")
+                        Input.B -> Color.parseColor("#FBBF24")
+                        Input.X -> Color.parseColor("#60A5FA")
+                        else -> Color.parseColor("#34D399")
+                    }
                     else -> Color.parseColor("#00E5FF")
                 }
                 canvas.drawCircle(bx, by, buttonRadius, activeStrokePaint)
@@ -285,7 +291,7 @@ class ModernButtonsView @JvmOverloads constructor(
                     ButtonColorStyle.GOLD_LUXURY -> Color.WHITE
                     ButtonColorStyle.EMERALD_MATRIX -> Color.WHITE
                     ButtonColorStyle.SNES_SUPER -> when (input) {
-                        Input.B -> Color.parseColor("#1E293B")
+                        Input.B -> Color.parseColor("#0F172A")
                         else -> Color.WHITE
                     }
                     else -> Color.parseColor("#00E5FF")
@@ -293,7 +299,10 @@ class ModernButtonsView @JvmOverloads constructor(
             } else {
                 textPaint.color = when (style) {
                     ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0F172A")
-                    ButtonColorStyle.SNES_SUPER -> Color.WHITE
+                    ButtonColorStyle.SNES_SUPER -> when (input) {
+                        Input.B -> Color.parseColor("#0F172A")
+                        else -> Color.WHITE
+                    }
                     ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
                     ButtonColorStyle.GOLD_LUXURY -> Color.WHITE
                     ButtonColorStyle.EMERALD_MATRIX -> Color.WHITE

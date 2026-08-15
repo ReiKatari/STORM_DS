@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -94,12 +95,13 @@ fun RomListRow(
                 onClick = onClick,
                 onLongClick = onLongPress,
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 1. Column 1: Box Art with fixed-position badges
         Box(
             modifier = Modifier
-                .width(44.dp)
+                .width(48.dp)
                 .aspectRatio(DsBoxArtAspectRatio)
                 .clip(RoundedCornerShape(6.dp)),
         ) {
@@ -107,60 +109,79 @@ fun RomListRow(
                 rom = rom,
                 boxArtUrl = boxArtUrl,
                 raCoverUrl = coverUrl,
-                initialsFontSize = 17.sp,
+                initialsFontSize = 18.sp,
                 boxArtLoading = boxArtLoading,
                 modifier = Modifier.fillMaxSize(),
             )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = romDisplayName(rom),
-                    color = colors.text,
-                    fontSize = 13.5.sp,
-                    lineHeight = 17.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (rom.isFavorite) {
-                    Spacer(Modifier.width(5.dp))
+            if (rom.isFavorite) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .padding(2.dp),
+                ) {
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
                         tint = WatermelonColors.favoriteStar,
-                        modifier = Modifier.padding(top = 2.dp).size(13.dp),
+                        modifier = Modifier.size(10.dp),
                     )
                 }
-                if (showAchievementBadge) {
-                    Spacer(Modifier.width(4.dp))
+            }
+            if (showAchievementBadge) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(2.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color.Black.copy(alpha = 0.70f))
+                        .padding(horizontal = 2.5.dp, vertical = 1.dp),
+                ) {
                     Icon(
                         imageVector = Icons.Filled.EmojiEvents,
                         contentDescription = null,
                         tint = WatermelonColors.gold,
-                        modifier = Modifier.padding(top = 2.dp).size(13.dp),
+                        modifier = Modifier.size(9.5.dp),
                     )
                 }
             }
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        // 2. Column 2: Title (up to 3 lines) & Developer/Subtitle
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = romDisplayName(rom),
+                color = colors.text,
+                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                fontSize = 13.5.sp,
+                lineHeight = 17.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
             val subtitle = buildSubtitle(rom, context)
             if (subtitle.isNotEmpty()) {
                 Text(
                     text = subtitle,
                     color = colors.text3,
+                    fontFamily = me.magnum.melonds.ui.theme.Manrope,
                     fontSize = 11.5.sp,
                     lineHeight = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 3.dp),
+                    modifier = Modifier.padding(top = 2.5.dp),
                 )
             }
         }
-        Spacer(Modifier.width(8.dp))
+
+        Spacer(Modifier.width(10.dp))
+
+        // 3. Column 3: Region Badge & Platform Tag
         val regionBadge = resolveRomRegionBadge(rom)
         Column(horizontalAlignment = Alignment.End) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -175,15 +196,15 @@ fun RomListRow(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .background(colors.surface2)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .padding(horizontal = 5.5.dp, vertical = 2.dp),
                 ) {
                     Text(
-                        text = if (rom.isDsiWareTitle) "DSiWARE" else "DS",
+                        text = if (rom.isDsiWareTitle) "DSi" else "DS",
                         color = colors.text2,
                         fontFamily = WatermelonMono,
-                        fontSize = 8.sp,
-                        lineHeight = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 8.5.sp,
+                        lineHeight = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                     )
                 }
@@ -200,10 +221,12 @@ fun RomListRow(
                 )
             }
         }
+
+        // 4. Column 4: Config Action
         if (allowConfiguration) {
             IconButton(
                 onClick = onConfigClick,
-                modifier = Modifier.size(34.dp),
+                modifier = Modifier.size(34.dp).padding(start = 2.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.MoreVert,

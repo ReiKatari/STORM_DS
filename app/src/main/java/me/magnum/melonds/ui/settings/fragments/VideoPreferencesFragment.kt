@@ -1386,7 +1386,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             .show()
     }
 
+    private var isShaderInstallBackgrounded = false
+
     private fun startShaderInstall() {
+        isShaderInstallBackgrounded = false
         val request = OneTimeWorkRequestBuilder<RetroArchShaderInstallWorker>()
             .setConstraints(
                 Constraints.Builder()
@@ -1489,7 +1492,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun showShaderInstallProgressDialog() {
-        if (shaderInstallProgressDialog?.isShowing == true) {
+        if (isShaderInstallBackgrounded || shaderInstallProgressDialog?.isShowing == true) {
             return
         }
 
@@ -1516,7 +1519,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             .setTitle(R.string.video_retroarch_shader_install_notification_title)
             .setView(container)
             .setCancelable(false)
-            .setPositiveButton(R.string.move_to_background) { dialog, _ -> dialog.dismiss() }
+            .setPositiveButton(R.string.move_to_background) { dialog, _ ->
+                isShaderInstallBackgrounded = true
+                dialog.dismiss()
+            }
             .setNegativeButton(android.R.string.cancel) { dialog, _ ->
                 WorkManager.getInstance(context).cancelUniqueWork(RetroArchShaderInstallWorker.WORK_NAME)
                 dialog.dismiss()
@@ -1526,6 +1532,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun dismissShaderInstallProgressDialog() {
+        isShaderInstallBackgrounded = false
         shaderInstallProgressDialog?.dismiss()
         shaderInstallProgressDialog = null
         shaderInstallProgressBar = null
