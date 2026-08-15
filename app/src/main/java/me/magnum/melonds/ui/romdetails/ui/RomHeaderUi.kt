@@ -160,6 +160,41 @@ fun SaveActionsButton(
 }
 
 @Composable
+fun RomInfoChip(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.38f))
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = label.uppercase(),
+            color = Color.White.copy(alpha = 0.50f),
+            fontFamily = WatermelonMono,
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.4.sp,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(1.dp))
+        Text(
+            text = value,
+            color = Color.White.copy(alpha = 0.95f),
+            fontFamily = WatermelonMono,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun HeroCover(
     rom: Rom,
     boxArtUrl: String?,
@@ -340,7 +375,35 @@ fun RomHeroVertical(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
+
+            // Game metadata chips row (Filename, Last Played, RetroAchievements Hash)
+            val dateFormat = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()) }
+            val lastPlayedStr = rom.lastPlayed?.let { dateFormat.format(it) } ?: stringResource(R.string.rom_info_never)
+            val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(8).uppercase() else "NTR-ROM"
+
+            Row(
+                modifier = Modifier.fillMaxWidth(0.94f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                RomInfoChip(
+                    label = stringResource(R.string.rom_info_file),
+                    value = rom.fileName,
+                    modifier = Modifier.weight(1.1f),
+                )
+                RomInfoChip(
+                    label = stringResource(R.string.rom_info_last_played),
+                    value = lastPlayedStr,
+                    modifier = Modifier.weight(0.95f),
+                )
+                RomInfoChip(
+                    label = "ID / HASH",
+                    value = hashStr,
+                    modifier = Modifier.weight(0.85f),
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
 
             // 6. Action buttons centered
             Row(
@@ -438,6 +501,26 @@ fun RomHeroSidePanel(
                         fontFamily = WatermelonMono,
                         fontSize = 10.5.sp,
                         modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                val dateFormat = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()) }
+                val lastPlayedStr = rom.lastPlayed?.let { dateFormat.format(it) } ?: stringResource(R.string.rom_info_never)
+                val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(8).uppercase() else "NTR-ROM"
+
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    RomInfoChip(
+                        label = stringResource(R.string.rom_info_last_played),
+                        value = lastPlayedStr,
+                        modifier = Modifier.weight(1f),
+                    )
+                    RomInfoChip(
+                        label = "HASH",
+                        value = hashStr,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }

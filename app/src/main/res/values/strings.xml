@@ -1248,14 +1248,14 @@
     <string name="translator_pause_on_translate">Pause Game During Translation</string>
     <string name="translator_pause_on_translate_summary">Temporarily suspend gameplay while text overlay is visible</string>
     <string name="translator_overlay_style">Overlay Appearance</string>
-    <string name="translator_style_smart_match">Smart Game Background Match (Bubble Translate)</string>
+    <string name="translator_style_smart_match">Smart Game Background Inpainting</string>
     <string name="translator_style_semi_transparent">Semi-transparent Dark</string>
     <string name="translator_style_neon_bubble">Translucent Neon Bubble</string>
     <string name="translator_style_outline_only">Outline Only (No Background)</string>
     <string name="translator_bubble_opacity">Background Opacity</string>
     <string name="translator_font_size_scale">Font Size Scale</string>
     <string name="translator_show_floating_button">Show Floating Translate Button</string>
-    <string name="translator_show_floating_button_summary">Draggable \'文A\' button over the emulator screen</string>
+    <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
     <string name="translator_api_keys_category">API Keys &amp; Custom AI Configuration</string>
     <string name="translator_deepl_key">DeepL API Key</string>
     <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>
@@ -1282,4 +1282,7 @@
     <string name="toggle_visibility">Hide / Show</string>
     <string name="components_visibility_title">Manage Components</string>
     <string name="back">Back</string>
+    <string name="rom_info_file">File</string>
+    <string name="rom_info_last_played">Last played</string>
+    <string name="rom_info_never">Never</string>
 </resources>

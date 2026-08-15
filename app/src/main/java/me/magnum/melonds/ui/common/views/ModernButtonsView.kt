@@ -171,6 +171,12 @@ class ModernButtonsView @JvmOverloads constructor(
             }
         }
 
+        // Plate 3D drop shadow
+        canvas.save()
+        canvas.translate(2f, 4f)
+        canvas.drawPath(platePath, shadowPaint)
+        canvas.restore()
+
         canvas.drawPath(platePath, platePaint)
         canvas.drawPath(platePath, plateStrokePaint)
         canvas.drawCircle(cx, cy, offset, plateStrokePaint)
@@ -203,7 +209,7 @@ class ModernButtonsView @JvmOverloads constructor(
             canvas.scale(scale, scale, bx, by)
 
             // Realistic 3D ambient drop shadow
-            canvas.drawCircle(bx, by + buttonRadius * 0.16f, buttonRadius * 1.03f, shadowPaint)
+            canvas.drawCircle(bx + 1.5f, by + buttonRadius * 0.16f + 2f, buttonRadius * 1.05f, shadowPaint)
 
             // Active press glow
             if (glow > 0f) {
