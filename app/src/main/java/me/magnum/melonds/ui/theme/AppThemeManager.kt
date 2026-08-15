@@ -24,4 +24,11 @@ object AppThemeManager {
             }
         }
     }
+
+    fun updateTheme(context: Context, themeKey: String) {
+        val theme = Theme.fromPreference(themeKey)
+        themeState.value = theme
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putString("theme", themeKey).apply()
+    }
 }

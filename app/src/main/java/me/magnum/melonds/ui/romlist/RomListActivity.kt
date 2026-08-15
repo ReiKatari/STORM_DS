@@ -69,8 +69,14 @@ class RomListActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRomListBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         installSplashScreen()
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        val isLight = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme == me.magnum.melonds.ui.Theme.LIGHT
+        if (isLight) {
+            enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
+        } else {
+            enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        }
         super.onCreate(savedInstanceState)
         binding = ActivityRomListBinding.inflate(layoutInflater)
         setContentView(binding.root)
