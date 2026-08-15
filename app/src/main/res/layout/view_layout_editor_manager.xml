@@ -56,18 +56,9 @@
                 style="@style/Button.Editor" />
 
             <Button
-                android:id="@+id/button_edit_size"
-                app:layout_constraintBaseline_toBaselineOf="@id/button_delete_button"
-                app:layout_constraintStart_toEndOf="@id/button_edit_position"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/label_size"
-                style="@style/Button.Editor" />
-
-            <Button
                 android:id="@+id/button_toggle_visibility"
                 app:layout_constraintBaseline_toBaselineOf="@id/button_delete_button"
-                app:layout_constraintStart_toEndOf="@id/button_edit_size"
+                app:layout_constraintStart_toEndOf="@id/button_edit_position"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/toggle_visibility"
@@ -249,10 +240,53 @@
                 android:layout_gravity="center_vertical" />
 
             <LinearLayout
+                android:id="@+id/layout_button_scale_labels"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_constraintWidth_min="wrap"
+                app:layout_constraintTop_toBottomOf="@id/layout_spread_labels"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/barrier_labels"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground"
+                android:orientation="vertical"
+                android:paddingVertical="4dp"
+                android:paddingStart="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/textLayoutEditor"
+                    android:text="@string/label_button_scale" />
+
+                <TextView
+                    android:id="@+id/text_button_scale"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/textLayoutEditor"
+                    tools:text="100%" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/seek_bar_button_scale"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_constraintStart_toEndOf="@id/barrier_labels"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@id/layout_button_scale_labels"
+                app:layout_constraintBottom_toBottomOf="@id/layout_button_scale_labels"
+                android:padding="8dp"
+                android:min="60"
+                android:max="140"
+                android:progress="100"
+                android:layout_gravity="center_vertical" />
+
+            <LinearLayout
                 android:id="@+id/layout_alpha_labels"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:layout_constraintTop_toBottomOf="@id/layout_spread_labels"
+                app:layout_constraintTop_toBottomOf="@id/layout_button_scale_labels"
                 app:layout_constraintStart_toStartOf="parent"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"

@@ -87,29 +87,48 @@ class ModernSingleButtonView @JvmOverloads constructor(
         }
     }
 
+    private var isStickyLocked: Boolean = false
+    private var holdTimerRunnable: Runnable? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         val isPressed = pressedInputs.isNotEmpty()
-        animator?.cancel()
+        val isCurrentlyDown = buttonScale < 0.95f
 
-        if (!isPressed) {
-            buttonScale = 1.0f
-            buttonGlow = 0.0f
-            invalidate()
-        } else {
-            val startScale = buttonScale
-            val startGlow = buttonGlow
+        if (isPressed) {
+            if (!isCurrentlyDown) {
+                buttonScale = 0.86f
+                buttonGlow = 1.0f
 
-            animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 50L
-                addUpdateListener { anim ->
-                    val fraction = anim.animatedFraction
-                    buttonScale = startScale + (0.86f - startScale) * fraction
-                    buttonGlow = startGlow + (1.0f - startGlow) * fraction
+                val holdRunnable = Runnable {
+                    isStickyLocked = true
                     invalidate()
                 }
+                holdTimerRunnable = holdRunnable
+                mainHandler.postDelayed(holdRunnable, 3000L)
             }
-            animator?.start()
+        } else {
+            if (isCurrentlyDown) {
+                holdTimerRunnable?.let { mainHandler.removeCallbacks(it) }
+                holdTimerRunnable = null
+
+                if (isStickyLocked) {
+                    isStickyLocked = false
+                    buttonScale = 1.0f
+                    buttonGlow = 0.0f
+                } else {
+                    buttonScale = 1.0f
+                    buttonGlow = 0.0f
+                }
+            } else if (isStickyLocked) {
+                buttonScale = 1.0f
+                buttonGlow = 1.0f
+            } else {
+                buttonScale = 1.0f
+                buttonGlow = 0.0f
+            }
         }
+        invalidate()
     }
 
     private fun getLabel(): String {

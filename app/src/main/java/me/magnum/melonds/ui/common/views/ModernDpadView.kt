@@ -93,6 +93,10 @@ class ModernDpadView @JvmOverloads constructor(
     private val directionGlows = mutableMapOf<Input, Float>()
     private val directionAnimators = mutableMapOf<Input, ValueAnimator>()
 
+    private val stickyLockedInputs = mutableSetOf<Input>()
+    private val holdTimerRunnables = mutableMapOf<Input, Runnable>()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     init {
         dpadInputs.forEach { input ->
             directionScales[input] = 1.0f
@@ -103,25 +107,39 @@ class ModernDpadView @JvmOverloads constructor(
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         dpadInputs.forEach { input ->
             val isPressed = input in pressedInputs
-            directionAnimators[input]?.cancel()
+            val isCurrentlyDown = (directionScales[input] ?: 1.0f) < 0.95f
 
-            if (!isPressed) {
-                directionScales[input] = 1.0f
-                directionGlows[input] = 0.0f
-            } else {
-                val startScale = directionScales[input] ?: 1.0f
-                val startGlow = directionGlows[input] ?: 0.0f
-                val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                    duration = 50L
-                    addUpdateListener { anim ->
-                        val fraction = anim.animatedFraction
-                        directionScales[input] = startScale + (0.90f - startScale) * fraction
-                        directionGlows[input] = startGlow + (1.0f - startGlow) * fraction
+            if (isPressed) {
+                if (!isCurrentlyDown) {
+                    directionScales[input] = 0.90f
+                    directionGlows[input] = 1.0f
+
+                    val holdRunnable = Runnable {
+                        stickyLockedInputs.add(input)
                         invalidate()
                     }
+                    holdTimerRunnables[input] = holdRunnable
+                    mainHandler.postDelayed(holdRunnable, 3000L)
                 }
-                directionAnimators[input] = animator
-                animator.start()
+            } else {
+                if (isCurrentlyDown) {
+                    holdTimerRunnables.remove(input)?.let { mainHandler.removeCallbacks(it) }
+
+                    if (input in stickyLockedInputs) {
+                        stickyLockedInputs.remove(input)
+                        directionScales[input] = 1.0f
+                        directionGlows[input] = 0.0f
+                    } else {
+                        directionScales[input] = 1.0f
+                        directionGlows[input] = 0.0f
+                    }
+                } else if (input in stickyLockedInputs) {
+                    directionScales[input] = 1.0f
+                    directionGlows[input] = 1.0f
+                } else {
+                    directionScales[input] = 1.0f
+                    directionGlows[input] = 0.0f
+                }
             }
         }
         invalidate()
