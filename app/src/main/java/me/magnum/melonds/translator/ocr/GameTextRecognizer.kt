@@ -47,7 +47,15 @@ class GameTextRecognizer {
         val visionText: Text = try {
             recognizer.processAsync(inputImage)
         } catch (e: Exception) {
-            return@withContext emptyList()
+            try {
+                if (recognizer != latinRecognizer) {
+                    latinRecognizer.processAsync(inputImage)
+                } else {
+                    return@withContext emptyList()
+                }
+            } catch (t: Exception) {
+                return@withContext emptyList()
+            }
         }
 
         val resultBlocks = mutableListOf<TranslatedTextBlock>()
@@ -89,10 +97,14 @@ class GameTextRecognizer {
         suspendCancellableCoroutine { continuation ->
             process(image)
                 .addOnSuccessListener { text ->
-                    continuation.resume(text, onCancellation = null)
+                    if (continuation.isActive) {
+                        continuation.resume(text, onCancellation = null)
+                    }
                 }
                 .addOnFailureListener { exception ->
-                    continuation.resumeWithException(exception)
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(exception)
+                    }
                 }
         }
 
