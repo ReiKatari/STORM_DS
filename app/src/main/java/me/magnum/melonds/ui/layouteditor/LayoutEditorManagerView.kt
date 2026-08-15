@@ -220,18 +220,24 @@ class LayoutEditorManagerView(
         addView(composeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            val cutoutInsets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            val systemBarInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val topPadding = maxOf(cutoutInsets.top, systemBarInsets.top)
+            val bottomPadding = maxOf(cutoutInsets.bottom, systemBarInsets.bottom)
+            val leftPadding = maxOf(cutoutInsets.left, systemBarInsets.left)
+            val rightPadding = maxOf(cutoutInsets.right, systemBarInsets.right)
+
             binding.layoutScalingContainer.setPadding(
-                insets.left,
+                leftPadding,
                 0,
-                insets.right,
-                insets.bottom,
+                rightPadding,
+                bottomPadding,
             )
             binding.layoutControls.setPadding(
-                insets.left,
+                leftPadding,
+                topPadding,
+                rightPadding,
                 0,
-                insets.right,
-                insets.bottom,
             )
 
             WindowInsetsCompat.CONSUMED
@@ -772,46 +778,13 @@ class LayoutEditorManagerView(
     }
 
     private fun showBottomControls(animate: Boolean = true) {
-        if (areBottomControlsShown) {
-            return
-        }
-
-        binding.layoutControls.clearAnimation()
-        if (animate) {
-            binding.layoutControls
-                .animate()
-                .y(binding.layoutControls.bottom.toFloat() - binding.layoutControls.height.toFloat())
-                .setDuration(CONTROLS_SLIDE_ANIMATION_DURATION_MS)
-                .withStartAction {
-                    binding.layoutControls.isVisible = true
-                }
-                .start()
-        } else {
-            binding.layoutControls.isVisible = true
-        }
-
+        binding.layoutControls.isVisible = true
         areBottomControlsShown = true
     }
 
     private fun hideBottomControls(animate: Boolean = true) {
-        if (!areBottomControlsShown) {
-            return
-        }
-
-        if (animate) {
-            binding.layoutControls.clearAnimation()
-            binding.layoutControls.animate()
-                .y(binding.layoutControls.bottom.toFloat())
-                .setDuration(CONTROLS_SLIDE_ANIMATION_DURATION_MS)
-                .withEndAction {
-                    binding.layoutControls.isGone = true
-                }
-                .start()
-        } else {
-            binding.layoutControls.isGone = true
-        }
-
-        areBottomControlsShown = false
+        binding.layoutControls.isVisible = true
+        areBottomControlsShown = true
     }
 
     private fun showScalingControls(
