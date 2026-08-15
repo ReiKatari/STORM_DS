@@ -373,6 +373,10 @@ class EmulatorActivity : AppCompatActivity() {
         )
     }
 
+    private val screenCaptureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        translatorManager.onMediaProjectionResult(result.resultCode, result.data)
+    }
+
     private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val logoutRequested =
             result.resultCode == RESULT_OK &&
@@ -589,6 +593,9 @@ class EmulatorActivity : AppCompatActivity() {
             setSystemInputHandler(melonTouchHandler)
         }
         translatorManager.attachOverlay(binding.viewTranslationOverlay)
+        translatorManager.requestMediaProjectionPermission = { captureIntent ->
+            screenCaptureLauncher.launch(captureIntent)
+        }
 
         val layoutChangeListener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             val oldWith = oldRight - oldLeft

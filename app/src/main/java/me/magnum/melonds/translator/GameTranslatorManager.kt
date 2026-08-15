@@ -53,12 +53,16 @@ class GameTranslatorManager(
         .build()
 
     private val textRecognizer = GameTextRecognizer()
+    private val mediaProjectionCapturer = me.magnum.melonds.translator.capture.MediaProjectionCapturer(activity)
     private val mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var overlayView: GameTranslationOverlayView? = null
     private var autoTranslateJob: Job? = null
     private var isPausedByTranslator = false
+    private var pendingTranslateAfterPermission = false
+
+    var requestMediaProjectionPermission: ((android.content.Intent) -> Unit)? = null
 
     // Cache of recent translations to avoid redundant API hits
     private val translationCache = mutableMapOf<String, String>()
@@ -123,16 +127,35 @@ class GameTranslatorManager(
             // Step 1: Capture frame BEFORE pausing emulator so rendering thread is active!
             var capturedBitmap: Bitmap? = null
 
+            // Priority 1: Direct native frame buffer
             try {
-                withTimeoutOrNull(800) {
+                withTimeoutOrNull(400) {
                     capturedBitmap = screenshotProvider?.invoke()
                 }
             } catch (e: Throwable) {
                 capturedBitmap = null
             }
 
+            // Priority 2: MediaProjection (hardware-composited display output)
+            if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
+                capturedBitmap = mediaProjectionCapturer.captureScreen()
+            }
+
+            // Priority 3: PixelCopy / Canvas fallback
             if (capturedBitmap == null) {
                 capturedBitmap = captureViaPixelCopy()
+            }
+
+            // Priority 4: Request MediaProjection permission if still missing
+            if (capturedBitmap == null && !mediaProjectionCapturer.hasPermission && requestMediaProjectionPermission != null) {
+                pendingTranslateAfterPermission = true
+                overlayView?.isTranslating = false
+                try {
+                    requestMediaProjectionPermission?.invoke(mediaProjectionCapturer.createCaptureIntent())
+                } catch (t: Throwable) {
+                    Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
             }
 
             // Step 2: Now that frame is captured, pause emulator if requested
@@ -158,6 +181,14 @@ class GameTranslatorManager(
                 }
                 Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    fun onMediaProjectionResult(resultCode: Int, data: android.content.Intent?) {
+        mediaProjectionCapturer.setPermissionResult(resultCode, data)
+        if (resultCode == Activity.RESULT_OK && data != null && pendingTranslateAfterPermission) {
+            pendingTranslateAfterPermission = false
+            triggerTranslation()
         }
     }
 
@@ -345,5 +376,6 @@ class GameTranslatorManager(
     fun onDestroy() {
         stopAutoTranslate()
         mainScope.cancel()
+        mediaProjectionCapturer.onDestroy()
     }
 }
