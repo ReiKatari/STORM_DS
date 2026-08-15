@@ -27,7 +27,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3.5f
+        strokeWidth = 3f
         color = Color.parseColor("#66FFFFFF")
     }
 
@@ -43,7 +43,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     private val activeStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 5f
+        strokeWidth = 4.5f
         color = Color.parseColor("#FF00E5FF")
     }
 
@@ -89,7 +89,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         val isPressed = pressedInputs.isNotEmpty()
-        val targetScale = if (isPressed) 0.88f else 1.0f
+        val targetScale = if (isPressed) 0.86f else 1.0f
         val targetGlow = if (isPressed) 1.0f else 0.0f
 
         if (buttonScale != targetScale) {
@@ -98,7 +98,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
             val startGlow = buttonGlow
 
             animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 90L
+                duration = 85L
                 addUpdateListener { anim ->
                     val fraction = anim.animatedFraction
                     buttonScale = startScale + (targetScale - startScale) * fraction
@@ -245,7 +245,6 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
 
-            // Compact readable font size for START / SELECT to avoid any clipping
             drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.31f, w - padding * 4, style)
         } else {
             val rx = min(w, h) * 0.38f
@@ -286,15 +285,18 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 textPaint.color = normalTint
             }
 
-            val iconSize = min(w, h) * 0.45f
+            val iconSize = min(w, h) * 0.48f
             when (component) {
                 LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> drawFastForwardIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_REWIND -> drawRewindIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> drawMicrophoneIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_PAUSE -> drawPauseIcon(canvas, cx, cy, iconSize)
-                LayoutComponent.BUTTON_HINGE -> drawHingeIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_RESET -> drawResetIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_SWAP_SCREENS -> drawSwapIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> drawTouchIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_QUICK_SAVE -> drawQuickSaveIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_QUICK_LOAD -> drawQuickLoadIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_HINGE -> drawHingeIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
                     drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.35f, w - padding * 2, style)
@@ -307,7 +309,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     private fun drawTextLabel(canvas: Canvas, cx: Float, cy: Float, text: String, baseSize: Float, maxWidth: Float, style: ButtonColorStyle) {
         textPaint.textSize = baseSize
-        var measured = textPaint.measureText(text)
+        val measured = textPaint.measureText(text)
         if (measured > maxWidth && maxWidth > 0f) {
             textPaint.textSize = baseSize * (maxWidth / measured)
         }
@@ -334,15 +336,13 @@ class ModernSingleButtonView @JvmOverloads constructor(
     private fun drawFastForwardIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val half = size / 2f
         val path = Path().apply {
-            // First triangle (points right)
-            moveTo(cx - half * 0.85f, cy - half * 0.75f)
+            moveTo(cx - half * 0.85f, cy - half * 0.70f)
             lineTo(cx - half * 0.05f, cy)
-            lineTo(cx - half * 0.85f, cy + half * 0.75f)
+            lineTo(cx - half * 0.85f, cy + half * 0.70f)
             close()
-            // Second triangle (points right)
-            moveTo(cx - half * 0.05f, cy - half * 0.75f)
+            moveTo(cx - half * 0.05f, cy - half * 0.70f)
             lineTo(cx + half * 0.75f, cy)
-            lineTo(cx - half * 0.05f, cy + half * 0.75f)
+            lineTo(cx - half * 0.05f, cy + half * 0.70f)
             close()
         }
         canvas.drawPath(path, iconShadowPaint)
@@ -352,15 +352,13 @@ class ModernSingleButtonView @JvmOverloads constructor(
     private fun drawRewindIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val half = size / 2f
         val path = Path().apply {
-            // First triangle (points left)
-            moveTo(cx + half * 0.85f, cy - half * 0.75f)
+            moveTo(cx + half * 0.85f, cy - half * 0.70f)
             lineTo(cx + half * 0.05f, cy)
-            lineTo(cx + half * 0.85f, cy + half * 0.75f)
+            lineTo(cx + half * 0.85f, cy + half * 0.70f)
             close()
-            // Second triangle (points left)
-            moveTo(cx + half * 0.05f, cy - half * 0.75f)
+            moveTo(cx + half * 0.05f, cy - half * 0.70f)
             lineTo(cx - half * 0.75f, cy)
-            lineTo(cx + half * 0.05f, cy + half * 0.75f)
+            lineTo(cx + half * 0.05f, cy + half * 0.70f)
             close()
         }
         canvas.drawPath(path, iconShadowPaint)
@@ -396,19 +394,99 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     private fun drawPauseIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val barW = size * 0.22f
-        val barH = size * 0.7f
-        val gap = size * 0.16f
+        val barH = size * 0.70f
+        val gap = size * 0.18f
 
         val leftRect = RectF(cx - gap / 2f - barW, cy - barH / 2f, cx - gap / 2f, cy + barH / 2f)
         val rightRect = RectF(cx + gap / 2f, cy - barH / 2f, cx + gap / 2f + barW, cy + barH / 2f)
 
-        canvas.drawRoundRect(leftRect, 3f, 3f, iconPaint)
-        canvas.drawRoundRect(rightRect, 3f, 3f, iconPaint)
+        canvas.drawRoundRect(leftRect, 3.5f, 3.5f, iconPaint)
+        canvas.drawRoundRect(rightRect, 3.5f, 3.5f, iconPaint)
+    }
+
+    private fun drawResetIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val r = size * 0.36f
+        val arcPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3.5f
+        }
+        val arcRect = RectF(cx - r, cy - r, cx + r, cy + r)
+        canvas.drawArc(arcRect, 45f, 275f, false, arcPaint)
+
+        // Bold Arrowhead at end of arc (around top right)
+        val arrowPath = Path().apply {
+            moveTo(cx + r * 0.6f, cy - r * 1.1f)
+            lineTo(cx + r * 1.05f, cy - r * 0.6f)
+            lineTo(cx + r * 0.45f, cy - r * 0.45f)
+            close()
+        }
+        canvas.drawPath(arrowPath, iconPaint)
+    }
+
+    private fun drawSwapIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val h = size * 0.65f
+        val off = size * 0.22f
+
+        val arrowPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        // Left arrow points UP
+        canvas.drawLine(cx - off, cy + h / 2f, cx - off, cy - h / 2f, arrowPaint)
+        canvas.drawLine(cx - off, cy - h / 2f, cx - off - size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
+        canvas.drawLine(cx - off, cy - h / 2f, cx - off + size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
+
+        // Right arrow points DOWN
+        canvas.drawLine(cx + off, cy - h / 2f, cx + off, cy + h / 2f, arrowPaint)
+        canvas.drawLine(cx + off, cy + h / 2f, cx + off - size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
+        canvas.drawLine(cx + off, cy + h / 2f, cx + off + size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
+    }
+
+    private fun drawQuickSaveIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val w = size * 0.65f
+        val h = size * 0.65f
+        val diskRect = RectF(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
+
+        val stroke = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.8f
+        }
+        canvas.drawRoundRect(diskRect, 4f, 4f, stroke)
+
+        // Arrow pointing UP inside disk
+        val arrowPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawLine(cx, cy + h * 0.25f, cx, cy - h * 0.22f, arrowPaint)
+        canvas.drawLine(cx, cy - h * 0.22f, cx - w * 0.22f, cy - h * 0.02f, arrowPaint)
+        canvas.drawLine(cx, cy - h * 0.22f, cx + w * 0.22f, cy - h * 0.02f, arrowPaint)
+    }
+
+    private fun drawQuickLoadIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val w = size * 0.65f
+        val h = size * 0.65f
+        val diskRect = RectF(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
+
+        val stroke = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.8f
+        }
+        canvas.drawRoundRect(diskRect, 4f, 4f, stroke)
+
+        // Arrow pointing DOWN inside disk
+        val arrowPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawLine(cx, cy - h * 0.25f, cx, cy + h * 0.22f, arrowPaint)
+        canvas.drawLine(cx, cy + h * 0.22f, cx - w * 0.22f, cy + h * 0.02f, arrowPaint)
+        canvas.drawLine(cx, cy + h * 0.22f, cx + w * 0.22f, cy + h * 0.02f, arrowPaint)
     }
 
     private fun drawHingeIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val w = size * 0.75f
-        val h = size * 0.35f
+        val h = size * 0.32f
         val gap = size * 0.12f
 
         val topRect = RectF(cx - w / 2f, cy - h - gap / 2f, cx + w / 2f, cy - gap / 2f)
@@ -416,27 +494,13 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
         val stroke = Paint(iconPaint).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 3f
+            strokeWidth = 2.8f
         }
         canvas.drawRoundRect(topRect, 4f, 4f, stroke)
         canvas.drawRoundRect(bottomRect, 4f, 4f, stroke)
-    }
 
-    private fun drawSwapIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
-        val h = size * 0.7f
-        val off = size * 0.22f
-
-        val arrowPaint = Paint(iconPaint).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 3.5f
-        }
-        canvas.drawLine(cx - off, cy + h / 2f, cx - off, cy - h / 2f, arrowPaint)
-        canvas.drawLine(cx - off, cy - h / 2f, cx - off - size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
-        canvas.drawLine(cx - off, cy - h / 2f, cx - off + size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
-
-        canvas.drawLine(cx + off, cy - h / 2f, cx + off, cy + h / 2f, arrowPaint)
-        canvas.drawLine(cx + off, cy + h / 2f, cx + off - size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
-        canvas.drawLine(cx + off, cy + h / 2f, cx + off + size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
+        // Hinge center bar
+        canvas.drawLine(cx - w * 0.35f, cy, cx + w * 0.35f, cy, stroke)
     }
 
     private fun drawTouchIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
@@ -445,7 +509,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
         val ringPaint = Paint(iconPaint).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 3f
+            strokeWidth = 2.8f
         }
         canvas.drawCircle(cx, cy, size * 0.40f, ringPaint)
 
