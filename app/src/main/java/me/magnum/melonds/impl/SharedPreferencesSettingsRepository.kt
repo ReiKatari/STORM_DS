@@ -769,16 +769,16 @@ class SharedPreferencesSettingsRepository(
 
     override fun getVideoInternalResolutionScaling(): Flow<Int> {
         return getOrCreatePreferenceSharedFlow("video_internal_resolution") {
-            val internalResolutionPreference = preferences.getString("video_internal_resolution", "1")!!
-            internalResolutionPreference.toIntOrNull() ?: 1
+            val internalResolutionPreference = preferences.getString("video_internal_resolution", "2") ?: "2"
+            internalResolutionPreference.toIntOrNull() ?: 2
         }
     }
 
     override fun getVideoFiltering(): Flow<VideoFiltering> {
         return getOrCreatePreferenceSharedFlow("video_filtering") {
-            val filteringPreference = preferences.getString("video_filtering", "none")!!
+            val filteringPreference = preferences.getString("video_filtering", "quilez") ?: "quilez"
             runCatching { VideoFiltering.valueOf(filteringPreference.uppercase()) }
-                .getOrDefault(VideoFiltering.NONE)
+                .getOrDefault(VideoFiltering.QUILEZ)
         }
     }
 
