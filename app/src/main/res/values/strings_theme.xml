@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string-array name="theme_options" tools:ignore="InconsistentArrays">
-        <item>STORM DAY (Light)</item>
         <item>STORM NIGHT (OLED Dark)</item>
+        <item>STORM DAY (Light)</item>
+        <item>STORM MIDNIGHT (Deep Violet)</item>
+        <item>STORM CYBERPUNK (Cyberpunk 2077)</item>
+        <item>STORM GOTHIC (Black &amp; Red)</item>
     </string-array>
 </resources>
