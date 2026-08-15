@@ -14,6 +14,18 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
+        runCatching {
+            val pInfo = requireContext().packageManager.getPackageInfo(requireContext().packageName, 0)
+            val vName = pInfo.versionName ?: "1.0.0"
+            val vCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+            findPreference<Preference>("about_version")?.summary = "v$vName (Build $vCode)"
+        }
+
         findPreference<Preference>("about_github")?.setOnPreferenceClickListener {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ReiKatari/STORM_DS"))
             startActivity(intent)

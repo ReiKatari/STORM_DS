@@ -38,14 +38,14 @@ class ModernButtonsView @JvmOverloads constructor(
 
     private val buttonBevelLightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3.5f
-        color = Color.parseColor("#80FFFFFF")
+        strokeWidth = 4f
+        color = Color.parseColor("#99FFFFFF")
     }
 
     private val buttonBevelDarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3.5f
-        color = Color.parseColor("#80000000")
+        strokeWidth = 4f
+        color = Color.parseColor("#99000000")
     }
 
     // Active Pressed Glow
@@ -60,7 +60,7 @@ class ModernButtonsView @JvmOverloads constructor(
         color = Color.parseColor("#FF00E5FF")
     }
 
-    // Text Lettering (DS Styled)
+    // Text Lettering (Nintendo DS Styled)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#F0F4F8")
         textAlign = Paint.Align.CENTER
@@ -71,6 +71,11 @@ class ModernButtonsView @JvmOverloads constructor(
         color = Color.parseColor("#B3000000")
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+    }
+
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#59000000")
     }
 
     private val buttonScales = mutableMapOf<Input, Float>()
@@ -120,7 +125,7 @@ class ModernButtonsView @JvmOverloads constructor(
         val size = min(w, h)
         val cx = w / 2f
         val cy = h / 2f
-        val buttonRadius = size * 0.17f
+        val buttonRadius = size * 0.175f
         val offset = size * 0.285f
 
         val style = ButtonThemeManager.currentStyle
@@ -142,6 +147,22 @@ class ModernButtonsView @JvmOverloads constructor(
             ButtonColorStyle.CLASSIC_GREY -> {
                 platePaint.color = Color.parseColor("#33475569")
                 plateStrokePaint.color = Color.parseColor("#4D94A3B8")
+            }
+            ButtonColorStyle.CRIMSON_RUBY -> {
+                platePaint.color = Color.parseColor("#332D0608")
+                plateStrokePaint.color = Color.parseColor("#4DE50914")
+            }
+            ButtonColorStyle.MIDNIGHT_PURPLE -> {
+                platePaint.color = Color.parseColor("#331F1738")
+                plateStrokePaint.color = Color.parseColor("#4DC084FC")
+            }
+            ButtonColorStyle.GOLD_LUXURY -> {
+                platePaint.color = Color.parseColor("#332A200B")
+                plateStrokePaint.color = Color.parseColor("#4DD4A017")
+            }
+            ButtonColorStyle.EMERALD_MATRIX -> {
+                platePaint.color = Color.parseColor("#33052614")
+                plateStrokePaint.color = Color.parseColor("#4D00E676")
             }
             else -> {
                 platePaint.color = Color.parseColor("#26111318")
@@ -180,58 +201,61 @@ class ModernButtonsView @JvmOverloads constructor(
             canvas.save()
             canvas.scale(scale, scale, bx, by)
 
-            // Button drop shadow
-            canvas.drawCircle(bx, by + 3.5f, buttonRadius, platePaint)
+            // Realistic 3D ambient drop shadow
+            canvas.drawCircle(bx, by + buttonRadius * 0.16f, buttonRadius * 1.03f, shadowPaint)
 
             // Active press glow
             if (glow > 0f) {
-                when (style) {
-                    ButtonColorStyle.CLASSIC_WHITE -> activeGlowPaint.color = Color.parseColor("#6638BDF8")
-                    ButtonColorStyle.CLASSIC_GREY -> activeGlowPaint.color = Color.parseColor("#6694A3B8")
-                    ButtonColorStyle.SNES_SUPER -> {
-                        val glowCol = when (input) {
-                            Input.A -> Color.parseColor("#66FF7675")
-                            Input.B -> Color.parseColor("#66FFEAA7")
-                            Input.X -> Color.parseColor("#6674B9FF")
-                            else -> Color.parseColor("#6655EFC4")
-                        }
-                        activeGlowPaint.color = glowCol
+                val glowCol = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#6638BDF8")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#6694A3B8")
+                    ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#66FF1744")
+                    ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#66C084FC")
+                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#66FFD700")
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#6600E676")
+                    ButtonColorStyle.SNES_SUPER -> when (input) {
+                        Input.A -> Color.parseColor("#66FF7675")
+                        Input.B -> Color.parseColor("#66FFEAA7")
+                        Input.X -> Color.parseColor("#6674B9FF")
+                        else -> Color.parseColor("#6655EFC4")
                     }
-                    else -> activeGlowPaint.color = Color.parseColor("#6600E5FF")
+                    else -> Color.parseColor("#6600E5FF")
                 }
-                activeGlowPaint.alpha = (glow * 180).toInt()
-                canvas.drawCircle(bx, by, buttonRadius * 1.18f, activeGlowPaint)
+                activeGlowPaint.color = glowCol
+                activeGlowPaint.alpha = (glow * 200).toInt()
+                canvas.drawCircle(bx, by, buttonRadius * 1.20f, activeGlowPaint)
             }
 
-            // Button main body cap
-            if (glow > 0f) {
-                buttonBodyPaint.color = when (style) {
-                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#E6CBD5E1")
-                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E6334155")
-                    ButtonColorStyle.SNES_SUPER -> when (input) {
-                        Input.A -> Color.parseColor("#E6D63031")
-                        Input.B -> Color.parseColor("#E6FDCB6E")
-                        Input.X -> Color.parseColor("#E60984E3")
-                        else -> Color.parseColor("#E600B894")
-                    }
-                    else -> Color.parseColor("#E61A3A4D")
+            // Authentic 3D Nintendo DS Cap Gradient Shading
+            val (cTop, cBottom) = when (style) {
+                ButtonColorStyle.CLASSIC_WHITE -> Pair(Color.parseColor("#FFFFFF"), Color.parseColor("#D4D8E2"))
+                ButtonColorStyle.CLASSIC_GREY -> Pair(Color.parseColor("#717E91"), Color.parseColor("#444E5E"))
+                ButtonColorStyle.CRIMSON_RUBY -> Pair(Color.parseColor("#FF2A37"), Color.parseColor("#99060E"))
+                ButtonColorStyle.MIDNIGHT_PURPLE -> Pair(Color.parseColor("#A855F7"), Color.parseColor("#581C87"))
+                ButtonColorStyle.GOLD_LUXURY -> Pair(Color.parseColor("#FBBF24"), Color.parseColor("#92400E"))
+                ButtonColorStyle.EMERALD_MATRIX -> Pair(Color.parseColor("#00E676"), Color.parseColor("#006932"))
+                ButtonColorStyle.SNES_SUPER -> when (input) {
+                    Input.A -> Pair(Color.parseColor("#FF5252"), Color.parseColor("#C62828"))
+                    Input.B -> Pair(Color.parseColor("#FFD54F"), Color.parseColor("#F57F17"))
+                    Input.X -> Pair(Color.parseColor("#42A5F5"), Color.parseColor("#1565C0"))
+                    else -> Pair(Color.parseColor("#26A69A"), Color.parseColor("#00695C"))
                 }
-            } else {
-                buttonBodyPaint.color = when (style) {
-                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#F2FFFFFF")
-                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E65A6577")
-                    ButtonColorStyle.SNES_SUPER -> when (input) {
-                        Input.A -> Color.parseColor("#E6D63031")
-                        Input.B -> Color.parseColor("#E6FDCB6E")
-                        Input.X -> Color.parseColor("#E60984E3")
-                        else -> Color.parseColor("#E600B894")
-                    }
-                    else -> Color.parseColor("#E6252932")
-                }
+                else -> Pair(Color.parseColor("#2E3846"), Color.parseColor("#151A22"))
             }
+
+            val capGradient = RadialGradient(
+                bx - buttonRadius * 0.30f,
+                by - buttonRadius * 0.35f,
+                buttonRadius * 1.35f,
+                if (glow > 0f) cBottom else cTop,
+                cBottom,
+                Shader.TileMode.CLAMP
+            )
+            buttonBodyPaint.shader = capGradient
             canvas.drawCircle(bx, by, buttonRadius, buttonBodyPaint)
+            buttonBodyPaint.shader = null
 
-            // Bevel highlights
+            // 3D tactile bevel rim
             val rectF = RectF(bx - buttonRadius, by - buttonRadius, bx + buttonRadius, by + buttonRadius)
             canvas.drawArc(rectF, 135f, 180f, false, buttonBevelLightPaint)
             canvas.drawArc(rectF, -45f, 180f, false, buttonBevelDarkPaint)
@@ -240,23 +264,34 @@ class ModernButtonsView @JvmOverloads constructor(
                 activeStrokePaint.color = when (style) {
                     ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
                     ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E2E8F0")
+                    ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#FF1744")
+                    ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
+                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
                     else -> Color.parseColor("#00E5FF")
                 }
                 canvas.drawCircle(bx, by, buttonRadius, activeStrokePaint)
             }
 
-            // Nintendo DS Lettering
+            // Nintendo DS Crisp Lettering
             val textY = by - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(labels[input] ?: "", bx, textY + 1.5f, textShadowPaint)
+            canvas.drawText(labels[input] ?: "", bx, textY + 2.0f, textShadowPaint)
             if (glow > 0f) {
                 textPaint.color = when (style) {
                     ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0369A1")
                     ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
+                    ButtonColorStyle.CRIMSON_RUBY -> Color.WHITE
+                    ButtonColorStyle.MIDNIGHT_PURPLE -> Color.WHITE
+                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#1C1917")
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#003314")
                     else -> Color.parseColor("#00E5FF")
                 }
             } else {
                 textPaint.color = when (style) {
                     ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0F172A")
+                    ButtonColorStyle.SNES_SUPER -> Color.WHITE
+                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#1C1917")
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#002910")
                     else -> Color.WHITE
                 }
             }

@@ -56,6 +56,21 @@ abstract class MultiButtonInputHandler(
                     }
                 }
             }
+            MotionEvent.ACTION_POINTER_UP -> {
+                val actionIndex = event.actionIndex
+                val pointerCount = event.pointerCount
+                for (i in 0 until pointerCount) {
+                    if (i == actionIndex) continue
+                    val px = event.getX(i)
+                    val py = event.getY(i)
+
+                    if (isRadialDpad) {
+                        processRadialDpad(px, py, rawCurrentInputs)
+                    } else {
+                        processAccurateButtons(px, py, rawCurrentInputs)
+                    }
+                }
+            }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 rawCurrentInputs.clear()
             }
@@ -84,10 +99,19 @@ abstract class MultiButtonInputHandler(
             stickyTimers.remove(input)?.let { handler.removeCallbacks(it) }
 
             val holdDuration = now - startTime
-            // If button was already sticky and user quickly tapped it (< 600ms), toggle it off
+            // If button was already locked as sticky, a quick tap (< 600ms) toggles it OFF!
             if (input in stickyInputs && holdDuration < 600L) {
                 stickyInputs.remove(input)
             }
+        }
+
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            // Cancel all pending timers that didn't reach 2s
+            for ((_, timer) in stickyTimers) {
+                handler.removeCallbacks(timer)
+            }
+            stickyTimers.clear()
+            activeTouchStartTimes.clear()
         }
 
         val effectiveInputs = resolveEffectiveInputs()
@@ -144,20 +168,25 @@ abstract class MultiButtonInputHandler(
 
         val closest = distances[0]
         val singleRadius = sqrt(closest.first.radiusSquared)
+        val maxReach = singleRadius * 1.80f
 
-        // If directly inside the closest button radius (strict single button zone)
-        if (closest.second <= singleRadius) {
-            val secondClosest = distances.getOrNull(1)
-            // Check for intentional dual-button press (e.g. rolling thumb between A and B)
-            if (secondClosest != null && secondClosest.second <= singleRadius * 1.18f && closest.second >= singleRadius * 0.45f) {
-                if (closest.first.input !in outInputs) outInputs.add(closest.first.input)
-                if (secondClosest.first.input !in outInputs) outInputs.add(secondClosest.first.input)
-            } else {
-                if (closest.first.input !in outInputs) outInputs.add(closest.first.input)
+        val candidateButtons = distances.filter { it.second <= maxReach }
+
+        if (candidateButtons.isNotEmpty()) {
+            val d0 = candidateButtons[0].second
+            // Add closest button
+            if (candidateButtons[0].first.input !in outInputs) {
+                outInputs.add(candidateButtons[0].first.input)
             }
-        } else if (closest.second <= singleRadius * 1.35f) {
-            // Generous boundary for the single closest button
-            if (closest.first.input !in outInputs) outInputs.add(closest.first.input)
+            // If touch is near the midpoint between buttons (e.g. between X and A, A and B, etc.), activate both!
+            for (i in 1 until candidateButtons.size) {
+                val candidate = candidateButtons[i]
+                if (candidate.second <= singleRadius * 1.70f && (candidate.second - d0) <= singleRadius * 0.95f) {
+                    if (candidate.first.input !in outInputs) {
+                        outInputs.add(candidate.first.input)
+                    }
+                }
+            }
         }
     }
 
@@ -206,27 +235,23 @@ abstract class MultiButtonInputHandler(
         }
     }
 
-    private fun initDimensions(viewWidth: Int, viewHeight: Int) {
-        buttonCircles.clear()
-        // Precise button radius (95 units out of 512) prevents accidental cross-triggering
-        val radiusSquared = (viewWidth * 95f / 512f).pow(2)
-        val pointToLocal: (Float, Float) -> Point = { x, y ->
-            Point().apply {
-                this.x = (viewWidth * x / 512f).toInt()
-                this.y = (viewHeight * y / 512f).toInt()
-            }
-        }
+    protected abstract fun getTopInput(): Input
+    protected abstract fun getBottomInput(): Input
+    protected abstract fun getLeftInput(): Input
+    protected abstract fun getRightInput(): Input
 
-        buttonCircles.add(ButtonCircle(pointToLocal(512f - 110f, 256f), radiusSquared, getRightInput()))
-        buttonCircles.add(ButtonCircle(pointToLocal(256f, 512f - 110f), radiusSquared, getBottomInput()))
-        buttonCircles.add(ButtonCircle(pointToLocal(256f, 110f), radiusSquared, getTopInput()))
-        buttonCircles.add(ButtonCircle(pointToLocal(110f, 256f), radiusSquared, getLeftInput()))
+    protected fun setButtonCircle(input: Input, center: Point, radiusSquared: Float) {
+        buttonCircles.removeAll { it.input == input }
+        buttonCircles.add(ButtonCircle(input, center, radiusSquared))
     }
 
-    private data class ButtonCircle(val center: Point, val radiusSquared: Float, val input: Input)
+    protected open fun initDimensions(width: Int, height: Int) {
+        buttonCircles.clear()
+    }
 
-    abstract fun getTopInput(): Input
-    abstract fun getLeftInput(): Input
-    abstract fun getBottomInput(): Input
-    abstract fun getRightInput(): Input
+    private data class ButtonCircle(
+        val input: Input,
+        val center: Point,
+        val radiusSquared: Float
+    )
 }

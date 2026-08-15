@@ -31,6 +31,11 @@ class ModernSingleButtonView @JvmOverloads constructor(
         color = Color.parseColor("#66FFFFFF")
     }
 
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#59000000")
+    }
+
     private val activeGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = Color.parseColor("#6600E5FF")
@@ -111,9 +116,6 @@ class ModernSingleButtonView @JvmOverloads constructor(
             LayoutComponent.BUTTON_R -> "R"
             LayoutComponent.BUTTON_START -> "START"
             LayoutComponent.BUTTON_SELECT -> "SELECT"
-            LayoutComponent.BUTTON_QUICK_SAVE -> "SAVE"
-            LayoutComponent.BUTTON_QUICK_LOAD -> "LOAD"
-            LayoutComponent.BUTTON_RESET -> "RESET"
             else -> ""
         }
     }
@@ -138,26 +140,46 @@ class ModernSingleButtonView @JvmOverloads constructor(
         val defaultBg = when (style) {
             ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#F2FFFFFF")
             ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E65A6577")
+            ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#E68F0E17")
+            ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#E6491979")
+            ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#E6B45309")
+            ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#E6047857")
             else -> Color.parseColor("#E6232730")
         }
         val pressedBg = when (style) {
             ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#E6E2E8F0")
             ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E6374151")
+            ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#E65C060D")
+            ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#E62D0B4E")
+            ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#E678350F")
+            ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#E6064E3B")
             else -> Color.parseColor("#E61A3A4D")
         }
         val normalStroke = when (style) {
             ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#80CBD5E1")
             ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#80D1D5DB")
+            ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#80E50914")
+            ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#80C084FC")
+            ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#80F59E0B")
+            ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#8010B981")
             else -> Color.parseColor("#66FFFFFF")
         }
         val glowColor = when (style) {
             ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#6638BDF8")
             ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#6694A3B8")
+            ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#66FF1744")
+            ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#66C084FC")
+            ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#66FFD700")
+            ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#6600E676")
             else -> Color.parseColor("#6600E5FF")
         }
         val activeStroke = when (style) {
             ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
             ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#CBD5E1")
+            ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#FF1744")
+            ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
+            ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
+            ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
             else -> Color.parseColor("#FF00E5FF")
         }
 
@@ -189,6 +211,9 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 shoulderPath.addRoundRect(rect, radii, Path.Direction.CW)
             }
 
+            // Drop shadow
+            canvas.drawRoundRect(RectF(rect.left, rect.top + 3f, rect.right, rect.bottom + 3f), cornerRadius * 0.5f, cornerRadius * 0.5f, shadowPaint)
+
             if (buttonGlow > 0f) {
                 bgPaint.color = pressedBg
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
@@ -204,6 +229,9 @@ class ModernSingleButtonView @JvmOverloads constructor(
             drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.52f, w - padding * 2, style)
         } else if (isStartSelect) {
             val rx = min(w, h) * 0.44f
+            // Drop shadow
+            canvas.drawRoundRect(RectF(rect.left, rect.top + 2.5f, rect.right, rect.bottom + 2.5f), rx, rx, shadowPaint)
+
             if (buttonGlow > 0f) {
                 bgPaint.color = pressedBg
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
@@ -217,9 +245,13 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
 
-            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.42f, w - padding * 3, style)
+            // Compact readable font size for START / SELECT to avoid any clipping
+            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.31f, w - padding * 4, style)
         } else {
             val rx = min(w, h) * 0.38f
+            // Drop shadow
+            canvas.drawRoundRect(RectF(rect.left, rect.top + 2.5f, rect.right, rect.bottom + 2.5f), rx, rx, shadowPaint)
+
             if (buttonGlow > 0f) {
                 bgPaint.color = pressedBg
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
@@ -234,7 +266,14 @@ class ModernSingleButtonView @JvmOverloads constructor(
             }
 
             if (buttonGlow > 0f) {
-                val activeTint = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0284C7") else Color.parseColor("#00E5FF")
+                val activeTint = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
+                    ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#FF1744")
+                    ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
+                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
+                    else -> Color.parseColor("#00E5FF")
+                }
                 iconPaint.color = activeTint
                 textPaint.color = activeTint
             } else if (!isToggledOn) {
@@ -257,7 +296,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> drawTouchIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
-                    drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.38f, w - padding * 2, style)
+                    drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.35f, w - padding * 2, style)
                 }
             }
         }
@@ -276,7 +315,14 @@ class ModernSingleButtonView @JvmOverloads constructor(
         val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
         canvas.drawText(text, cx, textY + 1.5f, textShadowPaint)
         if (buttonGlow > 0f) {
-            textPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0284C7") else Color.parseColor("#00E5FF")
+            textPaint.color = when (style) {
+                ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
+                ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#FF1744")
+                ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
+                ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
+                ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
+                else -> Color.parseColor("#00E5FF")
+            }
         } else {
             textPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0F172A") else Color.WHITE
         }
@@ -292,7 +338,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
             close()
             moveTo(cx, cy - half * 0.8f)
             lineTo(cx + half * 0.8f, cy)
-            lineTo(cx, cy + half * 0.8f)
+            lineTo(cx + half * 0.8f, cy + half * 0.8f)
             close()
         }
         canvas.drawPath(path, iconShadowPaint)
