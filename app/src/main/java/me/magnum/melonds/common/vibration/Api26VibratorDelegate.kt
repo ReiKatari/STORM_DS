@@ -16,8 +16,19 @@ class Api26VibratorDelegate(private val vibrator: Vibrator) : VibratorDelegate {
     }
 
     override fun vibrate(duration: Int, amplitude: Int) {
-        val effect = VibrationEffect.createOneShot(duration.toLong(), amplitude)
-        vibrator.vibrate(effect)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val effect = if (duration <= 35) {
+                VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+            } else if (duration <= 70) {
+                VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+            } else {
+                VibrationEffect.createOneShot(duration.toLong(), amplitude.coerceIn(1, 255))
+            }
+            vibrator.vibrate(effect)
+        } else {
+            val effect = VibrationEffect.createOneShot(duration.toLong(), amplitude.coerceIn(1, 255))
+            vibrator.vibrate(effect)
+        }
     }
 
     override fun startVibrating() {
