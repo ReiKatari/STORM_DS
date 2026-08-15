@@ -605,6 +605,10 @@ dependencies {
     implementation(libs.markwon.linkify)
     implementation(libs.commons.compress)
     implementation(libs.xz)
+    implementation(libs.okhttp)
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.text.recognition.japanese)
+    implementation(libs.mlkit.text.recognition.chinese)
 
     gitHubImplementation(libs.retrofit)
     gitHubImplementation(libs.retrofit.converter.kotlinx)

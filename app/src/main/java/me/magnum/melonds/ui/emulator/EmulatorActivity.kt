@@ -342,6 +342,10 @@ class EmulatorActivity : AppCompatActivity() {
             viewModel.onOpenRewind()
         }
 
+        override fun onTranslate() {
+            translatorManager.triggerTranslation()
+        }
+
         fun clearFastForwardHold() {
             if (!fastForwardHoldPressed) {
                 return
@@ -354,6 +358,16 @@ class EmulatorActivity : AppCompatActivity() {
             MelonEmulator.setFastForwardEnabled(fastForwardEnabled || fastForwardHoldPressed)
         }
     }
+
+    private val translatorManager by lazy {
+        me.magnum.melonds.translator.GameTranslatorManager(
+            activity = this,
+            surfaceProvider = { binding.surfaceMain },
+            onPauseEmulator = { viewModel.pauseEmulator(true) },
+            onResumeEmulator = { viewModel.resumeEmulator() }
+        )
+    }
+
     private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val logoutRequested =
             result.resultCode == RESULT_OK &&
@@ -569,6 +583,7 @@ class EmulatorActivity : AppCompatActivity() {
             setFrontendInputHandler(frontendInputHandler)
             setSystemInputHandler(melonTouchHandler)
         }
+        translatorManager.attachOverlay(binding.viewTranslationOverlay)
 
         val layoutChangeListener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             val oldWith = oldRight - oldLeft
@@ -1617,6 +1632,7 @@ class EmulatorActivity : AppCompatActivity() {
         super.onResume()
         choreographerFrameRenderer.startRendering()
         startShaderDiagnosticsPolling()
+        translatorManager.syncOverlaySettings()
 
         if (
             !activeOverlays.hasActiveOverlays() &&
@@ -4028,6 +4044,7 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        translatorManager.onDestroy()
         releaseEmulatorUiResources()
     }
 }

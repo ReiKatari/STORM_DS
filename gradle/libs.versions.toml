@@ -96,6 +96,9 @@ markwon-linkify = { module = "io.noties.markwon:linkify", version.ref = "markwon
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okHttp" }
 commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
 xz = { module = "org.tukaani:xz", version.ref = "xz" }
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
+mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-japanese", version = "16.0.1" }
+mlkit-text-recognition-chinese = { module = "com.google.mlkit:text-recognition-chinese", version = "16.0.1" }
 
 # GitHub
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
