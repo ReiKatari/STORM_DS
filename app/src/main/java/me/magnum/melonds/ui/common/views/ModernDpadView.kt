@@ -137,6 +137,31 @@ class ModernDpadView @JvmOverloads constructor(
         val armLength = size * 0.46f
         val cornerRadius = size * 0.06f
 
+        val style = ButtonThemeManager.currentStyle
+        when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> {
+                bodyPaint.color = Color.parseColor("#F2FFFFFF")
+                bevelLightPaint.color = Color.parseColor("#80CBD5E1")
+                centerDishPaint.color = Color.parseColor("#E2E8F0")
+                wellPaint.color = Color.parseColor("#33E2E8F0")
+                wellStrokePaint.color = Color.parseColor("#4DE2E8F0")
+            }
+            ButtonColorStyle.CLASSIC_GREY -> {
+                bodyPaint.color = Color.parseColor("#E65A6577")
+                bevelLightPaint.color = Color.parseColor("#80D1D5DB")
+                centerDishPaint.color = Color.parseColor("#CC475569")
+                wellPaint.color = Color.parseColor("#33475569")
+                wellStrokePaint.color = Color.parseColor("#4D94A3B8")
+            }
+            else -> {
+                bodyPaint.color = Color.parseColor("#E6232730")
+                bevelLightPaint.color = Color.parseColor("#66FFFFFF")
+                centerDishPaint.color = Color.parseColor("#CC1A1C22")
+                wellPaint.color = Color.parseColor("#330F1117")
+                wellStrokePaint.color = Color.parseColor("#33FFFFFF")
+            }
+        }
+
         // Draw circular well depression in background
         canvas.drawCircle(cx, cy, armLength * 1.05f, wellPaint)
         canvas.drawCircle(cx, cy, armLength * 1.05f, wellStrokePaint)

@@ -159,22 +159,32 @@ fun RomListRow(
             }
         }
         Spacer(Modifier.width(8.dp))
+        val regionFlag = resolveRomRegionFlag(rom)
         Column(horizontalAlignment = Alignment.End) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(colors.surface2)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            ) {
-                Text(
-                    text = if (rom.isDsiWareTitle) "DSiWARE" else "DS",
-                    color = colors.text2,
-                    fontFamily = WatermelonMono,
-                    fontSize = 8.sp,
-                    lineHeight = 9.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.5.sp,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (regionFlag.isNotEmpty()) {
+                    Text(
+                        text = regionFlag,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(end = 5.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(colors.surface2)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = if (rom.isDsiWareTitle) "DSiWARE" else "DS",
+                        color = colors.text2,
+                        fontFamily = WatermelonMono,
+                        fontSize = 8.sp,
+                        lineHeight = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp,
+                    )
+                }
             }
             val hours = formatHoursLabel(rom.totalPlayTime)
             if (hours.isNotEmpty()) {
