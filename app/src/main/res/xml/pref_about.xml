@@ -8,7 +8,7 @@
         <Preference
                 android:key="about_app_name"
                 android:title="STORM DS"
-                android:summary="Next-Generation Nintendo DS &amp; DSi Emulator for Android"
+                android:summary="@string/about_app_description"
                 app:iconSpaceReserved="false" />
 
         <Preference
