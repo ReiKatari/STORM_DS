@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.emulator
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
@@ -2288,6 +2289,15 @@ class EmulatorViewModel @Inject constructor(
         }
 
         return true
+    }
+
+    suspend fun captureScreenshot(): Bitmap? = withContext(Dispatchers.IO) {
+        val success = emulatorManager.takeScreenshot()
+        if (success) {
+            screenshotFrameBufferProvider.getScreenshot()
+        } else {
+            null
+        }
     }
 
     private suspend fun loadRomState(rom: Rom, slot: SaveStateSlot): Boolean {

@@ -110,6 +110,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun hasActiveTranslations(): Boolean = blocks.isNotEmpty()
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
