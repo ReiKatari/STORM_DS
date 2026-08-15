@@ -128,15 +128,27 @@ fun RomGridCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color.Black.copy(alpha = 0.35f))
+                        .background(Color(0xFF0F172A).copy(alpha = 0.85f))
+                        .border(0.7.dp, WatermelonColors.gold.copy(alpha = 0.70f), RoundedCornerShape(4.dp))
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.EmojiEvents,
-                        contentDescription = null,
-                        tint = WatermelonColors.gold,
-                        modifier = Modifier.size(10.dp),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.EmojiEvents,
+                            contentDescription = "Achievements",
+                            tint = WatermelonColors.gold,
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Spacer(Modifier.width(2.5.dp))
+                        Text(
+                            text = "RA",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = WatermelonColors.gold
+                            )
+                        )
+                    }
                 }
             }
         }
