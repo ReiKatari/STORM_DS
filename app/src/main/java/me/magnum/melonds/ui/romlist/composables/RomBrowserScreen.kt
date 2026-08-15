@@ -479,7 +479,7 @@ private fun GridContent(
                     coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                     boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                     boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
-                    showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                    showAchievementBadge = (entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut),
                     onClick = { onRomClick(entry.rom) },
                     onLongPress = {
                         if (!entry.rom.isInstalledDsiWareShortcut) {
@@ -604,7 +604,7 @@ private fun ListContent(
                             boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                             boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
                             allowConfiguration = allowConfiguration && !entry.rom.isInstalledDsiWareShortcut,
-                            showAchievementBadge = entry.rom.retroAchievementsHash in confirmedAchievementHashes,
+                            showAchievementBadge = (entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut),
                             onClick = { onRomClick(entry.rom) },
                             onLongPress = {
                                 if (!entry.rom.isInstalledDsiWareShortcut) {
