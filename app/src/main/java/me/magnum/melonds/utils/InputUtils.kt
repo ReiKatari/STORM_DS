@@ -25,5 +25,6 @@ fun getLayoutComponentName(layoutComponent: LayoutComponent): Int {
         LayoutComponent.BUTTON_QUICK_LOAD -> R.string.input_quick_load
         LayoutComponent.BUTTON_REWIND -> R.string.rewind
         LayoutComponent.BUTTON_TRANSLATE -> R.string.button_translate
+        LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> R.string.input_toggle_extra_buttons
     }
 }

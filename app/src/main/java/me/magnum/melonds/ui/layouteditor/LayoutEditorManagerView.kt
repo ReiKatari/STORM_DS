@@ -240,9 +240,14 @@ class LayoutEditorManagerView(
                 0,
             )
 
+            binding.viewLayoutEditor.safeAreaInsets = android.graphics.Rect(leftPadding, topPadding, rightPadding, bottomPadding)
+
             WindowInsetsCompat.CONSUMED
         }
 
+        binding.buttonBack.setOnClickListener {
+            handleBackNavigation()
+        }
         binding.buttonAddButton.setOnClickListener {
             openButtonsMenu()
         }
@@ -250,6 +255,9 @@ class LayoutEditorManagerView(
             openMenu()
         }
         binding.buttonDeleteButton.setOnClickListener {
+            binding.viewLayoutEditor.deleteSelectedView()
+        }
+        binding.buttonToggleVisibility.setOnClickListener {
             binding.viewLayoutEditor.deleteSelectedView()
         }
         binding.buttonEditPosition.captureEditTargetOnTouchDown()
@@ -266,6 +274,22 @@ class LayoutEditorManagerView(
         binding.buttonCenterVertical.setOnClickListener {
             binding.viewLayoutEditor.centerSelectedViewVertically()
         }
+        binding.seekBarSpread.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                binding.textSpread.text = "$progress%"
+                if (fromUser) {
+                    val comp = binding.viewLayoutEditor.getSelectedComponent()
+                    if (comp == LayoutComponent.BUTTONS) {
+                        val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
+                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread = progress / 100f
+                        listener?.onStoreLayoutChanges()
+                    }
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
 
         binding.viewLayoutEditor.setLayoutComponentViewBuilderFactory(EditorLayoutComponentViewBuilderFactory())
         binding.viewLayoutEditor.setOnClickListener {
@@ -680,26 +704,29 @@ class LayoutEditorManagerView(
 
     private fun openButtonsMenu() {
         hideBottomControls()
+        val allComponents = LayoutComponent.entries.filterNot { it.isScreen() }
         val instantiatedComponents = binding.viewLayoutEditor.getInstantiatedComponents()
-        val componentsToShow = LayoutComponent.entries.filterNot { instantiatedComponents.contains(it) }
-
-        val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
-        val dialogBuilder = AlertDialog.Builder(themedContext)
-            .setTitle(R.string.choose_component)
-            .setNegativeButton(R.string.cancel) { dialog, _ ->
-                dialog.cancel()
-            }
-
-        if (componentsToShow.isNotEmpty()) {
-            dialogBuilder.setItems(componentsToShow.map { resources.getString(getLayoutComponentName(it)) }.toTypedArray()) { _, which ->
-                val component = componentsToShow[which]
-                binding.viewLayoutEditor.addLayoutComponent(component)
-            }
-        } else {
-            dialogBuilder.setMessage(R.string.no_more_components)
+        val checkedItems = BooleanArray(allComponents.size) { i ->
+            instantiatedComponents.contains(allComponents[i])
         }
 
-        dialogBuilder.showInCurrentWindow()
+        val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
+        AlertDialog.Builder(themedContext)
+            .setTitle(R.string.components_visibility_title)
+            .setMultiChoiceItems(
+                allComponents.map { resources.getString(getLayoutComponentName(it)) }.toTypedArray(),
+                checkedItems
+            ) { _, which, isChecked ->
+                val component = allComponents[which]
+                if (isChecked) {
+                    binding.viewLayoutEditor.addLayoutComponent(component)
+                } else {
+                    binding.viewLayoutEditor.removeLayoutComponent(component)
+                }
+                listener?.onStoreLayoutChanges()
+            }
+            .setPositiveButton(R.string.ok, null)
+            .showInCurrentWindow()
     }
 
     private fun openMenu() {
@@ -828,6 +855,29 @@ class LayoutEditorManagerView(
                     progress = currentSize - minSize
                 }
                 binding.textSize.text = currentSize.toString()
+
+                binding.seekBarWidth.apply {
+                    max = maxWidth - minSize
+                    progress = (widthScale * (maxWidth - minSize)).roundToInt().coerceIn(0, max)
+                }
+                binding.textWidth.text = currentWidth.toString()
+
+                binding.seekBarHeight.apply {
+                    max = maxHeight - minSize
+                    progress = (heightScale * (maxHeight - minSize)).roundToInt().coerceIn(0, max)
+                }
+                binding.textHeight.text = currentHeight.toString()
+            }
+
+            val isButtonsCluster = (selectedScreenComponent == LayoutComponent.BUTTONS)
+            binding.layoutSpreadLabels.isVisible = isButtonsCluster
+            binding.seekBarSpread.isVisible = isButtonsCluster
+            if (isButtonsCluster) {
+                val view = binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.BUTTONS)?.view
+                val currentSpread = (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread ?: 1.0f
+                val spreadInt = (currentSpread * 100).toInt().coerceIn(60, 160)
+                binding.seekBarSpread.progress = spreadInt
+                binding.textSpread.text = "$spreadInt%"
             }
 
             binding.seekBarAlpha.progress = (alpha * 100).roundToInt().coerceIn(0, binding.seekBarAlpha.max)
@@ -844,11 +894,11 @@ class LayoutEditorManagerView(
 
         binding.layoutSizeLabels.isVisible = !isScreen
         binding.seekBarSize.isVisible = !isScreen
-        binding.buttonEditSize.isVisible = !isScreen
-        binding.layoutWidthLabels.isVisible = isScreen
-        binding.seekBarWidth.isVisible = isScreen
-        binding.layoutHeightLabels.isVisible = isScreen
-        binding.seekBarHeight.isVisible = isScreen
+        binding.buttonEditSize.isVisible = true
+        binding.layoutWidthLabels.isVisible = true
+        binding.seekBarWidth.isVisible = true
+        binding.layoutHeightLabels.isVisible = true
+        binding.seekBarHeight.isVisible = true
         binding.layoutAlphaLabels.isVisible = true
         binding.seekBarAlpha.isVisible = true
         binding.layoutAspectRatio.isVisible = selectedViewSupportsAspectRatio

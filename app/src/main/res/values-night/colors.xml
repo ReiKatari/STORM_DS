@@ -21,6 +21,7 @@
 
     <color name="buttonContrasted">#FFFFFF</color>
     <color name="divider">#252530</color>
+    <color name="textLayoutEditor">#F8FAFC</color>
 
     <color name="romConfigButtonEnabled">#00E5FF</color>
     <color name="statusOk">#00E676</color>

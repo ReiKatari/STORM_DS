@@ -346,6 +346,10 @@ class EmulatorActivity : AppCompatActivity() {
             translatorManager.triggerTranslation()
         }
 
+        override fun onToggleExtraButtons() {
+            binding.viewLayoutControls.toggleExtraButtonsVisibility()
+        }
+
         fun clearFastForwardHold() {
             if (!fastForwardHoldPressed) {
                 return

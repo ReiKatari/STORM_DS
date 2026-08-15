@@ -64,6 +64,15 @@
                 android:text="@string/label_size"
                 style="@style/Button.Editor" />
 
+            <Button
+                android:id="@+id/button_toggle_visibility"
+                app:layout_constraintBaseline_toBaselineOf="@id/button_delete_button"
+                app:layout_constraintStart_toEndOf="@id/button_edit_size"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/toggle_visibility"
+                style="@style/Button.Editor" />
+
             <ImageButton
                 android:id="@+id/button_hide_controls"
                 android:layout_width="wrap_content"
@@ -197,10 +206,53 @@
                 android:layout_gravity="center_vertical" />
 
             <LinearLayout
+                android:id="@+id/layout_spread_labels"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_constraintWidth_min="wrap"
+                app:layout_constraintTop_toBottomOf="@id/layout_height_labels"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/barrier_labels"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground"
+                android:orientation="vertical"
+                android:paddingVertical="4dp"
+                android:paddingStart="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/textLayoutEditor"
+                    android:text="@string/label_button_spread" />
+
+                <TextView
+                    android:id="@+id/text_spread"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/textLayoutEditor"
+                    tools:text="100%" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/seek_bar_spread"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_constraintStart_toEndOf="@id/barrier_labels"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@id/layout_spread_labels"
+                app:layout_constraintBottom_toBottomOf="@id/layout_spread_labels"
+                android:padding="8dp"
+                android:min="60"
+                android:max="160"
+                android:progress="100"
+                android:layout_gravity="center_vertical" />
+
+            <LinearLayout
                 android:id="@+id/layout_alpha_labels"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:layout_constraintTop_toBottomOf="@id/layout_height_labels"
+                app:layout_constraintTop_toBottomOf="@id/layout_spread_labels"
                 app:layout_constraintStart_toStartOf="parent"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
@@ -232,7 +284,7 @@
                 android:layout_height="wrap_content"
                 app:barrierDirection="end"
                 app:barrierAllowsGoneWidgets="false"
-                app:constraint_referenced_ids="layout_size_labels,layout_width_labels,layout_height_labels,layout_alpha_labels" />
+                app:constraint_referenced_ids="layout_size_labels,layout_width_labels,layout_height_labels,layout_spread_labels,layout_alpha_labels" />
 
             <LinearLayout
                 android:id="@+id/layout_aspect_ratio"
@@ -304,6 +356,15 @@
         android:paddingHorizontal="8dp"
         android:paddingVertical="4dp"
         android:visibility="visible">
+
+        <Button
+            android:id="@+id/button_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/back"
+            android:drawableStart="@drawable/ic_back"
+            android:drawablePadding="4dp"
+            style="@style/Button.Editor" />
 
         <Button
             android:id="@+id/button_add_button"
