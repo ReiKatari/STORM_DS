@@ -2,14 +2,17 @@ package me.magnum.melonds.ui.common.views
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.graphics.Color
 import androidx.preference.PreferenceManager
 
 enum class ButtonColorStyle {
     CYBER_CYAN,
     CLASSIC_WHITE,
     CLASSIC_GREY,
-    SNES_SUPER
+    SNES_SUPER,
+    CRIMSON_RUBY,
+    MIDNIGHT_PURPLE,
+    GOLD_LUXURY,
+    EMERALD_MATRIX
 }
 
 object ButtonThemeManager {
@@ -34,6 +37,10 @@ object ButtonThemeManager {
             "classic_white" -> ButtonColorStyle.CLASSIC_WHITE
             "classic_grey" -> ButtonColorStyle.CLASSIC_GREY
             "snes_super" -> ButtonColorStyle.SNES_SUPER
+            "crimson_ruby" -> ButtonColorStyle.CRIMSON_RUBY
+            "midnight_purple" -> ButtonColorStyle.MIDNIGHT_PURPLE
+            "gold_luxury" -> ButtonColorStyle.GOLD_LUXURY
+            "emerald_matrix" -> ButtonColorStyle.EMERALD_MATRIX
             else -> ButtonColorStyle.CYBER_CYAN
         }
     }

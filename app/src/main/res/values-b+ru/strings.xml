@@ -579,10 +579,16 @@
   <string name="video_retroarch_shader_clear_history_title">Очистить историю шейдеров RetroArch</string>
   <string name="video_retroarch_shader_clear_history_summary">Сбросить историю проходов при следующем обновлении.</string>
   <string name="video_retroarch_shader_source_title">Источник шейдеров</string>
-  <string name="video_retroarch_shader_source_internal">Установить во внутреннее хранилище (рекомендуется)</string>
-  <string name="video_retroarch_shader_source_internal_description">Загрузка официального набора шейдеров libretro (~53 МБ).</string>
-  <string name="video_retroarch_shader_source_folder">Выбрать папку</string>
-  <string name="video_retroarch_shader_source_folder_description">Выбрать ранее загруженную папку slang-shaders.</string>
+  <string name="video_retroarch_shader_source_scan_retroarch">Найти на телефоне (RetroArch)</string>
+  <string name="video_retroarch_shader_source_scan_retroarch_description">Автопоиск установленных шейдеров RetroArch на устройстве и добавление в папку STORM DS.</string>
+  <string name="video_retroarch_shader_scan_found_title">Импорт шейдеров RetroArch</string>
+  <string name="video_retroarch_shader_scan_found_msg">Найдены шейдеры RetroArch в папке:\n%1$s\n\nИмпортировать их в библиотеку STORM DS?</string>
+  <string name="video_retroarch_shader_scan_not_found">Шейдеры RetroArch не найдены в стандартных папках устройства. Выберите папку вручную.</string>
+  <string name="video_retroarch_shader_scan_import_success">Успешно импортировано шейдеров: %1$d!</string>
+  <string name="video_retroarch_shader_source_internal">Скачать из интернета</string>
+  <string name="video_retroarch_shader_source_internal_description">Быстрая загрузка и установка официальной библиотеки slang-шейдеров прямо в эмулятор.</string>
+  <string name="video_retroarch_shader_source_folder">Выбрать свою папку</string>
+  <string name="video_retroarch_shader_source_folder_description">Указать произвольный каталог с шейдерами через системный проводник.</string>
   <string name="video_retroarch_shader_install_title">Установить шейдеры</string>
   <string name="video_retroarch_shader_install_summary">Загрузка ~53 МБ с серверов libretro</string>
   <string name="video_retroarch_shader_install_notification_title">Шейдеры RetroArch</string>
@@ -1113,6 +1119,7 @@
   <string name="dsiware_manager_fix_setup">Исправить настройки DSi</string>
     <string name="about_app_title">О программе и благодарности</string>
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, авторы и лицензии</string>
+    <string name="about_version_title">Версия</string>
     <string name="about_credits_title">Благодарности авторам</string>
     <string name="about_credits_watermelonds_title">WatermelonDS</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite и контрибьюторы — порт на Android, высокоскоростной Vulkan рендер, поддержка шейдеров librashader и сенсорный интерфейс</string>
@@ -1125,15 +1132,23 @@
     <string name="button_color_theme">Цвет экранных кнопок</string>
     <string-array name="button_color_theme_options">
         <item>STORM Cyber Neon (Неоновый циан)</item>
-        <item>Nintendo DS Lite (Белый)</item>
+        <item>Nintendo DS Lite (Белый стиль)</item>
         <item>Nintendo DS Classic (Серый металлик)</item>
         <item>Super Famicom / SNES (Четыре цвета)</item>
+        <item>Gothic Crimson (Кроваво-красный и карбон)</item>
+        <item>Midnight Amethyst (Глубокий фиолетовый)</item>
+        <item>Royal Gold (Золотой и обсидиан)</item>
+        <item>Matrix Emerald (Изумрудный неон)</item>
     </string-array>
     <string-array name="button_color_theme_values">
         <item>cyber_cyan</item>
         <item>classic_white</item>
         <item>classic_grey</item>
         <item>snes_super</item>
+        <item>crimson_ruby</item>
+        <item>midnight_purple</item>
+        <item>gold_luxury</item>
+        <item>emerald_matrix</item>
     </string-array>
     <string name="rom_display_name_mode">Отображение названий игр</string>
     <string name="rom_display_name_mode_file_name">Название файла (без расширения)</string>

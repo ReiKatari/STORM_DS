@@ -1231,6 +1231,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val context = requireContext()
         val options = listOf(
             mapOf(
+                "title" to getString(R.string.video_retroarch_shader_source_scan_retroarch),
+                "description" to getString(R.string.video_retroarch_shader_source_scan_retroarch_description),
+            ),
+            mapOf(
                 "title" to getString(R.string.video_retroarch_shader_source_internal),
                 "description" to getString(R.string.video_retroarch_shader_source_internal_description),
             ),
@@ -1262,13 +1266,16 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             dialog.dismiss()
             when (position) {
                 0 -> {
+                    scanAndImportRetroArchShaders()
+                }
+                1 -> {
                     persistShaderSource(RetroArchShaderSource.INTERNAL)
                     refreshShaderPreferenceVisibility()
                     if (!shaderLibraryManager.isInstalled()) {
                         startShaderInstall()
                     }
                 }
-                1 -> {
+                2 -> {
                     persistShaderSource(RetroArchShaderSource.FOLDER)
                     refreshShaderPreferenceVisibility()
                     shaderRootPreference.performClick()
@@ -1276,6 +1283,60 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
         dialog.show()
+    }
+
+    private fun scanAndImportRetroArchShaders() {
+        val context = requireContext()
+        lifecycleScope.launch {
+            val candidatePaths = listOf(
+                "/storage/emulated/0/RetroArch/shaders",
+                "/storage/emulated/0/RetroArch/shaders_slang",
+                "/storage/emulated/0/Android/data/com.retroarch/files/shaders",
+                "/storage/emulated/0/Android/data/com.retroarch.aarch64/files/shaders",
+                "/storage/emulated/0/Android/data/com.retroarch.ra32/files/shaders",
+                "/storage/emulated/0/Download/shaders",
+                "/storage/emulated/0/shaders",
+            )
+
+            val foundDir = withContext(Dispatchers.IO) {
+                candidatePaths.map { File(it) }.firstOrNull { dir ->
+                    dir.exists() && dir.isDirectory && (dir.walkTopDown().maxDepth(3).any { it.extension.equals("slangp", ignoreCase = true) })
+                }
+            }
+
+            if (foundDir == null) {
+                Toast.makeText(context, R.string.video_retroarch_shader_scan_not_found, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle(R.string.video_retroarch_shader_scan_found_title)
+                .setMessage(getString(R.string.video_retroarch_shader_scan_found_msg, foundDir.absolutePath))
+                .setPositiveButton(R.string.ok) { _, _ ->
+                    lifecycleScope.launch {
+                        val targetDir = shaderLibraryManager.libraryRoot ?: File(context.filesDir, "shaders/retroarch").apply { mkdirs() }
+                        val importedCount = withContext(Dispatchers.IO) {
+                            var count = 0
+                            runCatching {
+                                foundDir.copyRecursively(targetDir, overwrite = true)
+                                count = targetDir.walkTopDown().filter { it.extension.equals("slangp", ignoreCase = true) }.count()
+                            }
+                            count
+                        }
+
+                        persistShaderSource(RetroArchShaderSource.INTERNAL)
+                        refreshShaderPreferenceVisibility()
+                        Toast.makeText(
+                            context,
+                            getString(R.string.video_retroarch_shader_scan_import_success, importedCount),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        showRetroArchPresetBrowserDialog(shaderPresetPreference)
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
     }
 
     private fun showShaderManageDialog() {

@@ -12,6 +12,12 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
+                android:key="about_version"
+                android:title="@string/about_version_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="about_github"
                 android:title="@string/about_github_title"
                 android:summary="@string/about_github_summary"

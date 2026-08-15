@@ -22,7 +22,7 @@ class SingleButtonInputHandler(
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         val now = System.currentTimeMillis()
 
-        when (event.action) {
+        when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 touchStartTime = now
                 if (!isStickyLocked) {
@@ -42,6 +42,7 @@ class SingleButtonInputHandler(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 stickyRunnable?.let { handler.removeCallbacks(it) }
+                stickyRunnable = null
                 val holdDuration = now - touchStartTime
 
                 if (isStickyLocked && holdDuration < 600L) {
@@ -51,6 +52,7 @@ class SingleButtonInputHandler(
                     performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
                     (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(emptySet())
                 } else if (!isStickyLocked) {
+                    // Normal quick tap release - release unconditionally and immediately!
                     inputListener.onKeyReleased(input)
                     performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
                     (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(emptySet())
