@@ -103,33 +103,28 @@ class ModernDpadView @JvmOverloads constructor(
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         dpadInputs.forEach { input ->
             val isPressed = input in pressedInputs
-            val targetScale = if (isPressed) 0.90f else 1.0f
-            val targetGlow = if (isPressed) 1.0f else 0.0f
+            directionAnimators[input]?.cancel()
 
-            val currentScale = directionScales[input] ?: 1.0f
-            if (currentScale != targetScale) {
-                animateDirection(input, targetScale, targetGlow)
+            if (!isPressed) {
+                directionScales[input] = 1.0f
+                directionGlows[input] = 0.0f
+            } else {
+                val startScale = directionScales[input] ?: 1.0f
+                val startGlow = directionGlows[input] ?: 0.0f
+                val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = 50L
+                    addUpdateListener { anim ->
+                        val fraction = anim.animatedFraction
+                        directionScales[input] = startScale + (0.90f - startScale) * fraction
+                        directionGlows[input] = startGlow + (1.0f - startGlow) * fraction
+                        invalidate()
+                    }
+                }
+                directionAnimators[input] = animator
+                animator.start()
             }
         }
-    }
-
-    private fun animateDirection(input: Input, targetScale: Float, targetGlow: Float) {
-        directionAnimators[input]?.cancel()
-
-        val startScale = directionScales[input] ?: 1.0f
-        val startGlow = directionGlows[input] ?: 0.0f
-
-        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 90L
-            addUpdateListener { anim ->
-                val fraction = anim.animatedFraction
-                directionScales[input] = startScale + (targetScale - startScale) * fraction
-                directionGlows[input] = startGlow + (targetGlow - startGlow) * fraction
-                invalidate()
-            }
-        }
-        directionAnimators[input] = animator
-        animator.start()
+        invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
