@@ -15,6 +15,92 @@
         <item>stable</item>
     </string-array>
 
+    <!-- Auto-Translator Arrays -->
+    <string-array name="translator_engine_options">
+        <item>@string/translator_engine_google</item>
+        <item>@string/translator_engine_deepl</item>
+        <item>@string/translator_engine_libre</item>
+        <item>@string/translator_engine_mymemory</item>
+        <item>@string/translator_engine_custom_ai</item>
+    </string-array>
+    <string-array name="translator_engine_values">
+        <item>google</item>
+        <item>deepl</item>
+        <item>libre</item>
+        <item>mymemory</item>
+        <item>custom_ai</item>
+    </string-array>
+
+    <string-array name="translator_source_lang_options">
+        <item>@string/lang_auto</item>
+        <item>@string/lang_ja</item>
+        <item>@string/lang_en</item>
+        <item>@string/lang_zh</item>
+        <item>@string/lang_ko</item>
+        <item>@string/lang_de</item>
+        <item>@string/lang_fr</item>
+        <item>@string/lang_es</item>
+        <item>@string/lang_it</item>
+    </string-array>
+    <string-array name="translator_source_lang_values">
+        <item>auto</item>
+        <item>ja</item>
+        <item>en</item>
+        <item>zh</item>
+        <item>ko</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>es</item>
+        <item>it</item>
+    </string-array>
+
+    <string-array name="translator_target_lang_options">
+        <item>@string/lang_ru</item>
+        <item>@string/lang_en</item>
+        <item>@string/lang_uk</item>
+        <item>@string/lang_es</item>
+        <item>@string/lang_de</item>
+        <item>@string/lang_fr</item>
+        <item>@string/lang_ja</item>
+        <item>@string/lang_zh</item>
+        <item>@string/lang_it</item>
+        <item>@string/lang_pt</item>
+    </string-array>
+    <string-array name="translator_target_lang_values">
+        <item>ru</item>
+        <item>en</item>
+        <item>uk</item>
+        <item>es</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>ja</item>
+        <item>zh</item>
+        <item>it</item>
+        <item>pt</item>
+    </string-array>
+
+    <string-array name="translator_trigger_mode_options">
+        <item>@string/translator_trigger_mode_on_demand</item>
+        <item>@string/translator_trigger_mode_auto</item>
+    </string-array>
+    <string-array name="translator_trigger_mode_values">
+        <item>on_demand</item>
+        <item>auto_screen_change</item>
+    </string-array>
+
+    <string-array name="translator_overlay_style_options">
+        <item>@string/translator_style_smart_match</item>
+        <item>@string/translator_style_semi_transparent</item>
+        <item>@string/translator_style_neon_bubble</item>
+        <item>@string/translator_style_outline_only</item>
+    </string-array>
+    <string-array name="translator_overlay_style_values">
+        <item>smart_background_match</item>
+        <item>semi_transparent</item>
+        <item>translucent_bubble</item>
+        <item>outline_only</item>
+    </string-array>
+
     <string-array name="rom_display_name_mode_options">
         <item>@string/rom_display_name_mode_file_name</item>
         <item>@string/rom_display_name_mode_internal</item>

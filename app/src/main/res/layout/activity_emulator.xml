@@ -89,6 +89,12 @@
             android:clipToPadding="false"
             app:layout_constraintBottom_toBottomOf="parent" />
 
+    <me.magnum.melonds.translator.ui.GameTranslationOverlayView
+            android:id="@+id/view_translation_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
     <androidx.compose.ui.platform.ComposeView
             android:id="@+id/layout_pause_menu"
             android:layout_width="match_parent"
