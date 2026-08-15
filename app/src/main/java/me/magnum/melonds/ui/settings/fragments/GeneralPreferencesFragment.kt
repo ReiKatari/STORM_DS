@@ -84,6 +84,16 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         frameLimitSpeedPreference = findPreference("frame_limit_speed_multiplier")!!
         val sustainedPerformancePreference = findPreference<SwitchPreference>("enable_sustained_performance")!!
 
+        val themePreference = findPreference<ListPreference>("theme")
+        if (themePreference != null) {
+            helper.bindPreferenceSummaryToValue(themePreference)
+            themePreference.setOnPreferenceChangeListener { _, newValue ->
+                me.magnum.melonds.ui.theme.AppThemeManager.updateTheme(requireContext(), newValue as String)
+                activity?.recreate()
+                true
+            }
+        }
+
         helper.bindPreferenceSummaryToValue(rewindPreference)
         helper.bindPreferenceSummaryToValue(frameLimitSpeedPreference)
         updateFrameLimitSpeedPreferenceState()

@@ -78,31 +78,35 @@ abstract class MultiButtonInputHandler(
 
         val now = System.currentTimeMillis()
 
+        // When finger touches down on a button that was sticky, immediately turn sticky OFF!
+        for (input in rawCurrentInputs) {
+            if (input in stickyInputs) {
+                stickyInputs.remove(input)
+            }
+        }
+
         // Track newly pressed inputs to schedule 2-second sticky hold
         for (input in rawCurrentInputs) {
             if (!activeTouchStartTimes.containsKey(input)) {
                 activeTouchStartTimes[input] = now
                 val runnable = Runnable {
-                    stickyInputs.add(input)
-                    performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
-                    (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(resolveEffectiveInputs().toSet())
+                    // Double check if input is still actively touched before locking sticky
+                    if (input in rawCurrentInputs) {
+                        stickyInputs.add(input)
+                        performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
+                        (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(resolveEffectiveInputs().toSet())
+                    }
                 }
                 stickyTimers[input] = runnable
                 handler.postDelayed(runnable, 2000L)
             }
         }
 
-        // Handle released inputs (lifted finger)
+        // Handle released inputs (lifted finger or moved off button)
         val releasedFromTouch = activeTouchStartTimes.keys.filter { it !in rawCurrentInputs }
         for (input in releasedFromTouch) {
-            val startTime = activeTouchStartTimes.remove(input) ?: now
+            activeTouchStartTimes.remove(input)
             stickyTimers.remove(input)?.let { handler.removeCallbacks(it) }
-
-            val holdDuration = now - startTime
-            // If button was already locked as sticky, a quick tap (< 600ms) toggles it OFF!
-            if (input in stickyInputs && holdDuration < 600L) {
-                stickyInputs.remove(input)
-            }
         }
 
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
