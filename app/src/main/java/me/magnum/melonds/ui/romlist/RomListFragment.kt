@@ -120,7 +120,7 @@ class RomListFragment : Fragment() {
                         onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
                         onRomClick = { rom ->
                             romListViewModel.setRomLastPlayedNow(rom)
-                            romSelectedListener?.invoke(rom)
+                            openRomDetails(rom)
                         },
                         onRomLongPress = { rom -> contextRomUri = rom.uri.toString() },
                         onRomConfigClick = { rom -> contextRomUri = rom.uri.toString() },
@@ -153,6 +153,7 @@ class RomListFragment : Fragment() {
                         onShowDetails = { rom -> openRomDetails(rom) },
                         onSendSaveFile = { rom -> shareSaveFile(rom) },
                         onImportSaveFile = { rom -> requestSaveFileImport(rom) },
+                        onLaunchRom = { rom -> romSelectedListener?.invoke(rom) },
                     )
                 }
             }

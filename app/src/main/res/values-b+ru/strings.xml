@@ -248,8 +248,9 @@
   <string name="presets">Пресеты экранов</string>
   <string name="layout_editing_disabled_by_presets">Редактирование макетов недоступно при активном пресете двух экранов.</string>
   <string name="above_other_screen">Поверх другого экрана</string>
-  <string name="center_horizontal">Центрировать по горизонтали</string>
-  <string name="center_vertical">Центрировать по вертикали</string>
+  <string name="center_horizontal">Центр (Г)</string>
+  <string name="center_vertical">Центр (В)</string>
+  <string name="label_button_scale">Размер кнопок</string>
   <string name="editing_internal_layout">Редактирование внутреннего макета</string>
   <string name="editing_external_layout">Редактирование внешнего макета</string>
   <string name="menu">Меню</string>

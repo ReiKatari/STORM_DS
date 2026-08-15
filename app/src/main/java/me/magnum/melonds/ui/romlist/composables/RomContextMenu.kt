@@ -20,6 +20,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -49,6 +50,7 @@ fun RomContextMenu(
     onShowDetails: (Rom) -> Unit,
     onSendSaveFile: (Rom) -> Unit,
     onImportSaveFile: (Rom) -> Unit,
+    onLaunchRom: (Rom) -> Unit = {},
 ) {
     if (rom == null) return
     val colors = watermelon
@@ -102,6 +104,15 @@ fun RomContextMenu(
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
                 Spacer(Modifier.height(6.dp))
+                ContextItem(
+                    icon = Icons.Filled.PlayArrow,
+                    iconTint = colors.red,
+                    label = stringResource(R.string.play),
+                    onClick = {
+                        onLaunchRom(rom)
+                        onDismiss()
+                    },
+                )
                 ContextItem(
                     icon = if (rom.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
                     iconTint = if (rom.isFavorite) WatermelonColors.favoriteStar else colors.text2,

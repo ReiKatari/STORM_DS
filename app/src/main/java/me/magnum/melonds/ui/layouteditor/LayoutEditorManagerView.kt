@@ -264,10 +264,6 @@ class LayoutEditorManagerView(
         binding.buttonEditPosition.setOnClickListener {
             openSelectedViewPositionDialog()
         }
-        binding.buttonEditSize.captureEditTargetOnTouchDown()
-        binding.buttonEditSize.setOnClickListener {
-            openSelectedViewSizeDialog()
-        }
         binding.buttonCenterHorizontal.setOnClickListener {
             binding.viewLayoutEditor.centerSelectedViewHorizontally()
         }
@@ -282,6 +278,22 @@ class LayoutEditorManagerView(
                     if (comp == LayoutComponent.BUTTONS) {
                         val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
                         (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread = progress / 100f
+                        listener?.onStoreLayoutChanges()
+                    }
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+        binding.seekBarButtonScale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                binding.textButtonScale.text = "$progress%"
+                if (fromUser) {
+                    val comp = binding.viewLayoutEditor.getSelectedComponent()
+                    if (comp == LayoutComponent.BUTTONS) {
+                        val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
+                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonInnerScale = progress / 100f
                         listener?.onStoreLayoutChanges()
                     }
                 }
@@ -872,12 +884,19 @@ class LayoutEditorManagerView(
             val isButtonsCluster = (selectedScreenComponent == LayoutComponent.BUTTONS)
             binding.layoutSpreadLabels.isVisible = isButtonsCluster
             binding.seekBarSpread.isVisible = isButtonsCluster
+            binding.layoutButtonScaleLabels.isVisible = isButtonsCluster
+            binding.seekBarButtonScale.isVisible = isButtonsCluster
             if (isButtonsCluster) {
                 val view = binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.BUTTONS)?.view
                 val currentSpread = (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread ?: 1.0f
                 val spreadInt = (currentSpread * 100).toInt().coerceIn(60, 160)
                 binding.seekBarSpread.progress = spreadInt
                 binding.textSpread.text = "$spreadInt%"
+
+                val currentScale = (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonInnerScale ?: 1.0f
+                val scaleInt = (currentScale * 100).toInt().coerceIn(60, 140)
+                binding.seekBarButtonScale.progress = scaleInt
+                binding.textButtonScale.text = "$scaleInt%"
             }
 
             binding.seekBarAlpha.progress = (alpha * 100).roundToInt().coerceIn(0, binding.seekBarAlpha.max)
@@ -894,7 +913,6 @@ class LayoutEditorManagerView(
 
         binding.layoutSizeLabels.isVisible = !isScreen
         binding.seekBarSize.isVisible = !isScreen
-        binding.buttonEditSize.isVisible = true
         binding.layoutWidthLabels.isVisible = true
         binding.seekBarWidth.isVisible = true
         binding.layoutHeightLabels.isVisible = true

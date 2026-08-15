@@ -84,33 +84,55 @@ class ModernButtonsView @JvmOverloads constructor(
             invalidate()
         }
 
+    var buttonInnerScale: Float = 1.0f
+        set(value) {
+            field = value.coerceIn(0.6f, 1.4f)
+            invalidate()
+        }
+
     private val buttonScales = mutableMapOf<Input, Float>()
     private val buttonGlows = mutableMapOf<Input, Float>()
-    private val buttonAnimators = mutableMapOf<Input, ValueAnimator>()
+    private val stickyLockedInputs = mutableSetOf<Input>()
+    private val holdTimerRunnables = mutableMapOf<Input, Runnable>()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         val allInputs = listOf(Input.X, Input.Y, Input.B, Input.A)
         allInputs.forEach { input ->
             val isPressed = input in pressedInputs
-            buttonAnimators[input]?.cancel()
+            val isCurrentlyDown = (buttonScales[input] ?: 1.0f) < 0.95f
 
-            if (!isPressed) {
-                buttonScales[input] = 1.0f
-                buttonGlows[input] = 0.0f
-            } else {
-                val startScale = buttonScales[input] ?: 1.0f
-                val startGlow = buttonGlows[input] ?: 0.0f
-                val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                    duration = 50L
-                    addUpdateListener { anim ->
-                        val fraction = anim.animatedFraction
-                        buttonScales[input] = startScale + (0.88f - startScale) * fraction
-                        buttonGlows[input] = startGlow + (1.0f - startGlow) * fraction
+            if (isPressed) {
+                if (!isCurrentlyDown) {
+                    buttonScales[input] = 0.88f
+                    buttonGlows[input] = 1.0f
+
+                    val holdRunnable = Runnable {
+                        stickyLockedInputs.add(input)
                         invalidate()
                     }
+                    holdTimerRunnables[input] = holdRunnable
+                    mainHandler.postDelayed(holdRunnable, 3000L)
                 }
-                buttonAnimators[input] = animator
-                animator.start()
+            } else {
+                if (isCurrentlyDown) {
+                    holdTimerRunnables.remove(input)?.let { mainHandler.removeCallbacks(it) }
+
+                    if (input in stickyLockedInputs) {
+                        stickyLockedInputs.remove(input)
+                        buttonScales[input] = 1.0f
+                        buttonGlows[input] = 0.0f
+                    } else {
+                        buttonScales[input] = 1.0f
+                        buttonGlows[input] = 0.0f
+                    }
+                } else if (input in stickyLockedInputs) {
+                    buttonScales[input] = 1.0f
+                    buttonGlows[input] = 1.0f
+                } else {
+                    buttonScales[input] = 1.0f
+                    buttonGlows[input] = 0.0f
+                }
             }
         }
         invalidate()
@@ -126,7 +148,7 @@ class ModernButtonsView @JvmOverloads constructor(
         val size = min(w, h)
         val cx = w / 2f
         val cy = h / 2f
-        val buttonRadius = size * 0.175f
+        val buttonRadius = size * 0.175f * buttonInnerScale
         val offset = size * 0.285f * buttonSpread
 
         val style = ButtonThemeManager.currentStyle
