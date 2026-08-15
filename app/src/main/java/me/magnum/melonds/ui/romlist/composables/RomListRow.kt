@@ -112,24 +112,27 @@ fun RomListRow(
         }
         Spacer(Modifier.width(13.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text(
                     text = romDisplayName(rom),
                     color = colors.text,
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
+                    fontSize = 13.5.sp,
+                    lineHeight = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (rom.isFavorite) {
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(5.dp))
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
                         tint = WatermelonColors.favoriteStar,
-                        modifier = Modifier.size(13.dp),
+                        modifier = Modifier.padding(top = 2.dp).size(13.dp),
                     )
                 }
                 if (showAchievementBadge) {
@@ -138,7 +141,7 @@ fun RomListRow(
                         imageVector = Icons.Filled.EmojiEvents,
                         contentDescription = null,
                         tint = WatermelonColors.gold,
-                        modifier = Modifier.size(13.dp),
+                        modifier = Modifier.padding(top = 2.dp).size(13.dp),
                     )
                 }
             }
@@ -147,11 +150,11 @@ fun RomListRow(
                 Text(
                     text = subtitle,
                     color = colors.text3,
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
+                    fontSize = 11.5.sp,
+                    lineHeight = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = 3.dp),
                 )
             }
         }
