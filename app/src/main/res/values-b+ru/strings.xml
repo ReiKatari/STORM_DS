@@ -1118,6 +1118,7 @@
   <string name="internal_layout_restore_error">Ошибка восстановления внутреннего макета</string>
   <string name="dsiware_manager_fix_setup">Исправить настройки DSi</string>
     <string name="about_app_title">О программе и благодарности</string>
+    <string name="about_app_description">Мощный форк эмулятора WatermelonDS (на ядре melonDS) для Android с Vulkan 3D, поддержкой шейдеров RetroArch и RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, авторы и лицензии</string>
     <string name="about_version_title">Версия</string>
     <string name="about_credits_title">Благодарности авторам</string>
