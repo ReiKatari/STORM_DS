@@ -214,7 +214,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
             }
 
             // Drop shadow
-            canvas.drawRoundRect(RectF(rect.left, rect.top + 3f, rect.right, rect.bottom + 3f), cornerRadius * 0.5f, cornerRadius * 0.5f, shadowPaint)
+            canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 4f, rect.right + 2f, rect.bottom + 4f), cornerRadius * 0.5f, cornerRadius * 0.5f, shadowPaint)
 
             if (buttonGlow > 0f) {
                 bgPaint.color = pressedBg
@@ -232,7 +232,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
         } else if (isStartSelect) {
             val rx = min(w, h) * 0.44f
             // Drop shadow
-            canvas.drawRoundRect(RectF(rect.left, rect.top + 2.5f, rect.right, rect.bottom + 2.5f), rx, rx, shadowPaint)
+            canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3.5f, rect.right + 2f, rect.bottom + 3.5f), rx, rx, shadowPaint)
 
             if (buttonGlow > 0f) {
                 bgPaint.color = pressedBg
@@ -251,7 +251,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
         } else {
             val rx = min(w, h) * 0.38f
             // Drop shadow
-            canvas.drawRoundRect(RectF(rect.left, rect.top + 2.5f, rect.right, rect.bottom + 2.5f), rx, rx, shadowPaint)
+            canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3.5f, rect.right + 2f, rect.bottom + 3.5f), rx, rx, shadowPaint)
 
             if (buttonGlow > 0f) {
                 bgPaint.color = pressedBg
@@ -528,16 +528,14 @@ class ModernSingleButtonView @JvmOverloads constructor(
     }
 
     private fun drawTranslateIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
-        val r = size * 0.38f
-        val globePaint = Paint(iconPaint).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 2.6f
+        val trPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = iconPaint.color
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            textSize = size * 0.48f
         }
-        canvas.drawCircle(cx, cy, r, globePaint)
-        canvas.drawLine(cx - r, cy, cx + r, cy, globePaint)
-        canvas.drawLine(cx, cy - r, cx, cy + r, globePaint)
-        val ovalRect = RectF(cx - r * 0.48f, cy - r, cx + r * 0.48f, cy + r)
-        canvas.drawOval(ovalRect, globePaint)
+        val y = cy - (trPaint.descent() + trPaint.ascent()) / 2f
+        canvas.drawText("TR", cx, y, trPaint)
     }
 
     private fun drawToggleExtraIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
