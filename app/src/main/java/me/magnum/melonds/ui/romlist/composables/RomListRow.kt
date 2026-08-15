@@ -181,10 +181,38 @@ fun RomListRow(
 
         Spacer(Modifier.width(10.dp))
 
-        // 3. Column 3: Region Badge & Platform Tag
+        // 3. Column 3: Region Badge, Platform Tag & RA Badge
         val regionBadge = resolveRomRegionBadge(rom)
         Column(horizontalAlignment = Alignment.End) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showAchievementBadge) {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 5.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF0F172A).copy(alpha = 0.85f))
+                            .border(0.7.dp, WatermelonColors.gold.copy(alpha = 0.70f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.EmojiEvents,
+                                contentDescription = "Achievements",
+                                tint = WatermelonColors.gold,
+                                modifier = Modifier.size(10.dp),
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                text = "RA",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = WatermelonColors.gold
+                                )
+                            )
+                        }
+                    }
+                }
                 if (regionBadge != null) {
                     RegionBadge(
                         flag = regionBadge.first,
