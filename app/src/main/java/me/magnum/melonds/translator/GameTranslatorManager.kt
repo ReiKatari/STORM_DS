@@ -111,70 +111,96 @@ class GameTranslatorManager(
             return
         }
 
-        val surfaceView = surfaceProvider() ?: return
-        if (surfaceView.width <= 0 || surfaceView.height <= 0) return
+        val surfaceView = surfaceProvider()
+        val decorView = activity.window.decorView
+        val width = (surfaceView?.width ?: decorView.width).coerceAtLeast(1)
+        val height = (surfaceView?.height ?: decorView.height).coerceAtLeast(1)
 
         val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
         if (pauseOnTranslate) {
             isPausedByTranslator = true
-            onPauseEmulator()
+            try {
+                onPauseEmulator()
+            } catch (e: Throwable) {
+                // Ignore pause failure
+            }
         }
 
         overlayView?.isTranslating = true
 
-        val bitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
-        try {
-            PixelCopy.request(surfaceView, bitmap, { copyResult ->
-                if (copyResult == PixelCopy.SUCCESS) {
-                    processCapturedFrame(bitmap)
-                } else {
-                    mainHandler.post {
-                        overlayView?.isTranslating = false
-                        Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
-                    }
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
+            if (copyResult == PixelCopy.SUCCESS) {
+                processCapturedFrame(bitmap)
+            } else {
+                mainHandler.post {
+                    overlayView?.isTranslating = false
+                    Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
                 }
-            }, mainHandler)
-        } catch (e: Exception) {
-            overlayView?.isTranslating = false
+            }
+        }
+
+        try {
+            if (surfaceView != null && surfaceView.holder.surface.isValid) {
+                PixelCopy.request(surfaceView, bitmap, onCopyFinished, mainHandler)
+            } else {
+                PixelCopy.request(activity.window, bitmap, onCopyFinished, mainHandler)
+            }
+        } catch (e: Throwable) {
+            try {
+                PixelCopy.request(activity.window, bitmap, onCopyFinished, mainHandler)
+            } catch (t: Throwable) {
+                mainHandler.post {
+                    overlayView?.isTranslating = false
+                    Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
     private fun processCapturedFrame(bitmap: Bitmap) {
         mainScope.launch {
-            val sourceLang = preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
-            val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
+            try {
+                val sourceLang = preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
+                val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
 
-            val blocks = textRecognizer.recognizeTextBlocks(bitmap, sourceLang)
-            if (blocks.isEmpty()) {
-                overlayView?.clearTranslations()
-                Toast.makeText(activity, R.string.translator_no_text_found, Toast.LENGTH_SHORT).show()
-                return@launch
-            }
+                val blocks = textRecognizer.recognizeTextBlocks(bitmap, sourceLang)
+                if (blocks.isEmpty()) {
+                    overlayView?.clearTranslations()
+                    Toast.makeText(activity, R.string.translator_no_text_found, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
 
-            val engine = getActiveTranslationEngine()
+                val engine = getActiveTranslationEngine()
 
-            // Translate blocks in parallel
-            coroutineScope {
-                blocks.map { block ->
-                    async(Dispatchers.IO) {
-                        val cacheKey = "${block.originalText}|$sourceLang|$targetLang"
-                        val cached = translationCache[cacheKey]
-                        if (cached != null) {
-                            block.translatedText = cached
-                        } else {
-                            val translated = try {
-                                engine.translate(block.originalText, sourceLang, targetLang)
-                            } catch (e: Exception) {
-                                block.originalText
+                // Translate blocks in parallel
+                coroutineScope {
+                    blocks.map { block ->
+                        async(Dispatchers.IO) {
+                            val cacheKey = "${block.originalText}|$sourceLang|$targetLang"
+                            val cached = translationCache[cacheKey]
+                            if (cached != null) {
+                                block.translatedText = cached
+                            } else {
+                                val translated = try {
+                                    engine.translate(block.originalText, sourceLang, targetLang)
+                                } catch (e: Exception) {
+                                    block.originalText
+                                }
+                                translationCache[cacheKey] = translated
+                                block.translatedText = translated
                             }
-                            translationCache[cacheKey] = translated
-                            block.translatedText = translated
                         }
-                    }
-                }.awaitAll()
-            }
+                    }.awaitAll()
+                }
 
-            overlayView?.setTranslatedBlocks(blocks)
+                overlayView?.setTranslatedBlocks(blocks)
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
+            } finally {
+                overlayView?.isTranslating = false
+            }
         }
     }
 

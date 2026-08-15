@@ -194,9 +194,9 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             canvas.drawCircle(floatBtnX, floatBtnY, floatBtnRadius, floatBtnPaint)
             canvas.drawCircle(floatBtnX, floatBtnY, floatBtnRadius, floatBtnStrokePaint)
 
-            // "文A" or "🌐" Icon/Text
+            // "TR" Translate Text
             val textY = floatBtnY - (floatBtnTextPaint.descent() + floatBtnTextPaint.ascent()) / 2f
-            canvas.drawText("文A", floatBtnX, textY, floatBtnTextPaint)
+            canvas.drawText("TR", floatBtnX, textY, floatBtnTextPaint)
         }
     }
 

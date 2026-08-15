@@ -1174,14 +1174,14 @@
     <string name="translator_pause_on_translate">Пауза игры во время перевода</string>
     <string name="translator_pause_on_translate_summary">Приостанавливать игру пока открыт перевод</string>
     <string name="translator_overlay_style">Стиль наложения перевода</string>
-    <string name="translator_style_smart_match">Умный подбор фона под диалоговое окно игры (Bubble Translate)</string>
+    <string name="translator_style_smart_match">Умный подбор фона под диалоговое окно игры</string>
     <string name="translator_style_semi_transparent">Полупрозрачный темный фон</string>
     <string name="translator_style_neon_bubble">Полупрозрачный неоновый баббл</string>
     <string name="translator_style_outline_only">Только контур (Без фона)</string>
     <string name="translator_bubble_opacity">Непрозрачность фона</string>
     <string name="translator_font_size_scale">Масштаб шрифта</string>
     <string name="translator_show_floating_button">Отображать плавающую кнопку перевода</string>
-    <string name="translator_show_floating_button_summary">Плавающая перетаскиваемая кнопка \'文A\' поверх экрана эмулятора</string>
+    <string name="translator_show_floating_button_summary">Плавающая перетаскиваемая кнопка \'TR\' поверх экрана эмулятора</string>
     <string name="translator_api_keys_category">API-ключи и настройка нейросетей</string>
     <string name="translator_deepl_key">Ключ DeepL API</string>
     <string name="translator_custom_ai_key">Ключ AI API (Gemini/OpenAI/Claude)</string>
@@ -1208,4 +1208,7 @@
     <string name="toggle_visibility">Скрыть / Показать</string>
     <string name="components_visibility_title">Управление элементами</string>
     <string name="back">Назад</string>
+    <string name="rom_info_file">Файл</string>
+    <string name="rom_info_last_played">Последний запуск</string>
+    <string name="rom_info_never">Никогда</string>
 </resources>
