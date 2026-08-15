@@ -83,21 +83,23 @@ fun RomListRow(
         modifier = modifier
             .fillMaxWidth()
             .scale(pressScale)
-            .padding(horizontal = 12.dp, vertical = 1.dp)
+            .padding(horizontal = 10.dp, vertical = 2.5.dp)
             .clip(shape)
-            .then(if (isFocused) Modifier.border(3.dp, colors.red, shape) else Modifier)
+            .background(colors.surface)
+            .border(0.75.dp, colors.line, shape)
+            .then(if (isFocused) Modifier.border(2.5.dp, colors.red, shape) else Modifier)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
                 onLongClick = onLongPress,
             )
-            .padding(horizontal = 8.dp, vertical = 9.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .width(48.dp)
+                .width(44.dp)
                 .aspectRatio(DsBoxArtAspectRatio)
                 .clip(RoundedCornerShape(6.dp)),
         ) {
@@ -105,12 +107,12 @@ fun RomListRow(
                 rom = rom,
                 boxArtUrl = boxArtUrl,
                 raCoverUrl = coverUrl,
-                initialsFontSize = 18.sp,
+                initialsFontSize = 17.sp,
                 boxArtLoading = boxArtLoading,
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        Spacer(Modifier.width(13.dp))
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.Top,
@@ -120,8 +122,8 @@ fun RomListRow(
                     text = romDisplayName(rom),
                     color = colors.text,
                     fontSize = 13.5.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 17.5.sp,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),

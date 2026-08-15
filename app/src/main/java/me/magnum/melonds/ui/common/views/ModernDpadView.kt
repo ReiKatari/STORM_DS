@@ -14,6 +14,10 @@ class ModernDpadView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr), IAnimatedInputView {
 
+    init {
+        ButtonThemeManager.init(context)
+    }
+
     // Background well / shadow
     private val wellPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -34,14 +38,19 @@ class ModernDpadView @JvmOverloads constructor(
 
     private val bevelLightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3f
-        color = Color.parseColor("#66FFFFFF")
+        strokeWidth = 3.5f
+        color = Color.parseColor("#80FFFFFF")
     }
 
     private val bevelDarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3f
+        strokeWidth = 3.5f
         color = Color.parseColor("#80000000")
+    }
+
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#59000000")
     }
 
     // Center concave dish
@@ -153,6 +162,34 @@ class ModernDpadView @JvmOverloads constructor(
                 wellPaint.color = Color.parseColor("#33475569")
                 wellStrokePaint.color = Color.parseColor("#4D94A3B8")
             }
+            ButtonColorStyle.CRIMSON_RUBY -> {
+                bodyPaint.color = Color.parseColor("#E68F0E17")
+                bevelLightPaint.color = Color.parseColor("#80FF2A37")
+                centerDishPaint.color = Color.parseColor("#CC5C060D")
+                wellPaint.color = Color.parseColor("#332D0608")
+                wellStrokePaint.color = Color.parseColor("#4DE50914")
+            }
+            ButtonColorStyle.MIDNIGHT_PURPLE -> {
+                bodyPaint.color = Color.parseColor("#E6491979")
+                bevelLightPaint.color = Color.parseColor("#80C084FC")
+                centerDishPaint.color = Color.parseColor("#CC2D0B4E")
+                wellPaint.color = Color.parseColor("#331F1738")
+                wellStrokePaint.color = Color.parseColor("#4DC084FC")
+            }
+            ButtonColorStyle.GOLD_LUXURY -> {
+                bodyPaint.color = Color.parseColor("#E6B45309")
+                bevelLightPaint.color = Color.parseColor("#80FBBF24")
+                centerDishPaint.color = Color.parseColor("#CC78350F")
+                wellPaint.color = Color.parseColor("#332A200B")
+                wellStrokePaint.color = Color.parseColor("#4DD4A017")
+            }
+            ButtonColorStyle.EMERALD_MATRIX -> {
+                bodyPaint.color = Color.parseColor("#E6047857")
+                bevelLightPaint.color = Color.parseColor("#8034D399")
+                centerDishPaint.color = Color.parseColor("#CC064E3B")
+                wellPaint.color = Color.parseColor("#33052614")
+                wellStrokePaint.color = Color.parseColor("#4D00E676")
+            }
             else -> {
                 bodyPaint.color = Color.parseColor("#E6232730")
                 bevelLightPaint.color = Color.parseColor("#66FFFFFF")
@@ -195,75 +232,74 @@ class ModernDpadView @JvmOverloads constructor(
             close()
         }
 
+        // Drop shadow for cross
+        canvas.drawPath(crossPath, shadowPaint)
+
         // Draw main body and bevels
         canvas.drawPath(crossPath, bodyPaint)
         canvas.drawPath(crossPath, bevelLightPaint)
 
-        // Center concave pivot dish
-        val dishRadius = armWidth * 0.42f
+        // Draw individual arm active states / glows
+        dpadInputs.forEach { input ->
+            val glow = directionGlows[input] ?: 0.0f
+            if (glow > 0f) {
+                val glowCol = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#6638BDF8")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#6694A3B8")
+                    ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#66FF1744")
+                    ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#66C084FC")
+                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#66FFD700")
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#6600E676")
+                    else -> Color.parseColor("#6600E5FF")
+                }
+                activeGlowPaint.color = glowCol
+                activeGlowPaint.alpha = (glow * 180).toInt()
+
+                val armRect = when (input) {
+                    Input.UP -> RectF(cx - hw, cy - hl, cx + hw, cy - hw)
+                    Input.DOWN -> RectF(cx - hw, cy + hw, cx + hw, cy + hl)
+                    Input.LEFT -> RectF(cx - hl, cy - hw, cx - hw, cy + hw)
+                    Input.RIGHT -> RectF(cx + hw, cy - hw, cx + hl, cy + hw)
+                    else -> null
+                }
+                if (armRect != null) {
+                    canvas.drawRoundRect(armRect, cornerRadius, cornerRadius, activeGlowPaint)
+                }
+            }
+        }
+
+        // Center concave circular dish (Nintendo DS authentic)
+        val dishRadius = size * 0.13f
         canvas.drawCircle(cx, cy, dishRadius, centerDishPaint)
         canvas.drawCircle(cx, cy, dishRadius, centerDishRimPaint)
 
-        val armOffsets = mapOf(
-            Input.UP to Pair(0f, -size * 0.28f),
-            Input.DOWN to Pair(0f, size * 0.28f),
-            Input.LEFT to Pair(-size * 0.28f, 0f),
-            Input.RIGHT to Pair(size * 0.28f, 0f)
-        )
+        // Draw arrows on each arm
+        val arrowDist = (hl + hw) / 2f * 0.95f
+        val arrowSize = size * 0.055f
 
-        val arrowAngles = mapOf(
-            Input.UP to 0f,
-            Input.RIGHT to 90f,
-            Input.DOWN to 180f,
-            Input.LEFT to 270f
-        )
+        arrowPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0F172A") else Color.parseColor("#F0F4F8")
 
-        dpadInputs.forEach { input ->
-            val offset = armOffsets[input] ?: Pair(0f, 0f)
-            val scale = directionScales[input] ?: 1.0f
-            val glow = directionGlows[input] ?: 0.0f
-            val angle = arrowAngles[input] ?: 0f
+        drawArrow(canvas, cx, cy - arrowDist, arrowSize, 0f)
+        drawArrow(canvas, cx + arrowDist, cy, arrowSize, 90f)
+        drawArrow(canvas, cx, cy + arrowDist, arrowSize, 180f)
+        drawArrow(canvas, cx - arrowDist, cy, arrowSize, 270f)
+    }
 
-            val ax = cx + offset.first
-            val ay = cy + offset.second
+    private fun drawArrow(canvas: Canvas, x: Float, y: Float, size: Float, angle: Float) {
+        canvas.save()
+        canvas.rotate(angle, x, y)
 
-            canvas.save()
-            canvas.scale(scale, scale, ax, ay)
-
-            if (glow > 0f) {
-                activeGlowPaint.alpha = (glow * 170).toInt()
-                canvas.drawCircle(ax, ay, armWidth * 0.52f, activeGlowPaint)
-                canvas.drawCircle(ax, ay, armWidth * 0.46f, activeStrokePaint)
-            }
-
-            // Draw crisp Nintendo DS Directional Triangle (Arrow)
-            val arrowSize = armWidth * 0.24f
-            val arrowPath = Path().apply {
-                moveTo(0f, -arrowSize)
-                lineTo(arrowSize * 0.86f, arrowSize * 0.7f)
-                lineTo(-arrowSize * 0.86f, arrowSize * 0.7f)
-                close()
-            }
-
-            canvas.save()
-            canvas.translate(ax, ay)
-            canvas.rotate(angle)
-
-            // Arrow shadow
-            canvas.save()
-            canvas.translate(0f, 1.5f)
-            canvas.drawPath(arrowPath, arrowShadowPaint)
-            canvas.restore()
-
-            if (glow > 0f) {
-                arrowPaint.color = Color.parseColor("#00E5FF")
-            } else {
-                arrowPaint.color = Color.parseColor("#F0F4F8")
-            }
-            canvas.drawPath(arrowPath, arrowPaint)
-
-            canvas.restore()
-            canvas.restore()
+        val path = Path().apply {
+            moveTo(x, y - size)
+            lineTo(x + size * 0.85f, y + size * 0.6f)
+            lineTo(x, y + size * 0.2f)
+            lineTo(x - size * 0.85f, y + size * 0.6f)
+            close()
         }
+
+        canvas.drawPath(path, arrowShadowPaint)
+        canvas.drawPath(path, arrowPaint)
+
+        canvas.restore()
     }
 }
