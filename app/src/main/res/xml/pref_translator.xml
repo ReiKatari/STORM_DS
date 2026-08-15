@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="@string/category_translator">
+
+        <SwitchPreferenceCompat
+            android:key="translator_enabled"
+            android:title="@string/translator_enabled"
+            android:summary="@string/translator_enabled_summary"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="translator_engine"
+            android:title="@string/translator_engine"
+            android:entries="@array/translator_engine_options"
+            android:entryValues="@array/translator_engine_values"
+            android:defaultValue="google"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <ListPreference
+            android:key="translator_source_lang"
+            android:title="@string/translator_source_lang"
+            android:entries="@array/translator_source_lang_options"
+            android:entryValues="@array/translator_source_lang_values"
+            android:defaultValue="auto"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <ListPreference
+            android:key="translator_target_lang"
+            android:title="@string/translator_target_lang"
+            android:entries="@array/translator_target_lang_options"
+            android:entryValues="@array/translator_target_lang_values"
+            android:defaultValue="ru"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <ListPreference
+            android:key="translator_trigger_mode"
+            android:title="@string/translator_trigger_mode"
+            android:entries="@array/translator_trigger_mode_options"
+            android:entryValues="@array/translator_trigger_mode_values"
+            android:defaultValue="on_demand"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="translator_pause_on_translate"
+            android:title="@string/translator_pause_on_translate"
+            android:summary="@string/translator_pause_on_translate_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="translator_show_floating_button"
+            android:title="@string/translator_show_floating_button"
+            android:summary="@string/translator_show_floating_button_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/translator_overlay_style">
+
+        <ListPreference
+            android:key="translator_overlay_style"
+            android:title="@string/translator_overlay_style"
+            android:entries="@array/translator_overlay_style_options"
+            android:entryValues="@array/translator_overlay_style_values"
+            android:defaultValue="smart_background_match"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <SeekBarPreference
+            android:key="translator_bubble_opacity"
+            android:title="@string/translator_bubble_opacity"
+            android:min="10"
+            android:max="100"
+            android:defaultValue="90"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <SeekBarPreference
+            android:key="translator_font_size_scale"
+            android:title="@string/translator_font_size_scale"
+            android:min="60"
+            android:max="160"
+            android:defaultValue="100"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="pref_category_api_keys"
+        android:title="@string/translator_api_keys_category">
+
+        <EditTextPreference
+            android:key="translator_deepl_key"
+            android:title="@string/translator_deepl_key"
+            android:summary="DeepL Free / Pro API key"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <EditTextPreference
+            android:key="translator_custom_ai_key"
+            android:title="@string/translator_custom_ai_key"
+            android:summary="API Key (OpenAI / Gemini / Claude)"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <EditTextPreference
+            android:key="translator_custom_ai_endpoint"
+            android:title="@string/translator_custom_ai_endpoint"
+            android:defaultValue="https://api.openai.com/v1/chat/completions"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <EditTextPreference
+            android:key="translator_custom_ai_model"
+            android:title="@string/translator_custom_ai_model"
+            android:defaultValue="gpt-4o-mini"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>
