@@ -164,36 +164,60 @@ class GameTranslatorManager(
     private suspend fun captureViaPixelCopy(): Bitmap? = withContext(Dispatchers.Main) {
         val surfaceView = surfaceProvider()
         val decorView = activity.window.decorView
-        val width = (surfaceView?.width ?: decorView.width).coerceAtLeast(1)
-        val height = (surfaceView?.height ?: decorView.height).coerceAtLeast(1)
+        val decorW = decorView.width.coerceAtLeast(1)
+        val decorH = decorView.height.coerceAtLeast(1)
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val srcRect = android.graphics.Rect(0, 0, width, height)
-
-        withTimeoutOrNull(1000) {
-            suspendCancellableCoroutine { continuation ->
-                val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
-                    if (copyResult == PixelCopy.SUCCESS) {
-                        if (continuation.isActive) continuation.resume(bitmap, onCancellation = null)
-                    } else {
-                        if (continuation.isActive) continuation.resume(null, onCancellation = null)
+        // Tier 1: Try PixelCopy from SurfaceView if valid
+        if (surfaceView != null && surfaceView.holder.surface.isValid && surfaceView.width > 0 && surfaceView.height > 0) {
+            val surfaceBitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
+            val result = withTimeoutOrNull(400) {
+                suspendCancellableCoroutine<Bitmap?> { continuation ->
+                    val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
+                        if (copyResult == PixelCopy.SUCCESS) {
+                            if (continuation.isActive) continuation.resume(surfaceBitmap, onCancellation = null)
+                        } else {
+                            if (continuation.isActive) continuation.resume(null, onCancellation = null)
+                        }
                     }
-                }
-
-                try {
-                    if (surfaceView != null && surfaceView.holder.surface.isValid) {
-                        PixelCopy.request(surfaceView, bitmap, onCopyFinished, mainHandler)
-                    } else {
-                        PixelCopy.request(activity.window, srcRect, bitmap, onCopyFinished, mainHandler)
-                    }
-                } catch (e: Throwable) {
                     try {
-                        PixelCopy.request(activity.window, srcRect, bitmap, onCopyFinished, mainHandler)
+                        PixelCopy.request(surfaceView, surfaceBitmap, onCopyFinished, mainHandler)
                     } catch (t: Throwable) {
                         if (continuation.isActive) continuation.resume(null, onCancellation = null)
                     }
                 }
             }
+            if (result != null) return@withContext result
+        }
+
+        // Tier 2: Try PixelCopy from full Window
+        val windowBitmap = Bitmap.createBitmap(decorW, decorH, Bitmap.Config.ARGB_8888)
+        val windowResult = withTimeoutOrNull(400) {
+            suspendCancellableCoroutine<Bitmap?> { continuation ->
+                val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
+                    if (copyResult == PixelCopy.SUCCESS) {
+                        if (continuation.isActive) continuation.resume(windowBitmap, onCancellation = null)
+                    } else {
+                        if (continuation.isActive) continuation.resume(null, onCancellation = null)
+                    }
+                }
+                try {
+                    val rect = android.graphics.Rect(0, 0, decorW, decorH)
+                    PixelCopy.request(activity.window, rect, windowBitmap, onCopyFinished, mainHandler)
+                } catch (t: Throwable) {
+                    if (continuation.isActive) continuation.resume(null, onCancellation = null)
+                }
+            }
+        }
+        if (windowResult != null) return@withContext windowResult
+
+        // Tier 3: Canvas Software Draw fallback from decorView
+        try {
+            val fallbackBitmap = Bitmap.createBitmap(decorW, decorH, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(fallbackBitmap)
+            decorView.draw(canvas)
+            fallbackBitmap
+        } catch (t: Throwable) {
+            null
         }
     }
 

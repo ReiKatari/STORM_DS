@@ -2697,9 +2697,14 @@ u32 MelonInstance::runFrame()
     if (screenshotRenderer->isScreenshotPending()) [[unlikely]]
     {
         if (currentRenderer == Renderer::Vulkan)
+        {
             (void)updateVulkanScreenshot(hasValidFrame ? tailFrame : lastCompletedVulkanFrame, hasValidFrame ? std::max(vulkanRenderScale, 1) : lastCompletedVulkanScale, true);
+            screenshotRenderer->notifyScreenshotReady();
+        }
         else
+        {
             screenshotRenderer->renderScreenshot(&nds->GPU, currentRenderer, renderFrame);
+        }
     }
 
     if (shouldCaptureRewindState)
