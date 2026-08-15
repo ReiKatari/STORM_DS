@@ -93,7 +93,13 @@ class SettingsActivity :
     private lateinit var binding: ActivitySettingsBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
+        val isLight = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme == me.magnum.melonds.ui.Theme.LIGHT
+        if (isLight) {
+            enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
+        } else {
+            enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        }
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -165,8 +171,9 @@ class SettingsActivity :
     }
 
     override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat, pref: PreferenceScreen): Boolean {
+        val classLoader = caller.javaClass.classLoader ?: this.classLoader
         val fragment = supportFragmentManager.fragmentFactory.instantiate(
-            ClassLoader.getSystemClassLoader(),
+            classLoader,
             caller::class.java.name,
         ).apply {
             arguments = bundleOf(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT to pref.key)
@@ -182,8 +189,9 @@ class SettingsActivity :
 
     override fun onPreferenceStartFragment(caller: PreferenceFragmentCompat, pref: Preference): Boolean {
         val fragmentClassName = pref.fragment ?: return false
+        val classLoader = caller.javaClass.classLoader ?: this.classLoader
 
-        val fragment = supportFragmentManager.fragmentFactory.instantiate(ClassLoader.getSystemClassLoader(), fragmentClassName).apply {
+        val fragment = supportFragmentManager.fragmentFactory.instantiate(classLoader, fragmentClassName).apply {
             arguments = pref.extras
         }
 

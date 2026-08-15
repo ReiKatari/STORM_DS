@@ -1153,5 +1153,5 @@
     </string-array>
     <string name="rom_display_name_mode">Отображение названий игр</string>
     <string name="rom_display_name_mode_file_name">Название файла (без расширения)</string>
-    <string name="rom_display_name_mode_internal">Название игры (как раньше)</string>
+    <string name="rom_display_name_mode_internal">Название игры</string>
 </resources>
