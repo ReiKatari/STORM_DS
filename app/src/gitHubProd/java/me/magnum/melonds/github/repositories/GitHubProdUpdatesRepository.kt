@@ -51,7 +51,7 @@ class GitHubProdUpdatesRepository(
             val channel = GitHubUpdateChannel.fromPreference(
                 settingsPreferences.getString(
                     PREF_KEY_GITHUB_UPDATE_CHANNEL,
-                    GitHubUpdateChannel.STABLE_AND_PRERELEASE.preferenceValue,
+                    GitHubUpdateChannel.STABLE.preferenceValue,
                 ),
             )
 
