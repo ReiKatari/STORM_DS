@@ -367,7 +367,7 @@ class EmulatorActivity : AppCompatActivity() {
         me.magnum.melonds.translator.GameTranslatorManager(
             activity = this,
             surfaceProvider = { binding.surfaceMain },
-            onPauseEmulator = { viewModel.pauseEmulator(true) },
+            onPauseEmulator = { viewModel.pauseEmulator(false) },
             onResumeEmulator = { viewModel.resumeEmulator() }
         )
     }
