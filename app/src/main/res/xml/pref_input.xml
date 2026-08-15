@@ -25,6 +25,15 @@
         app:fragment="me.magnum.melonds.ui.settings.fragments.SoftInputBehaviourPreferencesFragment"
         app:iconSpaceReserved="false" />
 
+    <ListPreference
+            android:key="button_color_theme"
+            android:title="@string/button_color_theme"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/button_color_theme_options"
+            android:entryValues="@array/button_color_theme_values"
+            android:defaultValue="cyber_cyan" />
+
     <SwitchPreference
             android:key="input_touch_haptic_feedback_enabled"
             android:title="@string/vibrate_on_touch"

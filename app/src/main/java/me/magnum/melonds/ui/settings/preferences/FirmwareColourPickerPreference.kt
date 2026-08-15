@@ -11,27 +11,34 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
 import me.magnum.melonds.R
 import me.magnum.melonds.databinding.DialogFirmwareColourPickerBinding
-import me.magnum.melonds.domain.model.FirmwareColour
 
 class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : Preference(context, attrs) {
     companion object {
-        private val colorMapper = mapOf(
-                FirmwareColour.GRAY to 0x61829A,
-                FirmwareColour.BROWN to 0xBA4900,
-                FirmwareColour.RED to 0xFB0018,
-                FirmwareColour.PINK to 0xFB8AFB,
-                FirmwareColour.ORANGE to 0xFB9200,
-                FirmwareColour.YELLOW to 0xF3E300,
-                FirmwareColour.LIME to 0xAAFB00,
-                FirmwareColour.GREEN to 0x00FB00,
-                FirmwareColour.DARK_GREEN to 0x00A238,
-                FirmwareColour.TURQUOISE to 0x49DB8A,
-                FirmwareColour.LIGHT_BLUE to 0x30BAF3,
-                FirmwareColour.BLUE to 0x0059F3,
-                FirmwareColour.DARK_BLUE to 0x000092,
-                FirmwareColour.PURPLE to 0x8A00D3,
-                FirmwareColour.VIOLET to 0xD300EB,
-                FirmwareColour.FUCHSIA to 0xFB0092
+        private val extendedColorList = listOf(
+            0x61829A, // 0: GRAY
+            0xBA4900, // 1: BROWN
+            0xFB0018, // 2: RED
+            0xFB8AFB, // 3: PINK
+            0xFB9200, // 4: ORANGE
+            0xF3E300, // 5: YELLOW
+            0xAAFB00, // 6: LIME
+            0x00FB00, // 7: GREEN
+            0x00A238, // 8: DARK_GREEN
+            0x49DB8A, // 9: TURQUOISE
+            0x30BAF3, // 10: LIGHT_BLUE
+            0x0059F3, // 11: BLUE
+            0x000092, // 12: DARK_BLUE
+            0x8A00D3, // 13: PURPLE
+            0xD300EB, // 14: VIOLET
+            0xFB0092, // 15: FUCHSIA
+            0xFFFFFF, // 16: WHITE
+            0x121418, // 17: OBSIDIAN BLACK
+            0x00E5FF, // 18: CYBER CYAN
+            0xFFD700, // 19: PURE GOLD
+            0xE0115F, // 20: RUBY CRIMSON
+            0x00E676, // 21: BRIGHT EMERALD
+            0xFF6E40, // 22: SUNSET CORAL
+            0x651FFF  // 23: ELECTRIC INDIGO
         )
     }
 
@@ -55,7 +62,7 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
                 .show()
 
         binding.layoutGridColours.children.flatMap { (it as ViewGroup).children }.forEach {
-            it.setOnClickListener {  view ->
+            it.setOnClickListener { view ->
                 val selectedColour = (view.tag as String).toInt()
                 updateSelectedColour(selectedColour)
                 if (callChangeListener(selectedColour)) {
@@ -67,9 +74,9 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
     }
 
     private fun updateSelectedColour(selectedColour: Int) {
-        val firmwareColour = FirmwareColour.entries[selectedColour]
-        colorMapper[firmwareColour]?.let {
-            val colourWithAlpha = (0xFF000000 or it.toLong())
+        val colorRgb = extendedColorList.getOrNull(selectedColour) ?: extendedColorList[0]
+        val colourWithAlpha = (0xFF000000 or colorRgb.toLong())
+        if (::viewSelectedColour.isInitialized) {
             viewSelectedColour.setBackgroundColor(colourWithAlpha.toInt())
         }
     }

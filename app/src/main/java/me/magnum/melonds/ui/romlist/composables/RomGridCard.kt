@@ -114,6 +114,14 @@ fun RomGridCard(
             modifier = Modifier.align(Alignment.TopStart).padding(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val regionFlag = resolveRomRegionFlag(rom)
+            if (regionFlag.isNotEmpty()) {
+                Text(
+                    text = regionFlag,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(end = 4.dp),
+                )
+            }
             PlatformBadge(text = romPlatformLabel(rom))
             if (showAchievementBadge) {
                 Spacer(Modifier.width(4.dp))

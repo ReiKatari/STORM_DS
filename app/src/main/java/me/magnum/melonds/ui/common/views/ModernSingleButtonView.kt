@@ -16,6 +16,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr), IAnimatedInputView {
 
+    init {
+        ButtonThemeManager.init(context)
+    }
+
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = Color.parseColor("#E6232730")
@@ -130,11 +134,41 @@ class ModernSingleButtonView @JvmOverloads constructor(
         val padding = 4f
         val rect = RectF(padding, padding, w - padding, h - padding)
 
+        val style = ButtonThemeManager.currentStyle
+        val defaultBg = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#F2FFFFFF")
+            ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E65A6577")
+            else -> Color.parseColor("#E6232730")
+        }
+        val pressedBg = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#E6E2E8F0")
+            ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E6374151")
+            else -> Color.parseColor("#E61A3A4D")
+        }
+        val normalStroke = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#80CBD5E1")
+            ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#80D1D5DB")
+            else -> Color.parseColor("#66FFFFFF")
+        }
+        val glowColor = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#6638BDF8")
+            ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#6694A3B8")
+            else -> Color.parseColor("#6600E5FF")
+        }
+        val activeStroke = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
+            ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#CBD5E1")
+            else -> Color.parseColor("#FF00E5FF")
+        }
+
+        strokePaint.color = normalStroke
+        activeGlowPaint.color = glowColor
+        activeStrokePaint.color = activeStroke
+
         val isShoulder = component == LayoutComponent.BUTTON_L || component == LayoutComponent.BUTTON_R
         val isStartSelect = component == LayoutComponent.BUTTON_START || component == LayoutComponent.BUTTON_SELECT
 
         if (isShoulder) {
-            // Authentic curved DS shoulder trigger
             val cornerRadius = min(w, h) * 0.45f
             val shoulderPath = Path()
             if (component == LayoutComponent.BUTTON_L) {
@@ -156,60 +190,60 @@ class ModernSingleButtonView @JvmOverloads constructor(
             }
 
             if (buttonGlow > 0f) {
-                bgPaint.color = Color.parseColor("#E61A3A4D")
+                bgPaint.color = pressedBg
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
                 canvas.drawPath(shoulderPath, activeGlowPaint)
                 canvas.drawPath(shoulderPath, bgPaint)
                 canvas.drawPath(shoulderPath, activeStrokePaint)
             } else {
-                bgPaint.color = Color.parseColor("#E6232730")
+                bgPaint.color = defaultBg
                 canvas.drawPath(shoulderPath, bgPaint)
                 canvas.drawPath(shoulderPath, strokePaint)
             }
 
-            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.52f, w - padding * 2)
+            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.52f, w - padding * 2, style)
         } else if (isStartSelect) {
-            // Authentic oblong pill for Start & Select (never clipped)
             val rx = min(w, h) * 0.44f
             if (buttonGlow > 0f) {
-                bgPaint.color = Color.parseColor("#E61A3A4D")
+                bgPaint.color = pressedBg
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
                 val glowRect = RectF(rect.left - 3f, rect.top - 3f, rect.right + 3f, rect.bottom + 3f)
                 canvas.drawRoundRect(glowRect, rx + 3f, rx + 3f, activeGlowPaint)
                 canvas.drawRoundRect(rect, rx, rx, bgPaint)
                 canvas.drawRoundRect(rect, rx, rx, activeStrokePaint)
             } else {
-                bgPaint.color = Color.parseColor("#E6252932")
+                bgPaint.color = defaultBg
                 canvas.drawRoundRect(rect, rx, rx, bgPaint)
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
 
-            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.42f, w - padding * 3)
+            drawTextLabel(canvas, cx, cy, getLabel(), min(w, h) * 0.42f, w - padding * 3, style)
         } else {
-            // Sleek circular / rounded utility buttons with vector icons
             val rx = min(w, h) * 0.38f
             if (buttonGlow > 0f) {
-                bgPaint.color = Color.parseColor("#E61A3A4D")
+                bgPaint.color = pressedBg
                 activeGlowPaint.alpha = (buttonGlow * 170).toInt()
                 val glowRect = RectF(rect.left - 3f, rect.top - 3f, rect.right + 3f, rect.bottom + 3f)
                 canvas.drawRoundRect(glowRect, rx + 3f, rx + 3f, activeGlowPaint)
                 canvas.drawRoundRect(rect, rx, rx, bgPaint)
                 canvas.drawRoundRect(rect, rx, rx, activeStrokePaint)
             } else {
-                bgPaint.color = if (isToggledOn) Color.parseColor("#E6232730") else Color.parseColor("#B3181B22")
+                bgPaint.color = if (isToggledOn) defaultBg else Color.parseColor("#B3181B22")
                 canvas.drawRoundRect(rect, rx, rx, bgPaint)
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
 
             if (buttonGlow > 0f) {
-                iconPaint.color = Color.parseColor("#00E5FF")
-                textPaint.color = Color.parseColor("#00E5FF")
+                val activeTint = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0284C7") else Color.parseColor("#00E5FF")
+                iconPaint.color = activeTint
+                textPaint.color = activeTint
             } else if (!isToggledOn) {
                 iconPaint.color = Color.parseColor("#808A98")
                 textPaint.color = Color.parseColor("#808A98")
             } else {
-                iconPaint.color = Color.parseColor("#F0F4F8")
-                textPaint.color = Color.WHITE
+                val normalTint = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0F172A") else Color.parseColor("#F0F4F8")
+                iconPaint.color = normalTint
+                textPaint.color = normalTint
             }
 
             val iconSize = min(w, h) * 0.45f
@@ -223,7 +257,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> drawTouchIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
-                    drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.38f, w - padding * 2)
+                    drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.38f, w - padding * 2, style)
                 }
             }
         }
@@ -231,7 +265,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
         canvas.restore()
     }
 
-    private fun drawTextLabel(canvas: Canvas, cx: Float, cy: Float, text: String, baseSize: Float, maxWidth: Float) {
+    private fun drawTextLabel(canvas: Canvas, cx: Float, cy: Float, text: String, baseSize: Float, maxWidth: Float, style: ButtonColorStyle) {
         textPaint.textSize = baseSize
         var measured = textPaint.measureText(text)
         if (measured > maxWidth && maxWidth > 0f) {
@@ -242,9 +276,9 @@ class ModernSingleButtonView @JvmOverloads constructor(
         val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
         canvas.drawText(text, cx, textY + 1.5f, textShadowPaint)
         if (buttonGlow > 0f) {
-            textPaint.color = Color.parseColor("#00E5FF")
+            textPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0284C7") else Color.parseColor("#00E5FF")
         } else {
-            textPaint.color = Color.WHITE
+            textPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0F172A") else Color.WHITE
         }
         canvas.drawText(text, cx, textY, textPaint)
     }

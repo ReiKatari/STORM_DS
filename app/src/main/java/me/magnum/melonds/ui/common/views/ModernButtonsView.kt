@@ -14,6 +14,10 @@ class ModernButtonsView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr), IAnimatedInputView {
 
+    init {
+        ButtonThemeManager.init(context)
+    }
+
     // Background track plate
     private val platePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -69,21 +73,13 @@ class ModernButtonsView @JvmOverloads constructor(
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
     }
 
-    private val buttonAnimators = mutableMapOf<Input, ValueAnimator>()
     private val buttonScales = mutableMapOf<Input, Float>()
     private val buttonGlows = mutableMapOf<Input, Float>()
-
-    private val targetInputs = listOf(Input.X, Input.Y, Input.B, Input.A)
-
-    init {
-        targetInputs.forEach { input ->
-            buttonScales[input] = 1.0f
-            buttonGlows[input] = 0.0f
-        }
-    }
+    private val buttonAnimators = mutableMapOf<Input, ValueAnimator>()
 
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
-        targetInputs.forEach { input ->
+        val allInputs = listOf(Input.X, Input.Y, Input.B, Input.A)
+        allInputs.forEach { input ->
             val isPressed = input in pressedInputs
             val targetScale = if (isPressed) 0.88f else 1.0f
             val targetGlow = if (isPressed) 1.0f else 0.0f
@@ -127,6 +123,8 @@ class ModernButtonsView @JvmOverloads constructor(
         val buttonRadius = size * 0.17f
         val offset = size * 0.285f
 
+        val style = ButtonThemeManager.currentStyle
+
         // Draw connecting diamond backing plate
         val platePath = Path().apply {
             moveTo(cx, cy - offset - buttonRadius * 0.7f)
@@ -135,10 +133,24 @@ class ModernButtonsView @JvmOverloads constructor(
             lineTo(cx - offset - buttonRadius * 0.7f, cy)
             close()
         }
+
+        when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> {
+                platePaint.color = Color.parseColor("#33E2E8F0")
+                plateStrokePaint.color = Color.parseColor("#4DE2E8F0")
+            }
+            ButtonColorStyle.CLASSIC_GREY -> {
+                platePaint.color = Color.parseColor("#33475569")
+                plateStrokePaint.color = Color.parseColor("#4D94A3B8")
+            }
+            else -> {
+                platePaint.color = Color.parseColor("#26111318")
+                plateStrokePaint.color = Color.parseColor("#33FFFFFF")
+            }
+        }
+
         canvas.drawPath(platePath, platePaint)
         canvas.drawPath(platePath, plateStrokePaint)
-
-        // Diamond center circular guide ring
         canvas.drawCircle(cx, cy, offset, plateStrokePaint)
 
         val positions = mapOf(
@@ -173,24 +185,63 @@ class ModernButtonsView @JvmOverloads constructor(
 
             // Active press glow
             if (glow > 0f) {
+                when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> activeGlowPaint.color = Color.parseColor("#6638BDF8")
+                    ButtonColorStyle.CLASSIC_GREY -> activeGlowPaint.color = Color.parseColor("#6694A3B8")
+                    ButtonColorStyle.SNES_SUPER -> {
+                        val glowCol = when (input) {
+                            Input.A -> Color.parseColor("#66FF7675")
+                            Input.B -> Color.parseColor("#66FFEAA7")
+                            Input.X -> Color.parseColor("#6674B9FF")
+                            else -> Color.parseColor("#6655EFC4")
+                        }
+                        activeGlowPaint.color = glowCol
+                    }
+                    else -> activeGlowPaint.color = Color.parseColor("#6600E5FF")
+                }
                 activeGlowPaint.alpha = (glow * 180).toInt()
                 canvas.drawCircle(bx, by, buttonRadius * 1.18f, activeGlowPaint)
             }
 
             // Button main body cap
             if (glow > 0f) {
-                buttonBodyPaint.color = Color.parseColor("#E61A3A4D")
+                buttonBodyPaint.color = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#E6CBD5E1")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E6334155")
+                    ButtonColorStyle.SNES_SUPER -> when (input) {
+                        Input.A -> Color.parseColor("#E6D63031")
+                        Input.B -> Color.parseColor("#E6FDCB6E")
+                        Input.X -> Color.parseColor("#E60984E3")
+                        else -> Color.parseColor("#E600B894")
+                    }
+                    else -> Color.parseColor("#E61A3A4D")
+                }
             } else {
-                buttonBodyPaint.color = Color.parseColor("#E6252932")
+                buttonBodyPaint.color = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#F2FFFFFF")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E65A6577")
+                    ButtonColorStyle.SNES_SUPER -> when (input) {
+                        Input.A -> Color.parseColor("#E6D63031")
+                        Input.B -> Color.parseColor("#E6FDCB6E")
+                        Input.X -> Color.parseColor("#E60984E3")
+                        else -> Color.parseColor("#E600B894")
+                    }
+                    else -> Color.parseColor("#E6252932")
+                }
             }
             canvas.drawCircle(bx, by, buttonRadius, buttonBodyPaint)
 
-            // Bevel highlights (Top-left light, Bottom-right dark)
+            // Bevel highlights
             val rectF = RectF(bx - buttonRadius, by - buttonRadius, bx + buttonRadius, by + buttonRadius)
             canvas.drawArc(rectF, 135f, 180f, false, buttonBevelLightPaint)
             canvas.drawArc(rectF, -45f, 180f, false, buttonBevelDarkPaint)
 
             if (glow > 0f) {
+                activeStrokePaint.color = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#E2E8F0")
+                    else -> Color.parseColor("#00E5FF")
+                }
                 canvas.drawCircle(bx, by, buttonRadius, activeStrokePaint)
             }
 
@@ -198,9 +249,16 @@ class ModernButtonsView @JvmOverloads constructor(
             val textY = by - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(labels[input] ?: "", bx, textY + 1.5f, textShadowPaint)
             if (glow > 0f) {
-                textPaint.color = Color.parseColor("#00E5FF")
+                textPaint.color = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0369A1")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
+                    else -> Color.parseColor("#00E5FF")
+                }
             } else {
-                textPaint.color = Color.WHITE
+                textPaint.color = when (style) {
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0F172A")
+                    else -> Color.WHITE
+                }
             }
             canvas.drawText(labels[input] ?: "", bx, textY, textPaint)
 

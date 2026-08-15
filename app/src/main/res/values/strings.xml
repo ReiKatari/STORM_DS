@@ -1196,4 +1196,17 @@
     <string name="about_credits_libraries_summary">Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools</string>
     <string name="about_github_title">STORM DS Repository</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
+    <string name="button_color_theme">Button Color Style</string>
+    <string-array name="button_color_theme_options">
+        <item>STORM Cyber Neon (Cyan &amp; Dark)</item>
+        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo DS Classic (Metallic Grey)</item>
+        <item>Super Famicom / SNES (Four Colors)</item>
+    </string-array>
+    <string-array name="button_color_theme_values">
+        <item>cyber_cyan</item>
+        <item>classic_white</item>
+        <item>classic_grey</item>
+        <item>snes_super</item>
+    </string-array>
 </resources>
