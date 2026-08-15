@@ -1184,4 +1184,16 @@
         <item>Fit bottom</item>
         <item>Fit right</item>
     </string-array>
+
+    <string name="about_app_title">About &amp; Credits</string>
+    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors &amp; open source licenses</string>
+    <string name="about_credits_title">Credits &amp; Acknowledgements</string>
+    <string name="about_credits_watermelonds_title">WatermelonDS</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite &amp; contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI &amp; touch controls</string>
+    <string name="about_credits_melonds_title">melonDS</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek &amp; melonDS team — original Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_libraries_title">Open Source Libraries</string>
+    <string name="about_credits_libraries_summary">Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools</string>
+    <string name="about_github_title">STORM DS Repository</string>
+    <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
 </resources>
