@@ -48,8 +48,12 @@ object EmulatorRuntimeModule {
 
     @Provides
     @ActivityRetainedScoped
-    fun provideSramProvider(settingsRepository: SettingsRepository, uriHandler: UriHandler): SramProvider {
-        return SramProvider(settingsRepository, uriHandler)
+    fun provideSramProvider(
+        @ApplicationContext context: Context,
+        settingsRepository: SettingsRepository,
+        uriHandler: UriHandler
+    ): SramProvider {
+        return SramProvider(context, settingsRepository, uriHandler)
     }
 
     @Provides

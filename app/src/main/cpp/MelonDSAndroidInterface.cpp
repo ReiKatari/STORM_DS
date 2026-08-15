@@ -4,6 +4,10 @@
 #include <string>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
+#include <signal.h>
+#include <unistd.h>
+#include <android/log.h>
+#include <time.h>
 #include "JniEnvHandler.h"
 #include "UriFileHandler.h"
 #include "MelonDS.h"
@@ -16,6 +20,47 @@
 #include "VulkanContext.h"
 #include "VulkanDispatch.h"
 #include "retroachievements/RetroAchievementsManager.h"
+
+static struct sigaction old_sa_segv;
+static struct sigaction old_sa_bus;
+static struct sigaction old_sa_fpe;
+static struct sigaction old_sa_ill;
+
+static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
+{
+    __android_log_print(ANDROID_LOG_FATAL, "STORM_DS_NATIVE", "CRASH DETECTED: signal %d at address %p", sig, info ? info->si_addr : nullptr);
+    FILE* f = fopen("/sdcard/Download/STORM_DS_CRASH.txt", "a");
+    if (!f) {
+        f = fopen("/storage/emulated/0/Download/STORM_DS_CRASH.txt", "a");
+    }
+    if (f) {
+        time_t now = time(nullptr);
+        fprintf(f, "\n================ STORM DS NATIVE CRASH REPORT ================\n");
+        fprintf(f, "Time: %ld\n", (long)now);
+        fprintf(f, "Fatal Signal: %d (%s)\n", sig, strsignal(sig));
+        fprintf(f, "Fault Address: %p\n", info ? info->si_addr : nullptr);
+        fprintf(f, "==============================================================\n");
+        fclose(f);
+    }
+    if (sig == SIGSEGV && old_sa_segv.sa_sigaction) old_sa_segv.sa_sigaction(sig, info, context);
+    else if (sig == SIGBUS && old_sa_bus.sa_sigaction) old_sa_bus.sa_sigaction(sig, info, context);
+    else {
+        signal(sig, SIG_DFL);
+        raise(sig);
+    }
+}
+
+static void installStormNativeCrashTrap()
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sa.sa_sigaction = stormNativeCrashHandler;
+    sigaction(SIGSEGV, &sa, &old_sa_segv);
+    sigaction(SIGBUS, &sa, &old_sa_bus);
+    sigaction(SIGFPE, &sa, &old_sa_fpe);
+    sigaction(SIGILL, &sa, &old_sa_ill);
+}
 
 JniEnvHandler* jniEnvHandler;
 
@@ -484,6 +529,7 @@ Java_me_magnum_melonds_MelonDSAndroidInterface_setupNative(
     jstring customVulkanDriverName,
     jstring customVulkanDriverDisplayName)
 {
+    installStormNativeCrashTrap();
     env->GetJavaVM(&vm);
     MelonDSAndroid::RetroAchievements::RetroAchievementsManager::SetJavaVm(vm);
     jniEnvHandler = new JniEnvHandler(vm);

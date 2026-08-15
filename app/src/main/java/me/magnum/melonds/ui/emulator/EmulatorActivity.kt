@@ -3984,6 +3984,48 @@ class EmulatorActivity : AppCompatActivity() {
         }
     }
 
+    private var twoFingerStartX = 0f
+    private var twoFingerStartY = 0f
+    private var isTwoFingerGesture = false
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.pointerCount == 2) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    twoFingerStartX = (event.getX(0) + event.getX(1)) / 2f
+                    twoFingerStartY = (event.getY(0) + event.getY(1)) / 2f
+                    isTwoFingerGesture = true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                    if (isTwoFingerGesture) {
+                        val endX = (event.getX(0) + (if (event.pointerCount > 1) event.getX(1) else event.getX(0))) / 2f
+                        val endY = (event.getY(0) + (if (event.pointerCount > 1) event.getY(1) else event.getY(0))) / 2f
+                        val dx = endX - twoFingerStartX
+                        val dy = endY - twoFingerStartY
+                        val threshold = 180f
+                        if (kotlin.math.abs(dx) > threshold || kotlin.math.abs(dy) > threshold) {
+                            if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                                if (dx > threshold) {
+                                    frontendInputHandler.onFastForwardPressed()
+                                } else {
+                                    frontendInputHandler.onRewind()
+                                }
+                            } else {
+                                if (dy > threshold) {
+                                    frontendInputHandler.onPausePressed()
+                                } else {
+                                    frontendInputHandler.onQuickSave()
+                                }
+                            }
+                        }
+                        isTwoFingerGesture = false
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         releaseEmulatorUiResources()
