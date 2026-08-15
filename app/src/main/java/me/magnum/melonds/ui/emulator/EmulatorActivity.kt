@@ -367,6 +367,7 @@ class EmulatorActivity : AppCompatActivity() {
         me.magnum.melonds.translator.GameTranslatorManager(
             activity = this,
             surfaceProvider = { binding.surfaceMain },
+            screenshotProvider = { viewModel.captureScreenshot() },
             onPauseEmulator = { viewModel.pauseEmulator(false) },
             onResumeEmulator = { viewModel.resumeEmulator() }
         )
@@ -4009,7 +4010,11 @@ class EmulatorActivity : AppCompatActivity() {
     private var isTwoFingerGesture = false
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (event.pointerCount == 2) {
+        val hasStylus = (0 until event.pointerCount).any {
+            val tool = event.getToolType(it)
+            tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
+        }
+        if (!hasStylus && event.pointerCount == 2) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     twoFingerStartX = (event.getX(0) + event.getX(1)) / 2f
@@ -4042,6 +4047,8 @@ class EmulatorActivity : AppCompatActivity() {
                     }
                 }
             }
+        } else if (hasStylus) {
+            isTwoFingerGesture = false
         }
         return super.dispatchTouchEvent(event)
     }

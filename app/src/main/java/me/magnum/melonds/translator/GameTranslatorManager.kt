@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 class GameTranslatorManager(
     private val activity: Activity,
     private val surfaceProvider: () -> SurfaceView?,
+    private val screenshotProvider: (suspend () -> Bitmap?)? = null,
     private val onPauseEmulator: () -> Unit,
     private val onResumeEmulator: () -> Unit
 ) {
@@ -73,10 +74,7 @@ class GameTranslatorManager(
             triggerTranslation()
         }
         overlay.onDismissRequested = {
-            if (isPausedByTranslator) {
-                isPausedByTranslator = false
-                onResumeEmulator()
-            }
+            dismissTranslation()
         }
 
         if (isEnabled) {
@@ -111,10 +109,11 @@ class GameTranslatorManager(
             return
         }
 
-        val surfaceView = surfaceProvider()
-        val decorView = activity.window.decorView
-        val width = (surfaceView?.width ?: decorView.width).coerceAtLeast(1)
-        val height = (surfaceView?.height ?: decorView.height).coerceAtLeast(1)
+        // Toggle: if currently showing translations or in translation mode, dismiss and unpause!
+        if (overlayView?.hasActiveTranslations() == true || overlayView?.isTranslating == true) {
+            dismissTranslation()
+            return
+        }
 
         val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
         if (pauseOnTranslate) {
@@ -128,26 +127,49 @@ class GameTranslatorManager(
 
         overlayView?.isTranslating = true
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val srcRect = android.graphics.Rect(0, 0, width, height)
+        mainScope.launch {
+            // Priority 1: Direct native frame capture from emulator
+            val nativeBitmap = try {
+                screenshotProvider?.invoke()
+            } catch (e: Throwable) {
+                null
+            }
 
-        val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
-            if (copyResult == PixelCopy.SUCCESS) {
-                processCapturedFrame(bitmap)
-            } else {
-                // Fallback to native screenshot
-                mainScope.launch(Dispatchers.IO) {
-                    try {
-                        val nativeOk = me.magnum.melonds.MelonEmulator.takeScreenshot()
-                        if (nativeOk) {
-                            val nativeBitmap = me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider().getScreenshot()
-                            mainHandler.post {
-                                processCapturedFrame(nativeBitmap)
-                            }
-                            return@launch
-                        }
-                    } catch (ignore: Throwable) {
+            if (nativeBitmap != null) {
+                processCapturedFrame(nativeBitmap)
+                return@launch
+            }
+
+            // Priority 2: PixelCopy from SurfaceView or Window DecorView
+            val surfaceView = surfaceProvider()
+            val decorView = activity.window.decorView
+            val width = (surfaceView?.width ?: decorView.width).coerceAtLeast(1)
+            val height = (surfaceView?.height ?: decorView.height).coerceAtLeast(1)
+
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val srcRect = android.graphics.Rect(0, 0, width, height)
+
+            val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
+                if (copyResult == PixelCopy.SUCCESS) {
+                    processCapturedFrame(bitmap)
+                } else {
+                    mainHandler.post {
+                        overlayView?.isTranslating = false
+                        Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
                     }
+                }
+            }
+
+            try {
+                if (surfaceView != null && surfaceView.holder.surface.isValid) {
+                    PixelCopy.request(surfaceView, bitmap, onCopyFinished, mainHandler)
+                } else {
+                    PixelCopy.request(activity.window, srcRect, bitmap, onCopyFinished, mainHandler)
+                }
+            } catch (e: Throwable) {
+                try {
+                    PixelCopy.request(activity.window, srcRect, bitmap, onCopyFinished, mainHandler)
+                } catch (t: Throwable) {
                     mainHandler.post {
                         overlayView?.isTranslating = false
                         Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
@@ -155,34 +177,17 @@ class GameTranslatorManager(
                 }
             }
         }
+    }
 
-        try {
-            if (surfaceView != null && surfaceView.holder.surface.isValid) {
-                PixelCopy.request(surfaceView, bitmap, onCopyFinished, mainHandler)
-            } else {
-                PixelCopy.request(activity.window, srcRect, bitmap, onCopyFinished, mainHandler)
-            }
-        } catch (e: Throwable) {
+    fun dismissTranslation() {
+        overlayView?.clearTranslations()
+        overlayView?.isTranslating = false
+        if (isPausedByTranslator) {
+            isPausedByTranslator = false
             try {
-                PixelCopy.request(activity.window, srcRect, bitmap, onCopyFinished, mainHandler)
-            } catch (t: Throwable) {
-                mainScope.launch(Dispatchers.IO) {
-                    try {
-                        val nativeOk = me.magnum.melonds.MelonEmulator.takeScreenshot()
-                        if (nativeOk) {
-                            val nativeBitmap = me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider().getScreenshot()
-                            mainHandler.post {
-                                processCapturedFrame(nativeBitmap)
-                            }
-                            return@launch
-                        }
-                    } catch (ignore: Throwable) {
-                    }
-                    mainHandler.post {
-                        overlayView?.isTranslating = false
-                        Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
-                    }
-                }
+                onResumeEmulator()
+            } catch (e: Throwable) {
+                // Ignore resume failure
             }
         }
     }
