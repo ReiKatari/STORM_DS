@@ -89,20 +89,22 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         val isPressed = pressedInputs.isNotEmpty()
-        val targetScale = if (isPressed) 0.86f else 1.0f
-        val targetGlow = if (isPressed) 1.0f else 0.0f
+        animator?.cancel()
 
-        if (buttonScale != targetScale) {
-            animator?.cancel()
+        if (!isPressed) {
+            buttonScale = 1.0f
+            buttonGlow = 0.0f
+            invalidate()
+        } else {
             val startScale = buttonScale
             val startGlow = buttonGlow
 
             animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 85L
+                duration = 50L
                 addUpdateListener { anim ->
                     val fraction = anim.animatedFraction
-                    buttonScale = startScale + (targetScale - startScale) * fraction
-                    buttonGlow = startGlow + (targetGlow - startGlow) * fraction
+                    buttonScale = startScale + (0.86f - startScale) * fraction
+                    buttonGlow = startGlow + (1.0f - startGlow) * fraction
                     invalidate()
                 }
             }
@@ -298,6 +300,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 LayoutComponent.BUTTON_QUICK_LOAD -> drawQuickLoadIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_HINGE -> drawHingeIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_TRANSLATE -> drawTranslateIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> drawToggleExtraIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
                     drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.35f, w - padding * 2, style)
@@ -535,5 +538,25 @@ class ModernSingleButtonView @JvmOverloads constructor(
         canvas.drawLine(cx, cy - r, cx, cy + r, globePaint)
         val ovalRect = RectF(cx - r * 0.48f, cy - r, cx + r * 0.48f, cy + r)
         canvas.drawOval(ovalRect, globePaint)
+    }
+
+    private fun drawToggleExtraIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val dotRadius = size * 0.09f
+        val gap = size * 0.28f
+
+        // Draw 2x2 or 3 horizontal dots representing extra buttons toggle
+        val paint = Paint(iconPaint).apply {
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(cx - gap, cy, dotRadius, paint)
+        canvas.drawCircle(cx, cy, dotRadius, paint)
+        canvas.drawCircle(cx + gap, cy, dotRadius, paint)
+
+        val framePaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.4f
+        }
+        val rect = RectF(cx - gap * 1.5f, cy - gap * 0.65f, cx + gap * 1.5f, cy + gap * 0.65f)
+        canvas.drawRoundRect(rect, 4f, 4f, framePaint)
     }
 }

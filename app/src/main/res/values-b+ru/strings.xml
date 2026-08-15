@@ -1203,4 +1203,9 @@
     <string name="lang_it">Итальянский (Italiano)</string>
     <string name="lang_uk">Украинский (Українська)</string>
     <string name="lang_pt">Португальский (Português)</string>
+    <string name="label_button_spread">Разнос кнопок</string>
+    <string name="input_toggle_extra_buttons">Скрыть/показать доп. кнопки</string>
+    <string name="toggle_visibility">Скрыть / Показать</string>
+    <string name="components_visibility_title">Управление элементами</string>
+    <string name="back">Назад</string>
 </resources>

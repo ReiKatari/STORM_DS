@@ -1277,4 +1277,9 @@
     <string name="lang_it">Italian (Italiano)</string>
     <string name="lang_uk">Ukrainian (Українська)</string>
     <string name="lang_pt">Portuguese (Português)</string>
+    <string name="label_button_spread">Button spacing</string>
+    <string name="input_toggle_extra_buttons">Toggle extra buttons</string>
+    <string name="toggle_visibility">Hide / Show</string>
+    <string name="components_visibility_title">Manage Components</string>
+    <string name="back">Back</string>
 </resources>

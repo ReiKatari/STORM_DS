@@ -17,6 +17,7 @@ abstract class FrontendInputHandler : IInputListener {
             Input.QUICK_LOAD -> onQuickLoad()
             Input.REWIND -> onRewind()
             Input.TRANSLATE -> onTranslate()
+            Input.TOGGLE_EXTRA_BUTTONS -> onToggleExtraButtons()
             else -> {}
         }
     }
@@ -43,4 +44,5 @@ abstract class FrontendInputHandler : IInputListener {
     abstract fun onQuickLoad()
     abstract fun onRewind()
     abstract fun onTranslate()
+    abstract fun onToggleExtraButtons()
 }
