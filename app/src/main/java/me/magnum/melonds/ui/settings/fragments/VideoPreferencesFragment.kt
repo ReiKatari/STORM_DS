@@ -1043,31 +1043,39 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun setupShaderSettingsSubScreen() {
-        shaderManagePreference = findPreference("video_retroarch_shader_manage")!!
-        shaderManagePreference.setOnPreferenceClickListener {
-            if (shaderLibraryManager.isInstalled()) {
-                showShaderManageDialog()
-            } else {
-                startShaderInstall()
+        findPreference<Preference>("video_retroarch_shader_manage")?.let {
+            shaderManagePreference = it
+            it.setOnPreferenceClickListener {
+                if (shaderLibraryManager.isInstalled()) {
+                    showShaderManageDialog()
+                } else {
+                    startShaderInstall()
+                }
+                true
             }
-            true
         }
-        shaderReportPreference = findPreference("video_retroarch_shader_report")!!
-        shaderReportPreference.setOnPreferenceClickListener {
-            showShaderCompatibilityReport()
-            true
+        findPreference<Preference>("video_retroarch_shader_report")?.let {
+            shaderReportPreference = it
+            it.setOnPreferenceClickListener {
+                showShaderCompatibilityReport()
+                true
+            }
         }
-        val rootPreference = findPreference<StoragePickerPreference>("video_retroarch_shader_root")!!
-        shaderRootPreference = rootPreference
-        helper.setupStoragePickerPreference(rootPreference)
-        rootPreference.addOnPreferenceChangeListener { _, _ ->
-            preferenceManager.sharedPreferences?.edit()?.remove("video_retroarch_shader_preset")?.apply()
-            true
+        val rootPreference = findPreference<StoragePickerPreference>("video_retroarch_shader_root")
+        if (rootPreference != null) {
+            shaderRootPreference = rootPreference
+            helper.setupStoragePickerPreference(rootPreference)
+            rootPreference.addOnPreferenceChangeListener { _, _ ->
+                preferenceManager.sharedPreferences?.edit()?.remove("video_retroarch_shader_preset")?.apply()
+                true
+            }
         }
 
         val source = resolveShaderSource()
-        shaderManagePreference.isVisible = source == RetroArchShaderSource.INTERNAL
-        rootPreference.isVisible = source == RetroArchShaderSource.FOLDER
+        if (::shaderManagePreference.isInitialized) {
+            shaderManagePreference.isVisible = source == RetroArchShaderSource.INTERNAL
+        }
+        rootPreference?.isVisible = source == RetroArchShaderSource.FOLDER
         updateShaderManageSummary()
         observeShaderInstallWork()
     }
@@ -1229,59 +1237,37 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     private fun showShaderSourceDialog() {
         val context = requireContext()
-        val options = listOf(
-            mapOf(
-                "title" to getString(R.string.video_retroarch_shader_source_scan_retroarch),
-                "description" to getString(R.string.video_retroarch_shader_source_scan_retroarch_description),
-            ),
-            mapOf(
-                "title" to getString(R.string.video_retroarch_shader_source_internal),
-                "description" to getString(R.string.video_retroarch_shader_source_internal_description),
-            ),
-            mapOf(
-                "title" to getString(R.string.video_retroarch_shader_source_folder),
-                "description" to getString(R.string.video_retroarch_shader_source_folder_description),
-            ),
-        )
-        val adapter = SimpleAdapter(
-            context,
-            options,
-            android.R.layout.simple_list_item_2,
-            arrayOf("title", "description"),
-            intArrayOf(android.R.id.text1, android.R.id.text2),
-        )
-
-        val listView = ListView(context).apply {
-            this.adapter = adapter
-            divider = null
-        }
+        val customView = LayoutInflater.from(context).inflate(R.layout.dialog_shader_source, null)
 
         val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.video_retroarch_shader_source_title)
-            .setView(listView)
+            .setView(customView)
             .setNegativeButton(android.R.string.cancel, null)
             .create()
 
-        listView.setOnItemClickListener { _, _, position, _ ->
+        customView.findViewById<View>(R.id.btn_source_scan)?.setOnClickListener {
             dialog.dismiss()
-            when (position) {
-                0 -> {
-                    scanAndImportRetroArchShaders()
-                }
-                1 -> {
-                    persistShaderSource(RetroArchShaderSource.INTERNAL)
-                    refreshShaderPreferenceVisibility()
-                    if (!shaderLibraryManager.isInstalled()) {
-                        startShaderInstall()
-                    }
-                }
-                2 -> {
-                    persistShaderSource(RetroArchShaderSource.FOLDER)
-                    refreshShaderPreferenceVisibility()
-                    shaderRootPreference.performClick()
-                }
+            scanAndImportRetroArchShaders()
+        }
+
+        customView.findViewById<View>(R.id.btn_source_internal)?.setOnClickListener {
+            dialog.dismiss()
+            persistShaderSource(RetroArchShaderSource.INTERNAL)
+            refreshShaderPreferenceVisibility()
+            if (!shaderLibraryManager.isInstalled()) {
+                startShaderInstall()
             }
         }
+
+        customView.findViewById<View>(R.id.btn_source_folder)?.setOnClickListener {
+            dialog.dismiss()
+            persistShaderSource(RetroArchShaderSource.FOLDER)
+            refreshShaderPreferenceVisibility()
+            if (::shaderRootPreference.isInitialized) {
+                shaderRootPreference.performClick()
+            }
+        }
+
         dialog.show()
     }
 

@@ -273,25 +273,30 @@ class ModernButtonsView @JvmOverloads constructor(
                 canvas.drawCircle(bx, by, buttonRadius, activeStrokePaint)
             }
 
-            // Nintendo DS Crisp Lettering
+            // Nintendo DS Crisp Lettering with High Contrast & Stylized Pressed Look
             val textY = by - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(labels[input] ?: "", bx, textY + 2.0f, textShadowPaint)
             if (glow > 0f) {
                 textPaint.color = when (style) {
-                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0369A1")
+                    ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
                     ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
                     ButtonColorStyle.CRIMSON_RUBY -> Color.WHITE
                     ButtonColorStyle.MIDNIGHT_PURPLE -> Color.WHITE
-                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#1C1917")
-                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#003314")
+                    ButtonColorStyle.GOLD_LUXURY -> Color.WHITE
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.WHITE
+                    ButtonColorStyle.SNES_SUPER -> when (input) {
+                        Input.B -> Color.parseColor("#1E293B")
+                        else -> Color.WHITE
+                    }
                     else -> Color.parseColor("#00E5FF")
                 }
             } else {
                 textPaint.color = when (style) {
                     ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0F172A")
                     ButtonColorStyle.SNES_SUPER -> Color.WHITE
-                    ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#1C1917")
-                    ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#002910")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
+                    ButtonColorStyle.GOLD_LUXURY -> Color.WHITE
+                    ButtonColorStyle.EMERALD_MATRIX -> Color.WHITE
                     else -> Color.WHITE
                 }
             }

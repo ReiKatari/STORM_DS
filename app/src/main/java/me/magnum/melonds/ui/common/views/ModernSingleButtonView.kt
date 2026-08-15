@@ -272,6 +272,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                     ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
                     ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
                     ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
+                    ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
                     else -> Color.parseColor("#00E5FF")
                 }
                 iconPaint.color = activeTint
@@ -321,6 +322,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
                 ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
                 ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
+                ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
                 else -> Color.parseColor("#00E5FF")
             }
         } else {
@@ -332,13 +334,15 @@ class ModernSingleButtonView @JvmOverloads constructor(
     private fun drawFastForwardIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val half = size / 2f
         val path = Path().apply {
-            moveTo(cx - half * 0.8f, cy - half * 0.8f)
-            lineTo(cx, cy)
-            lineTo(cx - half * 0.8f, cy + half * 0.8f)
+            // First triangle (points right)
+            moveTo(cx - half * 0.85f, cy - half * 0.75f)
+            lineTo(cx - half * 0.05f, cy)
+            lineTo(cx - half * 0.85f, cy + half * 0.75f)
             close()
-            moveTo(cx, cy - half * 0.8f)
-            lineTo(cx + half * 0.8f, cy)
-            lineTo(cx + half * 0.8f, cy + half * 0.8f)
+            // Second triangle (points right)
+            moveTo(cx - half * 0.05f, cy - half * 0.75f)
+            lineTo(cx + half * 0.75f, cy)
+            lineTo(cx - half * 0.05f, cy + half * 0.75f)
             close()
         }
         canvas.drawPath(path, iconShadowPaint)
@@ -348,13 +352,15 @@ class ModernSingleButtonView @JvmOverloads constructor(
     private fun drawRewindIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val half = size / 2f
         val path = Path().apply {
-            moveTo(cx, cy - half * 0.8f)
-            lineTo(cx - half * 0.8f, cy)
-            lineTo(cx, cy + half * 0.8f)
+            // First triangle (points left)
+            moveTo(cx + half * 0.85f, cy - half * 0.75f)
+            lineTo(cx + half * 0.05f, cy)
+            lineTo(cx + half * 0.85f, cy + half * 0.75f)
             close()
-            moveTo(cx + half * 0.8f, cy - half * 0.8f)
-            lineTo(cx, cy)
-            lineTo(cx + half * 0.8f, cy + half * 0.8f)
+            // Second triangle (points left)
+            moveTo(cx + half * 0.05f, cy - half * 0.75f)
+            lineTo(cx - half * 0.75f, cy)
+            lineTo(cx + half * 0.05f, cy + half * 0.75f)
             close()
         }
         canvas.drawPath(path, iconShadowPaint)
