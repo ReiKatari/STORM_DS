@@ -1192,6 +1192,7 @@
     </string-array>
 
     <string name="about_app_title">About &amp; Credits</string>
+    <string name="about_app_description">High-performance fork of WatermelonDS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors &amp; open source licenses</string>
     <string name="about_version_title">Version</string>
     <string name="about_credits_title">Credits &amp; Acknowledgements</string>
