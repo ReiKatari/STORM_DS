@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+            android:title="@string/about_app_title">
+        <Preference
+                android:key="about_app_name"
+                android:title="STORM DS"
+                android:summary="Next-Generation Nintendo DS &amp; DSi Emulator for Android"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="about_github"
+                android:title="@string/about_github_title"
+                android:summary="@string/about_github_summary"
+                app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/about_credits_title">
+        <Preference
+                android:key="credits_watermelonds"
+                android:title="@string/about_credits_watermelonds_title"
+                android:summary="@string/about_credits_watermelonds_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_melonds"
+                android:title="@string/about_credits_melonds_title"
+                android:summary="@string/about_credits_melonds_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_libraries"
+                android:title="@string/about_credits_libraries_title"
+                android:summary="@string/about_credits_libraries_summary"
+                app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

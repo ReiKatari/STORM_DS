@@ -106,8 +106,26 @@ cd STORM_DS
 
 ---
 
+## 💖 Благодарности и авторы / Credits & Acknowledgements
+
+STORM DS выражает глубокую признательность авторам и сообществу открытых проектов, сделавших этот эмулятор возможным:
+
+* **[melonDS](https://melonds.kuribo64.net/)** (Оригинальное ядро эмулятора Nintendo DS & DSi):
+  * **StapleButter**, **Nadia**, **RSDuck**, **genericretrogeek**, **Arisotura** и всей команде разработчиков melonDS за эталонную точность, быстродействие и чистую архитектуру эмуляции Nintendo DS и DSi.
+* **[WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS)** (Форк melonDS для Android):
+  * **SapphireRhodonite** и всем участникам проекта WatermelonDS за разработку мощного порта на Android, высокоскоростной аппаратный рендер Vulkan Fastpath, интеграцию шейдерного движка librashader, улучшенные экранные раскладки и современный сенсорный интерфейс.
+  * **rafaelvcaetano** за создание первой основы Android-порта melonDS.
+* **Сторонние открытые библиотеки и экосистемы**:
+  * **[Google Oboe](https://github.com/google/oboe)** — высокопроизводительная низколатентная аудиосистема с AAudio и OpenSL ES.
+  * **[librashader](https://github.com/SnowflakePowered/librashader)** — кроссплатформенный конвейер шейдеров RetroArch (Slang).
+  * **[RetroAchievements (rcheevos)](https://github.com/RetroAchievements/rcheevos)** — открытый стандарт интеграции достижений и таблиц рекордов.
+  * **[libslirp](https://gitlab.freedesktop.org/slirp/libslirp)** — пользовательский стек сетевой эмуляции Nintendo Wi-Fi Connection.
+  * **[libadrenotools](https://github.com/bylaws/libadrenotools)** — интеграция кастомных драйверов Qualcomm Adreno / Turnip.
+
+---
+
 ## 📜 Лицензия / License
 
 Проект распространяется под лицензией **GPL-3.0 License**.
 
-Основан на разработках [melonDS](https://melonds.kuribo64.net/) и [melonDS Android port](https://github.com/rafaelvcaetano/melonDS-android) с глубокими модификациями, оптимизациями интерфейса, ядра и графического конвейера STORM DS.
+Основан на разработках [melonDS](https://melonds.kuribo64.net/) и [WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS) с глубокими модификациями ядра, ускорением ввода/вывода, поддержкой внешних экранов, оффлайн-достижениями и оптимизациями STORM DS.

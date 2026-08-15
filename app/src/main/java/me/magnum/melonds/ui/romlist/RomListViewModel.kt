@@ -474,7 +474,7 @@ class RomListViewModel @Inject constructor(
         entries.forEachIndexed { index, entry ->
             // Folders aren't part of the alphabet; they get a dedicated folder icon at the top.
             if (entry !is RomBrowserEntry.RomItem) return@forEachIndexed
-            val rawName = (entry.rom.config.customName ?: entry.rom.name).trim()
+            val rawName = me.magnum.melonds.ui.romlist.composables.romDisplayName(entry.rom).trim()
             // NFKD decomposes compatibility chars (e.g. fullwidth Latin → ASCII Latin, ligature
             // 'ﬁ' → 'fi'). Then strip combining marks so accented "Élite" → "Elite" → 'E'.
             val normalized = java.text.Normalizer.normalize(rawName, java.text.Normalizer.Form.NFKD)
@@ -554,7 +554,8 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun buildRomWithParent(rom: Rom, parentDocId: String?): RomWithParent {
-        val searchKey = normalizeForSearch(rom.config.customName ?: rom.name) +
+        val searchKey = normalizeForSearch(me.magnum.melonds.ui.romlist.composables.romDisplayName(rom)) +
+            "\u0000" + normalizeForSearch(rom.name) +
             "\u0000" + normalizeForSearch(rom.fileName) +
             "\u0000" + normalizeForSearch(rom.developerName)
         return RomWithParent(rom, parentDocId, searchKey)
@@ -730,8 +731,8 @@ class RomListViewModel @Inject constructor(
 
     private fun buildAlphabeticalRomComparator(sortingOrder: SortingOrder): Comparator<Rom> {
         return Comparator { o1: Rom, o2: Rom ->
-            val name1 = o1.config.customName ?: o1.name
-            val name2 = o2.config.customName ?: o2.name
+            val name1 = me.magnum.melonds.ui.romlist.composables.romDisplayName(o1)
+            val name2 = me.magnum.melonds.ui.romlist.composables.romDisplayName(o2)
             val result = name1.compareTo(name2, ignoreCase = true)
             if (sortingOrder == SortingOrder.ASCENDING) result else -result
         }
