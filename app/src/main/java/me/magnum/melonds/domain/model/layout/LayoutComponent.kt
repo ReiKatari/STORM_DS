@@ -22,7 +22,8 @@ enum class LayoutComponent(val matchingInputs: List<Input>) {
     BUTTON_QUICK_LOAD(listOf(Input.QUICK_LOAD)),
     BUTTON_REWIND(listOf(Input.REWIND)),
     BUTTON_MICROPHONE_TOGGLE(listOf(Input.MICROPHONE)),
-    BUTTON_TRANSLATE(listOf(Input.TRANSLATE));
+    BUTTON_TRANSLATE(listOf(Input.TRANSLATE)),
+    BUTTON_TOGGLE_EXTRA_BUTTONS(listOf(Input.TOGGLE_EXTRA_BUTTONS));
 
     fun isScreen(): Boolean {
         return this == TOP_SCREEN || this == BOTTOM_SCREEN || this == HYBRID_SCREEN

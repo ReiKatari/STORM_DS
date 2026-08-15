@@ -37,7 +37,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     private var onViewSelectedListener: ViewSelectedListener? = null
     private var onViewDeselectedListener: ((LayoutComponentView) -> Unit)? = null
     private var otherClickListener: OnClickListener? = null
-    private val defaultComponentWidth by lazy { context.dpToPixels(100f).toInt() }
+    private val defaultComponentWidth by lazy { context.dpToPixels(140f).toInt() }
     private val minComponentSize by lazy { context.dpToPixels(30f).toInt() }
     private var selectedView: LayoutComponentView? = null
     private var selectedViewAnchor = Anchor.TOP_LEFT
@@ -45,12 +45,63 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     private var onLayoutChangedListener: ((List<PositionedLayoutComponent>, Int, Int) -> Unit)? = null
     private var onViewPositionEditRequestedListener: ((LayoutComponentPositionEditorState) -> Unit)? = null
 
+    var safeAreaInsets: android.graphics.Rect = android.graphics.Rect(0, 0, 0, 0)
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    private val gridPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 1f
+        color = android.graphics.Color.parseColor("#15FFFFFF")
+    }
+    private val centerGuidePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 1.5f
+        color = android.graphics.Color.parseColor("#3300E5FF")
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 10f), 0f)
+    }
+
     init {
+        setWillNotDraw(false)
         super.setOnClickListener {
             if (selectedView != null) {
                 deselectCurrentView()
             } else {
                 otherClickListener?.onClick(it)
+            }
+        }
+    }
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0 || h <= 0) return
+
+        // Draw center guidelines
+        val cx = w / 2f
+        val cy = h / 2f
+        canvas.drawLine(cx, 0f, cx, h, centerGuidePaint)
+        canvas.drawLine(0f, cy, w, cy, centerGuidePaint)
+
+        // Draw alignment grid
+        val step = context.dpToPixels(32f)
+        if (step > 0) {
+            var x = step
+            while (x < w) {
+                if (Math.abs(x - cx) > 4f) {
+                    canvas.drawLine(x, 0f, x, h, gridPaint)
+                }
+                x += step
+            }
+            var y = step
+            while (y < h) {
+                if (Math.abs(y - cy) > 4f) {
+                    canvas.drawLine(0f, y, w, y, gridPaint)
+                }
+                y += step
             }
         }
     }
@@ -105,7 +156,9 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     fun addLayoutComponent(component: LayoutComponent) {
         val componentBuilder = viewBuilderFactory.getLayoutComponentViewBuilder(component)
         val componentHeight = defaultComponentWidth / componentBuilder.getAspectRatio()
-        val componentView = addPositionedLayoutComponent(PositionedLayoutComponent(Rect(0, 0, defaultComponentWidth, componentHeight.toInt()), component))
+        val startX = safeAreaInsets.left + context.dpToPixels(16f).toInt()
+        val startY = safeAreaInsets.top + context.dpToPixels(16f).toInt()
+        val componentView = addPositionedLayoutComponent(PositionedLayoutComponent(Rect(startX, startY, defaultComponentWidth, componentHeight.toInt()), component))
         views[component] = componentView
         modifiedByUser = true
         notifyLayoutChanged()
@@ -314,10 +367,25 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         notifyLayoutChanged()
     }
 
+    fun removeLayoutComponent(component: LayoutComponent) {
+        val compView = views[component] ?: return
+        if (selectedView == compView) {
+            deselectCurrentView()
+        }
+        removeView(compView.view)
+        views.remove(component)
+        modifiedByUser = true
+        notifyLayoutChanged()
+    }
+
     private fun dragView(view: LayoutComponentView, offsetX: Float, offsetY: Float) {
         val currentPosition = view.getPosition()
-        val finalX = min(max(currentPosition.x + offsetX, 0f), width - view.getWidth().toFloat())
-        val finalY = min(max(currentPosition.y + offsetY, 0f), height - view.getHeight().toFloat())
+        val minX = safeAreaInsets.left.toFloat()
+        val maxX = max(minX, (width - safeAreaInsets.right - view.getWidth()).toFloat())
+        val minY = safeAreaInsets.top.toFloat()
+        val maxY = max(minY, (height - safeAreaInsets.bottom - view.getHeight()).toFloat())
+        val finalX = min(max(currentPosition.x + offsetX, minX), maxX)
+        val finalY = min(max(currentPosition.y + offsetY, minY), maxY)
         view.setPosition(Point(finalX.toInt(), finalY.toInt()))
         modifiedByUser = true
         notifyLayoutChanged()
@@ -347,8 +415,12 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun setComponentPosition(component: LayoutComponent, x: Int, y: Int): Boolean {
         val view = views[component] ?: return false
-        val boundedX = x.coerceIn(0, max(width - view.getWidth(), 0))
-        val boundedY = y.coerceIn(0, max(height - view.getHeight(), 0))
+        val minX = safeAreaInsets.left
+        val maxX = max(minX, width - safeAreaInsets.right - view.getWidth())
+        val minY = safeAreaInsets.top
+        val maxY = max(minY, height - safeAreaInsets.bottom - view.getHeight())
+        val boundedX = x.coerceIn(minX, maxX)
+        val boundedY = y.coerceIn(minY, maxY)
         view.setPosition(Point(boundedX, boundedY))
         modifiedByUser = true
         notifyLayoutChanged()
@@ -381,7 +453,8 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun centerSelectedViewHorizontally() {
         val view = selectedView ?: return
-        val centerX = (width - view.getWidth()) / 2
+        val usableWidth = width - safeAreaInsets.left - safeAreaInsets.right
+        val centerX = safeAreaInsets.left + (usableWidth - view.getWidth()) / 2
         val position = view.getPosition()
         view.setPosition(Point(centerX, position.y))
         modifiedByUser = true
@@ -390,7 +463,8 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun centerSelectedViewVertically() {
         val view = selectedView ?: return
-        val centerY = (height - view.getHeight()) / 2
+        val usableHeight = height - safeAreaInsets.top - safeAreaInsets.bottom
+        val centerY = safeAreaInsets.top + (usableHeight - view.getHeight()) / 2
         val position = view.getPosition()
         view.setPosition(Point(position.x, centerY))
         modifiedByUser = true

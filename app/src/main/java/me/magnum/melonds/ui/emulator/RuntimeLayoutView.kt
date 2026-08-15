@@ -111,6 +111,7 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
             getLayoutComponentView(LayoutComponent.BUTTON_QUICK_LOAD)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.QUICK_LOAD, enableHapticFeedback, touchVibrator))
             getLayoutComponentView(LayoutComponent.BUTTON_REWIND)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.REWIND, enableHapticFeedback, touchVibrator))
             getLayoutComponentView(LayoutComponent.BUTTON_TRANSLATE)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.TRANSLATE, enableHapticFeedback, touchVibrator))
+            getLayoutComponentView(LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.TOGGLE_EXTRA_BUTTONS, enableHapticFeedback, touchVibrator))
         }
 
         getLayoutComponentViews().forEach {
@@ -122,6 +123,24 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         }
 
         updateScreenInputs()
+    }
+
+    private var areExtraButtonsVisible = true
+
+    fun toggleExtraButtonsVisibility() {
+        areExtraButtonsVisible = !areExtraButtonsVisible
+        getLayoutComponentViews().forEach { compView ->
+            val c = compView.component
+            val isCore = c == LayoutComponent.DPAD || c == LayoutComponent.BUTTONS ||
+                    c == LayoutComponent.BUTTON_L || c == LayoutComponent.BUTTON_R ||
+                    c == LayoutComponent.BUTTON_START || c == LayoutComponent.BUTTON_SELECT ||
+                    c == LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS ||
+                    c.isScreen()
+            if (!isCore) {
+                compView.view.isVisible = areExtraButtonsVisible
+            }
+        }
+        setLayoutComponentToggleState(LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS, areExtraButtonsVisible)
     }
 
     private fun updateScreenInputs() {

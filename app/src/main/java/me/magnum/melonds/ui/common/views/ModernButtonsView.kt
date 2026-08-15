@@ -78,6 +78,12 @@ class ModernButtonsView @JvmOverloads constructor(
         color = Color.parseColor("#59000000")
     }
 
+    var buttonSpread: Float = 1.0f
+        set(value) {
+            field = value.coerceIn(0.6f, 1.6f)
+            invalidate()
+        }
+
     private val buttonScales = mutableMapOf<Input, Float>()
     private val buttonGlows = mutableMapOf<Input, Float>()
     private val buttonAnimators = mutableMapOf<Input, ValueAnimator>()
@@ -86,33 +92,28 @@ class ModernButtonsView @JvmOverloads constructor(
         val allInputs = listOf(Input.X, Input.Y, Input.B, Input.A)
         allInputs.forEach { input ->
             val isPressed = input in pressedInputs
-            val targetScale = if (isPressed) 0.88f else 1.0f
-            val targetGlow = if (isPressed) 1.0f else 0.0f
+            buttonAnimators[input]?.cancel()
 
-            val currentScale = buttonScales[input] ?: 1.0f
-            if (currentScale != targetScale) {
-                animateButton(input, targetScale, targetGlow)
+            if (!isPressed) {
+                buttonScales[input] = 1.0f
+                buttonGlows[input] = 0.0f
+            } else {
+                val startScale = buttonScales[input] ?: 1.0f
+                val startGlow = buttonGlows[input] ?: 0.0f
+                val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = 50L
+                    addUpdateListener { anim ->
+                        val fraction = anim.animatedFraction
+                        buttonScales[input] = startScale + (0.88f - startScale) * fraction
+                        buttonGlows[input] = startGlow + (1.0f - startGlow) * fraction
+                        invalidate()
+                    }
+                }
+                buttonAnimators[input] = animator
+                animator.start()
             }
         }
-    }
-
-    private fun animateButton(input: Input, targetScale: Float, targetGlow: Float) {
-        buttonAnimators[input]?.cancel()
-
-        val startScale = buttonScales[input] ?: 1.0f
-        val startGlow = buttonGlows[input] ?: 0.0f
-
-        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 90L
-            addUpdateListener { anim ->
-                val fraction = anim.animatedFraction
-                buttonScales[input] = startScale + (targetScale - startScale) * fraction
-                buttonGlows[input] = startGlow + (targetGlow - startGlow) * fraction
-                invalidate()
-            }
-        }
-        buttonAnimators[input] = animator
-        animator.start()
+        invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -126,7 +127,7 @@ class ModernButtonsView @JvmOverloads constructor(
         val cx = w / 2f
         val cy = h / 2f
         val buttonRadius = size * 0.175f
-        val offset = size * 0.285f
+        val offset = size * 0.285f * buttonSpread
 
         val style = ButtonThemeManager.currentStyle
 
