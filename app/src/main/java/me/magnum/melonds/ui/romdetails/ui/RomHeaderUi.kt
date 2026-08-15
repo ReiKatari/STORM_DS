@@ -234,7 +234,7 @@ fun RomHeroVertical(
     rom: Rom,
     boxArtUrl: String?,
     raCoverUrl: String?,
-    initialFocusRequester: FocusRequester,
+    initialFocusRequester: FocusRequester?,
     onLaunchRom: () -> Unit,
     onNavigateBack: () -> Unit,
     onSendSaveFile: () -> Unit,
@@ -243,23 +243,29 @@ fun RomHeroVertical(
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         HeroBackdrop(rom = rom, boxArtUrl = boxArtUrl, modifier = Modifier.matchParentSize())
+
+        // Top Back Button Overlay
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp, top = 14.dp),
+        ) {
+            HeroCircleButton(Icons.AutoMirrored.Filled.ArrowBack, null, onNavigateBack)
+        }
+
         Column(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(Modifier.fillMaxWidth()) {
-                HeroCircleButton(Icons.AutoMirrored.Filled.ArrowBack, null, onNavigateBack)
-                Spacer(Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
 
             // 1. System Badge centered on top of icon
             Box(
                 Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
+                    .background(Color.Black.copy(alpha = 0.50f))
                     .padding(horizontal = 10.dp, vertical = 3.5.dp),
             ) {
                 Text(
@@ -275,12 +281,12 @@ fun RomHeroVertical(
 
             Spacer(Modifier.height(10.dp))
 
-            // 2. ROM Icon / Cover Art in the center
-            HeroCover(rom, boxArtUrl, raCoverUrl, width = 120.dp, initialsSize = 34.sp)
+            // 2. ROM Icon / Cover Art strictly centered
+            HeroCover(rom, boxArtUrl, raCoverUrl, width = 126.dp, initialsSize = 36.sp)
 
             Spacer(Modifier.height(12.dp))
 
-            // 3. Game title centered below icon
+            // 3. Game title centered below icon (up to 3 lines)
             Text(
                 text = romDisplayName(rom),
                 color = Color.White,
@@ -299,6 +305,7 @@ fun RomHeroVertical(
                 Text(
                     text = rom.developerName,
                     color = Color.White.copy(alpha = 0.75f),
+                    fontFamily = me.magnum.melonds.ui.theme.Manrope,
                     fontSize = 12.sp,
                     maxLines = 1,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -339,6 +346,7 @@ fun RomHeroVertical(
             Row(
                 Modifier.fillMaxWidth(0.92f),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
                 PlayButton(
                     height = 50.dp,
