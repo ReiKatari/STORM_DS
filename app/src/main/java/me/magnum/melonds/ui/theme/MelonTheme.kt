@@ -8,6 +8,7 @@ import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import me.magnum.melonds.ui.Theme
 
 val watermelon: WatermelonColors
     @Composable get() = LocalWatermelonColors.current
@@ -51,7 +52,15 @@ fun MelonTheme(
     isDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val watermelonColors = if (isDarkTheme) DarkWatermelonColors else LightWatermelonColors
+    val theme = AppThemeManager.currentTheme
+    val watermelonColors = when (theme) {
+        Theme.LIGHT -> LightWatermelonColors
+        Theme.MIDNIGHT -> MidnightWatermelonColors
+        Theme.CYBERPUNK -> CyberpunkWatermelonColors
+        Theme.GOTHIC -> GothicWatermelonColors
+        Theme.DARK -> DarkWatermelonColors
+        Theme.SYSTEM -> if (isDarkTheme) DarkWatermelonColors else LightWatermelonColors
+    }
 
     CompositionLocalProvider(LocalWatermelonColors provides watermelonColors) {
         MaterialTheme(
