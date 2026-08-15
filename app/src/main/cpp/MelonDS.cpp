@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cctype>
 #include <vector>
+#include <thread>
 #include <android/asset_manager.h>
 #include <sys/system_properties.h>
 #include <oboe/Oboe.h>
@@ -1397,15 +1398,9 @@ namespace MelonDSAndroid
             return false;
         }
 
-        Platform::FileHandle* saveStateFile = Platform::OpenFile(path, Platform::FileMode::Write);
-
-        if (!saveStateFile)
-            return false;
-
         Savestate state;
         if (state.Error)
         {
-            Platform::CloseFile(saveStateFile);
             return false;
         }
 
@@ -1413,29 +1408,20 @@ namespace MelonDSAndroid
         if (!saved || state.Error)
         {
             Platform::Log(Platform::Error, "Failed to serialize savestate to %s\n", path);
-            Platform::CloseFile(saveStateFile);
             return false;
         }
 
-        if (Platform::FileWrite(state.Buffer(), state.Length(), 1, saveStateFile) != 1)
-        {
-            Platform::Log(Platform::Error, "Failed to write %d-byte savestate to %s\n", state.Length(), path);
-            Platform::CloseFile(saveStateFile);
-            return false;
-        }
+        const u8* stateBytes = static_cast<const u8*>(state.Buffer());
+        std::vector<u8> bufferCopy(stateBytes, stateBytes + state.Length());
+        std::string targetPath(path);
 
-        if (!Platform::FileFlush(saveStateFile))
-        {
-            Platform::Log(Platform::Error, "Failed to flush %d-byte savestate to %s\n", state.Length(), path);
+        std::thread([targetPath, bufferCopy = std::move(bufferCopy)]() {
+            Platform::FileHandle* saveStateFile = Platform::OpenFile(targetPath.c_str(), Platform::FileMode::Write);
+            if (!saveStateFile) return;
+            Platform::FileWrite(bufferCopy.data(), bufferCopy.size(), 1, saveStateFile);
+            Platform::FileFlush(saveStateFile);
             Platform::CloseFile(saveStateFile);
-            return false;
-        }
-
-        if (!Platform::CloseFile(saveStateFile))
-        {
-            Platform::Log(Platform::Error, "Failed to close %d-byte savestate at %s\n", state.Length(), path);
-            return false;
-        }
+        }).detach();
 
         return true;
     }

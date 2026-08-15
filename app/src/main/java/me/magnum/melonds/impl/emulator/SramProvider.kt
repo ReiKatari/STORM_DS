@@ -1,5 +1,6 @@
 package me.magnum.melonds.impl.emulator
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import me.magnum.melonds.common.uridelegates.UriHandler
@@ -7,6 +8,7 @@ import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.SettingsRepository
 
 class SramProvider(
+    private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val uriHandler: UriHandler,
 ) {
@@ -25,12 +27,28 @@ class SramProvider(
 
         val sramDocument = rootDocument.findFile(sramFileName)
         return if (sramDocument != null) {
+            // Create a shadow backup copy (.sav.bak) to protect user progress from corruption
+            runCatching {
+                if (sramDocument.length() > 0) {
+                    val backupFileName = "$sramFileName.bak"
+                    var backupDoc = rootDocument.findFile(backupFileName)
+                    if (backupDoc == null) {
+                        backupDoc = rootDocument.createFile("application/*", backupFileName)
+                    }
+                    if (backupDoc != null) {
+                        context.contentResolver.openInputStream(sramDocument.uri)?.use { input ->
+                            context.contentResolver.openOutputStream(backupDoc.uri)?.use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        Log.i("SramProvider", "Created shadow backup '$backupFileName'")
+                    }
+                }
+            }
             sramDocument.uri
         } else {
             val newSramUri = rootDocument.createFile("application/*", sramFileName)?.uri
             if (newSramUri == null) {
-                // It looks like some devices create the file just fine but return null. As a fallback, check if the SRAM file was actually created or not
-                // Reference: https://www.ghisler.ch/board/viewtopic.php?p=370089#p370089
                 rootDocument.findFile(sramFileName)?.uri ?: throw SramLoadException("Could not create temporary SRAM file at ${rootDocument.uri}")
             } else {
                 newSramUri
