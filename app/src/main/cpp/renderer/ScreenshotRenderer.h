@@ -35,7 +35,6 @@ private:
     void setupFrameBuffer();
     void setupShaders();
     void setupVertexBuffers();
-    void notifyScreenshotReady();
 
     std::mutex screenshotMutex;
     std::condition_variable screenshotCondition;
@@ -44,6 +43,7 @@ public:
     ScreenshotRenderer(u32* screenshotBuffer);
     void init();
     void renderScreenshot(GPU* gpu, Renderer renderer, Frame* renderFrame);
+    void notifyScreenshotReady();
     u32* getScreenshot();
 
     bool takeScreenshot();

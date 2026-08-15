@@ -88,9 +88,16 @@ bool ScreenshotRenderer::takeScreenshot()
     std::unique_lock lock(screenshotMutex);
 
     screenshotRequested = true;
-    screenshotCondition.wait(lock);
+    bool success = screenshotCondition.wait_for(lock, std::chrono::milliseconds(300), [this] {
+        return !screenshotRequested || stopped;
+    });
 
-    return !stopped;
+    if (!success)
+    {
+        screenshotRequested = false;
+    }
+
+    return success && !stopped;
 }
 
 bool ScreenshotRenderer::isScreenshotPending()
