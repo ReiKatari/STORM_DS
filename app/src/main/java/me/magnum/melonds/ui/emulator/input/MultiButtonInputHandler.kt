@@ -1,7 +1,5 @@
 package me.magnum.melonds.ui.emulator.input
 
-import android.os.Handler
-import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import me.magnum.melonds.common.vibration.TouchVibrator
@@ -22,13 +20,8 @@ abstract class MultiButtonInputHandler(
     private var viewHeight = 0
     private val buttonCircles = mutableListOf<ButtonCircle>()
     private val pressedInputs = mutableListOf<Input>()
-    private val rawCurrentInputs = mutableListOf<Input>()
+    private val newPressedInputs = mutableListOf<Input>()
     private val tempInputList = mutableListOf<Input>()
-
-    private val stickyInputs = mutableSetOf<Input>()
-    private val activeTouchStartTimes = mutableMapOf<Input, Long>()
-    private val stickyTimers = mutableMapOf<Input, Runnable>()
-    private val handler = Handler(Looper.getMainLooper())
 
     open val isRadialDpad: Boolean = false
 
@@ -40,7 +33,7 @@ abstract class MultiButtonInputHandler(
             areDimensionsInitialized = true
         }
 
-        rawCurrentInputs.clear()
+        newPressedInputs.clear()
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -50,9 +43,9 @@ abstract class MultiButtonInputHandler(
                     val py = event.getY(i)
 
                     if (isRadialDpad) {
-                        processRadialDpad(px, py, rawCurrentInputs)
+                        processRadialDpad(px, py, newPressedInputs)
                     } else {
-                        processAccurateButtons(px, py, rawCurrentInputs)
+                        processAccurateButtons(px, py, newPressedInputs)
                     }
                 }
             }
@@ -65,64 +58,21 @@ abstract class MultiButtonInputHandler(
                     val py = event.getY(i)
 
                     if (isRadialDpad) {
-                        processRadialDpad(px, py, rawCurrentInputs)
+                        processRadialDpad(px, py, newPressedInputs)
                     } else {
-                        processAccurateButtons(px, py, rawCurrentInputs)
+                        processAccurateButtons(px, py, newPressedInputs)
                     }
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                rawCurrentInputs.clear()
+                newPressedInputs.clear()
             }
         }
 
-        val now = System.currentTimeMillis()
-
-        // When finger touches down on a button that was sticky, immediately turn sticky OFF!
-        for (input in rawCurrentInputs) {
-            if (input in stickyInputs) {
-                stickyInputs.remove(input)
-            }
-        }
-
-        // Track newly pressed inputs to schedule 2-second sticky hold
-        for (input in rawCurrentInputs) {
-            if (!activeTouchStartTimes.containsKey(input)) {
-                activeTouchStartTimes[input] = now
-                val runnable = Runnable {
-                    // Double check if input is still actively touched before locking sticky
-                    if (input in rawCurrentInputs) {
-                        stickyInputs.add(input)
-                        performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
-                        (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(resolveEffectiveInputs().toSet())
-                    }
-                }
-                stickyTimers[input] = runnable
-                handler.postDelayed(runnable, 2000L)
-            }
-        }
-
-        // Handle released inputs (lifted finger or moved off button)
-        val releasedFromTouch = activeTouchStartTimes.keys.filter { it !in rawCurrentInputs }
-        for (input in releasedFromTouch) {
-            activeTouchStartTimes.remove(input)
-            stickyTimers.remove(input)?.let { handler.removeCallbacks(it) }
-        }
-
-        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-            // Cancel all pending timers that didn't reach 2s
-            for ((_, timer) in stickyTimers) {
-                handler.removeCallbacks(timer)
-            }
-            stickyTimers.clear()
-            activeTouchStartTimes.clear()
-        }
-
-        val effectiveInputs = resolveEffectiveInputs()
-
+        // Keys to release
         tempInputList.clear()
         pressedInputs.filterNotTo(tempInputList) {
-            it in effectiveInputs
+            it in newPressedInputs
         }.forEach {
             inputListener.onKeyReleased(it)
         }
@@ -131,8 +81,9 @@ abstract class MultiButtonInputHandler(
             performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
         }
 
+        // Keys to press
         tempInputList.clear()
-        effectiveInputs.filterNotTo(tempInputList) {
+        newPressedInputs.filterNotTo(tempInputList) {
             it in pressedInputs
         }.forEach {
             inputListener.onKeyPress(it)
@@ -143,22 +94,11 @@ abstract class MultiButtonInputHandler(
         }
 
         pressedInputs.clear()
-        pressedInputs.addAll(effectiveInputs)
+        pressedInputs.addAll(newPressedInputs)
 
-        (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(effectiveInputs.toSet())
+        (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(newPressedInputs.toSet())
 
         return true
-    }
-
-    private fun resolveEffectiveInputs(): List<Input> {
-        val result = mutableListOf<Input>()
-        result.addAll(rawCurrentInputs)
-        for (sticky in stickyInputs) {
-            if (sticky !in result) {
-                result.add(sticky)
-            }
-        }
-        return result
     }
 
     private fun processAccurateButtons(px: Float, py: Float, outInputs: MutableList<Input>) {
@@ -184,7 +124,7 @@ abstract class MultiButtonInputHandler(
             if (closest.first.input !in outInputs) {
                 outInputs.add(closest.first.input)
             }
-            // Check if user is touching between two buttons (e.g. between X and A, A and B, etc.) for combo presses!
+            // Combo presses (e.g. between X and A, A and B, etc.)
             for (i in 1 until distances.size) {
                 val candidate = distances[i]
                 if (candidate.second <= hitRadius * 1.45f && (candidate.second - d0) <= hitRadius * 0.70f) {
