@@ -67,8 +67,9 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
     }
 
     fun setLayoutComponentToggleState(layoutComponent: LayoutComponent, isEnabled: Boolean) {
-        val toggleableImageView = getLayoutComponentView(layoutComponent)?.view as? ToggleableImageView ?: return
-        toggleableImageView.setToggleState(isEnabled)
+        val view = getLayoutComponentView(layoutComponent)?.view
+        (view as? me.magnum.melonds.ui.common.views.ModernSingleButtonView)?.setToggleState(isEnabled)
+        (view as? ToggleableImageView)?.setToggleState(isEnabled)
     }
 
     fun instantiateLayout(runtimeLayout: RuntimeInputLayoutConfiguration, layoutTarget: LayoutTarget) {
