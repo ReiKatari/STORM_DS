@@ -730,8 +730,9 @@
     <string name="presets">Dual Screen Presets</string>
     <string name="layout_editing_disabled_by_presets">Layouts can not be edited while a dual screen preset is active.</string>
     <string name="above_other_screen">Above other screen</string>
-    <string name="center_horizontal">Center horizontally</string>
-    <string name="center_vertical">Center vertically</string>
+    <string name="center_horizontal">Center X</string>
+    <string name="center_vertical">Center Y</string>
+    <string name="label_button_scale">Button size</string>
     <string name="editing_internal_layout">Editing internal layout</string>
     <string name="editing_external_layout">Editing external layout</string>
     <string name="menu">Menu</string>
