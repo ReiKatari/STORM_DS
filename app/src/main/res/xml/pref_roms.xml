@@ -22,6 +22,15 @@
             android:defaultValue="none" />
 
     <ListPreference
+            android:key="rom_display_name_mode"
+            android:title="@string/rom_display_name_mode"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/rom_display_name_mode_options"
+            android:entryValues="@array/rom_display_name_mode_values"
+            android:defaultValue="file_name" />
+
+    <ListPreference
             android:key="rom_view_mode"
             android:title="@string/rom_view_mode"
             android:summary="%s"

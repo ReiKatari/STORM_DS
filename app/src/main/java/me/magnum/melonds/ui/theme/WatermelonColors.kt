@@ -66,4 +66,58 @@ val LightWatermelonColors = WatermelonColors(
     shadow = Color(0x1F000000),
 )
 
+val MidnightWatermelonColors = WatermelonColors(
+    isDark = true,
+    bg = Color(0xFF0B0814),
+    surface = Color(0xFF140F24),
+    surface2 = Color(0xFF1F1738),
+    surface3 = Color(0xFF312557),
+    line = Color(0x33C084FC),
+    text = Color(0xFFFAF5FF),
+    text2 = Color(0xFFE9D5FF),
+    text3 = Color(0xFFA855F7),
+    red = Color(0xFFF43F5E),
+    redGlow = Color(0x59F43F5E),
+    green = Color(0xFFC084FC),
+    greenDim = Color(0x33C084FC),
+    switchOff = Color(0x29FFFFFF),
+    shadow = Color(0x99000000),
+)
+
+val CyberpunkWatermelonColors = WatermelonColors(
+    isDark = true,
+    bg = Color(0xFF07080D),
+    surface = Color(0xFF0F121C),
+    surface2 = Color(0xFF191E2E),
+    surface3 = Color(0xFF283049),
+    line = Color(0x40FCEE0A),
+    text = Color(0xFFFCEE0A),
+    text2 = Color(0xFF00F0FF),
+    text3 = Color(0xFF909BB6),
+    red = Color(0xFFFF003C),
+    redGlow = Color(0x66FF003C),
+    green = Color(0xFF00F0FF),
+    greenDim = Color(0x3300F0FF),
+    switchOff = Color(0x29FFFFFF),
+    shadow = Color(0x99000000),
+)
+
+val GothicWatermelonColors = WatermelonColors(
+    isDark = true,
+    bg = Color(0xFF070708),
+    surface = Color(0xFF111113),
+    surface2 = Color(0xFF1B1B1F),
+    surface3 = Color(0xFF2B2B31),
+    line = Color(0x33E50914),
+    text = Color(0xFFF5F5F7),
+    text2 = Color(0xFFFF3344),
+    text3 = Color(0xFF8F8F9B),
+    red = Color(0xFFE50914),
+    redGlow = Color(0x66E50914),
+    green = Color(0xFFFF2A37),
+    greenDim = Color(0x33FF2A37),
+    switchOff = Color(0x29FFFFFF),
+    shadow = Color(0x99000000),
+)
+
 val LocalWatermelonColors = staticCompositionLocalOf { DarkWatermelonColors }

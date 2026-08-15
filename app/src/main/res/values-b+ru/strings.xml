@@ -443,7 +443,7 @@
   <string name="leaderboard_submission_info">%1$s   Ранг %2$d из %3$d</string>
   <string name="leaderboard_best_score">Личный рекорд: %1$s</string>
   <string name="game_completed">Пройдено: %1$s</string>
-  <string name="game_mastered">Пройдено на 100%: %1$s</string>
+  <string name="game_mastered">Пройдено на 100%%: %1$s</string>
   <string name="retroachievements_unsynchronized_data">Несинхронизированные данные RetroAchievements</string>
   <string name="retroachievements_unsynchronized_data_info">Есть несинхронизированные данные RetroAchievements:</string>
   <plurals name="retroachievements_pending_achievement_unlocks">
@@ -1135,4 +1135,7 @@
         <item>classic_grey</item>
         <item>snes_super</item>
     </string-array>
+    <string name="rom_display_name_mode">Отображение названий игр</string>
+    <string name="rom_display_name_mode_file_name">Название файла (без расширения)</string>
+    <string name="rom_display_name_mode_internal">Название игры (как раньше)</string>
 </resources>

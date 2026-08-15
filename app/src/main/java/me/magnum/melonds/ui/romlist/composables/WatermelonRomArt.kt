@@ -3,9 +3,12 @@ package me.magnum.melonds.ui.romlist.composables
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
@@ -37,11 +40,16 @@ import me.magnum.melonds.ui.theme.WatermelonMono
 import kotlin.math.absoluteValue
 import kotlin.time.Duration
 
+import me.magnum.melonds.ui.romlist.RomDisplayNameManager
+
 val DsBoxArtAspectRatio: Float = 512f / 458f
 
 fun romDisplayName(rom: Rom): String {
     if (!rom.config.customName.isNullOrBlank()) {
         return rom.config.customName!!
+    }
+    if (RomDisplayNameManager.currentMode == "internal_name" && rom.name.isNotBlank()) {
+        return rom.name
     }
     val fileBase = rom.fileName.substringBeforeLast('.')
     if (fileBase.isNotBlank()) {
@@ -70,22 +78,57 @@ fun romGradient(title: String): Brush {
 
 fun romPlatformLabel(rom: Rom): String = if (rom.isDsiWareTitle) "DSi" else "DS"
 
-fun resolveRomRegionFlag(rom: Rom): String {
+fun resolveRomRegionBadge(rom: Rom): Pair<String, String>? {
     val name = rom.fileName.uppercase()
     return when {
-        "(USA)" in name || "(US)" in name || " (U)" in name || "(USA," in name || "(US," in name -> "🇺🇸"
-        "(EUROPE)" in name || "(EUR)" in name || " (E)" in name || "(EU)" in name || "(EN," in name || "(EN)" in name -> "🇪🇺"
-        "(JAPAN)" in name || "(JAP)" in name || "(JPN)" in name || " (J)" in name -> "🇯🇵"
-        "(KOREA)" in name || "(KOR)" in name || " (K)" in name -> "🇰🇷"
-        "(CHINA)" in name || "(CHN)" in name || " (C)" in name -> "🇨🇳"
-        "(GERMANY)" in name || "(GER)" in name || " (DE)" in name || "(DE," in name -> "🇩🇪"
-        "(FRANCE)" in name || "(FRA)" in name || " (FR)" in name || "(FR," in name -> "🇫🇷"
-        "(ITALY)" in name || "(ITA)" in name || " (IT)" in name || "(IT," in name -> "🇮🇹"
-        "(SPAIN)" in name || "(SPA)" in name || " (ES)" in name || "(ES," in name -> "🇪🇸"
-        "(RUSSIA)" in name || "(RUS)" in name || " (RU)" in name || "(RU," in name -> "🇷🇺"
-        "(AUSTRALIA)" in name || "(AUS)" in name || "(AU)" in name -> "🇦🇺"
-        "(WORLD)" in name || "(GLOBAL)" in name -> "🌐"
-        else -> ""
+        "(USA)" in name || "(US)" in name || " (U)" in name || "(USA," in name || "(US," in name -> "🇺🇸" to "USA"
+        "(EUROPE)" in name || "(EUR)" in name || " (E)" in name || "(EU)" in name || "(EN," in name || "(EN)" in name -> "🇪🇺" to "EUR"
+        "(JAPAN)" in name || "(JAP)" in name || "(JPN)" in name || " (J)" in name -> "🇯🇵" to "JPN"
+        "(KOREA)" in name || "(KOR)" in name || " (K)" in name -> "🇰🇷" to "KOR"
+        "(CHINA)" in name || "(CHN)" in name || " (C)" in name -> "🇨🇳" to "CHN"
+        "(GERMANY)" in name || "(GER)" in name || " (DE)" in name || "(DE," in name -> "🇩🇪" to "GER"
+        "(FRANCE)" in name || "(FRA)" in name || " (FR)" in name || "(FR," in name -> "🇫🇷" to "FRA"
+        "(ITALY)" in name || "(ITA)" in name || " (IT)" in name || "(IT," in name -> "🇮🇹" to "ITA"
+        "(SPAIN)" in name || "(SPA)" in name || " (ES)" in name || "(ES," in name -> "🇪🇸" to "SPA"
+        "(RUSSIA)" in name || "(RUS)" in name || " (RU)" in name || "(RU," in name -> "🇷🇺" to "RUS"
+        "(AUSTRALIA)" in name || "(AUS)" in name || "(AU)" in name -> "🇦🇺" to "AUS"
+        "(WORLD)" in name || "(GLOBAL)" in name -> "🌐" to "WLD"
+        else -> null
+    }
+}
+
+fun resolveRomRegionFlag(rom: Rom): String {
+    return resolveRomRegionBadge(rom)?.first ?: ""
+}
+
+@Composable
+fun RegionBadge(
+    flag: String,
+    code: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color.Black.copy(alpha = 0.40f))
+            .padding(horizontal = 4.5.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = flag,
+            fontSize = 10.5.sp,
+            lineHeight = 11.sp,
+        )
+        Spacer(Modifier.width(3.dp))
+        Text(
+            text = code,
+            color = Color(0xFFE2E8F0),
+            fontFamily = WatermelonMono,
+            fontSize = 8.sp,
+            lineHeight = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
+        )
     }
 }
 
