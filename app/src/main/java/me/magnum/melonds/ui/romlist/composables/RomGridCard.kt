@@ -150,16 +150,16 @@ fun RomGridCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
-                    .padding(start = 9.dp, end = 9.dp, top = 22.dp, bottom = 9.dp),
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                    .padding(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
             ) {
                 Text(
                     text = romDisplayName(rom),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.5.sp,
-                    lineHeight = 14.5.sp,
-                    maxLines = 2,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val hours = formatHoursLabel(rom.totalPlayTime)
@@ -170,7 +170,7 @@ fun RomGridCard(
                         fontFamily = WatermelonMono,
                         fontSize = 8.5.sp,
                         lineHeight = 10.sp,
-                        modifier = Modifier.padding(top = 3.dp),
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
             }
