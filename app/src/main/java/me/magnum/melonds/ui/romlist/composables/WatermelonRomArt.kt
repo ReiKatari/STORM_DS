@@ -79,22 +79,51 @@ fun romGradient(title: String): Brush {
 fun romPlatformLabel(rom: Rom): String = if (rom.isDsiWareTitle) "DSi" else "DS"
 
 fun resolveRomRegionBadge(rom: Rom): Pair<String, String>? {
-    val name = rom.fileName.uppercase()
-    return when {
-        "(USA)" in name || "(US)" in name || " (U)" in name || "(USA," in name || "(US," in name -> "🇺🇸" to "USA"
-        "(EUROPE)" in name || "(EUR)" in name || " (E)" in name || "(EU)" in name || "(EN," in name || "(EN)" in name -> "🇪🇺" to "EUR"
-        "(JAPAN)" in name || "(JAP)" in name || "(JPN)" in name || " (J)" in name -> "🇯🇵" to "JPN"
-        "(KOREA)" in name || "(KOR)" in name || " (K)" in name -> "🇰🇷" to "KOR"
-        "(CHINA)" in name || "(CHN)" in name || " (C)" in name -> "🇨🇳" to "CHN"
-        "(GERMANY)" in name || "(GER)" in name || " (DE)" in name || "(DE," in name -> "🇩🇪" to "GER"
-        "(FRANCE)" in name || "(FRA)" in name || " (FR)" in name || "(FR," in name -> "🇫🇷" to "FRA"
-        "(ITALY)" in name || "(ITA)" in name || " (IT)" in name || "(IT," in name -> "🇮🇹" to "ITA"
-        "(SPAIN)" in name || "(SPA)" in name || " (ES)" in name || "(ES," in name -> "🇪🇸" to "SPA"
-        "(RUSSIA)" in name || "(RUS)" in name || " (RU)" in name || "(RU," in name -> "🇷🇺" to "RUS"
-        "(AUSTRALIA)" in name || "(AUS)" in name || "(AU)" in name -> "🇦🇺" to "AUS"
-        "(WORLD)" in name || "(GLOBAL)" in name -> "🌐" to "WLD"
-        else -> null
+    val candidates = listOf(rom.fileName, rom.name, rom.uri.lastPathSegment.orEmpty())
+    for (raw in candidates) {
+        val s = raw.uppercase()
+        if (s.containsAny("(USA", "[USA", " (U)", " [U]", "(US)", "[US]", " USA.", " USA ", "_USA_", "-USA-", "(USA,", "[USA,", "(EN,JA,FR,DE,ES,IT)", "(EN,ES)", "(EN,FR)")) {
+            return "🇺🇸" to "USA"
+        }
+        if (s.containsAny("(EUROPE", "[EUROPE", "(EUR", "[EUR", " (E)", " [E]", "(EU)", "[EU]", " EUR.", " EUR ", "_EUR_", "-EUR-", "(EN)", "[EN]", "(EN,", "[EN,", "EUROPEAN", "PAL")) {
+            return "🇪🇺" to "EUR"
+        }
+        if (s.containsAny("(JAPAN", "[JAPAN", "(JAP", "[JAP", "(JPN", "[JPN", " (J)", " [J]", "(JP)", "[JP]", " JPN.", " JPN ", "_JPN_", "-JPN-", "NTSC-J")) {
+            return "🇯🇵" to "JPN"
+        }
+        if (s.containsAny("(KOREA", "[KOREA", "(KOR", "[KOR", " (K)", " [K]", "(KO)", "[KO]", " KOR.", " KOR ")) {
+            return "🇰🇷" to "KOR"
+        }
+        if (s.containsAny("(CHINA", "[CHINA", "(CHN", "[CHN", " (C)", " [C]", "(ZH)", "[ZH]", " CHN.", " CHN ")) {
+            return "🇨🇳" to "CHN"
+        }
+        if (s.containsAny("(GERMANY", "[GERMANY", "(GER", "[GER", " (DE)", " [DE]", "(DE,", "[DE,")) {
+            return "🇩🇪" to "GER"
+        }
+        if (s.containsAny("(FRANCE", "[FRANCE", "(FRA", "[FRA", " (FR)", " [FR]", "(FR,", "[FR,")) {
+            return "🇫🇷" to "FRA"
+        }
+        if (s.containsAny("(ITALY", "[ITALY", "(ITA", "[ITA", " (IT)", " [IT]", "(IT,", "[IT,")) {
+            return "🇮🇹" to "ITA"
+        }
+        if (s.containsAny("(SPAIN", "[SPAIN", "(SPA", "[SPA", " (ES)", " [ES]", "(ES,", "[ES,")) {
+            return "🇪🇸" to "SPA"
+        }
+        if (s.containsAny("(RUSSIA", "[RUSSIA", "(RUS", "[RUS", " (RU)", " [RU]", "(RU,", "[RU,")) {
+            return "🇷🇺" to "RUS"
+        }
+        if (s.containsAny("(AUSTRALIA", "[AUSTRALIA", "(AUS", "[AUS", " (AU)", " [AU]")) {
+            return "🇦🇺" to "AUS"
+        }
+        if (s.containsAny("(WORLD", "[WORLD", "(GLOBAL", "[GLOBAL", "(WLD", "[WLD", " (W)", " [W]")) {
+            return "🌐" to "WLD"
+        }
     }
+    return "🌐" to "DS"
+}
+
+private fun String.containsAny(vararg terms: String): Boolean {
+    return terms.any { this.contains(it) }
 }
 
 fun resolveRomRegionFlag(rom: Rom): String {

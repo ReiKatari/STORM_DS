@@ -16,7 +16,7 @@
         android:summary="%s"
         android:entries="@array/update_channel_options"
         android:entryValues="@array/update_channel_values"
-        android:defaultValue="stable_and_prerelease"
+        android:defaultValue="stable"
         app:iconSpaceReserved="false"
         app:dependency="github_check_for_updates" />
 </PreferenceScreen>

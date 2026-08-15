@@ -162,7 +162,12 @@ abstract class MultiButtonInputHandler(
     }
 
     private fun processAccurateButtons(px: Float, py: Float, outInputs: MutableList<Input>) {
-        if (buttonCircles.isEmpty()) return
+        if (buttonCircles.isEmpty()) {
+            if (viewWidth > 0 && viewHeight > 0) {
+                initDimensions(viewWidth, viewHeight)
+            }
+            if (buttonCircles.isEmpty()) return
+        }
 
         // Compute distance from touch to each button
         val distances = buttonCircles.map { circle ->
@@ -171,21 +176,18 @@ abstract class MultiButtonInputHandler(
         }.sortedBy { it.second }
 
         val closest = distances[0]
-        val singleRadius = sqrt(closest.first.radiusSquared)
-        val maxReach = singleRadius * 1.80f
+        val hitRadius = sqrt(closest.first.radiusSquared)
+        val maxReach = hitRadius * 1.55f
 
-        val candidateButtons = distances.filter { it.second <= maxReach }
-
-        if (candidateButtons.isNotEmpty()) {
-            val d0 = candidateButtons[0].second
-            // Add closest button
-            if (candidateButtons[0].first.input !in outInputs) {
-                outInputs.add(candidateButtons[0].first.input)
+        if (closest.second <= maxReach) {
+            val d0 = closest.second
+            if (closest.first.input !in outInputs) {
+                outInputs.add(closest.first.input)
             }
-            // If touch is near the midpoint between buttons (e.g. between X and A, A and B, etc.), activate both!
-            for (i in 1 until candidateButtons.size) {
-                val candidate = candidateButtons[i]
-                if (candidate.second <= singleRadius * 1.70f && (candidate.second - d0) <= singleRadius * 0.95f) {
+            // Check if user is touching between two buttons (e.g. between X and A, A and B, etc.) for combo presses!
+            for (i in 1 until distances.size) {
+                val candidate = distances[i]
+                if (candidate.second <= hitRadius * 1.45f && (candidate.second - d0) <= hitRadius * 0.70f) {
                     if (candidate.first.input !in outInputs) {
                         outInputs.add(candidate.first.input)
                     }
@@ -250,7 +252,18 @@ abstract class MultiButtonInputHandler(
     }
 
     protected open fun initDimensions(width: Int, height: Int) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val size = kotlin.math.min(width, height).toFloat()
+        val offset = size * 0.285f
+        val hitRadius = size * 0.24f
+        val radiusSquared = hitRadius * hitRadius
+
         buttonCircles.clear()
+        buttonCircles.add(ButtonCircle(getRightInput(), Point((cx + offset).toInt(), cy.toInt()), radiusSquared))
+        buttonCircles.add(ButtonCircle(getBottomInput(), Point(cx.toInt(), (cy + offset).toInt()), radiusSquared))
+        buttonCircles.add(ButtonCircle(getTopInput(), Point(cx.toInt(), (cy - offset).toInt()), radiusSquared))
+        buttonCircles.add(ButtonCircle(getLeftInput(), Point((cx - offset).toInt(), cy.toInt()), radiusSquared))
     }
 
     private data class ButtonCircle(
