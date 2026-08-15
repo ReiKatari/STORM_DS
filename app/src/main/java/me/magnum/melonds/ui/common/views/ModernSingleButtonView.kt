@@ -68,7 +68,15 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     private var buttonScale = 1.0f
     private var buttonGlow = 0.0f
+    private var isToggledOn: Boolean = true
     private var animator: ValueAnimator? = null
+
+    fun setToggleState(enabled: Boolean) {
+        if (isToggledOn != enabled) {
+            isToggledOn = enabled
+            invalidate()
+        }
+    }
 
     override fun updatePressedInputs(pressedInputs: Set<Input>) {
         val isPressed = pressedInputs.isNotEmpty()
@@ -188,7 +196,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, rx, rx, bgPaint)
                 canvas.drawRoundRect(rect, rx, rx, activeStrokePaint)
             } else {
-                bgPaint.color = Color.parseColor("#E6232730")
+                bgPaint.color = if (isToggledOn) Color.parseColor("#E6232730") else Color.parseColor("#B3181B22")
                 canvas.drawRoundRect(rect, rx, rx, bgPaint)
                 canvas.drawRoundRect(rect, rx, rx, strokePaint)
             }
@@ -196,6 +204,9 @@ class ModernSingleButtonView @JvmOverloads constructor(
             if (buttonGlow > 0f) {
                 iconPaint.color = Color.parseColor("#00E5FF")
                 textPaint.color = Color.parseColor("#00E5FF")
+            } else if (!isToggledOn) {
+                iconPaint.color = Color.parseColor("#808A98")
+                textPaint.color = Color.parseColor("#808A98")
             } else {
                 iconPaint.color = Color.parseColor("#F0F4F8")
                 textPaint.color = Color.WHITE
@@ -241,12 +252,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
     private fun drawFastForwardIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val half = size / 2f
         val path = Path().apply {
-            // First triangle
             moveTo(cx - half * 0.8f, cy - half * 0.8f)
             lineTo(cx, cy)
             lineTo(cx - half * 0.8f, cy + half * 0.8f)
             close()
-            // Second triangle
             moveTo(cx, cy - half * 0.8f)
             lineTo(cx + half * 0.8f, cy)
             lineTo(cx, cy + half * 0.8f)
@@ -259,12 +268,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
     private fun drawRewindIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
         val half = size / 2f
         val path = Path().apply {
-            // First triangle
             moveTo(cx, cy - half * 0.8f)
             lineTo(cx - half * 0.8f, cy)
             lineTo(cx, cy + half * 0.8f)
             close()
-            // Second triangle
             moveTo(cx + half * 0.8f, cy - half * 0.8f)
             lineTo(cx, cy)
             lineTo(cx + half * 0.8f, cy + half * 0.8f)
@@ -278,11 +285,9 @@ class ModernSingleButtonView @JvmOverloads constructor(
         val r = size * 0.22f
         val bodyH = size * 0.48f
 
-        // Microphone capsule body
         val capsuleRect = RectF(cx - r, cy - bodyH * 0.65f, cx + r, cy + bodyH * 0.15f)
         canvas.drawRoundRect(capsuleRect, r, r, iconPaint)
 
-        // Cradle arc
         val cradlePaint = Paint(iconPaint).apply {
             style = Paint.Style.STROKE
             strokeWidth = 3f
@@ -290,10 +295,17 @@ class ModernSingleButtonView @JvmOverloads constructor(
         val cradleRect = RectF(cx - r * 1.55f, cy - bodyH * 0.35f, cx + r * 1.55f, cy + bodyH * 0.35f)
         canvas.drawArc(cradleRect, 0f, 180f, false, cradlePaint)
 
-        // Stand stem
         canvas.drawLine(cx, cy + bodyH * 0.35f, cx, cy + bodyH * 0.65f, cradlePaint)
-        // Stand base
         canvas.drawLine(cx - r * 1.2f, cy + bodyH * 0.65f, cx + r * 1.2f, cy + bodyH * 0.65f, cradlePaint)
+
+        if (!isToggledOn) {
+            val slashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 3.5f
+                color = Color.parseColor("#FF5252")
+            }
+            canvas.drawLine(cx - size * 0.35f, cy + size * 0.35f, cx + size * 0.35f, cy - size * 0.35f, slashPaint)
+        }
     }
 
     private fun drawPauseIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
@@ -309,7 +321,6 @@ class ModernSingleButtonView @JvmOverloads constructor(
     }
 
     private fun drawHingeIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
-        // Clamshell DS fold icon
         val w = size * 0.75f
         val h = size * 0.35f
         val gap = size * 0.12f
@@ -326,7 +337,6 @@ class ModernSingleButtonView @JvmOverloads constructor(
     }
 
     private fun drawSwapIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
-        // Dual screen vertical swap arrows
         val h = size * 0.7f
         val off = size * 0.22f
 
@@ -334,19 +344,16 @@ class ModernSingleButtonView @JvmOverloads constructor(
             style = Paint.Style.STROKE
             strokeWidth = 3.5f
         }
-        // Up arrow on left
         canvas.drawLine(cx - off, cy + h / 2f, cx - off, cy - h / 2f, arrowPaint)
         canvas.drawLine(cx - off, cy - h / 2f, cx - off - size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
         canvas.drawLine(cx - off, cy - h / 2f, cx - off + size * 0.15f, cy - h / 2f + size * 0.15f, arrowPaint)
 
-        // Down arrow on right
         canvas.drawLine(cx + off, cy - h / 2f, cx + off, cy + h / 2f, arrowPaint)
         canvas.drawLine(cx + off, cy + h / 2f, cx + off - size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
         canvas.drawLine(cx + off, cy + h / 2f, cx + off + size * 0.15f, cy + h / 2f - size * 0.15f, arrowPaint)
     }
 
     private fun drawTouchIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
-        // Touch target icon (stylus dot & pulse rings)
         val r = size * 0.18f
         canvas.drawCircle(cx, cy, r, iconPaint)
 
@@ -355,5 +362,14 @@ class ModernSingleButtonView @JvmOverloads constructor(
             strokeWidth = 3f
         }
         canvas.drawCircle(cx, cy, size * 0.40f, ringPaint)
+
+        if (!isToggledOn) {
+            val slashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 3.5f
+                color = Color.parseColor("#FF5252")
+            }
+            canvas.drawLine(cx - size * 0.35f, cy + size * 0.35f, cx + size * 0.35f, cy - size * 0.35f, slashPaint)
+        }
     }
 }
