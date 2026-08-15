@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
@@ -334,19 +335,46 @@ class RomListActivity : AppCompatActivity() {
     }
 
     private fun showProdUpdateAvailableDialog(update: AppUpdate) {
+        val currentVersionStr = runCatching {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            pInfo.versionName ?: "1.0.0"
+        }.getOrDefault("1.0.0")
+
+        val newVersionStr = getReadableVersionString(update.newVersion)
         val message = markwon.toMarkdown(update.description)
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.update_available, getReadableVersionString(update.newVersion)))
-            .setMessage(message)
-            .setPositiveButton(R.string.update) { _, _ ->
-                startUpdateDownload(update)
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .setNeutralButton(R.string.skip_update) { _, _ ->
-                updatesViewModel.skipUpdate(update)
-            }
-            .show()
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_styled_update, null, false)
+        val tvCurrentVersion = dialogView.findViewById<android.widget.TextView>(R.id.tv_current_version)
+        val tvNewVersion = dialogView.findViewById<android.widget.TextView>(R.id.tv_new_version)
+        val tvChangelog = dialogView.findViewById<android.widget.TextView>(R.id.tv_changelog)
+        val btnUpdate = dialogView.findViewById<android.widget.Button>(R.id.btn_update_now)
+        val btnLater = dialogView.findViewById<android.widget.Button>(R.id.btn_update_later)
+        val btnSkip = dialogView.findViewById<android.widget.Button>(R.id.btn_skip_version)
+
+        tvCurrentVersion?.text = "v$currentVersionStr"
+        tvNewVersion?.text = "v$newVersionStr"
+        tvChangelog?.text = message
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnUpdate?.setOnClickListener {
+            dialog.dismiss()
+            startUpdateDownload(update)
+        }
+        btnLater?.setOnClickListener {
+            dialog.dismiss()
+        }
+        btnSkip?.setOnClickListener {
+            dialog.dismiss()
+            updatesViewModel.skipUpdate(update)
+        }
+
+        dialog.show()
     }
 
     private fun showNightlyUpdateAvailableDialog(update: AppUpdate) {

@@ -1073,9 +1073,15 @@
     <string name="video_retroarch_shader_clear_history_summary">Reset multipass history on the next presentation config update.</string>
 
     <string name="video_retroarch_shader_source_title">Shader source</string>
-    <string name="video_retroarch_shader_source_internal">Install to internal storage (recommended)</string>
+    <string name="video_retroarch_shader_source_scan_retroarch">Find on Device (RetroArch)</string>
+    <string name="video_retroarch_shader_source_scan_retroarch_description">Automatically search for installed RetroArch shaders and import them to STORM DS.</string>
+    <string name="video_retroarch_shader_scan_found_title">Import RetroArch Shaders</string>
+    <string name="video_retroarch_shader_scan_found_msg">Found RetroArch shaders in:\n%1$s\n\nImport them into STORM DS?</string>
+    <string name="video_retroarch_shader_scan_not_found">RetroArch shaders were not found in standard directories. Please select a folder manually.</string>
+    <string name="video_retroarch_shader_scan_import_success">Successfully imported %1$d shader files!</string>
+    <string name="video_retroarch_shader_source_internal">Download from GitHub (recommended)</string>
     <string name="video_retroarch_shader_source_internal_description">Downloads the official libretro shaders (~53 MB). No folder permissions needed.</string>
-    <string name="video_retroarch_shader_source_folder">Select folder</string>
+    <string name="video_retroarch_shader_source_folder">Custom folder</string>
     <string name="video_retroarch_shader_source_folder_description">Pick a slang-shaders folder you already downloaded.</string>
     <string name="video_retroarch_shader_install_title">Install shaders</string>
     <string name="video_retroarch_shader_install_summary">Download ~53 MB from libretro</string>
@@ -1187,6 +1193,7 @@
 
     <string name="about_app_title">About &amp; Credits</string>
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors &amp; open source licenses</string>
+    <string name="about_version_title">Version</string>
     <string name="about_credits_title">Credits &amp; Acknowledgements</string>
     <string name="about_credits_watermelonds_title">WatermelonDS</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite &amp; contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI &amp; touch controls</string>
@@ -1202,12 +1209,20 @@
         <item>Nintendo DS Lite (Pure White)</item>
         <item>Nintendo DS Classic (Metallic Grey)</item>
         <item>Super Famicom / SNES (Four Colors)</item>
+        <item>Gothic Crimson (Ruby Red &amp; Carbon)</item>
+        <item>Midnight Amethyst (Deep Purple)</item>
+        <item>Royal Gold (Gold &amp; Obsidian)</item>
+        <item>Matrix Emerald (Neon Green)</item>
     </string-array>
     <string-array name="button_color_theme_values">
         <item>cyber_cyan</item>
         <item>classic_white</item>
         <item>classic_grey</item>
         <item>snes_super</item>
+        <item>crimson_ruby</item>
+        <item>midnight_purple</item>
+        <item>gold_luxury</item>
+        <item>emerald_matrix</item>
     </string-array>
     <string name="rom_display_name_mode">Game Title Display</string>
     <string name="rom_display_name_mode_file_name">File name (without extension)</string>

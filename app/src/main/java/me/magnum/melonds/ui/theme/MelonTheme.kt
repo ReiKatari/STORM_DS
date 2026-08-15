@@ -52,7 +52,7 @@ fun MelonTheme(
     isDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val theme = AppThemeManager.currentTheme
+    val theme = AppThemeManager.themeState.value
     val watermelonColors = when (theme) {
         Theme.LIGHT -> LightWatermelonColors
         Theme.MIDNIGHT -> MidnightWatermelonColors

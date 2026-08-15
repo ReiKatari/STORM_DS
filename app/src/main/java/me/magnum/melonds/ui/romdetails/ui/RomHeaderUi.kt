@@ -52,6 +52,8 @@ import coil.compose.AsyncImage
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romdetails.model.RomDetailsTab
+import me.magnum.melonds.ui.romlist.composables.RegionBadge
+import me.magnum.melonds.ui.romlist.composables.resolveRomRegionBadge
 import me.magnum.melonds.ui.romlist.composables.DsBoxArtAspectRatio
 import me.magnum.melonds.ui.romlist.composables.RomMiniIcon
 import me.magnum.melonds.ui.romlist.composables.ScanlinesOverlay
@@ -241,67 +243,103 @@ fun RomHeroVertical(
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         HeroBackdrop(rom = rom, boxArtUrl = boxArtUrl, modifier = Modifier.matchParentSize())
-        Column(Modifier.padding(16.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Row(Modifier.fillMaxWidth()) {
                 HeroCircleButton(Icons.AutoMirrored.Filled.ArrowBack, null, onNavigateBack)
                 Spacer(Modifier.weight(1f))
             }
-            Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                HeroCover(rom, boxArtUrl, raCoverUrl, width = 108.dp, initialsSize = 30.sp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = romDisplayName(rom),
-                        color = Color.White,
-                        fontFamily = SpaceGrotesk,
-                        fontSize = 21.sp,
-                        lineHeight = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
+            Spacer(Modifier.height(8.dp))
+
+            // 1. System Badge centered on top of icon
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 10.dp, vertical = 3.5.dp),
+            ) {
+                Text(
+                    text = romPlatformLabel(rom),
+                    color = Color.White,
+                    fontFamily = WatermelonMono,
+                    fontSize = 10.sp,
+                    lineHeight = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 2. ROM Icon / Cover Art in the center
+            HeroCover(rom, boxArtUrl, raCoverUrl, width = 120.dp, initialsSize = 34.sp)
+
+            Spacer(Modifier.height(12.dp))
+
+            // 3. Game title centered below icon
+            Text(
+                text = romDisplayName(rom),
+                color = Color.White,
+                fontFamily = SpaceGrotesk,
+                fontSize = 20.sp,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(0.92f),
+            )
+
+            // 4. Developer name centered
+            if (rom.developerName.isNotBlank()) {
+                Text(
+                    text = rom.developerName,
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // 5. Region Flag Badge & Play Time centered under title
+            val regionBadge = resolveRomRegionBadge(rom)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (regionBadge != null) {
+                    RegionBadge(
+                        flag = regionBadge.first,
+                        code = regionBadge.second,
+                        modifier = Modifier.padding(end = 8.dp),
                     )
-                    if (rom.developerName.isNotBlank()) {
-                        Text(
-                            text = rom.developerName,
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(Color.Black.copy(alpha = 0.3f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) {
-                            Text(
-                                text = romPlatformLabel(rom),
-                                color = Color.White,
-                                fontFamily = WatermelonMono,
-                                fontSize = 9.sp,
-                                lineHeight = 9.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 0.5.sp,
-                            )
-                        }
-                        if (rom.totalPlayTime != Duration.ZERO) {
-                            Text(
-                                text = stringResource(R.string.rom_total_play_time_format, formatHoursLabel(rom.totalPlayTime)),
-                                color = Color.White.copy(alpha = 0.75f),
-                                fontFamily = WatermelonMono,
-                                fontSize = 10.5.sp,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
-                    }
+                }
+                if (rom.totalPlayTime != Duration.ZERO) {
+                    Text(
+                        text = stringResource(R.string.rom_total_play_time_format, formatHoursLabel(rom.totalPlayTime)),
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontFamily = WatermelonMono,
+                        fontSize = 11.sp,
+                    )
                 }
             }
+
             Spacer(Modifier.height(14.dp))
-            Row {
+
+            // 6. Action buttons centered
+            Row(
+                Modifier.fillMaxWidth(0.92f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 PlayButton(
                     height = 50.dp,
                     onClick = onLaunchRom,
@@ -336,46 +374,54 @@ fun RomHeroSidePanel(
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             HeroCircleButton(Icons.AutoMirrored.Filled.ArrowBack, null, onNavigateBack)
-            Column {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    HeroCover(rom, boxArtUrl, raCoverUrl, width = 76.dp, initialsSize = 20.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(Color.Black.copy(alpha = 0.3f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            text = romPlatformLabel(rom),
-                            color = Color.White,
-                            fontFamily = WatermelonMono,
-                            fontSize = 9.sp,
-                            lineHeight = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = romPlatformLabel(rom),
+                        color = Color.White,
+                        fontFamily = WatermelonMono,
+                        fontSize = 9.sp,
+                        lineHeight = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
+                Spacer(Modifier.height(8.dp))
+                HeroCover(rom, boxArtUrl, raCoverUrl, width = 84.dp, initialsSize = 22.sp)
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = romDisplayName(rom),
                     color = Color.White,
                     fontFamily = SpaceGrotesk,
-                    fontSize = 17.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 16.sp,
+                    lineHeight = 19.sp,
                     fontWeight = FontWeight.Bold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 10.dp),
                 )
                 if (rom.developerName.isNotBlank()) {
                     Text(
                         text = rom.developerName,
                         color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         maxLines = 1,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 3.dp),
+                        modifier = Modifier.padding(top = 2.dp),
                     )
+                }
+                val regionBadge = resolveRomRegionBadge(rom)
+                if (regionBadge != null) {
+                    Spacer(Modifier.height(6.dp))
+                    RegionBadge(flag = regionBadge.first, code = regionBadge.second)
                 }
                 if (rom.totalPlayTime != Duration.ZERO) {
                     Text(

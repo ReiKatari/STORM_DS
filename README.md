@@ -5,7 +5,13 @@
 <h1 align="center">STORM DS</h1>
 
 <p align="center">
-  <strong>Next-Generation High-Performance Nintendo DS & DSi Emulator for Android</strong>
+  <strong>STORM DS</strong> — Высокопроизводительный форк эмулятора <strong>WatermelonDS</strong> (который в свою очередь является форком и Android-портом эталонного ядра эмуляции <strong>melonDS</strong>).
+
+## 🌟 Благодарности и первоисточники (Credits & Acknowledgements)
+
+* <strong>WatermelonDS</strong> (SapphireRhodonite & contributors) — современный порт для Android, интеграция Vulkan-рендерера, поддержка шейдеров librashader, сенсорное управление и Material Design UI.
+* <strong>melonDS</strong> (StapleButter, Nadia, RSDuck, genericretrogeek & melonDS team) — оригинальное высокоточное ядро эмуляции Nintendo DS и Nintendo DSi.
+* <strong>Open Source библиотеки</strong>: Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools.
 </p>
 
 <p align="center">
