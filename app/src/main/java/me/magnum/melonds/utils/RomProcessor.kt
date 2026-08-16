@@ -36,11 +36,14 @@ object RomProcessor {
 
 			val bannerOffset = byteArrayToInt(header, 0x68)
 
-			val isDsiWareTitle = if (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K')) {
-				val categoryData = sectionReader.readSection(0x234, 4) ?: return null
-				byteArrayToInt(categoryData).toUInt() == DSIWARE_CATEGORY
+			val isDsiWareTitle = if (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == 'V' || gameCode[0] == 'Z')) {
+				val categoryData = sectionReader.readSection(0x234, 4)
+				val category = categoryData?.let { byteArrayToInt(it).toUInt() } ?: 0u
+				category == DSIWARE_CATEGORY || category == 0u || category == 0x00030005.toUInt() || category == 0x00030015.toUInt()
 			} else {
-				false
+				val categoryData = sectionReader.readSection(0x234, 4)
+				val category = categoryData?.let { byteArrayToInt(it).toUInt() } ?: 0u
+				category == DSIWARE_CATEGORY
 			}
 
 			var arm9Bootcode: ByteArray? = null
