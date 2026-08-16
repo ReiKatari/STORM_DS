@@ -67,6 +67,13 @@
             android:defaultValue="true"
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
+
+        <Preference
+            android:key="pref_translator_regions"
+            android:title="@string/translator_regions_title"
+            android:summary="@string/translator_edit_regions_hint"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
     </PreferenceCategory>
 
     <PreferenceCategory
