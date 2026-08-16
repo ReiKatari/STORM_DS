@@ -913,10 +913,26 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
 
     if (titleId[1] != DSI_NAND_FILE_CATEGORY)
     {
-        // Not a DSiWare title
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: rejected non-DSiWare title category=%08x title=%08x\n", titleId[1], titleId[0]);
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        return TITLE_IMPORT_NOT_DSIWARE_TITLE;
+        const char gc0 = static_cast<char>(titleData[0x0C]);
+        const u8 unitCode = titleData[0x12];
+        if (titleId[1] == 0 || titleId[1] == 0x00030005 || titleId[1] == 0x00030015 || unitCode == 2 || unitCode == 3 || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z')
+        {
+            titleId[1] = DSI_NAND_FILE_CATEGORY;
+            memcpy(titleData.data() + 0x234, &titleId[1], sizeof(u32));
+        }
+        else
+        {
+            // Not a DSiWare title
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: rejected non-DSiWare title category=%08x title=%08x\n", titleId[1], titleId[0]);
+            env->ReleaseStringUTFChars(titleUri, titlePath);
+            return TITLE_IMPORT_NOT_DSIWARE_TITLE;
+        }
+    }
+
+    if (titleId[0] == 0)
+    {
+        memcpy(&titleId[0], titleData.data() + 0x0C, sizeof(u32));
+        memcpy(titleData.data() + 0x230, &titleId[0], sizeof(u32));
     }
 
     if (nandMount->TitleExists(titleId[1], titleId[0]))
@@ -936,30 +952,38 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
     if (tmdCategory != titleId[1] || tmdTitle != titleId[0])
     {
         melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "DSiWareImport: TMD/title mismatch selected=%08x/%08x tmd=%08x/%08x\n",
+            melonDS::Platform::LogLevel::Info,
+            "DSiWareImport: syncing TMD title id to match ROM selected=%08x/%08x tmd=%08x/%08x\n",
             titleId[1],
             titleId[0],
             tmdCategory,
             tmdTitle
         );
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-        return TITLE_IMPORT_INSATLL_FAILED;
+        titleMetadata->TitleId[0] = static_cast<u8>((titleId[1] >> 24) & 0xFF);
+        titleMetadata->TitleId[1] = static_cast<u8>((titleId[1] >> 16) & 0xFF);
+        titleMetadata->TitleId[2] = static_cast<u8>((titleId[1] >> 8) & 0xFF);
+        titleMetadata->TitleId[3] = static_cast<u8>(titleId[1] & 0xFF);
+        titleMetadata->TitleId[4] = static_cast<u8>((titleId[0] >> 24) & 0xFF);
+        titleMetadata->TitleId[5] = static_cast<u8>((titleId[0] >> 16) & 0xFF);
+        titleMetadata->TitleId[6] = static_cast<u8>((titleId[0] >> 8) & 0xFF);
+        titleMetadata->TitleId[7] = static_cast<u8>(titleId[0] & 0xFF);
     }
     if (tmdContentSize != titleData.size())
     {
         melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "DSiWareImport: TMD content size mismatch selected=%08x/%08x tmdBytes=%llu appBytes=%zu\n",
+            melonDS::Platform::LogLevel::Info,
+            "DSiWareImport: syncing TMD content size to match ROM selected=%08x/%08x tmdBytes=%llu appBytes=%zu\n",
             titleId[1],
             titleId[0],
             static_cast<unsigned long long>(tmdContentSize),
             titleData.size()
         );
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-        return TITLE_IMPORT_INSATLL_FAILED;
+        u64 actualSize = static_cast<u64>(titleData.size());
+        for (int i = 7; i >= 0; --i)
+        {
+            titleMetadata->Contents.ContentSize[i] = static_cast<u8>(actualSize & 0xFF);
+            actualSize >>= 8;
+        }
     }
 
     melonDS::NDSHeader header {};
