@@ -124,12 +124,11 @@ class GameTranslatorManager(
         mainScope.launch {
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
 
-            // Step 1: Capture frame BEFORE pausing emulator so rendering thread is active!
             var capturedBitmap: Bitmap? = null
 
             // Priority 1: Direct native frame buffer
             try {
-                withTimeoutOrNull(400) {
+                withTimeoutOrNull(300) {
                     capturedBitmap = screenshotProvider?.invoke()
                 }
             } catch (e: Throwable) {
@@ -137,25 +136,24 @@ class GameTranslatorManager(
             }
 
             // Priority 2: MediaProjection (hardware-composited display output)
-            if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
-                capturedBitmap = mediaProjectionCapturer.captureScreen()
+            if (capturedBitmap == null) {
+                if (mediaProjectionCapturer.hasPermission) {
+                    capturedBitmap = mediaProjectionCapturer.captureScreen()
+                } else if (requestMediaProjectionPermission != null) {
+                    pendingTranslateAfterPermission = true
+                    overlayView?.isTranslating = false
+                    try {
+                        requestMediaProjectionPermission?.invoke(mediaProjectionCapturer.createCaptureIntent())
+                    } catch (t: Throwable) {
+                        t.printStackTrace()
+                    }
+                    return@launch
+                }
             }
 
-            // Priority 3: PixelCopy / Canvas fallback
+            // Priority 3: PixelCopy from SurfaceView or Window
             if (capturedBitmap == null) {
                 capturedBitmap = captureViaPixelCopy()
-            }
-
-            // Priority 4: Request MediaProjection permission if still missing
-            if (capturedBitmap == null && !mediaProjectionCapturer.hasPermission && requestMediaProjectionPermission != null) {
-                pendingTranslateAfterPermission = true
-                overlayView?.isTranslating = false
-                try {
-                    requestMediaProjectionPermission?.invoke(mediaProjectionCapturer.createCaptureIntent())
-                } catch (t: Throwable) {
-                    Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
-                }
-                return@launch
             }
 
             // Step 2: Now that frame is captured, pause emulator if requested
@@ -241,15 +239,7 @@ class GameTranslatorManager(
         }
         if (windowResult != null) return@withContext windowResult
 
-        // Tier 3: Canvas Software Draw fallback from decorView
-        try {
-            val fallbackBitmap = Bitmap.createBitmap(decorW, decorH, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(fallbackBitmap)
-            decorView.draw(canvas)
-            fallbackBitmap
-        } catch (t: Throwable) {
-            null
-        }
+        null
     }
 
     fun dismissTranslation() {
@@ -319,7 +309,7 @@ class GameTranslatorManager(
                 overlayView?.setTranslatedBlocks(blocks)
             } catch (t: Throwable) {
                 t.printStackTrace()
-                Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, R.string.translator_no_text_found, Toast.LENGTH_SHORT).show()
                 if (isPausedByTranslator) {
                     isPausedByTranslator = false
                     try {

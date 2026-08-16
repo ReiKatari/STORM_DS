@@ -120,7 +120,7 @@ class RomListFragment : Fragment() {
                         onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
                         onRomClick = { rom ->
                             romListViewModel.setRomLastPlayedNow(rom)
-                            openRomDetails(rom)
+                            romSelectedListener?.invoke(rom)
                         },
                         onRomLongPress = { rom -> contextRomUri = rom.uri.toString() },
                         onRomConfigClick = { rom -> contextRomUri = rom.uri.toString() },
