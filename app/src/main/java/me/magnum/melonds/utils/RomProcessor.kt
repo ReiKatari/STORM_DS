@@ -89,23 +89,33 @@ object RomProcessor {
 	}
 
 	private fun readBannerTitleAndDeveloper(banner: ByteArray): Pair<String, String>? {
-		if (banner.size < 0x340 + 256) {
+		if (banner.size < 0x240 + 256) {
 			return null
 		}
 		val version = byteArrayToShort(banner, 0).toInt()
-		if (version !in 1..3) {
+		val versionLow = banner[0].toInt() and 0xFF
+		// DS banner version: 1..3, DSi banner version: 0x0101..0x0103
+		if (version !in 1..0x0303 && versionLow !in 1..3) {
 			return null
 		}
 
-		val titleData = banner.copyOfRange(0x340, 0x340 + 256)
-		val titleString = String(titleData, StandardCharsets.UTF_16LE).trim().replace("\u0000", "")
-		if (titleString.isBlank()) {
-			return null
+		// Language slots in NDS/DSi banner:
+		// 0x240: Japanese, 0x340: English, 0x440: French, 0x540: German, 0x640: Italian, 0x740: Spanish, 0x840: Chinese, 0x940: Korean
+		val offsets = listOf(0x340, 0x240, 0x440, 0x540, 0x640, 0x740, 0x840, 0x940)
+		for (offset in offsets) {
+			if (banner.size >= offset + 256) {
+				val titleData = banner.copyOfRange(offset, offset + 256)
+				val titleString = String(titleData, StandardCharsets.UTF_16LE).trim().replace("\u0000", "")
+				if (titleString.isNotBlank()) {
+					val title = titleString.substringBeforeLast('\n').replace("\n", " ").trim()
+					val developer = titleString.substringAfterLast('\n', "").trim()
+					if (title.isNotBlank()) {
+						return title to developer
+					}
+				}
+			}
 		}
-
-		val title = titleString.substringBeforeLast('\n').replace("\n", " ")
-		val developer = titleString.substringAfterLast('\n', "")
-		return title to developer
+		return null
 	}
 
 	fun getRomIcon(inputStream: InputStream): Bitmap? {
