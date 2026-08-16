@@ -35,28 +35,102 @@ class GameTextRecognizer {
 
     suspend fun recognizeTextBlocks(
         bitmap: Bitmap,
-        sourceLang: String
+        sourceLang: String,
+        regions: List<me.magnum.melonds.translator.model.TranslationRegion> = emptyList()
     ): List<TranslatedTextBlock> = withContext(Dispatchers.Default) {
-        val recognizer = when (sourceLang.lowercase()) {
-            "ja", "japanese" -> japaneseRecognizer
-            "zh", "chinese" -> chineseRecognizer
-            else -> latinRecognizer
+        if (regions.isNotEmpty()) {
+            val allRegionBlocks = mutableListOf<TranslatedTextBlock>()
+            val imgW = bitmap.width
+            val imgH = bitmap.height
+
+            for (region in regions) {
+                val leftPx = (region.rect.left * imgW).toInt().coerceIn(0, imgW - 1)
+                val topPx = (region.rect.top * imgH).toInt().coerceIn(0, imgH - 1)
+                val rightPx = (region.rect.right * imgW).toInt().coerceIn(leftPx + 1, imgW)
+                val bottomPx = (region.rect.bottom * imgH).toInt().coerceIn(topPx + 1, imgH)
+
+                val cropW = rightPx - leftPx
+                val cropH = bottomPx - topPx
+                if (cropW < 8 || cropH < 8) continue
+
+                val cropBitmap = try {
+                    Bitmap.createBitmap(bitmap, leftPx, topPx, cropW, cropH)
+                } catch (t: Throwable) {
+                    null
+                } ?: continue
+
+                // Recognize text within cropped region
+                var localBlocks = recognizeOnBitmap(cropBitmap, sourceLang)
+                if (localBlocks.isEmpty()) {
+                    // Try 2x upscale + high-contrast filter for small pixel fonts
+                    val enhancedCrop = createEnhancedBitmap(cropBitmap)
+                    if (enhancedCrop != null) {
+                        localBlocks = recognizeOnBitmap(enhancedCrop, sourceLang)
+                        enhancedCrop.recycle()
+                    }
+                }
+
+                val regionWidthRel = region.rect.width()
+                val regionHeightRel = region.rect.height()
+
+                if (localBlocks.isNotEmpty()) {
+                    for (lb in localBlocks) {
+                        val globalBox = RectF(
+                            region.rect.left + lb.boundingBox.left * regionWidthRel,
+                            region.rect.top + lb.boundingBox.top * regionHeightRel,
+                            region.rect.left + lb.boundingBox.right * regionWidthRel,
+                            region.rect.top + lb.boundingBox.bottom * regionHeightRel
+                        )
+                        allRegionBlocks.add(lb.copy(boundingBox = globalBox))
+                    }
+                }
+
+                cropBitmap.recycle()
+            }
+
+            return@withContext mergeAdjacentBlocks(allRegionBlocks)
+        }
+
+        // Full Screen OCR
+        var blocks = recognizeOnBitmap(bitmap, sourceLang)
+        if (blocks.isEmpty()) {
+            val enhanced = createEnhancedBitmap(bitmap)
+            if (enhanced != null) {
+                blocks = recognizeOnBitmap(enhanced, sourceLang)
+                enhanced.recycle()
+            }
+        }
+
+        mergeAdjacentBlocks(blocks)
+    }
+
+    private suspend fun recognizeOnBitmap(
+        bitmap: Bitmap,
+        sourceLang: String
+    ): List<TranslatedTextBlock> {
+        val recognizersToTry = when (sourceLang.lowercase()) {
+            "ja", "japanese" -> listOf(japaneseRecognizer, latinRecognizer, chineseRecognizer)
+            "zh", "chinese" -> listOf(chineseRecognizer, latinRecognizer, japaneseRecognizer)
+            "en", "english", "es", "fr", "de", "it", "pt", "ru" -> listOf(latinRecognizer, japaneseRecognizer, chineseRecognizer)
+            else -> listOf(latinRecognizer, japaneseRecognizer, chineseRecognizer) // auto
         }
 
         val inputImage = InputImage.fromBitmap(bitmap, 0)
-        val visionText: Text = try {
-            recognizer.processAsync(inputImage)
-        } catch (e: Exception) {
+        var visionText: Text? = null
+
+        for (rec in recognizersToTry) {
             try {
-                if (recognizer != latinRecognizer) {
-                    latinRecognizer.processAsync(inputImage)
-                } else {
-                    return@withContext emptyList()
+                val result = rec.processAsync(inputImage)
+                if (result.textBlocks.isNotEmpty()) {
+                    visionText = result
+                    break
                 }
-            } catch (t: Exception) {
-                return@withContext emptyList()
+            } catch (t: Throwable) {
+                // Continue to next recognizer
             }
         }
+
+        visionText ?: return emptyList()
 
         val resultBlocks = mutableListOf<TranslatedTextBlock>()
         val imgWidth = bitmap.width.toFloat()
@@ -67,7 +141,6 @@ class GameTextRecognizer {
             val text = block.text.trim()
             if (text.isBlank() || text.length < 2) continue
 
-            // Normalize bounding box coordinates relative to 0.0 .. 1.0
             val relBox = RectF(
                 (blockBox.left / imgWidth).coerceIn(0f, 1f),
                 (blockBox.top / imgHeight).coerceIn(0f, 1f),
@@ -89,8 +162,41 @@ class GameTextRecognizer {
             )
         }
 
-        // Smart merge overlapping or adjacent dialogue lines
-        mergeAdjacentBlocks(resultBlocks)
+        return resultBlocks
+    }
+
+    private fun createEnhancedBitmap(src: Bitmap): Bitmap? {
+        return try {
+            val scale = if (src.width < 800) 2f else 1f
+            val dstW = (src.width * scale).toInt().coerceAtLeast(1)
+            val dstH = (src.height * scale).toInt().coerceAtLeast(1)
+
+            val outBitmap = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(outBitmap)
+            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+
+            // High contrast color matrix
+            val cm = android.graphics.ColorMatrix()
+            cm.setSaturation(0f) // Grayscale
+            val contrast = 1.35f
+            val brightness = -15f
+            val scaleMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                contrast, 0f, 0f, 0f, brightness,
+                0f, contrast, 0f, 0f, brightness,
+                0f, 0f, contrast, 0f, brightness,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            cm.postConcat(scaleMatrix)
+            paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+
+            val srcRect = Rect(0, 0, src.width, src.height)
+            val dstRect = Rect(0, 0, dstW, dstH)
+            canvas.drawBitmap(src, srcRect, dstRect, paint)
+
+            outBitmap
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     private suspend fun TextRecognizer.processAsync(image: InputImage): Text =

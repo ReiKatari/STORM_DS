@@ -1265,6 +1265,15 @@
     <string name="translator_disabled_hint">Auto-Translator is disabled in Settings</string>
     <string name="translator_capture_failed">Failed to capture emulator screen</string>
     <string name="translator_no_text_found">No readable text found on screen</string>
+    <string name="translator_regions_title">Translation Regions</string>
+    <string name="translator_regions_summary">Targeted translation areas on screen</string>
+    <string name="translator_add_region">+ Area</string>
+    <string name="translator_clear_regions">Clear All</string>
+    <string name="translator_save_regions">Save</string>
+    <string name="translator_close_regions">Close</string>
+    <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
+    <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
+    <string name="translator_region_badge">Area #%d</string>
     <string name="button_translate">Translate Screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>

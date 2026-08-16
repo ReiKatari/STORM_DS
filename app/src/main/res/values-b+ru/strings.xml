@@ -1191,6 +1191,15 @@
     <string name="translator_disabled_hint">Авто-переводчик отключен в настройках</string>
     <string name="translator_capture_failed">Не удалось захватить экран эмулятора</string>
     <string name="translator_no_text_found">Текст на экране не обнаружен</string>
+    <string name="translator_regions_title">Области перевода</string>
+    <string name="translator_regions_summary">Точечные зоны перевода на экране</string>
+    <string name="translator_add_region">+ Область</string>
+    <string name="translator_clear_regions">Очистить все</string>
+    <string name="translator_save_regions">Сохранить</string>
+    <string name="translator_close_regions">Закрыть</string>
+    <string name="translator_regions_saved_toast">Сохранено областей перевода: %d</string>
+    <string name="translator_edit_regions_hint">Нажмите и тяните по экрану для создания области</string>
+    <string name="translator_region_badge">Область #%d</string>
     <string name="button_translate">Перевод экрана</string>
     <string name="lang_auto">Автоопределение</string>
     <string name="lang_ru">Русский</string>
