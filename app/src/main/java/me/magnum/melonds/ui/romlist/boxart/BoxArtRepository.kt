@@ -25,15 +25,16 @@ class BoxArtRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
     companion object {
-        private const val BASE_URL = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/"
+        private const val BASE_URL_DS = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/"
+        private const val BASE_URL_DSI = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DSi/Named_Boxarts/"
         private const val INDEX_MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
         private const val NO_MATCH = "-"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cacheDir = File(context.filesDir, "boxart").apply { mkdirs() }
-    private val indexFile = File(cacheDir, "named_boxarts_index.txt")
-    private val matchesFile = File(cacheDir, "matches_v2.json")
+    private val indexFile = File(cacheDir, "named_boxarts_index_v3.txt")
+    private val matchesFile = File(cacheDir, "matches_v3.json")
 
     private val mutex = Mutex()
     private val memoryCache = ConcurrentHashMap<String, String>()
@@ -41,7 +42,7 @@ class BoxArtRepository @Inject constructor(
     private var isMatchesLoaded = false
     private var isDirty = false
 
-    private data class IndexEntry(val encodedName: String, val normalized: String, val tokens: Set<String>)
+    private data class IndexEntry(val fullUrl: String, val normalized: String, val tokens: Set<String>)
 
     init {
         scope.launch {
@@ -55,13 +56,13 @@ class BoxArtRepository @Inject constructor(
         // 1. Instant in-memory check without mutex
         val cached = memoryCache[key]
         if (cached != null) {
-            return@withContext if (cached == NO_MATCH) null else BASE_URL + cached
+            return@withContext if (cached == NO_MATCH) null else cached
         }
 
         mutex.withLock {
             val secondCheck = memoryCache[key]
             if (secondCheck != null) {
-                return@withContext if (secondCheck == NO_MATCH) null else BASE_URL + secondCheck
+                return@withContext if (secondCheck == NO_MATCH) null else secondCheck
             }
 
             if (!isMatchesLoaded) {
@@ -70,22 +71,23 @@ class BoxArtRepository @Inject constructor(
 
             val stored = memoryCache[key]
             if (stored != null) {
-                return@withContext if (stored == NO_MATCH) null else BASE_URL + stored
+                return@withContext if (stored == NO_MATCH) null else stored
             }
 
             val entries = loadIndex() ?: return@withContext null
             val candidates = buildList {
-                add(rom.fileName.substringBeforeLast('.'))
-                rom.config.customName?.let { add(it) }
-                add(rom.name)
+                if (rom.name.isNotBlank()) add(rom.name)
+                val fileBase = rom.fileName.substringBeforeLast('.')
+                if (fileBase.isNotBlank() && fileBase != rom.name) add(fileBase)
+                rom.config.customName?.let { if (it.isNotBlank()) add(it) }
             }.filter { it.isNotBlank() }
 
             val match = findBestMatch(candidates, entries)
-            val matchValue = match?.encodedName ?: NO_MATCH
+            val matchValue = match?.fullUrl ?: NO_MATCH
             memoryCache[key] = matchValue
             schedulePersistMatches()
 
-            if (matchValue == NO_MATCH) null else BASE_URL + matchValue
+            if (matchValue == NO_MATCH) null else matchValue
         }
     }
 
@@ -132,11 +134,20 @@ class BoxArtRepository @Inject constructor(
 
         val entries = raw.lineSequence()
             .filter { it.isNotBlank() }
-            .map { encoded ->
+            .mapNotNull { line ->
+                val separatorIndex = line.indexOf('\t')
+                val (prefix, encoded) = if (separatorIndex != -1) {
+                    line.substring(0, separatorIndex) to line.substring(separatorIndex + 1)
+                } else {
+                    "DS" to line
+                }
+                val baseUrl = if (prefix == "DSI") BASE_URL_DSI else BASE_URL_DS
                 val decoded = runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrDefault(encoded)
                 val cleanName = decoded.removeSuffix(".png").substringBefore(" (")
                 val normalized = normalize(cleanName)
-                IndexEntry(encoded, normalized, normalized.split(' ').filter { it.isNotEmpty() }.toSet())
+                if (normalized.isNotBlank()) {
+                    IndexEntry(baseUrl + encoded, normalized, normalized.split(' ').filter { it.isNotEmpty() }.toSet())
+                } else null
             }
             .toList()
         indexEntries = entries
@@ -145,21 +156,28 @@ class BoxArtRepository @Inject constructor(
 
     private fun downloadIndex(): String? {
         return runCatching {
-            val connection = URL(BASE_URL).openConnection() as HttpURLConnection
+            val dsLines = downloadRepoIndex(BASE_URL_DS, "DS")
+            val dsiLines = downloadRepoIndex(BASE_URL_DSI, "DSI")
+            (dsLines + dsiLines).joinToString("\n").takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun downloadRepoIndex(baseUrl: String, prefix: String): List<String> {
+        return runCatching {
+            val connection = URL(baseUrl).openConnection() as HttpURLConnection
             connection.connectTimeout = 10000
             connection.readTimeout = 30000
             connection.setRequestProperty("User-Agent", "melonDS-android-boxart")
             try {
                 val html = connection.inputStream.bufferedReader().readText()
                 Regex("href=\"([^\"]+\\.png)\"").findAll(html)
-                    .map { it.groupValues[1] }
-                    .filter { !it.startsWith("/") && !it.startsWith("..") }
-                    .joinToString("\n")
-                    .takeIf { it.isNotBlank() }
+                    .map { "$prefix\t${it.groupValues[1]}" }
+                    .filter { !it.contains("/..") }
+                    .toList()
             } finally {
                 connection.disconnect()
             }
-        }.getOrNull()
+        }.getOrElse { emptyList() }
     }
 
     private fun findBestMatch(candidates: List<String>, entries: List<IndexEntry>): IndexEntry? {
