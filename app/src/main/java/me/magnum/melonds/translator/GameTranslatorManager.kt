@@ -40,6 +40,7 @@ class GameTranslatorManager(
         const val PREF_TRANSLATOR_BUBBLE_OPACITY = "translator_bubble_opacity"
         const val PREF_TRANSLATOR_FONT_SIZE_SCALE = "translator_font_size_scale"
         const val PREF_TRANSLATOR_SHOW_FLOATING_BUTTON = "translator_show_floating_button"
+        const val PREF_TRANSLATOR_SAVED_REGIONS = "translator_saved_regions"
         const val PREF_TRANSLATOR_DEEPL_KEY = "translator_deepl_key"
         const val PREF_TRANSLATOR_CUSTOM_AI_KEY = "translator_custom_ai_key"
         const val PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT = "translator_custom_ai_endpoint"
@@ -80,6 +81,15 @@ class GameTranslatorManager(
         overlay.onDismissRequested = {
             dismissTranslation()
         }
+        overlay.onRegionsSaved = { newRegions ->
+            val json = me.magnum.melonds.translator.model.TranslationRegion.listToJson(newRegions)
+            preferences.edit().putString(PREF_TRANSLATOR_SAVED_REGIONS, json).apply()
+            Toast.makeText(
+                activity,
+                activity.getString(R.string.translator_regions_saved_toast, newRegions.size),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
 
         if (isEnabled) {
             overlay.visibility = View.VISIBLE
@@ -90,6 +100,10 @@ class GameTranslatorManager(
         }
     }
 
+    fun openRegionEditor() {
+        overlayView?.enterRegionEditMode()
+    }
+
     fun syncOverlaySettings() {
         val overlay = overlayView ?: return
         val enabled = isEnabled
@@ -98,6 +112,10 @@ class GameTranslatorManager(
         overlay.overlayStyle = TranslatorOverlayStyle.fromPreference(preferences.getString(PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match"))
         overlay.bubbleOpacity = preferences.getInt(PREF_TRANSLATOR_BUBBLE_OPACITY, 90) / 100f
         overlay.fontSizeScale = preferences.getInt(PREF_TRANSLATOR_FONT_SIZE_SCALE, 100) / 100f
+
+        val savedRegionsJson = preferences.getString(PREF_TRANSLATOR_SAVED_REGIONS, null)
+        val regions = me.magnum.melonds.translator.model.TranslationRegion.listFromJson(savedRegionsJson)
+        overlay.setSavedRegions(regions)
 
         if (enabled) {
             startAutoTranslateIfEnabled()
@@ -261,9 +279,19 @@ class GameTranslatorManager(
                 val sourceLang = preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
                 val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
 
-                val blocks = withTimeoutOrNull(6000) {
-                    textRecognizer.recognizeTextBlocks(bitmap, sourceLang)
+                val savedRegionsJson = preferences.getString(PREF_TRANSLATOR_SAVED_REGIONS, null)
+                val customRegions = me.magnum.melonds.translator.model.TranslationRegion.listFromJson(savedRegionsJson)
+
+                var blocks = withTimeoutOrNull(6000) {
+                    textRecognizer.recognizeTextBlocks(bitmap, sourceLang, customRegions)
                 } ?: emptyList()
+
+                // Fallback to full screen if custom regions returned nothing
+                if (blocks.isEmpty() && customRegions.isNotEmpty()) {
+                    blocks = withTimeoutOrNull(6000) {
+                        textRecognizer.recognizeTextBlocks(bitmap, sourceLang, emptyList())
+                    } ?: emptyList()
+                }
 
                 if (blocks.isEmpty()) {
                     overlayView?.clearTranslations()
