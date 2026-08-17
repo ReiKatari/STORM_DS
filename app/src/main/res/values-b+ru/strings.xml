@@ -567,6 +567,7 @@
     <item>Quilez</item>
     <item>LCD</item>
     <item>Scanlines</item>
+    <item>AI-Upscale (Anime4K)</item>
     <item>RetroArch (.slangp)</item>
   </string-array>
   <string-array name="video_vulkan_driver_mode_options">
