@@ -181,7 +181,9 @@ fun RomDetailsScreen(
                         currentTab = RomDetailsTab.entries[pagerState.currentPage],
                         onTabClicked = navigateToTab,
                     )
-                    pagerContent(PaddingValues())
+                    androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth()) {
+                        pagerContent(PaddingValues())
+                    }
                 }
             }
         } else {
@@ -201,12 +203,14 @@ fun RomDetailsScreen(
                     currentTab = RomDetailsTab.entries[pagerState.currentPage],
                     onTabClicked = navigateToTab,
                 )
-                pagerContent(PaddingValues())
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth()) {
+                    pagerContent(PaddingValues())
+                }
             }
         }
 
         LaunchedEffect(focusRequester) {
-            focusRequester.requestFocus()
+            runCatching { focusRequester.requestFocus() }
         }
     }
 }
