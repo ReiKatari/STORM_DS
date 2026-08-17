@@ -317,4 +317,22 @@
         <item>4x</item>
         <item>8x</item>
     </string-array>
+
+    <string-array name="video_console_skin_type_options">
+        <item>Nintendo DS Lite (Matte Black)</item>
+        <item>Nintendo DS Lite (Polar White)</item>
+        <item>Nintendo DS Lite (Crimson Red)</item>
+        <item>Nintendo DSi XL (Midnight Blue)</item>
+        <item>Nintendo 3DS (Aqua Blue)</item>
+        <item>New Nintendo 3DS XL (Cosmo Black)</item>
+    </string-array>
+
+    <string-array name="video_console_skin_type_values">
+        <item>ds_lite_black</item>
+        <item>ds_lite_white</item>
+        <item>crimson_red</item>
+        <item>dsi_xl_blue</item>
+        <item>n3ds_aqua</item>
+        <item>n3ds_black</item>
+    </string-array>
 </resources>

@@ -1290,4 +1290,5 @@
     <string name="translator_tts_neural_summary">Естественные живые голоса с выразительными эмоциями через нейросеть</string>
     <string name="video_console_skin_title">3D-скин корпуса консоли</string>
     <string name="video_console_skin_summary">Реалистичный корпус Nintendo DS Lite / DSi XL с подсветкой диодов питания и Wi-Fi</string>
+    <string name="video_console_skin_type_title">Модель и цвет консоли</string>
 </resources>

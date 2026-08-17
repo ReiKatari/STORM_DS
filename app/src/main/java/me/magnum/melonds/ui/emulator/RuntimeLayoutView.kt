@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.emulator
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.View
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import dagger.hilt.android.AndroidEntryPoint
@@ -119,7 +120,9 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         }
 
         getLayoutComponentViews().forEach {
-            if (!it.component.isScreen()) {
+            if (it.component == LayoutComponent.BUTTON_TRANSLATE) {
+                it.view.visibility = View.GONE
+            } else if (!it.component.isScreen()) {
                 it.view.apply {
                     alpha = inputAlpha
                 }
@@ -135,6 +138,10 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         areExtraButtonsVisible = !areExtraButtonsVisible
         getLayoutComponentViews().forEach { compView ->
             val c = compView.component
+            if (c == LayoutComponent.BUTTON_TRANSLATE) {
+                compView.view.visibility = View.GONE
+                return@forEach
+            }
             val isCore = c == LayoutComponent.DPAD || c == LayoutComponent.BUTTONS ||
                     c == LayoutComponent.BUTTON_L || c == LayoutComponent.BUTTON_R ||
                     c == LayoutComponent.BUTTON_START || c == LayoutComponent.BUTTON_SELECT ||
