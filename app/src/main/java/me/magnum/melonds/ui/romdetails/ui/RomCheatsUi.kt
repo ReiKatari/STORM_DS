@@ -1,48 +1,77 @@
 package me.magnum.melonds.ui.romdetails.ui
 
-import android.content.Context
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.di.entrypoint.CheatsEntryPoint
+import me.magnum.melonds.domain.model.Cheat
+import me.magnum.melonds.domain.model.CheatFolder
+import me.magnum.melonds.domain.model.Game
+import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
-
-data class GameCheatItem(
-    val id: String,
-    val title: String,
-    val description: String,
-    val code: String,
-    var isEnabled: Boolean = false
-)
+import me.magnum.melonds.utils.RomProcessor
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun RomCheatsUi(
@@ -53,42 +82,119 @@ fun RomCheatsUi(
     val coroutineScope = rememberCoroutineScope()
     val colors = watermelon
 
+    val cheatsRepository = remember { CheatsEntryPoint.resolve(context).cheatsRepository() }
+
+    var game by remember(rom) { mutableStateOf<Game?>(null) }
+    var romInfo by remember(rom) { mutableStateOf<RomInfo?>(null) }
+    var cheatFolders by remember(rom) { mutableStateOf<List<CheatFolder>>(emptyList()) }
+    var isLoading by remember(rom) { mutableStateOf(true) }
     var isDownloadingDb by remember { mutableStateOf(false) }
 
-    // Sample / Game-specific Action Replay cheats
-    val cheatItems = remember(rom) {
-        val title = romDisplayName(rom)
-        mutableStateListOf(
-            GameCheatItem("c1", "Бесконечные жизни / HP", "Фиксация максимального запаса здоровья персонажа", "02000000 000003E7", false),
-            GameCheatItem("c2", "Бесконечные деньги / Монеты (999999)", "Максимальное количество игровой валюты в инвентаре", "02000004 000F423F", false),
-            GameCheatItem("c3", "Максимальный уровень (Level 99 / Max EXP)", "Моментальное повышение характеристик до предела", "02000008 00000063", false),
-            GameCheatItem("c4", "Разблокировать все предметы и инвентарь", "Все секретные и сюжетные предметы доступны сразу", "0200000C FFFFFFFF", false),
-            GameCheatItem("c5", "Бесконечная выносливость / Мана (MP)", "Неограниченное использование способностей и магии", "02000010 000003E7", false),
-            GameCheatItem("c6", "Бесконечное время таймера", "Остановка обратного отсчета времени в миссиях", "02000014 00000E10", false),
-            GameCheatItem("c7", "Хождение сквозь стены (Walk Through Walls)", "Свободное перемещение по всей карте", "02000018 00000001", false),
-            GameCheatItem("c8", "Мгновенное убийство врагов (1-Hit Kill)", "Любой противник повержен с одного удара", "0200001C 00000000", false)
-        )
+    val expandedFolders = remember(rom) { mutableStateMapOf<Long, Boolean>() }
+
+    fun refreshCheats() {
+        coroutineScope.launch(Dispatchers.IO) {
+            isLoading = true
+            val parsedInfo = try {
+                context.contentResolver.openInputStream(rom.uri)?.use { stream ->
+                    RomProcessor.getRomInfo(rom, stream)
+                }
+            } catch (_: Throwable) {
+                null
+            }
+            romInfo = parsedInfo
+
+            val foundGame = if (parsedInfo != null) {
+                cheatsRepository.findGameForRom(parsedInfo)
+            } else {
+                null
+            }
+            game = foundGame
+
+            if (foundGame != null) {
+                cheatsRepository.getAllGameCheats(foundGame).collect { folders ->
+                    cheatFolders = folders
+                    folders.forEach { f ->
+                        f.id?.let { id ->
+                            if (!expandedFolders.containsKey(id)) {
+                                expandedFolders[id] = true
+                            }
+                        }
+                    }
+                    isLoading = false
+                }
+            } else {
+                cheatFolders = emptyList()
+                isLoading = false
+            }
+        }
     }
 
-    fun downloadCheatDatabase() {
+    LaunchedEffect(rom) {
+        refreshCheats()
+    }
+
+    val importCheatsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                cheatsRepository.importCheats(uri)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Импорт чит-базы запущен...", Toast.LENGTH_SHORT).show()
+                }
+                refreshCheats()
+            }
+        }
+    }
+
+    fun downloadOfficialDatabase() {
         if (isDownloadingDb) return
         isDownloadingDb = true
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                // Simulate downloading the official usrcheat.dat
-                kotlinx.coroutines.delay(2000)
-                withContext(Dispatchers.Main) {
-                    isDownloadingDb = false
-                    Toast.makeText(context, "База чит-кодов успешно обновлена и подключена к ${romDisplayName(rom)}!", Toast.LENGTH_LONG).show()
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .build()
+
+                val url = "https://raw.githubusercontent.com/DeadskullzJr/NDS-i-Cheat-Databases/master/usrcheat.dat"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "STORM_DS_Emulator")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful && response.body != null) {
+                    val file = File(context.cacheDir, "usrcheat_downloaded.dat")
+                    FileOutputStream(file).use { fos ->
+                        fos.write(response.body!!.bytes())
+                    }
+                    val fileUri = Uri.fromFile(file)
+                    cheatsRepository.importCheats(fileUri)
+                    withContext(Dispatchers.Main) {
+                        isDownloadingDb = false
+                        Toast.makeText(context, "База читов успешно загружена и импортирована!", Toast.LENGTH_LONG).show()
+                        refreshCheats()
+                    }
+                } else {
+                    throw IllegalStateException("HTTP ${response.code}")
                 }
             } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
                     isDownloadingDb = false
-                    Toast.makeText(context, "Ошибка загрузки: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Ошибка загрузки онлайн базы: ${e.message}. Выберите локальный файл usrcheat.dat.", Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
+
+    fun toggleCheat(cheat: Cheat, isEnabled: Boolean) {
+        coroutineScope.launch(Dispatchers.IO) {
+            cheatsRepository.updateCheatsStatus(listOf(cheat.copy(enabled = isEnabled)))
+            refreshCheats()
+        }
+    }
+
+    val displayGameCode = romInfo?.gameCode ?: ""
 
     LazyColumn(
         modifier = modifier
@@ -97,7 +203,6 @@ fun RomCheatsUi(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Top Banner / Download DB action
         item {
             Box(
                 modifier = Modifier
@@ -115,7 +220,7 @@ fun RomCheatsUi(
                             modifier = Modifier.size(26.dp).padding(end = 8.dp)
                         )
                         Text(
-                            text = "ACTION REPLAY ЧИТЫ",
+                            text = if (displayGameCode.isNotBlank()) "ACTION REPLAY ЧИТЫ ($displayGameCode)" else "ACTION REPLAY ЧИТЫ",
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
@@ -124,46 +229,177 @@ fun RomCheatsUi(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Включение и выключение чит-кодов на лету. Изменения применяются мгновенно при запуске игры.",
+                        text = "Официальные чит-коды для выбранной игры. Включение читов применяется мгновенно при запуске эмулятора.",
                         fontFamily = WatermelonMono,
                         fontSize = 9.5.sp,
                         color = Color.White.copy(alpha = 0.75f)
                     )
-                    Spacer(Modifier.height(12.dp))
+
+                    Spacer(Modifier.height(10.dp))
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White.copy(alpha = 0.20f))
-                            .clickable { downloadCheatDatabase() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        Text(
-                            text = if (isDownloadingDb) "СКАЧИВАНИЕ БАЗЫ..." else "ОБНОВИТЬ БАЗУ ЧИТ-КОДОВ",
-                            fontFamily = WatermelonMono,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .clickable { importCheatsLauncher.launch(arrayOf("*/*")) }
+                                .padding(vertical = 8.dp, horizontal = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.UploadFile, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.size(6.dp))
+                                Text(
+                                    text = "Импорт usrcheat.dat",
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFFF0055).copy(alpha = 0.35f))
+                                .clickable { downloadOfficialDatabase() }
+                                .padding(vertical = 8.dp, horizontal = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isDownloadingDb) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(Modifier.size(6.dp))
+                                Text(
+                                    text = if (isDownloadingDb) "Загрузка..." else "Скачать базу читов",
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        items(cheatItems) { cheat ->
-            CheatCard(
-                cheat = cheat,
-                onToggle = { newState ->
-                    cheat.isEnabled = newState
-                    Toast.makeText(
-                        context,
-                        "${cheat.title}: ${if (newState) "ВКЛЮЧЕН" else "ВЫКЛЮЧЕН"}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFFFF0055))
                 }
-            )
+            }
+        } else if (cheatFolders.isEmpty() || cheatFolders.all { it.cheats.isEmpty() }) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surface.copy(alpha = 0.5f))
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Bolt,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "ЧИТ-КОДЫ ДЛЯ ДАННОЙ ИГРЫ НЕ НАЙДЕНЫ",
+                            fontFamily = SpaceGrotesk,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "В базе пока нет читов для ${romDisplayName(rom)}${if (displayGameCode.isNotBlank()) " [$displayGameCode]" else ""}.\nНажмите «Импорт usrcheat.dat» или «Скачать базу читов», чтобы подключить Action Replay.",
+                            fontFamily = WatermelonMono,
+                            fontSize = 9.5.sp,
+                            color = Color(0xFF64748B),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            cheatFolders.forEach { folder ->
+                if (folder.cheats.isNotEmpty()) {
+                    val folderId = folder.id ?: 0L
+                    val isExpanded = expandedFolders[folderId] ?: true
+
+                    item(key = "folder_$folderId") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.surface)
+                                .clickable { expandedFolders[folderId] = !isExpanded }
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (isExpanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF0055),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.size(8.dp))
+                                    Text(
+                                        text = folder.name,
+                                        fontFamily = SpaceGrotesk,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = colors.text
+                                    )
+                                    Spacer(Modifier.size(6.dp))
+                                    Text(
+                                        text = "(${folder.cheats.size})",
+                                        fontFamily = WatermelonMono,
+                                        fontSize = 11.sp,
+                                        color = colors.text.copy(alpha = 0.5f)
+                                    )
+                                }
+                                Icon(
+                                    if (isExpanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
+                                    contentDescription = null,
+                                    tint = colors.text.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (isExpanded) {
+                        items(folder.cheats, key = { "cheat_${it.id}" }) { cheat ->
+                            RealCheatCard(
+                                cheat = cheat,
+                                onToggle = { isEnabled -> toggleCheat(cheat, isEnabled) }
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         item {
@@ -173,71 +409,79 @@ fun RomCheatsUi(
 }
 
 @Composable
-private fun CheatCard(
-    cheat: GameCheatItem,
+private fun RealCheatCard(
+    cheat: Cheat,
     onToggle: (Boolean) -> Unit,
 ) {
-    var checked by remember { mutableStateOf(cheat.isEnabled) }
     val colors = watermelon
+    var showDetails by remember { mutableStateOf(false) }
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (checked) Color(0xFFE11D48).copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.25f))
-            .clickable {
-                checked = !checked
-                onToggle(checked)
-            }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(colors.surface)
+            .border(1.dp, if (cheat.enabled) Color(0xFFFF0055).copy(alpha = 0.4f) else Color.Transparent, RoundedCornerShape(12.dp))
+            .clickable { showDetails = !showDetails }
+            .padding(14.dp)
     ) {
-        Icon(
-            Icons.Filled.LockOpen,
-            contentDescription = null,
-            tint = if (checked) Color(0xFFFF0055) else Color.White.copy(alpha = 0.4f),
-            modifier = Modifier.size(20.dp).padding(end = 10.dp)
-        )
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = cheat.name,
+                        fontFamily = SpaceGrotesk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = if (cheat.enabled) Color(0xFFFF0055) else colors.text
+                    )
+                    val desc = cheat.description
+                    if (!desc.isNullOrBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = desc,
+                            fontFamily = WatermelonMono,
+                            fontSize = 9.sp,
+                            color = colors.text.copy(alpha = 0.65f),
+                            maxLines = if (showDetails) 10 else 2
+                        )
+                    }
+                }
+                Switch(
+                    checked = cheat.enabled,
+                    onCheckedChange = { onToggle(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFFFF0055),
+                        uncheckedThumbColor = colors.text.copy(alpha = 0.6f),
+                        uncheckedTrackColor = colors.bg
+                    )
+                )
+            }
 
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = cheat.title,
-                color = Color.White,
-                fontFamily = SpaceGrotesk,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = cheat.description,
-                color = Color.White.copy(alpha = 0.6f),
-                fontFamily = WatermelonMono,
-                fontSize = 9.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = cheat.code,
-                color = Color(0xFF00E5FF).copy(alpha = 0.8f),
-                fontFamily = WatermelonMono,
-                fontSize = 8.5.sp,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            AnimatedVisibility(visible = showDetails) {
+                Column(modifier = Modifier.padding(top = 10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.35f))
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            text = cheat.code,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.5.sp,
+                            color = Color(0xFF4ADE80),
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+            }
         }
-
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onToggle(it)
-            },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = colors.red,
-                uncheckedThumbColor = Color.LightGray,
-                uncheckedTrackColor = Color.DarkGray
-            )
-        )
     }
 }

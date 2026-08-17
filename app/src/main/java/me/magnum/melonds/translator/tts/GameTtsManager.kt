@@ -298,35 +298,16 @@ class GameTtsManager(private val context: Context) {
                     }
                 }
 
-                // 1. Try High-Definition Live Edge Neural synthesis first
-                var audioBytes = EdgeNeuralTtsClient.synthesize(
+                // 1. Synthesize via High-Definition Live Edge Neural engine
+                val audioBytes = EdgeNeuralTtsClient.synthesize(
                     text = text,
                     voiceName = voiceName,
                     pitch = ssmlPitch,
                     rate = ssmlRate
                 )
 
-                // 2. Fallback to Google Translate TTS with mobile browser headers if Edge is unavailable
                 if (audioBytes == null || audioBytes.isEmpty()) {
-                    val cleanText = text.take(220)
-                    val encodedText = URLEncoder.encode(cleanText, "UTF-8")
-                    val url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=$langCode&client=tw-ob&q=$encodedText"
-
-                    val request = Request.Builder()
-                        .url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
-                        .header("Referer", "https://translate.google.com/")
-                        .get()
-                        .build()
-
-                    val response = httpClient.newCall(request).execute()
-                    if (response.isSuccessful && response.body != null) {
-                        audioBytes = response.body!!.bytes()
-                    }
-                }
-
-                if (audioBytes == null || audioBytes.isEmpty()) {
-                    throw IllegalStateException("All Neural TTS streams failed")
+                    throw IllegalStateException("Edge Neural TTS unavailable, routing to local multi-voice engine")
                 }
 
                 val tempFile = File(context.cacheDir, "storm_neural_speech_${System.currentTimeMillis()}.mp3")
@@ -363,11 +344,11 @@ class GameTtsManager(private val context: Context) {
                 }
                 Log.i(TAG, "Live Neural Voice synthesized [$voiceName] for [$persona]")
             } catch (e: Throwable) {
-                Log.w(TAG, "Neural Cloud fallback to local TTS: ${e.message}")
+                Log.i(TAG, "Routing [$persona] to native Multi-Voice TTS: ${e.message}")
                 withContext(Dispatchers.Main) {
                     val locale = getSelectedLanguage()
                     applyPersonaVoice(persona, baseSpeed, locale)
-                    tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "game_tts_fallback")
+                    tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "game_tts_fallback_${System.currentTimeMillis()}")
                 }
             }
         }
