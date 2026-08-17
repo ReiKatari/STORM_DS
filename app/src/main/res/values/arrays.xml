@@ -267,4 +267,20 @@
         <item>rom_dir</item>
         <item>internal_dir</item>
     </string-array>
+
+    <string-array name="wfc_server_options">
+        <item>@string/wfc_server_disabled</item>
+        <item>Wiimmfi.de (178.62.43.212)</item>
+        <item>AltWFC (172.104.88.237)</item>
+        <item>Kaeru WFC (178.62.43.212)</item>
+        <item>@string/wfc_server_custom</item>
+    </string-array>
+
+    <string-array name="wfc_server_values">
+        <item>none</item>
+        <item>wiimmfi</item>
+        <item>altwfc</item>
+        <item>kaeru</item>
+        <item>custom</item>
+    </string-array>
 </resources>

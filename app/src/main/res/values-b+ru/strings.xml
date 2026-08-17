@@ -1224,6 +1224,8 @@
     <string name="translator_font_size_scale">Масштаб шрифта</string>
     <string name="translator_show_floating_button">Отображать плавающую кнопку перевода</string>
     <string name="translator_show_floating_button_summary">Плавающая перетаскиваемая кнопка \'TR\' поверх экрана эмулятора</string>
+    <string name="translator_tts_enabled">Голосовая озвучка диалогов (TTS)</string>
+    <string name="translator_tts_enabled_summary">Автоматически читать переведенный текст вслух русским синтезатором речи</string>
     <string name="translator_api_keys_category">API-ключи и настройка нейросетей</string>
     <string name="translator_deepl_key">Ключ DeepL API</string>
     <string name="translator_custom_ai_key">Ключ AI API (Gemini/OpenAI/Claude)</string>
@@ -1262,4 +1264,10 @@
     <string name="rom_info_file">Файл</string>
     <string name="rom_info_last_played">Последний запуск</string>
     <string name="rom_info_never">Никогда</string>
+    <string name="wfc_server_title">Онлайн-сервер Nintendo WFC</string>
+    <string name="wfc_server_summary">Быстрое подключение к серверам сетевой игры Nintendo Wi-Fi Connection</string>
+    <string name="wfc_server_disabled">Официальный / Выключено</string>
+    <string name="wfc_server_custom">Пользовательский DNS</string>
+    <string name="wfc_custom_dns_title">Основной DNS-сервер WFC</string>
+    <string name="wfc_custom_dns_summary">IP-адрес DNS для сетевого мультиплеера Nintendo WFC</string>
 </resources>
