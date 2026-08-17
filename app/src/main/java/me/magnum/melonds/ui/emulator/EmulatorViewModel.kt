@@ -6351,9 +6351,9 @@ class EmulatorViewModel @Inject constructor(
                 layoutsRepository.getLayout(layoutId)?.name ?: context.getString(R.string.not_set)
             } ?: useGlobalWithValue(globalLayoutName),
             videoFilteringValue = if (rom.config.videoFiltering == null) {
-                useGlobalWithValue(filteringOptions[effectiveVideoFiltering.ordinal])
+                useGlobalWithValue(filteringOptions.getOrElse(effectiveVideoFiltering.ordinal) { effectiveVideoFiltering.name })
             } else {
-                filteringOptions[effectiveVideoFiltering.ordinal]
+                filteringOptions.getOrElse(effectiveVideoFiltering.ordinal) { effectiveVideoFiltering.name }
             },
             showRetroArchSettings = showRetroArchSettings,
             retroArchPresetPathValue = rom.config.retroArchShaderPresetPath ?: useGlobalWithValue(globalRetroArchPresetPathLabel),
