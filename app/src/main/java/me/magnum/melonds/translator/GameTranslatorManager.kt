@@ -148,16 +148,16 @@ class GameTranslatorManager(
             else -> "Авто (По переводу)"
         }
 
-        val items = mutableListOf<String>()
-        items.add("⚡ Режим активации: $triggerModeName")
-        items.add("🎨 Стиль наложения: $overlayStyleName")
-        items.add("🌐 Движок: ${currentEngine.displayName.substringBefore(" (")}")
-        items.add("────────────────────────")
-        items.add(if (ttsEnabled) "🔊 Озвучка (TTS): [ВКЛ]" else "🔇 Озвучка (TTS): [ВЫКЛ]")
-        items.add(if (multiVoiceEnabled && !neuralTtsEnabled) "🎭 Голоса персонажей (М/Ж): [ВКЛ]" else "👤 Голоса персонажей (М/Ж): [ВЫКЛ]")
-        items.add(if (neuralTtsEnabled) "🎙️ Нейросетевая озвучка: [ВКЛ]" else "🎙️ Нейросетевая озвучка: [ВЫКЛ]")
-        items.add("🌐 Язык озвучки: $langName")
-        items.add("📐 Настроить зоны перевода (OCR)")
+        val items = mutableListOf<CharSequence>()
+        items.add(android.text.Html.fromHtml("<b>⚡ Режим активации:</b> <font color='#4ADE80'>$triggerModeName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml("<b>🎨 Стиль наложения:</b> <font color='#38BDF8'>$overlayStyleName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml("<b>🌐 Движок:</b> <font color='#FACC15'>${currentEngine.displayName.substringBefore(" (")}</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml("<font color='#64748B'>────────────────────────</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml(if (ttsEnabled) "<b>🔊 Озвучка (TTS):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>🔇 Озвучка (TTS):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml(if (multiVoiceEnabled && !neuralTtsEnabled) "<b>🎭 Голоса персонажей (М/Ж):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>👤 Голоса персонажей (М/Ж):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml(if (neuralTtsEnabled) "<b>🎙️ Нейросетевая озвучка:</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>🎙️ Нейросетевая озвучка:</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml("<b>🌐 Язык озвучки:</b> <font color='#38BDF8'>$langName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml("<b>📐 Настроить зоны перевода (OCR)</b>", android.text.Html.FROM_HTML_MODE_LEGACY))
 
         androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle("Настройки перевода и озвучки")
