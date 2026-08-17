@@ -245,6 +245,18 @@ class GameTtsManager(private val context: Context) {
             return CharacterPersona.MALE
         }
 
+        // 1. Addressing Batman at start (e.g. "Бэтмен, я так рад...") -> Joker/Villain speaking!
+        if (lower.startsWith("бэтмен,") || lower.startsWith("бэтмэн,") || lower.startsWith("batman,") ||
+            lower.contains("рад, что ты") || lower.contains("ха-ха") || lower.contains("хи-хи") || lower.contains("моя ловушка")) {
+            return CharacterPersona.MANIC_JOKER
+        }
+
+        // 2. Addressing Joker at end (e.g. "Что ты сейчас делаешь, Джокер?") -> Batman speaking!
+        if (lower.contains("джокер?") || lower.contains("джокер!") || lower.contains("joker?") || lower.contains("joker!") ||
+            lower.contains("сдавайся") || lower.contains("город под защитой") || lower.contains("где детонатор")) {
+            return CharacterPersona.HERO_BATMAN
+        }
+
         // Check dialogue text body keywords
         if (BATMAN_DARK_HERO_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_BATMAN
         if (JOKER_MANIC_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.MANIC_JOKER
@@ -253,11 +265,6 @@ class GameTtsManager(private val context: Context) {
         if (ELDER_OR_DEEP_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ELDER_DEEP
         if (YOUNG_OR_FAIRY_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.YOUNG_FAIRY
         if (ROBOTIC_TECH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ROBOTIC_TECH
-
-        // Laugh / manic cue
-        if (lower.contains("ха-ха") || lower.contains("хи-хи") || lower.contains("ha-ha") || lower.contains("hee-hee")) {
-            return CharacterPersona.MANIC_JOKER
-        }
 
         // Exclamation / Action cue
         if (text.contains("!")) {
