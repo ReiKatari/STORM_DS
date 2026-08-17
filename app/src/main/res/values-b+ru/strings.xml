@@ -151,6 +151,7 @@
   <string name="label_rom_config_gba_rom_path">Путь к ROM GBA</string>
   <string name="label_rom_config_gba_save_path">Путь к сохранению GBA</string>
   <string name="rom_details_configuration_tab">Конфигурация</string>
+  <string name="rom_details_audio_tab">Аудио</string>
   <string name="retro_achievements_tab">Достижения</string>
   <string name="rom_details_offline_achievements_tab">Офлайн</string>
   <string name="notification_channel_background_tasks">Фоновые задачи</string>
@@ -982,12 +983,12 @@
   <string name="show_progress_indicators_summary">Отображать прогресс достижений на экране</string>
   <string name="show_leaderboard_indicators">Индикаторы таблиц лидеров</string>
   <string name="show_leaderboard_indicators_summary">Уведомления о старте и финише забегов таблиц лидеров</string>
-  <string name="cheats">База Чит-Кодов</string>
+  <string name="cheats">База чит-кодов</string>
   <string name="cheats_summary">Импорт, включение и редактирование читов</string>
   <string name="enable_cheats">Включить поддержку читов</string>
   <string name="cheats_database">База данных чит-кодов</string>
-  <string name="import_cheats">Импорт чит-кодов</string>
-  <string name="import_cheats_summary">Загрузить базу чит-кодов (usrcheat.dat)</string>
+  <string name="import_cheats">База чит-кодов</string>
+  <string name="import_cheats_summary">Загрузить базу чит-кодов (usrcheat.dat / xml)</string>
   <string name="rom_shortcut">Ярлык на рабочем столе</string>
   <string name="firmware_language">Язык консоли Nintendo DS</string>
   <string name="action_sort_alphabetically">По алфавиту (A-Z)</string>

@@ -631,6 +631,7 @@
     <string name="label_rom_config_gba_rom_path">GBA ROM path</string>
     <string name="label_rom_config_gba_save_path">GBA save path</string>
     <string name="rom_details_configuration_tab">Configuration</string>
+    <string name="rom_details_audio_tab">Audio</string>
     <string name="retro_achievements_tab">Retro&#8203;Achievements</string> <!-- Keep zero-width space to allow line breaks in the middle of the word -->
     <string name="rom_details_offline_achievements_tab">Offline</string>
 
