@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.romdetails.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -176,9 +177,15 @@ fun OfflineAchievementsStatusUi(
             )
         }
 
+        val context = LocalContext.current
         Button(
-            onClick = onSyncNow,
-            enabled = state.canSyncNow,
+            onClick = {
+                onSyncNow()
+                if (!state.canSyncNow) {
+                    Toast.makeText(context, "Синхронизация с сервером RetroAchievements выполнена", Toast.LENGTH_SHORT).show()
+                }
+            },
+            enabled = !state.isSyncing,
             colors = melonButtonColors(),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         ) {

@@ -66,6 +66,16 @@
             app:iconSpaceReserved="false"
             android:defaultValue="false" />
 
+    <ListPreference
+            android:key="video_console_skin_type"
+            android:title="@string/video_console_skin_type_title"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true"
+            android:entries="@array/video_console_skin_type_options"
+            android:entryValues="@array/video_console_skin_type_values"
+            android:defaultValue="ds_lite_black"
+            android:dependency="video_console_skin_enabled" />
+
     <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
             android:key="video_filtering"
             android:title="@string/filter"

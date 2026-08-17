@@ -27,6 +27,7 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.preference.PreferenceManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -613,6 +614,25 @@ class EmulatorActivity : AppCompatActivity() {
 
         updateOrientation(resources.configuration)
         disableScreenTimeOut()
+
+        val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
+        val skinType = PreferenceManager.getDefaultSharedPreferences(this).getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
+        if (consoleSkinEnabled) {
+            binding.layoutConsoleSkin.visibility = View.VISIBLE
+            binding.layoutConsoleSkin.setContent {
+                val theme = when (skinType) {
+                    "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
+                    "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
+                    "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
+                    "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
+                    "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
+                    else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
+                }
+                me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(skinTheme = theme)
+            }
+        } else {
+            binding.layoutConsoleSkin.visibility = View.GONE
+        }
 
         binding.layoutAchievement.setContent {
             MelonTheme {
