@@ -68,8 +68,7 @@ class GameTranslatorManager(
     private var autoTranslateJob: Job? = null
     private var isPausedByTranslator = false
     private var pendingTranslateAfterPermission = false
-    private var textToSpeech: TextToSpeech? = null
-    private var isTtsReady = false
+    private val ttsManager = me.magnum.melonds.translator.tts.GameTtsManager(activity)
 
     var requestMediaProjectionPermission: ((android.content.Intent) -> Unit)? = null
 
@@ -79,23 +78,9 @@ class GameTranslatorManager(
     val isEnabled: Boolean
         get() = preferences.getBoolean(PREF_TRANSLATOR_ENABLED, false)
 
-    private fun initTtsIfNeeded() {
-        if (textToSpeech == null) {
-            textToSpeech = TextToSpeech(activity.applicationContext) { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    textToSpeech?.language = Locale("ru")
-                    isTtsReady = true
-                }
-            }
-        }
-    }
-
-    fun speakTts(text: String) {
+    fun speakTts(text: String, targetLang: String = "ru") {
         if (!preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)) return
-        initTtsIfNeeded()
-        if (isTtsReady && text.isNotBlank()) {
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "game_translator_tts")
-        }
+        ttsManager.speak(text, targetLang)
     }
 
     fun attachOverlay(overlay: GameTranslationOverlayView) {
@@ -134,6 +119,8 @@ class GameTranslatorManager(
         val currentPref = preferences.getString(PREF_TRANSLATOR_ENGINE, "google")
         val currentEngine = TranslatorEngineType.fromPreference(currentPref)
         val ttsEnabled = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
+        val multiVoiceEnabled = preferences.getBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
+        val ttsLang = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
         val engines = TranslatorEngineType.entries.toTypedArray()
         val items = engines.map { engine ->
             val isCurrent = engine == currentEngine
@@ -141,9 +128,24 @@ class GameTranslatorManager(
             "$prefix${engine.displayName}"
         }.toMutableList()
 
-        val ttsItem = if (ttsEnabled) "🔊 Озвучка перевода (TTS): [ВКЛ]" else "🔇 Озвучка перевода (TTS): [ВЫКЛ]"
+        val ttsItem = if (ttsEnabled) "🔊 Озвучка (TTS): [ВКЛ]" else "🔇 Озвучка (TTS): [ВЫКЛ]"
+        val multiVoiceItem = if (multiVoiceEnabled) "🎭 Голоса персонажей (М/Ж): [ВКЛ]" else "👤 Голоса персонажей (М/Ж): [ВЫКЛ]"
+        val langName = when (ttsLang) {
+            "ru" -> "Русский"
+            "en" -> "English"
+            "ja" -> "日本語"
+            "zh" -> "中文"
+            "de" -> "Deutsch"
+            "fr" -> "Français"
+            "es" -> "Español"
+            else -> "Авто (По переводу)"
+        }
+        val langItem = "🌐 Язык озвучки: $langName"
+
         items.add("────────────────────────")
         items.add(ttsItem)
+        items.add(multiVoiceItem)
+        items.add(langItem)
 
         androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle(R.string.translator_engine)
@@ -163,17 +165,45 @@ class GameTranslatorManager(
                     which == engines.size + 1 -> {
                         val newTts = !ttsEnabled
                         preferences.edit().putBoolean(PREF_TRANSLATOR_TTS_ENABLED, newTts).apply()
-                        if (newTts) initTtsIfNeeded()
                         Toast.makeText(
                             activity,
                             if (newTts) "🔊 Озвучка диалогов включена" else "🔇 Озвучка диалогов отключена",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
+                    which == engines.size + 2 -> {
+                        val newMultiVoice = !multiVoiceEnabled
+                        preferences.edit().putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, newMultiVoice).apply()
+                        Toast.makeText(
+                            activity,
+                            if (newMultiVoice) "🎭 Разные голоса для персонажей (М/Ж) ВКЛ" else "👤 Один голос ВЫКЛ",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    which == engines.size + 3 -> {
+                        showTtsLanguageSelectorDialog()
+                    }
                 }
             }
             .setNeutralButton(R.string.translator_regions_title) { _, _ ->
                 openRegionEditor()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun showTtsLanguageSelectorDialog() {
+        val langCodes = arrayOf("auto", "ru", "en", "ja", "zh", "de", "fr", "es")
+        val langLabels = arrayOf("Автоопределение (по языку перевода)", "Русский (ru)", "English (en)", "Japanese (ja)", "Chinese (zh)", "German (de)", "French (fr)", "Spanish (es)")
+        val currentLang = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
+        val selectedIndex = langCodes.indexOf(currentLang).coerceAtLeast(0)
+
+        androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setTitle(R.string.translator_tts_lang_title)
+            .setSingleChoiceItems(langLabels, selectedIndex) { dialog, which ->
+                preferences.edit().putString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_LANG, langCodes[which]).apply()
+                Toast.makeText(activity, "Язык озвучки: ${langLabels[which]}", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
             }
             .setNegativeButton(R.string.close, null)
             .show()
@@ -551,11 +581,7 @@ class GameTranslatorManager(
 
     fun onDestroy() {
         stopAutoTranslate()
-        try {
-            textToSpeech?.stop()
-            textToSpeech?.shutdown()
-            textToSpeech = null
-        } catch (_: Throwable) {}
+        ttsManager.destroy()
         mainScope.cancel()
         mediaProjectionCapturer.onDestroy()
     }
