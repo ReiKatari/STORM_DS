@@ -165,20 +165,18 @@ private fun Content(
     fun useGlobalWithValue(value: String): String {
         return context.getString(R.string.use_global_preference_with_value, value)
     }
-    val globalConsoleLabel = consoleOptions[romConfig.globalRuntimeConsoleType.ordinal + 1]
-    val globalMicLabel = micOptions[romConfig.globalRuntimeMicSource.ordinal + 1]
+    val globalConsoleLabel = consoleOptions.getOrNull(romConfig.globalRuntimeConsoleType.ordinal + 1) ?: consoleOptions.firstOrNull().orEmpty()
+    val globalMicLabel = micOptions.getOrNull(romConfig.globalRuntimeMicSource.ordinal + 1) ?: micOptions.firstOrNull().orEmpty()
     val globalInputModeLabel = context.getString(R.string.global_controller_mapping)
     val globalLayoutLabel = romConfig.globalLayoutName ?: context.getString(R.string.not_set)
-    val globalRendererLabel = rendererOptions[romConfig.globalVideoRenderer.ordinal]
+    val globalRendererLabel = rendererOptions.getOrNull(romConfig.globalVideoRenderer.ordinal) ?: romConfig.globalVideoRenderer.name
     val globalThreadedRenderingLabel = if (romConfig.globalThreadedRendering) {
         context.getString(R.string.on)
     } else {
         context.getString(R.string.off)
     }
-    val globalInternalResolutionLabel = internalResolutionOptions[
-        (romConfig.globalInternalResolutionScaling - 1).coerceIn(internalResolutionOptions.indices)
-    ]
-    val globalVideoFilteringLabel = videoFilteringOptions[effectiveGlobalFiltering.ordinal]
+    val globalInternalResolutionLabel = internalResolutionOptions.getOrNull((romConfig.globalInternalResolutionScaling - 1).coerceIn(internalResolutionOptions.indices)) ?: "1x"
+    val globalVideoFilteringLabel = videoFilteringOptions.getOrNull(effectiveGlobalFiltering.ordinal) ?: effectiveGlobalFiltering.name
     val globalRetroArchPresetPathLabel = romConfig.globalRetroArchShaderPresetPath ?: context.getString(R.string.not_set)
     val globalRetroArchParametersLabel = romConfig.globalRetroArchShaderParameters ?: context.getString(R.string.not_set)
     val rendererItems = buildList<VideoRenderer?> {
@@ -337,13 +335,13 @@ private fun Content(
             }
             ConfigRow(
                 title = stringResource(R.string.filter),
-                value = selectedFiltering?.let { videoFilteringOptions[it.ordinal] } ?: useGlobalWithValue(globalVideoFilteringLabel),
+                value = selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel),
                 showDivider = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH,
                 onClick = {
                     videoFilteringDialogState.show(
                         title = context.getString(R.string.filter),
                         items = filteringItems,
-                        labelOf = { filtering -> filtering?.let { videoFilteringOptions[it.ordinal] } ?: useGlobalWithValue(globalVideoFilteringLabel) },
+                        labelOf = { filtering -> filtering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel) },
                         selected = selectedFiltering,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoFilteringUpdate(it)) },
                     )

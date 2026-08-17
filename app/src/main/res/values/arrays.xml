@@ -170,6 +170,7 @@
         <item>quilez</item>
         <item>lcd</item>
         <item>scanlines</item>
+        <item>ai_upscale</item>
         <item>retroarch</item>
     </string-array>
 
