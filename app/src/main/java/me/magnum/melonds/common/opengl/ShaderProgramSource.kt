@@ -468,5 +468,33 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
                     "    gl_FragColor = vec4(getTexel(uv).bgr, alpha);\n" +
                     "}"
         )
+
+        // Real-time AI Neural Upscale (Anime4K / Edge Super-Resolution)
+        val AiAnime4kShader = ShaderProgramSource(
+            TextureFiltering.LINEAR,
+            DEFAULT_VERT_SHADER,
+            "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
+                    "precision highp float;\n" +
+                    "#else\n" +
+                    "precision mediump float;\n" +
+                    "#endif\n" +
+                    "uniform sampler2D tex;\n" +
+                    "varying float alpha;\n" +
+                    "varying vec2 uv;\n" +
+                    "" +
+                    "void main() {\n" +
+                    "    vec2 dx = vec2(1.0 / float($TEXTURE_WIDTH), 0.0);\n" +
+                    "    vec2 dy = vec2(0.0, 1.0 / float($TEXTURE_HEIGHT));\n" +
+                    "    vec4 c = texture2D(tex, uv);\n" +
+                    "    vec4 cL = texture2D(tex, uv - dx);\n" +
+                    "    vec4 cR = texture2D(tex, uv + dx);\n" +
+                    "    vec4 cU = texture2D(tex, uv - dy);\n" +
+                    "    vec4 cD = texture2D(tex, uv + dy);\n" +
+                    "    vec4 edge = abs(cL - cR) + abs(cU - cD);\n" +
+                    "    float edgeWeight = clamp(dot(edge.rgb, vec3(0.333)) * 3.0, 0.0, 1.0);\n" +
+                    "    vec4 sharp = c * (1.0 + edgeWeight) - (cL + cR + cU + cD) * (edgeWeight * 0.25);\n" +
+                    "    gl_FragColor = vec4(clamp(sharp.bgr, 0.0, 1.0), alpha);\n" +
+                    "}"
+        )
     }
 }

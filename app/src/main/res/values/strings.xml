@@ -1364,4 +1364,5 @@
     <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
     <string name="video_console_skin_title">3D Animated Console Skin</string>
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
+    <string name="video_console_skin_type_title">Console Model &amp; Color</string>
 </resources>
