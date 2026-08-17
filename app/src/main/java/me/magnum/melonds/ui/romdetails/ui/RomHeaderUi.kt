@@ -2,6 +2,8 @@ package me.magnum.melonds.ui.romdetails.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -615,7 +617,10 @@ fun RomDetailsTabRow(
     Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
         ) {
             RomDetailsTab.entries.forEach { tab ->
                 val label = when (tab) {
