@@ -48,7 +48,8 @@ object EdgeNeuralTtsClient {
 
             val listener = object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    val configMsg = "Content-Type:application/json;charset=utf-8\r\nPath:speech.config\r\n\r\n" +
+                    val timestamp = java.text.SimpleDateFormat("EEE MMM dd yyyy HH:mm:ss 'GMT'Z (zzzz)", java.util.Locale.US).format(java.util.Date())
+                    val configMsg = "X-Timestamp:$timestamp\r\nContent-Type:application/json;charset=utf-8\r\nPath:speech.config\r\n\r\n" +
                             "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}"
                     webSocket.send(configMsg)
 
@@ -62,7 +63,7 @@ object EdgeNeuralTtsClient {
                         voiceName.startsWith("es-") -> "es-ES"
                         else -> "en-US"
                     }
-                    val ssml = "X-RequestId:$requestId\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n" +
+                    val ssml = "X-RequestId:$requestId\r\nX-Timestamp:$timestamp\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n" +
                             "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$lang'>" +
                             "<voice name='$voiceName'>" +
                             "<prosody pitch='$pitch' rate='$rate' volume='$volume'>$cleanText</prosody>" +
@@ -72,12 +73,12 @@ object EdgeNeuralTtsClient {
 
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                     try {
-                        val buffer = bytes.asByteBuffer()
-                        if (buffer.remaining() > 2) {
-                            val headerLength = buffer.short.toInt()
-                            if (headerLength in 0 until (bytes.size - 2)) {
-                                val audioPayload = bytes.substring(2 + headerLength)
-                                audioBuffer.write(audioPayload.toByteArray())
+                        val raw = bytes.toByteArray()
+                        if (raw.size > 2) {
+                            val headerLength = ((raw[0].toInt() and 0xFF) shl 8) or (raw[1].toInt() and 0xFF)
+                            val payloadStart = 2 + headerLength
+                            if (payloadStart in 2..raw.size) {
+                                audioBuffer.write(raw, payloadStart, raw.size - payloadStart)
                             }
                         }
                     } catch (e: Throwable) {
