@@ -17,6 +17,7 @@ class DSiWareManagerActivity : AppCompatActivity() {
     private val viewModel by viewModels<DSiWareManagerViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
 

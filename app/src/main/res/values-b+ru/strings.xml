@@ -509,6 +509,7 @@
     <item>Итальянский</item>
     <item>Испанский</item>
     <item>Японский</item>
+    <item>Русский</item>
   </string-array>
   <string-array name="game_runtime_mic_source_options">
     <item>По умолчанию</item>
@@ -991,6 +992,11 @@
   <string name="firmware_language">Язык консоли Nintendo DS</string>
   <string name="action_sort_alphabetically">По алфавиту (A-Z)</string>
   <string name="action_sort_recently_played">По последнему запуску</string>
+  <string name="action_layout_export">Экспорт в файл</string>
+  <string name="action_layout_import">Импорт макета</string>
+  <string name="layout_export_success">Макет успешно экспортирован</string>
+  <string name="layout_import_success">Макет успешно импортирован</string>
+  <string name="layout_operation_failed">Не удалось выполнить операцию с макетом</string>
   <string name="action_boot_firmware_ds">Nintendo DS (BIOS)</string>
   <string name="action_boot_firmware_dsi">Nintendo DSi (NAND)</string>
   <string name="audio">Звук</string>
@@ -1057,6 +1063,7 @@
   <string name="info_vulkan_compiling_stage_init">Инициализация графического движка</string>
   <string name="action_sort_roms">Сортировка игр</string>
   <string name="dsiware_manager">Менеджер DSiWare</string>
+  <string name="dsiware_manager_rename">Переименовать</string>
   <string name="failed_to_load_image">Не удалось загрузить изображение</string>
   <string name="video_retroarch_shader_settings_summary">Параметры шейдеров RetroArch, логи и управление сборками</string>
   <string name="video_retroarch_shader_settings_title">Настройки шейдеров RetroArch</string>
@@ -1133,24 +1140,56 @@
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
     <string name="button_color_theme">Цвет экранных кнопок</string>
     <string-array name="button_color_theme_options">
-        <item>STORM Cyber Neon (Неоновый циан)</item>
-        <item>Nintendo DS Lite (Белый стиль)</item>
+        <item>Nintendo 3DS (Морской аквамарин)</item>
         <item>Nintendo DS Classic (Серый металлик)</item>
-        <item>Super Famicom / SNES (Четыре цвета)</item>
-        <item>Gothic Crimson (Кроваво-красный и карбон)</item>
-        <item>Midnight Amethyst (Глубокий фиолетовый)</item>
-        <item>Royal Gold (Золотой и обсидиан)</item>
-        <item>Matrix Emerald (Изумрудный неон)</item>
+        <item>Nintendo DS Lite (Белый стиль)</item>
+        <item>Nintendo Famicom / NES (Золотой и бордовый)</item>
+        <item>Nintendo Game Boy (DMG Серый и сливовый)</item>
+        <item>Nintendo Game Boy Advance (Ледяной индиго)</item>
+        <item>Nintendo GameCube (Индиго и зеленый/красный)</item>
+        <item>Nintendo Super Famicom / SNES (Четыре цвета)</item>
+        <item>Nintendo Switch Neon (Красный и синий)</item>
+        <item>Nintendo Switch OLED (Матовый белый)</item>
+        <item>Nintendo Virtual Boy (Лазерный красный)</item>
+        <item>Nintendo Wii (Кристально-белый и голубой)</item>
+        <item>Nintendo Wii U (Темный сланец и циан)</item>
+        <item>STORM Arcade Retro (Классический аркадный автомат / 4 цвета)</item>
+        <item>STORM Aurora Spectrum (Четыре пастельных цвета / Светлая)</item>
+        <item>STORM Cyber Neon (Неоновый циан)</item>
+        <item>STORM Cyberpunk 2077 (Неон / Разноцветная)</item>
+        <item>STORM Frost Glacier (Ледяной градиент / Светлая)</item>
+        <item>STORM Gothic Crimson (Кроваво-красный и карбон)</item>
+        <item>STORM Matrix Emerald (Изумрудный неон)</item>
+        <item>STORM Midnight Amethyst (Глубокий фиолетовый)</item>
+        <item>STORM Royal Gold (Золотой и обсидиан)</item>
+        <item>STORM Sakura Blossom (Цветущая сакура / Светлая)</item>
+        <item>STORM Solar Fusion (Солнечный спектр / Светлая)</item>
     </string-array>
     <string-array name="button_color_theme_values">
-        <item>cyber_cyan</item>
-        <item>classic_white</item>
+        <item>3ds_aqua</item>
         <item>classic_grey</item>
+        <item>classic_white</item>
+        <item>famicom_retro</item>
+        <item>gameboy_dmg</item>
+        <item>gba_glacier</item>
+        <item>gamecube_indigo</item>
         <item>snes_super</item>
+        <item>switch_neon</item>
+        <item>switch_oled</item>
+        <item>virtual_boy</item>
+        <item>wii_crystal</item>
+        <item>wii_u_dark</item>
+        <item>arcade_retro</item>
+        <item>aurora_spectrum</item>
+        <item>cyber_cyan</item>
+        <item>cyberpunk_neon</item>
+        <item>frost_glacier</item>
         <item>crimson_ruby</item>
+        <item>emerald_matrix</item>
         <item>midnight_purple</item>
         <item>gold_luxury</item>
-        <item>emerald_matrix</item>
+        <item>sakura_blossom</item>
+        <item>solar_fusion</item>
     </string-array>
     <string name="rom_display_name_mode">Отображение названий игр</string>
     <string name="rom_display_name_mode_file_name">Название файла (без расширения)</string>
@@ -1162,7 +1201,9 @@
     <string name="translator_enabled">Включить авто-переводчик</string>
     <string name="translator_enabled_summary">Распознавать и переводить игровые диалоги на экране</string>
     <string name="translator_engine">Движок перевода</string>
-    <string name="translator_engine_google">Google Translate (Бесплатно / Без ключа)</string>
+    <string name="translator_engine_yandex">Яндекс Переводчик (Бесплатно / Идеальный русский)</string>
+    <string name="translator_engine_google">Google Translate (Бесплатно / Быстрый)</string>
+    <string name="translator_engine_lingva">Lingva Neural (Бесплатно / Без ограничений)</string>
     <string name="translator_engine_deepl">DeepL Neural API</string>
     <string name="translator_engine_libre">LibreTranslate (Open-Source)</string>
     <string name="translator_engine_mymemory">MyMemory Translated</string>

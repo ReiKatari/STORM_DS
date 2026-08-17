@@ -58,6 +58,9 @@ fun MelonTheme(
         Theme.MIDNIGHT -> MidnightWatermelonColors
         Theme.CYBERPUNK -> CyberpunkWatermelonColors
         Theme.GOTHIC -> GothicWatermelonColors
+        Theme.MATRIX -> MatrixWatermelonColors
+        Theme.SOLAR -> SolarWatermelonColors
+        Theme.SAKURA -> SakuraWatermelonColors
         Theme.DARK -> DarkWatermelonColors
         Theme.SYSTEM -> if (isDarkTheme) DarkWatermelonColors else LightWatermelonColors
     }

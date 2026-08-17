@@ -26,11 +26,11 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_save_files, rootKey)
-        helper.setupStoragePickerPreference(findPreference<StoragePickerPreference>("sram_dir")!!) { uri, persistDirectory ->
-            handleSettingsMirror(uri, persistDirectory)
+        findPreference<StoragePickerPreference>("sram_dir")?.let { pref ->
+            helper.setupStoragePickerPreference(pref) { uri, persistDirectory ->
+                handleSettingsMirror(uri, persistDirectory)
+            }
         }
-
-        hideDependentsWhenInactive("use_rom_dir", "sram_dir", showWhenChecked = false)
     }
 
     private fun handleSettingsMirror(uri: Uri, persistDirectory: () -> Unit) {

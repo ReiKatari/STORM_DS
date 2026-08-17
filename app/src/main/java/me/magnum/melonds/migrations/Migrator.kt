@@ -22,7 +22,9 @@ class Migrator(private val context: Context, private val sharedPreferences: Shar
             return
 
         getMigrationsToPerform().forEach {
-            it.migrate()
+            runCatching {
+                it.migrate()
+            }
         }
         sharedPreferences.edit {
             putLong("last_version", getCurrentVersion())

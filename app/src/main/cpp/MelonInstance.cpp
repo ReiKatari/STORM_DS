@@ -1894,16 +1894,31 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
 void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
-    if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().IsDSiWare() && !currentConfiguration->showBootScreen)
+
+    // Priority 1: Installed DSiWare shortcut (.app extracted from NAND)
+    // Boot via NAND Launcher using TLNC autoload record — requires showBootScreen=true
+    if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
     {
+        nds->NDSCartSlot.EjectCart();
         auto dsi = (DSi*) nds;
-        DSiSupport::SetupDSiDirectBoot(dsi);
+        u32 titleIdLow = (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF);
+        u32 titleIdHigh = 0x00030004; // DSiWare title ID high
+        DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
     }
-    else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+    // Priority 2: Standalone DSiWare ROM or standard NDS/DSi direct boot
+    else
     {
-        // This seems to be unused, but it's required
-        std::string romName;
-        nds->SetupDirectBoot(romName);
+        if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
+            && !cart->GetHeader().IsDSiWare() && currentConfiguration->showBootScreen)
+        {
+            auto dsi = (DSi*) nds;
+            DSiSupport::SetupDSiDirectBoot(dsi);
+        }
+        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot() || (cart != nullptr && cart->GetHeader().IsDSiWare()))
+        {
+            std::string romName;
+            nds->SetupDirectBoot(romName);
+        }
     }
     nds->ReleaseScreen();
     nds->Start();
@@ -2839,6 +2854,26 @@ void MelonInstance::setAudioOutputSkew(double skew)
 
 bool MelonInstance::takeScreenshot()
 {
+    if (currentConfiguration->renderer == Renderer::Vulkan)
+    {
+        int frontBuffer = nds->GPU.FrontBuffer;
+        if (!nds->GPU.Framebuffer[frontBuffer][0] || !nds->GPU.Framebuffer[frontBuffer][1])
+            return false;
+
+        u32* dst = screenshotRenderer->getScreenshot();
+        if (!dst)
+            return false;
+
+        const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
+        const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
+
+        for (int i = 0; i < 256 * 192; i++)
+        {
+            dst[i] = top[i] | 0xFF000000;
+            dst[256 * 192 + i] = bottom[i] | 0xFF000000;
+        }
+        return true;
+    }
     return screenshotRenderer->takeScreenshot();
 }
 

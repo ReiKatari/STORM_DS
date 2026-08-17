@@ -64,13 +64,6 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     private var dragStartY = 0f
     private var hasMovedFloatBtn = false
     private val longPressHandler = Handler(Looper.getMainLooper())
-    private val longPressRunnable = Runnable {
-        if (isDraggingFloatBtn && !hasMovedFloatBtn) {
-            isDraggingFloatBtn = false
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            enterRegionEditMode()
-        }
-    }
 
     // Region Editor Touch State
     private enum class EditAction { NONE, DRAW_NEW, MOVE_REGION, RESIZE_REGION }
@@ -257,7 +250,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 canvas.drawRoundRect(drawingNewRect, 8f, 8f, regionBorderPaint)
             }
 
-            drawTopControlBar(canvas, w, h)
+            drawLeftControlDock(canvas, w, h)
             return
         }
 
@@ -268,39 +261,46 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             val right = block.boundingBox.right * w
             val bottom = block.boundingBox.bottom * h
 
-            val padding = 8f
-            val rect = RectF(left - padding, top - padding, right + padding, bottom + padding)
-            val rx = 10f
-
-            canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
+            val displayText = if (block.isShowingOriginal) block.originalText else block.translatedText.ifBlank { block.originalText }
+            val paddingH = 14f
+            val paddingV = 8f
+            val rect = RectF(
+                (left - paddingH).coerceAtLeast(6f),
+                (top - paddingV).coerceAtLeast(6f),
+                (right + paddingH).coerceAtMost(w - 6f),
+                (bottom + paddingV).coerceAtMost(h - 6f)
+            )
+            val rx = 12f
 
             when (overlayStyle) {
                 TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> {
+                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
                     val baseCol = block.backgroundColor
-                    val alpha = (bubbleOpacity.coerceIn(0.1f, 1.0f) * 255).toInt()
+                    val alpha = (bubbleOpacity.coerceIn(0.15f, 1.0f) * 255).toInt()
                     bgPaint.color = Color.argb(alpha, Color.red(baseCol), Color.green(baseCol), Color.blue(baseCol))
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
+                    borderPaint.color = Color.argb(60, 255, 255, 255)
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
                 TranslatorOverlayStyle.SEMI_TRANSPARENT -> {
-                    bgPaint.color = Color.argb(160, 15, 23, 42)
+                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
+                    bgPaint.color = Color.argb(210, 15, 23, 42)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
+                    borderPaint.color = Color.argb(70, 255, 255, 255)
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
                 TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> {
-                    bgPaint.color = Color.argb(235, 10, 15, 26)
+                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
+                    bgPaint.color = Color.argb(240, 10, 15, 26)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
                     borderPaint.color = Color.parseColor("#9900E5FF")
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
                 TranslatorOverlayStyle.OUTLINE_ONLY -> {
-                    borderPaint.color = Color.parseColor("#FF00E5FF")
-                    canvas.drawRoundRect(rect, rx, rx, borderPaint)
+                    // No background box, only text outline
                 }
             }
 
-            val displayText = if (block.isShowingOriginal) block.originalText else block.translatedText.ifBlank { block.originalText }
-            textPaint.color = block.textColor
             drawFittedText(canvas, displayText, rect, block.textColor)
         }
 
@@ -332,79 +332,116 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         }
     }
 
-    private fun drawTopControlBar(canvas: Canvas, w: Float, h: Float) {
-        val barH = 68f
-        val btnW = 120f
-        val spacing = 12f
-        val totalW = btnW * 4 + spacing * 3 + 24f
-        val startX = (w - totalW) / 2f
-        val topY = 24f
+    var onFloatingButtonLongClickListener: (() -> Unit)? = null
 
-        val barRect = RectF(startX, topY, startX + totalW, topY + barH)
-        canvas.drawRoundRect(barRect, 14f, 14f, shadowPaint)
-        canvas.drawRoundRect(barRect, 14f, 14f, topBarBtnPaint)
-        canvas.drawRoundRect(barRect, 14f, 14f, topBarBtnBorderPaint)
-
-        var curX = startX + 12f
-        val btnH = barH - 20f
-        val btnY = topY + 10f
-
-        btnAddRect.set(curX, btnY, curX + btnW, btnY + btnH)
-        drawBarButton(canvas, btnAddRect, context.getString(R.string.translator_add_region), "#00E5FF")
-        curX += btnW + spacing
-
-        btnClearRect.set(curX, btnY, curX + btnW, btnY + btnH)
-        drawBarButton(canvas, btnClearRect, context.getString(R.string.translator_clear_regions), "#FFAA00")
-        curX += btnW + spacing
-
-        btnSaveRect.set(curX, btnY, curX + btnW, btnY + btnH)
-        drawBarButton(canvas, btnSaveRect, context.getString(R.string.translator_save_regions), "#10B981")
-        curX += btnW + spacing
-
-        btnCloseRect.set(curX, btnY, curX + btnW, btnY + btnH)
-        drawBarButton(canvas, btnCloseRect, context.getString(R.string.translator_close_regions), "#EF4444")
+    private val longPressRunnable = Runnable {
+        if (isDraggingFloatBtn && !hasMovedFloatBtn) {
+            isDraggingFloatBtn = false
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            if (onFloatingButtonLongClickListener != null) {
+                onFloatingButtonLongClickListener?.invoke()
+            } else {
+                enterRegionEditMode()
+            }
+        }
     }
 
-    private fun drawBarButton(canvas: Canvas, rect: RectF, text: String, colorHex: String) {
-        bgPaint.color = Color.parseColor(colorHex)
-        bgPaint.alpha = 40
-        canvas.drawRoundRect(rect, 8f, 8f, bgPaint)
-        borderPaint.color = Color.parseColor(colorHex)
-        canvas.drawRoundRect(rect, 8f, 8f, borderPaint)
+    private fun drawLeftControlDock(canvas: Canvas, w: Float, h: Float) {
+        val density = context.resources.displayMetrics.density
+        val dockW = max(220f, 160f * density)
+        val btnH = max(66f, 48f * density)
+        val spacing = max(16f, 12f * density)
+        val padV = max(18f, 14f * density)
+        val totalH = btnH * 4 + spacing * 3 + padV * 2
+        val startX = max(24f, 16f * density)
+        val startY = max(24f, (h - totalH) / 2f)
 
-        topBarTextPaint.color = Color.parseColor(colorHex)
-        val textY = rect.centerY() - (topBarTextPaint.descent() + topBarTextPaint.ascent()) / 2f
-        canvas.drawText(text, rect.centerX(), textY, topBarTextPaint)
+        val dockRect = RectF(startX, startY, startX + dockW, startY + totalH)
+        canvas.drawRoundRect(dockRect, 20f, 20f, shadowPaint)
+        bgPaint.color = Color.parseColor("#E60F172A")
+        canvas.drawRoundRect(dockRect, 20f, 20f, bgPaint)
+        borderPaint.color = Color.parseColor("#4D00E5FF")
+        canvas.drawRoundRect(dockRect, 20f, 20f, borderPaint)
+
+        var curY = startY + padV
+        drawColorfulDockButton(canvas, btnAddRect, startX + 16f, curY, dockW - 32f, btnH, context.getString(R.string.translator_add_region), "#00E5FF")
+        curY += btnH + spacing
+        drawColorfulDockButton(canvas, btnClearRect, startX + 16f, curY, dockW - 32f, btnH, context.getString(R.string.translator_clear_regions), "#FFAA00")
+        curY += btnH + spacing
+        drawColorfulDockButton(canvas, btnSaveRect, startX + 16f, curY, dockW - 32f, btnH, context.getString(R.string.translator_save_regions), "#10B981")
+        curY += btnH + spacing
+        drawColorfulDockButton(canvas, btnCloseRect, startX + 16f, curY, dockW - 32f, btnH, context.getString(R.string.translator_close_regions), "#EF4444")
+    }
+
+    private fun drawColorfulDockButton(canvas: Canvas, targetRect: RectF, x: Float, y: Float, w: Float, h: Float, text: String, colorHex: String) {
+        targetRect.set(x, y, x + w, y + h)
+        val rx = 14f
+        val color = Color.parseColor(colorHex)
+
+        topBarBtnPaint.color = Color.argb(45, Color.red(color), Color.green(color), Color.blue(color))
+        topBarBtnBorderPaint.color = color
+        topBarBtnBorderPaint.strokeWidth = 2.5f
+        topBarTextPaint.color = color
+
+        canvas.drawRoundRect(targetRect, rx, rx, topBarBtnPaint)
+        canvas.drawRoundRect(targetRect, rx, rx, topBarBtnBorderPaint)
+
+        val density = context.resources.displayMetrics.density
+        topBarTextPaint.textSize = max(25f, 14.5f * density)
+        topBarTextPaint.typeface = Typeface.DEFAULT_BOLD
+        val textY = targetRect.centerY() - (topBarTextPaint.descent() + topBarTextPaint.ascent()) / 2f
+        canvas.drawText(text, targetRect.centerX(), textY, topBarTextPaint)
     }
 
     private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF, color: Int) {
-        val maxW = max(10, (bounds.width() - 16f).toInt())
-        val maxH = max(10, (bounds.height() - 12f).toInt())
+        val maxW = max(20, (bounds.width() - 16f).toInt())
+        val maxH = max(20, (bounds.height() - 8f).toInt())
 
-        var targetSize = (bounds.height() * 0.35f * fontSizeScale).coerceIn(18f, 52f)
+        // Initial font size with comfortable scale for handheld reading
+        var targetSize = (bounds.height() * 0.42f * fontSizeScale).coerceIn(20f, 54f)
+        val isSingleWordOrButton = !text.contains(' ') && text.length < 15
+        val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+
         textPaint.textSize = targetSize
         textPaint.color = color
+        textPaint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
 
         var layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .setLineSpacing(0f, 1.15f)
+            .setAlignment(alignment)
+            .setLineSpacing(2f, 1.15f)
             .setIncludePad(false)
             .build()
 
-        while (layout.height > maxH && targetSize > 14f) {
-            targetSize -= 2f
+        while (layout.height > maxH && targetSize > 16f) {
+            targetSize -= 1.5f
             textPaint.textSize = targetSize
             layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                .setLineSpacing(0f, 1.15f)
+                .setAlignment(alignment)
+                .setLineSpacing(2f, 1.15f)
                 .setIncludePad(false)
                 .build()
         }
 
-        canvas.save()
         val textX = bounds.left + 8f
-        val textY = bounds.top + max(4f, (bounds.height() - layout.height) / 2f)
+        val textY = bounds.top + max(2f, (bounds.height() - layout.height) / 2f)
+
+        // Pass 1: Crisp contrast outline for native subtitle look
+        val strokePaint = TextPaint(textPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = (targetSize * 0.16f).coerceIn(3.0f, 6.5f)
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            this.color = if (Color.luminance(color) > 0.5f) Color.argb(230, 0, 0, 0) else Color.argb(230, 255, 255, 255)
+        }
+        val strokeLayout = StaticLayout.Builder.obtain(text, 0, text.length, strokePaint, maxW)
+            .setAlignment(alignment)
+            .setLineSpacing(2f, 1.15f)
+            .setIncludePad(false)
+            .build()
+
+        canvas.save()
         canvas.translate(textX, textY)
+        strokeLayout.draw(canvas)
         layout.draw(canvas)
         canvas.restore()
     }

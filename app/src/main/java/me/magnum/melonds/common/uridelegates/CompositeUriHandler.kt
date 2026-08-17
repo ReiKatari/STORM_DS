@@ -11,18 +11,22 @@ class CompositeUriHandler(context: Context) : UriHandler {
     )
 
     override fun fileExists(uri: Uri): Boolean {
-        return delegates[uri.scheme]?.fileExists(uri) == true
+        val scheme = uri.scheme ?: "file"
+        return delegates[scheme]?.fileExists(uri) ?: delegates["file"]?.fileExists(uri) == true
     }
 
     override fun createFileDocument(uri: Uri): DocumentFile? {
-        return delegates[uri.scheme]?.createFileDocument(uri)
+        val scheme = uri.scheme ?: "file"
+        return delegates[scheme]?.createFileDocument(uri) ?: delegates["file"]?.createFileDocument(uri)
     }
 
     override fun getUriDocument(uri: Uri): DocumentFile? {
-        return delegates[uri.scheme]?.getUriDocument(uri)
+        val scheme = uri.scheme ?: "file"
+        return delegates[scheme]?.getUriDocument(uri) ?: delegates["file"]?.getUriDocument(uri)
     }
 
     override fun getUriTreeDocument(uri: Uri): DocumentFile? {
-        return delegates[uri.scheme]?.getUriTreeDocument(uri)
+        val scheme = uri.scheme ?: "file"
+        return delegates[scheme]?.getUriTreeDocument(uri) ?: delegates["file"]?.getUriTreeDocument(uri)
     }
 }

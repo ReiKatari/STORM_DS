@@ -17,6 +17,7 @@ import me.magnum.melonds.domain.model.dsinand.OpenDSiNandResult
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier
 import me.magnum.melonds.domain.services.DSiNandManager
+import me.magnum.melonds.impl.DSiWareTitlesMetadataStore
 import me.magnum.melonds.ui.dsiwaremanager.model.DSiWareManagerUiState
 import me.magnum.melonds.domain.model.dsinand.DSiWareTitleFileType
 import me.magnum.melonds.ui.dsiwaremanager.model.ImportExportDSiWareTitleFileEvent
@@ -29,6 +30,7 @@ class DSiWareManagerViewModel @Inject constructor(
     private val dsiNandManager: DSiNandManager,
     private val settingsRepository: SettingsRepository,
     private val configurationDirectoryVerifier: ConfigurationDirectoryVerifier,
+    private val dsiWareTitlesMetadataStore: DSiWareTitlesMetadataStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<DSiWareManagerUiState>(DSiWareManagerUiState.Loading)
@@ -68,6 +70,16 @@ class DSiWareManagerViewModel @Inject constructor(
         viewModelScope.launch {
             withContext(Dispatchers.Default) {
                 dsiNandManager.deleteTitle(title)
+                val titles = dsiNandManager.listTitles()
+                _state.value = DSiWareManagerUiState.Ready(titles)
+            }
+        }
+    }
+
+    fun renameTitle(title: DSiWareTitle, newName: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.Default) {
+                dsiWareTitlesMetadataStore.setCustomName(title.titleId, newName)
                 val titles = dsiNandManager.listTitles()
                 _state.value = DSiWareManagerUiState.Ready(titles)
             }

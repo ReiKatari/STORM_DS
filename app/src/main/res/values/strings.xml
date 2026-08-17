@@ -179,6 +179,7 @@
     <string name="dsiware_manager_export_file_error">Failed to export file</string>
     <string name="dsiware_import_from_file">From file</string>
     <string name="dsiware_import_from_rom_list">From ROM list</string>
+    <string name="dsiware_manager_rename">Rename</string>
 
     <string name="select_dsiware_title">Select DSiWare title</string>
     <string name="no_dsiware_roms_found">No DSiWare ROMs found</string>
@@ -235,6 +236,11 @@
 
     <string name="action_sort_alphabetically">Alphabetically</string>
     <string name="action_sort_recently_played">Recently played</string>
+    <string name="action_layout_export">Export to file</string>
+    <string name="action_layout_import">Import layout</string>
+    <string name="layout_export_success">Layout exported successfully</string>
+    <string name="layout_import_success">Layout imported successfully</string>
+    <string name="layout_operation_failed">Layout operation failed</string>
 
     <string name="ds_bios_dir_not_set">DS BIOS directory not set</string>
     <string name="ds_bios_dir_not_set_info">DS BIOS directory is not set. Select the directory that contains the following files:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin</string>
@@ -994,6 +1000,7 @@
         <item>Italian</item>
         <item>Spanish</item>
         <item>Japanese</item>
+        <item>Russian (Русский)</item>
     </string-array>
 
     <string-array name="game_runtime_mic_source_options">
@@ -1207,24 +1214,56 @@
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
     <string name="button_color_theme">Button Color Style</string>
     <string-array name="button_color_theme_options">
-        <item>STORM Cyber Neon (Cyan &amp; Dark)</item>
-        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
         <item>Nintendo DS Classic (Metallic Grey)</item>
-        <item>Super Famicom / SNES (Four Colors)</item>
-        <item>Gothic Crimson (Ruby Red &amp; Carbon)</item>
-        <item>Midnight Amethyst (Deep Purple)</item>
-        <item>Royal Gold (Gold &amp; Obsidian)</item>
-        <item>Matrix Emerald (Neon Green)</item>
+        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo Famicom / NES (Gold &amp; Maroon)</item>
+        <item>Nintendo Game Boy (DMG Retro Grey &amp; Plum)</item>
+        <item>Nintendo Game Boy Advance (Glacier Indigo)</item>
+        <item>Nintendo GameCube (Indigo &amp; Green/Red)</item>
+        <item>Nintendo Super Famicom / SNES (Four Colors)</item>
+        <item>Nintendo Switch Neon (Red &amp; Blue)</item>
+        <item>Nintendo Switch OLED (Matte White)</item>
+        <item>Nintendo Virtual Boy (Laser Red &amp; Void)</item>
+        <item>Nintendo Wii (Crystal White &amp; Blue)</item>
+        <item>Nintendo Wii U (Dark Slate &amp; Cyan)</item>
+        <item>STORM Arcade Retro (Classic Arcade Machine / 4 Colors)</item>
+        <item>STORM Aurora Spectrum (Four Pastel Colors / Light)</item>
+        <item>STORM Cyber Neon (Cyan &amp; Dark)</item>
+        <item>STORM Cyberpunk 2077 (Neon / Multi-Color)</item>
+        <item>STORM Frost Glacier (Ice Gradient / Light)</item>
+        <item>STORM Gothic Crimson (Ruby Red &amp; Carbon)</item>
+        <item>STORM Matrix Emerald (Neon Green)</item>
+        <item>STORM Midnight Amethyst (Deep Purple)</item>
+        <item>STORM Royal Gold (Gold &amp; Obsidian)</item>
+        <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
+        <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
     </string-array>
     <string-array name="button_color_theme_values">
-        <item>cyber_cyan</item>
-        <item>classic_white</item>
+        <item>3ds_aqua</item>
         <item>classic_grey</item>
+        <item>classic_white</item>
+        <item>famicom_retro</item>
+        <item>gameboy_dmg</item>
+        <item>gba_glacier</item>
+        <item>gamecube_indigo</item>
         <item>snes_super</item>
+        <item>switch_neon</item>
+        <item>switch_oled</item>
+        <item>virtual_boy</item>
+        <item>wii_crystal</item>
+        <item>wii_u_dark</item>
+        <item>arcade_retro</item>
+        <item>aurora_spectrum</item>
+        <item>cyber_cyan</item>
+        <item>cyberpunk_neon</item>
+        <item>frost_glacier</item>
         <item>crimson_ruby</item>
+        <item>emerald_matrix</item>
         <item>midnight_purple</item>
         <item>gold_luxury</item>
-        <item>emerald_matrix</item>
+        <item>sakura_blossom</item>
+        <item>solar_fusion</item>
     </string-array>
     <string name="rom_display_name_mode">Game Title Display</string>
     <string name="rom_display_name_mode_file_name">File name (without extension)</string>
@@ -1236,7 +1275,9 @@
     <string name="translator_enabled">Enable Auto-Translator</string>
     <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
     <string name="translator_engine">Translation Engine</string>
-    <string name="translator_engine_google">Google Translate (Free / No Key)</string>
+    <string name="translator_engine_yandex">Yandex Translate (Free / Best Russian)</string>
+    <string name="translator_engine_google">Google Translate (Free / Fast)</string>
+    <string name="translator_engine_lingva">Lingva Neural (Free / No Rate Limits)</string>
     <string name="translator_engine_deepl">DeepL Neural API</string>
     <string name="translator_engine_libre">LibreTranslate (Open-Source)</string>
     <string name="translator_engine_mymemory">MyMemory Translated</string>
