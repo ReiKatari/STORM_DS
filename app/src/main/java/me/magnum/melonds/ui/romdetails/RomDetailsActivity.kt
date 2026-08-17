@@ -64,40 +64,42 @@ class RomDetailsActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        externalInfoController.attach()
-        externalInfoController.setContent {
-            val rom = romDetailsViewModel.rom.collectAsState().value
-            val achievement = focusedAchievement.collectAsState().value
-            val setting = focusedSetting.collectAsState().value
-            when {
-                achievement != null -> me.magnum.melonds.ui.common.ExternalAchievementInfo(achievement)
-                setting != null -> me.magnum.melonds.ui.common.ExternalSettingInfo(
-                    iconDrawable = null,
-                    title = setting.first,
-                    description = setting.second,
-                    crumb = rom.name,
-                )
-                else -> {
-                    val boxArtUrl by produceState<String?>(initialValue = null, rom.uri) {
-                        value = runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
-                    }
-                    me.magnum.melonds.ui.common.ExternalLibraryGameInfo(
-                        rom = rom,
-                        boxArtUrl = boxArtUrl,
+        runCatching {
+            externalInfoController.attach()
+            externalInfoController.setContent {
+                val rom = romDetailsViewModel.rom.collectAsState().value
+                val achievement = focusedAchievement.collectAsState().value
+                val setting = focusedSetting.collectAsState().value
+                when {
+                    achievement != null -> me.magnum.melonds.ui.common.ExternalAchievementInfo(achievement)
+                    setting != null -> me.magnum.melonds.ui.common.ExternalSettingInfo(
+                        iconDrawable = null,
+                        title = setting.first,
+                        description = setting.second,
+                        crumb = rom.name,
                     )
+                    else -> {
+                        val boxArtUrl by produceState<String?>(initialValue = null, rom.uri) {
+                            value = runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+                        }
+                        me.magnum.melonds.ui.common.ExternalLibraryGameInfo(
+                            rom = rom,
+                            boxArtUrl = boxArtUrl,
+                        )
+                    }
                 }
             }
         }
     }
 
     override fun onStop() {
-        externalInfoController.detach()
+        runCatching { externalInfoController.detach() }
         super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
-        romRetroAchievementsViewModel.refreshOfflineAchievementsStatus()
+        runCatching { romRetroAchievementsViewModel.refreshOfflineAchievementsStatus() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
