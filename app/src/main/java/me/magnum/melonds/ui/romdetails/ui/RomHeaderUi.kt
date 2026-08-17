@@ -166,13 +166,16 @@ fun RomInfoChip(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    maxLines: Int = 1,
+    textAlign: androidx.compose.ui.text.style.TextAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(Color.Black.copy(alpha = 0.38f))
             .padding(horizontal = 8.dp, vertical = 5.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = horizontalAlignment,
     ) {
         Text(
             text = label.uppercase(),
@@ -188,9 +191,11 @@ fun RomInfoChip(
             text = value,
             color = Color.White.copy(alpha = 0.95f),
             fontFamily = WatermelonMono,
-            fontSize = 10.5.sp,
+            fontSize = 9.5.sp,
+            lineHeight = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = maxLines,
+            textAlign = textAlign,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -203,6 +208,7 @@ private fun HeroCover(
     raCoverUrl: String?,
     width: Dp,
     initialsSize: androidx.compose.ui.unit.TextUnit,
+    onClick: (() -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     Box(
@@ -211,7 +217,8 @@ private fun HeroCover(
             .aspectRatio(DsBoxArtAspectRatio)
             .shadow(10.dp, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
-            .background(romGradient(romDisplayName(rom))),
+            .background(romGradient(romDisplayName(rom)))
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it },
     ) {
         if (boxArtUrl != null) {
             AsyncImage(
@@ -301,6 +308,16 @@ fun RomHeroVertical(
     onImportSaveFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showFullScreenCover by remember { mutableStateOf(false) }
+
+    if (showFullScreenCover) {
+        FullScreenCoverDialog(
+            rom = rom,
+            boxArtUrl = boxArtUrl,
+            onDismiss = { showFullScreenCover = false }
+        )
+    }
+
     Box(modifier = modifier.fillMaxWidth()) {
         HeroBackdrop(rom = rom, boxArtUrl = boxArtUrl, modifier = Modifier.matchParentSize())
 
@@ -341,8 +358,15 @@ fun RomHeroVertical(
 
             Spacer(Modifier.height(10.dp))
 
-            // 2. ROM Icon / Cover Art strictly centered
-            HeroCover(rom, boxArtUrl, raCoverUrl, width = 126.dp, initialsSize = 36.sp)
+            // 2. ROM Icon / Cover Art strictly centered with click to enlarge
+            HeroCover(
+                rom = rom,
+                boxArtUrl = boxArtUrl,
+                raCoverUrl = raCoverUrl,
+                width = 126.dp,
+                initialsSize = 36.sp,
+                onClick = { showFullScreenCover = true }
+            )
 
             Spacer(Modifier.height(12.dp))
 
@@ -414,17 +438,20 @@ fun RomHeroVertical(
                 RomInfoChip(
                     label = stringResource(R.string.rom_info_file),
                     value = rom.fileName,
-                    modifier = Modifier.weight(1.1f),
+                    maxLines = 3,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.weight(1.3f),
                 )
                 RomInfoChip(
                     label = stringResource(R.string.rom_info_last_played),
                     value = lastPlayedStr,
-                    modifier = Modifier.weight(0.95f),
+                    modifier = Modifier.weight(0.9f),
                 )
                 RomInfoChip(
                     label = "ID / HASH",
                     value = hashStr,
-                    modifier = Modifier.weight(0.85f),
+                    modifier = Modifier.weight(0.8f),
                 )
             }
 
@@ -461,6 +488,16 @@ fun RomHeroSidePanel(
     onImportSaveFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showFullScreenCover by remember { mutableStateOf(false) }
+
+    if (showFullScreenCover) {
+        FullScreenCoverDialog(
+            rom = rom,
+            boxArtUrl = boxArtUrl,
+            onDismiss = { showFullScreenCover = false }
+        )
+    }
+
     Box(modifier = modifier.width(252.dp).fillMaxHeight()) {
         HeroBackdrop(rom = rom, boxArtUrl = boxArtUrl, modifier = Modifier.matchParentSize())
         Column(
@@ -490,7 +527,14 @@ fun RomHeroSidePanel(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                HeroCover(rom, boxArtUrl, raCoverUrl, width = 84.dp, initialsSize = 22.sp)
+                HeroCover(
+                    rom = rom,
+                    boxArtUrl = boxArtUrl,
+                    raCoverUrl = raCoverUrl,
+                    width = 84.dp,
+                    initialsSize = 22.sp,
+                    onClick = { showFullScreenCover = true }
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = romDisplayName(rom),
@@ -530,7 +574,6 @@ fun RomHeroSidePanel(
                 }
                 val dateFormat = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()) }
                 val lastPlayedStr = rom.lastPlayed?.let { dateFormat.format(it) } ?: stringResource(R.string.rom_info_never)
-                val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(8).uppercase() else "NTR-ROM"
 
                 Spacer(Modifier.height(6.dp))
                 Row(
@@ -538,27 +581,26 @@ fun RomHeroSidePanel(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     RomInfoChip(
-                        label = stringResource(R.string.rom_info_last_played),
-                        value = lastPlayedStr,
-                        modifier = Modifier.weight(1f),
+                        label = stringResource(R.string.rom_info_file),
+                        value = rom.fileName,
+                        maxLines = 3,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                        horizontalAlignment = Alignment.Start,
+                        modifier = Modifier.weight(1.3f),
                     )
                     RomInfoChip(
-                        label = "HASH",
-                        value = hashStr,
-                        modifier = Modifier.weight(1f),
+                        label = stringResource(R.string.rom_info_last_played),
+                        value = lastPlayedStr,
+                        modifier = Modifier.weight(0.9f),
                     )
                 }
             }
-            Row {
-                PlayButton(
-                    height = 42.dp,
-                    onClick = onLaunchRom,
-                    focusRequester = initialFocusRequester,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(9.dp))
-                SaveActionsButton(size = 42.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
-            }
+            PlayButton(
+                height = 50.dp,
+                onClick = onLaunchRom,
+                focusRequester = initialFocusRequester,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -572,12 +614,14 @@ fun RomDetailsTabRow(
     val colors = watermelon
     Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            modifier = Modifier.padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp),
         ) {
             RomDetailsTab.entries.forEach { tab ->
                 val label = when (tab) {
                     RomDetailsTab.CONFIG -> stringResource(R.string.rom_details_configuration_tab)
+                    RomDetailsTab.AUDIO -> stringResource(R.string.rom_details_audio_tab)
+                    RomDetailsTab.CHEATS -> stringResource(R.string.cheats)
                     RomDetailsTab.RETRO_ACHIEVEMENTS -> stringResource(R.string.retro_achievements_tab)
                     RomDetailsTab.OFFLINE_ACHIEVEMENTS -> stringResource(R.string.rom_details_offline_achievements_tab)
                 }
