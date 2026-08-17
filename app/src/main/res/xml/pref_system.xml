@@ -61,6 +61,25 @@
             android:entries="@array/dldi_sd_card_image_size_options"
             android:entryValues="@array/dldi_sd_card_image_size_values" />
 
+    <ListPreference
+            android:key="system_wfc_server"
+            android:title="@string/wfc_server_title"
+            android:summary="@string/wfc_server_summary"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="none"
+            android:entries="@array/wfc_server_options"
+            android:entryValues="@array/wfc_server_values" />
+
+    <EditTextPreference
+            android:key="system_wfc_custom_dns"
+            android:title="@string/wfc_custom_dns_title"
+            android:summary="@string/wfc_custom_dns_summary"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="178.62.43.212"
+            app:dependency="system_wfc_server" />
+
     <SwitchPreference
             android:key="system_disable_touch_gestures_on_touch_screen_area"
             android:title="@string/system_disable_touch_gestures_on_touch_screen_area"

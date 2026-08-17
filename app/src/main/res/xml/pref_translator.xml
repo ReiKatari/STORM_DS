@@ -68,6 +68,14 @@
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
 
+        <SwitchPreferenceCompat
+            android:key="translator_tts_enabled"
+            android:title="@string/translator_tts_enabled"
+            android:summary="@string/translator_tts_enabled_summary"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
         <Preference
             android:key="pref_translator_regions"
             android:title="@string/translator_regions_title"
