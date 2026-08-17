@@ -58,4 +58,21 @@
             app:iconSpaceReserved="false"
             android:defaultValue="50"
             android:max="100" />
+
+    <SwitchPreference
+            android:key="input_gyro_aiming_enabled"
+            android:title="@string/input_gyro_aiming_title"
+            android:summary="@string/input_gyro_aiming_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SeekBarPreference
+            android:key="input_gyro_sensitivity"
+            android:title="@string/input_gyro_sensitivity_title"
+            android:dependency="input_gyro_aiming_enabled"
+            app:iconSpaceReserved="false"
+            android:defaultValue="50"
+            app:min="10"
+            android:max="200"
+            app:showSeekBarValue="true" />
 </PreferenceScreen>

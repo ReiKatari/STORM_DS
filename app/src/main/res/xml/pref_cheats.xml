@@ -10,6 +10,12 @@
             android:defaultValue="false" />
 
     <Preference
+            android:key="cheats_download_online"
+            android:title="@string/cheats_download_online"
+            android:summary="@string/cheats_download_online_summary"
+            app:iconSpaceReserved="false" />
+
+    <Preference
             android:key="cheats_import"
             android:title="@string/import_cheats"
             android:summary="@string/import_cheats_summary"
