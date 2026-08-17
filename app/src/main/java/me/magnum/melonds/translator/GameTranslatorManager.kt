@@ -154,8 +154,8 @@ class GameTranslatorManager(
         items.add(android.text.Html.fromHtml("<b>🌐 Движок:</b> <font color='#FACC15'>${currentEngine.displayName.substringBefore(" (")}</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml("<font color='#64748B'>────────────────────────</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml(if (ttsEnabled) "<b>🔊 Озвучка (TTS):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>🔇 Озвучка (TTS):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml(if (multiVoiceEnabled && !neuralTtsEnabled) "<b>🎭 Голоса персонажей (М/Ж):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>👤 Голоса персонажей (М/Ж):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml(if (neuralTtsEnabled) "<b>🎙️ Нейросетевая озвучка:</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>🎙️ Нейросетевая озвучка:</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml(if (multiVoiceEnabled) "<b>🎭 Голоса персонажей (М/Ж/Злодеи):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>👤 Голоса персонажей (М/Ж/Злодеи):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml(if (neuralTtsEnabled) "<b>🎙️ Движок:</b> <font color='#38BDF8'>Живой Edge Neural HD</font>" else "<b>⚙️ Движок:</b> <font color='#FACC15'>Системный Android TTS</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml("<b>🌐 Язык озвучки:</b> <font color='#38BDF8'>$langName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml("<b>📐 Настроить зоны перевода (OCR)</b>", android.text.Html.FROM_HTML_MODE_LEGACY))
 
@@ -175,17 +175,15 @@ class GameTranslatorManager(
                         val newMulti = !multiVoiceEnabled
                         preferences.edit()
                             .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, newMulti)
-                            .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
                             .apply()
-                        Toast.makeText(activity, if (newMulti) "🎭 Разные голоса для персонажей (М/Ж) ВКЛ" else "👤 Один голос ВЫКЛ", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(activity, if (newMulti) "🎭 Разные голоса для персонажей (М/Ж/Злодеи/Дети) ВКЛ" else "👤 Стандартный один голос", Toast.LENGTH_SHORT).show()
                     }
                     6 -> {
                         val newNeural = !neuralTtsEnabled
                         preferences.edit()
                             .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, newNeural)
-                            .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, !newNeural)
                             .apply()
-                        Toast.makeText(activity, if (newNeural) "🎙️ Нейросетевая облачная озвучка ВКЛ" else "🎙️ Нейросетевая озвучка ВЫКЛ", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(activity, if (newNeural) "🎙️ Движок: Живой Edge Neural HD ВКЛ" else "⚙️ Движок: Системный Android TTS", Toast.LENGTH_SHORT).show()
                     }
                     7 -> showTtsLanguageSelectorDialog()
                     8 -> openRegionEditor()
