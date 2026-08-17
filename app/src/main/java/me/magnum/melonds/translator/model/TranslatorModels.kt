@@ -1,7 +1,9 @@
 package me.magnum.melonds.translator.model
 
 enum class TranslatorEngineType(val preferenceValue: String, val displayName: String) {
-    GOOGLE("google", "Google Translate (Бесплатно / Не требует ключа)"),
+    YANDEX("yandex", "Яндекс Переводчик (Бесплатно / Идеальный русский)"),
+    GOOGLE("google", "Google Translate (Бесплатно / Высокая скорость)"),
+    LINGVA("lingva", "Lingva Neural (Бесплатно / Без ограничений)"),
     DEEPL("deepl", "DeepL Neural API"),
     LIBRE("libre", "LibreTranslate (Open-Source)"),
     MYMEMORY("mymemory", "MyMemory Translated"),

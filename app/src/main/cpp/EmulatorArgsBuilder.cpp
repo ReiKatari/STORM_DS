@@ -124,11 +124,19 @@ void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& fir
             memcpy(currentData.Nickname, username.data(), usernameLength * sizeof(char16_t));
         }
 
-        auto language = static_cast<Firmware::Language>(firmwareConfig.language);
-        if (language != Firmware::Language::Reserved)
-        { // If the frontend specifies a language (rather than using the existing value)...
-            currentData.Settings &= ~Firmware::Language::Reserved; // ..clear the existing language...
-            currentData.Settings |= language; // ...and set the new one.
+        if (firmwareConfig.language == 8)
+        {
+            currentData.Settings &= ~Firmware::Language::Reserved;
+            currentData.Settings |= Firmware::Language::English;
+        }
+        else
+        {
+            auto language = static_cast<Firmware::Language>(firmwareConfig.language);
+            if (language != Firmware::Language::Reserved)
+            { // If the frontend specifies a language (rather than using the existing value)...
+                currentData.Settings &= ~Firmware::Language::Reserved; // ..clear the existing language...
+                currentData.Settings |= language; // ...and set the new one.
+            }
         }
 
         // setting up color
@@ -265,7 +273,7 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM9BIOS(const EmulatorConfiguration& confi
         FileRead(bios->data(), bios->size(), 1, f);
         CloseFile(f);
 
-        if (!configuration.showBootScreen)
+        if (!configuration.showBootScreen && configuration.dsiWareAutoloadTitleId == 0)
         {
             // herp
             *(u32*)bios->data() = 0xEAFFFFFE; // overwrites the reset vector
@@ -298,7 +306,7 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM7BIOS(const EmulatorConfiguration& confi
         FileRead(bios->data(), bios->size(), 1, f);
         CloseFile(f);
 
-        if (!configuration.showBootScreen)
+        if (!configuration.showBootScreen && configuration.dsiWareAutoloadTitleId == 0)
         {
             // herp
             *(u32*)bios->data() = 0xEAFFFFFE; // overwrites the reset vector
@@ -421,7 +429,10 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
             memcpy(&settings.Nickname, username.data(), usernameLength * sizeof(char16_t));
 
             // setting language
-            settings.Language = static_cast<Firmware::Language>(firmcfg.language);
+            if (firmcfg.language == 8)
+                settings.Language = Firmware::Language::English;
+            else
+                settings.Language = static_cast<Firmware::Language>(firmcfg.language);
 
             // setting up color
             settings.FavoriteColor = firmcfg.favouriteColour;

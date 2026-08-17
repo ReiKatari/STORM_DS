@@ -520,7 +520,15 @@ class FileSystemRomsRepository(
                 }
             }
 
-            if (cachedRoms.isEmpty() && searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty()) {
+            val validCachedRoms = if (searchDirectories.isNotEmpty()) {
+                cachedRoms.filter { rom ->
+                    searchDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) }
+                }
+            } else {
+                emptyList()
+            }
+
+            if (validCachedRoms.isEmpty() && searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty()) {
                 Log.w(TAG, "ROM cache is empty but search directories exist; forcing full rescan")
                 synchronized(directoryStatesLock) {
                     directoryStates.clear()
@@ -530,8 +538,8 @@ class FileSystemRomsRepository(
                 saveDirectoryStates()
             }
 
-            roms.addAll(cachedRoms)
-            if (cachedRoms.isNotEmpty() || cacheReadResult.isValid) {
+            roms.addAll(validCachedRoms)
+            if (validCachedRoms.isNotEmpty() || cacheReadResult.isValid) {
                 onRomsChanged(persist = unavailableDirectories.isEmpty())
             }
 
@@ -886,12 +894,12 @@ class FileSystemRomsRepository(
     }
 
     private fun isRomInDirectory(rom: Rom, directoryUri: Uri): Boolean {
-        val parentUri = rom.parentTreeUri ?: return true
-        val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull() ?: return true
+        val parentUri = rom.parentTreeUri ?: return false
+        val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull() ?: return false
         val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull()
             ?: runCatching { DocumentsContract.getTreeDocumentId(parentUri) }.getOrNull()
             ?: parentUri.lastPathSegment
-            ?: return true
+            ?: return false
         return parentDocId.startsWith(directoryDocId)
     }
 

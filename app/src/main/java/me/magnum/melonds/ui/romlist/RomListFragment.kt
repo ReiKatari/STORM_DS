@@ -95,6 +95,7 @@ class RomListFragment : Fragment() {
                     val scanningStatus by romListViewModel.romScanningStatus
                         .collectAsState(initial = RomScanningStatus.NOT_SCANNING)
                     val confirmedAchievementHashes by romListViewModel.confirmedAchievementHashes.collectAsState()
+                    val isRaAuthenticated by romListViewModel.isRaAuthenticated.collectAsState()
                     val raCoverByHash by romListViewModel.raCoverByHash.collectAsState()
                     val boxArtByUri by romListViewModel.boxArtByUri.collectAsState()
                     var contextRomUri by remember { mutableStateOf<String?>(null) }
@@ -117,6 +118,7 @@ class RomListFragment : Fragment() {
                         allowConfiguration = allowRomConfiguration,
                         scanningStatus = scanningStatus,
                         confirmedAchievementHashes = confirmedAchievementHashes,
+                        isRaAuthenticated = isRaAuthenticated,
                         onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
                         onRomClick = { rom ->
                             romListViewModel.setRomLastPlayedNow(rom)
@@ -239,6 +241,12 @@ class RomListFragment : Fragment() {
             }
             Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        romListViewModel.refreshAuthenticationState()
+        romListViewModel.refreshInstalledDsiWareShortcuts()
     }
 
     fun setRomSelectedListener(listener: (Rom) -> Unit) {

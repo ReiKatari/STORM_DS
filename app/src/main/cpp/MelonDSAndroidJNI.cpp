@@ -2577,14 +2577,18 @@ void* emulate(void*)
 
             if (round(frameLimitError) > 0.0)
             {
-                timespec sleepTime = {
-                    .tv_sec = 0,
-                    .tv_nsec = (long) (frameLimitError * 1000000),
-                };
-                clock_nanosleep(CLOCK_MONOTONIC, 0, &sleepTime, nullptr);
-                double timeAfterSleep = getCurrentMillis();
-                frameLimitError -= timeAfterSleep - currentTick;
-                currentTick = timeAfterSleep;
+                long long totalNsec = (long long) (frameLimitError * 1000000.0);
+                if (totalNsec > 0)
+                {
+                    timespec sleepTime = {
+                        .tv_sec = (time_t) (totalNsec / 1000000000LL),
+                        .tv_nsec = (long) (totalNsec % 1000000000LL),
+                    };
+                    clock_nanosleep(CLOCK_MONOTONIC, 0, &sleepTime, nullptr);
+                    double timeAfterSleep = getCurrentMillis();
+                    frameLimitError -= timeAfterSleep - currentTick;
+                    currentTick = timeAfterSleep;
+                }
             }
 
             lastTick = currentTick;

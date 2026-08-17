@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
@@ -13,6 +14,7 @@ import android.widget.Toast
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.*
 import me.magnum.melonds.R
+import me.magnum.melonds.translator.capture.*
 import me.magnum.melonds.translator.engine.*
 import me.magnum.melonds.translator.model.TranslatorEngineType
 import me.magnum.melonds.translator.model.TranslatorOverlayStyle
@@ -30,6 +32,7 @@ class GameTranslatorManager(
     private val onResumeEmulator: () -> Unit
 ) {
     companion object {
+        private const val TAG = "GameTranslatorManager"
         const val PREF_TRANSLATOR_ENABLED = "translator_enabled"
         const val PREF_TRANSLATOR_ENGINE = "translator_engine"
         const val PREF_TRANSLATOR_SOURCE_LANG = "translator_source_lang"
@@ -78,6 +81,9 @@ class GameTranslatorManager(
         overlay.onTriggerTranslationRequested = {
             triggerTranslation()
         }
+        overlay.onFloatingButtonLongClickListener = {
+            showQuickEngineSelectorDialog()
+        }
         overlay.onDismissRequested = {
             dismissTranslation()
         }
@@ -98,6 +104,36 @@ class GameTranslatorManager(
             overlay.visibility = View.GONE
             stopAutoTranslate()
         }
+    }
+
+    fun showQuickEngineSelectorDialog() {
+        val currentPref = preferences.getString(PREF_TRANSLATOR_ENGINE, "google")
+        val currentEngine = TranslatorEngineType.fromPreference(currentPref)
+        val engines = TranslatorEngineType.entries.toTypedArray()
+        val items = engines.map { engine ->
+            val isCurrent = engine == currentEngine
+            val prefix = if (isCurrent) "✓ " else "   "
+            "$prefix${engine.displayName}"
+        }.toTypedArray()
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.translator_engine)
+            .setItems(items) { _, which ->
+                val selectedEngine = engines[which]
+                preferences.edit().putString(PREF_TRANSLATOR_ENGINE, selectedEngine.preferenceValue).apply()
+                translationCache.clear()
+                val displayName = selectedEngine.displayName.substringBefore(" (")
+                Toast.makeText(
+                    activity,
+                    "${activity.getString(R.string.translator_engine)}: $displayName",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNeutralButton(R.string.translator_regions_title) { _, _ ->
+                openRegionEditor()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
     }
 
     fun openRegionEditor() {
@@ -137,6 +173,19 @@ class GameTranslatorManager(
             return
         }
 
+        // Priority 1: If MediaProjection permission is not granted yet, prompt user immediately
+        if (!mediaProjectionCapturer.hasPermission) {
+            pendingTranslateAfterPermission = true
+            try {
+                val intent = mediaProjectionCapturer.createCaptureIntent()
+                requestMediaProjectionPermission?.invoke(intent)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to launch MediaProjection permission request", e)
+                Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         overlayView?.isTranslating = true
 
         mainScope.launch {
@@ -144,34 +193,40 @@ class GameTranslatorManager(
 
             var capturedBitmap: Bitmap? = null
 
-            // Priority 1: Direct native frame buffer
+            // Capture via MediaProjection (high-resolution phone screen, 1080p+ with anti-aliasing)
             try {
-                withTimeoutOrNull(300) {
-                    capturedBitmap = screenshotProvider?.invoke()
+                capturedBitmap = withTimeoutOrNull(1500) {
+                    mediaProjectionCapturer.captureScreen()
+                }
+                if (capturedBitmap != null && isBitmapBlank(capturedBitmap)) {
+                    capturedBitmap?.recycle()
+                    capturedBitmap = null
                 }
             } catch (e: Throwable) {
+                Log.e(TAG, "MediaProjection capture failed", e)
                 capturedBitmap = null
             }
 
-            // Priority 2: MediaProjection (hardware-composited display output)
+            // Fallback 1: PixelCopy from SurfaceView/Window (with black-frame validation)
             if (capturedBitmap == null) {
-                if (mediaProjectionCapturer.hasPermission) {
-                    capturedBitmap = mediaProjectionCapturer.captureScreen()
-                } else if (requestMediaProjectionPermission != null) {
-                    pendingTranslateAfterPermission = true
-                    overlayView?.isTranslating = false
-                    try {
-                        requestMediaProjectionPermission?.invoke(mediaProjectionCapturer.createCaptureIntent())
-                    } catch (t: Throwable) {
-                        t.printStackTrace()
-                    }
-                    return@launch
+                val pixelCopyResult = captureViaPixelCopy()
+                capturedBitmap = if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
+                    pixelCopyResult
+                } else {
+                    pixelCopyResult?.recycle()
+                    null
                 }
             }
 
-            // Priority 3: PixelCopy from SurfaceView or Window
-            if (capturedBitmap == null) {
-                capturedBitmap = captureViaPixelCopy()
+            // Fallback 2: Native DS GPU framebuffer (256x384)
+            if (capturedBitmap == null && screenshotProvider != null) {
+                try {
+                    capturedBitmap = withTimeoutOrNull(500) {
+                        screenshotProvider?.invoke()
+                    }
+                } catch (_: Throwable) {
+                    capturedBitmap = null
+                }
             }
 
             // Step 2: Now that frame is captured, pause emulator if requested
@@ -185,15 +240,13 @@ class GameTranslatorManager(
             }
 
             if (capturedBitmap != null) {
-                processCapturedFrame(capturedBitmap!!)
+                val isNativeDsBitmap = (capturedBitmap!!.width == 256 && capturedBitmap!!.height == 384)
+                processCapturedFrame(capturedBitmap!!, forceFullscreen = isNativeDsBitmap)
             } else {
                 overlayView?.isTranslating = false
                 if (isPausedByTranslator) {
                     isPausedByTranslator = false
-                    try {
-                        onResumeEmulator()
-                    } catch (e: Throwable) {
-                    }
+                    try { onResumeEmulator() } catch (_: Throwable) {}
                 }
                 Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
             }
@@ -204,7 +257,16 @@ class GameTranslatorManager(
         mediaProjectionCapturer.setPermissionResult(resultCode, data)
         if (resultCode == Activity.RESULT_OK && data != null && pendingTranslateAfterPermission) {
             pendingTranslateAfterPermission = false
-            triggerTranslation()
+            mainScope.launch {
+                // Wait for Foreground Service and VirtualDisplay initialization (up to 2500ms)
+                withTimeoutOrNull(2500) {
+                    while (!ScreenCaptureService.isReady) {
+                        delay(50)
+                    }
+                }
+                delay(150)
+                triggerTranslation()
+            }
         }
     }
 
@@ -260,6 +322,33 @@ class GameTranslatorManager(
         null
     }
 
+    /**
+     * Fast check to detect genuinely blank/unrendered bitmaps (common when PixelCopy
+     * reads from uninitialized Vulkan SurfaceViews).
+     * Scans a dense 12x12 grid of pixels across the bitmap.
+     */
+    private fun isBitmapBlank(bitmap: Bitmap?): Boolean {
+        if (bitmap == null || bitmap.width < 4 || bitmap.height < 4) return true
+        val stepX = (bitmap.width / 12).coerceAtLeast(1)
+        val stepY = (bitmap.height / 12).coerceAtLeast(1)
+        var nonBlackCount = 0
+        for (row in 1..11) {
+            for (col in 1..11) {
+                val pixel = bitmap.getPixel(col * stepX, row * stepY)
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                // MediaProjection may return alpha=0 for opaque screen content on some
+                // Android devices (raw RGB buffer), so only check RGB channels.
+                if (r > 10 || g > 10 || b > 10) {
+                    nonBlackCount++
+                    if (nonBlackCount >= 1) return false // Found real content on screen
+                }
+            }
+        }
+        return nonBlackCount == 0
+    }
+
     fun dismissTranslation() {
         overlayView?.clearTranslations()
         overlayView?.isTranslating = false
@@ -273,22 +362,30 @@ class GameTranslatorManager(
         }
     }
 
-    private fun processCapturedFrame(bitmap: Bitmap) {
+    private fun processCapturedFrame(bitmap: Bitmap, forceFullscreen: Boolean = false) {
         mainScope.launch {
             try {
                 val sourceLang = preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
                 val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
 
-                val savedRegionsJson = preferences.getString(PREF_TRANSLATOR_SAVED_REGIONS, null)
-                val customRegions = me.magnum.melonds.translator.model.TranslationRegion.listFromJson(savedRegionsJson)
+                // When bitmap is from native DS framebuffer (256x384), custom regions are in
+                // phone-screen coordinate space and cannot map to DS framebuffer coordinates.
+                // Always use fullscreen OCR for native DS bitmaps.
+                val customRegions = if (forceFullscreen) {
+                    emptyList()
+                } else {
+                    val savedRegionsJson = preferences.getString(PREF_TRANSLATOR_SAVED_REGIONS, null)
+                    me.magnum.melonds.translator.model.TranslationRegion.listFromJson(savedRegionsJson)
+                }
 
-                var blocks = withTimeoutOrNull(6000) {
+                var blocks = withTimeoutOrNull(8000) {
                     textRecognizer.recognizeTextBlocks(bitmap, sourceLang, customRegions)
                 } ?: emptyList()
 
                 // Fallback to full screen if custom regions returned nothing
                 if (blocks.isEmpty() && customRegions.isNotEmpty()) {
-                    blocks = withTimeoutOrNull(6000) {
+                    Log.i(TAG, "Custom regions returned 0 blocks, trying fullscreen fallback...")
+                    blocks = withTimeoutOrNull(8000) {
                         textRecognizer.recognizeTextBlocks(bitmap, sourceLang, emptyList())
                     } ?: emptyList()
                 }
@@ -303,27 +400,38 @@ class GameTranslatorManager(
                         } catch (e: Throwable) {
                         }
                     }
-                    Toast.makeText(activity, R.string.translator_no_text_found, Toast.LENGTH_SHORT).show()
+                    val ocrError = textRecognizer.lastOcrError
+                    val toastMessage = if (!ocrError.isNullOrBlank()) {
+                        "OCR: $ocrError"
+                    } else {
+                        activity.getString(R.string.translator_no_text_found)
+                    }
+                    Log.w(TAG, "Translation stopped: $toastMessage")
+                    Toast.makeText(activity, toastMessage, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
                 val engine = getActiveTranslationEngine()
+                Log.i(TAG, "Translating ${blocks.size} blocks with ${engine.javaClass.simpleName} ($sourceLang -> $targetLang)")
 
                 // Translate blocks in parallel with timeout
                 withTimeoutOrNull(8000) {
                     coroutineScope {
                         blocks.map { block ->
                             async(Dispatchers.IO) {
-                                val cacheKey = "${block.originalText}|$sourceLang|$targetLang"
+                                val preparedText = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
+                                val cacheKey = "$preparedText|$sourceLang|$targetLang"
                                 val cached = translationCache[cacheKey]
                                 if (cached != null) {
                                     block.translatedText = cached
                                 } else {
                                     val translated = try {
                                         withTimeoutOrNull(5000) {
-                                            engine.translate(block.originalText, sourceLang, targetLang)
+                                            val raw = engine.translate(preparedText, sourceLang, targetLang)
+                                            me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
                                         } ?: block.originalText
                                     } catch (e: Exception) {
+                                        Log.w(TAG, "Translation error for block '${block.originalText}': ${e.message}", e)
                                         block.originalText
                                     }
                                     translationCache[cacheKey] = translated
@@ -336,8 +444,9 @@ class GameTranslatorManager(
 
                 overlayView?.setTranslatedBlocks(blocks)
             } catch (t: Throwable) {
-                t.printStackTrace()
-                Toast.makeText(activity, R.string.translator_no_text_found, Toast.LENGTH_SHORT).show()
+                Log.e(TAG, "Process captured frame failed", t)
+                val msg = t.message?.takeIf { it.isNotBlank() } ?: activity.getString(R.string.translator_no_text_found)
+                Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
                 if (isPausedByTranslator) {
                     isPausedByTranslator = false
                     try {
@@ -352,9 +461,11 @@ class GameTranslatorManager(
     }
 
     private fun getActiveTranslationEngine(): ITranslationEngine {
-        val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
+        val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "yandex"))
         return when (type) {
+            TranslatorEngineType.YANDEX -> YandexTranslateEngine(okHttpClient)
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)
+            TranslatorEngineType.LINGVA -> LingvaTranslateEngine(okHttpClient)
             TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient) {
                 preferences.getString(PREF_TRANSLATOR_DEEPL_KEY, "").orEmpty()
             }
