@@ -22,6 +22,11 @@ import java.net.URLEncoder
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+/**
+ * Ultimate NDS / NDSi Multi-Actor Neural and Multi-Voice TTS Engine.
+ * Supports complete character recognition for all major Nintendo DS franchises
+ * with custom pitch, speed, voice actor routing, and phonetics normalization.
+ */
 class GameTtsManager(private val context: Context) {
 
     companion object {
@@ -32,72 +37,111 @@ class GameTtsManager(private val context: Context) {
         const val PREF_TRANSLATOR_TTS_NEURAL_ENABLED = "translator_tts_neural_enabled"
         const val PREF_TRANSLATOR_TTS_API_KEY = "translator_tts_api_key"
 
-        // 1. Dark Heroes & Vigilantes (Batman, Kyle Hyde, Wesker, Kratos, Solid Snake)
-        private val BATMAN_DARK_HERO_KEYWORDS = setOf(
+        // 1. Dark Heroes & Vigilantes (Batman, Solid Snake, Kyle Hyde, Wesker, Kratos, Shadow, Punisher)
+        private val HERO_DARK_VIGILANTE_KEYWORDS = setOf(
             "бэтмен", "бэтмэн", "брюс", "уэйн", "темный рыцарь", "гордон", "комиссар", "хайден",
-            "кайл хайд", "снейк", "кратос", "вескер", "вейдер", "дарт вейдер", "двуликий", "аркхэм",
-            "batman", "bruce wayne", "dark knight", "gordon", "kyle hyde", "wesker", "vader", "two-face", "arkham"
+            "кайл хайд", "снейк", "кратос", "вескер", "вейдер", "дарт вейдер", "каратель", "аркхэм",
+            "шедоу", "солид снейк", "биг босс", "детектив хайд", "бэтпещера",
+            "batman", "bruce wayne", "dark knight", "gordon", "kyle hyde", "wesker", "vader", "two-face",
+            "arkham", "solid snake", "shadow", "kratos", "punisher"
         )
 
-        // 2. Manic Villains (Joker, Fawful, Kefka, Dimentio, Riddler)
-        private val JOKER_MANIC_KEYWORDS = setOf(
+        // 2. Manic Villains & Tricksters (Joker, Fawful, Kefka, Dimentio, Riddler, Porky, Waluigi, Ghirahim)
+        private val VILLAIN_MANIC_JOKER_KEYWORDS = setOf(
             "джокер", "фофул", "клоун", "безумец", "псих", "маньяк", "загадочник", "риддлер", "кефка", "диментио",
-            "ха-ха", "хи-хи", "ахаха", "хе-хе", "ловушка", "веселье", "шутка", "карты",
-            "joker", "fawful", "clown", "maniac", "riddler", "dimentio", "kefka", "haha", "hehe", "joke", "trap"
+            "порки", "валуиджи", "гирахим", "двуликий", "пугало", "крейн", "джокер:", "[джокер]",
+            "ха-ха", "хи-хи", "ахаха", "хе-хе", "хахаха", "муахаха", "ловушка", "веселье", "шутка", "карты",
+            "безумие", "взорву", "убью", "цирк", "фокус", "смех", "смешно",
+            "joker", "fawful", "clown", "maniac", "riddler", "dimentio", "kefka", "porky", "waluigi",
+            "ghirahim", "scarecrow", "two-face", "haha", "hehe", "hahaha", "muahaha", "joke", "trap", "insanity"
         )
 
-        // 3. Female Characters & Heroines (Zelda, Peach, Maya, Mia, Shanoa, Harley, Cynthia, Jill, Marle, Xion)
-        private val FEMALE_KEYWORDS = setOf(
-            "майя", "мия", "перл", "зельда", "пич", "дэйзи", "розалина", "эмма", "люси", "айрис",
-            "каллисто", "франциска", "синтиа", "харли", "харли квинн", "джилл", "шаноа", "марл",
-            "лукка", "шион", "афина", "труси", "флора", "линн", "шики", "девушка", "женщина",
-            "девочка", "принцесса", "королева", "мать", "сестра", "подруга", "хозяйка", "мисс", "леди", "госпожа",
-            "maya", "mia", "pearl", "zelda", "peach", "daisy", "rosalina", "franziska", "cynthia",
-            "harley", "harley quinn", "jill", "shanoa", "marle", "lucca", "xion", "athena", "trucy",
-            "flora", "lynne", "shiki", "girl", "woman", "princess", "queen", "lady", "miss"
+        // 3. Demonic, Devilish & Abyss Entities (Death, Dracula, Akuma, Giratina, Darkrai, Mewtwo, Ridley, Skull Kid)
+        private val DEMONIC_DEVILISH_KEYWORDS = setOf(
+            "смерть", "демон", "дьявол", "сатана", "даркрай", "гиратина", "мьюту", "ридли", "акума",
+            "череп", "скулл кид", "бездна", "преисподняя", "тьма", "поглощу", "душа", "кровавый",
+            "вампир", "нечисть", "проклятие", "вечные муки", "ад", "демонический", "некромант",
+            "death", "dracula", "demon", "devil", "satan", "darkrai", "giratina", "mewtwo", "ridley",
+            "akuma", "skull kid", "abyss", "curse", "damnation", "hell", "vampire", "necromancer"
         )
 
-        // 4. British Gentlemen & Sharp Sleuths (Layton, Edgeworth, Godot, Oak, Rowan, Phoenix)
-        private val GENTLEMAN_SLEUTH_KEYWORDS = setOf(
-            "лейтон", "профессор", "эджворт", "годо", "крэйвен", "оук", "роуэн", "джунипер",
+        // 4. Angelic, Divine & Celestial Spirits (Palutena, Goddess Hylia, Pit, Arceus, Celebi, Jirachi, Great Fairy, Goddess)
+        private val ANGELIC_DIVINE_KEYWORDS = setOf(
+            "палютена", "богиня", "хайлия", "аркеус", "селеби", "джирачи", "пит", "ангел", "великая фея",
+            "священный", "благословение", "свет", "небеса", "храм", "чистота", "молитва", "божественный",
+            "дух света", "серафим", "исцеление",
+            "palutena", "goddess", "hylia", "arceus", "celebi", "jirachi", "pit", "angel", "great fairy",
+            "holy", "blessing", "light", "heavens", "sanctuary", "purity", "prayer", "divine"
+        )
+
+        // 5. British Gentlemen, Sleuths & Scholars (Layton, Edgeworth, Phoenix Wright, Godot, Oak, Rowan, Birch, Chelmey)
+        private val GENTLEMAN_SCHOLAR_KEYWORDS = setOf(
+            "лейтон", "профессор", "эджворт", "годо", "крэйвен", "оук", "роуэн", "джунипер", "бирч", "элм", "сикамор",
             "феникс", "райт", "челми", "детектив", "загадка", "головоломка", "пазл", "джентльмен",
-            "layton", "professor", "edgeworth", "godot", "klavier", "oak", "rowan", "juniper",
-            "phoenix", "wright", "chelmey", "puzzle", "gentleman"
+            "протестую", "судебное заседание", "улика", "показания", "перекрестный допрос", "дедукция",
+            "layton", "professor", "edgeworth", "godot", "klavier", "oak", "rowan", "birch", "elm", "sycamore",
+            "phoenix", "wright", "chelmey", "puzzle", "gentleman", "objection", "evidence", "testimony", "court"
         )
 
-        // 5. Elders, Heavy Bosses & Monsters (The Judge, Bowser, Dracula, Slime, King, Ghetsis, Saix)
-        private val ELDER_OR_DEEP_KEYWORDS = setOf(
+        // 6. Elders, Heavy Bosses & Judges (The Judge, King Bowser, Ganondorf, Ghetsis, Giovanni, Dedede, Eggman, Wario, K. Rool)
+        private val ELDER_ANCIENT_BOSS_KEYWORDS = setOf(
             "судья", "дед", "старик", "босс", "детектив", "гамшу", "вон карма", "король", "монстр",
-            "дракон", "баузер", "боузер", "дракула", "гетсис", "ганон", "ганондорф", "пингвин", "сайкс",
-            "виновен", "приговор", "сокрушу", "ничтожества",
-            "judge", "elder", "gumshoe", "von karma", "gant", "king", "boss",
-            "bowser", "dracula", "ghetsis", "ganon", "ganondorf", "penguin", "saix"
+            "дракон", "баузер", "боузер", "гетсис", "ганон", "ганондорф", "пингвин", "сайкс", "ксемнас", "ансем",
+            "дидиди", "дедеде", "эггман", "эгнот", "варио", "кинг к. рол", "джованни",
+            "виновен", "приговор", "сокрушу", "ничтожества", "тысяча лет", "суд объявляет", "тишина в зале",
+            "judge", "elder", "gumshoe", "von karma", "gant", "king", "boss", "bowser", "ghetsis", "ganon",
+            "ganondorf", "penguin", "saix", "xemnas", "ansem", "dedede", "eggman", "wario", "k. rool", "giovanni"
         )
 
-        // 6. Young, Cute, Fairies & Kids (Luke, Tails, Pikachu, Navi, Starlow, Red, Toad)
-        private val YOUNG_OR_FAIRY_KEYWORDS = setOf(
-            "люк", "тейлз", "тейлс", "пикачу", "нави", "старлоу", "тоад", "фея", "малыш", "ребенок",
-            "татл", "мальчик", "дитя", "соник", "пика-пика", "ура",
-            "luke", "tails", "pikachu", "navi", "starlow", "toad", "fairy", "child", "kid", "boy", "sonic"
+        // 7. Heroines & Female Protagonists (Zelda, Peach, Daisy, Rosalina, Maya, Mia, Franziska, Ema, Shanoa, Samus, Cynthia, Dawn, Harley, Jill)
+        private val HEROINE_FEMALE_KEYWORDS = setOf(
+            "майя", "мия", "перл", "зельда", "пич", "дэйзи", "розалина", "эмма", "люси", "айрис",
+            "каллисто", "франциска", "синтиа", "харли", "харли квинн", "джилл", "шаноа", "самус", "марл",
+            "лукка", "шион", "афина", "труси", "флора", "линн", "шики", "мидна", "доун", "хильда", "роза", "мисти",
+            "аква", "каири", "девушка", "женщина", "девочка", "принцесса", "королева", "мать", "сестра", "подруга",
+            "хозяйка", "мисс", "леди", "госпожа", "братец", "спасите", "помогите",
+            "maya", "mia", "pearl", "zelda", "peach", "daisy", "rosalina", "franziska", "cynthia",
+            "harley", "harley quinn", "jill", "shanoa", "samus", "marle", "lucca", "xion", "athena", "trucy",
+            "flora", "lynne", "shiki", "midna", "dawn", "hilda", "rosa", "misty", "aqua", "kairi",
+            "girl", "woman", "princess", "queen", "lady", "miss"
         )
 
-        // 7. Robots, AI & Tech (Robo, Omega-Xis, Pokedex)
-        private val ROBOTIC_TECH_KEYWORDS = setOf(
+        // 8. Children, Cute Fairies & Companions (Luke Triton, Tails, Pikachu, Navi, Tatl, Starlow, Toad, Kirby, Yoshi, Chocobo)
+        private val CHILD_FAIRY_COMPANION_KEYWORDS = setOf(
+            "люк", "тейлз", "тейлс", "пикачу", "нави", "старлоу", "тоад", "тоадетта", "фея", "малыш", "ребенок",
+            "татл", "мальчик", "дитя", "соник", "пика-пика", "ура", "ура-а", "кирби", "йоши", "чокобо", "мугл",
+            "малыш марио", "малыш луиджи", "слушай!", "хей!",
+            "luke", "tails", "pikachu", "navi", "starlow", "toad", "toadette", "fairy", "child", "kid",
+            "boy", "sonic", "kirby", "yoshi", "chocobo", "moogle", "listen", "hey"
+        )
+
+        // 9. Robots, AI & Futuristic Tech (Robo, Omega-Xis, Geo Stelar, Pokedex, Computer, Metal Sonic, E-123 Omega)
+        private val ROBOTIC_AI_TECH_KEYWORDS = setOf(
             "робо", "омега", "покедекс", "компьютер", "робот", "дроид", "система", "протокол", "директива",
-            "robo", "omega", "pokedex", "computer", "robot", "droid", "system", "protocol"
+            "метал соник", "бортовой компьютер", "терминал", "инициализация", "сбой программы", "анализ данных",
+            "robo", "omega", "pokedex", "computer", "robot", "droid", "system", "protocol", "directive"
+        )
+
+        // 10. Young Male Heroes & Protagonists (Mario, Luigi, Link, Sonic, Crono, Neku, Mega Man, Red, Ethan, Sora, Roxas)
+        private val HERO_PROTAGONIST_MALE_KEYWORDS = setOf(
+            "марио", "луиджи", "линк", "соник", "хроно", "кроно", "неку", "рокмен", "мегамен", "ред",
+            "этан", "хильберт", "нейт", "сора", "роксас", "вентус", "юси", "джинг", "данте",
+            "mario", "luigi", "link", "sonic", "crono", "neku", "megaman", "red", "ethan", "sora", "roxas"
         )
     }
 
     enum class CharacterPersona {
-        MALE,
-        FEMALE,
-        HERO_BATMAN,
-        MANIC_JOKER,
-        GENTLEMAN_LAYTON,
-        ELDER_DEEP,
-        YOUNG_FAIRY,
-        ROBOTIC_TECH,
-        NARRATOR
+        HERO_DARK_VIGILANTE,   // Batman, Snake, Wesker, Kratos
+        VILLAIN_MANIC_JOKER,   // Joker, Fawful, Kefka, Dimentio
+        DEMONIC_DEVILISH,      // Death, Dracula, Akuma, Giratina, Mewtwo
+        ANGELIC_DIVINE,        // Palutena, Hylia, Pit, Arceus, Great Fairy
+        GENTLEMAN_SCHOLAR,     // Layton, Edgeworth, Phoenix, Oak
+        ELDER_ANCIENT_BOSS,    // The Judge, Bowser, Ganon, Eggman, Dedede
+        HEROINE_FEMALE,        // Zelda, Peach, Maya, Franziska, Shanoa
+        CHILD_FAIRY_COMPANION, // Luke, Tails, Pikachu, Navi, Starlow
+        ROBOTIC_AI_TECH,       // Robo, Omega-Xis, Pokedex, System AI
+        HERO_PROTAGONIST_MALE, // Mario, Link, Sonic, Crono, Sora
+        NARRATOR_CHRONICLE     // World chronicle & descriptions
     }
 
     private val preferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -124,7 +168,7 @@ class GameTtsManager(private val context: Context) {
                 applyLanguage(getSelectedLanguage())
                 try {
                     availableVoices = tts?.voices?.toList() ?: emptyList()
-                    Log.i(TAG, "TTS initialized successfully. Available voices: ${availableVoices.size}")
+                    Log.i(TAG, "TTS initialized. Available voices count: ${availableVoices.size}")
                 } catch (e: Throwable) {
                     Log.w(TAG, "Cannot query voices: ${e.message}")
                 }
@@ -161,7 +205,7 @@ class GameTtsManager(private val context: Context) {
     fun speak(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
 
-        // 1. Apply intelligent stress accents and phonetics normalization for gaming terms
+        // 1. Normalization of accents, gaming terminology, and numbers
         val normalizedText = RussianTtsNormalizer.normalize(text, targetLang)
 
         val isNeural = preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
@@ -223,10 +267,10 @@ class GameTtsManager(private val context: Context) {
         scope.launch {
             try {
                 val langCode = if (targetLang.isBlank()) "ru" else targetLang.lowercase()
-                val cleanText = text.take(200)
+                val cleanText = text.take(220)
                 val encodedText = URLEncoder.encode(cleanText, "UTF-8")
-                
-                // Construct high-quality Neural Web Speech request
+
+                // High quality Neural cloud endpoint
                 val url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=$langCode&client=tw-ob&q=$encodedText"
 
                 val request = Request.Builder()
@@ -238,16 +282,15 @@ class GameTtsManager(private val context: Context) {
 
                 val response = httpClient.newCall(request).execute()
                 if (!response.isSuccessful || response.body == null) {
-                    throw IllegalStateException("Neural TTS HTTP response unsuccessful: ${response.code}")
+                    throw IllegalStateException("Neural TTS HTTP response code: ${response.code}")
                 }
 
                 val audioBytes = response.body!!.bytes()
                 if (audioBytes.isEmpty()) {
-                    throw IllegalStateException("Neural TTS audio bytes empty")
+                    throw IllegalStateException("Neural TTS audio payload empty")
                 }
 
-                // Write to cache file for MediaPlayer
-                val tempFile = File(context.cacheDir, "neural_tts_speech_${System.currentTimeMillis()}.mp3")
+                val tempFile = File(context.cacheDir, "storm_neural_speech_${System.currentTimeMillis()}.mp3")
                 FileOutputStream(tempFile).use { fos ->
                     fos.write(audioBytes)
                 }
@@ -265,51 +308,59 @@ class GameTtsManager(private val context: Context) {
                         setDataSource(tempFile.absolutePath)
                         prepare()
 
-                        // Apply Persona pitch and speech rate hardware modulation to the Neural audio stream!
+                        // Real-time Hardware Audio DSP Modulation for every distinct character persona
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             try {
                                 val params = PlaybackParams()
                                 when (persona) {
-                                    CharacterPersona.HERO_BATMAN -> {
-                                        params.pitch = 0.65f // Deep dark baritone vigilante
-                                        params.speed = baseSpeed * 0.86f
+                                    CharacterPersona.HERO_DARK_VIGILANTE -> {
+                                        params.pitch = 0.55f // Heavy gravelly dark baritone
+                                        params.speed = baseSpeed * 0.84f
                                     }
-                                    CharacterPersona.MANIC_JOKER -> {
-                                        params.pitch = 1.30f // High-pitched, wild, manic villain
-                                        params.speed = baseSpeed * 1.25f
+                                    CharacterPersona.VILLAIN_MANIC_JOKER -> {
+                                        params.pitch = 1.36f // Wild, hysterical, laughing high pitch
+                                        params.speed = baseSpeed * 1.30f
                                     }
-                                    CharacterPersona.GENTLEMAN_LAYTON -> {
-                                        params.pitch = 0.85f // Cultured polite gentleman
-                                        params.speed = baseSpeed * 0.92f
+                                    CharacterPersona.DEMONIC_DEVILISH -> {
+                                        params.pitch = 0.38f // Subterranean abyss demonic pitch
+                                        params.speed = baseSpeed * 0.72f
                                     }
-                                    CharacterPersona.FEMALE -> {
-                                        params.pitch = 1.20f // Melodious heroine
+                                    CharacterPersona.ANGELIC_DIVINE -> {
+                                        params.pitch = 1.48f // Celestial serene tone
+                                        params.speed = baseSpeed * 0.94f
+                                    }
+                                    CharacterPersona.GENTLEMAN_SCHOLAR -> {
+                                        params.pitch = 0.82f // Refined academic baritone
+                                        params.speed = baseSpeed * 0.90f
+                                    }
+                                    CharacterPersona.ELDER_ANCIENT_BOSS -> {
+                                        params.pitch = 0.48f // Authoritative booming ancient judge bass
+                                        params.speed = baseSpeed * 0.76f
+                                    }
+                                    CharacterPersona.HEROINE_FEMALE -> {
+                                        params.pitch = 1.22f // Bright, melodic heroine
                                         params.speed = baseSpeed * 1.02f
                                     }
-                                    CharacterPersona.ELDER_DEEP -> {
-                                        params.pitch = 0.50f // Heavy ancient boss/judge bass
-                                        params.speed = baseSpeed * 0.78f
+                                    CharacterPersona.CHILD_FAIRY_COMPANION -> {
+                                        params.pitch = 1.62f // High cheerful kid/fairy
+                                        params.speed = baseSpeed * 1.18f
                                     }
-                                    CharacterPersona.YOUNG_FAIRY -> {
-                                        params.pitch = 1.55f // Cheerful kid/fairy
-                                        params.speed = baseSpeed * 1.15f
+                                    CharacterPersona.ROBOTIC_AI_TECH -> {
+                                        params.pitch = 0.42f // Metallic monotone synthetic
+                                        params.speed = baseSpeed * 1.06f
                                     }
-                                    CharacterPersona.ROBOTIC_TECH -> {
-                                        params.pitch = 0.40f // Deep monotone robotic
-                                        params.speed = baseSpeed * 1.05f
+                                    CharacterPersona.HERO_PROTAGONIST_MALE -> {
+                                        params.pitch = 0.90f // Energetic young hero
+                                        params.speed = baseSpeed * 1.00f
                                     }
-                                    CharacterPersona.MALE -> {
-                                        params.pitch = 0.88f // Classic male protagonist
-                                        params.speed = baseSpeed * 0.98f
-                                    }
-                                    CharacterPersona.NARRATOR -> {
-                                        params.pitch = 1.0f
+                                    CharacterPersona.NARRATOR_CHRONICLE -> {
+                                        params.pitch = 1.00f
                                         params.speed = baseSpeed
                                     }
                                 }
                                 playbackParams = params
                             } catch (e: Throwable) {
-                                Log.w(TAG, "Cannot apply PlaybackParams: ${e.message}")
+                                Log.w(TAG, "Cannot set PlaybackParams: ${e.message}")
                             }
                         }
 
@@ -319,9 +370,9 @@ class GameTtsManager(private val context: Context) {
                         }
                     }
                 }
-                Log.i(TAG, "Neural Cloud TTS played for [$persona]: ${audioBytes.size} bytes")
+                Log.i(TAG, "Neural Cloud TTS synthesized [$persona]")
             } catch (e: Throwable) {
-                Log.w(TAG, "Neural cloud TTS fallback to local: ${e.message}")
+                Log.w(TAG, "Neural Cloud fallback to local TTS: ${e.message}")
                 withContext(Dispatchers.Main) {
                     val locale = getSelectedLanguage()
                     applyPersonaVoice(persona, baseSpeed, locale)
@@ -333,57 +384,78 @@ class GameTtsManager(private val context: Context) {
 
     private fun detectPersona(text: String): CharacterPersona {
         val lower = text.lowercase()
-        val speaker = if (lower.contains(":")) lower.substringBefore(":").trim() else ""
 
-        // 1. Explicit Speaker Tags (e.g. "Бэтмен:", "Joker:", "[Layton]")
+        // 1. Explicit Speaker Tag Extraction (e.g. "Бэтмен:", "[Joker]", "【Layton】", "Зельда —", "(Phoenix)")
+        val speaker = when {
+            lower.contains(":") -> lower.substringBefore(":").trim()
+            lower.startsWith("[") && lower.contains("]") -> lower.substringAfter("[").substringBefore("]").trim()
+            lower.startsWith("【") && lower.contains("】") -> lower.substringAfter("【").substringBefore("】").trim()
+            lower.startsWith("«") && lower.contains("»") -> lower.substringAfter("«").substringBefore("»").trim()
+            lower.contains(" — ") -> lower.substringBefore(" — ").trim()
+            else -> ""
+        }
+
         if (speaker.isNotEmpty()) {
-            if (BATMAN_DARK_HERO_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HERO_BATMAN
-            if (JOKER_MANIC_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.MANIC_JOKER
-            if (GENTLEMAN_SLEUTH_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.GENTLEMAN_LAYTON
-            if (FEMALE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.FEMALE
-            if (ELDER_OR_DEEP_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ELDER_DEEP
-            if (YOUNG_OR_FAIRY_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.YOUNG_FAIRY
-            if (ROBOTIC_TECH_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ROBOTIC_TECH
-            return CharacterPersona.MALE
+            if (HERO_DARK_VIGILANTE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HERO_DARK_VIGILANTE
+            if (VILLAIN_MANIC_JOKER_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.VILLAIN_MANIC_JOKER
+            if (DEMONIC_DEVILISH_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.DEMONIC_DEVILISH
+            if (ANGELIC_DIVINE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ANGELIC_DIVINE
+            if (GENTLEMAN_SCHOLAR_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.GENTLEMAN_SCHOLAR
+            if (ELDER_ANCIENT_BOSS_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ELDER_ANCIENT_BOSS
+            if (HEROINE_FEMALE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HEROINE_FEMALE
+            if (CHILD_FAIRY_COMPANION_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.CHILD_FAIRY_COMPANION
+            if (ROBOTIC_AI_TECH_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ROBOTIC_AI_TECH
+            if (HERO_PROTAGONIST_MALE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HERO_PROTAGONIST_MALE
+            return CharacterPersona.HERO_PROTAGONIST_MALE
         }
 
-        // 2. Vocative Detection & Dialogue Roles
-        // Addressing Batman -> Joker/Villain speaking!
+        // 2. Vocative Dialogue Roles & Behavioral Context
+        // Addressing Batman / Laughing / Mocking -> Manic Villain speaking!
         if (lower.startsWith("бэтмен,") || lower.startsWith("бэтмэн,") || lower.startsWith("batman,") ||
-            lower.contains("рад, что ты") || lower.contains("ха-ха") || lower.contains("хи-хи") || lower.contains("ахаха") ||
-            lower.contains("моя ловушка") || lower.contains("моя игра") || lower.contains("клоун")) {
-            return CharacterPersona.MANIC_JOKER
+            lower.contains("рад, что ты пришел") || lower.contains("ха-ха") || lower.contains("хи-хи") ||
+            lower.contains("ахаха") || lower.contains("моя ловушка") || lower.contains("моя игра") ||
+            lower.contains("веселье только начинается") || lower.contains("глупый мышонок")) {
+            return CharacterPersona.VILLAIN_MANIC_JOKER
         }
 
-        // Addressing Joker -> Batman speaking!
+        // Threatening the Villain / Demanding answers -> Dark Vigilante speaking!
         if (lower.contains("джокер?") || lower.contains("джокер!") || lower.contains("joker?") || lower.contains("joker!") ||
             lower.contains("сдавайся") || lower.contains("город под защитой") || lower.contains("где детонатор") ||
-            lower.contains("аркхэм") || lower.contains("хватит, джокер")) {
-            return CharacterPersona.HERO_BATMAN
+            lower.contains("аркхэм ждет тебя") || lower.contains("хватит, джокер") || lower.contains("отвечай!")) {
+            return CharacterPersona.HERO_DARK_VIGILANTE
         }
 
-        // 3. Keyword Content Analysis
-        if (BATMAN_DARK_HERO_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_BATMAN
-        if (JOKER_MANIC_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.MANIC_JOKER
-        if (GENTLEMAN_SLEUTH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.GENTLEMAN_LAYTON
-        if (FEMALE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.FEMALE
-        if (ELDER_OR_DEEP_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ELDER_DEEP
-        if (YOUNG_OR_FAIRY_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.YOUNG_FAIRY
-        if (ROBOTIC_TECH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ROBOTIC_TECH
+        // Solving a puzzle / Court deduction -> Gentleman Scholar
+        if (lower.contains("каждая загадка имеет решение") || lower.contains("как истинный джентльмен") ||
+            lower.contains("протестую!") || lower.contains("objection!") || lower.contains("взгляните на эту улику")) {
+            return CharacterPersona.GENTLEMAN_SCHOLAR
+        }
 
-        // Exclamation / Action cue
+        // 3. Keyword Content Analysis Across Entire Phrase
+        if (DEMONIC_DEVILISH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.DEMONIC_DEVILISH
+        if (ANGELIC_DIVINE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ANGELIC_DIVINE
+        if (HERO_DARK_VIGILANTE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_DARK_VIGILANTE
+        if (VILLAIN_MANIC_JOKER_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.VILLAIN_MANIC_JOKER
+        if (GENTLEMAN_SCHOLAR_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.GENTLEMAN_SCHOLAR
+        if (ELDER_ANCIENT_BOSS_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ELDER_ANCIENT_BOSS
+        if (HEROINE_FEMALE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HEROINE_FEMALE
+        if (CHILD_FAIRY_COMPANION_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.CHILD_FAIRY_COMPANION
+        if (ROBOTIC_AI_TECH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ROBOTIC_AI_TECH
+        if (HERO_PROTAGONIST_MALE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_PROTAGONIST_MALE
+
+        // Action cues & shouts
         if (text.contains("!")) {
-            return CharacterPersona.MALE
+            return CharacterPersona.HERO_PROTAGONIST_MALE
         }
 
-        return CharacterPersona.NARRATOR
+        return CharacterPersona.NARRATOR_CHRONICLE
     }
 
     private fun applyPersonaVoice(persona: CharacterPersona, baseSpeed: Float, locale: Locale) {
         val isLangMatching = { v: Voice -> v.locale.language == locale.language }
         val langVoices = availableVoices.filter(isLangMatching)
 
-        // Multiple distinct male voices (e.g. rud vs rue in Google Speech Services)
+        // Classify distinct male and female voices installed on Android
         val maleVoices = langVoices.filter {
             val name = it.name.lowercase()
             (name.contains("rud") || name.contains("rue") || name.contains("male") ||
@@ -409,71 +481,92 @@ class GameTtsManager(private val context: Context) {
         val secondaryFemaleVoice = femaleVoices.getOrNull(1) ?: primaryFemaleVoice
 
         when (persona) {
-            CharacterPersona.HERO_BATMAN -> {
+            CharacterPersona.HERO_DARK_VIGILANTE -> {
                 if (primaryMaleVoice != null) {
                     try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
                 }
-                // Super deep, authoritative gravelly baritone
-                tts?.setPitch(0.48f)
+                // Super deep, authoritative, gritty baritone
+                tts?.setPitch(0.42f)
                 tts?.setSpeechRate(baseSpeed * 0.82f)
             }
-            CharacterPersona.MANIC_JOKER -> {
+            CharacterPersona.VILLAIN_MANIC_JOKER -> {
                 if (secondaryMaleVoice != null) {
                     try { tts?.voice = secondaryMaleVoice } catch (_: Throwable) {}
                 }
-                // High-pitched, wild, crazy manic tone
-                tts?.setPitch(1.35f)
-                tts?.setSpeechRate(baseSpeed * 1.28f)
+                // High-pitched, wild, manic cadence
+                tts?.setPitch(1.40f)
+                tts?.setSpeechRate(baseSpeed * 1.32f)
             }
-            CharacterPersona.GENTLEMAN_LAYTON -> {
+            CharacterPersona.DEMONIC_DEVILISH -> {
                 if (primaryMaleVoice != null) {
                     try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
                 }
-                // Refined, calm gentleman tone
-                tts?.setPitch(0.78f)
-                tts?.setSpeechRate(baseSpeed * 0.90f)
+                // Subterranean demonic bass
+                tts?.setPitch(0.30f)
+                tts?.setSpeechRate(baseSpeed * 0.70f)
             }
-            CharacterPersona.FEMALE -> {
-                if (primaryFemaleVoice != null) {
-                    try { tts?.voice = primaryFemaleVoice } catch (_: Throwable) {}
-                }
-                tts?.setPitch(1.25f)
-                tts?.setSpeechRate(baseSpeed * 1.02f)
-            }
-            CharacterPersona.MALE -> {
-                if (primaryMaleVoice != null) {
-                    try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
-                }
-                tts?.setPitch(0.85f)
-                tts?.setSpeechRate(baseSpeed * 0.98f)
-            }
-            CharacterPersona.ELDER_DEEP -> {
-                if (primaryMaleVoice != null) {
-                    try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
-                }
-                // Very heavy ancient bass
-                tts?.setPitch(0.38f)
-                tts?.setSpeechRate(baseSpeed * 0.75f)
-            }
-            CharacterPersona.YOUNG_FAIRY -> {
+            CharacterPersona.ANGELIC_DIVINE -> {
                 if (secondaryFemaleVoice != null) {
                     try { tts?.voice = secondaryFemaleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(1.70f)
-                tts?.setSpeechRate(baseSpeed * 1.15f)
+                // Serene celestial tone
+                tts?.setPitch(1.45f)
+                tts?.setSpeechRate(baseSpeed * 0.95f)
             }
-            CharacterPersona.ROBOTIC_TECH -> {
+            CharacterPersona.GENTLEMAN_SCHOLAR -> {
                 if (primaryMaleVoice != null) {
                     try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(0.42f)
+                // Calm, cultured gentleman baritone
+                tts?.setPitch(0.78f)
+                tts?.setSpeechRate(baseSpeed * 0.90f)
+            }
+            CharacterPersona.ELDER_ANCIENT_BOSS -> {
+                if (primaryMaleVoice != null) {
+                    try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
+                }
+                // Heavy ancient judge/boss bass
+                tts?.setPitch(0.36f)
+                tts?.setSpeechRate(baseSpeed * 0.74f)
+            }
+            CharacterPersona.HEROINE_FEMALE -> {
+                if (primaryFemaleVoice != null) {
+                    try { tts?.voice = primaryFemaleVoice } catch (_: Throwable) {}
+                }
+                // Melodic expressive heroine voice
+                tts?.setPitch(1.25f)
+                tts?.setSpeechRate(baseSpeed * 1.02f)
+            }
+            CharacterPersona.CHILD_FAIRY_COMPANION -> {
+                if (secondaryFemaleVoice != null) {
+                    try { tts?.voice = secondaryFemaleVoice } catch (_: Throwable) {}
+                }
+                // Cheerful kid/fairy tone
+                tts?.setPitch(1.75f)
+                tts?.setSpeechRate(baseSpeed * 1.20f)
+            }
+            CharacterPersona.ROBOTIC_AI_TECH -> {
+                if (primaryMaleVoice != null) {
+                    try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
+                }
+                // Robotic monotone cadence
+                tts?.setPitch(0.40f)
+                tts?.setSpeechRate(baseSpeed * 1.04f)
+            }
+            CharacterPersona.HERO_PROTAGONIST_MALE -> {
+                if (primaryMaleVoice != null) {
+                    try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
+                }
+                // Energetic young hero
+                tts?.setPitch(0.88f)
                 tts?.setSpeechRate(baseSpeed * 1.00f)
             }
-            CharacterPersona.NARRATOR -> {
+            CharacterPersona.NARRATOR_CHRONICLE -> {
                 if (primaryMaleVoice != null) {
                     try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(0.95f)
+                // Balanced storyteller voice
+                tts?.setPitch(0.98f)
                 tts?.setSpeechRate(baseSpeed)
             }
         }
