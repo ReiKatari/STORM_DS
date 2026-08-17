@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import android.util.Log
@@ -12,10 +11,14 @@ import androidx.preference.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.net.HttpURLConnection
-import java.net.URL
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
 import java.net.URLEncoder
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class GameTtsManager(private val context: Context) {
 
@@ -45,10 +48,10 @@ class GameTtsManager(private val context: Context) {
             "майя", "мия", "перл", "зельда", "пич", "дэйзи", "розалина", "эмма", "люси", "айрис",
             "каллисто", "франциска", "синтиа", "харли", "харли квинн", "джилл", "шаноа", "марл",
             "лукка", "шион", "афина", "труси", "флора", "линн", "шики", "девушка", "женщина",
-            "девочка", "принцесса", "королева", "мать", "сестра", "подруга", "хозяйка",
+            "девочка", "принцесса", "королева", "мать", "сестра", "подруга", "хозяйка", "мисс", "леди",
             "maya", "mia", "pearl", "zelda", "peach", "daisy", "rosalina", "franziska", "cynthia",
             "harley", "harley quinn", "jill", "shanoa", "marle", "lucca", "xion", "athena", "trucy",
-            "flora", "lynne", "shiki", "girl", "woman", "princess", "queen", "lady"
+            "flora", "lynne", "shiki", "girl", "woman", "princess", "queen", "lady", "miss"
         )
 
         // 4. British Gentlemen & Sharp Sleuths (Layton, Edgeworth, Godot, Oak, Rowan, Phoenix)
@@ -100,6 +103,11 @@ class GameTtsManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO)
     private var mediaPlayer: MediaPlayer? = null
 
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+
     init {
         initTts()
     }
@@ -113,6 +121,9 @@ class GameTtsManager(private val context: Context) {
                 try {
                     availableVoices = tts?.voices?.toList() ?: emptyList()
                     Log.i(TAG, "TTS initialized successfully. Available voices: ${availableVoices.size}")
+                    for (v in availableVoices) {
+                        Log.d(TAG, "Voice: ${v.name}, locale: ${v.locale}, features: ${v.features}")
+                    }
                 } catch (e: Throwable) {
                     Log.w(TAG, "Cannot query voices: ${e.message}")
                 }
@@ -149,9 +160,12 @@ class GameTtsManager(private val context: Context) {
     fun speak(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
 
+        // 1. Apply intelligent stress accents and phonetics normalization for gaming terms
+        val normalizedText = RussianTtsNormalizer.normalize(text, targetLang)
+
         val isNeural = preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
         if (isNeural) {
-            speakNeuralCloud(text, targetLang)
+            speakNeuralCloud(normalizedText, targetLang)
             return
         }
 
@@ -183,7 +197,7 @@ class GameTtsManager(private val context: Context) {
         val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
 
         if (multiVoiceEnabled) {
-            val lines = text.split("\n", ". ")
+            val lines = normalizedText.split("\n", ". ")
             for (line in lines) {
                 val trimmed = line.trim()
                 if (trimmed.isEmpty()) continue
@@ -194,37 +208,70 @@ class GameTtsManager(private val context: Context) {
         } else {
             tts?.setPitch(1.0f)
             tts?.setSpeechRate(baseSpeed)
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "game_tts_single")
+            tts?.speak(normalizedText, TextToSpeech.QUEUE_FLUSH, null, "game_tts_single")
         }
     }
 
     private fun speakNeuralCloud(text: String, targetLang: String) {
         scope.launch {
             try {
-                // Free streaming Google Neural / Lingva TTS endpoint with instant buffer
                 val langCode = if (targetLang.isBlank()) "ru" else targetLang.lowercase()
-                val encodedText = URLEncoder.encode(text.take(150), "UTF-8")
+                val cleanText = text.take(200)
+                val encodedText = URLEncoder.encode(cleanText, "UTF-8")
+                
+                // Construct Google Neural / Web Speech API request with standard browser headers
                 val url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=$langCode&client=tw-ob&q=$encodedText"
 
-                mediaPlayer?.stop()
-                mediaPlayer?.release()
-                mediaPlayer = MediaPlayer().apply {
-                    setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                            .setUsage(AudioAttributes.USAGE_GAME)
-                            .build()
-                    )
-                    setDataSource(context, Uri.parse(url))
-                    prepareAsync()
-                    setOnPreparedListener { start() }
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
+                    .header("Referer", "https://translate.google.com/")
+                    .get()
+                    .build()
+
+                val response = httpClient.newCall(request).execute()
+                if (!response.isSuccessful || response.body == null) {
+                    throw IllegalStateException("Neural TTS HTTP response unsuccessful: ${response.code}")
                 }
+
+                val audioBytes = response.body!!.bytes()
+                if (audioBytes.isEmpty()) {
+                    throw IllegalStateException("Neural TTS audio bytes empty")
+                }
+
+                // Write to cache file for MediaPlayer
+                val tempFile = File(context.cacheDir, "neural_tts_speech.mp3")
+                FileOutputStream(tempFile).use { fos ->
+                    fos.write(audioBytes)
+                }
+
+                withContext(Dispatchers.Main) {
+                    mediaPlayer?.stop()
+                    mediaPlayer?.release()
+                    mediaPlayer = MediaPlayer().apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .setUsage(AudioAttributes.USAGE_GAME)
+                                .build()
+                        )
+                        setDataSource(tempFile.absolutePath)
+                        prepare()
+                        start()
+                        setOnCompletionListener {
+                            tempFile.delete()
+                        }
+                    }
+                }
+                Log.i(TAG, "Neural Cloud TTS played successfully: ${audioBytes.size} bytes for [$cleanText]")
             } catch (e: Throwable) {
-                Log.w(TAG, "Neural cloud TTS fallback to local: ${e.message}")
-                // Fallback to local TTS
-                val locale = getSelectedLanguage()
-                applyPersonaVoice(detectPersona(text), 1.0f, locale)
-                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "game_tts_fallback")
+                Log.w(TAG, "Neural cloud TTS failed, falling back to local TTS: ${e.message}")
+                // Seamless fallback to local TTS engine
+                withContext(Dispatchers.Main) {
+                    val locale = getSelectedLanguage()
+                    applyPersonaVoice(detectPersona(text), 1.0f, locale)
+                    tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "game_tts_fallback")
+                }
             }
         }
     }
@@ -278,19 +325,34 @@ class GameTtsManager(private val context: Context) {
         val isLangMatching = { v: Voice -> v.locale.language == locale.language }
         val langVoices = availableVoices.filter(isLangMatching)
 
+        // Strict detection of real Male and Female voices in Android / Google TTS / Samsung TTS:
+        // Google TTS:
+        //   ru-ru-x-rud / ru-ru-x-rue -> MALE
+        //   ru-ru-x-dfc / ru-ru-x-ruf / ru-ru-x-dfb -> FEMALE
         val maleVoice = langVoices.firstOrNull {
             val name = it.name.lowercase()
-            (name.contains("male") || name.contains("-m-") || name.contains("dfc") || name.contains("ruc") || name.contains("man")) &&
-                    !name.contains("female") && !name.contains("ruf") && !name.contains("-f-")
+            val hasMaleFeature = (name.contains("rud") || name.contains("rue") || name.contains("male") ||
+                    name.contains("guy") || name.contains("boy") || name.contains("man") ||
+                    name.contains("dmitry") || name.contains("alexander") || name.contains("pavel") ||
+                    name.contains("maxim") || name.contains("m-local") || name.contains("m-network") ||
+                    it.features?.contains("male") == true)
+            val isFemale = (name.contains("female") || name.contains("woman") || name.contains("girl") ||
+                    name.contains("dfc") || name.contains("ruf") || name.contains("dfb") ||
+                    name.contains("anna") || name.contains("elena") || name.contains("tatyana"))
+            hasMaleFeature && !isFemale
         } ?: langVoices.firstOrNull {
             val name = it.name.lowercase()
-            !name.contains("female") && !name.contains("ruf") && !name.contains("-f-")
+            !name.contains("female") && !name.contains("woman") && !name.contains("girl") &&
+                    !name.contains("dfc") && !name.contains("ruf") && !name.contains("dfb") && !name.contains("-f-")
         }
 
         val femaleVoice = langVoices.firstOrNull {
             val name = it.name.lowercase()
-            name.contains("female") || name.contains("-f-") || name.contains("ruf") || name.contains("woman") || name.contains("-f-")
-        }
+            name.contains("female") || name.contains("woman") || name.contains("girl") ||
+                    name.contains("dfc") || name.contains("ruf") || name.contains("dfb") ||
+                    name.contains("anna") || name.contains("elena") || name.contains("irina") ||
+                    name.contains("tatyana") || name.contains("-f-")
+        } ?: langVoices.firstOrNull { it != maleVoice }
 
         val hasDistinctMaleVoice = maleVoice != null && maleVoice != femaleVoice
 
@@ -299,16 +361,16 @@ class GameTtsManager(private val context: Context) {
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
-                // Gruff, heavy dark vigilante tone
-                tts?.setPitch(if (hasDistinctMaleVoice) 0.68f else 0.52f)
-                tts?.setSpeechRate(baseSpeed * 0.88f)
+                // Gruff, heavy dark vigilante deep pitch (forces deep masculine tone even if base voice is single)
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.65f else 0.45f)
+                tts?.setSpeechRate(baseSpeed * 0.85f)
             }
             CharacterPersona.MANIC_JOKER -> {
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
-                // Manic, fast, crazy male tone (not woman voice!)
-                tts?.setPitch(if (hasDistinctMaleVoice) 1.10f else 0.78f)
+                // Manic, fast, crazy male tone
+                tts?.setPitch(if (hasDistinctMaleVoice) 1.05f else 0.75f)
                 tts?.setSpeechRate(baseSpeed * 1.25f)
             }
             CharacterPersona.GENTLEMAN_LAYTON -> {
@@ -316,46 +378,49 @@ class GameTtsManager(private val context: Context) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
                 // Refined, calm gentleman baritone
-                tts?.setPitch(if (hasDistinctMaleVoice) 0.82f else 0.65f)
-                tts?.setSpeechRate(baseSpeed * 0.94f)
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.80f else 0.58f)
+                tts?.setSpeechRate(baseSpeed * 0.92f)
             }
             CharacterPersona.FEMALE -> {
                 if (femaleVoice != null) {
                     try { tts?.voice = femaleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(1.22f)
-                tts?.setSpeechRate(baseSpeed * 1.04f)
+                tts?.setPitch(1.25f)
+                tts?.setSpeechRate(baseSpeed * 1.02f)
             }
             CharacterPersona.MALE -> {
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(if (hasDistinctMaleVoice) 0.90f else 0.72f)
-                tts?.setSpeechRate(baseSpeed * 1.00f)
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.88f else 0.60f)
+                tts?.setSpeechRate(baseSpeed * 0.98f)
             }
             CharacterPersona.ELDER_DEEP -> {
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(if (hasDistinctMaleVoice) 0.60f else 0.48f)
-                tts?.setSpeechRate(baseSpeed * 0.82f)
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.55f else 0.40f)
+                tts?.setSpeechRate(baseSpeed * 0.80f)
             }
             CharacterPersona.YOUNG_FAIRY -> {
                 if (femaleVoice != null) {
                     try { tts?.voice = femaleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(1.38f)
-                tts?.setSpeechRate(baseSpeed * 1.12f)
+                tts?.setPitch(1.45f)
+                tts?.setSpeechRate(baseSpeed * 1.15f)
             }
             CharacterPersona.ROBOTIC_TECH -> {
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
-                tts?.setPitch(0.70f)
-                tts?.setSpeechRate(baseSpeed * 0.92f)
+                tts?.setPitch(0.50f)
+                tts?.setSpeechRate(baseSpeed * 0.90f)
             }
             CharacterPersona.NARRATOR -> {
-                tts?.setPitch(1.0f)
+                if (maleVoice != null) {
+                    try { tts?.voice = maleVoice } catch (_: Throwable) {}
+                }
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.95f else 0.70f)
                 tts?.setSpeechRate(baseSpeed)
             }
         }
