@@ -68,6 +68,17 @@
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
 
+        <Preference
+            android:key="pref_translator_regions"
+            android:title="@string/translator_regions_title"
+            android:summary="@string/translator_edit_regions_hint"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/category_translator_tts">
+
         <SwitchPreferenceCompat
             android:key="translator_tts_enabled"
             android:title="@string/translator_tts_enabled"
@@ -76,12 +87,23 @@
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
 
-        <Preference
-            android:key="pref_translator_regions"
-            android:title="@string/translator_regions_title"
-            android:summary="@string/translator_edit_regions_hint"
+        <ListPreference
+            android:key="translator_tts_lang"
+            android:title="@string/translator_tts_lang_title"
+            android:entries="@array/translator_tts_lang_options"
+            android:entryValues="@array/translator_tts_lang_values"
+            android:defaultValue="auto"
+            app:useSimpleSummaryProvider="true"
             app:iconSpaceReserved="false"
-            app:dependency="translator_enabled" />
+            app:dependency="translator_tts_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="translator_tts_multi_voice"
+            android:title="@string/translator_tts_multi_voice"
+            android:summary="@string/translator_tts_multi_voice_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_tts_enabled" />
     </PreferenceCategory>
 
     <PreferenceCategory
