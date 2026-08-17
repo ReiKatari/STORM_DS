@@ -305,4 +305,16 @@
         <item>fr</item>
         <item>es</item>
     </string-array>
+
+    <string-array name="video_ai_upscale_scale_options">
+        <item>2x (512×384)</item>
+        <item>4x (1024×768 - HD)</item>
+        <item>8x (2048×1536 - Ultra HD)</item>
+    </string-array>
+
+    <string-array name="video_ai_upscale_scale_values">
+        <item>2x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </string-array>
 </resources>

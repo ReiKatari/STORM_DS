@@ -1349,4 +1349,15 @@
     <string name="wfc_server_custom">Custom DNS</string>
     <string name="wfc_custom_dns_title">Custom WFC Primary DNS</string>
     <string name="wfc_custom_dns_summary">Primary DNS IP address for Nintendo WFC multiplayer</string>
+    <string name="cheats_download_online">Download cheat database</string>
+    <string name="cheats_download_online_summary">Download the latest cheat database (usrcheat.dat) from online repositories</string>
+    <string name="cheats_download_success">Cheat database updated successfully</string>
+    <string name="video_ai_upscale_title">AI-Upscale 2D Sprites (Anime4K / NPU)</string>
+    <string name="video_ai_upscale_summary">Real-time neural network scaling and edge smoothing for 2D sprites and fonts</string>
+    <string name="video_ai_upscale_scale_title">AI Upscale Resolution</string>
+    <string name="video_hd_textures_title">HD Texture Packs Loader</string>
+    <string name="video_hd_textures_summary">Automatically load custom HD/4K textures from textures/&lt;GameID&gt;/</string>
+    <string name="input_gyro_aiming_title">Gyro Aiming</string>
+    <string name="input_gyro_aiming_summary">Control aiming in 3D shooters (Metroid, Dementium, Moon) by tilting device</string>
+    <string name="input_gyro_sensitivity_title">Gyro Sensitivity</string>
 </resources>

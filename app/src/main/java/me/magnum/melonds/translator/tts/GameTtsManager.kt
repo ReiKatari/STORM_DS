@@ -216,62 +216,82 @@ class GameTtsManager(private val context: Context) {
 
     private fun applyPersonaVoice(persona: CharacterPersona, baseSpeed: Float, locale: Locale) {
         val isLangMatching = { v: Voice -> v.locale.language == locale.language }
+        val langVoices = availableVoices.filter(isLangMatching)
+
+        val maleVoice = langVoices.firstOrNull {
+            val name = it.name.lowercase()
+            (name.contains("male") || name.contains("-m-") || name.contains("dfc") || name.contains("ruc") || name.contains("man")) &&
+                    !name.contains("female") && !name.contains("ruf") && !name.contains("-f-")
+        } ?: langVoices.firstOrNull {
+            val name = it.name.lowercase()
+            !name.contains("female") && !name.contains("ruf") && !name.contains("-f-")
+        }
+
+        val femaleVoice = langVoices.firstOrNull {
+            val name = it.name.lowercase()
+            name.contains("female") || name.contains("-f-") || name.contains("ruf") || name.contains("woman") || name.contains("-f-")
+        }
+
+        val hasDistinctMaleVoice = maleVoice != null && maleVoice != femaleVoice
 
         when (persona) {
             CharacterPersona.HERO_BATMAN -> {
-                tts?.setPitch(0.70f)
-                tts?.setSpeechRate(baseSpeed * 0.94f)
-                val maleVoice = availableVoices.firstOrNull {
-                    isLangMatching(it) && (it.name.contains("male", ignoreCase = true) ||
-                            it.name.contains("dfc", ignoreCase = true) ||
-                            it.name.contains("ruc", ignoreCase = true))
-                }
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
+                // Gruff, heavy dark vigilante tone
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.68f else 0.52f)
+                tts?.setSpeechRate(baseSpeed * 0.88f)
             }
             CharacterPersona.MANIC_JOKER -> {
-                tts?.setPitch(1.32f)
-                tts?.setSpeechRate(baseSpeed * 1.18f)
+                if (maleVoice != null) {
+                    try { tts?.voice = maleVoice } catch (_: Throwable) {}
+                }
+                // Manic, fast, crazy male tone (not woman voice!)
+                tts?.setPitch(if (hasDistinctMaleVoice) 1.10f else 0.78f)
+                tts?.setSpeechRate(baseSpeed * 1.25f)
             }
             CharacterPersona.GENTLEMAN_LAYTON -> {
-                tts?.setPitch(0.85f)
-                tts?.setSpeechRate(baseSpeed * 0.96f)
+                if (maleVoice != null) {
+                    try { tts?.voice = maleVoice } catch (_: Throwable) {}
+                }
+                // Refined, calm gentleman baritone
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.82f else 0.65f)
+                tts?.setSpeechRate(baseSpeed * 0.94f)
             }
             CharacterPersona.FEMALE -> {
-                tts?.setPitch(1.24f)
-                tts?.setSpeechRate(baseSpeed * 1.04f)
-                val femaleVoice = availableVoices.firstOrNull {
-                    isLangMatching(it) && (it.name.contains("female", ignoreCase = true) ||
-                            it.name.contains("-f-", ignoreCase = true) ||
-                            it.name.contains("ruf", ignoreCase = true))
-                }
                 if (femaleVoice != null) {
                     try { tts?.voice = femaleVoice } catch (_: Throwable) {}
                 }
+                tts?.setPitch(1.22f)
+                tts?.setSpeechRate(baseSpeed * 1.04f)
             }
             CharacterPersona.MALE -> {
-                tts?.setPitch(0.92f)
-                tts?.setSpeechRate(baseSpeed * 1.00f)
-                val maleVoice = availableVoices.firstOrNull {
-                    isLangMatching(it) && (it.name.contains("male", ignoreCase = true) ||
-                            it.name.contains("dfc", ignoreCase = true) ||
-                            it.name.contains("ruc", ignoreCase = true))
-                }
                 if (maleVoice != null) {
                     try { tts?.voice = maleVoice } catch (_: Throwable) {}
                 }
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.90f else 0.72f)
+                tts?.setSpeechRate(baseSpeed * 1.00f)
             }
             CharacterPersona.ELDER_DEEP -> {
-                tts?.setPitch(0.64f)
-                tts?.setSpeechRate(baseSpeed * 0.88f)
+                if (maleVoice != null) {
+                    try { tts?.voice = maleVoice } catch (_: Throwable) {}
+                }
+                tts?.setPitch(if (hasDistinctMaleVoice) 0.60f else 0.48f)
+                tts?.setSpeechRate(baseSpeed * 0.82f)
             }
             CharacterPersona.YOUNG_FAIRY -> {
-                tts?.setPitch(1.40f)
+                if (femaleVoice != null) {
+                    try { tts?.voice = femaleVoice } catch (_: Throwable) {}
+                }
+                tts?.setPitch(1.38f)
                 tts?.setSpeechRate(baseSpeed * 1.12f)
             }
             CharacterPersona.ROBOTIC_TECH -> {
-                tts?.setPitch(0.78f)
+                if (maleVoice != null) {
+                    try { tts?.voice = maleVoice } catch (_: Throwable) {}
+                }
+                tts?.setPitch(0.70f)
                 tts?.setSpeechRate(baseSpeed * 0.92f)
             }
             CharacterPersona.NARRATOR -> {

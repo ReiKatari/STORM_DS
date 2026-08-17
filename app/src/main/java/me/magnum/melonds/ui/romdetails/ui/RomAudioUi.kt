@@ -134,27 +134,83 @@ fun RomAudioUi(
             audioTrack = trackObj
             trackObj.play()
 
-            // Melodic synth generation
-            val scaleFrequencies = when (track.category) {
-                "SFX" -> doubleArrayOf(523.25, 659.25, 783.99, 1046.50) // C Major Arpeggio
-                else -> doubleArrayOf(261.63, 293.66, 329.63, 392.00, 440.00, 523.25) // Pentatonic DS Melody
+            // Unique musical composition per track
+            val (trackNotes, noteDurationFactor, waveType) = when (track.index) {
+                1 -> Triple(
+                    doubleArrayOf(261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50, 783.99), // Title Fanfare
+                    4,
+                    1 // Square
+                )
+                2 -> Triple(
+                    doubleArrayOf(392.00, 440.00, 493.88, 587.33, 659.25, 587.33, 493.88, 440.00), // Overworld Adventure
+                    5,
+                    0 // Sine + harmonics
+                )
+                3 -> Triple(
+                    doubleArrayOf(329.63, 392.00, 440.00, 523.25, 440.00, 392.00, 329.63, 293.66), // Town Waltz
+                    3,
+                    0 // Soft acoustic
+                )
+                4 -> Triple(
+                    doubleArrayOf(293.66, 349.23, 440.00, 587.33, 349.23, 440.00, 587.33, 698.46, 440.00, 880.00), // Battle Pulse
+                    8, // Fast 160 BPM
+                    1 // Aggressive square synth
+                )
+                5 -> Triple(
+                    doubleArrayOf(220.00, 233.08, 246.94, 261.63, 220.00, 311.13, 293.66, 277.18), // Boss Diminished
+                    6,
+                    1 // Dark heavy pulse
+                )
+                6 -> Triple(
+                    doubleArrayOf(523.25, 523.25, 523.25, 659.25, 587.33, 659.25, 783.99, 1046.50), // Victory Fanfare
+                    6,
+                    0 // Bright chime
+                )
+                7 -> Triple(
+                    doubleArrayOf(164.81, 174.61, 196.00, 220.00, 246.94, 196.00, 174.61, 164.81), // Mystical Dungeon
+                    2, // Very slow ambient
+                    0
+                )
+                8 -> Triple(
+                    doubleArrayOf(349.23, 440.00, 523.25, 698.46, 659.25, 523.25, 440.00, 349.23), // Emotional Dialogue
+                    3,
+                    0
+                )
+                9 -> Triple(
+                    doubleArrayOf(440.00, 466.16, 493.88, 523.25, 659.25, 587.33, 523.25, 440.00), // Mini-Game Arcade
+                    7,
+                    1
+                )
+                else -> Triple(
+                    doubleArrayOf(261.63, 392.00, 523.25, 659.25, 783.99, 880.00, 783.99, 1046.50), // Credits Finale
+                    4,
+                    0
+                )
             }
 
+            val noteDurationSamples = sampleRate / noteDurationFactor
             val buffer = ShortArray(bufferSize / 2)
             var currentNote = 0
             var sampleCounter = 0
 
             try {
                 while (isActive) {
-                    val freq = scaleFrequencies[(currentNote + (track.index % 3)) % scaleFrequencies.size]
+                    val freq = trackNotes[currentNote % trackNotes.size]
                     for (i in buffer.indices) {
                         val t = sampleCounter.toDouble() / sampleRate
-                        val wave = sin(2.0 * Math.PI * freq * t) + 0.3 * sin(2.0 * Math.PI * freq * 2.0 * t)
-                        val envelope = (1.0 - (sampleCounter % (sampleRate / 4)).toDouble() / (sampleRate / 4)).coerceIn(0.1, 1.0)
-                        buffer[i] = (wave * envelope * 12000.0).toInt().toShort()
+                        val wave = if (waveType == 1) {
+                            // Square / Pulse wave with harmonics for retro chiptune
+                            if ((sin(2.0 * Math.PI * freq * t)) > 0) 0.8 else -0.8
+                        } else {
+                            // Warm sine wave + soft octave overtone
+                            sin(2.0 * Math.PI * freq * t) + 0.35 * sin(4.0 * Math.PI * freq * t)
+                        }
+                        val noteProgress = (sampleCounter % noteDurationSamples).toDouble() / noteDurationSamples
+                        val envelope = (1.0 - noteProgress * 0.85).coerceIn(0.1, 1.0)
+                        buffer[i] = (wave * envelope * 12500.0).toInt().toShort()
                         sampleCounter++
-                        if (sampleCounter % (sampleRate / 4) == 0) {
-                            currentNote = (currentNote + 1) % scaleFrequencies.size
+                        if (sampleCounter % noteDurationSamples == 0) {
+                            currentNote = (currentNote + 1) % trackNotes.size
                         }
                     }
                     trackObj.write(buffer, 0, buffer.size)
