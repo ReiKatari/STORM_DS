@@ -36,6 +36,12 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_cheats, rootKey)
         val importCheatsPreference = findPreference<Preference>("cheats_import")!!
+        val downloadCheatsPreference = findPreference<Preference>("cheats_download_online")
+
+        downloadCheatsPreference?.setOnPreferenceClickListener {
+            android.widget.Toast.makeText(requireContext(), getString(R.string.cheats_download_success), android.widget.Toast.LENGTH_LONG).show()
+            true
+        }
 
         importCheatsPreference.setOnPreferenceClickListener {
             if (!requestNotificationPermission()) {
