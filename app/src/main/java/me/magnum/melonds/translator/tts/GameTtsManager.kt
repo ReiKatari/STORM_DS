@@ -2,10 +2,19 @@ package me.magnum.melonds.translator.tts
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import android.util.Log
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Locale
 
 class GameTtsManager(private val context: Context) {
@@ -15,50 +24,54 @@ class GameTtsManager(private val context: Context) {
         const val PREF_TRANSLATOR_TTS_LANG = "translator_tts_lang"
         const val PREF_TRANSLATOR_TTS_MULTI_VOICE = "translator_tts_multi_voice"
         const val PREF_TRANSLATOR_TTS_SPEED = "translator_tts_speed"
+        const val PREF_TRANSLATOR_TTS_NEURAL_ENABLED = "translator_tts_neural_enabled"
+        const val PREF_TRANSLATOR_TTS_API_KEY = "translator_tts_api_key"
 
-        // 1. Heroic Gruff / Dark Heroes & Vigilantes (Batman, Kyle Hyde, Wesker, Darth Vader)
+        // 1. Dark Heroes & Vigilantes (Batman, Kyle Hyde, Wesker, Kratos, Solid Snake)
         private val BATMAN_DARK_HERO_KEYWORDS = setOf(
             "бэтмен", "бэтмэн", "брюс", "уэйн", "темный рыцарь", "гордон", "комиссар", "хайден",
-            "кайл хайд", "снейк", "кратос", "вескер", "вейдер", "дарт вейдер",
-            "batman", "bruce wayne", "dark knight", "gordon", "kyle hyde", "wesker", "vader"
+            "кайл хайд", "снейк", "кратос", "вескер", "вейдер", "дарт вейдер", "двуликий",
+            "batman", "bruce wayne", "dark knight", "gordon", "kyle hyde", "wesker", "vader", "two-face"
         )
 
-        // 2. Manic / Crazy / Eccentric Villains (Joker, Fawful, Kefka, Dementio)
+        // 2. Manic Villains (Joker, Fawful, Kefka, Dimentio, Riddler)
         private val JOKER_MANIC_KEYWORDS = setOf(
-            "джокер", "фофул", "клоун", "безумец", "псих", "маньяк", "загадочник", "риддлер",
+            "джокер", "фофул", "клоун", "безумец", "псих", "маньяк", "загадочник", "риддлер", "кефка",
             "joker", "fawful", "clown", "maniac", "riddler", "dimentio", "kefka"
         )
 
-        // 3. Female Heroines & Characters (Zelda, Peach, Maya, Mia, Shanoa, Harley Quinn, Cynthia, Jill)
+        // 3. Female Characters & Heroines (Zelda, Peach, Maya, Mia, Shanoa, Harley, Cynthia, Jill, Marle, Xion)
         private val FEMALE_KEYWORDS = setOf(
             "майя", "мия", "перл", "зельда", "пич", "дэйзи", "розалина", "эмма", "люси", "айрис",
             "каллисто", "франциска", "синтиа", "харли", "харли квинн", "джилл", "шаноа", "марл",
-            "лукка", "шион", "афина", "труси", "девушка", "женщина", "девочка", "принцесса", "королева",
-            "мать", "сестра", "подруга", "хозяйка",
+            "лукка", "шион", "афина", "труси", "флора", "линн", "шики", "девушка", "женщина",
+            "девочка", "принцесса", "королева", "мать", "сестра", "подруга", "хозяйка",
             "maya", "mia", "pearl", "zelda", "peach", "daisy", "rosalina", "franziska", "cynthia",
             "harley", "harley quinn", "jill", "shanoa", "marle", "lucca", "xion", "athena", "trucy",
-            "girl", "woman", "princess", "queen", "lady"
+            "flora", "lynne", "shiki", "girl", "woman", "princess", "queen", "lady"
         )
 
-        // 4. Refined Gentlemen & Smart Sleuths (Layton, Edgeworth, Godot, Rowan, Oak)
+        // 4. British Gentlemen & Sharp Sleuths (Layton, Edgeworth, Godot, Oak, Rowan, Phoenix)
         private val GENTLEMAN_SLEUTH_KEYWORDS = setOf(
             "лейтон", "профессор", "эджворт", "годо", "крэйвен", "оук", "роуэн", "джунипер",
-            "layton", "professor", "edgeworth", "godot", "klavier", "oak", "rowan", "juniper"
+            "феникс", "райт", "челми",
+            "layton", "professor", "edgeworth", "godot", "klavier", "oak", "rowan", "juniper",
+            "phoenix", "wright", "chelmey"
         )
 
-        // 5. Elders, Heavy Bosses & Monsters (The Judge, Bowser, Dracula, Slime, King, Ghetsis)
+        // 5. Elders, Heavy Bosses & Monsters (The Judge, Bowser, Dracula, Slime, King, Ghetsis, Saix)
         private val ELDER_OR_DEEP_KEYWORDS = setOf(
             "судья", "дед", "старик", "босс", "детектив", "гамшу", "вон карма", "король", "монстр",
-            "дракон", "баузер", "боузер", "дракула", "гетсис", "ганон", "ганондорф",
+            "дракон", "баузер", "боузер", "дракула", "гетсис", "ганон", "ганондорф", "пингвин", "сайкс",
             "judge", "elder", "detective", "gumshoe", "von karma", "gant", "king", "boss",
-            "bowser", "dracula", "ghetsis", "ganon", "ganondorf"
+            "bowser", "dracula", "ghetsis", "ganon", "ganondorf", "penguin", "saix"
         )
 
-        // 6. Young, Cute, Fairies & Kids (Luke, Tails, Pikachu, Navi, Starlow, Red)
+        // 6. Young, Cute, Fairies & Kids (Luke, Tails, Pikachu, Navi, Starlow, Red, Toad)
         private val YOUNG_OR_FAIRY_KEYWORDS = setOf(
-            "люк", "тейлз", "тейлс", "пикачу", "нави", "старлоу", "фея", "малыш", "ребенок",
-            "татл", "мальчик", "дитя",
-            "luke", "tails", "pikachu", "navi", "starlow", "fairy", "child", "kid", "boy"
+            "люк", "тейлз", "тейлс", "пикачу", "нави", "старлоу", "тоад", "фея", "малыш", "ребенок",
+            "татл", "мальчик", "дитя", "соник",
+            "luke", "tails", "pikachu", "navi", "starlow", "toad", "fairy", "child", "kid", "boy", "sonic"
         )
 
         // 7. Robots, AI & Tech (Robo, Omega-Xis, Pokedex)
@@ -84,6 +97,8 @@ class GameTtsManager(private val context: Context) {
     private var tts: TextToSpeech? = null
     private var isReady = false
     private var availableVoices: List<Voice> = emptyList()
+    private val scope = CoroutineScope(Dispatchers.IO)
+    private var mediaPlayer: MediaPlayer? = null
 
     init {
         initTts()
@@ -133,6 +148,13 @@ class GameTtsManager(private val context: Context) {
 
     fun speak(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
+
+        val isNeural = preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
+        if (isNeural) {
+            speakNeuralCloud(text, targetLang)
+            return
+        }
+
         if (tts == null || !isReady) {
             initTts()
             return
@@ -173,6 +195,37 @@ class GameTtsManager(private val context: Context) {
             tts?.setPitch(1.0f)
             tts?.setSpeechRate(baseSpeed)
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "game_tts_single")
+        }
+    }
+
+    private fun speakNeuralCloud(text: String, targetLang: String) {
+        scope.launch {
+            try {
+                // Free streaming Google Neural / Lingva TTS endpoint with instant buffer
+                val langCode = if (targetLang.isBlank()) "ru" else targetLang.lowercase()
+                val encodedText = URLEncoder.encode(text.take(150), "UTF-8")
+                val url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=$langCode&client=tw-ob&q=$encodedText"
+
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .build()
+                    )
+                    setDataSource(context, Uri.parse(url))
+                    prepareAsync()
+                    setOnPreparedListener { start() }
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Neural cloud TTS fallback to local: ${e.message}")
+                // Fallback to local TTS
+                val locale = getSelectedLanguage()
+                applyPersonaVoice(detectPersona(text), 1.0f, locale)
+                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "game_tts_fallback")
+            }
         }
     }
 
@@ -303,12 +356,18 @@ class GameTtsManager(private val context: Context) {
 
     fun stop() {
         try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
             tts?.stop()
         } catch (_: Throwable) {}
     }
 
     fun destroy() {
         try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
             tts?.stop()
             tts?.shutdown()
             tts = null

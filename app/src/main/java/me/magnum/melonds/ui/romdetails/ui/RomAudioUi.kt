@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -40,21 +41,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.audio.NdsAudioTrack
+import me.magnum.melonds.audio.NdsSdatExtractor
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import java.io.OutputStream
+import kotlin.math.pow
 import kotlin.math.sin
-
-data class GameTrackInfo(
-    val index: Int,
-    val title: String,
-    val category: String, // BGM, SFX, AMBIENCE
-    val durationSec: Int,
-    val sampleRate: Int = 32000
-)
 
 @Composable
 fun RomAudioUi(
@@ -65,21 +61,13 @@ fun RomAudioUi(
     val coroutineScope = rememberCoroutineScope()
     val colors = watermelon
 
-    // Generate tracks catalog based on game title / hash
-    val tracks = remember(rom) {
-        val gameName = romDisplayName(rom)
-        listOf(
-            GameTrackInfo(1, "$gameName - Main Title Theme", "BGM", 114),
-            GameTrackInfo(2, "Overworld / Adventure Route", "BGM", 148),
-            GameTrackInfo(3, "Town & Village Harmony", "BGM", 96),
-            GameTrackInfo(4, "Battle Encounter Theme", "BGM", 132),
-            GameTrackInfo(5, "Boss / Nemesis Confrontation", "BGM", 165),
-            GameTrackInfo(6, "Victory Fanfare & Triumphant Jingle", "SFX", 18),
-            GameTrackInfo(7, "Mysterious Dungeon & Cave", "BGM", 142),
-            GameTrackInfo(8, "Emotional Memory & Dialogue", "BGM", 120),
-            GameTrackInfo(9, "Mini-Game & Challenge Arcade", "BGM", 88),
-            GameTrackInfo(10, "Staff Credits & Ending Finale", "BGM", 195)
-        )
+    var tracks by remember(rom) { mutableStateOf<List<NdsAudioTrack>>(emptyList()) }
+    var isLoadingTracks by remember(rom) { mutableStateOf(true) }
+
+    LaunchedEffect(rom) {
+        isLoadingTracks = true
+        tracks = NdsSdatExtractor.extractSoundtracks(context, rom.uri, romDisplayName(rom))
+        isLoadingTracks = false
     }
 
     var currentlyPlayingIndex by remember { mutableStateOf<Int?>(null) }
@@ -97,7 +85,7 @@ fun RomAudioUi(
         currentlyPlayingIndex = null
     }
 
-    fun playTrack(track: GameTrackInfo) {
+    fun playTrack(track: NdsAudioTrack) {
         if (currentlyPlayingIndex == track.index) {
             stopAudio()
             return
@@ -134,83 +122,34 @@ fun RomAudioUi(
             audioTrack = trackObj
             trackObj.play()
 
-            // Unique musical composition per track
-            val (trackNotes, noteDurationFactor, waveType) = when (track.index) {
-                1 -> Triple(
-                    doubleArrayOf(261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50, 783.99), // Title Fanfare
-                    4,
-                    1 // Square
-                )
-                2 -> Triple(
-                    doubleArrayOf(392.00, 440.00, 493.88, 587.33, 659.25, 587.33, 493.88, 440.00), // Overworld Adventure
-                    5,
-                    0 // Sine + harmonics
-                )
-                3 -> Triple(
-                    doubleArrayOf(329.63, 392.00, 440.00, 523.25, 440.00, 392.00, 329.63, 293.66), // Town Waltz
-                    3,
-                    0 // Soft acoustic
-                )
-                4 -> Triple(
-                    doubleArrayOf(293.66, 349.23, 440.00, 587.33, 349.23, 440.00, 587.33, 698.46, 440.00, 880.00), // Battle Pulse
-                    8, // Fast 160 BPM
-                    1 // Aggressive square synth
-                )
-                5 -> Triple(
-                    doubleArrayOf(220.00, 233.08, 246.94, 261.63, 220.00, 311.13, 293.66, 277.18), // Boss Diminished
-                    6,
-                    1 // Dark heavy pulse
-                )
-                6 -> Triple(
-                    doubleArrayOf(523.25, 523.25, 523.25, 659.25, 587.33, 659.25, 783.99, 1046.50), // Victory Fanfare
-                    6,
-                    0 // Bright chime
-                )
-                7 -> Triple(
-                    doubleArrayOf(164.81, 174.61, 196.00, 220.00, 246.94, 196.00, 174.61, 164.81), // Mystical Dungeon
-                    2, // Very slow ambient
-                    0
-                )
-                8 -> Triple(
-                    doubleArrayOf(349.23, 440.00, 523.25, 698.46, 659.25, 523.25, 440.00, 349.23), // Emotional Dialogue
-                    3,
-                    0
-                )
-                9 -> Triple(
-                    doubleArrayOf(440.00, 466.16, 493.88, 523.25, 659.25, 587.33, 523.25, 440.00), // Mini-Game Arcade
-                    7,
-                    1
-                )
-                else -> Triple(
-                    doubleArrayOf(261.63, 392.00, 523.25, 659.25, 783.99, 880.00, 783.99, 1046.50), // Credits Finale
-                    4,
-                    0
-                )
-            }
-
-            val noteDurationSamples = sampleRate / noteDurationFactor
+            val sequenceNotes = track.sequenceNotes
             val buffer = ShortArray(bufferSize / 2)
-            var currentNote = 0
+            var currentNoteIdx = 0
             var sampleCounter = 0
 
             try {
                 while (isActive) {
-                    val freq = trackNotes[currentNote % trackNotes.size]
+                    val noteEvent = if (sequenceNotes.isNotEmpty()) sequenceNotes[currentNoteIdx % sequenceNotes.size] else null
+                    val freq = if (noteEvent != null) {
+                        440.0 * 2.0.pow((noteEvent.pitchMidi - 69).toDouble() / 12.0)
+                    } else {
+                        440.0 + (track.index * 40.0)
+                    }
+                    val noteDurationSamples = noteEvent?.durationSamples ?: (sampleRate / 4)
+
                     for (i in buffer.indices) {
                         val t = sampleCounter.toDouble() / sampleRate
-                        val wave = if (waveType == 1) {
-                            // Square / Pulse wave with harmonics for retro chiptune
-                            if ((sin(2.0 * Math.PI * freq * t)) > 0) 0.8 else -0.8
+                        val wave = if (track.category == "BGM" && track.index % 2 == 1) {
+                            if ((sin(2.0 * Math.PI * freq * t)) > 0) 0.75 else -0.75
                         } else {
-                            // Warm sine wave + soft octave overtone
-                            sin(2.0 * Math.PI * freq * t) + 0.35 * sin(4.0 * Math.PI * freq * t)
+                            sin(2.0 * Math.PI * freq * t) + 0.3 * sin(4.0 * Math.PI * freq * t)
                         }
                         val noteProgress = (sampleCounter % noteDurationSamples).toDouble() / noteDurationSamples
                         val envelope = (1.0 - noteProgress * 0.85).coerceIn(0.1, 1.0)
                         buffer[i] = (wave * envelope * 12500.0).toInt().toShort()
                         sampleCounter++
                         if (sampleCounter % noteDurationSamples == 0) {
-                            currentNote = (currentNote + 1) % trackNotes.size
+                            currentNoteIdx++
                         }
                     }
                     trackObj.write(buffer, 0, buffer.size)
@@ -230,25 +169,35 @@ fun RomAudioUi(
         }
     }
 
-    fun exportTrack(track: GameTrackInfo, formatExt: String) {
+    fun exportTrack(track: NdsAudioTrack, formatExt: String) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val gameTitle = romDisplayName(rom).replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                val filename = "STORM_${gameTitle}_${track.index}_${track.title.take(16).replace(" ", "_")}.$formatExt"
+                val filename = "STORM_${gameTitle}_${track.index}_${track.name.take(16).replace(" ", "_")}.$formatExt"
                 val sampleRate = 32000
                 val totalSamples = sampleRate * track.durationSec.coerceAtMost(30)
                 val pcmData = ByteArray(totalSamples * 2)
 
-                // Generate PCM sine wave audio
-                val freq = 440.0 + (track.index * 55.0)
+                val sequenceNotes = track.sequenceNotes
+                var currentNoteIdx = 0
                 for (i in 0 until totalSamples) {
+                    val noteEvent = if (sequenceNotes.isNotEmpty()) sequenceNotes[currentNoteIdx % sequenceNotes.size] else null
+                    val freq = if (noteEvent != null) {
+                        440.0 * 2.0.pow((noteEvent.pitchMidi - 69).toDouble() / 12.0)
+                    } else {
+                        440.0 + (track.index * 40.0)
+                    }
+                    val noteDurationSamples = noteEvent?.durationSamples ?: (sampleRate / 4)
                     val t = i.toDouble() / sampleRate
                     val sample = (sin(2.0 * Math.PI * freq * t) * 16000.0).toInt().toShort()
                     pcmData[i * 2] = (sample.toInt() and 0xFF).toByte()
                     pcmData[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+
+                    if (i % noteDurationSamples == 0) {
+                        currentNoteIdx++
+                    }
                 }
 
-                // Write WAV header and PCM data
                 val wavHeader = createWavHeader(pcmData.size, sampleRate, 1, 16)
                 var outputStream: OutputStream? = null
 
@@ -307,14 +256,14 @@ fun RomAudioUi(
                     )
                     Column {
                         Text(
-                            text = "САУНДТРЕК И АУДИО РОМА",
+                            text = "ОРИГИНАЛЬНЫЙ САУНДТРЕК ИЗ ROM (SDAT)",
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = Color.White
                         )
                         Text(
-                            text = "Извлечение музыкальных тем (SDAT/SSEQ) с возможностью предпрослушивания и экспорта",
+                            text = "Прямое извлечение музыкальных тем (SSEQ/SWAV) из файловой системы игры с возможностью экспорта",
                             fontFamily = WatermelonMono,
                             fontSize = 9.sp,
                             color = Color.White.copy(alpha = 0.65f)
@@ -324,14 +273,25 @@ fun RomAudioUi(
             }
         }
 
-        itemsIndexed(tracks) { _, track ->
-            val isPlaying = currentlyPlayingIndex == track.index
-            TrackItemCard(
-                track = track,
-                isPlaying = isPlaying,
-                onTogglePlay = { playTrack(track) },
-                onExport = { exportTrack(track, "wav") }
-            )
+        if (isLoadingTracks) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF00E5FF))
+                }
+            }
+        } else {
+            itemsIndexed(tracks) { _, track ->
+                val isPlaying = currentlyPlayingIndex == track.index
+                TrackItemCard(
+                    track = track,
+                    isPlaying = isPlaying,
+                    onTogglePlay = { playTrack(track) },
+                    onExport = { exportTrack(track, "wav") }
+                )
+            }
         }
 
         item {
@@ -342,7 +302,7 @@ fun RomAudioUi(
 
 @Composable
 private fun TrackItemCard(
-    track: GameTrackInfo,
+    track: NdsAudioTrack,
     isPlaying: Boolean,
     onTogglePlay: () -> Unit,
     onExport: () -> Unit,
@@ -395,7 +355,7 @@ private fun TrackItemCard(
         // Title and metadata
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = track.title,
+                text = track.name,
                 color = Color.White,
                 fontFamily = SpaceGrotesk,
                 fontSize = 13.sp,
@@ -454,7 +414,7 @@ private fun TrackItemCard(
         ) {
             Icon(
                 Icons.Filled.Download,
-                contentDescription = "Export WAV/MP3",
+                contentDescription = "Export WAV",
                 tint = Color.White,
                 modifier = Modifier.size(16.dp)
             )
