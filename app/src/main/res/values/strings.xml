@@ -1298,8 +1298,12 @@
     <string name="translator_font_size_scale">Font Size Scale</string>
     <string name="translator_show_floating_button">Show Floating Translate Button</string>
     <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
-    <string name="translator_tts_enabled">Speech Synthesis (Text-to-Speech)</string>
+    <string name="category_translator_tts">Dialogue Voice Acting (Text-to-Speech)</string>
+    <string name="translator_tts_enabled">Enable Speech Synthesis (TTS)</string>
     <string name="translator_tts_enabled_summary">Read translated game dialogues aloud automatically</string>
+    <string name="translator_tts_lang_title">Voice Acting Language</string>
+    <string name="translator_tts_multi_voice">Multi-Character Voice Acting</string>
+    <string name="translator_tts_multi_voice_summary">Automatically detect male, female, and elder characters to speak with different timbres and pitches</string>
     <string name="translator_api_keys_category">API Keys &amp; Custom AI Configuration</string>
     <string name="translator_deepl_key">DeepL API Key</string>
     <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>

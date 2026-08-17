@@ -1224,8 +1224,12 @@
     <string name="translator_font_size_scale">Масштаб шрифта</string>
     <string name="translator_show_floating_button">Отображать плавающую кнопку перевода</string>
     <string name="translator_show_floating_button_summary">Плавающая перетаскиваемая кнопка \'TR\' поверх экрана эмулятора</string>
-    <string name="translator_tts_enabled">Голосовая озвучка диалогов (TTS)</string>
-    <string name="translator_tts_enabled_summary">Автоматически читать переведенный текст вслух русским синтезатором речи</string>
+    <string name="category_translator_tts">Голосовая озвучка диалогов (TTS)</string>
+    <string name="translator_tts_enabled">Включить голосовую озвучку (TTS)</string>
+    <string name="translator_tts_enabled_summary">Автоматически читать переведенный текст вслух синтезатором речи</string>
+    <string name="translator_tts_lang_title">Язык озвучки</string>
+    <string name="translator_tts_multi_voice">Многоголосая озвучка персонажей</string>
+    <string name="translator_tts_multi_voice_summary">Автоматически определять мужских, женских, пожилых персонажей и озвучивать разными тембрами и высотой голоса</string>
     <string name="translator_api_keys_category">API-ключи и настройка нейросетей</string>
     <string name="translator_deepl_key">Ключ DeepL API</string>
     <string name="translator_custom_ai_key">Ключ AI API (Gemini/OpenAI/Claude)</string>
