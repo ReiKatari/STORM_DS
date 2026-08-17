@@ -1360,4 +1360,8 @@
     <string name="input_gyro_aiming_title">Gyro Aiming</string>
     <string name="input_gyro_aiming_summary">Control aiming in 3D shooters (Metroid, Dementium, Moon) by tilting device</string>
     <string name="input_gyro_sensitivity_title">Gyro Sensitivity</string>
+    <string name="translator_tts_neural_title">Neural Cloud TTS (High Quality)</string>
+    <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
+    <string name="video_console_skin_title">3D Animated Console Skin</string>
+    <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
 </resources>
