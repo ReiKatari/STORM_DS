@@ -142,11 +142,21 @@ class LayoutEditorActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themeRes = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId()
+        setTheme(themeRes)
         super.onCreate(savedInstanceState)
         handler = Handler(mainLooper)
 
+        val typedValue = android.util.TypedValue()
+        theme.resolveAttribute(android.R.attr.colorBackground, typedValue, true)
+        val bgColor = if (typedValue.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT && typedValue.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT) {
+            typedValue.data
+        } else {
+            Color.parseColor("#0B0814")
+        }
+
         val container = RelativeLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(bgColor)
         }
         layoutEditorManager = LayoutEditorManagerView(LayoutTarget.MAIN_SCREEN, picasso, null, this).apply {
             listener = layoutEditorManagerListener

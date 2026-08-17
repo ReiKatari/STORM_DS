@@ -20,17 +20,18 @@ class ScreenshotFrameBufferProvider {
     fun getScreenshot(): Bitmap {
         val frameBuffer = ensureBufferIsReady()
 
-        return Bitmap.createBitmap(SCREEN_WIDTH, SCREEN_HEIGHT, Bitmap.Config.ARGB_8888).apply {
-            for (x in 0 until SCREEN_WIDTH) {
-                for (y in 0 until SCREEN_HEIGHT) {
-                    val pixelPosition = (y * SCREEN_WIDTH + x) * 4
-                    // There's no need to do a manual pixel format conversion. Since getInt() uses the buffer's byte order, which is little endian, it will automatically
-                    // convert the internal BGRA format into the ARGB format, which is what we need to build the bitmap
-                    val argbPixel = frameBuffer.getInt(pixelPosition)
-                    setPixel(x, y, argbPixel)
-                }
-            }
+        val pixels = IntArray(SCREEN_WIDTH * SCREEN_HEIGHT)
+        for (i in 0 until SCREEN_WIDTH * SCREEN_HEIGHT) {
+            val raw = frameBuffer.getInt(i * 4)
+            // melonDS GPU framebuffer format: r | (g << 8) | (b << 16)
+            // On little-endian: byte0=R, byte1=G, byte2=B, byte3=X
+            val r = (raw and 0xFF)
+            val g = (raw shr 8) and 0xFF
+            val b = (raw shr 16) and 0xFF
+            // Android Bitmap ARGB_8888: 0xAA_RR_GG_BB
+            pixels[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
+        return Bitmap.createBitmap(pixels, SCREEN_WIDTH, SCREEN_HEIGHT, Bitmap.Config.ARGB_8888)
     }
 
     fun clearBuffer() {

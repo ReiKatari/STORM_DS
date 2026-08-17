@@ -7,7 +7,11 @@ import me.magnum.melonds.ui.common.views.ModernButtonsView
 
 class ButtonsLayoutComponentViewBuilder : LayoutComponentViewBuilder() {
     override fun build(context: Context): View {
-        return ModernButtonsView(context)
+        val view = ModernButtonsView(context)
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        view.buttonSpread = prefs.getFloat("pref_button_cluster_spread", 1.0f)
+        view.buttonInnerScale = prefs.getFloat("pref_button_cluster_inner_scale", 1.0f)
+        return view
     }
 
     override fun getAspectRatio() = 1f

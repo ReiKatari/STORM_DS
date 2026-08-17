@@ -148,14 +148,16 @@ class Migration35to36(
                     newConfiguration
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    null
+                    // Preserve the original layout as-is instead of discarding it
+                    layoutElement
                 }
             }
 
             val finalArray = JsonArray(updatedLayouts)
             layoutsFile.writeText(finalArray.toString())
-        } catch (_: Exception) {
-            layoutsFile.delete()
+        } catch (e: Exception) {
+            // Don't delete the layouts file — preserve user data even if migration fails
+            e.printStackTrace()
         }
     }
 }

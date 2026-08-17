@@ -13,3 +13,13 @@ rcheevos-api/bin/
 *.patch
 !/app/librashader-patches/*.patch
 
+# Temporary research and decompiled files
+/BIOS/
+/MelonDS/
+/MelonDS_extracted/
+/WatermelonDS/
+/WatermelonDS_extracted/
+/decompiled_melonDS/
+/decompiled_watermelon/
+/jadx/
+jadx.zip

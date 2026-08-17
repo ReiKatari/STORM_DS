@@ -13,14 +13,20 @@ class SecondaryDisplaySelector @Inject constructor() {
         val ExcludedDisplays = listOf(
             "HiddenDisplay", // Seems like a placeholder display present in some devices
             "WebRTC_ScreenCapture", // Used by apps that record the screen (e.g.: Discord)
+            "StormScreenCapture", // STORM DS internal screen translation capture display
         )
     }
 
     fun getSecondaryDisplay(context: Context): Display? {
         val currentDisplay = ContextCompat.getDisplayOrDefault(context)
         return context.getSystemService<DisplayManager>()?.let { displayManager ->
-            displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).firstOrNull {
-                it.displayId != currentDisplay.displayId && it.name !in ExcludedDisplays
+            displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).firstOrNull { display ->
+                val name = display.name ?: ""
+                display.displayId != currentDisplay.displayId &&
+                    name !in ExcludedDisplays &&
+                    !name.contains("ScreenCapture", ignoreCase = true) &&
+                    !name.contains("Virtual", ignoreCase = true) &&
+                    !name.contains("Record", ignoreCase = true)
             }
         }
     }

@@ -55,6 +55,7 @@ fun DSiWareItem(
     modifier: Modifier,
     item: DSiWareTitle,
     onDeleteClicked: () -> Unit,
+    onRenameClicked: () -> Unit,
     onImportFile: (DSiWareTitleFileType) -> Unit,
     onExportFile: (DSiWareTitleFileType) -> Unit,
     retrieveTitleIcon: () -> RomIcon,
@@ -134,6 +135,10 @@ fun DSiWareItem(
         item = item,
         menu = dropdownMenu,
         onOpenMenu = { dropdownMenu = it },
+        onRenameItem = {
+            dropdownMenu = DSiWareItemDropdownMenu.NONE
+            onRenameClicked()
+        },
         onDeleteItem = {
             dropdownMenu = DSiWareItemDropdownMenu.NONE
             onDeleteClicked()
@@ -154,6 +159,7 @@ private fun ItemActionsDialog(
     item: DSiWareTitle,
     menu: DSiWareItemDropdownMenu,
     onOpenMenu: (DSiWareItemDropdownMenu) -> Unit,
+    onRenameItem: () -> Unit,
     onDeleteItem: () -> Unit,
     onImportFile: (DSiWareTitleFileType) -> Unit,
     onExportFile: (DSiWareTitleFileType) -> Unit,
@@ -165,6 +171,10 @@ private fun ItemActionsDialog(
                 title = item.name,
                 onDismiss = { onOpenMenu(DSiWareItemDropdownMenu.NONE) },
             ) {
+                ConsoleActionRow(
+                    label = stringResource(id = R.string.dsiware_manager_rename),
+                    onClick = onRenameItem,
+                )
                 ConsoleActionRow(
                     label = stringResource(id = R.string.dsiware_manager_import_data),
                     onClick = { onOpenMenu(DSiWareItemDropdownMenu.IMPORT) },
@@ -223,6 +233,7 @@ private fun PreviewDSiWareItem() {
             modifier = Modifier.fillMaxWidth(),
             item = DSiWareTitle("Highway 4: Mediocre Racing", "Playpark", 0, ByteArray(0), 0, 0, 0),
             onDeleteClicked = { },
+            onRenameClicked = { },
             onImportFile = { },
             onExportFile = { },
             retrieveTitleIcon = { RomIcon(bitmap, RomIconFiltering.NONE) },

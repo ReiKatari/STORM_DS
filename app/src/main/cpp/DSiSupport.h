@@ -9,6 +9,7 @@ namespace MelonDSAndroid
 namespace DSiSupport
 {
 
+#pragma pack(push, 1)
 struct DSiAutoLoad
 {
     uint8_t ID[4]; // "TLNC"
@@ -21,8 +22,10 @@ struct DSiAutoLoad
     uint32_t Unused1; // this part is typically still checksummed
     uint8_t Unused2[0xE0]; // this part isn't checksummed, but is 0 filled on erasing autoload data
 };
+#pragma pack(pop)
 
 void SetupDSiDirectBoot(melonDS::DSi *dsi);
+void SetupDSiWareDirectBoot(melonDS::DSi *dsi, uint32_t titleIdLow, uint32_t titleIdHigh = 0x00030004);
 
 }
 }

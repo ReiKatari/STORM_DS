@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +59,7 @@ import me.magnum.melonds.ui.romlist.composables.DsBoxArtAspectRatio
 import me.magnum.melonds.ui.romlist.composables.RomMiniIcon
 import me.magnum.melonds.ui.romlist.composables.ScanlinesOverlay
 import me.magnum.melonds.ui.romlist.composables.formatHoursLabel
+import me.magnum.melonds.ui.romlist.composables.romIconRequest
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import me.magnum.melonds.ui.romlist.composables.romGradient
 import me.magnum.melonds.ui.romlist.composables.romInitials
@@ -202,6 +204,7 @@ private fun HeroCover(
     width: Dp,
     initialsSize: androidx.compose.ui.unit.TextUnit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Box(
         modifier = Modifier
             .width(width)
@@ -218,28 +221,37 @@ private fun HeroCover(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Text(
-                text = romInitials(romDisplayName(rom)),
-                color = Color.White.copy(alpha = 0.22f),
-                fontFamily = SpaceGrotesk,
-                fontWeight = FontWeight.Bold,
-                fontSize = initialsSize,
-                modifier = Modifier.align(Alignment.Center),
-            )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = romIconRequest(context, rom),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    filterQuality = FilterQuality.None,
+                    modifier = Modifier
+                        .size(width * 0.58f)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+            }
         }
         ScanlinesOverlay()
-        RomMiniIcon(
-            rom = rom,
-            raCoverUrl = raCoverUrl,
-            size = 26.dp,
-            modifier = Modifier.align(Alignment.BottomStart).padding(5.dp),
-        )
+        if (boxArtUrl != null) {
+            RomMiniIcon(
+                rom = rom,
+                raCoverUrl = raCoverUrl,
+                size = 26.dp,
+                modifier = Modifier.align(Alignment.BottomStart).padding(5.dp),
+            )
+        }
     }
 }
 
 @Composable
 private fun HeroBackdrop(rom: Rom, boxArtUrl: String?, modifier: Modifier = Modifier) {
     val colors = watermelon
+    val context = androidx.compose.ui.platform.LocalContext.current
     Box(modifier = modifier) {
         if (boxArtUrl != null) {
             AsyncImage(
@@ -250,7 +262,20 @@ private fun HeroBackdrop(rom: Rom, boxArtUrl: String?, modifier: Modifier = Modi
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Box(Modifier.fillMaxSize().background(romGradient(romDisplayName(rom))))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(romGradient(romDisplayName(rom))),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = romIconRequest(context, rom),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.35f,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         Box(
             Modifier

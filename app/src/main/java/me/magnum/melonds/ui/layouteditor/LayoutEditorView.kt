@@ -154,11 +154,18 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     }
 
     fun addLayoutComponent(component: LayoutComponent) {
+        val baseWidth = when (component) {
+            LayoutComponent.DPAD, LayoutComponent.BUTTONS -> context.dpToPixels(140f).toInt()
+            LayoutComponent.BUTTON_L, LayoutComponent.BUTTON_R -> context.dpToPixels(56f).toInt()
+            LayoutComponent.BUTTON_SELECT, LayoutComponent.BUTTON_START -> context.dpToPixels(54f).toInt()
+            LayoutComponent.TOP_SCREEN, LayoutComponent.BOTTOM_SCREEN -> (width * 0.5f).toInt().coerceAtLeast(defaultComponentWidth)
+            else -> context.dpToPixels(40f).toInt()
+        }
         val componentBuilder = viewBuilderFactory.getLayoutComponentViewBuilder(component)
-        val componentHeight = defaultComponentWidth / componentBuilder.getAspectRatio()
+        val componentHeight = (baseWidth / componentBuilder.getAspectRatio()).toInt().coerceAtLeast(minComponentSize)
         val startX = safeAreaInsets.left + context.dpToPixels(16f).toInt()
         val startY = safeAreaInsets.top + context.dpToPixels(16f).toInt()
-        val componentView = addPositionedLayoutComponent(PositionedLayoutComponent(Rect(startX, startY, defaultComponentWidth, componentHeight.toInt()), component))
+        val componentView = addPositionedLayoutComponent(PositionedLayoutComponent(Rect(startX, startY, baseWidth, componentHeight), component))
         views[component] = componentView
         modifiedByUser = true
         notifyLayoutChanged()
@@ -472,14 +479,19 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     }
 
     fun scaleSelectedView(scale: Float) {
-        // Assume view has a 1:1 aspect ratio. Always scale on the smallest axis
-        if (width > height) {
-            val widthScale = ((height - minComponentSize) * scale) / (width - minComponentSize)
-            scaleSelectedView(widthScale, scale)
-        } else {
-            val heightScale =  ((width - minComponentSize) * scale) / (height - minComponentSize)
-            scaleSelectedView(scale, heightScale)
-        }
+        val currentView = selectedView ?: return
+        val currentW = currentView.getWidth().toFloat().coerceAtLeast(minComponentSize.toFloat())
+        val currentH = currentView.getHeight().toFloat().coerceAtLeast(minComponentSize.toFloat())
+        val ratio = currentW / currentH
+
+        val baseDimension = (min(width, height) - minComponentSize).toFloat().coerceAtLeast(1f)
+        val targetH = (baseDimension * scale + minComponentSize).coerceAtLeast(minComponentSize.toFloat())
+        val targetW = (targetH * ratio).coerceIn(minComponentSize.toFloat(), (width - minComponentSize).toFloat())
+
+        val widthScale = ((targetW - minComponentSize) / (width - minComponentSize).toFloat()).coerceIn(0f, 1f)
+        val heightScale = ((targetH - minComponentSize) / (height - minComponentSize).toFloat()).coerceIn(0f, 1f)
+
+        scaleSelectedView(widthScale, heightScale)
     }
 
     fun scaleSelectedView(widthScale: Float, heightScale: Float) {
@@ -488,14 +500,19 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     }
 
     fun scaleComponent(component: LayoutComponent, scale: Float): Boolean {
-        // Assume view has a 1:1 aspect ratio. Always scale on the smallest axis
-        return if (width > height) {
-            val widthScale = ((height - minComponentSize) * scale) / (width - minComponentSize)
-            scaleComponent(component, widthScale, scale)
-        } else {
-            val heightScale =  ((width - minComponentSize) * scale) / (height - minComponentSize)
-            scaleComponent(component, scale, heightScale)
-        }
+        val currentView = views[component] ?: return false
+        val currentW = currentView.getWidth().toFloat().coerceAtLeast(minComponentSize.toFloat())
+        val currentH = currentView.getHeight().toFloat().coerceAtLeast(minComponentSize.toFloat())
+        val ratio = currentW / currentH
+
+        val baseDimension = (min(width, height) - minComponentSize).toFloat().coerceAtLeast(1f)
+        val targetH = (baseDimension * scale + minComponentSize).coerceAtLeast(minComponentSize.toFloat())
+        val targetW = (targetH * ratio).coerceIn(minComponentSize.toFloat(), (width - minComponentSize).toFloat())
+
+        val widthScale = ((targetW - minComponentSize) / (width - minComponentSize).toFloat()).coerceIn(0f, 1f)
+        val heightScale = ((targetH - minComponentSize) / (height - minComponentSize).toFloat()).coerceIn(0f, 1f)
+
+        return scaleComponent(component, widthScale, heightScale)
     }
 
     fun scaleComponent(component: LayoutComponent, widthScale: Float, heightScale: Float): Boolean {

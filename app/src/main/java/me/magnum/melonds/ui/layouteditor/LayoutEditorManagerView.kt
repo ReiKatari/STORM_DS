@@ -276,8 +276,13 @@ class LayoutEditorManagerView(
                 if (fromUser) {
                     val comp = binding.viewLayoutEditor.getSelectedComponent()
                     if (comp == LayoutComponent.BUTTONS) {
+                        val spread = progress / 100f
                         val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
-                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread = progress / 100f
+                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread = spread
+                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                            .edit()
+                            .putFloat("pref_button_cluster_spread", spread)
+                            .apply()
                         listener?.onStoreLayoutChanges()
                     }
                 }
@@ -292,8 +297,13 @@ class LayoutEditorManagerView(
                 if (fromUser) {
                     val comp = binding.viewLayoutEditor.getSelectedComponent()
                     if (comp == LayoutComponent.BUTTONS) {
+                        val scale = progress / 100f
                         val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
-                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonInnerScale = progress / 100f
+                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonInnerScale = scale
+                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                            .edit()
+                            .putFloat("pref_button_cluster_inner_scale", scale)
+                            .apply()
                         listener?.onStoreLayoutChanges()
                     }
                 }
@@ -716,7 +726,7 @@ class LayoutEditorManagerView(
 
     private fun openButtonsMenu() {
         hideBottomControls()
-        val allComponents = LayoutComponent.entries.filterNot { it.isScreen() }
+        val allComponents = LayoutComponent.entries.toList()
         val instantiatedComponents = binding.viewLayoutEditor.getInstantiatedComponents()
         val checkedItems = BooleanArray(allComponents.size) { i ->
             instantiatedComponents.contains(allComponents[i])

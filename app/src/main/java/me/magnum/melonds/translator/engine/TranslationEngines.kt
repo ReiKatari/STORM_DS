@@ -15,13 +15,81 @@ interface ITranslationEngine {
     suspend fun translate(text: String, sourceLang: String, targetLang: String): String
 }
 
+class YandexTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
+    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
+        if (text.isBlank()) return@withContext text
+
+        val sl = if (sourceLang == "auto" || sourceLang.isBlank()) "" else "$sourceLang-"
+        val langPair = "$sl$targetLang"
+        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
+        val url = "https://translate.yandex.net/api/v1/tr.json/translate?srv=android&lang=$langPair&text=$encodedText"
+
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext text
+            val responseBody = response.body?.string() ?: return@withContext text
+            val root = JSONObject(responseBody)
+            val textArray = root.optJSONArray("text")
+            if (textArray != null && textArray.length() > 0) {
+                val sb = StringBuilder()
+                for (i in 0 until textArray.length()) {
+                    sb.append(textArray.optString(i)).append(" ")
+                }
+                sb.toString().trim().ifEmpty { text }
+            } else {
+                root.optString("text", text)
+            }
+        }
+    }
+}
+
+class LingvaTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
+    private val mirrors = listOf(
+        "https://lingva.ml",
+        "https://lingva.thedaviddelta.com",
+        "https://translate.plausibility.cloud"
+    )
+
+    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
+        if (text.isBlank()) return@withContext text
+        val sl = if (sourceLang == "auto") "auto" else sourceLang
+        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
+
+        for (host in mirrors) {
+            try {
+                val url = "$host/api/v1/$sl/$targetLang/$encodedText"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:128.0)")
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: return@use
+                        val json = JSONObject(body)
+                        val translation = json.optString("translation")
+                        if (translation.isNotBlank()) {
+                            return@withContext translation.replace("+", " ")
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+        text
+    }
+}
+
 class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
         if (text.isBlank()) return@withContext text
 
         val sl = if (sourceLang == "auto") "auto" else sourceLang
         val tl = targetLang
-        val encodedText = URLEncoder.encode(text, "UTF-8")
+        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
         val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$encodedText"
 
         val request = Request.Builder()
@@ -107,10 +175,10 @@ class LibreTranslateEngine(
             }
         }
 
-        val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+        val requestBody = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()
             .url(server)
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json; charset=utf-8")
             .post(requestBody)
             .build()
 
@@ -118,7 +186,8 @@ class LibreTranslateEngine(
             if (!response.isSuccessful) return@withContext text
             val responseBody = response.body?.string() ?: return@withContext text
             val root = JSONObject(responseBody)
-            root.optString("translatedText", text)
+            val result = root.optString("translatedText", text)
+            result.replace("+", " ")
         }
     }
 }
@@ -129,7 +198,7 @@ class MyMemoryEngine(private val client: OkHttpClient) : ITranslationEngine {
 
         val sl = if (sourceLang == "auto") "en" else sourceLang
         val langPair = "$sl|$targetLang"
-        val encodedText = URLEncoder.encode(text, "UTF-8")
+        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
         val url = "https://api.mymemory.translated.net/get?q=$encodedText&langpair=$langPair"
 
         val request = Request.Builder()
@@ -141,7 +210,8 @@ class MyMemoryEngine(private val client: OkHttpClient) : ITranslationEngine {
             val responseBody = response.body?.string() ?: return@withContext text
             val root = JSONObject(responseBody)
             val responseData = root.optJSONObject("responseData")
-            responseData?.optString("translatedText") ?: text
+            val result = responseData?.optString("translatedText") ?: text
+            result.replace("+", " ")
         }
     }
 }

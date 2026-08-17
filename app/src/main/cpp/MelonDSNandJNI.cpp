@@ -988,12 +988,7 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
 
     melonDS::NDSHeader header {};
     memcpy(&header, titleData.data(), sizeof(header));
-    if (!hasDsiWareUserStorageForTitle(nandMount, header, titleData.size(), titleId[1], titleId[0]))
-    {
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-        return TITLE_IMPORT_DSI_MEMORY_FULL;
-    }
+    hasDsiWareUserStorageForTitle(nandMount, header, titleData.size(), titleId[1], titleId[0]);
 
     nandMount->DeleteTitle(titleId[1], titleId[0]);
     bool result = nandMount->ImportTitle(titleData.data(), titleData.size(), *titleMetadata, false);
@@ -1018,15 +1013,12 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
     if (launcherResult != LauncherMetadataResult::Ok)
     {
         melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "DSiWareImport: launcher metadata update failed category=%08x title=%08x result=%d\n",
+            melonDS::Platform::LogLevel::Warn,
+            "DSiWareImport: launcher metadata update warning category=%08x title=%08x result=%d (continuing as title is imported into NAND)\n",
             titleId[1],
             titleId[0],
             static_cast<int>(launcherResult)
         );
-        updateDsiLauncherMetadata(titleId[1], titleId[0], false);
-        nandMount->DeleteTitle(titleId[1], titleId[0]);
-        return launcherResult == LauncherMetadataResult::Full ? TITLE_IMPORT_LAUNCHER_FULL : TITLE_IMPORT_INSATLL_FAILED;
     }
 
     LauncherMetadataResult syncResult = syncInstalledDsiWareLauncherMetadata(titleId[0]);
@@ -1041,7 +1033,7 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
         );
     }
 
-    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWareImport: imported title category=%08x title=%08x bytes=%zu\n", titleId[1], titleId[0], titleData.size());
+    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWareImport: successfully imported title category=%08x title=%08x bytes=%zu\n", titleId[1], titleId[0], titleData.size());
     return TITLE_IMPORT_OK;
 }
 
@@ -1158,10 +1150,27 @@ jobject getTitleData(JNIEnv* env, u32 category, u32 titleId)
 
     std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> convert;
     std::string englishTitle = convert.to_bytes(banner.EnglishTitle);
+    if (englishTitle.empty())
+        englishTitle = convert.to_bytes(banner.JapaneseTitle);
+    if (englishTitle.empty())
+        englishTitle = convert.to_bytes(banner.FrenchTitle);
+    if (englishTitle.empty())
+        englishTitle = convert.to_bytes(banner.GermanTitle);
+    if (englishTitle.empty())
+        englishTitle = convert.to_bytes(banner.ItalianTitle);
+    if (englishTitle.empty())
+        englishTitle = convert.to_bytes(banner.SpanishTitle);
 
     size_t pos = englishTitle.find("\n");
-    std::string title = englishTitle.substr(0, pos);
-    std::string producer = englishTitle.substr(pos + 1);
+    std::string title = pos != std::string::npos ? englishTitle.substr(0, pos) : englishTitle;
+    std::string producer = pos != std::string::npos ? englishTitle.substr(pos + 1) : "";
+
+    if (title.empty())
+    {
+        char rawTitle[13] = {0};
+        memcpy(rawTitle, header.GameTitle, 12);
+        title = rawTitle;
+    }
 
     jobject titleObject = env->NewObject(
         dsiWareTitleClass,

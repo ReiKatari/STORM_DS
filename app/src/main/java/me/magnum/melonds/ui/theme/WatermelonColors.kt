@@ -120,4 +120,58 @@ val GothicWatermelonColors = WatermelonColors(
     shadow = Color(0x99000000),
 )
 
+val MatrixWatermelonColors = WatermelonColors(
+    isDark = true,
+    bg = Color(0xFF030906),
+    surface = Color(0xFF08140D),
+    surface2 = Color(0xFF0F2418),
+    surface3 = Color(0xFF183826),
+    line = Color(0x4000FF66),
+    text = Color(0xFF00FF66),
+    text2 = Color(0xFF34D399),
+    text3 = Color(0xFF059669),
+    red = Color(0xFFFF0055),
+    redGlow = Color(0x66FF0055),
+    green = Color(0xFF00FF66),
+    greenDim = Color(0x3300FF66),
+    switchOff = Color(0x29FFFFFF),
+    shadow = Color(0x99000000),
+)
+
+val SolarWatermelonColors = WatermelonColors(
+    isDark = true,
+    bg = Color(0xFF0D0803),
+    surface = Color(0xFF1C1207),
+    surface2 = Color(0xFF2E1D0C),
+    surface3 = Color(0xFF452B13),
+    line = Color(0x40FFB300),
+    text = Color(0xFFFFF8E1),
+    text2 = Color(0xFFFFB300),
+    text3 = Color(0xFFFF8F00),
+    red = Color(0xFFFF3D00),
+    redGlow = Color(0x66FF3D00),
+    green = Color(0xFFFFB300),
+    greenDim = Color(0x33FFB300),
+    switchOff = Color(0x29FFFFFF),
+    shadow = Color(0x99000000),
+)
+
+val SakuraWatermelonColors = WatermelonColors(
+    isDark = false,
+    bg = Color(0xFFFDF8FA),
+    surface = Color(0xFFFFFFFF),
+    surface2 = Color(0xFFFCE7F3),
+    surface3 = Color(0xFFFBCFE8),
+    line = Color(0x33F43F5E),
+    text = Color(0xFF2D121C),
+    text2 = Color(0xFFBE123C),
+    text3 = Color(0xFF9D174D),
+    red = Color(0xFFE11D48),
+    redGlow = Color(0x33E11D48),
+    green = Color(0xFFFB7185),
+    greenDim = Color(0x26FB7185),
+    switchOff = Color(0x29000000),
+    shadow = Color(0x1A000000),
+)
+
 val LocalWatermelonColors = staticCompositionLocalOf { DarkWatermelonColors }

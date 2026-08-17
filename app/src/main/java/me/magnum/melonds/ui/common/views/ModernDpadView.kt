@@ -203,6 +203,69 @@ class ModernDpadView @JvmOverloads constructor(
                 wellPaint.color = Color.parseColor("#33052614")
                 wellStrokePaint.color = Color.parseColor("#4D00E676")
             }
+            ButtonColorStyle.WII_CRYSTAL -> {
+                bodyPaint.color = Color.parseColor("#F2FFFFFF")
+                bevelLightPaint.color = Color.parseColor("#80CBD5E1")
+                centerDishPaint.color = Color.parseColor("#E2E8F0")
+                wellPaint.color = Color.parseColor("#33FFFFFF")
+                wellStrokePaint.color = Color.parseColor("#6600D2FF")
+            }
+            ButtonColorStyle.WII_U_DARK -> {
+                bodyPaint.color = Color.parseColor("#E61E222B")
+                bevelLightPaint.color = Color.parseColor("#80475569")
+                centerDishPaint.color = Color.parseColor("#CC111318")
+                wellPaint.color = Color.parseColor("#331E222B")
+                wellStrokePaint.color = Color.parseColor("#4D38BDF8")
+            }
+            ButtonColorStyle.SWITCH_NEON, ButtonColorStyle.SWITCH_OLED -> {
+                bodyPaint.color = Color.parseColor("#E61E293B")
+                bevelLightPaint.color = Color.parseColor("#8064748B")
+                centerDishPaint.color = Color.parseColor("#CC0F172A")
+                wellPaint.color = Color.parseColor("#330F172A")
+                wellStrokePaint.color = Color.parseColor("#4D38BDF8")
+            }
+            ButtonColorStyle.VIRTUAL_BOY -> {
+                bodyPaint.color = Color.parseColor("#E61A0005")
+                bevelLightPaint.color = Color.parseColor("#80FF0033")
+                centerDishPaint.color = Color.parseColor("#CC0A0002")
+                wellPaint.color = Color.parseColor("#40000000")
+                wellStrokePaint.color = Color.parseColor("#66FF0033")
+            }
+            ButtonColorStyle.GAMECUBE_INDIGO -> {
+                bodyPaint.color = Color.parseColor("#E63C3B6E")
+                bevelLightPaint.color = Color.parseColor("#806C5CE7")
+                centerDishPaint.color = Color.parseColor("#CC2A2952")
+                wellPaint.color = Color.parseColor("#333C3B6E")
+                wellStrokePaint.color = Color.parseColor("#4D6C5CE7")
+            }
+            ButtonColorStyle.GAMEBOY_DMG -> {
+                bodyPaint.color = Color.parseColor("#E65A5A66")
+                bevelLightPaint.color = Color.parseColor("#808E8E93")
+                centerDishPaint.color = Color.parseColor("#CC3A3A44")
+                wellPaint.color = Color.parseColor("#338E8E93")
+                wellStrokePaint.color = Color.parseColor("#4D5856D6")
+            }
+            ButtonColorStyle.GBA_GLACIER -> {
+                bodyPaint.color = Color.parseColor("#E64A69BD")
+                bevelLightPaint.color = Color.parseColor("#80706FD3")
+                centerDishPaint.color = Color.parseColor("#CC2C2C54")
+                wellPaint.color = Color.parseColor("#334A69BD")
+                wellStrokePaint.color = Color.parseColor("#4D6A89CC")
+            }
+            ButtonColorStyle.FAMICOM_RETRO -> {
+                bodyPaint.color = Color.parseColor("#E68B0000")
+                bevelLightPaint.color = Color.parseColor("#80FFD700")
+                centerDishPaint.color = Color.parseColor("#CC4A0000")
+                wellPaint.color = Color.parseColor("#33B8860B")
+                wellStrokePaint.color = Color.parseColor("#4DDAA520")
+            }
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> {
+                bodyPaint.color = Color.parseColor("#E6004D40")
+                bevelLightPaint.color = Color.parseColor("#8000D2D3")
+                centerDishPaint.color = Color.parseColor("#CC002B24")
+                wellPaint.color = Color.parseColor("#33004E64")
+                wellStrokePaint.color = Color.parseColor("#4D00A896")
+            }
             else -> {
                 bodyPaint.color = Color.parseColor("#E6232730")
                 bevelLightPaint.color = Color.parseColor("#66FFFFFF")
@@ -245,8 +308,7 @@ class ModernDpadView @JvmOverloads constructor(
             close()
         }
 
-        // 3D Volumetric drop shadow for well and cross
-        canvas.drawCircle(cx + 2f, cy + 4f, armLength * 1.05f, shadowPaint)
+        // Drop shadow for tactile cross
         canvas.save()
         canvas.translate(2.5f, 4.5f)
         canvas.drawPath(crossPath, shadowPaint)
@@ -267,6 +329,19 @@ class ModernDpadView @JvmOverloads constructor(
                     ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#66C084FC")
                     ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#66FFD700")
                     ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#6600E676")
+                    ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#6600D2FF")
+                    ButtonColorStyle.WII_U_DARK -> Color.parseColor("#6638BDF8")
+                    ButtonColorStyle.SWITCH_NEON -> when (input) {
+                        Input.RIGHT, Input.DOWN -> Color.parseColor("#66FF3E3E")
+                        else -> Color.parseColor("#660AB9E6")
+                    }
+                    ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#6694A3B8")
+                    ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#80FF0033")
+                    ButtonColorStyle.GAMECUBE_INDIGO -> Color.parseColor("#666C5CE7")
+                    ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#66C70039")
+                    ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#66706FD3")
+                    ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#66FFD700")
+                    ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#6600D2D3")
                     else -> Color.parseColor("#6600E5FF")
                 }
                 activeGlowPaint.color = glowCol
@@ -294,7 +369,13 @@ class ModernDpadView @JvmOverloads constructor(
         val arrowDist = (hl + hw) / 2f * 0.95f
         val arrowSize = size * 0.055f
 
-        arrowPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0F172A") else Color.parseColor("#F0F4F8")
+        arrowPaint.color = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE, ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#0F172A")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#FF0033")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#FFD700")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#00FFFF")
+            else -> Color.parseColor("#F0F4F8")
+        }
 
         drawArrow(canvas, cx, cy - arrowDist, arrowSize, 0f)
         drawArrow(canvas, cx + arrowDist, cy, arrowSize, 90f)

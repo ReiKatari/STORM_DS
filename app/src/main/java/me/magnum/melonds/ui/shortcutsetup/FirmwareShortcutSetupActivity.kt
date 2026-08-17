@@ -13,6 +13,7 @@ import me.magnum.melonds.ui.emulator.EmulatorActivity
 
 abstract class FirmwareShortcutSetupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         super.onCreate(savedInstanceState)
 
         val console = getConsoleType()

@@ -65,3 +65,20 @@
 -keepattributes Signature
 -keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
 -keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
+# Google ML Kit Text Recognition
+-keep class com.google.mlkit.** { *; }
+-keep interface com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+
+# Google Play Services ML Kit & Vision
+-keep class com.google.android.gms.vision.** { *; }
+-keep class com.google.android.gms.internal.mlkit_** { *; }
+-keep class com.google.android.gms.tasks.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+-keep class com.google.android.gms.dynamite.** { *; }
+-dontwarn com.google.android.gms.**
+
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
