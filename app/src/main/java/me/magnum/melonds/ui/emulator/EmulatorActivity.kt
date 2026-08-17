@@ -474,6 +474,7 @@ class EmulatorActivity : AppCompatActivity() {
         val onSlotPicked: (SaveStateSlot) -> Unit,
     )
     private val saveStatesOverlayState = mutableStateOf<SaveStatesOverlayData?>(null)
+    private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
 
     private sealed interface ConsoleOverlayNode {
         val title: String
@@ -619,6 +620,8 @@ class EmulatorActivity : AppCompatActivity() {
         val skinType = PreferenceManager.getDefaultSharedPreferences(this).getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
         if (consoleSkinEnabled) {
             binding.layoutConsoleSkin.visibility = View.VISIBLE
+            binding.layoutConsoleSkin.isClickable = false
+            binding.layoutConsoleSkin.isFocusable = false
             binding.layoutConsoleSkin.setContent {
                 val theme = when (skinType) {
                     "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
@@ -628,7 +631,12 @@ class EmulatorActivity : AppCompatActivity() {
                     "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
                     else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
                 }
-                me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(skinTheme = theme)
+                val areas = consoleSkinAreasState.value
+                me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
+                    skinTheme = theme,
+                    topScreenRect = areas?.topScreenRect,
+                    bottomScreenRect = areas?.bottomScreenRect
+                )
             }
         } else {
             binding.layoutConsoleSkin.visibility = View.GONE
@@ -1806,6 +1814,7 @@ class EmulatorActivity : AppCompatActivity() {
             return
         }
         val areas = resolveMainScreenPresentationAreas()
+        consoleSkinAreasState.value = areas
         updateOpenGlRetroArchFilterConfiguration(currentRuntimeRendererConfiguration)
         mainScreenRenderer.updateScreenAreas(
             areas.topScreenRect,
