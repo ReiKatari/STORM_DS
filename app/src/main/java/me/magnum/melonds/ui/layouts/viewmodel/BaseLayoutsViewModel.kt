@@ -33,6 +33,58 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
         }
     }
 
+    fun exportLayout(context: android.content.Context, layout: LayoutConfiguration, uri: android.net.Uri, onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val dto = me.magnum.melonds.impl.dtos.layout.LayoutConfigurationDto.fromModel(layout)
+                val json = com.google.gson.Gson().toJson(dto)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete?.invoke(true)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete?.invoke(false)
+                }
+            }
+        }
+    }
+
+    fun importLayout(context: android.content.Context, uri: android.net.Uri, onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val json = context.contentResolver.openInputStream(uri)?.use { input ->
+                    input.bufferedReader(Charsets.UTF_8).readText()
+                } ?: run {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onComplete?.invoke(false)
+                    }
+                    return@launch
+                }
+
+                val dto = com.google.gson.Gson().fromJson(json, me.magnum.melonds.impl.dtos.layout.LayoutConfigurationDto::class.java)
+                val model = dto.toModel()
+                val importedLayout = model.copy(
+                    id = UUID.randomUUID(),
+                    name = model.name?.let { if (it.endsWith(")")) it else "$it (Imported)" } ?: "Imported Layout",
+                    type = LayoutConfiguration.LayoutType.CUSTOM
+                )
+                layoutsRepository.saveLayout(importedLayout)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete?.invoke(true)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete?.invoke(false)
+                }
+            }
+        }
+    }
+
     abstract fun setSelectedLayoutId(id: UUID?)
 
     protected abstract fun applyFallbackLayout()

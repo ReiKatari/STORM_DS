@@ -165,6 +165,15 @@ class ModernSingleButtonView @JvmOverloads constructor(
             ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#E6491979")
             ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#E6B45309")
             ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#E6047857")
+            ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#F2FFFFFF")
+            ButtonColorStyle.WII_U_DARK -> Color.parseColor("#E61E222B")
+            ButtonColorStyle.SWITCH_NEON, ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#E61E293B")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#E61A0005")
+            ButtonColorStyle.GAMECUBE_INDIGO -> Color.parseColor("#E63C3B6E")
+            ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#E6801336")
+            ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#E6575FCF")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#E68B0000")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#E6006266")
             else -> Color.parseColor("#E6232730")
         }
         val pressedBg = when (style) {
@@ -174,6 +183,15 @@ class ModernSingleButtonView @JvmOverloads constructor(
             ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#E62D0B4E")
             ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#E678350F")
             ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#E6064E3B")
+            ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#E6DDE3EA")
+            ButtonColorStyle.WII_U_DARK -> Color.parseColor("#E6111318")
+            ButtonColorStyle.SWITCH_NEON, ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#E60F172A")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#E60A0002")
+            ButtonColorStyle.GAMECUBE_INDIGO -> Color.parseColor("#E62A2952")
+            ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#E64A0E17")
+            ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#E62C2C54")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#E64A0000")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#E6002B36")
             else -> Color.parseColor("#E61A3A4D")
         }
         val normalStroke = when (style) {
@@ -183,6 +201,16 @@ class ModernSingleButtonView @JvmOverloads constructor(
             ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#80C084FC")
             ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#80F59E0B")
             ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#8010B981")
+            ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#80CBD5E1")
+            ButtonColorStyle.WII_U_DARK -> Color.parseColor("#80475569")
+            ButtonColorStyle.SWITCH_NEON -> Color.parseColor("#80FF3B30")
+            ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#80FFFFFF")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#80FF0033")
+            ButtonColorStyle.GAMECUBE_INDIGO -> Color.parseColor("#806C5CE7")
+            ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#805856D6")
+            ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#80706FD3")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#80FFD700")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#8000D2D3")
             else -> Color.parseColor("#66FFFFFF")
         }
         val glowColor = when (style) {
@@ -192,6 +220,16 @@ class ModernSingleButtonView @JvmOverloads constructor(
             ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#66C084FC")
             ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#66FFD700")
             ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#6600E676")
+            ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#6600D2FF")
+            ButtonColorStyle.WII_U_DARK -> Color.parseColor("#6638BDF8")
+            ButtonColorStyle.SWITCH_NEON -> Color.parseColor("#66FF3E3E")
+            ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#6694A3B8")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#80FF0033")
+            ButtonColorStyle.GAMECUBE_INDIGO -> Color.parseColor("#666C5CE7")
+            ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#66C70039")
+            ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#66706FD3")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#66FFD700")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#6600D2D3")
             else -> Color.parseColor("#6600E5FF")
         }
         val activeStroke = when (style) {
@@ -201,6 +239,16 @@ class ModernSingleButtonView @JvmOverloads constructor(
             ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
             ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
             ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
+            ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#00D2FF")
+            ButtonColorStyle.WII_U_DARK -> Color.parseColor("#38BDF8")
+            ButtonColorStyle.SWITCH_NEON -> Color.parseColor("#FF3E3E")
+            ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#FFFFFF")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#FF0033")
+            ButtonColorStyle.GAMECUBE_INDIGO -> Color.parseColor("#6C5CE7")
+            ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#FF4081")
+            ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#706FD3")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#FFD700")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#00D2D3")
             else -> Color.parseColor("#FF00E5FF")
         }
 
@@ -342,16 +390,26 @@ class ModernSingleButtonView @JvmOverloads constructor(
         canvas.drawText(text, cx, textY + 1.5f, textShadowPaint)
         if (buttonGlow > 0f) {
             textPaint.color = when (style) {
-                ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#0284C7")
+                ButtonColorStyle.CLASSIC_WHITE, ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#0284C7")
                 ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#FF1744")
                 ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#C084FC")
                 ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#FFD700")
                 ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#00E676")
-                ButtonColorStyle.CLASSIC_GREY -> Color.WHITE
-                else -> Color.parseColor("#00E5FF")
+                ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#FF0033")
+                ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#FFD700")
+                ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#00FFFF")
+                ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#0F172A")
+                else -> Color.WHITE
             }
         } else {
-            textPaint.color = if (style == ButtonColorStyle.CLASSIC_WHITE) Color.parseColor("#0F172A") else Color.WHITE
+            textPaint.color = when (style) {
+                ButtonColorStyle.CLASSIC_WHITE, ButtonColorStyle.WII_CRYSTAL, ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#0F172A")
+                ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#FF0033")
+                ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#FFD700")
+                ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#00FFFF")
+                ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#F2C9D8")
+                else -> Color.WHITE
+            }
         }
         canvas.drawText(text, cx, textY, textPaint)
     }

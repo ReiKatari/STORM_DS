@@ -55,20 +55,22 @@ class MelonDSApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         installCrashHandler()
-        giveLibrashaderACacheDirectory()
-        ButtonThemeManager.init(this)
-        AppThemeManager.init(this)
-        RomDisplayNameManager.init(this)
-        createNotificationChannels()
-        applyTheme()
-        performMigrations()
-        settingsBackupManager.initializeMirror()
-        appLogFileRecorder.start()
-        recoverUnexpectedHardcoreOfflineLossIfNeeded()
-        MelonDSAndroidInterface.setup(
-            UriFileHandler(this, uriHandler),
-            settingsRepository.getVulkanDriverConfiguration(applicationInfo.nativeLibraryDir),
-        )
+        runCatching { giveLibrashaderACacheDirectory() }
+        runCatching { ButtonThemeManager.init(this) }
+        runCatching { AppThemeManager.init(this) }
+        runCatching { RomDisplayNameManager.init(this) }
+        runCatching { createNotificationChannels() }
+        runCatching { applyTheme() }
+        runCatching { performMigrations() }
+        runCatching { settingsBackupManager.initializeMirror() }
+        runCatching { appLogFileRecorder.start() }
+        runCatching { recoverUnexpectedHardcoreOfflineLossIfNeeded() }
+        runCatching {
+            MelonDSAndroidInterface.setup(
+                UriFileHandler(this, uriHandler),
+                settingsRepository.getVulkanDriverConfiguration(applicationInfo.nativeLibraryDir),
+            )
+        }
     }
 
     private fun installCrashHandler() {

@@ -13,7 +13,6 @@
     <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
             android:key="sram_dir"
             android:title="@string/save_file_directory"
-            android:dependency="use_rom_dir"
             app:iconSpaceReserved="false"
             app:type="directory"
             app:permissions="read_write"

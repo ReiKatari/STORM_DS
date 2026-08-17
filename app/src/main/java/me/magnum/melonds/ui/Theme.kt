@@ -8,6 +8,9 @@ enum class Theme(val nightMode: Int, val preferenceValue: String) {
     MIDNIGHT(AppCompatDelegate.MODE_NIGHT_YES, "midnight"),
     CYBERPUNK(AppCompatDelegate.MODE_NIGHT_YES, "cyberpunk"),
     GOTHIC(AppCompatDelegate.MODE_NIGHT_YES, "gothic"),
+    MATRIX(AppCompatDelegate.MODE_NIGHT_YES, "matrix"),
+    SOLAR(AppCompatDelegate.MODE_NIGHT_YES, "solar"),
+    SAKURA(AppCompatDelegate.MODE_NIGHT_NO, "sakura"),
     SYSTEM(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM, "system");
 
     fun getThemeResId(): Int {
@@ -17,6 +20,9 @@ enum class Theme(val nightMode: Int, val preferenceValue: String) {
             MIDNIGHT -> me.magnum.melonds.R.style.AppTheme_Midnight
             CYBERPUNK -> me.magnum.melonds.R.style.AppTheme_Cyberpunk
             GOTHIC -> me.magnum.melonds.R.style.AppTheme_Gothic
+            MATRIX -> me.magnum.melonds.R.style.AppTheme_Matrix
+            SOLAR -> me.magnum.melonds.R.style.AppTheme_Solar
+            SAKURA -> me.magnum.melonds.R.style.AppTheme_Sakura
             SYSTEM -> me.magnum.melonds.R.style.AppTheme_Dark
         }
     }

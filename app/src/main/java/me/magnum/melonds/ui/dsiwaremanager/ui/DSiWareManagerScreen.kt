@@ -80,6 +80,8 @@ import me.magnum.melonds.ui.common.melonButtonColors
 import me.magnum.melonds.ui.dsiwaremanager.DSiWareManagerViewModel
 import me.magnum.melonds.ui.dsiwaremanager.model.DSiWareManagerUiState
 import me.magnum.melonds.ui.dsiwaremanager.model.ImportExportDSiWareTitleFileEvent
+import me.magnum.melonds.ui.common.component.dialog.TextInputDialog
+import me.magnum.melonds.ui.common.component.dialog.rememberTextInputDialogState
 import me.magnum.melonds.ui.common.WatermelonScreenScaffold
 import me.magnum.melonds.ui.romlist.RomIcon
 import me.magnum.melonds.ui.settings.SettingsActivity
@@ -98,6 +100,7 @@ fun DSiWareManagerScreen(
     val importingTitle = viewModel.importingTitle.collectAsState(false)
     val context = LocalContext.current
     val showingRomList = rememberSaveable(null) { mutableStateOf(false) }
+    val renameDialogState = rememberTextInputDialogState()
 
     val importTitleFilePickLauncher = rememberDSiWareTitleImportFilePicker(
         onFilePicked = viewModel::importDSiWareTitleFile,
@@ -150,6 +153,14 @@ fun DSiWareManagerScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = padding,
                     titles = currentState.titles,
+                    onRenameTitle = { title ->
+                        renameDialogState.show(
+                            initialText = title.name,
+                            onConfirm = { newName ->
+                                viewModel.renameTitle(title, newName)
+                            },
+                        )
+                    },
                     onDeleteTitle = viewModel::deleteTitle,
                     onImportTitleFile = importTitleFilePickLauncher::launch,
                     onExportTitleFile = exportTitleFilePickLauncher::launch,
@@ -159,6 +170,11 @@ fun DSiWareManagerScreen(
             is DSiWareManagerUiState.Error -> Error(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize())
         }
     }
+
+    TextInputDialog(
+        title = stringResource(R.string.dsiware_manager_rename),
+        dialogState = renameDialogState,
+    )
 
     if (showImportMenu) {
         ConsoleActionDialog(
@@ -275,6 +291,7 @@ private fun Ready(
     modifier: Modifier,
     contentPadding: PaddingValues,
     titles: List<DSiWareTitle>,
+    onRenameTitle: (DSiWareTitle) -> Unit,
     onDeleteTitle: (DSiWareTitle) -> Unit,
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     onExportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
@@ -295,6 +312,7 @@ private fun Ready(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding,
                 titles = titles,
+                onRenameTitle = onRenameTitle,
                 onDeleteTitle = onDeleteTitle,
                 onImportTitleFile = onImportTitleFile,
                 onExportTitleFile = onExportTitleFile,
@@ -322,6 +340,7 @@ private fun DSiWareTitleList(
     modifier: Modifier,
     contentPadding: PaddingValues,
     titles: List<DSiWareTitle>,
+    onRenameTitle: (DSiWareTitle) -> Unit,
     onDeleteTitle: (DSiWareTitle) -> Unit,
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     onExportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
@@ -343,6 +362,7 @@ private fun DSiWareTitleList(
             DSiWareItem(
                 modifier = Modifier.fillMaxWidth(),
                 item = dSiWareTitle,
+                onRenameClicked = { onRenameTitle(dSiWareTitle) },
                 onDeleteClicked = { onDeleteTitle(dSiWareTitle) },
                 onImportFile = { onImportTitleFile(dSiWareTitle, it) },
                 onExportFile = { onExportTitleFile(dSiWareTitle, it) },
@@ -391,6 +411,7 @@ private fun PreviewDSiWareManagerReady() {
                 DSiWareTitle("Legit Game: Snapped!", "Upasuft", 1, ByteArray(0), 0, 0, 0),
                 DSiWareTitle("Highway 4 - Mediocre Racing", "Microware", 2, ByteArray(0), 0, 0, 0),
             ),
+            onRenameTitle = {},
             onDeleteTitle = {},
             onImportTitleFile = { _, _ -> },
             onExportTitleFile = { _, _ -> },

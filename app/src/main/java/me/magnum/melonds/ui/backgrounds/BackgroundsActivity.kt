@@ -37,6 +37,7 @@ class BackgroundsActivity : AppCompatActivity() {
     private val viewModel: BackgroundsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
 

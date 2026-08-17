@@ -359,6 +359,7 @@
         <item>Italien</item>
         <item>Espagnol</item>
         <item>Japonais</item>
+        <item>Russe</item>
     </string-array>
 
     <string-array name="game_runtime_mic_source_options">

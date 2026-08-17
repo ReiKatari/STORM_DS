@@ -83,6 +83,7 @@ fun RomBrowserScreen(
     allowConfiguration: Boolean,
     scanningStatus: RomScanningStatus,
     confirmedAchievementHashes: Set<String>,
+    isRaAuthenticated: Boolean,
     onFolderClick: (RomBrowserEntry.Folder) -> Unit,
     onRomClick: (Rom) -> Unit,
     onRomLongPress: (Rom) -> Unit,
@@ -236,6 +237,7 @@ fun RomBrowserScreen(
                                     coverByHash = coverByHash,
                                     boxArtByUri = boxArtByUri,
                                     confirmedAchievementHashes = confirmedAchievementHashes,
+                                    isRaAuthenticated = isRaAuthenticated,
                                     showAlphabetBar = showAlphabetBar,
                                     showContinueShelf = showContinueShelf,
                                     showSectionHeader = showSectionHeader,
@@ -261,6 +263,7 @@ fun RomBrowserScreen(
                                     boxArtByUri = boxArtByUri,
                                     allowConfiguration = allowConfiguration,
                                     confirmedAchievementHashes = confirmedAchievementHashes,
+                                    isRaAuthenticated = isRaAuthenticated,
                                     showAlphabetBar = showAlphabetBar,
                                     showContinueShelf = showContinueShelf,
                                     showSectionHeader = showSectionHeader,
@@ -368,6 +371,7 @@ private fun GridContent(
     coverByHash: Map<String, String>,
     boxArtByUri: Map<String, String>,
     confirmedAchievementHashes: Set<String>,
+    isRaAuthenticated: Boolean,
     showAlphabetBar: Boolean,
     showContinueShelf: Boolean,
     showSectionHeader: Boolean,
@@ -479,7 +483,7 @@ private fun GridContent(
                     coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                     boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                     boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
-                    showAchievementBadge = (entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut),
+                    showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut)),
                     onClick = { onRomClick(entry.rom) },
                     onLongPress = {
                         if (!entry.rom.isInstalledDsiWareShortcut) {
@@ -507,6 +511,7 @@ private fun ListContent(
     boxArtByUri: Map<String, String>,
     allowConfiguration: Boolean,
     confirmedAchievementHashes: Set<String>,
+    isRaAuthenticated: Boolean,
     showAlphabetBar: Boolean,
     showContinueShelf: Boolean,
     showSectionHeader: Boolean,
@@ -604,7 +609,7 @@ private fun ListContent(
                             boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                             boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
                             allowConfiguration = allowConfiguration && !entry.rom.isInstalledDsiWareShortcut,
-                            showAchievementBadge = (entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut),
+                            showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut)),
                             onClick = { onRomClick(entry.rom) },
                             onLongPress = {
                                 if (!entry.rom.isInstalledDsiWareShortcut) {

@@ -193,5 +193,10 @@
             android:name="me.magnum.melonds.translator.capture.ScreenCaptureService"
             android:foregroundServiceType="mediaProjection"
             android:exported="false" />
+
+        <!-- Pre-download ML Kit OCR models at app install for instant text recognition -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr,ocr_japanese,ocr_chinese" />
     </application>
 </manifest>

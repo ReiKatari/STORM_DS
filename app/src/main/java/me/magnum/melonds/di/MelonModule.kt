@@ -267,9 +267,10 @@ object MelonModule {
         @ApplicationContext context: Context,
         settingsRepository: SettingsRepository,
         dSiWareMetadataRepository: DSiWareMetadataRepository,
-        configurationDirectoryVerifier: ConfigurationDirectoryVerifier
+        configurationDirectoryVerifier: ConfigurationDirectoryVerifier,
+        dSiWareTitlesMetadataStore: DSiWareTitlesMetadataStore,
     ): DSiNandManager {
-        return AndroidDSiNandManager(context, settingsRepository, dSiWareMetadataRepository, configurationDirectoryVerifier)
+        return AndroidDSiNandManager(context, settingsRepository, dSiWareMetadataRepository, configurationDirectoryVerifier, dSiWareTitlesMetadataStore)
     }
 
     @Provides

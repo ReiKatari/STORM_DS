@@ -19,6 +19,8 @@ import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier
 import me.magnum.melonds.domain.services.DSiNandManager
 import java.io.EOFException
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -28,6 +30,7 @@ class AndroidDSiNandManager(
     private val settingsRepository: SettingsRepository,
     private val dsiWareMetadataRepository: DSiWareMetadataRepository,
     private val biosDirectoryVerifier: ConfigurationDirectoryVerifier,
+    private val dsiWareTitlesMetadataStore: DSiWareTitlesMetadataStore,
 ) : DSiNandManager {
 
     private companion object {
@@ -68,7 +71,23 @@ class AndroidDSiNandManager(
             return emptyList()
         }
 
-        return MelonDSiNand.listTitles()
+        val titles = MelonDSiNand.listTitles()
+        return titles.map { title ->
+            val displayName = dsiWareTitlesMetadataStore.getDisplayName(title.titleId, title.name)
+            if (displayName != title.name) {
+                DSiWareTitle(
+                    name = displayName,
+                    producer = title.producer,
+                    titleId = title.titleId,
+                    icon = title.icon,
+                    publicSavSize = title.publicSavSize,
+                    privateSavSize = title.privateSavSize,
+                    appFlags = title.appFlags,
+                )
+            } else {
+                title
+            }
+        }
     }
 
     override suspend fun importTitle(titleUri: Uri): ImportDSiWareTitleResult = nandControlLock.withLock {
@@ -85,102 +104,139 @@ class AndroidDSiNandManager(
             var fileSize: Long = 0L
             var sha1Bytes: ByteArray? = null
 
+            val tempFile = File(context.cacheDir, "dsiware_import_${System.currentTimeMillis()}.nds")
             val titleReadResult = suspendRunCatching {
                 context.contentResolver.openInputStream(titleUri)?.use { input ->
-                    val header = ByteArray(0x240)
-                    var readBytes = 0
-                    while (readBytes < 0x240) {
-                        val count = input.read(header, readBytes, 0x240 - readBytes)
-                        if (count <= 0) break
-                        readBytes += count
+                    FileOutputStream(tempFile).use { fileOut ->
+                        val header = ByteArray(0x240)
+                        var readBytes = 0
+                        while (readBytes < 0x240) {
+                            val count = input.read(header, readBytes, 0x240 - readBytes)
+                            if (count <= 0) break
+                            readBytes += count
+                        }
+                        if (readBytes < 0x160) throw EOFException("Unable to read selected title header (too small)")
+
+                        fileOut.write(header, 0, readBytes)
+
+                        val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
+                        val unitCode = header[0x012].toInt() and 0xFF
+                        val romVersion = (header[0x01E].toInt() and 0xFF).toUShort()
+
+                        val rawTitleId = if (readBytes >= 0x234) {
+                            ((header[0x230].toInt() and 0xFF) or
+                                ((header[0x231].toInt() and 0xFF) shl 8) or
+                                ((header[0x232].toInt() and 0xFF) shl 16) or
+                                ((header[0x233].toInt() and 0xFF) shl 24)).toUInt()
+                        } else 0.toUInt()
+
+                        val rawCategoryId = if (readBytes >= 0x238) {
+                            ((header[0x234].toInt() and 0xFF) or
+                                ((header[0x235].toInt() and 0xFF) shl 8) or
+                                ((header[0x236].toInt() and 0xFF) shl 16) or
+                                ((header[0x237].toInt() and 0xFF) shl 24)).toUInt()
+                        } else 0.toUInt()
+
+                        val rawPublicSav = if (readBytes >= 0x23C) {
+                            ((header[0x238].toInt() and 0xFF) or
+                                ((header[0x239].toInt() and 0xFF) shl 8) or
+                                ((header[0x23A].toInt() and 0xFF) shl 16) or
+                                ((header[0x23B].toInt() and 0xFF) shl 24)).toUInt()
+                        } else 0.toUInt()
+
+                        val rawPrivateSav = if (readBytes >= 0x240) {
+                            ((header[0x23C].toInt() and 0xFF) or
+                                ((header[0x23D].toInt() and 0xFF) shl 8) or
+                                ((header[0x23E].toInt() and 0xFF) shl 16) or
+                                ((header[0x23F].toInt() and 0xFF) shl 24)).toUInt()
+                        } else 0.toUInt()
+
+                        titleId = if (rawTitleId != 0u) rawTitleId else {
+                            ((gameCode.getOrNull(0)?.code ?: 0) or
+                             ((gameCode.getOrNull(1)?.code ?: 0) shl 8) or
+                             ((gameCode.getOrNull(2)?.code ?: 0) shl 16) or
+                             ((gameCode.getOrNull(3)?.code ?: 0) shl 24)).toUInt()
+                        }
+
+                        categoryId = if (rawCategoryId != 0u) rawCategoryId else DSIWARE_CATEGORY
+                        publicSavSize = rawPublicSav
+                        privateSavSize = rawPrivateSav
+                        titleVersion = romVersion
+
+                        val digest = java.security.MessageDigest.getInstance("SHA-1")
+                        digest.update(header, 0, readBytes)
+                        fileSize = readBytes.toLong()
+                        val buf = ByteArray(65536)
+                        while (true) {
+                            val len = input.read(buf)
+                            if (len <= 0) break
+                            digest.update(buf, 0, len)
+                            fileOut.write(buf, 0, len)
+                            fileSize += len
+                        }
+                        sha1Bytes = digest.digest()
                     }
-                    if (readBytes < 0x160) throw EOFException("Unable to read selected title header (too small)")
-
-                    val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
-                    val unitCode = header[0x012].toInt() and 0xFF
-                    val romVersion = (header[0x01E].toInt() and 0xFF).toUShort()
-
-                    val rawTitleId = if (readBytes >= 0x234) {
-                        ((header[0x230].toInt() and 0xFF) or
-                            ((header[0x231].toInt() and 0xFF) shl 8) or
-                            ((header[0x232].toInt() and 0xFF) shl 16) or
-                            ((header[0x233].toInt() and 0xFF) shl 24)).toUInt()
-                    } else 0.toUInt()
-
-                    val rawCategoryId = if (readBytes >= 0x238) {
-                        ((header[0x234].toInt() and 0xFF) or
-                            ((header[0x235].toInt() and 0xFF) shl 8) or
-                            ((header[0x236].toInt() and 0xFF) shl 16) or
-                            ((header[0x237].toInt() and 0xFF) shl 24)).toUInt()
-                    } else 0.toUInt()
-
-                    val rawPublicSav = if (readBytes >= 0x23C) {
-                        ((header[0x238].toInt() and 0xFF) or
-                            ((header[0x239].toInt() and 0xFF) shl 8) or
-                            ((header[0x23A].toInt() and 0xFF) shl 16) or
-                            ((header[0x23B].toInt() and 0xFF) shl 24)).toUInt()
-                    } else 0.toUInt()
-
-                    val rawPrivateSav = if (readBytes >= 0x240) {
-                        ((header[0x23C].toInt() and 0xFF) or
-                            ((header[0x23D].toInt() and 0xFF) shl 8) or
-                            ((header[0x23E].toInt() and 0xFF) shl 16) or
-                            ((header[0x23F].toInt() and 0xFF) shl 24)).toUInt()
-                    } else 0.toUInt()
-
-                    titleId = if (rawTitleId != 0u) rawTitleId else {
-                        ((gameCode.getOrNull(0)?.code ?: 0) or
-                         ((gameCode.getOrNull(1)?.code ?: 0) shl 8) or
-                         ((gameCode.getOrNull(2)?.code ?: 0) shl 16) or
-                         ((gameCode.getOrNull(3)?.code ?: 0) shl 24)).toUInt()
-                    }
-
-                    categoryId = if (rawCategoryId != 0u) rawCategoryId else DSIWARE_CATEGORY
-                    publicSavSize = rawPublicSav
-                    privateSavSize = rawPrivateSav
-                    titleVersion = romVersion
-
-                    val digest = java.security.MessageDigest.getInstance("SHA-1")
-                    digest.update(header, 0, readBytes)
-                    fileSize = readBytes.toLong()
-                    val buf = ByteArray(65536)
-                    while (true) {
-                        val len = input.read(buf)
-                        if (len <= 0) break
-                        digest.update(buf, 0, len)
-                        fileSize += len
-                    }
-                    sha1Bytes = digest.digest()
                 } ?: throw EOFException("Unable to open selected title")
             }
 
             if (titleReadResult.isFailure) {
                 Log.w(TAG, "DSiWareImport: failed to read selected title id uri=$titleUri", titleReadResult.exceptionOrNull())
+                runCatching { tempFile.delete() }
                 return@withContext ImportDSiWareTitleResult.ERROR_OPENING_FILE
             }
 
             Log.i(TAG, "DSiWareImport: selected category=${categoryId.toHex()} title=${titleId.toHex()} size=$fileSize uri=$titleUri")
 
-            val installedTitles = MelonDSiNand.listTitles()
-            val titleAlreadyInstalled = installedTitles.any { it.titleId.toUInt() == titleId }
-            if (titleAlreadyInstalled) {
-                Log.w(TAG, "DSiWareImport: title already imported category=${categoryId.toHex()} title=${titleId.toHex()}")
-                return@withContext ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED
+            try {
+                val installedTitles = MelonDSiNand.listTitles()
+                val titleAlreadyInstalled = installedTitles.any { it.titleId.toUInt() == titleId }
+                if (titleAlreadyInstalled) {
+                    Log.w(TAG, "DSiWareImport: title already imported category=${categoryId.toHex()} title=${titleId.toHex()}")
+                    return@withContext ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED
+                }
+
+                val tmdMetadata = NusDSiWareMetadataRepository.createTmd(
+                    categoryId = categoryId,
+                    titleId = titleId,
+                    publicSaveSize = publicSavSize,
+                    privateSaveSize = privateSavSize,
+                    titleVersion = titleVersion,
+                    contentSize = fileSize,
+                    contentSha1 = sha1Bytes,
+                )
+
+                val result = mapImportTitleReturnCodeToResult(MelonDSiNand.importTitle(tempFile.absolutePath, tmdMetadata))
+                Log.i(TAG, "DSiWareImport: native result=$result category=${categoryId.toHex()} title=${titleId.toHex()}")
+                if (result == ImportDSiWareTitleResult.SUCCESS) {
+                    val originalFileName = runCatching {
+                        androidx.documentfile.provider.DocumentFile.fromSingleUri(context, titleUri)?.name
+                            ?: context.contentResolver.query(titleUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                                if (cursor.moveToFirst()) {
+                                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    if (idx != -1) cursor.getString(idx) else null
+                                } else null
+                            }
+                            ?: titleUri.lastPathSegment
+                    }.getOrNull()?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+
+                    if (!originalFileName.isNullOrBlank()) {
+                        dsiWareTitlesMetadataStore.setOriginalFileName(titleId.toLong(), originalFileName)
+                    }
+
+                    val raHash = runCatching {
+                        java.io.FileInputStream(tempFile).use { fis ->
+                            me.magnum.melonds.utils.RomProcessor.getRomMetadata(fis)?.retroAchievementsHash
+                        }
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+
+                    if (!raHash.isNullOrBlank()) {
+                        dsiWareTitlesMetadataStore.setRaHash(titleId.toLong(), raHash)
+                    }
+                }
+                result
+            } finally {
+                runCatching { tempFile.delete() }
             }
-
-            val tmdMetadata = NusDSiWareMetadataRepository.createTmd(
-                categoryId = categoryId,
-                titleId = titleId,
-                publicSaveSize = publicSavSize,
-                privateSaveSize = privateSavSize,
-                titleVersion = titleVersion,
-                contentSize = fileSize,
-                contentSha1 = sha1Bytes,
-            )
-
-            val result = mapImportTitleReturnCodeToResult(MelonDSiNand.importTitle(titleUri.toString(), tmdMetadata))
-            Log.i(TAG, "DSiWareImport: native result=$result category=${categoryId.toHex()} title=${titleId.toHex()}")
-            result
         }
     }
 
@@ -221,7 +277,29 @@ class AndroidDSiNandManager(
             return false
         }
 
-        return MelonDSiNand.importTitleFile((title.titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, fileUri.toString())
+        val targetPath: String = if (fileUri.scheme == "content") {
+            val tempFile = File(context.cacheDir, "dsiware_import_data_${System.currentTimeMillis()}.bin")
+            val copyResult = runCatching {
+                context.contentResolver.openInputStream(fileUri)?.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw EOFException("Unable to open content URI")
+            }
+            if (copyResult.isFailure) {
+                runCatching { tempFile.delete() }
+                return false
+            }
+            try {
+                return MelonDSiNand.importTitleFile((title.titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, tempFile.absolutePath)
+            } finally {
+                runCatching { tempFile.delete() }
+            }
+        } else {
+            fileUri.path ?: fileUri.toString()
+        }
+
+        return MelonDSiNand.importTitleFile((title.titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, targetPath)
     }
 
     override suspend fun exportTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean = nandControlLock.withLock {

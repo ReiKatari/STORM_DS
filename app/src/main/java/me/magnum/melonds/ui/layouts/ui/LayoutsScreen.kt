@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -90,6 +93,34 @@ fun LayoutsScreen(
     val selectedLayout by viewModel.selectedLayoutId.collectAsStateWithLifecycle()
     val layoutEditorLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    var exportingLayout by remember { mutableStateOf<LayoutConfiguration?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null && exportingLayout != null) {
+            viewModel.exportLayout(context, exportingLayout!!, uri) { success ->
+                android.widget.Toast.makeText(
+                    context,
+                    if (success) R.string.layout_export_success else R.string.layout_operation_failed,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        exportingLayout = null
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            viewModel.importLayout(context, uri) { success ->
+                android.widget.Toast.makeText(
+                    context,
+                    if (success) R.string.layout_import_success else R.string.layout_operation_failed,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
     LayoutsScreenContent(
         layouts = layouts ?: emptyList(),
         selectedLayoutId = selectedLayout.layoutId,
@@ -97,6 +128,14 @@ fun LayoutsScreen(
         onCreateLayout = {
             val intent = Intent(context, LayoutEditorActivity::class.java)
             layoutEditorLauncher.launch(intent)
+        },
+        onImportLayout = {
+            importLauncher.launch(arrayOf("application/json", "*/*"))
+        },
+        onExportLayout = { layout ->
+            exportingLayout = layout
+            val fileName = "${layout.name?.replace("[^\\p{L}\\p{N}_\\- ]".toRegex(), "_")?.trim() ?: "layout"}.json"
+            exportLauncher.launch(fileName)
         },
         onEditLayout = { layoutId ->
             val intent = Intent(context, LayoutEditorActivity::class.java)
@@ -115,6 +154,8 @@ private fun LayoutsScreenContent(
     selectedLayoutId: UUID?,
     onLayoutSelected: (UUID?) -> Unit,
     onCreateLayout: () -> Unit,
+    onImportLayout: () -> Unit,
+    onExportLayout: (LayoutConfiguration) -> Unit,
     onEditLayout: (UUID) -> Unit,
     onDeleteLayout: (LayoutConfiguration) -> Unit,
     onUndoDelete: (LayoutConfiguration) -> Unit,
@@ -137,6 +178,13 @@ private fun LayoutsScreenContent(
         onBack = onBackClick,
         scaffoldState = scaffoldState,
         actions = {
+            IconButton(onClick = onImportLayout) {
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_folder),
+                    contentDescription = stringResource(R.string.action_layout_import),
+                    tint = colors.text,
+                )
+            }
             IconButton(onClick = onCreateLayout) {
                 Icon(
                     painter = rememberVectorPainter(Icons.Default.Add),
@@ -146,13 +194,14 @@ private fun LayoutsScreenContent(
             }
         },
     ) { padding ->
+        val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
         LazyColumn(
             modifier = Modifier.fillMaxSize()
                 .focusRequester(initialFocusRequester)
                 .consumeWindowInsets(padding),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
+                start = 16.dp + safeInsets.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                end = 16.dp + safeInsets.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
                 top = padding.calculateTopPadding() + 12.dp,
                 bottom = padding.calculateBottomPadding() + 12.dp,
             ),
@@ -167,6 +216,7 @@ private fun LayoutsScreenContent(
                     isSelected = layout.id == selectedLayoutId,
                     onLayoutSelected = { onLayoutSelected(layout.id) },
                     onEditLayout = { layout.id?.let(onEditLayout) },
+                    onExportLayout = { onExportLayout(layout) },
                     onDeleteLayout = {
                         deleteLayoutEvent.tryEmit(layout)
                         onDeleteLayout(layout)
@@ -196,6 +246,7 @@ private fun LayoutItem(
     isSelected: Boolean,
     onLayoutSelected: () -> Unit,
     onEditLayout: () -> Unit,
+    onExportLayout: () -> Unit,
     onDeleteLayout: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -271,6 +322,15 @@ private fun LayoutItem(
                     DropdownMenuItem(
                         onClick = {
                             showMenu = false
+                            onExportLayout()
+                        },
+                    ) {
+                        Text(stringResource(R.string.action_layout_export))
+                    }
+
+                    DropdownMenuItem(
+                        onClick = {
+                            showMenu = false
                             onEditLayout()
                         },
                     ) {
@@ -323,6 +383,8 @@ private fun PreviewLayoutsScreen() {
             selectedLayoutId = LayoutConfiguration.DEFAULT_ID,
             onLayoutSelected = { },
             onCreateLayout = { },
+            onImportLayout = { },
+            onExportLayout = { },
             onEditLayout = { },
             onDeleteLayout = { },
             onUndoDelete = { },

@@ -28,26 +28,31 @@ class Migration21to22(
 
     override fun migrate() {
         val originalRoms = getOriginalRoms()
+        if (originalRoms.isEmpty()) return
+
         val newRoms = originalRoms.mapNotNull { rom ->
-            val fileName = uriHandler.getUriDocument(rom.uri)?.name ?: return@mapNotNull null
+            val uri = rom.uri ?: return@mapNotNull null
+            val fileName = runCatching { uriHandler.getUriDocument(uri)?.name }.getOrNull() ?: rom.name ?: "ROM"
             val romMetadata = runCatching {
-                context.contentResolver.openInputStream(rom.uri)?.use {
+                context.contentResolver.openInputStream(uri)?.use {
                     RomProcessor.getRomMetadata(it.buffered())
                 }
-            }.getOrNull() ?: return@mapNotNull null
+            }.getOrNull()
 
             Rom22(
-                rom.name,
+                rom.name ?: fileName,
                 fileName,
-                rom.uri,
+                uri,
                 rom.parentTreeUri,
                 rom.config,
                 rom.lastPlayed,
-                romMetadata.isDSiWareTitle,
+                romMetadata?.isDSiWareTitle ?: false,
             )
         }
 
-        saveNewRoms(newRoms)
+        if (newRoms.isNotEmpty()) {
+            runCatching { saveNewRoms(newRoms) }
+        }
     }
 
     private fun getOriginalRoms(): List<Rom21> {

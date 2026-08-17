@@ -53,8 +53,9 @@ class RomListViewModel @Inject constructor(
     private val uriPermissionManager: UriPermissionManager,
     private val directoryAccessValidator: DirectoryAccessValidator,
     private val dsiNandManager: DSiNandManager,
-    retroAchievementsRepository: RetroAchievementsRepository,
+    private val retroAchievementsRepository: RetroAchievementsRepository,
     private val boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository,
+    private val dsiWareTitlesMetadataStore: me.magnum.melonds.impl.DSiWareTitlesMetadataStore,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -81,7 +82,40 @@ class RomListViewModel @Inject constructor(
             }
         }
     }
-    private val _sortingMode = MutableStateFlow(settingsRepository.getRomSortingMode())
+
+    private fun DSiWareTitle.toInstalledDsiWareRom(): Rom {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        val gameCodeChars = try {
+            val b0 = ((titleId shr 24) and 0xFF).toInt()
+            val b1 = ((titleId shr 16) and 0xFF).toInt()
+            val b2 = ((titleId shr 8) and 0xFF).toInt()
+            val b3 = (titleId and 0xFF).toInt()
+            if (b0 in 32..126 && b1 in 32..126 && b2 in 32..126 && b3 in 32..126) {
+                "${b0.toChar()}${b1.toChar()}${b2.toChar()}${b3.toChar()}"
+            } else ""
+        } catch (e: Throwable) {
+            ""
+        }
+        val cleanName = when {
+            name.isNotBlank() && !name.equals(titleIdHex, ignoreCase = true) -> name
+            gameCodeChars.isNotEmpty() -> "DSiWare ($gameCodeChars)"
+            else -> "DSiWare ($titleIdHex)"
+        }
+        val savedRaHash = dsiWareTitlesMetadataStore.getRaHash(titleIdHex) ?: ""
+        return Rom(
+            name = cleanName,
+            developerName = producer,
+            fileName = "$cleanName.nds",
+            uri = Rom.installedDsiWareUri(titleId),
+            parentTreeUri = null,
+            config = RomConfig.forDsiWareTitle().copy(customName = cleanName),
+            lastPlayed = null,
+            isDsiWareTitle = true,
+            retroAchievementsHash = savedRaHash,
+            installedDsiWareTitleId = titleId and 0xFFFFFFFFL,
+            installedDsiWareIcon = icon,
+        )
+    }    private val _sortingMode = MutableStateFlow(settingsRepository.getRomSortingMode())
     private val _sortingOrder = MutableStateFlow(settingsRepository.getRomSortingOrder())
     private val _filter = MutableStateFlow(RomFilter.ALL)
 
@@ -91,6 +125,20 @@ class RomListViewModel @Inject constructor(
     val confirmedAchievementHashes: StateFlow<Set<String>> = retroAchievementsRepository.observeKnownAchievementHashes()
         .map { it.toSet() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** True when the user is logged into RetroAchievements. Badge is hidden when false. */
+    private val _isRaAuthenticated = MutableStateFlow(false)
+    val isRaAuthenticated: StateFlow<Boolean> = _isRaAuthenticated.asStateFlow()
+
+    fun refreshAuthenticationState() {
+        viewModelScope.launch {
+            _isRaAuthenticated.value = retroAchievementsRepository.isUserAuthenticated()
+        }
+    }
+
+    init {
+        refreshAuthenticationState()
+    }
 
     /**
      * (rom.retroAchievementsHash → RA badge URL) for every game whose RA data is cached locally.
@@ -176,7 +224,7 @@ class RomListViewModel @Inject constructor(
             }
         }
 
-        // Sort runs only when ROMs or sort settings change. Cached separately so toggling a filter
+        // Compute sorted list once and cache it, so changes in filters (e.g. clicking "Favorites")
         // or typing in the search bar doesn't re-sort the entire 15k+ ROM library each keystroke.
         val sortedRomsFlow = combine(
             romsWithParents,
@@ -184,7 +232,53 @@ class RomListViewModel @Inject constructor(
             _sortingMode,
             _sortingOrder,
         ) { roms, shortcuts, mode, order ->
-            withContext(Dispatchers.Default) { sortRoms(roms + shortcuts, mode, order) to mode }
+            withContext(Dispatchers.Default) {
+                // Collect RA hashes and Title IDs from scanned ROMs to link with installed DSiWare shortcuts
+                val raHashMapByName = roms.filter { it.rom.retroAchievementsHash.isNotEmpty() }
+                    .associate { it.rom.name.lowercase().trim() to it.rom.retroAchievementsHash }
+                val raHashMapByHex = roms.filter { it.rom.retroAchievementsHash.isNotEmpty() }
+                    .associate { it.rom.fileName.substringBeforeLast('.').lowercase().trim() to it.rom.retroAchievementsHash }
+
+                val installedTitleHexes = shortcuts.mapNotNull {
+                    it.rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase()
+                }.toSet()
+
+                // Filter out any scanned files that are raw .app/.nds dump files, 8-hex Title ID files (e.g. "4b443945")
+                // or entries matching installed NAND titles so "4b443945" duplicate entries never appear
+                val hexTitleIdPattern = Regex("^[0-9a-fA-F]{8}$")
+                val deduplicatedRoms = roms.filter { romWithParent ->
+                    val rom = romWithParent.rom
+                    val fileBase = rom.fileName.substringBeforeLast('.').lowercase().trim()
+                    val rawName = rom.name.lowercase().trim()
+                    val isRawHexTitle = hexTitleIdPattern.matches(fileBase) || hexTitleIdPattern.matches(rawName)
+                    !isRawHexTitle && fileBase !in installedTitleHexes && rawName !in installedTitleHexes
+                }
+
+                val existingIds = deduplicatedRoms.mapNotNull { it.rom.installedDsiWareTitleId }.toSet()
+                val uniqueShortcuts = shortcuts.map { shortcut ->
+                    val rom = shortcut.rom
+                    val titleHex = rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase()
+                    val matchedHash = rom.retroAchievementsHash.takeIf { it.isNotEmpty() }
+                        ?: raHashMapByHex[titleHex]
+                        ?: raHashMapByName[rom.name.lowercase().trim()]
+                        ?: ""
+                    if (matchedHash.isNotEmpty() && matchedHash != rom.retroAchievementsHash) {
+                        val updatedRom = rom.copy(retroAchievementsHash = matchedHash)
+                        shortcut.copy(
+                            rom = updatedRom,
+                            searchKey = normalizeForSearch(me.magnum.melonds.ui.romlist.composables.romDisplayName(updatedRom)) +
+                                "\u0000" + normalizeForSearch(updatedRom.name) +
+                                "\u0000" + normalizeForSearch(updatedRom.fileName) +
+                                "\u0000" + normalizeForSearch(updatedRom.developerName)
+                        )
+                    } else {
+                        shortcut
+                    }
+                }.filter { shortcut ->
+                    shortcut.rom.installedDsiWareTitleId !in existingIds
+                }
+                sortRoms(deduplicatedRoms + uniqueShortcuts, mode, order) to mode
+            }
         }.distinctUntilChanged()
 
         @OptIn(FlowPreview::class)
@@ -395,7 +489,10 @@ class RomListViewModel @Inject constructor(
                 sortedRoms.filter { matchesFilter(it.rom, filter) }
                     .map { RomBrowserEntry.RomItem(it.rom) }
             } else {
-                folders
+                val installedDsiEntries = sortedRoms
+                    .filter { it.rom.isInstalledDsiWareShortcut && matchesFilter(it.rom, filter) }
+                    .map { RomBrowserEntry.RomItem(it.rom) }
+                folders + installedDsiEntries
             }
         } else {
             val docId = (currentLocation as BrowserLocation.Directory).docId
@@ -419,6 +516,7 @@ class RomListViewModel @Inject constructor(
                 .filter { matchesFilter(it.rom, filter) }
                 .filter { romWithParent ->
                     if (filter == RomFilter.ALL) {
+                        romWithParent.rom.isInstalledDsiWareShortcut ||
                         romWithParent.parentDocId == docId ||
                         matchesRoot(romWithParent.parentDocId ?: "", docId) ||
                         (roots.size == 1 && (romWithParent.parentDocId == null || matchesRoot(romWithParent.parentDocId, roots.first().docId)))
@@ -460,8 +558,8 @@ class RomListViewModel @Inject constructor(
         return when (filter) {
             RomFilter.ALL -> true
             RomFilter.FAVORITES -> rom.isFavorite
-            RomFilter.DS_ONLY -> !rom.isDsiWareTitle
-            RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle
+            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
+            RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
         }
     }
@@ -516,7 +614,7 @@ class RomListViewModel @Inject constructor(
         return roms.filter { it.searchKey.contains(normalizedQuery) }
     }
 
-    private fun refreshInstalledDsiWareShortcuts() {
+    fun refreshInstalledDsiWareShortcuts() {
         viewModelScope.launch {
             installedDsiWareShortcuts.value = loadInstalledDsiWareShortcuts()
         }
@@ -534,23 +632,6 @@ class RomListViewModel @Inject constructor(
         } finally {
             dsiNandManager.closeNand()
         }
-    }
-
-    private fun DSiWareTitle.toInstalledDsiWareRom(): Rom {
-        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0')
-        return Rom(
-            name = name,
-            developerName = producer,
-            fileName = "$titleIdHex.app",
-            uri = Rom.installedDsiWareUri(titleId),
-            parentTreeUri = null,
-            config = RomConfig.forDsiWareTitle(),
-            lastPlayed = null,
-            isDsiWareTitle = true,
-            retroAchievementsHash = "",
-            installedDsiWareTitleId = titleId and 0xFFFFFFFFL,
-            installedDsiWareIcon = icon,
-        )
     }
 
     private fun buildRomWithParent(rom: Rom, parentDocId: String?): RomWithParent {

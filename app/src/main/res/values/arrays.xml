@@ -17,14 +17,18 @@
 
     <!-- Auto-Translator Arrays -->
     <string-array name="translator_engine_options">
+        <item>@string/translator_engine_yandex</item>
         <item>@string/translator_engine_google</item>
+        <item>@string/translator_engine_lingva</item>
         <item>@string/translator_engine_deepl</item>
         <item>@string/translator_engine_libre</item>
         <item>@string/translator_engine_mymemory</item>
         <item>@string/translator_engine_custom_ai</item>
     </string-array>
     <string-array name="translator_engine_values">
+        <item>yandex</item>
         <item>google</item>
+        <item>lingva</item>
         <item>deepl</item>
         <item>libre</item>
         <item>mymemory</item>
@@ -126,6 +130,7 @@
         <item>4</item>
         <item>5</item>
         <item>0</item>
+        <item>8</item>
     </string-array>
 
     <string-array name="fps_counter_position_values">
@@ -227,6 +232,9 @@
         <item>midnight</item>
         <item>cyberpunk</item>
         <item>gothic</item>
+        <item>matrix</item>
+        <item>solar</item>
+        <item>sakura</item>
     </string-array>
 
     <string-array name="fast_forward_speed_multiplier_values">
