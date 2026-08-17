@@ -1,6 +1,7 @@
 package me.magnum.melonds.impl.emulator
 
 import android.content.Context
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.net.Uri
 import android.util.Log
@@ -25,6 +26,7 @@ import me.magnum.melonds.domain.model.EmulatorConfiguration
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.dsinand.DSiWareTitleFileType
+import me.magnum.melonds.domain.model.dsinand.OpenDSiNandResult
 import me.magnum.melonds.domain.model.emulator.EmulatorEvent
 import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
@@ -357,28 +359,61 @@ class AndroidEmulatorManager(
         }
     }
 
-    private suspend fun loadInstalledDsiWareShortcut(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
-        val titleId = rom.installedDsiWareTitleId ?: return RomLaunchResult.LaunchFailedRomNotFound
+    private suspend fun loadInstalledDsiWareShortcut(rom: Rom, cheats: List<Cheat>): RomLaunchResult = withContext(Dispatchers.IO) {
+        val titleId = rom.installedDsiWareTitleId ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
         val titleIdHex = titleId.toDsiWareTitleIdHex()
+        val cacheDir = File(context.cacheDir, "dsiware_cache").apply { mkdirs() }
+        val cacheRomFile = File(cacheDir, "${titleIdHex}.nds")
+
+        if (!cacheRomFile.exists() || cacheRomFile.length() == 0L) {
+            val openResult = dsiNandManager.openNand()
+            if (openResult != OpenDSiNandResult.SUCCESS && openResult != OpenDSiNandResult.NAND_ALREADY_OPEN) {
+                Log.e(TAG, "DSiWareShortcut: failed to open NAND: $openResult")
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+            }
+            try {
+                val exported = dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
+                if (!exported || !cacheRomFile.exists() || cacheRomFile.length() == 0L) {
+                    Log.e(TAG, "DSiWareShortcut: exportTitleExecutable failed for titleId=$titleIdHex")
+                    return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                }
+            } finally {
+                dsiNandManager.closeNand()
+            }
+        }
+
+        val romUri = Uri.fromFile(cacheRomFile)
+        val sram = try {
+            sramProvider.getSramForRom(rom)
+        } catch (exception: SramLoadException) {
+            return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
+        }
+
         val emulatorConfiguration = getRomEmulatorConfiguration(rom)
             .copy(
                 consoleType = ConsoleType.DSi,
                 useCustomBios = true,
-                showBootScreen = true, // DSiWare MUST boot via NAND Launcher (TLNC autoload)
-                dsiWareAutoloadTitleId = titleId,
+                showBootScreen = false,
+                dsiWareAutoloadTitleId = 0L,
             )
             .withPreparedDldiConfiguration()
-            ?: return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+            ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
 
         setupEmulator(emulatorConfiguration)
 
-        Log.i(TAG, "DSiWareShortcut: booting installed title via NAND Launcher title=$titleIdHex")
-        val firmwareResult = MelonEmulator.bootFirmware()
-        if (firmwareResult != MelonEmulator.FirmwareLoadResult.SUCCESS) {
+        Log.i(TAG, "DSiWareShortcut: direct booting title $titleIdHex via loadRom")
+        val loadResult = MelonEmulator.loadRom(
+            romUri = romUri,
+            sramUri = sram,
+            gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+            gbaRomUri = null,
+            gbaSramUri = null
+        )
+        if (loadResult.isTerminal || !isActive) {
             cameraManager.stopCurrentCameraSource()
             MelonEmulator.stopEmulation()
-            Log.w(TAG, "DSiWareShortcut: bootFirmware failed title=$titleIdHex result=$firmwareResult")
-            return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+            dldiFolderSyncManager.syncBackIfNeeded()
+            return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
 
         messageQueue.start()
@@ -387,16 +422,12 @@ class AndroidEmulatorManager(
             MelonEmulator.stopEmulation()
             messageQueue.stop()
             dldiFolderSyncManager.syncBackIfNeeded()
-            return RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
         }
         MelonEmulator.setupCheats(cheats.toTypedArray())
-        activeInstalledDsiWareShortcutSession = InstalledDsiWareShortcutSession(
-            titleId = titleId,
-            titleIdHex = titleIdHex,
-            publicSaveFile = null,
-        )
+        activeInstalledDsiWareShortcutSession = null
         MelonEmulator.startEmulation(startPaused = true)
-        return RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
+        return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
     }
 
     private fun Long.toDsiWareTitleIdHex(): String {

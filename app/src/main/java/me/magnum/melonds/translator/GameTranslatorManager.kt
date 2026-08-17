@@ -116,7 +116,7 @@ class GameTranslatorManager(
             "$prefix${engine.displayName}"
         }.toTypedArray()
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+        androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle(R.string.translator_engine)
             .setItems(items) { _, which ->
                 val selectedEngine = engines[which]
