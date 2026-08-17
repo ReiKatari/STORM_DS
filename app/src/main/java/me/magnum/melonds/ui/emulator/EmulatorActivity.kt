@@ -2368,7 +2368,7 @@ class EmulatorActivity : AppCompatActivity() {
             }
         }
         val labels = items.map { filtering ->
-            filtering?.let { allFilteringOptions[it.ordinal] } ?: getString(R.string.use_global_preference)
+            filtering?.let { allFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: getString(R.string.use_global_preference)
         }.toTypedArray()
         val checkedItem = items.indexOf(selectedFiltering).coerceAtLeast(0)
 
