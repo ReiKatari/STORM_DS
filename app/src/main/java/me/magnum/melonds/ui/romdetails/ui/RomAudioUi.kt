@@ -282,6 +282,42 @@ fun RomAudioUi(
                     CircularProgressIndicator(color = Color(0xFF00E5FF))
                 }
             }
+        } else if (tracks.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surface.copy(alpha = 0.5f))
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "АУДИО-БЛОК (SDAT) НЕ НАЙДЕН",
+                            fontFamily = SpaceGrotesk,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "В данном файле ROM отсутствует стандартная таблица звуков Nitro SDAT.",
+                            fontFamily = WatermelonMono,
+                            fontSize = 9.5.sp,
+                            color = Color(0xFF64748B),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
         } else {
             itemsIndexed(tracks) { _, track ->
                 val isPlaying = currentlyPlayingIndex == track.index
