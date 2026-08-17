@@ -1298,6 +1298,8 @@
     <string name="translator_font_size_scale">Font Size Scale</string>
     <string name="translator_show_floating_button">Show Floating Translate Button</string>
     <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
+    <string name="translator_tts_enabled">Speech Synthesis (Text-to-Speech)</string>
+    <string name="translator_tts_enabled_summary">Read translated game dialogues aloud automatically</string>
     <string name="translator_api_keys_category">API Keys &amp; Custom AI Configuration</string>
     <string name="translator_deepl_key">DeepL API Key</string>
     <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>
@@ -1336,4 +1338,10 @@
     <string name="rom_info_file">File</string>
     <string name="rom_info_last_played">Last played</string>
     <string name="rom_info_never">Never</string>
+    <string name="wfc_server_title">Nintendo WFC Online Server</string>
+    <string name="wfc_server_summary">1-Click connect to custom Nintendo Wi-Fi Connection servers</string>
+    <string name="wfc_server_disabled">Official / Disabled</string>
+    <string name="wfc_server_custom">Custom DNS</string>
+    <string name="wfc_custom_dns_title">Custom WFC Primary DNS</string>
+    <string name="wfc_custom_dns_summary">Primary DNS IP address for Nintendo WFC multiplayer</string>
 </resources>

@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.PixelCopy
 import android.view.SurfaceView
@@ -22,6 +23,7 @@ import me.magnum.melonds.translator.model.TranslatorTriggerMode
 import me.magnum.melonds.translator.ocr.GameTextRecognizer
 import me.magnum.melonds.translator.ui.GameTranslationOverlayView
 import okhttp3.OkHttpClient
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class GameTranslatorManager(
@@ -44,6 +46,7 @@ class GameTranslatorManager(
         const val PREF_TRANSLATOR_FONT_SIZE_SCALE = "translator_font_size_scale"
         const val PREF_TRANSLATOR_SHOW_FLOATING_BUTTON = "translator_show_floating_button"
         const val PREF_TRANSLATOR_SAVED_REGIONS = "translator_saved_regions"
+        const val PREF_TRANSLATOR_TTS_ENABLED = "translator_tts_enabled"
         const val PREF_TRANSLATOR_DEEPL_KEY = "translator_deepl_key"
         const val PREF_TRANSLATOR_CUSTOM_AI_KEY = "translator_custom_ai_key"
         const val PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT = "translator_custom_ai_endpoint"
@@ -65,6 +68,8 @@ class GameTranslatorManager(
     private var autoTranslateJob: Job? = null
     private var isPausedByTranslator = false
     private var pendingTranslateAfterPermission = false
+    private var textToSpeech: TextToSpeech? = null
+    private var isTtsReady = false
 
     var requestMediaProjectionPermission: ((android.content.Intent) -> Unit)? = null
 
@@ -73,6 +78,25 @@ class GameTranslatorManager(
 
     val isEnabled: Boolean
         get() = preferences.getBoolean(PREF_TRANSLATOR_ENABLED, false)
+
+    private fun initTtsIfNeeded() {
+        if (textToSpeech == null) {
+            textToSpeech = TextToSpeech(activity.applicationContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    textToSpeech?.language = Locale("ru")
+                    isTtsReady = true
+                }
+            }
+        }
+    }
+
+    fun speakTts(text: String) {
+        if (!preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)) return
+        initTtsIfNeeded()
+        if (isTtsReady && text.isNotBlank()) {
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "game_translator_tts")
+        }
+    }
 
     fun attachOverlay(overlay: GameTranslationOverlayView) {
         overlayView = overlay
@@ -109,25 +133,44 @@ class GameTranslatorManager(
     fun showQuickEngineSelectorDialog() {
         val currentPref = preferences.getString(PREF_TRANSLATOR_ENGINE, "google")
         val currentEngine = TranslatorEngineType.fromPreference(currentPref)
+        val ttsEnabled = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
         val engines = TranslatorEngineType.entries.toTypedArray()
         val items = engines.map { engine ->
             val isCurrent = engine == currentEngine
             val prefix = if (isCurrent) "✓ " else "   "
             "$prefix${engine.displayName}"
-        }.toTypedArray()
+        }.toMutableList()
+
+        val ttsItem = if (ttsEnabled) "🔊 Озвучка перевода (TTS): [ВКЛ]" else "🔇 Озвучка перевода (TTS): [ВЫКЛ]"
+        items.add("────────────────────────")
+        items.add(ttsItem)
 
         androidx.appcompat.app.AlertDialog.Builder(activity)
             .setTitle(R.string.translator_engine)
-            .setItems(items) { _, which ->
-                val selectedEngine = engines[which]
-                preferences.edit().putString(PREF_TRANSLATOR_ENGINE, selectedEngine.preferenceValue).apply()
-                translationCache.clear()
-                val displayName = selectedEngine.displayName.substringBefore(" (")
-                Toast.makeText(
-                    activity,
-                    "${activity.getString(R.string.translator_engine)}: $displayName",
-                    Toast.LENGTH_SHORT
-                ).show()
+            .setItems(items.toTypedArray()) { _, which ->
+                when {
+                    which < engines.size -> {
+                        val selectedEngine = engines[which]
+                        preferences.edit().putString(PREF_TRANSLATOR_ENGINE, selectedEngine.preferenceValue).apply()
+                        translationCache.clear()
+                        val displayName = selectedEngine.displayName.substringBefore(" (")
+                        Toast.makeText(
+                            activity,
+                            "${activity.getString(R.string.translator_engine)}: $displayName",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    which == engines.size + 1 -> {
+                        val newTts = !ttsEnabled
+                        preferences.edit().putBoolean(PREF_TRANSLATOR_TTS_ENABLED, newTts).apply()
+                        if (newTts) initTtsIfNeeded()
+                        Toast.makeText(
+                            activity,
+                            if (newTts) "🔊 Озвучка диалогов включена" else "🔇 Озвучка диалогов отключена",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             }
             .setNeutralButton(R.string.translator_regions_title) { _, _ ->
                 openRegionEditor()
@@ -443,6 +486,10 @@ class GameTranslatorManager(
                 }
 
                 overlayView?.setTranslatedBlocks(blocks)
+                if (preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)) {
+                    val speechText = blocks.joinToString(". ") { it.translatedText }
+                    speakTts(speechText)
+                }
             } catch (t: Throwable) {
                 Log.e(TAG, "Process captured frame failed", t)
                 val msg = t.message?.takeIf { it.isNotBlank() } ?: activity.getString(R.string.translator_no_text_found)
@@ -504,6 +551,11 @@ class GameTranslatorManager(
 
     fun onDestroy() {
         stopAutoTranslate()
+        try {
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
+            textToSpeech = null
+        } catch (_: Throwable) {}
         mainScope.cancel()
         mediaProjectionCapturer.onDestroy()
     }
