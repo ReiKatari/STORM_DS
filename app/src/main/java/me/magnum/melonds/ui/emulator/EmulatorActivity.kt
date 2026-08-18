@@ -1672,6 +1672,9 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        setupSustainedPerformanceMode()
+        setupFpsCounter()
+        setupResolutionHud()
         choreographerFrameRenderer.startRendering()
         startShaderDiagnosticsPolling()
         translatorManager.syncOverlaySettings()
@@ -1764,6 +1767,10 @@ class EmulatorActivity : AppCompatActivity() {
         val height = 384 * effectiveScale
         binding.textResolution.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
 
+        val density = resources.displayMetrics.density
+        val margin16 = (16 * density).toInt()
+        val marginOffset = if (binding.textFps.isVisible) (52 * density).toInt() else margin16
+
         val newParams = ConstraintLayout.LayoutParams(
             ConstraintLayout.LayoutParams.WRAP_CONTENT,
             ConstraintLayout.LayoutParams.WRAP_CONTENT
@@ -1772,26 +1779,26 @@ class EmulatorActivity : AppCompatActivity() {
             "top_left" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_LEFT) 90 else 16
-                newParams.leftMargin = 16
+                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_LEFT) marginOffset else margin16
+                newParams.leftMargin = margin16
             }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_RIGHT) 90 else 16
-                newParams.rightMargin = 16
+                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_RIGHT) marginOffset else margin16
+                newParams.rightMargin = margin16
             }
             "bottom_left" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_LEFT) 90 else 16
-                newParams.leftMargin = 16
+                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_LEFT) marginOffset else margin16
+                newParams.leftMargin = margin16
             }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_RIGHT) 90 else 16
-                newParams.rightMargin = 16
+                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_RIGHT) marginOffset else margin16
+                newParams.rightMargin = margin16
             }
         }
         binding.textResolution.layoutParams = newParams

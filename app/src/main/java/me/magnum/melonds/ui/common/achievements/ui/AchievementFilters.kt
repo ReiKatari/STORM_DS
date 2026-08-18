@@ -41,19 +41,24 @@ enum class AchievementStateFilter(
     val bucket: AchievementBucketUiModel.Bucket?,
 ) {
     All(0, null),
-    PendingSubmissions(1, AchievementBucketUiModel.Bucket.PendingSubmissions),
-    ActiveChallenges(2, AchievementBucketUiModel.Bucket.ActiveChallenges),
-    RecentlyUnlocked(3, AchievementBucketUiModel.Bucket.RecentlyUnlocked),
-    Unsynced(4, AchievementBucketUiModel.Bucket.Unsynced),
-    AlmostThere(5, AchievementBucketUiModel.Bucket.AlmostThere),
-    Locked(6, AchievementBucketUiModel.Bucket.Locked),
-    Unsupported(7, AchievementBucketUiModel.Bucket.Unsupported),
-    Unofficial(8, AchievementBucketUiModel.Bucket.Unofficial),
-    Unlocked(9, AchievementBucketUiModel.Bucket.Unlocked),
+    Unlocked(1, AchievementBucketUiModel.Bucket.Unlocked),
+    Locked(2, AchievementBucketUiModel.Bucket.Locked),
+    ActiveChallenges(3, AchievementBucketUiModel.Bucket.ActiveChallenges),
+    RecentlyUnlocked(4, AchievementBucketUiModel.Bucket.RecentlyUnlocked),
+    PendingSubmissions(5, AchievementBucketUiModel.Bucket.PendingSubmissions),
+    Unsynced(6, AchievementBucketUiModel.Bucket.Unsynced),
+    AlmostThere(7, AchievementBucketUiModel.Bucket.AlmostThere),
+    Unsupported(8, AchievementBucketUiModel.Bucket.Unsupported),
+    Unofficial(9, AchievementBucketUiModel.Bucket.Unofficial),
     ;
 
     fun matches(bucketType: AchievementBucketUiModel.Bucket): Boolean {
-        return bucket == null || bucket == bucketType
+        return when (this) {
+            All -> true
+            Unlocked -> bucketType == AchievementBucketUiModel.Bucket.Unlocked || bucketType == AchievementBucketUiModel.Bucket.RecentlyUnlocked || bucketType == AchievementBucketUiModel.Bucket.PendingSubmissions
+            Locked -> bucketType == AchievementBucketUiModel.Bucket.Locked || bucketType == AchievementBucketUiModel.Bucket.AlmostThere || bucketType == AchievementBucketUiModel.Bucket.ActiveChallenges
+            else -> bucket == null || bucket == bucketType
+        }
     }
 
     companion object {

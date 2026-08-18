@@ -34,24 +34,18 @@ object EmbeddedActionReplayCheats {
             ?: if (cleanCode.length >= 3) database.gameDao().findGameByPrefix(cleanCode.take(3)) else null
             ?: if (gameTitle.isNotBlank()) database.gameDao().findGameByTitle(gameTitle.trim()) else null
 
-        if (existing != null) return@withContext true
-
-        val categories = getEmbeddedCheatsForGame(cleanCode, gameTitle)
-        if (categories.isNotEmpty()) {
-            insertCheatsToDatabase(database, cleanCode, gameTitle, categories)
-            return@withContext true
+        if (existing != null && existing.id != null) {
+            val folders = database.cheatFolderDao().getFoldersForGame(existing.id)
+            if (folders.isNotEmpty()) return@withContext true
         }
 
-        // Try online auto-fetch for this game code
-        val onlineCategories = fetchOnlineCheats(cleanCode)
-        if (onlineCategories.isNotEmpty()) {
-            insertCheatsToDatabase(database, cleanCode, gameTitle, onlineCategories)
-            return@withContext true
+        val categories = getEmbeddedCheatsForGame(cleanCode, gameTitle).ifEmpty {
+            fetchOnlineCheats(cleanCode).ifEmpty {
+                generateUniversalCheats(cleanCode, gameTitle)
+            }
         }
 
-        // Final fallback: generate universal game-tailored Action Replay pack
-        val universalCategories = generateUniversalCheats(cleanCode, gameTitle)
-        insertCheatsToDatabase(database, cleanCode, gameTitle, universalCategories)
+        insertCheatsToDatabase(database, cleanCode, gameTitle, categories, existing?.id)
         return@withContext true
     }
 
@@ -59,13 +53,14 @@ object EmbeddedActionReplayCheats {
         database: MelonDatabase,
         gameCode: String,
         gameTitle: String,
-        categories: List<RawCheatCategory>
+        categories: List<RawCheatCategory>,
+        existingGameId: Long? = null
     ) {
         try {
             val dbEntity = CheatDatabaseEntity(id = null, name = "Action Replay Official")
             val dbId = database.cheatDatabaseDao().insertCheatDatabase(dbEntity).takeIf { it > 0 } ?: 1L
 
-            val gameId = database.gameDao().insertGame(
+            val gameId = existingGameId ?: database.gameDao().insertGame(
                 GameEntity(
                     id = null,
                     name = gameTitle.ifBlank { "NDS Game ($gameCode)" },
