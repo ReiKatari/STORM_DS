@@ -2096,14 +2096,10 @@ class EmulatorViewModel @Inject constructor(
                         }
                     }
                     RomPauseMenuOption.CHEATS -> {
-                        if (emulatorSession.areCheatsEnabled()) {
-                            (_emulatorState.value as? EmulatorState.RunningRom)?.let {
-                                getRomInfo(it.rom)?.let { romInfo ->
-                                    _uiEvent.tryEmit(EmulatorUiEvent.OpenScreen.CheatsScreen(romInfo))
-                                }
+                        (_emulatorState.value as? EmulatorState.RunningRom)?.let {
+                            getRomInfo(it.rom)?.let { romInfo ->
+                                _uiEvent.tryEmit(EmulatorUiEvent.OpenScreen.CheatsScreen(romInfo))
                             }
-                        } else {
-                            _toastEvent.tryEmit(ToastEvent.CannotUseCheatsWhenRAHardcoreIsEnabled)
                         }
                     }
                     RomPauseMenuOption.VIEW_ACHIEVEMENTS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowAchievementList)
@@ -6302,7 +6298,7 @@ class EmulatorViewModel @Inject constructor(
             RomPauseMenuOption.SAVE_STATE -> emulatorSession.areSaveStatesAllowed()
             RomPauseMenuOption.REWIND -> settingsRepository.isRewindEnabled() && emulatorSession.areSaveStateLoadsAllowed()
             RomPauseMenuOption.LOAD_STATE -> emulatorSession.areSaveStateLoadsAllowed()
-            RomPauseMenuOption.CHEATS -> emulatorSession.areCheatsEnabled()
+            RomPauseMenuOption.CHEATS -> true
             RomPauseMenuOption.VIEW_ACHIEVEMENTS -> emulatorSession.isRetroAchievementsEnabledForSession()
             RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> buildRaPendingSyncMenuState().isVisible
             RomPauseMenuOption.RENDERER_DEBUG -> rendererDebugToolsEnabled
