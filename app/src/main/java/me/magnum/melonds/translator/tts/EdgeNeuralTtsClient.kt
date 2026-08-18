@@ -3,8 +3,10 @@ package me.magnum.melonds.translator.tts
 import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -23,9 +25,9 @@ object EdgeNeuralTtsClient {
     private const val TRUSTED_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .writeTimeout(8, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -38,14 +40,19 @@ object EdgeNeuralTtsClient {
     ): ByteArray? {
         if (text.isBlank()) return null
 
-        // Try WebSocket first
+        // 1. Primary: Edge Neural WebSocket Stream (24kHz HD Studio Quality)
         val wsAudio = synthesizeViaWebSocket(text, voiceName, pitch, rate, volume)
         if (wsAudio != null && wsAudio.isNotEmpty()) {
             return wsAudio
         }
 
-        // Fallback to Google / Edge REST Stream if WebSocket fails or throttles
-        return synthesizeViaRestFallback(text, voiceName)
+        // 2. Secondary: Edge Cognitive Voice Endpoint
+        val cognitiveAudio = synthesizeViaCognitiveEdge(text, voiceName, pitch, rate)
+        if (cognitiveAudio != null && cognitiveAudio.isNotEmpty()) {
+            return cognitiveAudio
+        }
+
+        return null
     }
 
     private suspend fun synthesizeViaWebSocket(
@@ -57,16 +64,18 @@ object EdgeNeuralTtsClient {
     ): ByteArray? {
         var webSocketRef: WebSocket? = null
         return try {
-            withTimeoutOrNull(6500) {
+            withTimeoutOrNull(7000) {
                 val deferred = CompletableDeferred<ByteArray?>()
                 val audioBuffer = ByteArrayOutputStream()
                 val connectionId = UUID.randomUUID().toString().replace("-", "")
                 val requestId = UUID.randomUUID().toString().replace("-", "")
 
                 val request = Request.Builder()
-                    .url("$WSS_URL?TrustedClientToken=$TRUSTED_TOKEN&ConnectionId=$connectionId")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0")
+                    .url("$WSS_URL?TrustedClientToken=$TRUSTED_TOKEN&ConnectionId=$connectionId&Sec-MS-GEC-Version=1-130.0.2849.68")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
                     .header("Origin", "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold")
+                    .header("Accept-Encoding", "gzip, deflate, br")
+                    .header("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
                     .build()
 
                 val listener = object : WebSocketListener() {
@@ -88,7 +97,7 @@ object EdgeNeuralTtsClient {
                             else -> "en-US"
                         }
                         val ssml = "X-RequestId:$requestId\r\nX-Timestamp:$timestamp\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n" +
-                                "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$lang'>" +
+                                "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='$lang'>" +
                                 "<voice name='$voiceName'>" +
                                 "<prosody pitch='$pitch' rate='$rate' volume='$volume'>$cleanText</prosody>" +
                                 "</voice></speak>"
@@ -119,7 +128,7 @@ object EdgeNeuralTtsClient {
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        Log.w(TAG, "Edge TTS WebSocket error: ${t.message}")
+                        Log.w(TAG, "Edge TTS WebSocket failure: ${t.message}")
                         val result = audioBuffer.toByteArray()
                         deferred.complete(if (result.isNotEmpty()) result else null)
                     }
@@ -143,22 +152,31 @@ object EdgeNeuralTtsClient {
         }
     }
 
-    private fun synthesizeViaRestFallback(text: String, voiceName: String): ByteArray? {
+    private fun synthesizeViaCognitiveEdge(text: String, voiceName: String, pitch: String, rate: String): ByteArray? {
         return try {
-            val encodedText = java.net.URLEncoder.encode(text.take(300), "UTF-8")
+            val cleanText = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
             val lang = when {
-                voiceName.startsWith("ru-") -> "ru"
-                voiceName.startsWith("ja-") -> "ja"
-                voiceName.startsWith("zh-") -> "zh"
-                voiceName.startsWith("de-") -> "de"
-                voiceName.startsWith("fr-") -> "fr"
-                voiceName.startsWith("es-") -> "es"
-                else -> "en"
+                voiceName.startsWith("ru-") -> "ru-RU"
+                voiceName.startsWith("ja-") -> "ja-JP"
+                voiceName.startsWith("zh-") -> "zh-CN"
+                voiceName.startsWith("de-") -> "de-DE"
+                voiceName.startsWith("fr-") -> "fr-FR"
+                voiceName.startsWith("es-") -> "es-ES"
+                else -> "en-US"
             }
-            val url = "https://translate.google.com/translate_tts?ie=UTF-8&q=$encodedText&tl=$lang&client=tw-ob"
+            val ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$lang'>" +
+                    "<voice name='$voiceName'>" +
+                    "<prosody pitch='$pitch' rate='$rate'>$cleanText</prosody>" +
+                    "</voice></speak>"
+
+            val mediaType = "application/ssml+xml; charset=utf-8".toMediaTypeOrNull()
+            val body = ssml.toRequestBody(mediaType)
             val request = Request.Builder()
-                .url(url)
+                .url("https://eastus.tts.speech.microsoft.com/cognitiveservices/v1")
+                .header("X-Microsoft-OutputFormat", "audio-24khz-48kbitrate-mono-mp3")
+                .header("Content-Type", "application/ssml+xml")
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .post(body)
                 .build()
 
             val response = client.newCall(request).execute()
@@ -167,8 +185,7 @@ object EdgeNeuralTtsClient {
             } else {
                 null
             }
-        } catch (e: Throwable) {
-            Log.w(TAG, "REST TTS fallback failed: ${e.message}")
+        } catch (_: Throwable) {
             null
         }
     }

@@ -3,21 +3,29 @@ package me.magnum.melonds.ui.romdetails.ui
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
@@ -68,6 +76,7 @@ import me.magnum.melonds.ui.romdetails.model.RomAchievementsSummary
 import me.magnum.melonds.ui.romdetails.model.RomRetroAchievementsUiState
 import me.magnum.melonds.ui.romdetails.ui.preview.mockRAAchievementPreview
 import me.magnum.melonds.ui.theme.MelonTheme
+import me.magnum.melonds.ui.theme.watermelon
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAchievementSet
 import java.net.URL
@@ -141,55 +150,267 @@ fun OfflineAchievementsStatusUi(
     state: OfflineAchievementsUiState,
     onSyncNow: () -> Unit,
 ) {
-    ConfigSection(
-        title = stringResource(id = R.string.offline_ra_settings_title),
-        modifier = modifier,
+    val colors = watermelon
+    val context = LocalContext.current
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        val availabilityText = when (state.availability) {
-            OfflineAchievementsUiState.Availability.ENABLED -> stringResource(id = R.string.offline_ra_status_enabled)
-            OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> stringResource(id = R.string.offline_ra_status_disabled_not_logged_in)
-            OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(id = R.string.offline_ra_status_disabled_no_cache)
+        // Status Hero Banner
+        val isEnabled = state.availability == OfflineAchievementsUiState.Availability.ENABLED
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        if (isEnabled) listOf(androidx.compose.ui.graphics.Color(0xFF064E3B), androidx.compose.ui.graphics.Color(0xFF022C22))
+                        else listOf(androidx.compose.ui.graphics.Color(0xFF451A03), androidx.compose.ui.graphics.Color(0xFF1C1917))
+                    )
+                )
+                .border(
+                    1.dp,
+                    if (isEnabled) androidx.compose.ui.graphics.Color(0xFF10B981).copy(alpha = 0.5f)
+                    else androidx.compose.ui.graphics.Color(0xFFF59E0B).copy(alpha = 0.5f),
+                    RoundedCornerShape(14.dp)
+                )
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isEnabled) androidx.compose.ui.graphics.Color(0xFF10B981) else androidx.compose.ui.graphics.Color(0xFFF59E0B))
+                )
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = if (isEnabled) "ОФЛАЙН-СИСТЕМА RETROACHIEVEMENTS АКТИВНА" else "ОФЛАЙН-РЕЖИМ: ТРЕБУЕТСЯ ВХОД",
+                        fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                    Text(
+                        text = if (isEnabled) "Достижения сохраняются локально и синхронизируются при появлении сети" else "Войдите в аккаунт RetroAchievements для локального кэширования",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 9.5.sp,
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
+                    )
+                }
+            }
         }
-        StatusLine(text = availabilityText)
-        StatusLine(text = stringResource(id = R.string.offline_ra_pending_softcore_unlocks, state.pendingSoftcoreUnlockCount))
-        StatusLine(text = stringResource(id = R.string.offline_ra_pending_ledger_unlocks, state.pendingLedgerUnlockCount))
-        val expirationText = rememberLedgerExpirationText(state.ledgerExpiresInMs)
-        if (expirationText != null) {
-            StatusLine(
-                text = stringResource(id = R.string.offline_ra_ledger_expiration, expirationText),
-                highlight = state.isLedgerExpired,
-            )
+
+        // Color Indicator Cards Grid
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Softcore Pending Card (Cyan)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.surface)
+                    .border(1.dp, androidx.compose.ui.graphics.Color(0xFF0284C7).copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(androidx.compose.ui.graphics.Color(0xFF38BDF8))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "СОФТКОР",
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color(0xFF38BDF8)
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "${state.pendingSoftcoreUnlockCount} в очереди",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.text
+                    )
+                    Text(
+                        text = "Ожидают отправки",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 8.5.sp,
+                        color = colors.text3
+                    )
+                }
+            }
+
+            // Hardcore Ledger Card (Gold / Flame)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.surface)
+                    .border(1.dp, androidx.compose.ui.graphics.Color(0xFFD97706).copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(androidx.compose.ui.graphics.Color(0xFFFBBF24))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "ХАРДКОР ЛЕДЖЕР",
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color(0xFFFBBF24)
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "${state.pendingLedgerUnlockCount} записей",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.text
+                    )
+                    Text(
+                        text = "Защищенный журнал",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 8.5.sp,
+                        color = colors.text3
+                    )
+                }
+            }
         }
-        val integrityText = if (state.isLedgerIntegrityOk) {
-            stringResource(id = R.string.offline_ra_ledger_integrity_ok)
-        } else {
-            stringResource(id = R.string.offline_ra_ledger_integrity_tampered)
+
+        // Integrity & Expiration Info Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.surface)
+                .padding(14.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Integrity Indicator
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (state.isLedgerIntegrityOk) androidx.compose.ui.graphics.Color(0xFF10B981) else androidx.compose.ui.graphics.Color(0xFFEF4444))
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Целостность журнала достижений",
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 11.sp,
+                            color = colors.text
+                        )
+                    }
+                    Text(
+                        text = if (state.isLedgerIntegrityOk) "ПОДТВЕРЖДЕНА (OK)" else "НАРУШЕНА",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        color = if (state.isLedgerIntegrityOk) androidx.compose.ui.graphics.Color(0xFF10B981) else androidx.compose.ui.graphics.Color(0xFFEF4444)
+                    )
+                }
+
+                // Expiration Indicator
+                val expirationText = rememberLedgerExpirationText(state.ledgerExpiresInMs)
+                if (expirationText != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (state.isLedgerExpired) androidx.compose.ui.graphics.Color(0xFFEF4444) else androidx.compose.ui.graphics.Color(0xFFA855F7))
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Срок действия кэша",
+                                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                                fontSize = 11.sp,
+                                color = colors.text
+                            )
+                        }
+                        Text(
+                            text = expirationText,
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                            fontSize = 10.sp,
+                            color = if (state.isLedgerExpired) androidx.compose.ui.graphics.Color(0xFFEF4444) else androidx.compose.ui.graphics.Color(0xFFA855F7)
+                        )
+                    }
+                }
+            }
         }
-        StatusLine(
-            text = stringResource(id = R.string.offline_ra_ledger_integrity, integrityText),
-            highlight = !state.isLedgerIntegrityOk,
-        )
 
         if (state.isSyncing) {
             LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                color = MaterialTheme.colors.secondary,
+                modifier = Modifier.fillMaxWidth(),
+                color = androidx.compose.ui.graphics.Color(0xFFFF0055)
             )
         }
 
-        val context = LocalContext.current
-        Button(
-            onClick = {
-                onSyncNow()
-                if (!state.canSyncNow) {
+        // Sync Action Button
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Brush.horizontalGradient(listOf(androidx.compose.ui.graphics.Color(0xFFFF0055), androidx.compose.ui.graphics.Color(0xFFBE123C))))
+                .clickable(enabled = !state.isSyncing) {
+                    onSyncNow()
                     Toast.makeText(context, "Синхронизация с сервером RetroAchievements выполнена", Toast.LENGTH_SHORT).show()
                 }
-            },
-            enabled = !state.isSyncing,
-            colors = melonButtonColors(),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text(text = stringResource(id = R.string.offline_ra_sync_now_button).uppercase())
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (state.isSyncing) {
+                    CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "СИНХРОНИЗАЦИЯ...",
+                        fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                } else {
+                    Text(
+                        text = "СИНХРОНИЗИРОВАТЬ С СЕРВЕРОМ СЕЙЧАС",
+                        fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                }
+            }
         }
     }
 }

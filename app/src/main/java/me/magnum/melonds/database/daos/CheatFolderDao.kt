@@ -13,6 +13,9 @@ interface CheatFolderDao {
     @Insert
     suspend fun insertCheatFolders(cheatFolders: List<CheatFolderEntity>): List<Long>
 
+    @Query("SELECT * FROM cheat_folder WHERE game_id = :gameId")
+    suspend fun getFoldersForGame(gameId: Long): List<CheatFolderEntity>
+
     @Query("DELETE FROM cheat_folder WHERE id NOT IN (SELECT DISTINCT cheat_folder_id FROM cheat)")
     suspend fun deleteEmptyFolders()
 }

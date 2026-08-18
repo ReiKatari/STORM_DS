@@ -453,6 +453,32 @@ class GameTtsManager(private val context: Context) {
         val primaryFemaleVoice = femaleVoices.firstOrNull()
         val secondaryFemaleVoice = femaleVoices.getOrNull(1) ?: primaryFemaleVoice
 
+        val isMalePersona = when (persona) {
+            CharacterPersona.HERO_DARK_VIGILANTE,
+            CharacterPersona.VILLAIN_MANIC_JOKER,
+            CharacterPersona.DEMONIC_DEVILISH,
+            CharacterPersona.GENTLEMAN_SCHOLAR,
+            CharacterPersona.ELDER_ANCIENT_BOSS,
+            CharacterPersona.ROBOTIC_AI_TECH,
+            CharacterPersona.HERO_PROTAGONIST_MALE,
+            CharacterPersona.NARRATOR_CHRONICLE -> true
+            else -> false
+        }
+
+        try {
+            if (isMalePersona) {
+                if (primaryMaleVoice != null) {
+                    tts?.voice = primaryMaleVoice
+                } else if (primaryFemaleVoice != null && tts?.voice == primaryFemaleVoice) {
+                    tts?.voice = tts?.defaultVoice
+                }
+            } else {
+                if (primaryFemaleVoice != null) {
+                    tts?.voice = primaryFemaleVoice
+                }
+            }
+        } catch (_: Throwable) {}
+
         when (persona) {
             CharacterPersona.HERO_DARK_VIGILANTE -> {
                 if (primaryMaleVoice != null) {
