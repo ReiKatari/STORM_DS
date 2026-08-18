@@ -1462,20 +1462,34 @@ class SharedPreferencesSettingsRepository(
         return dirPreference?.toUri()
     }
 
+    private fun getEmulatorBaseDirectory(): File {
+        return try {
+            val publicStorage = File(android.os.Environment.getExternalStorageDirectory(), "com.stormds.emulator")
+            if (!publicStorage.exists()) {
+                publicStorage.mkdirs()
+            }
+            if (publicStorage.isDirectory) {
+                publicStorage
+            } else {
+                context.getExternalFilesDir(null) ?: File(context.filesDir, "storm_ds")
+            }
+        } catch (_: Throwable) {
+            context.getExternalFilesDir(null) ?: File(context.filesDir, "storm_ds")
+        }
+    }
+
     override fun getSaveFileDirectory(rom: Rom): Uri {
         return if (!saveNextToRomFile() && getSaveFileDirectory() != null) {
             getSaveFileDirectory()!!
+        } else if (saveNextToRomFile() && rom.parentTreeUri != null) {
+            getRomParentDirectory(rom)
         } else {
-            if (rom.parentTreeUri != null) {
-                getRomParentDirectory(rom)
+            val saveFileDirectory = File(getEmulatorBaseDirectory(), "save")
+            if (!saveFileDirectory.isDirectory && !saveFileDirectory.mkdirs()) {
+                val fallback = File(context.getExternalFilesDir(null), "save")
+                fallback.mkdirs()
+                Uri.fromFile(fallback)
             } else {
-                // We don't know the ROM's directory, so we can't save next to it. Put save file in an app folder
-                val externalFilesDir = context.getExternalFilesDir(null)
-                val saveFileDirectory = File(externalFilesDir, "saves")
-                if (!saveFileDirectory.isDirectory && !saveFileDirectory.mkdirs()) {
-                    throw Exception("Could not create internal save directory")
-                }
-
                 Uri.fromFile(saveFileDirectory)
             }
         }
@@ -1492,7 +1506,7 @@ class SharedPreferencesSettingsRepository(
             SaveStateLocation.SAVE_DIR -> getSaveFileDirectory(rom)
             SaveStateLocation.ROM_DIR -> getRomParentDirectory(rom)
             SaveStateLocation.INTERNAL_DIR -> {
-                val saveStateDir = File(context.getExternalFilesDir(null), "savestates")
+                val saveStateDir = File(getEmulatorBaseDirectory(), "savestates")
                 if (!saveStateDir.isDirectory) {
                     saveStateDir.mkdirs()
                 }

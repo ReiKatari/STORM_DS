@@ -455,7 +455,8 @@ class AndroidEmulatorManager(
         } else 0L
 
         val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
-        val isDsiWare = category == 0x00030004L || (gameCode.isNotEmpty() && gameCode[0] in listOf('H', 'K', 'V', 'Z')) || rom.isDsiWareTitle
+        val unitCode = header.getOrNull(0x12)?.toInt() ?: 0
+        val isDsiWare = category == 0x00030004L || (gameCode.isNotEmpty() && gameCode[0] in listOf('H', 'K') && unitCode == 3) || rom.isDsiWareTitle
         if (!isDsiWare) return null
 
         val rawTitleId = if (readBytes >= 0x234) {

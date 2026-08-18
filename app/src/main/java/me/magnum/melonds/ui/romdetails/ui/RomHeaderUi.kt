@@ -625,7 +625,6 @@ fun RomDetailsTabRow(
             RomDetailsTab.entries.forEach { tab ->
                 val label = when (tab) {
                     RomDetailsTab.CONFIG -> stringResource(R.string.rom_details_configuration_tab)
-                    RomDetailsTab.AUDIO -> stringResource(R.string.rom_details_audio_tab)
                     RomDetailsTab.CHEATS -> stringResource(R.string.cheats)
                     RomDetailsTab.RETRO_ACHIEVEMENTS -> stringResource(R.string.retro_achievements_tab)
                     RomDetailsTab.OFFLINE_ACHIEVEMENTS -> stringResource(R.string.rom_details_offline_achievements_tab)
