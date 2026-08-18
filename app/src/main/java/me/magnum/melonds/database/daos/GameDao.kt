@@ -23,6 +23,12 @@ interface GameDao {
     @Query("SELECT * FROM game WHERE game_code = :gameCode LIMIT 1")
     suspend fun findGameByCode(gameCode: String): GameEntity?
 
+    @Query("SELECT * FROM game WHERE game_code LIKE :codePrefix || '%' LIMIT 1")
+    suspend fun findGameByPrefix(codePrefix: String): GameEntity?
+
+    @Query("SELECT * FROM game WHERE name LIKE '%' || :titleKeyword || '%' LIMIT 1")
+    suspend fun findGameByTitle(titleKeyword: String): GameEntity?
+
     @Transaction
     @Query("SELECT * FROM cheat_folder WHERE game_id = :gameId")
     fun getGameCheats(gameId: Long): Flow<List<CheatFolderWithCheats>>

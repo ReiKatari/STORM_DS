@@ -155,38 +155,56 @@ fun RomCheatsUi(
         if (isDownloadingDb) return
         isDownloadingDb = true
         coroutineScope.launch(Dispatchers.IO) {
-            try {
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    .build()
+            val candidateUrls = listOf(
+                "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
+                "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/master/Cheat%20Databases/usrcheat.dat",
+                "https://github.com/DeadSkullzJr/NDS-i-Cheat-Databases/releases/latest/download/usrcheat.dat",
+                "https://github.com/DeadSkullzJr/NDS-i-Cheat-Databases/raw/main/Cheat%20Databases/usrcheat.dat",
+                "https://raw.githubusercontent.com/ahezard/nds-rom-info/master/usrcheat.dat"
+            )
 
-                val url = "https://raw.githubusercontent.com/DeadskullzJr/NDS-i-Cheat-Databases/master/usrcheat.dat"
-                val request = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "STORM_DS_Emulator")
-                    .build()
+            var success = false
+            var lastError = ""
 
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful && response.body != null) {
-                    val file = File(context.cacheDir, "usrcheat_downloaded.dat")
-                    FileOutputStream(file).use { fos ->
-                        fos.write(response.body!!.bytes())
+            val client = OkHttpClient.Builder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .build()
+
+            for (url in candidateUrls) {
+                try {
+                    val request = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build()
+
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful && response.body != null) {
+                        val file = File(context.cacheDir, "usrcheat_downloaded.dat")
+                        FileOutputStream(file).use { fos ->
+                            fos.write(response.body!!.bytes())
+                        }
+                        val fileUri = Uri.fromFile(file)
+                        cheatsRepository.importCheats(fileUri)
+                        success = true
+                        break
+                    } else {
+                        lastError = "HTTP ${response.code}"
                     }
-                    val fileUri = Uri.fromFile(file)
-                    cheatsRepository.importCheats(fileUri)
-                    withContext(Dispatchers.Main) {
-                        isDownloadingDb = false
-                        Toast.makeText(context, "База читов успешно загружена и импортирована!", Toast.LENGTH_LONG).show()
-                        refreshCheats()
-                    }
-                } else {
-                    throw IllegalStateException("HTTP ${response.code}")
+                } catch (e: Throwable) {
+                    lastError = e.message ?: "Network error"
                 }
-            } catch (e: Throwable) {
-                withContext(Dispatchers.Main) {
-                    isDownloadingDb = false
-                    Toast.makeText(context, "Ошибка загрузки: ${e.message}. Выберите локальный файл usrcheat.dat.", Toast.LENGTH_LONG).show()
+            }
+
+            withContext(Dispatchers.Main) {
+                isDownloadingDb = false
+                if (success) {
+                    Toast.makeText(context, "База читов Action Replay успешно загружена и импортирована!", Toast.LENGTH_LONG).show()
+                    refreshCheats()
+                } else {
+                    Toast.makeText(context, "Ошибка загрузки онлайн базы ($lastError). Выберите свой файл usrcheat.dat.", Toast.LENGTH_LONG).show()
                 }
             }
         }

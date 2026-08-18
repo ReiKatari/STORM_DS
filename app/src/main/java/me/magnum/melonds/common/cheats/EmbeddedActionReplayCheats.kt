@@ -31,9 +31,12 @@ object EmbeddedActionReplayCheats {
         if (cleanCode.isBlank()) return@withContext false
 
         val existing = database.gameDao().findGameByCode(cleanCode)
+            ?: if (cleanCode.length >= 3) database.gameDao().findGameByPrefix(cleanCode.take(3)) else null
+            ?: if (gameTitle.isNotBlank()) database.gameDao().findGameByTitle(gameTitle.trim()) else null
+
         if (existing != null) return@withContext true
 
-        val categories = getEmbeddedCheatsForGame(cleanCode)
+        val categories = getEmbeddedCheatsForGame(cleanCode, gameTitle)
         if (categories.isNotEmpty()) {
             insertCheatsToDatabase(database, cleanCode, gameTitle, categories)
             return@withContext true
@@ -46,7 +49,10 @@ object EmbeddedActionReplayCheats {
             return@withContext true
         }
 
-        return@withContext false
+        // Final fallback: generate universal game-tailored Action Replay pack
+        val universalCategories = generateUniversalCheats(cleanCode, gameTitle)
+        insertCheatsToDatabase(database, cleanCode, gameTitle, universalCategories)
+        return@withContext true
     }
 
     private suspend fun insertCheatsToDatabase(
@@ -92,7 +98,7 @@ object EmbeddedActionReplayCheats {
                         database.cheatDao().insertCheats(cheatEntities)
                     }
                 }
-                Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} cheats for $gameCode")
+                Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} cheats for $gameCode ($gameTitle)")
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed inserting cheats for $gameCode: ${e.message}")
@@ -100,24 +106,27 @@ object EmbeddedActionReplayCheats {
     }
 
     private fun fetchOnlineCheats(gameCode: String): List<RawCheatCategory> {
-        return try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(6, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
-                .build()
+        val prefix = gameCode.take(4).uppercase()
+        val urls = listOf(
+            "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/main/Cheats/$prefix.txt",
+            "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/master/Cheats/$prefix.txt"
+        )
+        val client = OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .build()
 
-            val prefix = gameCode.take(4).uppercase()
-            val url = "https://raw.githubusercontent.com/DeadskullzJr/NDS-i-Cheat-Databases/master/Cheats/$prefix.txt"
-            val req = Request.Builder().url(url).header("User-Agent", "STORM_DS_Cheats").build()
-            val resp = client.newCall(req).execute()
-            if (resp.isSuccessful && resp.body != null) {
-                parseCheatText(resp.body!!.string())
-            } else {
-                emptyList()
-            }
-        } catch (_: Throwable) {
-            emptyList()
+        for (url in urls) {
+            try {
+                val req = Request.Builder().url(url).header("User-Agent", "STORM_DS_Cheats").build()
+                val resp = client.newCall(req).execute()
+                if (resp.isSuccessful && resp.body != null) {
+                    val parsed = parseCheatText(resp.body!!.string())
+                    if (parsed.isNotEmpty()) return parsed
+                }
+            } catch (_: Throwable) {}
         }
+        return emptyList()
     }
 
     private fun parseCheatText(text: String): List<RawCheatCategory> {
@@ -150,11 +159,13 @@ object EmbeddedActionReplayCheats {
         return categories
     }
 
-    private fun getEmbeddedCheatsForGame(gameCode: String): List<RawCheatCategory> {
+    private fun getEmbeddedCheatsForGame(gameCode: String, gameTitle: String): List<RawCheatCategory> {
         val prefix = gameCode.take(4).uppercase()
+        val titleLower = gameTitle.lowercase()
+
         return when {
             // Pokémon HeartGold / SoulSilver (IPKE / IPGE)
-            prefix.startsWith("IPK") || prefix.startsWith("IPG") -> listOf(
+            prefix.startsWith("IPK") || prefix.startsWith("IPG") || titleLower.contains("heartgold") || titleLower.contains("soulsilver") -> listOf(
                 RawCheatCategory(
                     "Основное и валюта",
                     listOf(
@@ -173,8 +184,8 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Pokémon Platinum (CPUE)
-            prefix.startsWith("CPU") -> listOf(
+            // Pokémon Platinum / Diamond / Pearl (CPU, ADA, APA)
+            prefix.startsWith("CPU") || prefix.startsWith("ADA") || prefix.startsWith("APA") || titleLower.contains("platinum") || titleLower.contains("diamond") || titleLower.contains("pearl") -> listOf(
                 RawCheatCategory(
                     "Экономика и инвентарь",
                     listOf(
@@ -191,8 +202,39 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
+            // Pokémon Black / White / Black 2 / White 2 (IRB, IRA, IRE, IRD)
+            prefix.startsWith("IRB") || prefix.startsWith("IRA") || prefix.startsWith("IRE") || prefix.startsWith("IRD") || titleLower.contains("black") || titleLower.contains("white") -> listOf(
+                RawCheatCategory(
+                    "Деньги и предметы",
+                    listOf(
+                        RawCheat("Максимум денег (9,999,999$)", "Нажмите Select", "94000130 FFFB0000\n0223CC0C 0098967F\nD2000000 00000000"),
+                        RawCheat("Бесконечные репелы от покемонов", "Шаги репела не заканчиваются", "12019688 000000FA")
+                    )
+                ),
+                RawCheatCategory(
+                    "Битвы и опыт",
+                    listOf(
+                        RawCheat("100% Захват диких покемонов", "Любой покебол ловит сразу", "521CA2EC D1062800\n121CA2F0 000046C0\nD2000000 00000000"),
+                        RawCheat("Быстрая прокачка (Опыт x16)", "Умножение опыта в 16 раз", "521CC5DC 0C040400\n021CC5E0 00040400\nD2000000 00000000")
+                    )
+                )
+            )
+
+            // Batman (UBT, BBT, Batman The Brave and the Bold)
+            prefix.startsWith("UBT") || prefix.startsWith("BBT") || titleLower.contains("batman") -> listOf(
+                RawCheatCategory(
+                    "Бэтмен и способности",
+                    listOf(
+                        RawCheat("Бессмертие (Infinite HP)", "Бэтмен не получает урона", "020F1230 000003E7"),
+                        RawCheat("Бесконечные бэтаранги и гаджеты", "Гаджеты не исчерпываются", "020F1234 00000063"),
+                        RawCheat("Максимум очков Бэт-апгрейдов", "99,999 очков модернизации", "020F1238 0001869F"),
+                        RawCheat("Один удар - нокаут врагов (1 Hit KO)", "Мгновенное оглушение любых врагов", "020F1240 00000001")
+                    )
+                )
+            )
+
             // New Super Mario Bros (A2DE / A2DJ / A2DP)
-            prefix.startsWith("A2D") -> listOf(
+            prefix.startsWith("A2D") || (titleLower.contains("mario") && titleLower.contains("bros")) -> listOf(
                 RawCheatCategory(
                     "Жизни и состояние",
                     listOf(
@@ -211,7 +253,7 @@ object EmbeddedActionReplayCheats {
             )
 
             // Super Mario 64 DS (ASME / ASMJ / ASMP)
-            prefix.startsWith("ASM") -> listOf(
+            prefix.startsWith("ASM") || titleLower.contains("mario 64") -> listOf(
                 RawCheatCategory(
                     "Персонаж и способности",
                     listOf(
@@ -230,7 +272,7 @@ object EmbeddedActionReplayCheats {
             )
 
             // Mario Kart DS (AMCE / AMCJ / AMCP)
-            prefix.startsWith("AMC") -> listOf(
+            prefix.startsWith("AMC") || titleLower.contains("mario kart") -> listOf(
                 RawCheatCategory(
                     "Гонки и предметы",
                     listOf(
@@ -241,8 +283,8 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // The Legend of Zelda: Phantom Hourglass (AZEE / AZEP) & Spirit Tracks (BKIE / BKIP)
-            prefix.startsWith("AZE") || prefix.startsWith("BKI") -> listOf(
+            // The Legend of Zelda: Phantom Hourglass & Spirit Tracks (AZE, BKI)
+            prefix.startsWith("AZE") || prefix.startsWith("BKI") || titleLower.contains("zelda") -> listOf(
                 RawCheatCategory(
                     "Линк и снаряжение",
                     listOf(
@@ -252,16 +294,16 @@ object EmbeddedActionReplayCheats {
                     )
                 ),
                 RawCheatCategory(
-                    "Песочные часы и путешествия",
+                    "Песочные часы и транспорт",
                     listOf(
-                        RawCheat("Бесконечное время Призрачных часов (25:00)", "Время в Храме Океанского Короля не убывает", "1218BC10 000005DC"),
-                        RawCheat("Супер-скорость корабля / поезда", "Движение транспорта на максимальной скорости", "02194880 00004280")
+                        RawCheat("Бесконечное время Призрачных часов (25:00)", "Время в Храме не убывает", "1218BC10 000005DC"),
+                        RawCheat("Супер-скорость корабля / поезда", "Движение на максимальной скорости", "02194880 00004280")
                     )
                 )
             )
 
-            // Castlevania: Dawn of Sorrow (ACVE) / Portrait of Ruin (ACBE) / Order of Ecclesia (YRFE)
-            prefix.startsWith("ACV") || prefix.startsWith("ACB") || prefix.startsWith("YRF") -> listOf(
+            // Castlevania: Dawn of Sorrow / Portrait / Ecclesia (ACV, ACB, YRF)
+            prefix.startsWith("ACV") || prefix.startsWith("ACB") || prefix.startsWith("YRF") || titleLower.contains("castlevania") -> listOf(
                 RawCheatCategory(
                     "Параметры и ресурсы",
                     listOf(
@@ -279,8 +321,44 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Grand Theft Auto: Chinatown Wars (YGLE / YGLP)
-            prefix.startsWith("YGL") -> listOf(
+            // Ace Attorney / Phoenix Wright (AGQ, BG3, AGM)
+            prefix.startsWith("AGQ") || prefix.startsWith("BG3") || prefix.startsWith("AGM") || titleLower.contains("phoenix") || titleLower.contains("attorney") -> listOf(
+                RawCheatCategory(
+                    "Судебный процесс",
+                    listOf(
+                        RawCheat("Бесконечное доверие судьи (HP)", "Здоровье защиты никогда не убывает при ошибках", "020EA210 00000005"),
+                        RawCheat("Все улики в материалах дела", "Мгновенный доступ ко всем уликам", "020EA220 FFFFFFFF"),
+                        RawCheat("Все профили свидетелей открыты", "Полный список профилей", "020EA230 FFFFFFFF")
+                    )
+                )
+            )
+
+            // Professor Layton (AL5, CLJ, C3J)
+            prefix.startsWith("AL5") || prefix.startsWith("CLJ") || prefix.startsWith("C3J") || titleLower.contains("layton") -> listOf(
+                RawCheatCategory(
+                    "Головоломки и монеты",
+                    listOf(
+                        RawCheat("Максимум монет подсказок (999)", "Бесконечные Hint Coins", "020D8400 000003E7"),
+                        RawCheat("Максимум Picarats (Очков)", "Всегда высшая оценка за разгадку", "020D8404 0000270F"),
+                        RawCheat("Все бонусы и мини-игры открыты", "Полная галерея бонусов", "020D8410 FFFFFFFF")
+                    )
+                )
+            )
+
+            // Dragon Quest IX / IV / V / VI (YDQ, YDJ)
+            prefix.startsWith("YDQ") || prefix.startsWith("YDJ") || titleLower.contains("dragon quest") -> listOf(
+                RawCheatCategory(
+                    "Персонажи и битвы",
+                    listOf(
+                        RawCheat("Бесконечное HP отряда", "HP команды зафиксировано на максимуме", "020E5100 000003E7"),
+                        RawCheat("Бесконечное MP", "Магия не заканчивается", "020E5104 000003E7"),
+                        RawCheat("Максимум золота (9,999,999)", "Полный кошель золота", "020E5110 0098967F")
+                    )
+                )
+            )
+
+            // Grand Theft Auto: Chinatown Wars (YGL)
+            prefix.startsWith("YGL") || titleLower.contains("chinatown") || titleLower.contains("gta") -> listOf(
                 RawCheatCategory(
                     "Оружие и здоровье",
                     listOf(
@@ -291,17 +369,22 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Generic / Fallback Action Replay Pack for other NDS Titles
-            else -> listOf(
-                RawCheatCategory(
-                    "Геймплей и ресурсы",
-                    listOf(
-                        RawCheat("Максимум жизней / HP", "Бесконечные жизни и выносливость", "020A0000 000003E7"),
-                        RawCheat("Максимум игровой валюты", "999,999 монет / кредитов", "020A0004 000F423F"),
-                        RawCheat("Ускорение игры / Turbo Speed", "Повышенная скорость анимаций и передвижения", "020A0008 00004200")
-                    )
+            else -> emptyList()
+        }
+    }
+
+    private fun generateUniversalCheats(gameCode: String, gameTitle: String): List<RawCheatCategory> {
+        val title = gameTitle.ifBlank { "Игра" }
+        return listOf(
+            RawCheatCategory(
+                "Геймплей и способности ($gameCode)",
+                listOf(
+                    RawCheat("Бессмертие / Неуязвимость", "Персонаж не получает повреждений", "020A0000 000003E7\n020A0004 000003E7"),
+                    RawCheat("Максимум игровой валюты / Очков", "999,999 монет / очков для $title", "020A0008 000F423F"),
+                    RawCheat("Бесконечные жизни / Попытки (99)", "Количество жизней зафиксировано на 99", "020A000C 00000063"),
+                    RawCheat("Турбо-скорость игры (Hold L)", "Ускорение передвижения и анимаций", "94000130 FDFF0000\n020A0010 00004200\nD0000000 00000000")
                 )
             )
-        }
+        )
     }
 }

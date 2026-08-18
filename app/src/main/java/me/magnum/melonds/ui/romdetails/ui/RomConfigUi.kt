@@ -332,16 +332,24 @@ private fun Content(
             }
             ConfigRow(
                 title = stringResource(R.string.filter),
-                value = selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel),
+                value = if (effectiveRenderer == VideoRenderer.SOFTWARE) {
+                    "Недоступно в Software (Выкл)"
+                } else {
+                    selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel)
+                },
                 showDivider = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH,
                 onClick = {
-                    videoFilteringDialogState.show(
-                        title = context.getString(R.string.filter),
-                        items = filteringItems,
-                        labelOf = { filtering -> filtering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel) },
-                        selected = selectedFiltering,
-                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoFilteringUpdate(it)) },
-                    )
+                    if (effectiveRenderer == VideoRenderer.SOFTWARE) {
+                        android.widget.Toast.makeText(context, "Шейдерная фильтрация и AI-Upscale недоступны при программном (Software) рендеринге.", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        videoFilteringDialogState.show(
+                            title = context.getString(R.string.filter),
+                            items = filteringItems,
+                            labelOf = { filtering -> filtering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel) },
+                            selected = selectedFiltering,
+                            onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoFilteringUpdate(it)) },
+                        )
+                    }
                 },
             )
             AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH) {
