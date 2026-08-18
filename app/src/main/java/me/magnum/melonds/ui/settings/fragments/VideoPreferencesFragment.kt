@@ -1012,24 +1012,25 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         allFilteringValues: Array<String>,
         allFilteringEntries: Array<String>,
     ) {
+        val isSoftware = renderer == VideoRenderer.SOFTWARE
         val filteredPairs = allFilteringValues.zip(allFilteringEntries).filter { (value, _) ->
             val filtering = videoFilteringOrNone(value)
-            when (renderer) {
-                VideoRenderer.VULKAN -> filtering.isSupportedByVulkan()
-                else -> filtering.isSupportedByOpenGlSurface()
-            }
+            filtering.isSupportedByRenderer(renderer)
         }
 
         videoFilteringPreference.entryValues = filteredPairs.map { it.first }.toTypedArray()
         videoFilteringPreference.entries = filteredPairs.map { it.second }.toTypedArray()
 
-        val currentFiltering = videoFilteringOrNone(videoFilteringPreference.value)
-        val currentFilteringSupported = when (renderer) {
-            VideoRenderer.VULKAN -> currentFiltering.isSupportedByVulkan()
-            else -> currentFiltering.isSupportedByOpenGlSurface()
-        }
-        if (!currentFilteringSupported) {
+        if (isSoftware) {
+            videoFilteringPreference.isEnabled = false
+            videoFilteringPreference.summary = "Шейдерная фильтрация и AI-Upscale недоступны при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
             videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
+        } else {
+            videoFilteringPreference.isEnabled = true
+            val currentFiltering = videoFilteringOrNone(videoFilteringPreference.value)
+            if (!currentFiltering.isSupportedByRenderer(renderer)) {
+                videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
+            }
         }
 
         updateShaderPickerPreferences(

@@ -469,7 +469,7 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
                     "}"
         )
 
-        // Real-time AI Neural Upscale (Anime4K / Edge Super-Resolution)
+        // Real-time AI Neural Upscale (Anime4K / Edge Super-Resolution with Directional Normal Push)
         val AiAnime4kShader = ShaderProgramSource(
             TextureFiltering.LINEAR,
             DEFAULT_VERT_SHADER,
@@ -482,18 +482,58 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
                     "varying float alpha;\n" +
                     "varying vec2 uv;\n" +
                     "" +
+                    "float getLuma(vec4 c) {\n" +
+                    "    return dot(c.bgr, vec3(0.299, 0.587, 0.114));\n" +
+                    "}\n" +
+                    "" +
                     "void main() {\n" +
                     "    vec2 dx = vec2(1.0 / float($TEXTURE_WIDTH), 0.0);\n" +
                     "    vec2 dy = vec2(0.0, 1.0 / float($TEXTURE_HEIGHT));\n" +
-                    "    vec4 c = texture2D(tex, uv);\n" +
-                    "    vec4 cL = texture2D(tex, uv - dx);\n" +
-                    "    vec4 cR = texture2D(tex, uv + dx);\n" +
-                    "    vec4 cU = texture2D(tex, uv - dy);\n" +
-                    "    vec4 cD = texture2D(tex, uv + dy);\n" +
-                    "    vec4 edge = abs(cL - cR) + abs(cU - cD);\n" +
-                    "    float edgeWeight = clamp(dot(edge.rgb, vec3(0.333)) * 3.0, 0.0, 1.0);\n" +
-                    "    vec4 sharp = c * (1.0 + edgeWeight) - (cL + cR + cU + cD) * (edgeWeight * 0.25);\n" +
-                    "    gl_FragColor = vec4(clamp(sharp.bgr, 0.0, 1.0), alpha);\n" +
+                    "" +
+                    "    vec4 C  = texture2D(tex, uv);\n" +
+                    "    vec4 L  = texture2D(tex, uv - dx);\n" +
+                    "    vec4 R  = texture2D(tex, uv + dx);\n" +
+                    "    vec4 T  = texture2D(tex, uv - dy);\n" +
+                    "    vec4 B  = texture2D(tex, uv + dy);\n" +
+                    "    vec4 TL = texture2D(tex, uv - dx - dy);\n" +
+                    "    vec4 TR = texture2D(tex, uv + dx - dy);\n" +
+                    "    vec4 BL = texture2D(tex, uv - dx + dy);\n" +
+                    "    vec4 BR = texture2D(tex, uv + dx + dy);\n" +
+                    "" +
+                    "    float lC  = getLuma(C);\n" +
+                    "    float lL  = getLuma(L);\n" +
+                    "    float lR  = getLuma(R);\n" +
+                    "    float lT  = getLuma(T);\n" +
+                    "    float lB  = getLuma(B);\n" +
+                    "    float lTL = getLuma(TL);\n" +
+                    "    float lTR = getLuma(TR);\n" +
+                    "    float lBL = getLuma(BL);\n" +
+                    "    float lBR = getLuma(BR);\n" +
+                    "" +
+                    "    // Sobel gradient computation for edge direction\n" +
+                    "    float gx = (lTR + 2.0 * lR + lBR) - (lTL + 2.0 * lL + lBL);\n" +
+                    "    float gy = (lBL + 2.0 * lB + lBR) - (lTL + 2.0 * lT + lTR);\n" +
+                    "    float edgeStrength = sqrt(gx * gx + gy * gy);\n" +
+                    "" +
+                    "    vec4 result;\n" +
+                    "    if (edgeStrength > 0.035) {\n" +
+                    "        vec2 normGrad = vec2(gx, gy) / (edgeStrength + 0.0001);\n" +
+                    "        vec2 pushOffset = -normGrad * (dx + dy) * clamp(edgeStrength * 3.5, 0.0, 0.85);\n" +
+                    "        vec4 pushed = texture2D(tex, uv + pushOffset);\n" +
+                    "        vec4 minCol = min(C, min(min(L, R), min(T, B)));\n" +
+                    "        vec4 maxCol = max(C, max(max(L, R), max(T, B)));\n" +
+                    "        result = clamp(pushed, minCol, maxCol);\n" +
+                    "    } else {\n" +
+                    "        // Adaptive bilateral smoothing on flat surfaces\n" +
+                    "        result = (C * 4.0 + L + R + T + B) / 8.0;\n" +
+                    "    }\n" +
+                    "" +
+                    "    // High-fidelity vibrant color output (inverting BGR to RGB)\n" +
+                    "    vec3 finalRgb = result.bgr;\n" +
+                    "    float finalLuma = dot(finalRgb, vec3(0.299, 0.587, 0.114));\n" +
+                    "    finalRgb = mix(vec3(finalLuma), finalRgb, 1.10);\n" +
+                    "" +
+                    "    gl_FragColor = vec4(clamp(finalRgb, 0.0, 1.0), alpha);\n" +
                     "}"
         )
     }
