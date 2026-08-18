@@ -472,7 +472,13 @@ class RomListViewModel @Inject constructor(
 
         val entries = if (isVirtualRoot) {
             val folders = if (showFolders) {
-                roots.sortedBy { it.displayName.lowercase() }
+                roots.filter { root ->
+                    sortedRoms.any { item ->
+                        val pDocId = item.parentDocId ?: return@any false
+                        val r = findRootForDocId(pDocId, roots)
+                        r?.docId == root.docId && matchesFilter(item.rom, filter)
+                    }
+                }.sortedBy { it.displayName.lowercase() }
                     .map {
                         RomBrowserEntry.Folder(
                             docId = it.docId,
@@ -500,6 +506,9 @@ class RomListViewModel @Inject constructor(
             val childFolders = if (showFolders) {
                 node.childDirectories
                     .mapNotNull { directoryNodes[it] }
+                    .filter { childNode ->
+                        sortedRoms.any { it.parentDocId == childNode.docId && matchesFilter(it.rom, filter) }
+                    }
                     .sortedBy { it.displayName.lowercase() }
                     .map {
                         RomBrowserEntry.Folder(

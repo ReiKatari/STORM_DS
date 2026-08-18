@@ -131,6 +131,11 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         helper.setupStoragePickerPreference(dldiDirectoryPreference)
         helper.bindPreferenceSummaryToValue(findPreference("system_dldi_sd_card_image_size"))
 
+        findPreference<Preference>("pref_open_dldi_file_manager")?.setOnPreferenceClickListener {
+            startActivity(android.content.Intent(requireContext(), me.magnum.melonds.ui.dldi.DldiFileManagerActivity::class.java))
+            true
+        }
+
         mirrorPreference.setOnPreferenceChangeListener { _, newValue ->
             if (updatingMirrorPreference) {
                 return@setOnPreferenceChangeListener true

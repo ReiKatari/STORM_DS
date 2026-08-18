@@ -61,6 +61,12 @@
             android:entries="@array/dldi_sd_card_image_size_options"
             android:entryValues="@array/dldi_sd_card_image_size_values" />
 
+    <Preference
+            android:key="pref_open_dldi_file_manager"
+            android:title="Открыть менеджер файлов DLDI"
+            android:summary="Просмотр и управление файлами виртуальной SD-карты"
+            app:iconSpaceReserved="false" />
+
     <ListPreference
             android:key="system_wfc_server"
             android:title="@string/wfc_server_title"

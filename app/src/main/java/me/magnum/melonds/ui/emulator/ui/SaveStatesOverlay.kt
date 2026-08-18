@@ -146,6 +146,7 @@ fun SaveStatesOverlay(
                 SaveStateSlotCard(
                     slot = slot,
                     isSaving = isSaving,
+                    gameTitle = gameTitle,
                     focusRequester = if (slot.slot == slots.firstOrNull()?.slot) firstFocusRequester else null,
                     onClick = { onSlotPicked(slot) },
                     onDelete = { onSlotDeleted(slot) },
@@ -170,6 +171,7 @@ fun SaveStatesOverlay(
 private fun SaveStateSlotCard(
     slot: SaveStateSlot,
     isSaving: Boolean,
+    gameTitle: String?,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -181,6 +183,9 @@ private fun SaveStateSlotCard(
     val enabled = slot.exists || isSaving
     val isQuick = slot.slot == SaveStateSlot.QUICK_SAVE_SLOT
     val shape = RoundedCornerShape(11.dp)
+    val autoTag = remember(slot.slot, gameTitle) {
+        me.magnum.melonds.ui.emulator.savestate.SmartSaveStateHelper.generateAutoBookmarkTag(gameTitle, slot.slot)
+    }
 
     Column(
         modifier = Modifier
@@ -230,7 +235,7 @@ private fun SaveStateSlotCard(
                     .align(Alignment.TopStart)
                     .padding(start = 8.dp, top = 7.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(if (isQuick) colors.red else Color.Black.copy(alpha = 0.45f))
+                    .background(if (isQuick) colors.red else Color.Black.copy(alpha = 0.55f))
                     .padding(horizontal = 7.dp, vertical = 2.dp),
             ) {
                 Text(
@@ -266,6 +271,18 @@ private fun SaveStateSlotCard(
                 }
             }
         }
+        if (slot.exists) {
+            Text(
+                text = autoTag,
+                color = colors.red,
+                fontFamily = SpaceGrotesk,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, top = 4.dp),
+            )
+        }
         val lastUsed = slot.lastUsedDate
         Text(
             text = if (slot.exists && lastUsed != null) {
@@ -275,10 +292,10 @@ private fun SaveStateSlotCard(
             },
             color = colors.text3,
             fontFamily = WatermelonMono,
-            fontSize = 9.5.sp,
+            fontSize = 9.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 2.dp, top = 6.dp),
+            modifier = Modifier.padding(start = 2.dp, top = 2.dp),
         )
     }
 }

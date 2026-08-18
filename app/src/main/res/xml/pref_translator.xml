@@ -109,6 +109,37 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="Локальный AI Voice Actor Studio (Piper TTS)">
+
+        <SwitchPreferenceCompat
+            android:key="translator_local_voice_actor_studio"
+            android:title="AI Voice Actor Studio"
+            android:summary="Автономный оффлайн-синтез голосов персонажей (Piper INT8 ONNX) с динамической сменой тембра, формант и ролей (Герои, Злодеи, Мудрецы, Дети)"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="translator_local_voice_model"
+            android:title="Пакет нейромоделей голоса"
+            android:entries="@array/translator_local_voice_model_options"
+            android:entryValues="@array/translator_local_voice_model_values"
+            android:defaultValue="piper_ru_dmitri_medium"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_local_voice_actor_studio" />
+
+        <SeekBarPreference
+            android:key="translator_local_voice_pitch_variance"
+            android:title="Вариативность тембра персонажей"
+            android:min="0"
+            android:max="100"
+            android:defaultValue="65"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_local_voice_actor_studio" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="@string/translator_overlay_style">
 
         <ListPreference
