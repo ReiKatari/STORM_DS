@@ -468,17 +468,23 @@ class RomListViewModel @Inject constructor(
         val currentLocation = effectiveStack.lastOrNull() ?: baseLocation
         val isVirtualRoot = currentLocation is BrowserLocation.VirtualRoot
 
-        val showFolders = filter == RomFilter.ALL
+        val visibleRoots = roots.filter { root ->
+            sortedRoms.any { item ->
+                val pDocId = item.parentDocId ?: return@any false
+                val r = findRootForDocId(pDocId, roots)
+                r?.docId == root.docId && matchesFilter(item.rom, filter)
+            }
+        }
+        val hasSingleVisibleRoot = visibleRoots.size <= 1
+        val showFolders = filter == RomFilter.ALL && !hasSingleVisibleRoot
 
-        val entries = if (isVirtualRoot) {
+        val entries = if (hasSingleVisibleRoot) {
+            sortedRoms
+                .filter { matchesFilter(it.rom, filter) }
+                .map { RomBrowserEntry.RomItem(it.rom) }
+        } else if (isVirtualRoot) {
             val folders = if (showFolders) {
-                roots.filter { root ->
-                    sortedRoms.any { item ->
-                        val pDocId = item.parentDocId ?: return@any false
-                        val r = findRootForDocId(pDocId, roots)
-                        r?.docId == root.docId && matchesFilter(item.rom, filter)
-                    }
-                }.sortedBy { it.displayName.lowercase() }
+                visibleRoots.sortedBy { it.displayName.lowercase() }
                     .map {
                         RomBrowserEntry.Folder(
                             docId = it.docId,
@@ -541,7 +547,7 @@ class RomListViewModel @Inject constructor(
             childFolders + romEntries
         }
 
-        val breadcrumbs = if (isVirtualRoot) {
+        val breadcrumbs = if (hasSingleVisibleRoot || isVirtualRoot) {
             emptyList()
         } else {
             val docId = (currentLocation as BrowserLocation.Directory).docId
@@ -551,9 +557,9 @@ class RomListViewModel @Inject constructor(
         RomBrowserUiState(
             entries = entries,
             breadcrumbs = breadcrumbs,
-            canNavigateUp = effectiveStack.size > 1,
+            canNavigateUp = !hasSingleVisibleRoot && effectiveStack.size > 1,
             isSearchActive = false,
-            isAtVirtualRoot = isVirtualRoot,
+            isAtVirtualRoot = hasSingleVisibleRoot || isVirtualRoot,
             viewMode = viewMode,
             filter = filter,
             sortingMode = sortingMode,
@@ -569,7 +575,7 @@ class RomListViewModel @Inject constructor(
             RomFilter.ALL -> !isRawDsiWare
             RomFilter.FAVORITES -> rom.isFavorite && !isRawDsiWare
             RomFilter.DS_ONLY -> !isRawDsiWare && !rom.isInstalledDsiWareShortcut
-            RomFilter.DSIWARE_ONLY -> isRawDsiWare || rom.isInstalledDsiWareShortcut
+            RomFilter.DSIWARE_ONLY -> rom.isInstalledDsiWareShortcut
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty() && !isRawDsiWare
         }
     }
