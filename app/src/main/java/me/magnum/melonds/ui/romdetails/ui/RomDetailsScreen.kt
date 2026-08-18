@@ -126,12 +126,6 @@ fun RomDetailsScreen(
                         onSettingFocused = { title, value -> onSettingFocused(title, value) },
                     )
                 }
-                RomDetailsTab.AUDIO.tabIndex -> {
-                    RomAudioUi(
-                        rom = rom,
-                        modifier = Modifier.fillMaxSize().focusRequester(pageFocusRequester),
-                    )
-                }
                 RomDetailsTab.CHEATS.tabIndex -> {
                     RomCheatsUi(
                         rom = rom,

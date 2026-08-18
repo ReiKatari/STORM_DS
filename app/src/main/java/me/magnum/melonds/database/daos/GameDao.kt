@@ -23,6 +23,9 @@ interface GameDao {
     @Query("SELECT * FROM game WHERE game_code = :gameCode LIMIT 1")
     suspend fun findGameByCode(gameCode: String): GameEntity?
 
+    @Query("SELECT * FROM game WHERE game_checksum = :gameChecksum LIMIT 1")
+    suspend fun findGameByChecksum(gameChecksum: String): GameEntity?
+
     @Query("SELECT * FROM game WHERE game_code LIKE :codePrefix || '%' LIMIT 1")
     suspend fun findGameByPrefix(codePrefix: String): GameEntity?
 

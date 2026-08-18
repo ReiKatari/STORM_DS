@@ -1284,7 +1284,7 @@
     <string name="video_ai_upscale_scale_title">Разрешение AI-апскейла</string>
     <string name="video_hd_textures_title">Загрузка паков HD-текстур</string>
     <string name="video_hd_textures_summary">Автоматическая замена текстур из папки textures/&lt;GameID&gt;/</string>
-    <string name="input_gyro_aiming_title">Прицеливание гироскопом (Gyro Aiming)</string>
+    <string name="input_gyro_aiming_title">Прицеливание гироскопом</string>
     <string name="input_gyro_aiming_summary">Управление прицелом в 3D-шутерах (Metroid, Dementium, Moon) наклоном смартфона</string>
     <string name="input_gyro_sensitivity_title">Чувствительность гироскопа</string>
     <string name="translator_tts_neural_title">Нейросетевая облачная озвучка (Высокое качество)</string>
@@ -1292,4 +1292,6 @@
     <string name="video_console_skin_title">3D-скин корпуса консоли</string>
     <string name="video_console_skin_summary">Реалистичный корпус Nintendo DS Lite / DSi XL с подсветкой диодов питания и Wi-Fi</string>
     <string name="video_console_skin_type_title">Модель и цвет консоли</string>
+    <string name="video_oled_battery_saver_title">Энергосбережение для OLED-экранов</string>
+    <string name="video_oled_battery_saver_summary">Динамическая оптимизация частоты обновления и энергопотребления на OLED-дисплеях при статичных сценах (экономия до 40% батареи)</string>
 </resources>
