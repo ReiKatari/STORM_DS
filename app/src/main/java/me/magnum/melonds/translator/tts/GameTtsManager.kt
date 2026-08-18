@@ -358,54 +358,58 @@ class GameTtsManager(private val context: Context) {
 
     private fun detectPersona(text: String): CharacterPersona {
         val lower = text.lowercase()
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val firstLine = lines.firstOrNull() ?: ""
+        val firstLineLower = firstLine.lowercase()
 
-        // 1. Explicit Speaker Tag Extraction (e.g. "Бэтмен:", "[Joker]", "【Layton】", "Зельда —", "(Phoenix)")
-        val speaker = when {
-            lower.contains(":") -> lower.substringBefore(":").trim()
-            lower.startsWith("[") && lower.contains("]") -> lower.substringAfter("[").substringBefore("]").trim()
-            lower.startsWith("【") && lower.contains("】") -> lower.substringAfter("【").substringBefore("】").trim()
-            lower.startsWith("«") && lower.contains("»") -> lower.substringAfter("«").substringBefore("»").trim()
-            lower.contains(" — ") -> lower.substringBefore(" — ").trim()
+        // 1. Explicit Speaker Tag Extraction (e.g. "Бэтмен:", "[Joker]", "【Layton】", "Зельда —", "(Phoenix)", "BATMAN\n...")
+        val candidateSpeaker = when {
+            firstLineLower.contains(":") -> firstLineLower.substringBefore(":").trim()
+            firstLineLower.contains("—") -> firstLineLower.substringBefore("—").trim()
+            firstLineLower.contains("-") && firstLineLower.length <= 25 -> firstLineLower.substringBefore("-").trim()
+            firstLineLower.startsWith("[") && firstLineLower.contains("]") -> firstLineLower.substringAfter("[").substringBefore("]").trim()
+            firstLineLower.startsWith("【") && firstLineLower.contains("】") -> firstLineLower.substringAfter("【").substringBefore("】").trim()
+            firstLineLower.startsWith("«") && firstLineLower.contains("»") -> firstLineLower.substringAfter("«").substringBefore("»").trim()
+            firstLineLower.startsWith("(") && firstLineLower.contains(")") && firstLineLower.length <= 25 -> firstLineLower.substringAfter("(").substringBefore(")").trim()
+            lines.size >= 2 && firstLineLower.length <= 25 && !firstLineLower.endsWith(".") && !firstLineLower.endsWith(",") && !firstLineLower.endsWith("?") && !firstLineLower.endsWith("!") -> firstLineLower
             else -> ""
+        }.trim()
+
+        if (candidateSpeaker.isNotEmpty()) {
+            if (HERO_DARK_VIGILANTE_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.HERO_DARK_VIGILANTE
+            if (VILLAIN_MANIC_JOKER_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.VILLAIN_MANIC_JOKER
+            if (DEMONIC_DEVILISH_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.DEMONIC_DEVILISH
+            if (ANGELIC_DIVINE_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.ANGELIC_DIVINE
+            if (GENTLEMAN_SCHOLAR_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.GENTLEMAN_SCHOLAR
+            if (ELDER_ANCIENT_BOSS_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.ELDER_ANCIENT_BOSS
+            if (HEROINE_FEMALE_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.HEROINE_FEMALE
+            if (CHILD_FAIRY_COMPANION_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.CHILD_FAIRY_COMPANION
+            if (ROBOTIC_AI_TECH_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.ROBOTIC_AI_TECH
+            if (HERO_PROTAGONIST_MALE_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.HERO_PROTAGONIST_MALE
         }
 
-        if (speaker.isNotEmpty()) {
-            if (HERO_DARK_VIGILANTE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HERO_DARK_VIGILANTE
-            if (VILLAIN_MANIC_JOKER_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.VILLAIN_MANIC_JOKER
-            if (DEMONIC_DEVILISH_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.DEMONIC_DEVILISH
-            if (ANGELIC_DIVINE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ANGELIC_DIVINE
-            if (GENTLEMAN_SCHOLAR_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.GENTLEMAN_SCHOLAR
-            if (ELDER_ANCIENT_BOSS_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ELDER_ANCIENT_BOSS
-            if (HEROINE_FEMALE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HEROINE_FEMALE
-            if (CHILD_FAIRY_COMPANION_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.CHILD_FAIRY_COMPANION
-            if (ROBOTIC_AI_TECH_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.ROBOTIC_AI_TECH
-            if (HERO_PROTAGONIST_MALE_KEYWORDS.any { speaker.contains(it) }) return CharacterPersona.HERO_PROTAGONIST_MALE
-            return CharacterPersona.HERO_PROTAGONIST_MALE
-        }
-
-        // 2. Vocative Dialogue Roles & Behavioral Context
-        // Addressing Batman / Laughing / Mocking -> Manic Villain speaking!
-        if (lower.startsWith("бэтмен,") || lower.startsWith("бэтмэн,") || lower.startsWith("batman,") ||
-            lower.contains("рад, что ты пришел") || lower.contains("ха-ха") || lower.contains("хи-хи") ||
-            lower.contains("ахаха") || lower.contains("моя ловушка") || lower.contains("моя игра") ||
-            lower.contains("веселье только начинается") || lower.contains("глупый мышонок")) {
+        // 2. Behavioral & Dialogue Vocative Triggers
+        if (lower.contains("ха-ха") || lower.contains("хи-хи") || lower.contains("ахаха") || lower.contains("хе-хе") ||
+            lower.contains("hahaha") || lower.contains("hehe") || lower.contains("моя ловушка") || lower.contains("моя игра") ||
+            lower.contains("глупый мышонок") || lower.contains("веселье") || lower.contains("шутка")) {
             return CharacterPersona.VILLAIN_MANIC_JOKER
         }
 
-        // Threatening the Villain / Demanding answers -> Dark Vigilante speaking!
-        if (lower.contains("джокер?") || lower.contains("джокер!") || lower.contains("joker?") || lower.contains("joker!") ||
-            lower.contains("сдавайся") || lower.contains("город под защитой") || lower.contains("где детонатор") ||
-            lower.contains("аркхэм ждет тебя") || lower.contains("хватит, джокер") || lower.contains("отвечай!")) {
+        if (lower.startsWith("бэтмен") || lower.startsWith("batman") || lower.contains("мышонок") || lower.contains("темный рыцарь")) {
+            return CharacterPersona.VILLAIN_MANIC_JOKER
+        }
+
+        if (lower.contains("джокер") || lower.contains("joker") || lower.contains("сдавайся") || lower.contains("город под защитой") ||
+            lower.contains("где детонатор") || lower.contains("аркхэм") || lower.contains("отвечай!")) {
             return CharacterPersona.HERO_DARK_VIGILANTE
         }
 
-        // Solving a puzzle / Court deduction -> Gentleman Scholar
-        if (lower.contains("каждая загадка имеет решение") || lower.contains("как истинный джентльмен") ||
-            lower.contains("протестую!") || lower.contains("objection!") || lower.contains("взгляните на эту улику")) {
+        if (lower.contains("протестую") || lower.contains("objection") || lower.contains("головоломка") || lower.contains("загадка") ||
+            lower.contains("джентльмен") || lower.contains("улика") || lower.contains("перекрестный допрос")) {
             return CharacterPersona.GENTLEMAN_SCHOLAR
         }
 
-        // 3. Keyword Content Analysis Across Entire Phrase
+        // 3. Keyword Content Analysis Across Entire Text
         if (DEMONIC_DEVILISH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.DEMONIC_DEVILISH
         if (ANGELIC_DIVINE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ANGELIC_DIVINE
         if (HERO_DARK_VIGILANTE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_DARK_VIGILANTE
@@ -416,11 +420,6 @@ class GameTtsManager(private val context: Context) {
         if (CHILD_FAIRY_COMPANION_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.CHILD_FAIRY_COMPANION
         if (ROBOTIC_AI_TECH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ROBOTIC_AI_TECH
         if (HERO_PROTAGONIST_MALE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_PROTAGONIST_MALE
-
-        // Action cues & shouts
-        if (text.contains("!")) {
-            return CharacterPersona.HERO_PROTAGONIST_MALE
-        }
 
         return CharacterPersona.NARRATOR_CHRONICLE
     }
