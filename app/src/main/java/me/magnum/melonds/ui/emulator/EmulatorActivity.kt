@@ -618,32 +618,45 @@ class EmulatorActivity : AppCompatActivity() {
         disableScreenTimeOut()
 
         val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
+        val ambientGlowEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_ambient_glow_enabled", false)
         val skinType = PreferenceManager.getDefaultSharedPreferences(this).getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
-        if (consoleSkinEnabled) {
+        val currentAmbientGlowColor = androidx.compose.runtime.mutableStateOf(androidx.compose.ui.graphics.Color.Transparent)
+
+        if (consoleSkinEnabled || ambientGlowEnabled) {
             binding.layoutConsoleSkin.visibility = View.VISIBLE
             binding.layoutConsoleSkin.isClickable = false
             binding.layoutConsoleSkin.isFocusable = false
             binding.layoutConsoleSkin.setContent {
-                val theme = when (skinType) {
-                    "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
-                    "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
-                    "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
-                    "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
-                    "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
-                    else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
-                }
                 val areas = consoleSkinAreasState.value
-                me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
-                    skinTheme = theme,
-                    topScreenRect = areas?.topScreenRect,
-                    bottomScreenRect = areas?.bottomScreenRect
-                )
+
+                if (ambientGlowEnabled) {
+                    me.magnum.melonds.ui.emulator.skin.AmbientGlowOverlay(
+                        glowColor = currentAmbientGlowColor.value,
+                        topScreenRect = areas?.topScreenRect,
+                        bottomScreenRect = areas?.bottomScreenRect
+                    )
+                }
+
+                if (consoleSkinEnabled) {
+                    val theme = when (skinType) {
+                        "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
+                        "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
+                        "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
+                        "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
+                        "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
+                        else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
+                    }
+                    me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
+                        skinTheme = theme,
+                        topScreenRect = areas?.topScreenRect,
+                        bottomScreenRect = areas?.bottomScreenRect
+                    )
+                }
             }
         } else {
             binding.layoutConsoleSkin.visibility = View.GONE
         }
 
-        val ambientGlowEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_ambient_glow_enabled", false)
         if (ambientGlowEnabled) {
             lifecycleScope.launch {
                 while (true) {
@@ -651,9 +664,9 @@ class EmulatorActivity : AppCompatActivity() {
                     if (bootRomReady.value) {
                         try {
                             val bitmap = viewModel.captureScreenshot()
-                            val glowColor = me.magnum.melonds.ui.emulator.render.AmbientGlowManager.extractDominantGlowColor(bitmap)
-                            if (glowColor != android.graphics.Color.TRANSPARENT) {
-                                binding.layoutRoot.setBackgroundColor(glowColor)
+                            val colorInt = me.magnum.melonds.ui.emulator.render.AmbientGlowManager.extractDominantGlowColor(bitmap)
+                            if (colorInt != android.graphics.Color.TRANSPARENT) {
+                                currentAmbientGlowColor.value = androidx.compose.ui.graphics.Color(colorInt)
                             }
                         } catch (_: Throwable) {}
                     }
@@ -1733,32 +1746,44 @@ class EmulatorActivity : AppCompatActivity() {
                 ConstraintLayout.LayoutParams.WRAP_CONTENT,
                 ConstraintLayout.LayoutParams.WRAP_CONTENT
             )
+            val density = resources.displayMetrics.density
+            val margin12 = (12 * density).toInt()
             when (position) {
                 FpsCounterPosition.TOP_LEFT -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.topMargin = margin12
+                    newParams.leftMargin = margin12
                 }
                 FpsCounterPosition.TOP_CENTER -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.topMargin = margin12
                 }
                 FpsCounterPosition.TOP_RIGHT -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.topMargin = margin12
+                    newParams.rightMargin = margin12
                 }
                 FpsCounterPosition.BOTTOM_LEFT -> {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.bottomMargin = margin12
+                    newParams.leftMargin = margin12
                 }
                 FpsCounterPosition.BOTTOM_CENTER -> {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.bottomMargin = margin12
                 }
                 FpsCounterPosition.BOTTOM_RIGHT -> {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.bottomMargin = margin12
+                    newParams.rightMargin = margin12
                 }
                 FpsCounterPosition.HIDDEN -> { /* Do nothing here */ }
             }
