@@ -495,7 +495,7 @@ private fun Content(
             }
         }
 
-        Spacer(Modifier.height(contentPadding.calculateBottomPadding() + 16.dp))
+        Spacer(Modifier.height(contentPadding.calculateBottomPadding() + 96.dp))
     }
 
     TextInputDialog(
