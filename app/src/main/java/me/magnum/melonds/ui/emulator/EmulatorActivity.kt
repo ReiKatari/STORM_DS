@@ -643,6 +643,24 @@ class EmulatorActivity : AppCompatActivity() {
             binding.layoutConsoleSkin.visibility = View.GONE
         }
 
+        val ambientGlowEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_ambient_glow_enabled", false)
+        if (ambientGlowEnabled) {
+            lifecycleScope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(250)
+                    if (bootRomReady.value) {
+                        try {
+                            val bitmap = viewModel.captureScreenshot()
+                            val glowColor = me.magnum.melonds.ui.emulator.render.AmbientGlowManager.extractDominantGlowColor(bitmap)
+                            if (glowColor != android.graphics.Color.TRANSPARENT) {
+                                binding.layoutRoot.setBackgroundColor(glowColor)
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                }
+            }
+        }
+
         binding.layoutAchievement.setContent {
             MelonTheme {
                 val achievementsViewModel = viewModels<EmulatorRetroAchievementsViewModel>().value
@@ -1707,13 +1725,15 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun setupFpsCounter() {
-        val fpsCounterPosition = viewModel.getFpsCounterPosition()
-        if (fpsCounterPosition == FpsCounterPosition.HIDDEN) {
+        val position = viewModel.getFpsCounterPosition()
+        if (position == FpsCounterPosition.HIDDEN || !bootRomReady.value) {
             binding.textFps.isGone = true
         } else {
-            binding.textFps.isVisible = true
-            val newParams = binding.textFps.layoutParams as ConstraintLayout.LayoutParams
-            when (fpsCounterPosition) {
+            val newParams = ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                ConstraintLayout.LayoutParams.WRAP_CONTENT
+            )
+            when (position) {
                 FpsCounterPosition.TOP_LEFT -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
@@ -1743,13 +1763,17 @@ class EmulatorActivity : AppCompatActivity() {
                 FpsCounterPosition.HIDDEN -> { /* Do nothing here */ }
             }
             binding.textFps.layoutParams = newParams
+            binding.textFps.elevation = 999f
+            binding.textFps.bringToFront()
+            binding.textFps.isVisible = true
         }
+        setupResolutionHud()
     }
 
     private fun setupResolutionHud() {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val position = prefs.getString("resolution_hud_position", "hidden") ?: "hidden"
-        if (position == "hidden" || !bootRomReady.value || viewModel.currentFps.value == null) {
+        if (position == "hidden" || !bootRomReady.value) {
             binding.textResolution.isGone = true
             return
         }
@@ -1785,6 +1809,12 @@ class EmulatorActivity : AppCompatActivity() {
                 newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (margin12 + 30 * density).toInt() else margin12
                 newParams.leftMargin = margin12
             }
+            "top_center" -> {
+                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_CENTER) (margin12 + 30 * density).toInt() else margin12
+            }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
@@ -1797,17 +1827,27 @@ class EmulatorActivity : AppCompatActivity() {
                 newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (margin12 + 30 * density).toInt() else margin12
                 newParams.leftMargin = margin12
             }
+            "bottom_center" -> {
+                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_CENTER) (margin12 + 30 * density).toInt() else margin12
+            }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (margin12 + 30 * density).toInt() else margin12
                 newParams.rightMargin = margin12
             }
+            else -> {
+                binding.textResolution.isGone = true
+                return
+            }
         }
         binding.textResolution.layoutParams = newParams
         binding.textResolution.isVisible = true
         binding.textResolution.bringToFront()
-        binding.textResolution.elevation = 100f
+        binding.textResolution.elevation = 999f
     }
 
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {

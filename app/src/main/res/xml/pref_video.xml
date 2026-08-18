@@ -68,8 +68,8 @@
 
     <SwitchPreference
             android:key="video_ambient_glow_enabled"
-            android:title="Динамическая подсветка (Screen Glow / Ambilight)"
-            android:summary="Мягкая атмосферная подсветка фона вокруг экранов консоли в реальном времени под тон изображения игры"
+            android:title="Динамическая подсветка экрана"
+            android:summary="Мягкая фоновая подсветка вокруг экранов в реальном времени под тон изображения игры"
             app:iconSpaceReserved="false"
             android:defaultValue="false" />
 
@@ -185,8 +185,8 @@
             android:title="Отображение текущего разрешения"
             android:summary="%s"
             app:iconSpaceReserved="false"
-            android:entries="@array/resolution_hud_position_options"
-            android:entryValues="@array/resolution_hud_position_values"
+            android:entries="@array/fps_counter_position_options"
+            android:entryValues="@array/fps_counter_position_values"
             android:defaultValue="hidden" />
 
     <ListPreference

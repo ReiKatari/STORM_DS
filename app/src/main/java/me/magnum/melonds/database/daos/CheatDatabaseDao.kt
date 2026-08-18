@@ -7,6 +7,9 @@ import me.magnum.melonds.database.entities.CheatDatabaseEntity
 
 @Dao
 interface CheatDatabaseDao {
+    @Query("SELECT * FROM cheat_database")
+    suspend fun getCheatDatabases(): List<CheatDatabaseEntity>
+
     @Insert
     suspend fun insertCheatDatabase(database: CheatDatabaseEntity): Long
 
