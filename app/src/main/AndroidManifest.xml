@@ -149,6 +149,11 @@
             android:name=".ui.backgrounds.BackgroundsActivity"
             android:label="@string/backgrounds">
         </activity>
+        <activity
+            android:name=".ui.dldi.DldiFileManagerActivity"
+            android:label="Файловый менеджер DLDI"
+            android:exported="false">
+        </activity>
 
         <receiver
             android:name="me.magnum.melondualds.RetroAchievementsHostOverrideReceiver"

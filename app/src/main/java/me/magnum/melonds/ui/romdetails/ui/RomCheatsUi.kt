@@ -102,13 +102,13 @@ fun RomCheatsUi(
             val parsedInfo = parseRomInfoDeep(context, rom)
             romInfo = parsedInfo
 
+            val checksum = parsedInfo?.headerChecksumString() ?: ""
             val effectiveCode = parsedInfo?.gameCode?.takeIf { it.isNotBlank() }
                 ?: extractCodeFromName(rom.name)
             val effectiveTitle = parsedInfo?.gameTitle?.takeIf { it.isNotBlank() }
                 ?: romDisplayName(rom)
 
-            // Always ensure cheats are populated if none exist in the database
-            EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle)
+            EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle, checksum)
 
             var foundGame = if (parsedInfo != null) {
                 cheatsRepository.findGameForRom(parsedInfo)
@@ -117,7 +117,8 @@ fun RomCheatsUi(
             }
 
             if (foundGame == null) {
-                val resolvedEntity = database.gameDao().findGameByCode(effectiveCode)
+                val resolvedEntity = (if (checksum.isNotBlank()) database.gameDao().findGameByChecksum(checksum) else null)
+                    ?: database.gameDao().findGameByCode(effectiveCode)
                     ?: if (effectiveCode.length >= 3) database.gameDao().findGameByPrefix(effectiveCode.take(3)) else null
                     ?: database.gameDao().findGameByTitle(effectiveTitle)
 
@@ -129,6 +130,9 @@ fun RomCheatsUi(
 
             if (foundGame != null) {
                 cheatsRepository.getAllGameCheats(foundGame).collect { folders ->
+                    if (folders.isEmpty()) {
+                        EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle, checksum)
+                    }
                     cheatFolders = folders
                     folders.forEach { f ->
                         f.id?.let { id ->

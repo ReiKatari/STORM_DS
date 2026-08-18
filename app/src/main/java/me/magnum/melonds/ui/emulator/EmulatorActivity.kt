@@ -4114,6 +4114,9 @@ class EmulatorActivity : AppCompatActivity() {
     private var isTwoFingerGesture = false
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            me.magnum.melonds.ui.emulator.input.StylusHapticHelper.performStylusClick(window.decorView)
+        }
         val hasStylus = (0 until event.pointerCount).any {
             val tool = event.getToolType(it)
             tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
