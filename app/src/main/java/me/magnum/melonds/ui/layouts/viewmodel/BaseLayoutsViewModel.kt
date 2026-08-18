@@ -74,6 +74,7 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
                 )
                 layoutsRepository.saveLayout(importedLayout)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    setSelectedLayoutId(importedLayout.id)
                     onComplete?.invoke(true)
                 }
             } catch (e: Exception) {

@@ -163,8 +163,8 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         }
         val componentBuilder = viewBuilderFactory.getLayoutComponentViewBuilder(component)
         val componentHeight = (baseWidth / componentBuilder.getAspectRatio()).toInt().coerceAtLeast(minComponentSize)
-        val startX = safeAreaInsets.left + context.dpToPixels(16f).toInt()
-        val startY = safeAreaInsets.top + context.dpToPixels(16f).toInt()
+        val startX = ((width - baseWidth) / 2).coerceAtLeast(0)
+        val startY = ((height - componentHeight) / 2).coerceAtLeast(0)
         val componentView = addPositionedLayoutComponent(PositionedLayoutComponent(Rect(startX, startY, baseWidth, componentHeight), component))
         views[component] = componentView
         modifiedByUser = true
@@ -387,10 +387,10 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     private fun dragView(view: LayoutComponentView, offsetX: Float, offsetY: Float) {
         val currentPosition = view.getPosition()
-        val minX = safeAreaInsets.left.toFloat()
-        val maxX = max(minX, (width - safeAreaInsets.right - view.getWidth()).toFloat())
-        val minY = safeAreaInsets.top.toFloat()
-        val maxY = max(minY, (height - safeAreaInsets.bottom - view.getHeight()).toFloat())
+        val minX = 0f
+        val maxX = max(0f, (width - view.getWidth()).toFloat())
+        val minY = 0f
+        val maxY = max(0f, (height - view.getHeight()).toFloat())
         val finalX = min(max(currentPosition.x + offsetX, minX), maxX)
         val finalY = min(max(currentPosition.y + offsetY, minY), maxY)
         view.setPosition(Point(finalX.toInt(), finalY.toInt()))
@@ -422,10 +422,10 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun setComponentPosition(component: LayoutComponent, x: Int, y: Int): Boolean {
         val view = views[component] ?: return false
-        val minX = safeAreaInsets.left
-        val maxX = max(minX, width - safeAreaInsets.right - view.getWidth())
-        val minY = safeAreaInsets.top
-        val maxY = max(minY, height - safeAreaInsets.bottom - view.getHeight())
+        val minX = 0
+        val maxX = max(0, width - view.getWidth())
+        val minY = 0
+        val maxY = max(0, height - view.getHeight())
         val boundedX = x.coerceIn(minX, maxX)
         val boundedY = y.coerceIn(minY, maxY)
         view.setPosition(Point(boundedX, boundedY))
