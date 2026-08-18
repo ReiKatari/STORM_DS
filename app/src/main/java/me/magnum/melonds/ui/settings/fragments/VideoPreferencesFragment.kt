@@ -1058,6 +1058,17 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         // Lock / Unlock AI-Upscale 2D option if present
+        findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.let { aiSwitch ->
+            if (isSoftware) {
+                aiSwitch.isChecked = false
+                aiSwitch.isEnabled = false
+                aiSwitch.summary = "AI-Upscale 2D-спрайтов (Anime4K) недоступен при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
+            } else {
+                aiSwitch.isEnabled = true
+                aiSwitch.summary = getString(R.string.video_ai_upscale_summary)
+            }
+        }
+
         findPreference<Preference>("video_ai_upscale_scale")?.let { aiUpscalePref ->
             aiUpscalePref.isEnabled = !isSoftware
             if (isSoftware) {
