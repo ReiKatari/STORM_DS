@@ -2274,6 +2274,7 @@ class EmulatorViewModel @Inject constructor(
 
     private suspend fun saveRomState(rom: Rom, slot: SaveStateSlot): Boolean {
         val slotUri = getRomSaveStateUri(rom, slot)
+        emulatorManager.takeScreenshot()
         if (!emulatorManager.saveState(slotUri)) {
             return false
         }

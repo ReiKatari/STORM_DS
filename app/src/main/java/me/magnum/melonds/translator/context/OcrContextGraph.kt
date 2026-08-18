@@ -94,16 +94,19 @@ object OcrContextGraph {
         }
 
         if (detectedDirectly != null && detectedDirectly != "NARRATOR_CHRONICLE") {
+            lastActiveSpeaker = null
             return detectedDirectly
         }
 
-        // If alternating dialogue (indicated by quotes or question/answer)
+        // If alternating dialogue (indicated by quotes or dash)
         if (text.startsWith("—") || text.startsWith("-") || text.startsWith("\"") || text.startsWith("«")) {
             previousSpeakerWasMale = !previousSpeakerWasMale
             return if (previousSpeakerWasMale) "HERO_PROTAGONIST_MALE" else "HEROINE_FEMALE"
         }
 
-        return lastActiveSpeaker?.defaultPersona ?: "HERO_PROTAGONIST_MALE"
+        val persona = lastActiveSpeaker?.defaultPersona ?: "NARRATOR_CHRONICLE"
+        lastActiveSpeaker = null // Reset so it doesn't stick permanently across subsequent dialogues
+        return persona
     }
 
     fun sanitizeTranslation(translatedText: String): String {
