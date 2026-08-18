@@ -1366,4 +1366,6 @@
     <string name="video_console_skin_title">3D Animated Console Skin</string>
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
     <string name="video_console_skin_type_title">Console Model &amp; Color</string>
+    <string name="video_oled_battery_saver_title">Smart OLED Battery Saver</string>
+    <string name="video_oled_battery_saver_summary">Dynamically optimize refresh rate and power consumption on OLED/AMOLED screens during static scenes (save up to 40% battery)</string>
 </resources>

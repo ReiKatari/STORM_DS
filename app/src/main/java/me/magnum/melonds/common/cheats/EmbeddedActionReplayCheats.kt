@@ -26,26 +26,28 @@ data class RawCheatCategory(
 object EmbeddedActionReplayCheats {
     private const val TAG = "EmbeddedActionReplay"
 
-    suspend fun populateIfEmpty(database: MelonDatabase, gameCode: String, gameTitle: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun populateIfEmpty(database: MelonDatabase, gameCode: String, gameTitle: String, gameChecksum: String = ""): Boolean = withContext(Dispatchers.IO) {
         val cleanCode = gameCode.trim().uppercase()
-        if (cleanCode.isBlank()) return@withContext false
+        val cleanChecksum = gameChecksum.trim().uppercase()
+        if (cleanCode.isBlank() && cleanChecksum.isBlank()) return@withContext false
 
-        val existing = database.gameDao().findGameByCode(cleanCode)
-            ?: if (cleanCode.length >= 3) database.gameDao().findGameByPrefix(cleanCode.take(3)) else null
-            ?: if (gameTitle.isNotBlank()) database.gameDao().findGameByTitle(gameTitle.trim()) else null
+        val existing = (if (cleanChecksum.isNotBlank()) database.gameDao().findGameByChecksum(cleanChecksum) else null)
+            ?: (if (cleanCode.isNotBlank()) database.gameDao().findGameByCode(cleanCode) else null)
+            ?: (if (cleanCode.length >= 3) database.gameDao().findGameByPrefix(cleanCode.take(3)) else null)
+            ?: (if (gameTitle.isNotBlank()) database.gameDao().findGameByTitle(gameTitle.trim()) else null)
 
         if (existing != null && existing.id != null) {
             val folders = database.cheatFolderDao().getFoldersForGame(existing.id)
             if (folders.isNotEmpty()) return@withContext true
         }
 
-        val categories = getEmbeddedCheatsForGame(cleanCode, gameTitle).ifEmpty {
+        val categories = getEmbeddedCheatsForGame(cleanCode, gameTitle, cleanChecksum).ifEmpty {
             fetchOnlineCheats(cleanCode).ifEmpty {
                 generateUniversalCheats(cleanCode, gameTitle)
             }
         }
 
-        insertCheatsToDatabase(database, cleanCode, gameTitle, categories, existing?.id)
+        insertCheatsToDatabase(database, cleanCode, gameTitle, cleanChecksum, categories, existing?.id)
         return@withContext true
     }
 
@@ -53,6 +55,7 @@ object EmbeddedActionReplayCheats {
         database: MelonDatabase,
         gameCode: String,
         gameTitle: String,
+        gameChecksum: String,
         categories: List<RawCheatCategory>,
         existingGameId: Long? = null
     ) {
@@ -65,7 +68,7 @@ object EmbeddedActionReplayCheats {
                     id = null,
                     name = gameTitle.ifBlank { "NDS Game ($gameCode)" },
                     gameCode = gameCode,
-                    gameChecksum = ""
+                    gameChecksum = gameChecksum
                 )
             )
 
@@ -93,7 +96,7 @@ object EmbeddedActionReplayCheats {
                         database.cheatDao().insertCheats(cheatEntities)
                     }
                 }
-                Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} cheats for $gameCode ($gameTitle)")
+                Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} cheats for $gameCode / $gameChecksum ($gameTitle)")
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed inserting cheats for $gameCode: ${e.message}")
@@ -154,9 +157,10 @@ object EmbeddedActionReplayCheats {
         return categories
     }
 
-    private fun getEmbeddedCheatsForGame(gameCode: String, gameTitle: String): List<RawCheatCategory> {
+    private fun getEmbeddedCheatsForGame(gameCode: String, gameTitle: String, gameChecksum: String = ""): List<RawCheatCategory> {
         val prefix = gameCode.take(4).uppercase()
         val titleLower = gameTitle.lowercase()
+        val checksum = gameChecksum.uppercase()
 
         return when {
             // Pokémon HeartGold / SoulSilver (IPKE / IPGE)
@@ -215,8 +219,8 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Batman (UBT, BBT, Batman The Brave and the Bold)
-            prefix.startsWith("UBT") || prefix.startsWith("BBT") || titleLower.contains("batman") -> listOf(
+            // Batman (UBT, BBT, Batman The Brave and the Bold, CRC 08D5D422)
+            prefix.startsWith("UBT") || prefix.startsWith("BBT") || titleLower.contains("batman") || checksum.contains("08D5D422") -> listOf(
                 RawCheatCategory(
                     "Бэтмен и способности",
                     listOf(

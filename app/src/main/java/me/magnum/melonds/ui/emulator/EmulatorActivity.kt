@@ -918,8 +918,10 @@ class EmulatorActivity : AppCompatActivity() {
                 viewModel.currentFps.collectLatest {
                     if (it == null) {
                         binding.textFps.text = null
+                        binding.textResolution.isGone = true
                     } else {
                         binding.textFps.text = getString(R.string.info_fps, it)
+                        setupResolutionHud()
                     }
                 }
             }
@@ -1747,7 +1749,7 @@ class EmulatorActivity : AppCompatActivity() {
     private fun setupResolutionHud() {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val position = prefs.getString("resolution_hud_position", "hidden") ?: "hidden"
-        if (position == "hidden") {
+        if (position == "hidden" || !bootRomReady.value || viewModel.currentFps.value == null) {
             binding.textResolution.isGone = true
             return
         }
@@ -1768,8 +1770,9 @@ class EmulatorActivity : AppCompatActivity() {
         binding.textResolution.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
 
         val density = resources.displayMetrics.density
-        val margin16 = (16 * density).toInt()
-        val marginOffset = if (binding.textFps.isVisible) (52 * density).toInt() else margin16
+        val margin12 = (12 * density).toInt()
+        val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
+        val fpsPos = viewModel.getFpsCounterPosition()
 
         val newParams = ConstraintLayout.LayoutParams(
             ConstraintLayout.LayoutParams.WRAP_CONTENT,
@@ -1779,26 +1782,26 @@ class EmulatorActivity : AppCompatActivity() {
             "top_left" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_LEFT) marginOffset else margin16
-                newParams.leftMargin = margin16
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (margin12 + 30 * density).toInt() else margin12
+                newParams.leftMargin = margin12
             }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_RIGHT) marginOffset else margin16
-                newParams.rightMargin = margin16
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_RIGHT) (margin12 + 30 * density).toInt() else margin12
+                newParams.rightMargin = margin12
             }
             "bottom_left" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_LEFT) marginOffset else margin16
-                newParams.leftMargin = margin16
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (margin12 + 30 * density).toInt() else margin12
+                newParams.leftMargin = margin12
             }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_RIGHT) marginOffset else margin16
-                newParams.rightMargin = margin16
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (margin12 + 30 * density).toInt() else margin12
+                newParams.rightMargin = margin12
             }
         }
         binding.textResolution.layoutParams = newParams
