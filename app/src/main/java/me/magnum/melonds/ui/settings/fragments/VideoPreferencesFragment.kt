@@ -378,6 +378,33 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         )
         updateDsiCameraImagePreference(dsiCameraImagePreference, dsiCameraSourcePreference.value)
         updateDualScreenPresetSummary()
+
+        val fpsCounterPref = findPreference<ListPreference>("fps_counter_position")
+        val resolutionHudPref = findPreference<ListPreference>("resolution_hud_position")
+        if (fpsCounterPref != null && resolutionHudPref != null) {
+            helper.bindPreferenceSummaryToValue(fpsCounterPref)
+            helper.bindPreferenceSummaryToValue(resolutionHudPref)
+
+            fpsCounterPref.addOnPreferenceChangeListener { _, newValue ->
+                val newPos = newValue as? String ?: return@addOnPreferenceChangeListener true
+                if (newPos != "hidden" && newPos == resolutionHudPref.value) {
+                    val fallback = if (newPos == "top_left") "top_right" else "top_left"
+                    resolutionHudPref.value = fallback
+                    Toast.makeText(requireContext(), "Позиция разрешения изменена во избежание наложения", Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
+
+            resolutionHudPref.addOnPreferenceChangeListener { _, newValue ->
+                val newPos = newValue as? String ?: return@addOnPreferenceChangeListener true
+                if (newPos != "hidden" && newPos == fpsCounterPref.value) {
+                    val fallback = if (newPos == "top_left") "top_right" else "top_left"
+                    fpsCounterPref.value = fallback
+                    Toast.makeText(requireContext(), "Позиция FPS изменена во избежание наложения", Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
+        }
     }
 
     private fun setupVulkanDriverPreferences(

@@ -60,13 +60,18 @@ object EmbeddedActionReplayCheats {
         existingGameId: Long? = null
     ) {
         try {
-            val dbEntity = CheatDatabaseEntity(id = null, name = "Action Replay Official")
-            val dbId = database.cheatDatabaseDao().insertCheatDatabase(dbEntity).takeIf { it > 0 } ?: 1L
+            var dbList = database.cheatDatabaseDao().getCheatDatabases()
+            val dbId = if (dbList.isNotEmpty() && dbList.first().id != null) {
+                dbList.first().id!!
+            } else {
+                database.cheatDatabaseDao().insertCheatDatabase(CheatDatabaseEntity(id = null, name = "Action Replay Official"))
+            }
 
+            val targetGameName = gameTitle.ifBlank { "NDS Game ($gameCode)" }
             val gameId = existingGameId ?: database.gameDao().insertGame(
                 GameEntity(
                     id = null,
-                    name = gameTitle.ifBlank { "NDS Game ($gameCode)" },
+                    name = targetGameName,
                     gameCode = gameCode,
                     gameChecksum = gameChecksum
                 )

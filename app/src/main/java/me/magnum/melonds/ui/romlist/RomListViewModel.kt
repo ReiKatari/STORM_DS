@@ -564,12 +564,13 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {
+        val isRawDsiWare = (rom.isDsiWareTitle || rom.fileName.endsWith(".dsi", ignoreCase = true) || rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true) && !rom.isInstalledDsiWareShortcut
         return when (filter) {
-            RomFilter.ALL -> true
-            RomFilter.FAVORITES -> rom.isFavorite
-            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
-            RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
-            RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
+            RomFilter.ALL -> !isRawDsiWare
+            RomFilter.FAVORITES -> rom.isFavorite && !isRawDsiWare
+            RomFilter.DS_ONLY -> !isRawDsiWare && !rom.isInstalledDsiWareShortcut
+            RomFilter.DSIWARE_ONLY -> isRawDsiWare || rom.isInstalledDsiWareShortcut
+            RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty() && !isRawDsiWare
         }
     }
 
