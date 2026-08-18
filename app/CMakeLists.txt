@@ -254,3 +254,12 @@ target_link_libraries(melonDS-android-frontend
 if (MELONDS_HAS_ADRENOTOOLS)
     add_dependencies(melonDS-android-frontend main_hook file_redirect_hook gsl_alloc_hook hook_impl)
 endif()
+
+if (NOT MELONDS_ANDROID_DEBUG_BUILD)
+    target_compile_options(melonDS-android-frontend PRIVATE
+        -O3
+        -fomit-frame-pointer
+        -fvisibility-inlines-hidden
+        -finline-functions
+    )
+endif()
