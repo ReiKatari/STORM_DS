@@ -67,13 +67,6 @@
             android:defaultValue="false" />
 
     <SwitchPreference
-            android:key="video_ambient_glow_enabled"
-            android:title="Динамическая подсветка экрана"
-            android:summary="Мягкая фоновая подсветка вокруг экранов в реальном времени под тон изображения игры"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <SwitchPreference
             android:key="video_console_skin_enabled"
             android:title="@string/video_console_skin_title"
             android:summary="@string/video_console_skin_summary"
