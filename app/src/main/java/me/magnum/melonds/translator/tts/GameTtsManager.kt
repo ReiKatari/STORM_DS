@@ -208,19 +208,19 @@ class GameTtsManager(private val context: Context) {
     fun speak(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
 
-        // 1. Normalization of accents, gaming terminology, and numbers
+        // 1. Detect speaker / persona BEFORE accent normalization on raw text
+        val detected = detectPersona(text)
+        val personaStr = me.magnum.melonds.translator.context.OcrContextGraph.getNextTurnPersona(text, detected.name)
+        val activePersona = runCatching { CharacterPersona.valueOf(personaStr) }.getOrDefault(detected)
+        lastActivePersona = activePersona
+
+        // 2. Normalization of accents, gaming terminology, and numbers for TTS engines
         val normalizedText = RussianTtsNormalizer.normalize(text, targetLang)
 
         val engine = preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
         val isNeural = engine == "neural_edge" || preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
         val multiVoiceEnabled = engine != "single" && preferences.getBoolean(PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
         val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
-
-        // Detect speaker / persona across context graph and text
-        val detected = detectPersona(normalizedText)
-        val personaStr = me.magnum.melonds.translator.context.OcrContextGraph.getNextTurnPersona(normalizedText, detected.name)
-        val activePersona = runCatching { CharacterPersona.valueOf(personaStr) }.getOrDefault(detected)
-        lastActivePersona = activePersona
 
         if (isNeural) {
             // Synthesize coherent speech for the active persona with no sentence cutoff
@@ -354,8 +354,10 @@ class GameTtsManager(private val context: Context) {
     }
 
     private fun detectPersona(text: String): CharacterPersona {
-        val lower = text.lowercase()
-        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val clean = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+        val lower = clean.lowercase()
+        val lines = clean.lines().map { it.trim() }.filter { it.isNotEmpty() }
         val firstLine = lines.firstOrNull() ?: ""
         val firstLineLower = firstLine.lowercase()
 
