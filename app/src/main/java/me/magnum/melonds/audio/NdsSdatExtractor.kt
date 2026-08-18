@@ -5,8 +5,6 @@ import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import me.magnum.melonds.domain.model.rom.Rom
-import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -36,19 +34,17 @@ object NdsSdatExtractor {
         try {
             val romBytes = readRomStreamBytes(context, uri, maxBytes = 48 * 1024 * 1024)
             if (romBytes != null && romBytes.size > 0x200) {
-                // 1. Search for SDAT offsets across ROM
                 val sdatOffsets = findAllSdatOffsets(romBytes)
                 Log.i(TAG, "Found ${sdatOffsets.size} SDAT block(s) in ROM: ${sdatOffsets.map { "0x" + it.toString(16) }}")
 
                 for (offset in sdatOffsets) {
                     val sdatSlice = ByteBuffer.wrap(romBytes, offset, romBytes.size - offset).order(ByteOrder.LITTLE_ENDIAN)
-                    val parsed = parseSdatBuffer(sdatSlice)
+                    val parsed = parseSdatBuffer(sdatSlice, offset, romBytes)
                     if (parsed.isNotEmpty()) {
                         tracks.addAll(parsed)
                     }
                 }
 
-                // 2. If no SDAT was found, try NitroFS FAT table parsing
                 if (tracks.isEmpty()) {
                     val nitroTracks = extractFromNitroFs(romBytes)
                     if (nitroTracks.isNotEmpty()) {
@@ -66,7 +62,6 @@ object NdsSdatExtractor {
     private fun readRomStreamBytes(context: Context, uri: Uri, maxBytes: Int): ByteArray? {
         val rawStream = context.contentResolver.openInputStream(uri) ?: return null
         return try {
-            // Check if this is a ZIP archive containing .nds
             val buffered = rawStream.buffered()
             buffered.mark(4)
             val magic = ByteArray(4)
@@ -102,7 +97,6 @@ object NdsSdatExtractor {
                 data[i + 2] == 'A'.code.toByte() &&
                 data[i + 3] == 'T'.code.toByte()
             ) {
-                // Validate SDAT header
                 val size = (data[i + 8].toInt() and 0xFF) or
                         ((data[i + 9].toInt() and 0xFF) shl 8) or
                         ((data[i + 10].toInt() and 0xFF) shl 16) or
@@ -115,7 +109,7 @@ object NdsSdatExtractor {
         return offsets
     }
 
-    private fun parseSdatBuffer(buf: ByteBuffer): List<NdsAudioTrack> {
+    private fun parseSdatBuffer(buf: ByteBuffer, sdatAbsoluteStart: Int, romBytes: ByteArray): List<NdsAudioTrack> {
         if (buf.remaining() < 64) return emptyList()
         val sdatStart = buf.position()
 
@@ -133,6 +127,7 @@ object NdsSdatExtractor {
         val fileSize = buf.int
 
         val rawTrackNames = mutableListOf<String>()
+        val seqFileIds = mutableListOf<Int>()
 
         // 1. Read Symbol Table (SYMB) if available
         if (symbOffset > 0 && symbSize > 8 && (sdatStart + symbOffset + symbSize <= buf.limit())) {
@@ -154,6 +149,7 @@ object NdsSdatExtractor {
                                 buf.position(oldPos)
                                 if (name.isNotBlank()) {
                                     rawTrackNames.add(name)
+                                    seqFileIds.add(i)
                                 }
                             }
                         }
@@ -176,6 +172,7 @@ object NdsSdatExtractor {
                         val count = buf.int.coerceIn(0, 256)
                         for (i in 0 until count) {
                             rawTrackNames.add("SEQ_BGM_${(i + 1).toString().padStart(2, '0')}")
+                            seqFileIds.add(i)
                         }
                     }
                 }
@@ -192,7 +189,8 @@ object NdsSdatExtractor {
                 if (fatMagic == "FAT ") {
                     val count = buf.int.coerceIn(0, 256)
                     for (i in 0 until count) {
-                        rawTrackNames.add("SOUND_TRACK_${i + 1}")
+                        rawTrackNames.add("ORIGINAL_SEQ_${i + 1}")
+                        seqFileIds.add(i)
                     }
                 }
             } catch (_: Throwable) {}
@@ -201,6 +199,19 @@ object NdsSdatExtractor {
         val tracks = mutableListOf<NdsAudioTrack>()
         for (i in rawTrackNames.indices) {
             val rawName = rawTrackNames[i]
+            val seqIndex = seqFileIds.getOrElse(i) { i }
+
+            // Extract authentic MIDI notes from SSEQ file in FAT
+            val notes = extractSseqNotesFromFat(
+                buf = buf,
+                sdatStart = sdatStart,
+                fatOffset = fatOffset,
+                fileOffset = fileOffset,
+                seqIndex = seqIndex
+            ).ifEmpty {
+                generateTrackSequenceFromUniqueHash(rawName, seqIndex, sdatAbsoluteStart)
+            }
+
             val category = when {
                 rawName.contains("BGM", true) || rawName.contains("FIELD", true) || rawName.contains("TOWN", true) || rawName.contains("DUNGEON", true) || rawName.contains("BATTLE", true) || rawName.contains("TITLE", true) -> "BGM"
                 rawName.contains("ME", true) || rawName.contains("FANFARE", true) || rawName.contains("JINGLE", true) || rawName.contains("VICTORY", true) -> "ME"
@@ -221,12 +232,113 @@ object NdsSdatExtractor {
                     category = category,
                     durationSec = duration,
                     sampleRate = 32000,
-                    sequenceNotes = generateAuthenticSequenceMelody(rawName, i)
+                    sequenceNotes = notes
                 )
             )
         }
 
         return tracks
+    }
+
+    private fun extractSseqNotesFromFat(
+        buf: ByteBuffer,
+        sdatStart: Int,
+        fatOffset: Int,
+        fileOffset: Int,
+        seqIndex: Int
+    ): List<NdsNoteEvent> {
+        val notes = mutableListOf<NdsNoteEvent>()
+        try {
+            if (fatOffset <= 0 || (sdatStart + fatOffset + 16 >= buf.limit())) return emptyList()
+            buf.position(sdatStart + fatOffset)
+            val fatMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
+            if (fatMagic != "FAT ") return emptyList()
+
+            val fatCount = buf.int
+            if (seqIndex >= fatCount) return emptyList()
+
+            val entryPos = sdatStart + fatOffset + 12 + (seqIndex * 16)
+            if (entryPos + 8 > buf.limit()) return emptyList()
+            buf.position(entryPos)
+            val fileEntryOffset = buf.int
+            val fileEntrySize = buf.int
+
+            val sseqPos = sdatStart + fileEntryOffset
+            if (fileEntrySize in 32..(2 * 1024 * 1024) && (sseqPos + fileEntrySize <= buf.limit())) {
+                buf.position(sseqPos)
+                val sseqMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
+                if (sseqMagic == "SSEQ") {
+                    buf.position(sseqPos + 0x10) // DATA block
+                    val dataMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
+                    if (dataMagic == "DATA") {
+                        val dataSize = buf.int
+                        val bytecodeStart = sseqPos + 0x1C
+                        val sampleRate = 32000
+                        var currentTempoBpm = 120
+                        var ticksPerQuarter = 48
+
+                        var pos = bytecodeStart
+                        val end = (bytecodeStart + dataSize).coerceAtMost(sseqPos + fileEntrySize)
+                        while (pos < end && notes.size < 96) {
+                            buf.position(pos)
+                            val cmd = buf.get().toInt() and 0xFF
+                            pos++
+                            when {
+                                cmd in 0x00..0x7F -> {
+                                    // Note On command: cmd is MIDI pitch (0..127)
+                                    val durationTicks = readVarLen(buf)
+                                    pos = buf.position()
+                                    val samplesPerTick = (sampleRate * 60) / (currentTempoBpm * ticksPerQuarter)
+                                    val durationSamples = (durationTicks * samplesPerTick).coerceIn(sampleRate / 16, sampleRate * 2)
+                                    notes.add(
+                                        NdsNoteEvent(
+                                            pitchMidi = cmd,
+                                            durationSamples = durationSamples,
+                                            volume = 0.85f
+                                        )
+                                    )
+                                }
+                                cmd == 0x80 -> {
+                                    // Rest / wait
+                                    val restTicks = readVarLen(buf)
+                                    pos = buf.position()
+                                }
+                                cmd == 0x93 -> {
+                                    // Set tempo
+                                    if (pos + 2 <= end) {
+                                        val tempo = buf.short.toInt() and 0xFFFF
+                                        if (tempo in 40..280) currentTempoBpm = tempo
+                                        pos += 2
+                                    }
+                                }
+                                cmd == 0xFF -> break // End of track
+                                else -> {
+                                    // Parameter skipping
+                                    if (cmd in 0x81..0x92 || cmd in 0x95..0xBD) {
+                                        readVarLen(buf)
+                                        pos = buf.position()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            Log.d(TAG, "SSEQ bytecode read note: ${e.message}")
+        }
+        return notes
+    }
+
+    private fun readVarLen(buf: ByteBuffer): Int {
+        var value = 0
+        var b: Int
+        do {
+            if (!buf.hasRemaining()) break
+            b = buf.get().toInt() and 0xFF
+            value = (value shl 7) or (b and 0x7F)
+        } while ((b and 0x80) != 0)
+        return if (value <= 0) 24 else value
     }
 
     private fun extractFromNitroFs(rom: ByteArray): List<NdsAudioTrack> {
@@ -245,7 +357,6 @@ object NdsSdatExtractor {
                     if (top in 0 until bottom && bottom <= rom.size) {
                         val size = bottom - top
                         if (size in 16..(16 * 1024 * 1024)) {
-                            // Check SSEQ or SDAT magic at top
                             val magic = String(rom, top, 4.coerceAtMost(size))
                             if (magic == "SSEQ" || magic == "SSAR" || magic == "STRM") {
                                 sseqCount++
@@ -256,7 +367,7 @@ object NdsSdatExtractor {
                                         category = if (magic == "STRM") "STRM" else "BGM",
                                         durationSec = 80 + (sseqCount * 9) % 100,
                                         sampleRate = 32000,
-                                        sequenceNotes = generateAuthenticSequenceMelody("SEQ_$sseqCount", sseqCount)
+                                        sequenceNotes = generateTrackSequenceFromUniqueHash("SEQ_$sseqCount", sseqCount, top)
                                     )
                                 )
                             }
@@ -292,8 +403,8 @@ object NdsSdatExtractor {
             .ifBlank { raw }
     }
 
-    private fun generateAuthenticSequenceMelody(name: String, trackIndex: Int): List<NdsNoteEvent> {
-        val hash = (name.hashCode() xor (trackIndex * 31)).let { if (it < 0) -it else it }
+    private fun generateTrackSequenceFromUniqueHash(name: String, trackIndex: Int, seedOffset: Int): List<NdsNoteEvent> {
+        val hash = (name.hashCode() xor (trackIndex * 31) xor seedOffset).let { if (it < 0) -it else it }
         val scales = listOf(
             listOf(60, 62, 64, 65, 67, 69, 71, 72), // C Major
             listOf(57, 59, 60, 62, 64, 65, 67, 69), // A Minor
@@ -304,7 +415,7 @@ object NdsSdatExtractor {
         val selectedScale = scales[hash % scales.size]
         val noteCount = 48 + (hash % 32)
         val sampleRate = 32000
-        val baseNoteDuration = sampleRate / 4 // 16th to 8th notes
+        val baseNoteDuration = sampleRate / 4
 
         val notes = mutableListOf<NdsNoteEvent>()
         var rng = hash

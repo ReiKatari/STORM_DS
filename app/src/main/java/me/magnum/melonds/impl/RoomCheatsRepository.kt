@@ -49,8 +49,12 @@ class RoomCheatsRepository(
     }
 
     override suspend fun findGameForRom(romInfo: RomInfo): Game? {
-        val gameEntity = database.gameDao().findGame(romInfo.gameCode, romInfo.headerChecksumString())
-            ?: database.gameDao().findGameByCode(romInfo.gameCode)
+        val exact = database.gameDao().findGame(romInfo.gameCode, romInfo.headerChecksumString())
+        val byCode = exact ?: database.gameDao().findGameByCode(romInfo.gameCode)
+        val byPrefix = byCode ?: if (romInfo.gameCode.length >= 3) database.gameDao().findGameByPrefix(romInfo.gameCode.take(3)) else null
+        val byTitle = byPrefix ?: if (romInfo.gameTitle.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameTitle.trim()) else null
+        val gameEntity = byTitle ?: if (romInfo.gameName.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameName.trim()) else null
+
         return gameEntity?.let {
             Game(
                 it.id,

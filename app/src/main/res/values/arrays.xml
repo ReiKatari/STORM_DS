@@ -336,4 +336,32 @@
         <item>n3ds_aqua</item>
         <item>n3ds_black</item>
     </string-array>
+
+    <string-array name="translator_tts_voice_engine_options">
+        <item>Живая нейросетевая озвучка (Edge Neural HD 24kHz)</item>
+        <item>Многоголосая озвучка персонажей (М/Ж/Злодеи/Дети) [Оффлайн]</item>
+        <item>Стандартный один голос (Системный)</item>
+    </string-array>
+
+    <string-array name="translator_tts_voice_engine_values">
+        <item>neural_edge</item>
+        <item>local_multi</item>
+        <item>single</item>
+    </string-array>
+
+    <string-array name="resolution_hud_position_options">
+        <item>Скрыто</item>
+        <item>Верхний левый угол</item>
+        <item>Верхний правый угол</item>
+        <item>Нижний левый угол</item>
+        <item>Нижний правый угол</item>
+    </string-array>
+
+    <string-array name="resolution_hud_position_values">
+        <item>hidden</item>
+        <item>top_left</item>
+        <item>top_right</item>
+        <item>bottom_left</item>
+        <item>bottom_right</item>
+    </string-array>
 </resources>
