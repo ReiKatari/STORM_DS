@@ -167,6 +167,15 @@
             android:defaultValue="hidden" />
 
     <ListPreference
+            android:key="resolution_hud_position"
+            android:title="Отображение текущего разрешения"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/resolution_hud_position_options"
+            android:entryValues="@array/resolution_hud_position_values"
+            android:defaultValue="hidden" />
+
+    <ListPreference
             android:key="dsi_camera_source"
             android:title="@string/dsi_camera_source"
             android:summary="%s"

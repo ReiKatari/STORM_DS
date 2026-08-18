@@ -31,6 +31,7 @@ class GameTtsManager(private val context: Context) {
 
     companion object {
         private const val TAG = "GameTtsManager"
+        const val PREF_TRANSLATOR_TTS_VOICE_ENGINE = "translator_tts_voice_engine"
         const val PREF_TRANSLATOR_TTS_LANG = "translator_tts_lang"
         const val PREF_TRANSLATOR_TTS_MULTI_VOICE = "translator_tts_multi_voice"
         const val PREF_TRANSLATOR_TTS_SPEED = "translator_tts_speed"
@@ -202,24 +203,31 @@ class GameTtsManager(private val context: Context) {
         }
     }
 
+    private var lastActivePersona: CharacterPersona = CharacterPersona.HERO_PROTAGONIST_MALE
+
     fun speak(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
 
         // 1. Normalization of accents, gaming terminology, and numbers
         val normalizedText = RussianTtsNormalizer.normalize(text, targetLang)
 
-        val isNeural = preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
-        val multiVoiceEnabled = preferences.getBoolean(PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
+        val engine = preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
+        val isNeural = engine == "neural_edge" || preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
+        val multiVoiceEnabled = engine != "single" && preferences.getBoolean(PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
         val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
 
+        // Detect speaker / persona across the entire text
+        val detected = detectPersona(normalizedText)
+        val activePersona = if (detected != CharacterPersona.NARRATOR_CHRONICLE) {
+            lastActivePersona = detected
+            detected
+        } else {
+            lastActivePersona
+        }
+
         if (isNeural) {
-            val lines = normalizedText.split("\n", ". ")
-            for (line in lines) {
-                val trimmed = line.trim()
-                if (trimmed.isEmpty()) continue
-                val persona = detectPersona(trimmed)
-                speakNeuralCloud(trimmed, targetLang, persona, baseSpeed)
-            }
+            // Synthesize coherent speech for the active persona with no sentence cutoff
+            speakNeuralCloud(normalizedText, targetLang, activePersona, baseSpeed)
             return
         }
 
@@ -248,14 +256,8 @@ class GameTtsManager(private val context: Context) {
         applyLanguage(locale)
 
         if (multiVoiceEnabled) {
-            val lines = normalizedText.split("\n", ". ")
-            for (line in lines) {
-                val trimmed = line.trim()
-                if (trimmed.isEmpty()) continue
-                val persona = detectPersona(trimmed)
-                applyPersonaVoice(persona, baseSpeed, locale)
-                tts?.speak(trimmed, TextToSpeech.QUEUE_ADD, null, "game_tts_${System.currentTimeMillis()}")
-            }
+            applyPersonaVoice(activePersona, baseSpeed, locale)
+            tts?.speak(normalizedText, TextToSpeech.QUEUE_FLUSH, null, "game_tts_${System.currentTimeMillis()}")
         } else {
             tts?.setPitch(1.0f)
             tts?.setSpeechRate(baseSpeed)

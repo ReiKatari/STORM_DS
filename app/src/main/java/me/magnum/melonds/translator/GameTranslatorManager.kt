@@ -121,9 +121,12 @@ class GameTranslatorManager(
         val triggerMode = TranslatorTriggerMode.fromPreference(preferences.getString(PREF_TRANSLATOR_TRIGGER_MODE, "on_demand"))
         val overlayStyle = TranslatorOverlayStyle.fromPreference(preferences.getString(PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match"))
         val ttsEnabled = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
-        val multiVoiceEnabled = preferences.getBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
-        val neuralTtsEnabled = preferences.getBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
-        val ttsLang = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
+        val voiceEngine = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
+        val voiceEngineName = when (voiceEngine) {
+            "neural_edge" -> "Живой Edge Neural HD"
+            "local_multi" -> "Многоголосая системная"
+            else -> "Один голос (Системный)"
+        }
 
         val triggerModeName = when (triggerMode) {
             TranslatorTriggerMode.ON_DEMAND -> "По нажатию кнопки"
@@ -137,6 +140,7 @@ class GameTranslatorManager(
             TranslatorOverlayStyle.OUTLINE_ONLY -> "Только контур"
         }
 
+        val ttsLang = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
         val langName = when (ttsLang) {
             "ru" -> "Русский (ru)"
             "en" -> "English (en)"
@@ -154,8 +158,7 @@ class GameTranslatorManager(
         items.add(android.text.Html.fromHtml("<b>🌐 Движок:</b> <font color='#FACC15'>${currentEngine.displayName.substringBefore(" (")}</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml("<font color='#64748B'>────────────────────────</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml(if (ttsEnabled) "<b>🔊 Озвучка (TTS):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>🔇 Озвучка (TTS):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml(if (multiVoiceEnabled) "<b>🎭 Голоса персонажей (М/Ж/Злодеи):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>👤 Голоса персонажей (М/Ж/Злодеи):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml(if (neuralTtsEnabled) "<b>🎙️ Движок:</b> <font color='#38BDF8'>Живой Edge Neural HD</font>" else "<b>⚙️ Движок:</b> <font color='#FACC15'>Системный Android TTS</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
+        items.add(android.text.Html.fromHtml("<b>🎙️ Режим озвучки:</b> <font color='#38BDF8'>$voiceEngineName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml("<b>🌐 Язык озвучки:</b> <font color='#38BDF8'>$langName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
         items.add(android.text.Html.fromHtml("<b>📐 Настроить зоны перевода (OCR)</b>", android.text.Html.FROM_HTML_MODE_LEGACY))
 
@@ -171,25 +174,40 @@ class GameTranslatorManager(
                         preferences.edit().putBoolean(PREF_TRANSLATOR_TTS_ENABLED, newTts).apply()
                         Toast.makeText(activity, if (newTts) "🔊 Озвучка диалогов включена" else "🔇 Озвучка диалогов отключена", Toast.LENGTH_SHORT).show()
                     }
-                    5 -> {
-                        val newMulti = !multiVoiceEnabled
-                        preferences.edit()
-                            .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, newMulti)
-                            .apply()
-                        Toast.makeText(activity, if (newMulti) "🎭 Разные голоса для персонажей (М/Ж/Злодеи/Дети) ВКЛ" else "👤 Стандартный один голос", Toast.LENGTH_SHORT).show()
-                    }
-                    6 -> {
-                        val newNeural = !neuralTtsEnabled
-                        preferences.edit()
-                            .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, newNeural)
-                            .apply()
-                        Toast.makeText(activity, if (newNeural) "🎙️ Движок: Живой Edge Neural HD ВКЛ" else "⚙️ Движок: Системный Android TTS", Toast.LENGTH_SHORT).show()
-                    }
-                    7 -> showTtsLanguageSelectorDialog()
-                    8 -> openRegionEditor()
+                    5 -> showVoiceEngineSelectorDialog()
+                    6 -> showTtsLanguageSelectorDialog()
+                    7 -> openRegionEditor()
                 }
             }
             .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun showVoiceEngineSelectorDialog() {
+        val engines = arrayOf("neural_edge", "local_multi", "single")
+        val names = arrayOf(
+            "🎙️ Живая нейросетевая озвучка (Edge Neural HD 24kHz)",
+            "🎭 Многоголосая системная (М/Ж/Злодеи/Дети) [Оффлайн]",
+            "👤 Стандартный один голос (Системный)"
+        )
+        val currentEngine = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
+        val selectedIdx = engines.indexOf(currentEngine).coerceAtLeast(0)
+
+        androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setTitle("Выбор режима озвучки")
+            .setSingleChoiceItems(names, selectedIdx) { dialog, which ->
+                val chosen = engines[which]
+                val isNeural = chosen == "neural_edge"
+                val isMulti = chosen != "single"
+                preferences.edit()
+                    .putString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, chosen)
+                    .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, isNeural)
+                    .putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, isMulti)
+                    .apply()
+                Toast.makeText(activity, "Выбрано: ${names[which]}", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
