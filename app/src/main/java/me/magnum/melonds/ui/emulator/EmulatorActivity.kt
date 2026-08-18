@@ -2361,11 +2361,8 @@ class EmulatorActivity : AppCompatActivity() {
     ) {
         val allFilteringOptions = resources.getStringArray(R.array.video_filtering_options)
         val items = listOf(null) + VideoFiltering.entries.filter { filtering ->
-            when (renderer) {
-                VideoRenderer.VULKAN -> filtering.isSupportedByVulkan() &&
-                    (filtering != VideoFiltering.RETROARCH || hasValidRetroArchShaderRoot)
-                else -> filtering.isSupportedByOpenGlSurface()
-            }
+            filtering.isSupportedByRenderer(renderer) &&
+                (filtering != VideoFiltering.RETROARCH || hasValidRetroArchShaderRoot)
         }
         val labels = items.map { filtering ->
             filtering?.let { allFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: getString(R.string.use_global_preference)

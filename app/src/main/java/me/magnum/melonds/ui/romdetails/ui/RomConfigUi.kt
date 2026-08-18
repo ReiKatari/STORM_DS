@@ -153,10 +153,7 @@ private fun Content(
     val selectedRenderer = romConfig.videoRenderer?.takeIf { supportsRenderer(it) }
     val effectiveRenderer = selectedRenderer ?: romConfig.globalVideoRenderer
     fun supportsFiltering(renderer: VideoRenderer, filtering: VideoFiltering): Boolean {
-        return when (renderer) {
-            VideoRenderer.VULKAN -> filtering.isSupportedByVulkan()
-            else -> filtering.isSupportedByOpenGlSurface()
-        }
+        return filtering.isSupportedByRenderer(renderer)
     }
     val selectedFiltering = romConfig.videoFiltering?.takeIf { supportsFiltering(effectiveRenderer, it) }
     val effectiveGlobalFiltering = romConfig.globalVideoFiltering.takeIf { supportsFiltering(effectiveRenderer, it) }

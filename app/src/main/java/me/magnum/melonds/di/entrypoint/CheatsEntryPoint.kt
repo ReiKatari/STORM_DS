@@ -11,6 +11,7 @@ import me.magnum.melonds.domain.repositories.CheatsRepository
 @InstallIn(SingletonComponent::class)
 interface CheatsEntryPoint {
     fun cheatsRepository(): CheatsRepository
+    fun database(): me.magnum.melonds.database.MelonDatabase
 
     companion object {
         fun resolve(context: Context): CheatsEntryPoint {
