@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.emulator.ui
 
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
@@ -234,9 +235,12 @@ private fun Content(
     val availableStateFilters = remember(selectedSet) {
         buildList {
             add(AchievementStateFilter.All)
+            add(AchievementStateFilter.Unlocked)
+            add(AchievementStateFilter.Locked)
             addAll(
                 selectedSet.buckets
                     .map { AchievementStateFilter.fromBucket(it.bucket) }
+                    .filter { it != AchievementStateFilter.Unlocked && it != AchievementStateFilter.Locked && it != AchievementStateFilter.All }
                     .distinct()
                     .sortedBy { it.displayOrder },
             )
@@ -466,30 +470,23 @@ private fun AchievementsHeader(
     onTypeFilterChanged: (AchievementTypeFilter) -> Unit,
 ) {
     val colors = watermelon
-    Column {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, end = 16.dp, top = 7.dp, bottom = 7.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = stringResource(R.string.achievements),
-                    color = colors.text,
-                    fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "${summary.completedAchievements}/${summary.totalAchievements} · ${summary.totalPoints} ${stringResource(R.string.points_abbreviated)}",
-                    color = colors.text3,
-                    fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
-                    fontSize = 9.5.sp,
-                    modifier = Modifier.padding(bottom = 1.dp),
-                )
-            }
+            Text(
+                text = stringResource(R.string.achievements),
+                color = colors.text,
+                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.weight(1f))
             ConsoleChipRow(
                 options = availableTypeFilters.sortedBy { it.displayOrder },
@@ -498,6 +495,111 @@ private fun AchievementsHeader(
                 label = { getTypeFilterLabelText(it) },
                 modifier = Modifier.widthIn(max = 360.dp),
             )
+        }
+
+        // Dual Mode Metric Breakdown Cards (Softcore vs Hardcore)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Softcore Card (Cyan)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.surface)
+                    .border(
+                        1.dp,
+                        if (!summary.forHardcoreMode) androidx.compose.ui.graphics.Color(0xFF38BDF8).copy(alpha = 0.45f)
+                        else colors.line,
+                        RoundedCornerShape(10.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(androidx.compose.ui.graphics.Color(0xFF38BDF8))
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = "СОФТКОР",
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color(0xFF38BDF8)
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = "${summary.completedAchievements}/${summary.totalAchievements}",
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.text
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = "${summary.totalPoints} очков (${summary.completedPercentage}%)",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 9.sp,
+                        color = colors.text3
+                    )
+                }
+            }
+
+            // Hardcore Card (Gold / Flame)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.surface)
+                    .border(
+                        1.dp,
+                        if (summary.forHardcoreMode) androidx.compose.ui.graphics.Color(0xFFFBBF24).copy(alpha = 0.60f)
+                        else colors.line,
+                        RoundedCornerShape(10.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(androidx.compose.ui.graphics.Color(0xFFFBBF24))
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = "ХАРДКОР (x2)",
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color(0xFFFBBF24)
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = if (summary.forHardcoreMode) "${summary.completedAchievements}/${summary.totalAchievements}" else "0/${summary.totalAchievements}",
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.text
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    val hardcorePoints = if (summary.forHardcoreMode) summary.totalPoints else summary.totalPoints * 2
+                    Text(
+                        text = "$hardcorePoints очков ${if (summary.forHardcoreMode) "(${summary.completedPercentage}%)" else "(Заблокировано)"}",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 9.sp,
+                        color = if (summary.forHardcoreMode) androidx.compose.ui.graphics.Color(0xFFFBBF24) else colors.text3
+                    )
+                }
+            }
         }
         androidx.compose.material.Divider(color = colors.line)
     }
