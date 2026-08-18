@@ -618,60 +618,30 @@ class EmulatorActivity : AppCompatActivity() {
         disableScreenTimeOut()
 
         val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
-        val ambientGlowEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_ambient_glow_enabled", false)
         val skinType = PreferenceManager.getDefaultSharedPreferences(this).getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
-        val currentAmbientGlowColor = androidx.compose.runtime.mutableStateOf(androidx.compose.ui.graphics.Color.Transparent)
 
-        if (consoleSkinEnabled || ambientGlowEnabled) {
+        if (consoleSkinEnabled) {
             binding.layoutConsoleSkin.visibility = View.VISIBLE
             binding.layoutConsoleSkin.isClickable = false
             binding.layoutConsoleSkin.isFocusable = false
             binding.layoutConsoleSkin.setContent {
                 val areas = consoleSkinAreasState.value
-
-                if (ambientGlowEnabled) {
-                    me.magnum.melonds.ui.emulator.skin.AmbientGlowOverlay(
-                        glowColor = currentAmbientGlowColor.value,
-                        topScreenRect = areas?.topScreenRect,
-                        bottomScreenRect = areas?.bottomScreenRect
-                    )
+                val theme = when (skinType) {
+                    "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
+                    "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
+                    "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
+                    "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
+                    "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
+                    else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
                 }
-
-                if (consoleSkinEnabled) {
-                    val theme = when (skinType) {
-                        "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
-                        "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
-                        "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
-                        "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
-                        "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
-                        else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
-                    }
-                    me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
-                        skinTheme = theme,
-                        topScreenRect = areas?.topScreenRect,
-                        bottomScreenRect = areas?.bottomScreenRect
-                    )
-                }
+                me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
+                    skinTheme = theme,
+                    topScreenRect = areas?.topScreenRect,
+                    bottomScreenRect = areas?.bottomScreenRect
+                )
             }
         } else {
             binding.layoutConsoleSkin.visibility = View.GONE
-        }
-
-        if (ambientGlowEnabled) {
-            lifecycleScope.launch {
-                while (true) {
-                    kotlinx.coroutines.delay(250)
-                    if (bootRomReady.value) {
-                        try {
-                            val bitmap = viewModel.captureScreenshot()
-                            val colorInt = me.magnum.melonds.ui.emulator.render.AmbientGlowManager.extractDominantGlowColor(bitmap)
-                            if (colorInt != android.graphics.Color.TRANSPARENT) {
-                                currentAmbientGlowColor.value = androidx.compose.ui.graphics.Color(colorInt)
-                            }
-                        } catch (_: Throwable) {}
-                    }
-                }
-            }
         }
 
         binding.layoutAchievement.setContent {

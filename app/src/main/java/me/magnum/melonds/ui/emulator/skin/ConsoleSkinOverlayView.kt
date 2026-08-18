@@ -36,49 +36,6 @@ enum class ConsoleSkinTheme {
     N3DS_BLACK
 }
 
-@Composable
-fun AmbientGlowOverlay(
-    glowColor: Color,
-    topScreenRect: Rect? = null,
-    bottomScreenRect: Rect? = null,
-    modifier: Modifier = Modifier,
-) {
-    if (glowColor == Color.Transparent || glowColor.alpha <= 0.01f) return
-
-    Canvas(modifier = modifier.fillMaxSize()) {
-        if (topScreenRect != null) {
-            val topCenterX = (topScreenRect.x + topScreenRect.width / 2f)
-            val topCenterY = (topScreenRect.y + topScreenRect.height / 2f)
-            val radius = maxOf(topScreenRect.width, topScreenRect.height) * 0.95f
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(glowColor.copy(alpha = 0.60f), Color.Transparent),
-                    center = Offset(topCenterX, topCenterY),
-                    radius = radius
-                ),
-                center = Offset(topCenterX, topCenterY),
-                radius = radius
-            )
-        }
-
-        if (bottomScreenRect != null) {
-            val bottomCenterX = (bottomScreenRect.x + bottomScreenRect.width / 2f)
-            val bottomCenterY = (bottomScreenRect.y + bottomScreenRect.height / 2f)
-            val radius = maxOf(bottomScreenRect.width, bottomScreenRect.height) * 0.95f
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(glowColor.copy(alpha = 0.60f), Color.Transparent),
-                    center = Offset(bottomCenterX, bottomCenterY),
-                    radius = radius
-                ),
-                center = Offset(bottomCenterX, bottomCenterY),
-                radius = radius
-            )
-        }
-    }
-}
 
 @Composable
 fun ConsoleSkinFullFrame(
