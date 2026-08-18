@@ -43,6 +43,17 @@
             tools:text="FPS: 60"/>
 
     <TextView
+            android:id="@+id/textResolution"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:textColor="#38BDF8"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="256x384 (1x)"/>
+
+    <TextView
             android:id="@+id/textLoading"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

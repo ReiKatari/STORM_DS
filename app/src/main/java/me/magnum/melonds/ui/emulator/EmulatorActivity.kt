@@ -393,6 +393,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
         setupSustainedPerformanceMode()
         setupFpsCounter()
+        setupResolutionHud()
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         updateDisplays()
     }
@@ -1203,6 +1204,7 @@ class EmulatorActivity : AppCompatActivity() {
                             presentation?.setInfoOverlayContent(null)
                             setupSustainedPerformanceMode()
                             setupFpsCounter()
+                            setupResolutionHud()
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1737,6 +1739,56 @@ class EmulatorActivity : AppCompatActivity() {
             }
             binding.textFps.layoutParams = newParams
         }
+    }
+
+    private fun setupResolutionHud() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val position = prefs.getString("resolution_hud_position", "hidden") ?: "hidden"
+        if (position == "hidden") {
+            binding.textResolution.isGone = true
+            return
+        }
+        binding.textResolution.isVisible = true
+
+        val rendererPref = prefs.getString("video_renderer", "opengl") ?: "opengl"
+        val renderer = runCatching { VideoRenderer.valueOf(rendererPref.uppercase()) }.getOrDefault(VideoRenderer.OPENGL)
+        val resScaling = (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1).coerceAtLeast(1)
+        val effectiveScale = if (renderer == VideoRenderer.SOFTWARE) 1 else resScaling
+
+        val rendererName = when (renderer) {
+            VideoRenderer.SOFTWARE -> "Software"
+            VideoRenderer.OPENGL -> "OpenGL"
+            VideoRenderer.VULKAN -> "Vulkan"
+            else -> "Compute"
+        }
+        val width = 256 * effectiveScale
+        val height = 384 * effectiveScale
+        binding.textResolution.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
+
+        val newParams = binding.textResolution.layoutParams as ConstraintLayout.LayoutParams
+        when (position) {
+            "top_left" -> {
+                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_LEFT) 80 else 0
+            }
+            "top_right" -> {
+                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_RIGHT) 80 else 0
+            }
+            "bottom_left" -> {
+                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_LEFT) 80 else 0
+            }
+            "bottom_right" -> {
+                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_RIGHT) 80 else 0
+            }
+        }
+        binding.textResolution.layoutParams = newParams
     }
 
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {

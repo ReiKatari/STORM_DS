@@ -1031,6 +1031,40 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             if (!currentFiltering.isSupportedByRenderer(renderer)) {
                 videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
             }
+            videoFilteringPreference.summary = "%s"
+        }
+
+        // Lock / Unlock HD Custom Textures on Software renderer
+        findPreference<androidx.preference.TwoStatePreference>("video_hd_textures_enabled")?.let { customTexturesPref ->
+            if (isSoftware) {
+                customTexturesPref.isChecked = false
+                customTexturesPref.isEnabled = false
+                customTexturesPref.summary = "Загрузка HD-текстур доступна только при аппаратном рендеринге (OpenGL / Vulkan)."
+            } else {
+                customTexturesPref.isEnabled = true
+                customTexturesPref.summary = getString(R.string.video_hd_textures_summary)
+            }
+        }
+
+        // Lock / Unlock 3D Internal Resolution on Software renderer
+        findPreference<ListPreference>("video_internal_resolution")?.let { internalResPref ->
+            if (isSoftware) {
+                internalResPref.isEnabled = false
+                internalResPref.summary = "Масштабирование разрешения 3D доступно только в OpenGL / Vulkan."
+            } else {
+                internalResPref.isEnabled = true
+                internalResPref.summary = "%s"
+            }
+        }
+
+        // Lock / Unlock AI-Upscale 2D option if present
+        findPreference<Preference>("video_ai_upscale_scale")?.let { aiUpscalePref ->
+            aiUpscalePref.isEnabled = !isSoftware
+            if (isSoftware) {
+                aiUpscalePref.summary = "AI-Upscale 2D недоступен в Software режиме."
+            } else {
+                aiUpscalePref.summary = "%s"
+            }
         }
 
         updateShaderPickerPreferences(
