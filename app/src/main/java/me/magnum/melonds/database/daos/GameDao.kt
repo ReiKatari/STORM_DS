@@ -20,6 +20,9 @@ interface GameDao {
     @Query("SELECT * FROM game WHERE game_code = :gameCode AND game_checksum = :gameChecksum")
     suspend fun findGame(gameCode: String, gameChecksum: String): GameEntity?
 
+    @Query("SELECT * FROM game WHERE game_code = :gameCode LIMIT 1")
+    suspend fun findGameByCode(gameCode: String): GameEntity?
+
     @Transaction
     @Query("SELECT * FROM cheat_folder WHERE game_id = :gameId")
     fun getGameCheats(gameId: Long): Flow<List<CheatFolderWithCheats>>
