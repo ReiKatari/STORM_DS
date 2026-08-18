@@ -5,5 +5,5 @@ object AppConfig {
     const val ndkVersion = "28.0.13004108"
 
     const val versionCode = 117
-    const val versionName = "1.1.7eR1eNi!2Ty9kP"
+    const val versionName = "1.1.7"
 }
