@@ -33,11 +33,17 @@ class EmulatorRumbleManager(
 
         coroutineScope.launch {
             connectedControllerManager.managedControllers.collect { devices ->
-                val vibrators = devices.mapNotNull { device ->
+                val vibrators = devices.flatMap { device ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        device.vibratorManager.defaultVibrator.takeIf { it.hasVibrator() }
+                        val vm = device.vibratorManager
+                        val ids = vm.vibratorIds
+                        if (ids.isNotEmpty()) {
+                            ids.map { vm.getVibrator(it) }
+                        } else {
+                            listOfNotNull(vm.defaultVibrator.takeIf { it.hasVibrator() })
+                        }
                     } else {
-                        device.vibrator.takeIf { it.hasVibrator() }
+                        listOfNotNull(device.vibrator.takeIf { it.hasVibrator() })
                     }
                 }
 

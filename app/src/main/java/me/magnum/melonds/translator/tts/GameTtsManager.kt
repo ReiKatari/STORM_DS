@@ -216,14 +216,11 @@ class GameTtsManager(private val context: Context) {
         val multiVoiceEnabled = engine != "single" && preferences.getBoolean(PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
         val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
 
-        // Detect speaker / persona across the entire text
+        // Detect speaker / persona across context graph and text
         val detected = detectPersona(normalizedText)
-        val activePersona = if (detected != CharacterPersona.NARRATOR_CHRONICLE) {
-            lastActivePersona = detected
-            detected
-        } else {
-            lastActivePersona
-        }
+        val personaStr = me.magnum.melonds.translator.context.OcrContextGraph.getNextTurnPersona(normalizedText, detected.name)
+        val activePersona = runCatching { CharacterPersona.valueOf(personaStr) }.getOrDefault(detected)
+        lastActivePersona = activePersona
 
         if (isNeural) {
             // Synthesize coherent speech for the active persona with no sentence cutoff

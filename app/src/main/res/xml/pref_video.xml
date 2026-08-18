@@ -60,6 +60,13 @@
             android:defaultValue="true" />
 
     <SwitchPreference
+            android:key="video_oled_battery_saver"
+            android:title="Smart OLED Battery Saver"
+            android:summary="Динамическая оптимизация частоты обновления и энергопотребления на OLED-экранах при статичных сценах (экономия до 40% батареи)"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SwitchPreference
             android:key="video_console_skin_enabled"
             android:title="@string/video_console_skin_title"
             android:summary="@string/video_console_skin_summary"
