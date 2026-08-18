@@ -299,44 +299,44 @@ private fun LayoutItem(
             )
         }
 
-        if (isCustomLayout) {
-            Box {
-                IconButton(
-                    modifier = Modifier
-                        .focusRequester(optionsFocusRequester)
-                        .focusProperties {
-                            start = mainFocusRequester
-                        },
-                    onClick = { showMenu = true },
+        Box {
+            IconButton(
+                modifier = Modifier
+                    .focusRequester(optionsFocusRequester)
+                    .focusProperties {
+                        start = mainFocusRequester
+                    },
+                onClick = { showMenu = true },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.options),
+                )
+            }
+
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+            ) {
+                DropdownMenuItem(
+                    onClick = {
+                        showMenu = false
+                        onEditLayout()
+                    },
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.options),
-                    )
+                    Text(if (isCustomLayout) stringResource(R.string.edit) else "Редактировать копию")
                 }
 
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
+                DropdownMenuItem(
+                    onClick = {
+                        showMenu = false
+                        onExportLayout()
+                    },
                 ) {
-                    DropdownMenuItem(
-                        onClick = {
-                            showMenu = false
-                            onExportLayout()
-                        },
-                    ) {
-                        Text(stringResource(R.string.action_layout_export))
-                    }
+                    Text(stringResource(R.string.action_layout_export))
+                }
 
-                    DropdownMenuItem(
-                        onClick = {
-                            showMenu = false
-                            onEditLayout()
-                        },
-                    ) {
-                        Text(stringResource(R.string.edit))
-                    }
-
+                if (isCustomLayout) {
                     DropdownMenuItem(
                         onClick = {
                             showMenu = false
@@ -347,10 +347,6 @@ private fun LayoutItem(
                     }
                 }
             }
-        } else {
-            // Placeholder box to ensure the UI has the same height for all items, even if they don't display the options dropdown. This height is equal to the minimum
-            // interactive component size as defined by the minimumInteractiveComponentSize() modifier
-            Box(Modifier.height(48.dp))
         }
     }
 }

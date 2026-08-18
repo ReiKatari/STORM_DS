@@ -107,6 +107,9 @@ fun RomCheatsUi(
             val effectiveTitle = parsedInfo?.gameTitle?.takeIf { it.isNotBlank() }
                 ?: romDisplayName(rom)
 
+            // Always ensure cheats are populated if none exist in the database
+            EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle)
+
             var foundGame = if (parsedInfo != null) {
                 cheatsRepository.findGameForRom(parsedInfo)
             } else {
@@ -114,22 +117,11 @@ fun RomCheatsUi(
             }
 
             if (foundGame == null) {
-                // Check by code or title in database
-                val existingEntity = database.gameDao().findGameByCode(effectiveCode)
+                val resolvedEntity = database.gameDao().findGameByCode(effectiveCode)
                     ?: if (effectiveCode.length >= 3) database.gameDao().findGameByPrefix(effectiveCode.take(3)) else null
                     ?: database.gameDao().findGameByTitle(effectiveTitle)
 
-                foundGame = existingEntity?.let {
-                    Game(it.id, it.name, it.gameCode, it.gameChecksum, emptyList())
-                }
-            }
-
-            // Auto-populate embedded/online cheats if missing
-            if (foundGame == null) {
-                EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle)
-                val newEntity = database.gameDao().findGameByCode(effectiveCode)
-                    ?: database.gameDao().findGameByTitle(effectiveTitle)
-                foundGame = newEntity?.let {
+                foundGame = resolvedEntity?.let {
                     Game(it.id, it.name, it.gameCode, it.gameChecksum, emptyList())
                 }
             }

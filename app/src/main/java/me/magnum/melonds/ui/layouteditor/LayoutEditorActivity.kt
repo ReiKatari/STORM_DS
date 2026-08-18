@@ -321,18 +321,14 @@ class LayoutEditorActivity : AppCompatActivity() {
     }
 
     private fun storeLayoutChanges() {
-        val primaryDisplayLayoutComponents = if (layoutEditorManager.layoutEditorView.isModifiedByUser()) {
+        val primaryDisplayLayoutComponents = if (::layoutEditorManager.isInitialized) {
             layoutEditorManager.layoutEditorView.buildCurrentLayout()
         } else {
             null
         }
 
         val externalPresentationLayoutView = externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView
-        val secondaryDisplayLayoutComponents = if (externalPresentationLayoutView?.isModifiedByUser() == true) {
-            externalPresentationLayoutView.buildCurrentLayout()
-        } else {
-            null
-        }
+        val secondaryDisplayLayoutComponents = externalPresentationLayoutView?.buildCurrentLayout()
         viewModel.saveLayoutToCurrentConfiguration(primaryDisplayLayoutComponents, secondaryDisplayLayoutComponents)
     }
 
@@ -353,6 +349,11 @@ class LayoutEditorActivity : AppCompatActivity() {
         storeLayoutChanges()
         viewModel.saveCurrentLayoutAsNew()
         finish()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        storeLayoutChanges()
     }
 
     override fun onStop() {
