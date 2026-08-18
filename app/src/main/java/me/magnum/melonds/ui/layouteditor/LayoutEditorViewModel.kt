@@ -81,17 +81,23 @@ class LayoutEditorViewModel @Inject constructor(
     init {
         val isExternal = savedStateHandle.get<Boolean>(LayoutEditorActivity.KEY_IS_EXTERNAL) ?: false
         val layoutId = editingLayoutId
-        if (layoutId != null) {
+        if (layoutId != null && layoutId != LayoutConfiguration.DEFAULT_ID) {
             viewModelScope.launch {
                 val initialLayout = layoutsRepository.getLayout(layoutId)
                 initialLayoutConfiguration = initialLayout
                 _currentLayoutConfiguration.value = initialLayout
             }
         } else {
-            val newLayout = LayoutConfiguration.newCustom(
-            )
-            initialLayoutConfiguration = newLayout
-            _currentLayoutConfiguration.value = newLayout
+            viewModelScope.launch {
+                val defaultLayout = layoutsRepository.getLayout(LayoutConfiguration.DEFAULT_ID)
+                val newLayout = defaultLayout?.copy(
+                    id = null,
+                    name = if (layoutId == LayoutConfiguration.DEFAULT_ID) "Пользовательский (на основе стандарта)" else null,
+                    type = LayoutConfiguration.LayoutType.CUSTOM,
+                ) ?: LayoutConfiguration.newCustom()
+                initialLayoutConfiguration = newLayout
+                _currentLayoutConfiguration.value = newLayout
+            }
         }
 
         viewModelScope.launch {

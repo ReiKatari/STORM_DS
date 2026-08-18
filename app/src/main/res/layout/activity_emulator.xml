@@ -38,8 +38,17 @@
             android:id="@+id/textFps"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:padding="12dp"
-            android:textColor="@android:color/white"
+            android:layout_margin="12dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:background="@drawable/bg_resolution_hud"
+            android:textColor="#10B981"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:elevation="100dp"
+            android:visibility="gone"
             tools:text="FPS: 60"/>
 
     <TextView

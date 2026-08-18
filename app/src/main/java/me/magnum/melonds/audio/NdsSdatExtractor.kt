@@ -180,24 +180,79 @@ object NdsSdatExtractor {
             } catch (_: Throwable) {}
         }
 
+        // Parse INFO section to map SEQ index to FAT fileId
+        val seqFatFileIds = mutableListOf<Int>()
+        if (infoOffset > 0 && infoSize > 8 && (sdatStart + infoOffset + infoSize <= buf.limit())) {
+            try {
+                buf.position(sdatStart + infoOffset)
+                val infoMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
+                if (infoMagic == "INFO") {
+                    val seqSectionOffset = buf.int
+                    if (seqSectionOffset in 8 until infoSize) {
+                        buf.position(sdatStart + infoOffset + seqSectionOffset)
+                        val recordCount = buf.int.coerceIn(0, 1024)
+                        for (r in 0 until recordCount) {
+                            val recordOffset = buf.int
+                            if (recordOffset in 0 until infoSize) {
+                                val recPos = sdatStart + infoOffset + recordOffset
+                                val oldPos = buf.position()
+                                buf.position(recPos)
+                                val fileId = buf.short.toInt() and 0xFFFF
+                                seqFatFileIds.add(fileId)
+                                buf.position(oldPos)
+                            }
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        // If SYMB was stripped in this ROM, extract all SSEQ files from FAT directly
         if (rawTrackNames.isEmpty()) {
-            return generateFranchiseSoundtracks(gameCode, gameTitle)
+            try {
+                if (fatOffset > 0 && (sdatStart + fatOffset + 12 < buf.limit())) {
+                    buf.position(sdatStart + fatOffset)
+                    val fatMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
+                    if (fatMagic == "FAT ") {
+                        val fatCount = buf.int.coerceIn(0, 2048)
+                        for (f in 0 until fatCount) {
+                            val entryPos = sdatStart + fatOffset + 12 + (f * 8)
+                            if (entryPos + 8 <= buf.limit()) {
+                                buf.position(entryPos)
+                                val fileEntryOffset = buf.int
+                                val fileEntrySize = buf.int
+                                val sseqPos = sdatStart + fileEntryOffset
+                                if (fileEntrySize in 32..(2 * 1024 * 1024) && (sseqPos + 4 <= buf.limit())) {
+                                    buf.position(sseqPos)
+                                    val sseqMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
+                                    if (sseqMagic == "SSEQ") {
+                                        rawTrackNames.add("SEQ_TRACK_${String.format("%03d", f + 1)}")
+                                        seqFileIds.add(f)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        if (rawTrackNames.isEmpty()) {
+            return emptyList()
         }
 
         val tracks = mutableListOf<NdsAudioTrack>()
         for (i in rawTrackNames.indices) {
             val rawName = rawTrackNames[i]
-            val seqIndex = seqFileIds.getOrElse(i) { i }
+            val actualFatFileId = seqFatFileIds.getOrNull(i) ?: seqFileIds.getOrElse(i) { i }
 
             val notes = extractSseqNotesFromFat(
                 buf = buf,
                 sdatStart = sdatStart,
                 fatOffset = fatOffset,
                 fileOffset = fileOffset,
-                seqIndex = seqIndex
-            ).ifEmpty {
-                generateGameSpecificMelody(gameCode, gameTitle, rawName, seqIndex)
-            }
+                fatFileId = actualFatFileId
+            )
 
             val category = when {
                 rawName.contains("BGM", true) || rawName.contains("FIELD", true) || rawName.contains("TOWN", true) || rawName.contains("DUNGEON", true) || rawName.contains("BATTLE", true) || rawName.contains("TITLE", true) || rawName.contains("THEME", true) -> "BGM"
@@ -232,7 +287,7 @@ object NdsSdatExtractor {
         sdatStart: Int,
         fatOffset: Int,
         fileOffset: Int,
-        seqIndex: Int
+        fatFileId: Int
     ): List<NdsNoteEvent> {
         val notes = mutableListOf<NdsNoteEvent>()
         try {
@@ -242,9 +297,9 @@ object NdsSdatExtractor {
             if (fatMagic != "FAT ") return emptyList()
 
             val fatCount = buf.int
-            if (seqIndex >= fatCount) return emptyList()
+            if (fatFileId >= fatCount) return emptyList()
 
-            val entryPos = sdatStart + fatOffset + 12 + (seqIndex * 16)
+            val entryPos = sdatStart + fatOffset + 12 + (fatFileId * 8)
             if (entryPos + 8 > buf.limit()) return emptyList()
             buf.position(entryPos)
             val fileEntryOffset = buf.int
@@ -259,14 +314,15 @@ object NdsSdatExtractor {
                     val dataMagic = ByteArray(4).also { buf.get(it) }.toString(Charsets.US_ASCII)
                     if (dataMagic == "DATA") {
                         val dataSize = buf.int
-                        val bytecodeStart = sseqPos + 0x1C
+                        val bytecodeOffset = buf.int.coerceIn(0, fileEntrySize)
+                        val bytecodeStart = sseqPos + 0x10 + bytecodeOffset
                         val sampleRate = 32000
                         var currentTempoBpm = 120
                         var ticksPerQuarter = 48
 
                         var pos = bytecodeStart
                         val end = (bytecodeStart + dataSize).coerceAtMost(sseqPos + fileEntrySize)
-                        while (pos < end && notes.size < 96) {
+                        while (pos < end && notes.size < 128) {
                             buf.position(pos)
                             val cmd = buf.get().toInt() and 0xFF
                             pos++
@@ -275,12 +331,12 @@ object NdsSdatExtractor {
                                     val durationTicks = readVarLen(buf)
                                     pos = buf.position()
                                     val samplesPerTick = (sampleRate * 60) / (currentTempoBpm * ticksPerQuarter)
-                                    val durationSamples = (durationTicks * samplesPerTick).coerceIn(sampleRate / 16, sampleRate * 2)
+                                    val durationSamples = (durationTicks * samplesPerTick).coerceIn(sampleRate / 20, sampleRate * 3)
                                     notes.add(
                                         NdsNoteEvent(
                                             pitchMidi = cmd,
                                             durationSamples = durationSamples,
-                                            volume = 0.85f
+                                            volume = 0.9f
                                         )
                                     )
                                 }
@@ -291,13 +347,13 @@ object NdsSdatExtractor {
                                 cmd == 0x93 -> {
                                     if (pos + 2 <= end) {
                                         val tempo = buf.short.toInt() and 0xFFFF
-                                        if (tempo in 40..280) currentTempoBpm = tempo
+                                        if (tempo in 30..300) currentTempoBpm = tempo
                                         pos += 2
                                     }
                                 }
                                 cmd == 0xFF -> break
                                 else -> {
-                                    if (cmd in 0x81..0x92 || cmd in 0x95..0xBD) {
+                                    if (cmd in 0x81..0x92 || cmd in 0x94..0xBD) {
                                         readVarLen(buf)
                                         pos = buf.position()
                                     }
