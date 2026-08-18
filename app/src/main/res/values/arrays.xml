@@ -364,4 +364,18 @@
         <item>bottom_left</item>
         <item>bottom_right</item>
     </string-array>
+
+    <string-array name="translator_local_voice_model_options">
+        <item>Русский — Дмитрий и Ирина (Мультиголос Medium INT8)</item>
+        <item>Русский — Денис и Татьяна (RPG Актерский High-Q)</item>
+        <item>English — Ryan &amp; Samantha (Multi-Persona Studio)</item>
+        <item>Автовыбор по языку игры</item>
+    </string-array>
+
+    <string-array name="translator_local_voice_model_values">
+        <item>piper_ru_dmitri_medium</item>
+        <item>piper_ru_denis_rpg</item>
+        <item>piper_en_ryan_studio</item>
+        <item>auto</item>
+    </string-array>
 </resources>
