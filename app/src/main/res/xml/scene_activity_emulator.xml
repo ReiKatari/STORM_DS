@@ -24,6 +24,12 @@
                     app:visibilityMode="ignore" />
         </Constraint>
 
+        <Constraint android:id="@+id/textResolution">
+            <PropertySet
+                    app:applyMotionScene="false"
+                    app:visibilityMode="ignore" />
+        </Constraint>
+
         <Constraint android:id="@+id/textLoading">
             <PropertySet
                     app:applyMotionScene="false"

@@ -26,7 +26,11 @@ class DSiWareRomListViewModel @Inject constructor(
 
     init {
         romsRepository.getRoms()
-            .map { roms -> roms.filter { it.isDsiWareTitle } }
+            .map { roms ->
+                roms.filter { 
+                    it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true 
+                }
+            }
             .onEach {
                 if (it.isEmpty()) {
                     _dsiWareRoms.value = DSiWareMangerRomListUiState.Empty
