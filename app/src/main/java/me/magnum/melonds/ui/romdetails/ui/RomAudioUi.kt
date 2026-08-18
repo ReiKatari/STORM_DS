@@ -135,18 +135,25 @@ fun RomAudioUi(
                     } else {
                         440.0 + (track.index * 40.0)
                     }
+                    val bassFreq = freq * 0.5
                     val noteDurationSamples = noteEvent?.durationSamples ?: (sampleRate / 4)
 
                     for (i in buffer.indices) {
                         val t = sampleCounter.toDouble() / sampleRate
-                        val wave = if (track.category == "BGM" && track.index % 2 == 1) {
-                            if ((sin(2.0 * Math.PI * freq * t)) > 0) 0.75 else -0.75
-                        } else {
-                            sin(2.0 * Math.PI * freq * t) + 0.3 * sin(4.0 * Math.PI * freq * t)
-                        }
+                        val pulsePhase = (t * freq) % 1.0
+                        val pulseWave = if (pulsePhase < 0.25) 0.8 else -0.8
+
+                        val trianglePhase = (t * bassFreq) % 1.0
+                        val triangleWave = (4.0 * Math.abs(trianglePhase - 0.5) - 1.0) * 0.6
+
+                        val chordFreq = freq * 1.25
+                        val chordWave = Math.sin(2.0 * Math.PI * chordFreq * t) * 0.35
+
+                        val combined = (pulseWave * 0.5 + triangleWave * 0.35 + chordWave * 0.15)
                         val noteProgress = (sampleCounter % noteDurationSamples).toDouble() / noteDurationSamples
-                        val envelope = (1.0 - noteProgress * 0.85).coerceIn(0.1, 1.0)
-                        buffer[i] = (wave * envelope * 12500.0).toInt().toShort()
+                        val envelope = (1.0 - noteProgress * 0.75).coerceIn(0.1, 1.0)
+
+                        buffer[i] = (combined * envelope * 14000.0).toInt().toShort()
                         sampleCounter++
                         if (sampleCounter % noteDurationSamples == 0) {
                             currentNoteIdx++

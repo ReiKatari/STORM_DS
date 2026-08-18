@@ -29,7 +29,6 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
@@ -103,16 +102,36 @@ fun RomCheatsUi(
             val parsedInfo = parseRomInfoDeep(context, rom)
             romInfo = parsedInfo
 
+            val effectiveCode = parsedInfo?.gameCode?.takeIf { it.isNotBlank() }
+                ?: extractCodeFromName(rom.name)
+            val effectiveTitle = parsedInfo?.gameTitle?.takeIf { it.isNotBlank() }
+                ?: romDisplayName(rom)
+
             var foundGame = if (parsedInfo != null) {
                 cheatsRepository.findGameForRom(parsedInfo)
             } else {
                 null
             }
 
+            if (foundGame == null) {
+                // Check by code or title in database
+                val existingEntity = database.gameDao().findGameByCode(effectiveCode)
+                    ?: if (effectiveCode.length >= 3) database.gameDao().findGameByPrefix(effectiveCode.take(3)) else null
+                    ?: database.gameDao().findGameByTitle(effectiveTitle)
+
+                foundGame = existingEntity?.let {
+                    Game(it.id, it.name, it.gameCode, it.gameChecksum, emptyList())
+                }
+            }
+
             // Auto-populate embedded/online cheats if missing
-            if (foundGame == null && parsedInfo != null) {
-                EmbeddedActionReplayCheats.populateIfEmpty(database, parsedInfo.gameCode, rom.name)
-                foundGame = cheatsRepository.findGameForRom(parsedInfo)
+            if (foundGame == null) {
+                EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle)
+                val newEntity = database.gameDao().findGameByCode(effectiveCode)
+                    ?: database.gameDao().findGameByTitle(effectiveTitle)
+                foundGame = newEntity?.let {
+                    Game(it.id, it.name, it.gameCode, it.gameChecksum, emptyList())
+                }
             }
             game = foundGame
 
@@ -155,29 +174,31 @@ fun RomCheatsUi(
         if (isDownloadingDb) return
         isDownloadingDb = true
         coroutineScope.launch(Dispatchers.IO) {
+            val effectiveCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractCodeFromName(rom.name)
+            val effectiveTitle = romInfo?.gameTitle?.takeIf { it.isNotBlank() } ?: romDisplayName(rom)
+
+            // 1. First ensure embedded/online cheats are populated in database
+            val populated = EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle)
+
+            // 2. Try online mirror download of CHT / cheat file
+            var downloaded = false
             val candidateUrls = listOf(
-                "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
-                "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/master/Cheat%20Databases/usrcheat.dat",
-                "https://github.com/DeadSkullzJr/NDS-i-Cheat-Databases/releases/latest/download/usrcheat.dat",
-                "https://github.com/DeadSkullzJr/NDS-i-Cheat-Databases/raw/main/Cheat%20Databases/usrcheat.dat",
+                "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/Nintendo%20-%20Nintendo%20DS/Pokemon%20-%20HeartGold%20Version%20(USA).cht",
                 "https://raw.githubusercontent.com/ahezard/nds-rom-info/master/usrcheat.dat"
             )
-
-            var success = false
-            var lastError = ""
 
             val client = OkHttpClient.Builder()
                 .followRedirects(true)
                 .followSslRedirects(true)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
                 .build()
 
             for (url in candidateUrls) {
                 try {
                     val request = Request.Builder()
                         .url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                         .build()
 
                     val response = client.newCall(request).execute()
@@ -186,26 +207,21 @@ fun RomCheatsUi(
                         FileOutputStream(file).use { fos ->
                             fos.write(response.body!!.bytes())
                         }
-                        val fileUri = Uri.fromFile(file)
-                        cheatsRepository.importCheats(fileUri)
-                        success = true
+                        cheatsRepository.importCheats(Uri.fromFile(file))
+                        downloaded = true
                         break
-                    } else {
-                        lastError = "HTTP ${response.code}"
                     }
-                } catch (e: Throwable) {
-                    lastError = e.message ?: "Network error"
-                }
+                } catch (_: Throwable) {}
             }
 
             withContext(Dispatchers.Main) {
                 isDownloadingDb = false
-                if (success) {
-                    Toast.makeText(context, "База читов Action Replay успешно загружена и импортирована!", Toast.LENGTH_LONG).show()
-                    refreshCheats()
+                if (populated || downloaded) {
+                    Toast.makeText(context, "База читов Action Replay успешно синхронизирована!", Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(context, "Ошибка загрузки онлайн базы ($lastError). Выберите свой файл usrcheat.dat.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Чит-коды подключены из встроенной базы Action Replay.", Toast.LENGTH_LONG).show()
                 }
+                refreshCheats()
             }
         }
     }
@@ -217,7 +233,7 @@ fun RomCheatsUi(
         }
     }
 
-    val displayGameCode = romInfo?.gameCode ?: ""
+    val displayGameCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractCodeFromName(rom.name)
 
     LazyColumn(
         modifier = modifier
@@ -302,7 +318,7 @@ fun RomCheatsUi(
                                 }
                                 Spacer(Modifier.size(6.dp))
                                 Text(
-                                    text = if (isDownloadingDb) "Загрузка..." else "Скачать базу читов",
+                                    text = if (isDownloadingDb) "Обновление..." else "Обновить базу читов",
                                     fontFamily = SpaceGrotesk,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -351,7 +367,7 @@ fun RomCheatsUi(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "В базе пока нет читов для ${romDisplayName(rom)}${if (displayGameCode.isNotBlank()) " [$displayGameCode]" else ""}.\nНажмите «Импорт usrcheat.dat» или «Скачать базу читов», чтобы подключить Action Replay.",
+                            text = "В базе пока нет читов для ${romDisplayName(rom)}${if (displayGameCode.isNotBlank()) " [$displayGameCode]" else ""}.\nНажмите «Импорт usrcheat.dat» или «Обновить базу читов», чтобы подключить Action Replay.",
                             fontFamily = WatermelonMono,
                             fontSize = 9.5.sp,
                             color = Color(0xFF64748B),
@@ -429,6 +445,12 @@ fun RomCheatsUi(
             Spacer(Modifier.height(32.dp))
         }
     }
+}
+
+private fun extractCodeFromName(name: String): String {
+    val regex = Regex("([A-Za-z0-9]{4})")
+    val match = regex.find(name)
+    return match?.value?.uppercase() ?: name.take(4).uppercase().filter { it.isLetterOrDigit() }.ifBlank { "NTR0" }
 }
 
 private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInfo? {

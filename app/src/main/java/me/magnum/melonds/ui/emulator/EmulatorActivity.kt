@@ -1748,7 +1748,6 @@ class EmulatorActivity : AppCompatActivity() {
             binding.textResolution.isGone = true
             return
         }
-        binding.textResolution.isVisible = true
 
         val rendererPref = prefs.getString("video_renderer", "opengl") ?: "opengl"
         val renderer = runCatching { VideoRenderer.valueOf(rendererPref.uppercase()) }.getOrDefault(VideoRenderer.OPENGL)
@@ -1765,30 +1764,40 @@ class EmulatorActivity : AppCompatActivity() {
         val height = 384 * effectiveScale
         binding.textResolution.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
 
-        val newParams = binding.textResolution.layoutParams as ConstraintLayout.LayoutParams
+        val newParams = ConstraintLayout.LayoutParams(
+            ConstraintLayout.LayoutParams.WRAP_CONTENT,
+            ConstraintLayout.LayoutParams.WRAP_CONTENT
+        )
         when (position) {
             "top_left" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_LEFT) 80 else 0
+                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_LEFT) 90 else 16
+                newParams.leftMargin = 16
             }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_RIGHT) 80 else 0
+                newParams.topMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.TOP_RIGHT) 90 else 16
+                newParams.rightMargin = 16
             }
             "bottom_left" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_LEFT) 80 else 0
+                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_LEFT) 90 else 16
+                newParams.leftMargin = 16
             }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_RIGHT) 80 else 0
+                newParams.bottomMargin = if (binding.textFps.isVisible && viewModel.getFpsCounterPosition() == FpsCounterPosition.BOTTOM_RIGHT) 90 else 16
+                newParams.rightMargin = 16
             }
         }
         binding.textResolution.layoutParams = newParams
+        binding.textResolution.isVisible = true
+        binding.textResolution.bringToFront()
+        binding.textResolution.elevation = 100f
     }
 
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {
