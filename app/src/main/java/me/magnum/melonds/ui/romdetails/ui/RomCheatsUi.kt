@@ -29,6 +29,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
@@ -56,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats
 import me.magnum.melonds.di.entrypoint.CheatsEntryPoint
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatFolder
@@ -72,6 +74,7 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipInputStream
 
 @Composable
 fun RomCheatsUi(
@@ -82,7 +85,9 @@ fun RomCheatsUi(
     val coroutineScope = rememberCoroutineScope()
     val colors = watermelon
 
-    val cheatsRepository = remember { CheatsEntryPoint.resolve(context).cheatsRepository() }
+    val entryPoint = remember { CheatsEntryPoint.resolve(context) }
+    val cheatsRepository = remember { entryPoint.cheatsRepository() }
+    val database = remember { entryPoint.database() }
 
     var game by remember(rom) { mutableStateOf<Game?>(null) }
     var romInfo by remember(rom) { mutableStateOf<RomInfo?>(null) }
@@ -95,19 +100,19 @@ fun RomCheatsUi(
     fun refreshCheats() {
         coroutineScope.launch(Dispatchers.IO) {
             isLoading = true
-            val parsedInfo = try {
-                context.contentResolver.openInputStream(rom.uri)?.use { stream ->
-                    RomProcessor.getRomInfo(rom, stream)
-                }
-            } catch (_: Throwable) {
-                null
-            }
+            val parsedInfo = parseRomInfoDeep(context, rom)
             romInfo = parsedInfo
 
-            val foundGame = if (parsedInfo != null) {
+            var foundGame = if (parsedInfo != null) {
                 cheatsRepository.findGameForRom(parsedInfo)
             } else {
                 null
+            }
+
+            // Auto-populate embedded/online cheats if missing
+            if (foundGame == null && parsedInfo != null) {
+                EmbeddedActionReplayCheats.populateIfEmpty(database, parsedInfo.gameCode, rom.name)
+                foundGame = cheatsRepository.findGameForRom(parsedInfo)
             }
             game = foundGame
 
@@ -181,7 +186,7 @@ fun RomCheatsUi(
             } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
                     isDownloadingDb = false
-                    Toast.makeText(context, "Ошибка загрузки онлайн базы: ${e.message}. Выберите локальный файл usrcheat.dat.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Ошибка загрузки: ${e.message}. Выберите локальный файл usrcheat.dat.", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -405,6 +410,35 @@ fun RomCheatsUi(
         item {
             Spacer(Modifier.height(32.dp))
         }
+    }
+}
+
+private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInfo? {
+    return try {
+        val rawStream = context.contentResolver.openInputStream(rom.uri) ?: return null
+        val buffered = rawStream.buffered()
+        buffered.mark(4)
+        val magic = ByteArray(4)
+        val read = buffered.read(magic)
+        buffered.reset()
+
+        val isZip = read == 4 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()
+        if (isZip) {
+            val zip = ZipInputStream(buffered)
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val name = entry.name.lowercase()
+                if (name.endsWith(".nds") || name.endsWith(".dsi") || name.endsWith(".ids")) {
+                    return RomProcessor.getRomInfo(rom, zip)
+                }
+                entry = zip.nextEntry
+            }
+            null
+        } else {
+            buffered.use { RomProcessor.getRomInfo(rom, it) }
+        }
+    } catch (_: Throwable) {
+        null
     }
 }
 

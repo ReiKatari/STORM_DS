@@ -24,8 +24,8 @@ interface CheatDao {
     @Query("DELETE FROM cheat WHERE id = :cheatId")
     suspend fun deleteCheat(cheatId: Long)
 
-    @Query("SELECT cheat.* FROM game LEFT JOIN cheat_folder ON game.id = cheat_folder.game_id LEFT JOIN cheat ON cheat_folder.id = cheat.cheat_folder_id WHERE game.game_code = :gameCode AND (game.game_checksum IS NULL OR game.game_checksum = :gameChecksum) AND cheat.enabled = 1")
-    suspend fun getEnabledRomCheats(gameCode: String, gameChecksum: String): List<CheatEntity>
+    @Query("SELECT cheat.* FROM game LEFT JOIN cheat_folder ON game.id = cheat_folder.game_id LEFT JOIN cheat ON cheat_folder.id = cheat.cheat_folder_id WHERE game.game_code = :gameCode AND (:gameChecksum IS NULL OR game.game_checksum IS NULL OR game.game_checksum = :gameChecksum) AND cheat.enabled = 1")
+    suspend fun getEnabledRomCheats(gameCode: String, gameChecksum: String?): List<CheatEntity>
 
     @Query("SELECT * FROM cheat WHERE cheat_folder_id = :folderId")
     fun getFolderCheats(folderId: Long): Flow<List<CheatEntity>>
