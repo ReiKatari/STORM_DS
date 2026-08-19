@@ -1931,12 +1931,8 @@ void MelonInstance::reset()
     // If there is a cart inserted, check if direct boot is required
     if (nds->GetNDSCart())
     {
-        if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
-        {
-            // This seems to be unused, but it's required
-            std::string romName;
-            nds->SetupDirectBoot(romName);
-        }
+        std::string romName;
+        nds->SetupDirectBoot(romName);
     }
 
     rewindManager.Reset();
