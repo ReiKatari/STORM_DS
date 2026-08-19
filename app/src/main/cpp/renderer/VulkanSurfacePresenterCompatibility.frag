@@ -296,12 +296,16 @@ Rgba6 sampleCapture3DColorAtDsPixel(int dsX, int dsY)
 
 uint readTopPacked(int y, int x)
 {
+    if (y < 0 || y >= 192 || x < 0 || x >= int(pushConstants.packedStride))
+        return 0u;
     uint offset = uint(y) * pushConstants.packedStride + uint(x);
     return topPacked[offset];
 }
 
 uint readBottomPacked(int y, int x)
 {
+    if (y < 0 || y >= 192 || x < 0 || x >= int(pushConstants.packedStride))
+        return 0u;
     uint offset = uint(y) * pushConstants.packedStride + uint(x);
     return bottomPacked[offset];
 }
