@@ -1,6 +1,7 @@
 package me.magnum.melonds.translator.model
 
 enum class TranslatorEngineType(val preferenceValue: String, val displayName: String) {
+    OFFLINE("offline", "Автономный оффлайн-переводчик (Без интернета)"),
     YANDEX("yandex", "Яндекс Переводчик (Бесплатно / Идеальный русский)"),
     GOOGLE("google", "Google Translate (Бесплатно / Высокая скорость)"),
     LINGVA("lingva", "Lingva Neural (Бесплатно / Без ограничений)"),

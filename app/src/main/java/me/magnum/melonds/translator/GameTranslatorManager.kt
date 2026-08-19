@@ -622,7 +622,8 @@ class GameTranslatorManager(
 
     private fun getActiveTranslationEngine(): ITranslationEngine {
         val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "yandex"))
-        return when (type) {
+        val baseEngine = when (type) {
+            TranslatorEngineType.OFFLINE -> OfflineSmartDictionaryEngine()
             TranslatorEngineType.YANDEX -> YandexTranslateEngine(okHttpClient)
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)
             TranslatorEngineType.LINGVA -> LingvaTranslateEngine(okHttpClient)
@@ -638,6 +639,7 @@ class GameTranslatorManager(
                 modelProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_MODEL, "gpt-4o-mini").orEmpty() }
             )
         }
+        return if (type == TranslatorEngineType.OFFLINE) baseEngine else ReliableHybridTranslateEngine(baseEngine)
     }
 
     private var lastTranslatedRawText: String = ""

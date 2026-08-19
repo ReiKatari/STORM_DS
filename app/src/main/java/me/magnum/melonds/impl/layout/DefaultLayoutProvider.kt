@@ -263,8 +263,9 @@ class DefaultLayoutProvider(
 
         val topScreenView = Rect(safeLeft + screenMargin, mainFold.foldBounds.y - screenHeight, screenWidth, screenHeight)
         val bottomScreenView = Rect(safeLeft + screenMargin, mainFold.foldBounds.bottom, screenWidth, screenHeight)
-        val dpadView = Rect(safeLeft, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
-        val buttonsView = Rect(width - safeRight - largeButtonsSize, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+        val gripSpacing = screenUnitsConverter.dpToPixels(8f).toInt()
+        val dpadView = Rect(safeLeft + gripSpacing, height - safeBottom - largeButtonsSize - gripSpacing, largeButtonsSize, largeButtonsSize)
+        val buttonsView = Rect(width - safeRight - largeButtonsSize - gripSpacing, height - safeBottom - largeButtonsSize - gripSpacing, largeButtonsSize, largeButtonsSize)
 
         val selectStartWidth = screenUnitsConverter.dpToPixels(54f).toInt()
         val selectStartHeight = screenUnitsConverter.dpToPixels(32f).toInt()
@@ -277,14 +278,14 @@ class DefaultLayoutProvider(
                 PositionedLayoutComponent(bottomScreenView, LayoutComponent.BOTTOM_SCREEN),
                 PositionedLayoutComponent(dpadView, LayoutComponent.DPAD),
                 PositionedLayoutComponent(buttonsView, LayoutComponent.BUTTONS),
-                PositionedLayoutComponent(Rect(safeLeft, mainFold.foldBounds.bottom, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
-                PositionedLayoutComponent(Rect(width - safeRight - lrWidth, mainFold.foldBounds.bottom, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
-                PositionedLayoutComponent(Rect(width / 2 - selectStartWidth - spacing4dp / 2, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
-                PositionedLayoutComponent(Rect(width / 2 + spacing4dp / 2, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
-                PositionedLayoutComponent(Rect(width / 2 - (smallButtonsSize * 2.0 + spacing4dp * 1.5).toInt(), mainFold.foldBounds.bottom, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
-                PositionedLayoutComponent(Rect(width / 2 - smallButtonsSize - (spacing4dp / 2.0).toInt(), mainFold.foldBounds.bottom, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
-                PositionedLayoutComponent(Rect(width / 2 + spacing4dp + (spacing4dp / 2.0).toInt(), mainFold.foldBounds.bottom, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
-                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize + (spacing4dp * 1.5).toInt(), mainFold.foldBounds.bottom, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
+                PositionedLayoutComponent(Rect(safeLeft + gripSpacing, mainFold.foldBounds.bottom + gripSpacing, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
+                PositionedLayoutComponent(Rect(width - safeRight - lrWidth - gripSpacing, mainFold.foldBounds.bottom + gripSpacing, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
+                PositionedLayoutComponent(Rect(width / 2 - selectStartWidth - spacing4dp / 2, height - safeBottom - selectStartHeight - gripSpacing, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
+                PositionedLayoutComponent(Rect(width / 2 + spacing4dp / 2, height - safeBottom - selectStartHeight - gripSpacing, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
+                PositionedLayoutComponent(Rect(width / 2 - (smallButtonsSize * 2.0 + spacing4dp * 1.5).toInt(), mainFold.foldBounds.bottom + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
+                PositionedLayoutComponent(Rect(width / 2 - smallButtonsSize - (spacing4dp / 2.0).toInt(), mainFold.foldBounds.bottom + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
+                PositionedLayoutComponent(Rect(width / 2 + spacing4dp + (spacing4dp / 2.0).toInt(), mainFold.foldBounds.bottom + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize + (spacing4dp * 1.5).toInt(), mainFold.foldBounds.bottom + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
             )
         )
     }
@@ -332,8 +333,9 @@ class DefaultLayoutProvider(
 
         val topScreenView = Rect(mainFold.foldBounds.x - topScreenWidth, screenYPos, topScreenWidth, topScreenHeight)
         val bottomScreenView = Rect(mainFold.foldBounds.right, screenYPos, bottomScreenWidth, bottomScreenHeight)
-        val dpadView = Rect(safeLeft, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
-        val buttonsView = Rect(width - safeRight - largeButtonsSize, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+        val gripSpacing = screenUnitsConverter.dpToPixels(8f).toInt()
+        val dpadView = Rect(safeLeft + gripSpacing, height - safeBottom - largeButtonsSize - gripSpacing, largeButtonsSize, largeButtonsSize)
+        val buttonsView = Rect(width - safeRight - largeButtonsSize - gripSpacing, height - safeBottom - largeButtonsSize - gripSpacing, largeButtonsSize, largeButtonsSize)
 
         val selectStartWidth = screenUnitsConverter.dpToPixels(54f).toInt()
         val selectStartHeight = screenUnitsConverter.dpToPixels(32f).toInt()
@@ -346,14 +348,14 @@ class DefaultLayoutProvider(
                 PositionedLayoutComponent(bottomScreenView, LayoutComponent.BOTTOM_SCREEN),
                 PositionedLayoutComponent(dpadView, LayoutComponent.DPAD),
                 PositionedLayoutComponent(buttonsView, LayoutComponent.BUTTONS),
-                PositionedLayoutComponent(Rect(safeLeft, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
-                PositionedLayoutComponent(Rect(width - safeRight - lrWidth, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
-                PositionedLayoutComponent(Rect(mainFold.foldBounds.x - selectStartWidth - spacing8dp, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
-                PositionedLayoutComponent(Rect(mainFold.foldBounds.right + spacing8dp, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
-                PositionedLayoutComponent(Rect(mainFold.foldBounds.x - smallButtonsSize * 2 - spacing8dp * 2, safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
-                PositionedLayoutComponent(Rect(mainFold.foldBounds.x - smallButtonsSize - spacing8dp, safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
-                PositionedLayoutComponent(Rect(mainFold.foldBounds.right + smallButtonsSize + spacing8dp, safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
-                PositionedLayoutComponent(Rect(mainFold.foldBounds.right + spacing8dp * 2, safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
+                PositionedLayoutComponent(Rect(safeLeft + gripSpacing, safeTop + gripSpacing, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
+                PositionedLayoutComponent(Rect(width - safeRight - lrWidth - gripSpacing, safeTop + gripSpacing, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
+                PositionedLayoutComponent(Rect(mainFold.foldBounds.x - selectStartWidth - spacing8dp, height - safeBottom - selectStartHeight - gripSpacing, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
+                PositionedLayoutComponent(Rect(mainFold.foldBounds.right + spacing8dp, height - safeBottom - selectStartHeight - gripSpacing, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
+                PositionedLayoutComponent(Rect(mainFold.foldBounds.x - smallButtonsSize * 2 - spacing8dp * 2, safeTop + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
+                PositionedLayoutComponent(Rect(mainFold.foldBounds.x - smallButtonsSize - spacing8dp, safeTop + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
+                PositionedLayoutComponent(Rect(mainFold.foldBounds.right + smallButtonsSize + spacing8dp, safeTop + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
+                PositionedLayoutComponent(Rect(mainFold.foldBounds.right + spacing8dp * 2, safeTop + gripSpacing, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
             )
         )
     }

@@ -298,16 +298,18 @@ class GameTtsManager(private val context: Context) {
                     }
                 }
 
-                // 1. Synthesize via High-Definition Live Edge Neural engine
-                val audioBytes = EdgeNeuralTtsClient.synthesize(
-                    text = text,
-                    voiceName = voiceName,
-                    pitch = ssmlPitch,
-                    rate = ssmlRate
-                )
+                // 1. Synthesize via High-Definition Live Edge Neural engine with strict 650ms latency guard
+                val audioBytes = kotlinx.coroutines.withTimeoutOrNull(650L) {
+                    EdgeNeuralTtsClient.synthesize(
+                        text = text,
+                        voiceName = voiceName,
+                        pitch = ssmlPitch,
+                        rate = ssmlRate
+                    )
+                }
 
                 if (audioBytes == null || audioBytes.isEmpty()) {
-                    throw IllegalStateException("Edge Neural TTS unavailable, routing to local multi-voice engine")
+                    throw IllegalStateException("Edge Neural TTS latency guard exceeded or offline, falling back instantly to local zero-latency TTS")
                 }
 
                 val tempFile = File(context.cacheDir, "storm_neural_speech_${System.currentTimeMillis()}.mp3")

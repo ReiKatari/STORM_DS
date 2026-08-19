@@ -2907,39 +2907,34 @@ bool VulkanSurfacePresenter::ensureSwapchain(
     pipelineInfo.renderPass = surfaceState.renderPass;
     pipelineInfo.subpass = 0;
 
-    if (fastPathProfile)
-        ensureSurfacePipelineCache();
-    const u64 pipelineCreateStartNs = fastPathProfile ? PerfNowNs() : 0;
+    ensureSurfacePipelineCache();
+    const u64 pipelineCreateStartNs = PerfNowNs();
     VkPipeline& selectedPipeline = fastPathProfile
         ? surfaceState.pipeline
         : surfaceState.compatibilityPipeline;
     const VkResult createPipelineResult = vkCreateGraphicsPipelines(
         device,
-        fastPathProfile ? surfacePipelineCache : VK_NULL_HANDLE,
+        surfacePipelineCache,
         1,
         &pipelineInfo,
         nullptr,
         &selectedPipeline
     );
-    u64 pipelineCreateNs = 0;
-    if (fastPathProfile)
+    const u64 pipelineCreateNs = PerfNowNs() - pipelineCreateStartNs;
+    if (pipelineCreateNs > 200'000'000ull)
     {
-        pipelineCreateNs = PerfNowNs() - pipelineCreateStartNs;
-        if (pipelineCreateNs > 200'000'000ull)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanPresenter[SlowPhase]: createGraphicsPipeline waitMs=%.1f surface=%d",
-                static_cast<double>(pipelineCreateNs) / 1e6,
-                surfaceState.id
-            );
-        }
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanPresenter[SlowPhase]: createGraphicsPipeline waitMs=%.1f surface=%d (profile=%s)",
+            static_cast<double>(pipelineCreateNs) / 1e6,
+            surfaceState.id,
+            fastPathProfile ? "fast" : "compat"
+        );
     }
     if (createPipelineResult != VK_SUCCESS)
         return failSwapchainConfig("vkCreateGraphicsPipelines", createPipelineResult);
 
-    if (fastPathProfile && pipelineCreateNs > 200'000'000ull)
-        saveSurfacePipelineCache();
+    saveSurfacePipelineCache();
 
     for (u32 i = 0; i < swapchainImageCount; i++)
     {
