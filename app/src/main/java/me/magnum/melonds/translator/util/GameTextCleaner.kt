@@ -100,6 +100,7 @@ object GameTextCleaner {
     fun prepareForTranslation(rawText: String): String {
         val lines = rawText.lines()
             .map { cleanOcrNoise(it) }
+            .map { repairPixelArtOcrText(it) }
             .filter { it.isNotBlank() }
 
         if (lines.isEmpty()) return ""
@@ -132,6 +133,38 @@ object GameTextCleaner {
         }
 
         return reconstructed.toString().trim()
+    }
+
+    /**
+     * Fixes classic 8x8 pixel font glyph misrecognitions in video games:
+     * - '1', '|', 'I', '!' confused with lowercase 'l' in words: e.g. "he11o" -> "hello", "p1ease" -> "please", "shou1d" -> "should"
+     * - '0' confused with 'o' / 'O' in words: e.g. "c0me" -> "come", "y0u" -> "you", "g0" -> "go"
+     * - '5' confused with 'S' / 's' in words: e.g. "5tart" -> "Start", "5word" -> "Sword"
+     * - '8' confused with 'B' / 'b' in words: e.g. "8oss" -> "Boss"
+     */
+    fun repairPixelArtOcrText(rawText: String): String {
+        var text = rawText
+        // Fix 1/|/! inside words
+        text = text.replace(Regex("([a-zA-Z])[1|!]([a-zA-Z])")) { "${it.groupValues[1]}l${it.groupValues[2]}" }
+        text = text.replace(Regex("(?i)\\b([a-z])[1|!]([a-z]+)\\b")) { "${it.groupValues[1]}l${it.groupValues[2]}" }
+        text = text.replace(Regex("(?i)\\b1([a-z]{2,})\\b")) { "l${it.groupValues[1]}" }
+        text = text.replace(Regex("(?i)\\b([a-z]+)1\\b")) { "${it.groupValues[1]}l" }
+
+        // Fix 0 inside words
+        text = text.replace(Regex("([a-zA-Z])0([a-zA-Z])")) { "${it.groupValues[1]}o${it.groupValues[2]}" }
+        text = text.replace(Regex("(?i)\\by0u\\b"), "you")
+        text = text.replace(Regex("(?i)\\bc0me\\b"), "come")
+        text = text.replace(Regex("(?i)\\bg0\\b"), "go")
+        text = text.replace(Regex("(?i)\\bt0\\b"), "to")
+        text = text.replace(Regex("(?i)\\bn0\\b"), "no")
+        text = text.replace(Regex("(?i)\\bf0r\\b"), "for")
+        text = text.replace(Regex("(?i)\\bfr0m\\b"), "from")
+
+        // Fix 5/8 inside words
+        text = text.replace(Regex("(?i)\\b5([a-z]{2,})\\b")) { "S${it.groupValues[1]}" }
+        text = text.replace(Regex("(?i)\\b8([a-z]{2,})\\b")) { "B${it.groupValues[1]}" }
+
+        return text
     }
 
     private fun cleanOcrNoise(line: String): String {
