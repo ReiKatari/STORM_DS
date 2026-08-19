@@ -43,6 +43,15 @@ class SaveStateScreenshotProvider(
         }
     }
 
+    fun duplicateRomSaveStateScreenshot(rom: Rom, sourceSlot: SaveStateSlot, targetSlotNumber: Int) {
+        val sourceFile = getRomSaveStateScreenshotFile(rom, sourceSlot) ?: return
+        if (!sourceFile.exists()) return
+        val targetSlot = SaveStateSlot(targetSlotNumber, true, null, null)
+        val targetFile = getRomSaveStateScreenshotFile(rom, targetSlot, true) ?: return
+        sourceFile.copyTo(targetFile, overwrite = true)
+        invalidateScreenshotFile(targetFile)
+    }
+
     private fun getRomSaveStateScreenshotFile(rom: Rom, saveState: SaveStateSlot, createDirectoriesIfNeeded: Boolean = false): File? {
         val romDirectoryName = rom.uri.hashCode().toString()
         val romDirectory = File(getScreenshotsDir(), romDirectoryName)

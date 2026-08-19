@@ -12,4 +12,7 @@ interface SaveStatesRepository {
     fun setRomSaveStateScreenshot(rom: Rom, saveState: SaveStateSlot, screenshot: Bitmap)
     fun deleteRomSaveStateScreenshot(rom: Rom, saveState: SaveStateSlot)
     fun deleteRomSaveState(rom: Rom, saveState: SaveStateSlot)
+    fun duplicateRomSaveState(rom: Rom, sourceSlot: SaveStateSlot, targetSlotNumber: Int)
+    fun setSaveStateCustomName(rom: Rom, slotNumber: Int, customName: String?)
+    fun getSaveStateCustomName(rom: Rom, slotNumber: Int): String?
 }
