@@ -1451,14 +1451,15 @@ vec4 FUNC_NAME() \
                 ); \
         } \
         bool controlHas2DPayload = hasStructured2DControlPayload(val3); \
+        bool vram3DHasVisibleColor = (vram3D.a & 0x1F) > 0 && ((vram3D.r | vram3D.g | vram3D.b) != 0); \
         if (class4ExactDisplayedBottom) \
         { \
-            if (!controlHas2DPayload) \
+            if (!controlHas2DPayload && vram3DHasVisibleColor) \
                 pixel = vram3D; \
         } \
         else if (class4AuthenticatedFrameOwnedBottom) \
         { \
-            if (!controlHas2DPayload && (vram3D.a & 0x1F) > 0) \
+            if (!controlHas2DPayload && vram3DHasVisibleColor) \
                 pixel = vram3D; \
         } \
         else if (class4Full2dOnlyVramPackedAuthoritative) \
