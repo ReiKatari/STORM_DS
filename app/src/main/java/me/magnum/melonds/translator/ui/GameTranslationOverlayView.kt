@@ -262,31 +262,52 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             val bottom = block.boundingBox.bottom * h
 
             val displayText = if (block.isShowingOriginal) block.originalText else block.translatedText.ifBlank { block.originalText }
-            val paddingH = 14f
-            val paddingV = 8f
-            val rect = RectF(
-                (left - paddingH).coerceAtLeast(6f),
-                (top - paddingV).coerceAtLeast(6f),
-                (right + paddingH).coerceAtMost(w - 6f),
-                (bottom + paddingV).coerceAtMost(h - 6f)
-            )
-            val rx = 12f
+
+            // Check if this text block is part of a dialogue box or wide banner
+            val isWideDialogue = (right - left) > w * 0.22f || displayText.length > 20 || (top > h * 0.35f && (right - left) > w * 0.18f)
+            val paddingH = if (isWideDialogue) 22f else 14f
+            val paddingV = if (isWideDialogue) 14f else 8f
+
+            val minBoxWidth = if (isWideDialogue) (w * 0.88f) else (right - left + paddingH * 2)
+            val boxWidth = max(right - left + paddingH * 2, minBoxWidth).coerceAtMost(w - 16f)
+
+            val boxLeft = if (isWideDialogue) {
+                ((w - boxWidth) / 2f).coerceAtLeast(8f)
+            } else {
+                (left - paddingH).coerceIn(8f, (w - boxWidth - 8f).coerceAtLeast(8f))
+            }
+            val boxRight = (boxLeft + boxWidth).coerceAtMost(w - 8f)
+
+            val minBoxHeight = if (isWideDialogue) 72f else (bottom - top + paddingV * 2)
+            val boxHeight = max(bottom - top + paddingV * 2, minBoxHeight).coerceAtMost(h - 16f)
+            val boxTop = (top - paddingV).coerceIn(8f, (h - boxHeight - 8f).coerceAtLeast(8f))
+            val boxBottom = (boxTop + boxHeight).coerceAtMost(h - 8f)
+
+            val rect = RectF(boxLeft, boxTop, boxRight, boxBottom)
+            val rx = 16f
 
             when (overlayStyle) {
                 TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> {
                     canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
                     val baseCol = block.backgroundColor
-                    val alpha = (bubbleOpacity.coerceIn(0.15f, 1.0f) * 255).toInt()
-                    bgPaint.color = Color.argb(alpha, Color.red(baseCol), Color.green(baseCol), Color.blue(baseCol))
+                    val alpha = (bubbleOpacity.coerceIn(0.60f, 1.0f) * 255).toInt()
+                    // Blend sampled color with deep dark acrylic slate (#0F172A) for authentic contrast and readability
+                    val blendR = ((Color.red(baseCol) * 0.35f) + (15 * 0.65f)).toInt().coerceIn(0, 255)
+                    val blendG = ((Color.green(baseCol) * 0.35f) + (23 * 0.65f)).toInt().coerceIn(0, 255)
+                    val blendB = ((Color.blue(baseCol) * 0.35f) + (42 * 0.65f)).toInt().coerceIn(0, 255)
+
+                    bgPaint.color = Color.argb(alpha, blendR, blendG, blendB)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
-                    borderPaint.color = Color.argb(60, 255, 255, 255)
+                    borderPaint.color = Color.argb(100, 56, 189, 248)
+                    borderPaint.strokeWidth = 2.0f
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
                 TranslatorOverlayStyle.SEMI_TRANSPARENT -> {
                     canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
-                    bgPaint.color = Color.argb(210, 15, 23, 42)
+                    bgPaint.color = Color.argb(220, 15, 23, 42)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
-                    borderPaint.color = Color.argb(70, 255, 255, 255)
+                    borderPaint.color = Color.argb(80, 255, 255, 255)
+                    borderPaint.strokeWidth = 2.0f
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
                 TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> {
@@ -294,6 +315,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                     bgPaint.color = Color.argb(240, 10, 15, 26)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
                     borderPaint.color = Color.parseColor("#9900E5FF")
+                    borderPaint.strokeWidth = 2.0f
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
                 TranslatorOverlayStyle.OUTLINE_ONLY -> {
@@ -394,11 +416,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     }
 
     private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF, color: Int) {
-        val maxW = max(20, (bounds.width() - 16f).toInt())
-        val maxH = max(20, (bounds.height() - 8f).toInt())
+        val padH = 16f
+        val padV = 10f
+        val maxW = max(20, (bounds.width() - padH * 2).toInt())
+        val maxH = max(20, (bounds.height() - padV * 2).toInt())
 
         // Initial font size with comfortable scale for handheld reading
-        var targetSize = (bounds.height() * 0.42f * fontSizeScale).coerceIn(20f, 54f)
+        var targetSize = (bounds.height() * 0.38f * fontSizeScale).coerceIn(22f, 48f)
         val isSingleWordOrButton = !text.contains(' ') && text.length < 15
         val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
 
@@ -408,34 +432,34 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
         var layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
             .setAlignment(alignment)
-            .setLineSpacing(2f, 1.15f)
+            .setLineSpacing(3f, 1.18f)
             .setIncludePad(false)
             .build()
 
         while (layout.height > maxH && targetSize > 16f) {
-            targetSize -= 1.5f
+            targetSize -= 1.0f
             textPaint.textSize = targetSize
             layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
                 .setAlignment(alignment)
-                .setLineSpacing(2f, 1.15f)
+                .setLineSpacing(3f, 1.18f)
                 .setIncludePad(false)
                 .build()
         }
 
-        val textX = bounds.left + 8f
-        val textY = bounds.top + max(2f, (bounds.height() - layout.height) / 2f)
+        val textX = bounds.left + padH
+        val textY = bounds.top + max(padV, (bounds.height() - layout.height) / 2f)
 
         // Pass 1: Crisp contrast outline for native subtitle look
         val strokePaint = TextPaint(textPaint).apply {
             style = Paint.Style.STROKE
-            strokeWidth = (targetSize * 0.16f).coerceIn(3.0f, 6.5f)
+            strokeWidth = (targetSize * 0.16f).coerceIn(2.5f, 6.0f)
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
-            this.color = if (Color.luminance(color) > 0.5f) Color.argb(230, 0, 0, 0) else Color.argb(230, 255, 255, 255)
+            this.color = if (Color.luminance(color) > 0.5f) Color.argb(235, 0, 0, 0) else Color.argb(235, 255, 255, 255)
         }
         val strokeLayout = StaticLayout.Builder.obtain(text, 0, text.length, strokePaint, maxW)
             .setAlignment(alignment)
-            .setLineSpacing(2f, 1.15f)
+            .setLineSpacing(3f, 1.18f)
             .setIncludePad(false)
             .build()
 

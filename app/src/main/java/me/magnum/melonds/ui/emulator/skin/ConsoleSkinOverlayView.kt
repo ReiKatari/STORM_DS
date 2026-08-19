@@ -220,8 +220,8 @@ fun ConsoleSkinFullFrame(
 
             // 2. THE CENTRAL 3D CYLINDRICAL HINGE (Positioned EXACTLY between top & bottom screens!)
             val hingeY = topScreenBottomDp
-            val hingeHeight = if (gapDp > 6.dp) gapDp else 20.dp
-            val hingeTopOffset = if (gapDp > 6.dp) hingeY else (hingeY - 10.dp)
+            val hingeHeight = if (gapDp >= 4.dp) gapDp else 18.dp
+            val hingeTopOffset = if (gapDp >= 4.dp) hingeY else (hingeY - 9.dp)
 
             Box(
                 modifier = Modifier
