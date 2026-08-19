@@ -178,40 +178,42 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
 
         val bestVariant = layoutConfiguration.layoutVariants.entries.firstOrNull {
             it.key.orientation == variant.orientation && it.key.uiSize == variant.uiSize
+        } ?: layoutConfiguration.layoutVariants.entries.firstOrNull {
+            it.key.orientation == variant.orientation
         }
         if (bestVariant != null) {
-            if (bestVariant.key.uiInsets == variant.uiInsets) {
-                return bestVariant.value
+            val sourceVariant = bestVariant.key
+            val sourceLayout = bestVariant.value
+            if (sourceVariant.uiSize == variant.uiSize && sourceVariant.uiInsets == variant.uiInsets) {
+                return sourceLayout
             }
-
-            // If insets don't match, check if they are rotated 180º
-            val rotatedInsets = with(bestVariant.key.uiInsets) {
-                Insets(left = right, top = bottom, right = left, bottom = top)
-            }
-            if (rotatedInsets == variant.uiInsets) {
-                val layoutBounds = getLayoutBoundingRect(bestVariant.value.mainScreenLayout)
-                if (layoutBounds == null) {
-                    // Layout has no components. Use it just for the background
-                    return bestVariant.value
+            if (sourceVariant.uiSize == variant.uiSize) {
+                val rotatedInsets = with(sourceVariant.uiInsets) {
+                    Insets(left = right, top = bottom, right = left, bottom = top)
                 }
-
-                val safeUiWidth = bestVariant.key.uiSize.x - (bestVariant.key.uiInsets.left + bestVariant.key.uiInsets.right)
-                val safeUiHeight = bestVariant.key.uiSize.y - (bestVariant.key.uiInsets.top + bestVariant.key.uiInsets.bottom)
-                val safeUiBounds = Rect(bestVariant.key.uiInsets.left, bestVariant.key.uiInsets.top, safeUiWidth, safeUiHeight)
-                // Check if the layout fits inside the safe UI bounds
-                if (safeUiBounds.contains(layoutBounds)) {
-                    // Offset components to adjust to new UI insets
-                    val offset = -bestVariant.key.uiInsets.left + bestVariant.key.uiInsets.right
-                    val offsetComponents = bestVariant.value.mainScreenLayout.components?.map {
+                if (rotatedInsets == variant.uiInsets) {
+                    val offset = -sourceVariant.uiInsets.left + sourceVariant.uiInsets.right
+                    val offsetComponents = sourceLayout.mainScreenLayout.components?.map {
                         it.copy(rect = it.rect.copy(x = it.rect.x + offset))
                     }
-
-                    return bestVariant.value.copy(mainScreenLayout = bestVariant.value.mainScreenLayout.copy(components = offsetComponents))
-                } else {
-                    // Layout components extend into the UI insets. Use it anyway as is since the customization could be important to the user
-                    return bestVariant.value
+                    return sourceLayout.copy(mainScreenLayout = sourceLayout.mainScreenLayout.copy(components = offsetComponents))
                 }
+                return sourceLayout
             }
+
+            // Proportional scaling so user customizations are never lost on window resizing or backgrounding
+            val scaleX = if (sourceVariant.uiSize.x > 0) variant.uiSize.x.toFloat() / sourceVariant.uiSize.x else 1f
+            val scaleY = if (sourceVariant.uiSize.y > 0) variant.uiSize.y.toFloat() / sourceVariant.uiSize.y else 1f
+            val scaledComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
+                val scaledRect = Rect(
+                    (comp.rect.x * scaleX).toInt(),
+                    (comp.rect.y * scaleY).toInt(),
+                    (comp.rect.width * scaleX).toInt(),
+                    (comp.rect.height * scaleY).toInt()
+                )
+                comp.copy(rect = scaledRect)
+            }
+            return sourceLayout.copy(mainScreenLayout = sourceLayout.mainScreenLayout.copy(components = scaledComponents))
         }
 
         return null

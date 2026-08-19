@@ -21,13 +21,15 @@ class BiosDownloadManager @Inject constructor(
 ) {
     companion object {
         val DS_BIOS_MIRRORS = listOf(
-            "https://archive.org/download/nds_bios_firmware/nds_bios_firmware.zip",
+            "https://github.com/ReiKatari/STORM_DS_TOOLS/releases/download/0.0.1/Nintendo_DS.zip",
             "https://raw.githubusercontent.com/archeader/melonDS-android/main/bios/ds_bios.zip",
             "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/ds_bios.zip",
-            "https://github.com/melonds-emu/melonDS/releases/download/bios/nds_bios.zip"
+            "https://github.com/melonds-emu/melonDS/releases/download/bios/nds_bios.zip",
+            "https://archive.org/download/nds_bios_firmware/nds_bios_firmware.zip"
         )
 
         val DSI_BIOS_MIRRORS = listOf(
+            "https://github.com/ReiKatari/STORM_DS_TOOLS/releases/download/0.0.1/Nintendo_DSi.zip",
             "https://raw.githubusercontent.com/archeader/melonDS-android/main/bios/dsi_bios.zip",
             "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/dsi_bios.zip",
             "https://github.com/melonds-emu/melonDS/releases/download/bios/dsi_bios.zip",
