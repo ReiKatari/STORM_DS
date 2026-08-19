@@ -59,11 +59,13 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
     }
 
     private fun getDSBios7Status(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
-        return getBiosFileStatus(configurationDir, "bios7.bin", 0x4000.toLong())
+        val status = getBiosFileStatus(configurationDir, "bios7.bin", 0x4000.toLong())
+        return if (status == ConfigurationDirResult.FileStatus.PRESENT) status else getBiosFileStatus(configurationDir, "nds7.bin", 0x4000.toLong())
     }
 
     private fun getDSBios9Status(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
-        return getBiosFileStatus(configurationDir, "bios9.bin", 0x1000.toLong())
+        val status = getBiosFileStatus(configurationDir, "bios9.bin", 0x1000.toLong())
+        return if (status == ConfigurationDirResult.FileStatus.PRESENT) status else getBiosFileStatus(configurationDir, "nds9.bin", 0x1000.toLong())
     }
 
     private fun getDSFirmwareStatus(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
