@@ -2272,6 +2272,30 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
+    fun renameSaveStateSlot(slot: SaveStateSlot, newName: String?, onSlotsUpdated: (List<SaveStateSlot>) -> Unit) {
+        (_emulatorState.value as? EmulatorState.RunningRom)?.let {
+            sessionCoroutineScope.launch {
+                val updatedSlots = withContext(Dispatchers.IO) {
+                    saveStatesRepository.setSaveStateCustomName(it.rom, slot.slot, newName)
+                    saveStatesRepository.getRomSaveStates(it.rom)
+                }
+                onSlotsUpdated(updatedSlots)
+            }
+        }
+    }
+
+    fun duplicateSaveStateSlot(sourceSlot: SaveStateSlot, targetSlotNumber: Int, onSlotsUpdated: (List<SaveStateSlot>) -> Unit) {
+        (_emulatorState.value as? EmulatorState.RunningRom)?.let {
+            sessionCoroutineScope.launch {
+                val updatedSlots = withContext(Dispatchers.IO) {
+                    saveStatesRepository.duplicateRomSaveState(it.rom, sourceSlot, targetSlotNumber)
+                    saveStatesRepository.getRomSaveStates(it.rom)
+                }
+                onSlotsUpdated(updatedSlots)
+            }
+        }
+    }
+
     private suspend fun saveRomState(rom: Rom, slot: SaveStateSlot): Boolean {
         val slotUri = getRomSaveStateUri(rom, slot)
         emulatorManager.takeScreenshot()

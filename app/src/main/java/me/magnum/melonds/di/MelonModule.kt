@@ -106,8 +106,8 @@ object MelonModule {
 
     @Provides
     @Singleton
-    fun provideSaveStatesRepository(settingsRepository: SettingsRepository, saveStateScreenshotProvider: SaveStateScreenshotProvider, uriHandler: UriHandler): SaveStatesRepository {
-        return FileSystemSaveStatesRepository(settingsRepository, saveStateScreenshotProvider, uriHandler)
+    fun provideSaveStatesRepository(@dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context, settingsRepository: SettingsRepository, saveStateScreenshotProvider: SaveStateScreenshotProvider, uriHandler: UriHandler): SaveStatesRepository {
+        return FileSystemSaveStatesRepository(context, settingsRepository, saveStateScreenshotProvider, uriHandler)
     }
 
     @Provides

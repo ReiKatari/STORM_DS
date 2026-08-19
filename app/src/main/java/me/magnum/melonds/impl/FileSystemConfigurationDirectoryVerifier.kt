@@ -122,10 +122,17 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         return runCatching {
             if (nandDocument.uri.scheme == "file") {
                 val f = java.io.File(nandDocument.uri.path ?: "")
-                if (f.exists() && f.canRead()) ConfigurationDirResult.FileStatus.PRESENT else ConfigurationDirResult.FileStatus.MISSING
-            } else {
-                context.contentResolver.openFileDescriptor(nandDocument.uri, "rw")?.use {
+                if (f.exists() && f.canRead() && f.length() >= 1024 * 1024L) {
                     ConfigurationDirResult.FileStatus.PRESENT
+                } else if (f.exists() && f.length() < 1024 * 1024L) {
+                    ConfigurationDirResult.FileStatus.INVALID
+                } else {
+                    ConfigurationDirResult.FileStatus.MISSING
+                }
+            } else {
+                context.contentResolver.openFileDescriptor(nandDocument.uri, "r")?.use { pfd ->
+                    val len = pfd.statSize
+                    if (len >= 1024 * 1024L) ConfigurationDirResult.FileStatus.PRESENT else ConfigurationDirResult.FileStatus.INVALID
                 } ?: ConfigurationDirResult.FileStatus.MISSING
             }
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
