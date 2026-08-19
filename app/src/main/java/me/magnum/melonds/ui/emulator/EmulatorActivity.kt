@@ -792,6 +792,16 @@ class EmulatorActivity : AppCompatActivity() {
                                     saveStatesOverlayState.value = saveStatesData.copy(slots = newSlots)
                                 }
                             },
+                            onSlotRenamed = { slot, newName ->
+                                viewModel.renameSaveStateSlot(slot, newName) { newSlots ->
+                                    saveStatesOverlayState.value = saveStatesData.copy(slots = newSlots)
+                                }
+                            },
+                            onSlotDuplicated = { sourceSlot, targetSlotNum ->
+                                viewModel.duplicateSaveStateSlot(sourceSlot, targetSlotNum) { newSlots ->
+                                    saveStatesOverlayState.value = saveStatesData.copy(slots = newSlots)
+                                }
+                            },
                             onDismiss = {
                                 dismissSaveStatesOverlay()
                                 reopenPauseMenu()

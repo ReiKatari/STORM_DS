@@ -17,7 +17,7 @@ class OnlineVulkanDriverRepository @Inject constructor() {
     }
 
     private val staticDrivers = listOf(
-        // --- 2026 RELEASES: The412Banner, whitebelyash, Qualcomm Adreno, Upstream Turnip ---
+        // --- 2026 RELEASES: The412Banner, MrPurple, whitebelyash, Qualcomm Adreno, Upstream Turnip ---
 
         OnlineVulkanDriver(
             id = "turnip-banner-26-3-0-r17",
@@ -50,6 +50,22 @@ class OnlineVulkanDriverRepository @Inject constructor() {
             isRecommended = true
         ),
         OnlineVulkanDriver(
+            id = "turnip-mrpurple-26-3-0-t30",
+            name = "Turnip Mesa (MrPurple Build v26.3.0-devel T-30 — 18.08.2026)",
+            version = "26.3.0-devel-T30",
+            releaseDate = "2026-08-18",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "🔥 Популярная сборка от автора MrPurple на базе ветки Mesa 26.3 с поддержкой Vulkan 1.4.359 и высокой стабильностью.",
+            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17.zip",
+            fileSizeMb = 2.55,
+            isRecommended = true
+        ),
+        OnlineVulkanDriver(
             id = "turnip-whitebelyash-v31",
             name = "Turnip Mesa (whitebelyash Build v31 / Mainline — 17.08.2026)",
             version = "v31-wb",
@@ -78,6 +94,22 @@ class OnlineVulkanDriverRepository @Inject constructor() {
             ),
             description = "Сборка от whitebelyash с синхронизацией командного буфера GPU для стабильной частоты кадров без разрывов.",
             downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v31/mainline-turnip-sync-V31.zip",
+            fileSizeMb = 2.55,
+            isRecommended = false
+        ),
+        OnlineVulkanDriver(
+            id = "turnip-mrpurple-26-2-0-r28",
+            name = "Turnip Mesa (MrPurple Build v26.2.0-r28 — Август 2026)",
+            version = "26.2.0-r28-MrP",
+            releaseDate = "2026-08-16",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "Ревизия от MrPurple с агрессивным компилятором SPIR-V шейдеров и стабильным фреймрейтом.",
+            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17.zip",
             fileSizeMb = 2.55,
             isRecommended = false
         ),

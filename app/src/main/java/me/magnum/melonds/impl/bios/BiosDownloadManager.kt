@@ -84,11 +84,10 @@ class BiosDownloadManager @Inject constructor(
     ): Result<File> = withContext(Dispatchers.IO) {
         val targetDir = File(context.filesDir, "bios/dsi").apply { mkdirs() }
 
-        // 1. First priority: Copy authentic bundled BIOS files from assets
-        val extractedFromAssets = copyDsiBiosFromAssets(targetDir)
-        ensureDsiNandExists(targetDir)
+        // 1. First priority: Copy authentic bundled BIOS files from assets (bios7, bios9, firmware)
+        copyDsiBiosFromAssets(targetDir)
 
-        if (extractedFromAssets && hasValidDsiFiles(targetDir)) {
+        if (hasValidDsiFiles(targetDir)) {
             onProgress(100)
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsiBiosDirectory(dirUri)
@@ -96,7 +95,7 @@ class BiosDownloadManager @Inject constructor(
             return@withContext Result.success(targetDir)
         }
 
-        // 2. Fallback to online mirrors
+        // 2. Fallback to online mirrors to download complete authentic DSi package with valid NAND
         val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
@@ -105,7 +104,6 @@ class BiosDownloadManager @Inject constructor(
             try {
                 downloadFile(mirrorUrl, tempZip, onProgress)
                 extractAndNormalizeBiosFiles(tempZip, targetDir, isDsi = true)
-                ensureDsiNandExists(targetDir)
                 if (hasValidDsiFiles(targetDir)) {
                     downloadSuccess = true
                     break
@@ -123,7 +121,7 @@ class BiosDownloadManager @Inject constructor(
             settingsRepository.setUseCustomBios(true)
             Result.success(targetDir)
         } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi."))
+            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi и образ NAND."))
         }
     }
 
@@ -159,19 +157,6 @@ class BiosDownloadManager @Inject constructor(
         }
     }
 
-    private fun ensureDsiNandExists(targetDir: File) {
-        val nandFile = File(targetDir, "nand.bin")
-        if (!nandFile.exists() || nandFile.length() < 0x20000L) {
-            try {
-                RandomAccessFile(nandFile, "rw").use { raf ->
-                    raf.setLength(251658240L) // Standard 240MB DSi clean NAND
-                }
-            } catch (_: Throwable) {
-                nandFile.writeBytes(ByteArray(1024 * 1024 * 16))
-            }
-        }
-    }
-
     private fun hasValidDsFiles(dir: File): Boolean {
         val b7 = File(dir, "bios7.bin")
         val b9 = File(dir, "bios9.bin")
@@ -184,7 +169,41 @@ class BiosDownloadManager @Inject constructor(
         val b9 = File(dir, "bios9.bin")
         val fw = File(dir, "firmware.bin")
         val nand = File(dir, "nand.bin")
-        return b7.exists() && b7.length() >= 0x10000L && b9.exists() && b9.length() >= 0x10000L && fw.exists() && fw.length() >= 0x20000L && nand.exists() && nand.length() > 0L
+        if (!b7.exists() || b7.length() < 0x10000L || !b9.exists() || b9.length() < 0x10000L || !fw.exists() || fw.length() < 0x20000L) {
+            return false
+        }
+        if (!nand.exists() || nand.length() < 1024 * 1024L) {
+            return false
+        }
+        return try {
+            RandomAccessFile(nand, "r").use { raf ->
+                val len = raf.length()
+                if (len >= 0x40) {
+                    raf.seek(len - 0x40)
+                    val footer = ByteArray(16)
+                    raf.readFully(footer)
+                    val str = String(footer, Charsets.US_ASCII)
+                    if (str.startsWith("DSi eMMC CID/CPU")) {
+                        return@use true
+                    }
+                }
+                if (len >= 0x000FF800 + 16) {
+                    raf.seek(0x000FF800)
+                    val footer = ByteArray(16)
+                    raf.readFully(footer)
+                    val str = String(footer, Charsets.US_ASCII)
+                    if (str.startsWith("DSi eMMC CID/CPU")) {
+                        return@use true
+                    }
+                }
+                raf.seek(0)
+                val testBuf = ByteArray(512)
+                raf.readFully(testBuf)
+                testBuf.any { it != 0.toByte() }
+            }
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun downloadFile(urlStr: String, destination: File, onProgress: (Int) -> Unit) {
