@@ -1298,7 +1298,28 @@ class EmulatorActivity : AppCompatActivity() {
         binding.viewLayoutControls.isInvisible = true
         binding.textFps.isGone = true
         binding.textLoading.isVisible = true
-        if (bootStatus.value == null) {
+
+        val args = LaunchArgs.fromIntent(intent)
+        if (args is LaunchArgs.Firmware) {
+            when (args.consoleType) {
+                ConsoleType.DS -> {
+                    binding.textLoading.text = "🎮 Nintendo DS"
+                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#E0E7FF"))
+                    binding.textLoadingDetail.isVisible = true
+                    binding.textLoadingDetail.text = "Загрузка системного меню & BIOS..."
+                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#93C5FD"))
+                    bootStatus.value = "Nintendo DS BIOS"
+                }
+                ConsoleType.DSi -> {
+                    binding.textLoading.text = "✨ Nintendo DSi"
+                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#F0FDFA"))
+                    binding.textLoadingDetail.isVisible = true
+                    binding.textLoadingDetail.text = "Загрузка системного меню & eMMC NAND..."
+                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+                    bootStatus.value = "Nintendo DSi NAND"
+                }
+            }
+        } else if (bootStatus.value == null) {
             bootStatus.value = getString(R.string.info_loading)
         }
     }
@@ -1311,6 +1332,29 @@ class EmulatorActivity : AppCompatActivity() {
             binding.textLoadingDetail.isVisible = true
             binding.textLoadingDetail.setText(R.string.info_refreshing_retroachievements_detail)
             bootStatus.value = getString(R.string.info_refreshing_retroachievements_title)
+            return
+        }
+
+        val args = LaunchArgs.fromIntent(intent)
+        if (args is LaunchArgs.Firmware && (progress == null || progress.total <= 0)) {
+            when (args.consoleType) {
+                ConsoleType.DS -> {
+                    binding.textLoading.text = "🎮 Nintendo DS"
+                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#E0E7FF"))
+                    binding.textLoadingDetail.isVisible = true
+                    binding.textLoadingDetail.text = "Загрузка системного меню & BIOS..."
+                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#93C5FD"))
+                }
+                ConsoleType.DSi -> {
+                    binding.textLoading.text = "✨ Nintendo DSi"
+                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#F0FDFA"))
+                    binding.textLoadingDetail.isVisible = true
+                    binding.textLoadingDetail.text = "Загрузка системного меню & eMMC NAND..."
+                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+                }
+            }
+            binding.progressLoading.isVisible = true
+            binding.progressLoading.isIndeterminate = true
             return
         }
 

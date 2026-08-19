@@ -24,7 +24,7 @@
   <string name="version_beta">Бета</string>
   <string name="version_nightly">Ночная сборка</string>
   <string name="console_ds">DS</string>
-  <string name="console_dsi">DSi (Экспериментально)</string>
+  <string name="console_dsi">Nintendo DSi</string>
   <string name="console_ds_full">Nintendo DS</string>
   <string name="console_dsi_full">Nintendo DSi</string>
   <string name="size_bytes">Б</string>
