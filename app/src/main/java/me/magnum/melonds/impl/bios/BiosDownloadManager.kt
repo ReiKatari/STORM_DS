@@ -188,18 +188,7 @@ class BiosDownloadManager @Inject constructor(
     }
 
     private fun downloadFile(urlStr: String, destination: File, onProgress: (Int) -> Unit) {
-        val url = URL(urlStr)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.connectTimeout = 12000
-        connection.readTimeout = 25000
-        connection.instanceFollowRedirects = true
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
-        connection.connect()
-
-        if (connection.responseCode !in 200..299) {
-            throw java.io.IOException("HTTP error ${connection.responseCode}")
-        }
-
+        val connection = openConnectionWithRedirects(urlStr)
         val totalLength = connection.contentLength
         var downloaded = 0
 
@@ -216,6 +205,42 @@ class BiosDownloadManager @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun openConnectionWithRedirects(initialUrl: String, maxRedirects: Int = 10): HttpURLConnection {
+        var currentUrl = initialUrl
+        var redirects = 0
+        while (redirects < maxRedirects) {
+            val url = URL(currentUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 20000
+            connection.readTimeout = 45000
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
+            connection.setRequestProperty("Accept", "*/*")
+            connection.connect()
+
+            val responseCode = connection.responseCode
+            if (responseCode in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
+                val location = connection.getHeaderField("Location")
+                connection.disconnect()
+                if (location.isNullOrBlank()) {
+                    throw java.io.IOException("HTTP redirect $responseCode with missing Location header")
+                }
+                currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                    location
+                } else {
+                    URL(url, location).toString()
+                }
+                redirects++
+            } else if (responseCode in 200..299) {
+                return connection
+            } else {
+                connection.disconnect()
+                throw java.io.IOException("HTTP error $responseCode")
+            }
+        }
+        throw java.io.IOException("Too many redirects ($redirects)")
     }
 
     private fun extractAndNormalizeBiosFiles(zipFile: File, outputDir: File, isDsi: Boolean) {
