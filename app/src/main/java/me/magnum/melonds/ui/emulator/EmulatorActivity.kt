@@ -1355,6 +1355,10 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun renderLoadingState(progress: VulkanCompileProgress?, raLoadStage: RetroAchievementsLoadStage? = null) {
+        if (bootRomReady.value || viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware) {
+            binding.layoutLoadingDevice.isGone = true
+            return
+        }
         binding.layoutLoadingDevice.isVisible = true
         updateLoadingBadge()
 

@@ -600,11 +600,14 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {
+        val isRawDsiWare = rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
+        if (isRawDsiWare) return false // Raw DSiWare files are imported to NAND and represented by installed shortcuts
+
         return when (filter) {
             RomFilter.ALL -> true
             RomFilter.FAVORITES -> rom.isFavorite
-            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
-            RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
+            RomFilter.DS_ONLY -> !rom.isInstalledDsiWareShortcut
+            RomFilter.DSIWARE_ONLY -> rom.isInstalledDsiWareShortcut
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
         }
     }
