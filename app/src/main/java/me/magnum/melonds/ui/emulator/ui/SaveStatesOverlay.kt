@@ -1,7 +1,9 @@
 package me.magnum.melonds.ui.emulator.ui
 
-import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,41 +11,24 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Icon
-import androidx.compose.material.Text
+import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -54,9 +39,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import me.magnum.melonds.R
@@ -66,6 +53,8 @@ import me.magnum.melonds.ui.common.GamepadHintsFooter
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -75,10 +64,15 @@ fun SaveStatesOverlay(
     gameTitle: String?,
     onSlotPicked: (SaveStateSlot) -> Unit,
     onSlotDeleted: (SaveStateSlot) -> Unit,
+    onSlotRenamed: (SaveStateSlot, String?) -> Unit = { _, _ -> },
+    onSlotDuplicated: (SaveStateSlot, Int) -> Unit = { _, _ -> },
     onDismiss: () -> Unit,
 ) {
     val colors = watermelon
     val firstFocusRequester = remember { FocusRequester() }
+
+    var slotToRename by remember { mutableStateOf<SaveStateSlot?>(null) }
+    var slotToDuplicate by remember { mutableStateOf<SaveStateSlot?>(null) }
 
     BackHandler { onDismiss() }
 
@@ -96,51 +90,78 @@ fun SaveStatesOverlay(
                 }
             },
     ) {
+        // --- Header ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 7.dp, bottom = 7.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onDismiss),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cancel), tint = colors.text, modifier = Modifier.size(20.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.cancel),
+                    tint = colors.text,
+                    modifier = Modifier.size(22.dp)
+                )
             }
             Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(if (isSaving) R.string.save_state else R.string.load_state),
-                color = colors.text,
-                fontFamily = SpaceGrotesk,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (gameTitle != null) {
-                Text(
-                    text = gameTitle,
-                    color = colors.text3,
-                    fontFamily = WatermelonMono,
-                    fontSize = 9.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false),
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(if (isSaving) R.string.save_state else R.string.load_state),
+                        color = colors.text,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSaving) colors.red.copy(alpha = 0.2f) else colors.surface2)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (isSaving) "СОХРАНЕНИЕ" else "ЗАГРУЗКА",
+                            color = if (isSaving) colors.red else colors.text2,
+                            fontFamily = WatermelonMono,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                if (gameTitle != null) {
+                    Text(
+                        text = gameTitle,
+                        color = colors.text3,
+                        fontFamily = WatermelonMono,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
 
+        // --- Grid of Slots ---
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
+            columns = GridCells.Adaptive(minSize = 160.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .weight(1f)
-                .widthIn(max = 760.dp)
+                .widthIn(max = 840.dp)
                 .align(Alignment.CenterHorizontally)
                 .padding(horizontal = 16.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 14.dp, bottom = 18.dp),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 20.dp),
         ) {
             items(slots, key = { it.slot }) { slot ->
                 SaveStateSlotCard(
@@ -150,16 +171,46 @@ fun SaveStatesOverlay(
                     focusRequester = if (slot.slot == slots.firstOrNull()?.slot) firstFocusRequester else null,
                     onClick = { onSlotPicked(slot) },
                     onDelete = { onSlotDeleted(slot) },
+                    onRename = { slotToRename = slot },
+                    onDuplicate = { slotToDuplicate = slot },
                 )
             }
         }
 
+        // --- Gamepad Footer ---
         GamepadHintsFooter(
             hints = listOf(
                 GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
                 GamepadHint("A", stringResource(if (isSaving) R.string.save_state else R.string.load_state)),
+                GamepadHint("X", "Переименовать"),
+                GamepadHint("Y", "Дублировать"),
                 GamepadHint("B", stringResource(R.string.cancel)),
             ),
+        )
+    }
+
+    // --- Rename Dialog ---
+    slotToRename?.let { slot ->
+        RenameSaveStateDialog(
+            slot = slot,
+            onDismiss = { slotToRename = null },
+            onConfirm = { newName ->
+                onSlotRenamed(slot, newName)
+                slotToRename = null
+            }
+        )
+    }
+
+    // --- Duplicate Dialog ---
+    slotToDuplicate?.let { sourceSlot ->
+        DuplicateSaveStateDialog(
+            sourceSlot = sourceSlot,
+            slots = slots,
+            onDismiss = { slotToDuplicate = null },
+            onConfirm = { targetSlotNum ->
+                onSlotDuplicated(sourceSlot, targetSlotNum)
+                slotToDuplicate = null
+            }
         )
     }
 
@@ -175,6 +226,8 @@ private fun SaveStateSlotCard(
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onRename: () -> Unit,
+    onDuplicate: () -> Unit,
 ) {
     val colors = watermelon
     val context = LocalContext.current
@@ -182,10 +235,9 @@ private fun SaveStateSlotCard(
     val isFocused by interactionSource.collectIsFocusedAsState()
     val enabled = slot.exists || isSaving
     val isQuick = slot.slot == SaveStateSlot.QUICK_SAVE_SLOT
-    val shape = RoundedCornerShape(11.dp)
-    val autoTag = remember(slot.slot, gameTitle) {
-        me.magnum.melonds.ui.emulator.savestate.SmartSaveStateHelper.generateAutoBookmarkTag(gameTitle, slot.slot)
-    }
+    val shape = RoundedCornerShape(12.dp)
+
+    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()) }
 
     Column(
         modifier = Modifier
@@ -196,7 +248,7 @@ private fun SaveStateSlotCard(
                 indication = null,
                 enabled = enabled,
                 onClick = onClick,
-                onLongClick = if (slot.exists) onDelete else null,
+                onLongClick = if (slot.exists) onRename else null,
             ),
     ) {
         Box(
@@ -206,15 +258,17 @@ private fun SaveStateSlotCard(
                 .clip(shape)
                 .background(colors.surface2)
                 .border(
-                    width = 2.dp,
+                    width = if (isFocused) 2.5.dp else 1.5.dp,
                     color = when {
                         isFocused -> colors.red
-                        isQuick && slot.exists -> colors.red.copy(alpha = 0.8f)
-                        else -> colors.line
+                        isQuick && slot.exists -> colors.red.copy(alpha = 0.85f)
+                        slot.exists -> colors.line
+                        else -> colors.line.copy(alpha = 0.5f)
                     },
                     shape = shape,
                 ),
         ) {
+            // Screenshot preview or Empty Placeholder
             if (slot.exists && slot.screenshot != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(context).data(slot.screenshot).build(),
@@ -222,71 +276,144 @@ private fun SaveStateSlotCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else if (!slot.exists) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = stringResource(R.string.save_state_empty_slot),
-                    tint = colors.text3,
-                    modifier = Modifier.size(26.dp).align(Alignment.Center),
+                // Dark bottom gradient for legible badges
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))
+                            )
+                        )
                 )
+            } else if (!slot.exists) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AddCircleOutline,
+                        contentDescription = stringResource(R.string.save_state_empty_slot),
+                        tint = if (isFocused) colors.red else colors.text3,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "СВОБОДНЫЙ СЛОТ",
+                        color = colors.text3,
+                        fontFamily = WatermelonMono,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
+
+            // Top-Left Badge: Slot number or Quick Save
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 8.dp, top = 7.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (isQuick) colors.red else Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                    .padding(start = 8.dp, top = 8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (isQuick) colors.red else Color.Black.copy(alpha = 0.75f))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
             ) {
                 Text(
                     text = if (isQuick) {
-                        stringResource(R.string.save_state_slot_quick)
+                        "⚡ БЫСТРОЕ"
                     } else {
-                        stringResource(R.string.save_state_slot_number, slot.slot)
+                        "СЛОТ ${slot.slot}"
                     },
                     color = Color.White,
                     fontFamily = WatermelonMono,
                     fontSize = 8.5.sp,
-                    lineHeight = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                 )
             }
+
+            // Top-Right Action Bar (Rename, Duplicate, Delete)
             if (slot.exists) {
-                Box(
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .clickable(onClick = onDelete),
-                    contentAlignment = Alignment.Center,
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(14.dp),
-                    )
+                    // Rename button
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .clickable(onClick = onRename),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "Переименовать",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+
+                    // Duplicate button
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .clickable(onClick = onDuplicate),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = "Дублировать",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+
+                    // Delete button
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .clickable(onClick = onDelete),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Удалить",
+                            tint = Color(0xFFFF5252),
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
                 }
             }
         }
+
+        // Custom Name / Label
         if (slot.exists) {
+            val label = slot.customName?.takeIf { it.isNotBlank() } ?: "Без названия"
             Text(
-                text = autoTag,
-                color = colors.red,
+                text = "🏷️ $label",
+                color = if (!slot.customName.isNullOrBlank()) colors.red else colors.text2,
                 fontFamily = SpaceGrotesk,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 2.dp, top = 4.dp),
+                modifier = Modifier.padding(start = 2.dp, top = 6.dp),
             )
         }
+
+        // Exact Date & Time Stamp
         val lastUsed = slot.lastUsedDate
         Text(
             text = if (slot.exists && lastUsed != null) {
-                DateFormat.getMediumDateFormat(context).format(lastUsed) + " · " + DateFormat.getTimeFormat(context).format(lastUsed)
+                "📅 " + dateFormat.format(lastUsed)
             } else {
                 stringResource(R.string.save_state_empty_slot)
             },
@@ -297,5 +424,228 @@ private fun SaveStateSlotCard(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 2.dp, top = 2.dp),
         )
+    }
+}
+
+@Composable
+private fun RenameSaveStateDialog(
+    slot: SaveStateSlot,
+    onDismiss: () -> Unit,
+    onConfirm: (String?) -> Unit,
+) {
+    val colors = watermelon
+    var text by remember { mutableStateOf(slot.customName ?: "") }
+
+    val presetTags = listOf("Перед боссом", "Чекпоинт", "Секрет", "Новая локация", "Перед развилкой", "Тест")
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = colors.surface,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Переименовать слот ${if (slot.slot == 0) "Быстрого сохранения" else slot.slot}",
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.text,
+                )
+                Spacer(Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Название сохранения", color = colors.text3) },
+                    placeholder = { Text("Например: Перед боссом 3", color = colors.text3.copy(alpha = 0.6f)) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        textColor = colors.text,
+                        cursorColor = colors.red,
+                        focusedBorderColor = colors.red,
+                        unfocusedBorderColor = colors.line,
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Quick preset chips
+                Text(
+                    text = "Быстрые шаблоны:",
+                    color = colors.text3,
+                    fontFamily = WatermelonMono,
+                    fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presetTags.take(3).forEach { tag ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(colors.surface2)
+                                .clickable { text = tag }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = tag,
+                                color = colors.text2,
+                                fontSize = 9.5.sp,
+                                fontFamily = SpaceGrotesk
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presetTags.drop(3).forEach { tag ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(colors.surface2)
+                                .clickable { text = tag }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = tag,
+                                color = colors.text2,
+                                fontSize = 9.5.sp,
+                                fontFamily = SpaceGrotesk
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { onConfirm(null) }) {
+                        Text("Очистить", color = colors.text3)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = colors.text2)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { onConfirm(text.trim().takeIf { it.isNotEmpty() }) },
+                        colors = ButtonDefaults.buttonColors(backgroundColor = colors.red),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Сохранить", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DuplicateSaveStateDialog(
+    sourceSlot: SaveStateSlot,
+    slots: List<SaveStateSlot>,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    val colors = watermelon
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = colors.surface,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Дублировать сохранение",
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.text,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Из слота ${if (sourceSlot.slot == 0) "Быстрого" else sourceSlot.slot} в:",
+                    fontFamily = WatermelonMono,
+                    fontSize = 11.sp,
+                    color = colors.text3,
+                )
+                Spacer(Modifier.height(16.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    slots.forEach { slot ->
+                        val isSelf = slot.slot == sourceSlot.slot
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelf) colors.surface2.copy(alpha = 0.3f) else colors.surface2)
+                                .clickable(enabled = !isSelf) {
+                                    onConfirm(slot.slot)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (slot.slot == 0) "⚡ Быстрый слот" else "Слот ${slot.slot}",
+                                    color = if (isSelf) colors.text3 else colors.text,
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (isSelf) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "(Текущий)",
+                                        color = colors.text3,
+                                        fontFamily = WatermelonMono,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = if (slot.exists) "Перезаписать" else "Свободно",
+                                color = if (slot.exists) Color(0xFFFF9800) else Color(0xFF4CAF50),
+                                fontFamily = WatermelonMono,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text(stringResource(R.string.cancel), color = colors.text2)
+                }
+            }
+        }
     }
 }
