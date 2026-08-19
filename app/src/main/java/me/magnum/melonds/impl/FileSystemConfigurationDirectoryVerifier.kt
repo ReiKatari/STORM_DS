@@ -26,7 +26,13 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         }
 
         val dirDocument = runCatching {
-            DocumentFile.fromTreeUri(context, directory)
+            if (directory.scheme == "file") {
+                val path = directory.path ?: return@runCatching null
+                val file = java.io.File(path)
+                if (file.exists() && file.isDirectory) DocumentFile.fromFile(file) else null
+            } else {
+                DocumentFile.fromTreeUri(context, directory)
+            }
         }.getOrNull()
         val isDirectory = runCatching {
             dirDocument?.isDirectory == true
@@ -61,17 +67,22 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
     }
 
     private fun getDSFirmwareStatus(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
-        val firmwareDocument =configurationDir.findFile("firmware.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
+        val firmwareDocument = configurationDir.findFile("firmware.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
         return runCatching {
-            context.contentResolver.openAssetFileDescriptor(firmwareDocument.uri, "r")?.use {
-                when (it.length) {
-                    AssetFileDescriptor.UNKNOWN_LENGTH -> ConfigurationDirResult.FileStatus.MISSING
-                    0x20000.toLong(),
-                    0x40000.toLong(),
-                    0x80000.toLong() -> ConfigurationDirResult.FileStatus.PRESENT
-                    else -> ConfigurationDirResult.FileStatus.INVALID
-                }
-            } ?: ConfigurationDirResult.FileStatus.MISSING
+            val length = if (firmwareDocument.uri.scheme == "file") {
+                java.io.File(firmwareDocument.uri.path ?: "").length()
+            } else {
+                context.contentResolver.openAssetFileDescriptor(firmwareDocument.uri, "r")?.use {
+                    it.length
+                } ?: AssetFileDescriptor.UNKNOWN_LENGTH
+            }
+            when (length) {
+                AssetFileDescriptor.UNKNOWN_LENGTH -> ConfigurationDirResult.FileStatus.MISSING
+                0x20000.toLong(),
+                0x40000.toLong(),
+                0x80000.toLong() -> ConfigurationDirResult.FileStatus.PRESENT
+                else -> ConfigurationDirResult.FileStatus.INVALID
+            }
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
     }
 
@@ -86,13 +97,18 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
     private fun getDSiFirmwareStatus(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
         val firmwareDocument = configurationDir.findFile("firmware.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
         return runCatching {
-            context.contentResolver.openAssetFileDescriptor(firmwareDocument.uri, "r")?.use {
-                when (it.length) {
-                    AssetFileDescriptor.UNKNOWN_LENGTH -> ConfigurationDirResult.FileStatus.MISSING
-                    0x20000.toLong() -> ConfigurationDirResult.FileStatus.PRESENT
-                    else -> ConfigurationDirResult.FileStatus.INVALID
-                }
-            } ?: ConfigurationDirResult.FileStatus.MISSING
+            val length = if (firmwareDocument.uri.scheme == "file") {
+                java.io.File(firmwareDocument.uri.path ?: "").length()
+            } else {
+                context.contentResolver.openAssetFileDescriptor(firmwareDocument.uri, "r")?.use {
+                    it.length
+                } ?: AssetFileDescriptor.UNKNOWN_LENGTH
+            }
+            when (length) {
+                AssetFileDescriptor.UNKNOWN_LENGTH -> ConfigurationDirResult.FileStatus.MISSING
+                0x20000.toLong() -> ConfigurationDirResult.FileStatus.PRESENT
+                else -> ConfigurationDirResult.FileStatus.INVALID
+            }
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
     }
 
@@ -104,22 +120,32 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         }
 
         return runCatching {
-            context.contentResolver.openFileDescriptor(nandDocument.uri, "rw")?.use {
-                ConfigurationDirResult.FileStatus.PRESENT
-            } ?: ConfigurationDirResult.FileStatus.MISSING
+            if (nandDocument.uri.scheme == "file") {
+                val f = java.io.File(nandDocument.uri.path ?: "")
+                if (f.exists() && f.canRead()) ConfigurationDirResult.FileStatus.PRESENT else ConfigurationDirResult.FileStatus.MISSING
+            } else {
+                context.contentResolver.openFileDescriptor(nandDocument.uri, "rw")?.use {
+                    ConfigurationDirResult.FileStatus.PRESENT
+                } ?: ConfigurationDirResult.FileStatus.MISSING
+            }
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
     }
 
     private fun getBiosFileStatus(configurationDir: DocumentFile, fileName: String, requiredSize: Long): ConfigurationDirResult.FileStatus {
         val biosDocument = configurationDir.findFile(fileName) ?: return ConfigurationDirResult.FileStatus.MISSING
         return runCatching {
-            context.contentResolver.openAssetFileDescriptor(biosDocument.uri, "r")?.use {
-                when (it.length) {
-                    AssetFileDescriptor.UNKNOWN_LENGTH -> ConfigurationDirResult.FileStatus.MISSING
-                    requiredSize -> ConfigurationDirResult.FileStatus.PRESENT
-                    else -> ConfigurationDirResult.FileStatus.INVALID
-                }
-            } ?: ConfigurationDirResult.FileStatus.MISSING
+            val length = if (biosDocument.uri.scheme == "file") {
+                java.io.File(biosDocument.uri.path ?: "").length()
+            } else {
+                context.contentResolver.openAssetFileDescriptor(biosDocument.uri, "r")?.use {
+                    it.length
+                } ?: AssetFileDescriptor.UNKNOWN_LENGTH
+            }
+            when (length) {
+                AssetFileDescriptor.UNKNOWN_LENGTH -> ConfigurationDirResult.FileStatus.MISSING
+                requiredSize -> ConfigurationDirResult.FileStatus.PRESENT
+                else -> ConfigurationDirResult.FileStatus.INVALID
+            }
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
     }
 

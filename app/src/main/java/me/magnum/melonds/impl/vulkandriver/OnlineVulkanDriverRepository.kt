@@ -17,12 +17,12 @@ class OnlineVulkanDriverRepository @Inject constructor() {
     }
 
     private val staticDrivers = listOf(
-        // --- 2026 RELEASES: MrPurple, whitebelyash, Upstream Turnip & Qualcomm ---
+        // --- 2026 RELEASES: The412Banner, whitebelyash, Qualcomm Adreno, Upstream Turnip ---
 
         OnlineVulkanDriver(
-            id = "turnip-mrpurple-26-3-0-t30",
-            name = "Turnip Mesa (MrPurple Build v26.3.0-devel T-30 / Vulkan 1.4.359)",
-            version = "26.3.0-devel-T30",
+            id = "turnip-banner-26-3-0-r17",
+            name = "Turnip Mesa (The412Banner Build v26.3.0 R17 — 18.08.2026)",
+            version = "26.3.0-r17-Banner",
             releaseDate = "2026-08-18",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
@@ -30,15 +30,29 @@ class OnlineVulkanDriverRepository @Inject constructor() {
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "👑 Новейшая сборка от MrPurple (18 августа 2026) на базе Mesa 26.3-devel с полной поддержкой спецификаций Vulkan 1.4.359, оптимизацией конвейеров и увеличенными лимитами дескрипторов для Adreno 6xx/7xx/8xx.",
-            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v26.3.0-devel-T30/turnip_mesa_v26.3.0-devel_T30_mrpurple.zip",
-            fileSizeMb = 5.4,
+            description = "👑 Новейшая сборка от The412Banner (18 августа 2026) на базе Mesa 26.3 с поддержкой Vulkan 1.4, расширенными лимитами дескрипторов и нулевым инпут-лагом для Adreno 6xx/7xx/8xx.",
+            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17.zip",
+            fileSizeMb = 2.55,
             isRecommended = true
         ),
         OnlineVulkanDriver(
-            id = "turnip-whitebelyash-26-3-0-v14359",
-            name = "Turnip Mesa (whitebelyash Build v26.3.0-devel / Vulkan 1.4.359)",
-            version = "26.3.0-devel-wb",
+            id = "turnip-banner-26-3-0-r17-a8xx",
+            name = "Turnip Mesa (The412Banner v26.3.0 R17 for Adreno 8xx / Snapdragon 8 Elite)",
+            version = "26.3.0-r17-A8xx",
+            releaseDate = "2026-08-18",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "⚡ Специализированная сборка The412Banner для новейших GPU Adreno 830 / 840 (Snapdragon 8 Elite / 8 Gen 4) с максимальным FPS.",
+            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17-A8xx.zip",
+            fileSizeMb = 2.55,
+            isRecommended = true
+        ),
+        OnlineVulkanDriver(
+            id = "turnip-whitebelyash-v31",
+            name = "Turnip Mesa (whitebelyash Build v31 / Mainline — 17.08.2026)",
+            version = "v31-wb",
             releaseDate = "2026-08-17",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
@@ -46,47 +60,31 @@ class OnlineVulkanDriverRepository @Inject constructor() {
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "⚡ Экстремально оптимизированная сборка от whitebelyash (17 августа 2026) с тонкой настройкой кэширования пайплайнов, низким инпут-лагом и увеличенным FPS на Snapdragon 8 Gen 1/2/3/Elite.",
-            downloadUrl = "https://github.com/whitebelyash/Turnip-Drivers/releases/download/v26.3.0-devel/turnip_mesa_v26.3.0-devel_whitebelyash.zip",
-            fileSizeMb = 5.3,
+            description = "⚡ Экстремально оптимизированная сборка от whitebelyash (17 августа 2026) с тонкой настройкой кэширования пайплайнов и увеличенным FPS.",
+            downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v31/mainline-turnip-V31.zip",
+            fileSizeMb = 2.55,
             isRecommended = true
         ),
         OnlineVulkanDriver(
-            id = "turnip-mrpurple-26-2-0-r28",
-            name = "Turnip Mesa (MrPurple Build v26.2.0-r28 — Август 2026)",
-            version = "26.2.0-r28-MrP",
-            releaseDate = "2026-08-16",
+            id = "turnip-whitebelyash-v31-sync",
+            name = "Turnip Mesa (whitebelyash Build v31 Sync — 17.08.2026)",
+            version = "v31-sync-wb",
+            releaseDate = "2026-08-17",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Оптимизированная ревизия от MrPurple с агрессивным шейдерным компилятором и стабильными 60 FPS в 3D.",
-            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v26.2.0-r28/turnip_mesa_v26.2.0-r28_mrpurple.zip",
-            fileSizeMb = 5.3,
+            description = "Сборка от whitebelyash с синхронизацией командного буфера GPU для стабильной частоты кадров без разрывов.",
+            downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v31/mainline-turnip-sync-V31.zip",
+            fileSizeMb = 2.55,
             isRecommended = false
         ),
         OnlineVulkanDriver(
-            id = "turnip-mesa-26-2-0-r28",
-            name = "Turnip Mesa v26.2.0 (Revision 28 — Август 2026)",
-            version = "26.2.0-r28",
-            releaseDate = "2026-08-12",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Официальный апстрим-релиз Turnip Mesa (Август 2026) с поддержкой Vulkan 1.3/1.4 и dynamic rendering.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.2.0-r28/turnip_mesa_v26.2.0-r28.zip",
-            fileSizeMb = 5.2,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-whitebelyash-26-2-0",
-            name = "Turnip Mesa (whitebelyash Build v26.2.0 — Август 2026)",
-            version = "26.2.0-wb",
+            id = "turnip-whitebelyash-v30",
+            name = "Turnip Mesa (whitebelyash Build v30 — 10.08.2026)",
+            version = "v30-wb",
             releaseDate = "2026-08-10",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
@@ -94,145 +92,117 @@ class OnlineVulkanDriverRepository @Inject constructor() {
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Сборка от whitebelyash с исправлением тайлинга текстур и консервативной растеризации.",
-            downloadUrl = "https://github.com/whitebelyash/Turnip-Drivers/releases/download/v26.2.0/turnip_mesa_v26.2.0_whitebelyash.zip",
-            fileSizeMb = 5.1,
+            description = "Сборка от whitebelyash с оптимизацией тайлинга текстур и консервативной растеризации.",
+            downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v30/mainline-turnip-V30.zip",
+            fileSizeMb = 2.55,
             isRecommended = false
         ),
         OnlineVulkanDriver(
-            id = "qualcomm-v830-0",
-            name = "Qualcomm Adreno Driver v830.0 (Июль 2026)",
-            version = "v830.0",
-            releaseDate = "2026-07-28",
+            id = "qualcomm-v849",
+            name = "Qualcomm Adreno Driver v849 (Июль 2026)",
+            version = "v849",
+            releaseDate = "2026-07-25",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Официальный проприетарный драйвер Qualcomm 2026 года с нативной оптимизацией под Snapdragon 8 Elite / 8 Gen 4 и Adreno 830/840.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v830.0/qualcomm_v830.0.zip",
-            fileSizeMb = 4.4,
+            description = "Официальный проприетарный пакет Qualcomm (Июль 2026) с нативной поддержкой Vulkan 1.3/1.4 и Snapdragon 8 Elite / 8 Gen 3.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v849/Qualcomm_849_adpkg.zip",
+            fileSizeMb = 22.58,
             isRecommended = true
         ),
         OnlineVulkanDriver(
-            id = "turnip-mrpurple-26-1-0-r26",
-            name = "Turnip Mesa (MrPurple Build v26.1.0-r26 — Июнь 2026)",
-            version = "26.1.0-r26-MrP",
-            releaseDate = "2026-06-25",
+            id = "qualcomm-v842-6",
+            name = "Qualcomm Adreno Driver v842.6 (Июнь 2026)",
+            version = "v842.6",
+            releaseDate = "2026-06-20",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "Официальный драйвер Qualcomm для чипсетов Snapdragon 8 Gen 2 / 8 Gen 3 / 8 Elite.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v842.6/8Elite2-842.6.zip",
+            fileSizeMb = 23.4,
+            isRecommended = false
+        ),
+        OnlineVulkanDriver(
+            id = "turnip-v26-0-0-rc6-gmem",
+            name = "Turnip Mesa v26.0.0 RC6 (GMEM — Май 2026)",
+            version = "v26.0.0-rc06-gmem",
+            releaseDate = "2026-05-15",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Сборка MrPurple с кастомными оптимизациями буферов команд и сниженным энергопотреблением в тяжелых 3D играх.",
-            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v26.1.0-r26/turnip_mesa_v26.1.0-r26_mrpurple.zip",
-            fileSizeMb = 5.1,
+            description = "Сборка Turnip Mesa с оптимизацией скоростной локальной памяти GMEM для Adreno 6xx/7xx.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc06/Turnip_v26.0.0_R6_Gmem.zip",
+            fileSizeMb = 3.38,
             isRecommended = false
         ),
         OnlineVulkanDriver(
-            id = "turnip-whitebelyash-26-1-0",
-            name = "Turnip Mesa (whitebelyash Build v26.1.0 — Июнь 2026)",
-            version = "26.1.0-wb",
-            releaseDate = "2026-06-18",
+            id = "turnip-v26-0-0-rc6-sysmem",
+            name = "Turnip Mesa v26.0.0 RC6 (Sysmem — Май 2026)",
+            version = "v26.0.0-rc06-sysmem",
+            releaseDate = "2026-05-15",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Июньский релиз whitebelyash для стабильной эмуляции 3D слоев.",
-            downloadUrl = "https://github.com/whitebelyash/Turnip-Drivers/releases/download/v26.1.0/turnip_mesa_v26.1.0_whitebelyash.zip",
-            fileSizeMb = 5.0,
+            description = "Сборка Turnip Mesa с прямой адресацией системной памяти Sysmem для максимальной стабильности.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc06/Turnip_v26.0.0_R6_Sysmem.zip",
+            fileSizeMb = 3.38,
             isRecommended = false
         ),
         OnlineVulkanDriver(
-            id = "turnip-mrpurple-25-3-0-r24",
-            name = "Turnip Mesa (MrPurple Build v25.3.0-r24 — Март 2026)",
-            version = "25.3.0-r24-MrP",
-            releaseDate = "2026-03-20",
+            id = "turnip-v26-0-0-rc5",
+            name = "Turnip Mesa v26.0.0 RC5 (Апрель 2026)",
+            version = "v26.0.0-rc05",
+            releaseDate = "2026-04-10",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Популярная сборка MrPurple с минимальным тепловыделением и оптимизацией памяти для Snapdragon 8 Gen 1/2/3.",
-            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v25.3.0-r24/turnip_mesa_v25.3.0-r24_mrpurple.zip",
-            fileSizeMb = 5.0,
+            description = "Стабильный релиз Turnip Mesa с поддержкой динамического рендеринга и исправлением артефактов текстур.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc05/Turnip_v26.0.0_R5.zip",
+            fileSizeMb = 3.35,
             isRecommended = false
         ),
         OnlineVulkanDriver(
-            id = "qualcomm-v790-10",
-            name = "Qualcomm Adreno Driver v790.10 (Январь 2026)",
-            version = "v790.10",
-            releaseDate = "2026-01-18",
+            id = "turnip-v25-3-0-rc11",
+            name = "Turnip Mesa v25.3.0 R11 (Февраль 2026)",
+            version = "v25.3.0-rc11",
+            releaseDate = "2026-02-18",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "Популярный релиз Turnip Mesa с оптимизацией тепловыделения на Snapdragon 8 Gen 1/2/3.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v25.3.0-rc.11/Turnip_v25.3.0_R11.zip",
+            fileSizeMb = 3.30,
+            isRecommended = false
+        ),
+        OnlineVulkanDriver(
+            id = "qualcomm-v819-2",
+            name = "Qualcomm Adreno Driver v819.2 (Январь 2026)",
+            version = "v819.2",
+            releaseDate = "2026-01-20",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Зимний релиз официального драйвера Qualcomm с оптимизацией энергопотребления на флагманских чипсетах.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v790.10/qualcomm_v790.10.zip",
-            fileSizeMb = 4.1,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-mrpurple-24-3-0-r20",
-            name = "Turnip Mesa (MrPurple Build v24.3.0-r20)",
-            version = "24.3.0-r20-MrP",
-            releaseDate = "2024-11-20",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Проверенный временем драйвер Turnip от MrPurple.",
-            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v24.3.0-r20/turnip_mesa_v24.3.0-r20_mrpurple.zip",
-            fileSizeMb = 4.9,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-mesa-24-3-0-r20",
-            name = "Turnip Mesa v24.3.0 (Revision 20)",
-            version = "24.3.0-r20",
-            releaseDate = "2024-11-15",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Классический проверенный драйвер Turnip Mesa с поддержкой Vulkan 1.3.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v24.3.0-r20/turnip_mesa_v24.3.0-r20.zip",
-            fileSizeMb = 4.8,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "qualcomm-v762-0",
-            name = "Qualcomm Adreno Driver v762.0",
-            version = "v762.0",
-            releaseDate = "2024-10-05",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Проприетарный драйвер Qualcomm для Snapdragon 8 Gen 3.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v762.0/qualcomm_v762.0.zip",
-            fileSizeMb = 3.9,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "qualcomm-v615-77",
-            name = "Qualcomm Adreno Driver v615.77",
-            version = "v615.77",
-            releaseDate = "2024-03-20",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "OEM-ревизия драйвера Qualcomm для Adreno 6xx (Snapdragon 865, 870, 778G).",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v615.77/qualcomm_v615.77.zip",
-            fileSizeMb = 3.2,
+            description = "Проприетарный пакет Qualcomm для стабильной работы на Adreno 6xx/7xx/8xx.",
+            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v819.2/Qualcomm_819.2_adpkg.zip",
+            fileSizeMb = 21.8,
             isRecommended = false
         )
     )
