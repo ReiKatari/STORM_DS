@@ -1660,7 +1660,7 @@ void storeBottomClass4SparseOverlayColor(vec4 color, bool hasPayload)
 
 bool directColorLooksEmpty(vec4 color)
 {
-    return max(max(color.r, color.g), color.b) < (1.0 / 255.0);
+    return color.a < (1.0 / 255.0);
 }
 
 bool directColorLooksWhite(vec4 color)

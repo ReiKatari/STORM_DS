@@ -339,16 +339,28 @@ class SharedPreferencesSettingsRepository(
         val dsDirDocument = getTreeDocument(dsBiosDirUri, "bios_dir")
         val dsiDirDocument = getTreeDocument(dsiBiosDirUri, "dsi_bios_dir")
 
+        val internalDsDir = File(context.filesDir, "bios/ds")
+        val internalDsiDir = File(context.filesDir, "bios/dsi")
+
+        val dsBios7 = getFileUri(dsDirDocument, "bios7.bin") ?: File(internalDsDir, "bios7.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsBios9 = getFileUri(dsDirDocument, "bios9.bin") ?: File(internalDsDir, "bios9.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsFirmware = getFileUri(dsDirDocument, "firmware.bin") ?: File(internalDsDir, "firmware.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+
+        val dsiBios7 = getFileUri(dsiDirDocument, "bios7.bin") ?: File(internalDsiDir, "bios7.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsiBios9 = getFileUri(dsiDirDocument, "bios9.bin") ?: File(internalDsiDir, "bios9.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsiFirmware = getFileUri(dsiDirDocument, "firmware.bin") ?: File(internalDsiDir, "firmware.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsiNand = getFileUri(dsiDirDocument, "nand.bin") ?: File(internalDsiDir, "nand.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+
         return EmulatorConfiguration(
             useCustomBios(),
             showBootScreen(),
-            getFileUri(dsDirDocument, "bios7.bin"),
-            getFileUri(dsDirDocument, "bios9.bin"),
-            getFileUri(dsDirDocument, "firmware.bin"),
-            getFileUri(dsiDirDocument, "bios7.bin"),
-            getFileUri(dsiDirDocument, "bios9.bin"),
-            getFileUri(dsiDirDocument, "firmware.bin"),
-            getFileUri(dsiDirDocument, "nand.bin"),
+            dsBios7,
+            dsBios9,
+            dsFirmware,
+            dsiBios7,
+            dsiBios9,
+            dsiFirmware,
+            dsiNand,
             context.filesDir.absolutePath,
             getFastForwardSpeedMultiplier(),
             getFrameLimitSpeedMultiplier(),
