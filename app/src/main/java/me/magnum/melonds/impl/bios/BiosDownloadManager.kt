@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import java.io.File
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.ZipInputStream
@@ -59,23 +58,13 @@ class BiosDownloadManager @Inject constructor(
             }
         }
 
-        if (!downloadSuccess) {
-            // Fallback generation: Create standard FreeBIOS melonDS bios7/bios9/firmware files
-            try {
-                generateFallbackDsBios(targetDir)
-                downloadSuccess = true
-            } catch (e: Throwable) {
-                lastException = e
-            }
-        }
-
         if (downloadSuccess) {
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
             Result.success(targetDir)
         } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS со всех зеркал."))
+            Result.failure(lastException ?: Exception("Не удалось скачать официальные файлы BIOS DS. Проверьте подключение к интернету."))
         }
     }
 
@@ -103,23 +92,13 @@ class BiosDownloadManager @Inject constructor(
             }
         }
 
-        if (!downloadSuccess) {
-            // Fallback generation for DSi
-            try {
-                generateFallbackDsiBios(targetDir)
-                downloadSuccess = true
-            } catch (e: Throwable) {
-                lastException = e
-            }
-        }
-
         if (downloadSuccess) {
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsiBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
             Result.success(targetDir)
         } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi со всех зеркал."))
+            Result.failure(lastException ?: Exception("Не удалось скачать официальные файлы BIOS DSi. Проверьте подключение к интернету."))
         }
     }
 
@@ -127,57 +106,22 @@ class BiosDownloadManager @Inject constructor(
         val b7 = File(dir, "bios7.bin")
         val b9 = File(dir, "bios9.bin")
         val fw = File(dir, "firmware.bin")
-        return b7.exists() && b7.length() > 0 && b9.exists() && b9.length() > 0 && fw.exists() && fw.length() > 0
+        return b7.exists() && b7.length() >= 0x4000L && b9.exists() && b9.length() >= 0x1000L && fw.exists() && fw.length() >= 0x20000L
     }
 
     private fun hasValidDsiFiles(dir: File): Boolean {
         val b7 = File(dir, "bios7.bin")
         val b9 = File(dir, "bios9.bin")
         val fw = File(dir, "firmware.bin")
-        return b7.exists() && b7.length() > 0 && b9.exists() && b9.length() > 0 && fw.exists() && fw.length() > 0
-    }
-
-    private fun generateFallbackDsBios(dir: File) {
-        val b7 = File(dir, "bios7.bin")
-        val b9 = File(dir, "bios9.bin")
-        val fw = File(dir, "firmware.bin")
-
-        if (!b7.exists() || b7.length() != 0x4000L) {
-            b7.writeBytes(ByteArray(0x4000))
-        }
-        if (!b9.exists() || b9.length() != 0x1000L) {
-            b9.writeBytes(ByteArray(0x1000))
-        }
-        if (!fw.exists() || fw.length() < 0x20000L) {
-            fw.writeBytes(ByteArray(0x40000))
-        }
-    }
-
-    private fun generateFallbackDsiBios(dir: File) {
-        val b7 = File(dir, "bios7.bin")
-        val b9 = File(dir, "bios9.bin")
-        val fw = File(dir, "firmware.bin")
         val nand = File(dir, "nand.bin")
-
-        if (!b7.exists() || b7.length() != 0x10000L) {
-            b7.writeBytes(ByteArray(0x10000))
-        }
-        if (!b9.exists() || b9.length() != 0x10000L) {
-            b9.writeBytes(ByteArray(0x10000))
-        }
-        if (!fw.exists() || fw.length() < 0x20000L) {
-            fw.writeBytes(ByteArray(0x20000))
-        }
-        if (!nand.exists() || nand.length() == 0L) {
-            nand.writeBytes(ByteArray(1024 * 1024 * 16)) // Initial sparse 16MB base
-        }
+        return b7.exists() && b7.length() >= 0x10000L && b9.exists() && b9.length() >= 0x10000L && fw.exists() && fw.length() >= 0x20000L && nand.exists() && nand.length() > 0L
     }
 
     private fun downloadFile(urlStr: String, destination: File, onProgress: (Int) -> Unit) {
         val url = URL(urlStr)
         val connection = url.openConnection() as HttpURLConnection
-        connection.connectTimeout = 10000
-        connection.readTimeout = 20000
+        connection.connectTimeout = 12000
+        connection.readTimeout = 25000
         connection.instanceFollowRedirects = true
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
         connection.connect()
