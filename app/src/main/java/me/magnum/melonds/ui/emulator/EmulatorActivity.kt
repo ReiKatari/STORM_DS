@@ -1215,15 +1215,17 @@ class EmulatorActivity : AppCompatActivity() {
                                 bootRomTitle.value = running.rom.config.customName ?: running.rom.name
                             }
                             bootRomReady.value = true
+                            showBootAnimation.value = false
                             presentation?.setInfoOverlayContent(null)
                             setupSustainedPerformanceMode()
                             setupFpsCounter()
                             setupResolutionHud()
-                            binding.layoutLoadingDevice.isGone = true
-                            binding.textLoading.isGone = true
-                            binding.progressLoading.isGone = true
-                            binding.textLoadingDetail.isGone = true
-                            binding.viewLayoutControls.isVisible = true
+                            binding.layoutLoadingDevice.visibility = View.GONE
+                            binding.textLoading.visibility = View.GONE
+                            binding.progressLoading.visibility = View.GONE
+                            binding.textLoadingDetail.visibility = View.GONE
+                            binding.surfaceMain.visibility = View.VISIBLE
+                            binding.viewLayoutControls.visibility = View.VISIBLE
                             backPressedCallback.isEnabled = true
                             scheduleStartupPresentationRefreshes()
                             if (
@@ -1801,48 +1803,52 @@ class EmulatorActivity : AppCompatActivity() {
         if (position == FpsCounterPosition.HIDDEN || !bootRomReady.value) {
             binding.textFps.isGone = true
         } else {
+            val isSkin = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
             val newParams = ConstraintLayout.LayoutParams(
                 ConstraintLayout.LayoutParams.WRAP_CONTENT,
                 ConstraintLayout.LayoutParams.WRAP_CONTENT
             )
             val density = resources.displayMetrics.density
-            val margin12 = (12 * density).toInt()
+            val topMarginVal = if (isSkin) (28 * density).toInt() else (8 * density).toInt()
+            val bottomMarginVal = (12 * density).toInt()
+            val sideMarginVal = (12 * density).toInt()
+
             when (position) {
                 FpsCounterPosition.TOP_LEFT -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.topMargin = margin12
-                    newParams.leftMargin = margin12
+                    newParams.topMargin = topMarginVal
+                    newParams.leftMargin = sideMarginVal
                 }
                 FpsCounterPosition.TOP_CENTER -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.topMargin = margin12
+                    newParams.topMargin = topMarginVal
                 }
                 FpsCounterPosition.TOP_RIGHT -> {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.topMargin = margin12
-                    newParams.rightMargin = margin12
+                    newParams.topMargin = topMarginVal
+                    newParams.rightMargin = sideMarginVal
                 }
                 FpsCounterPosition.BOTTOM_LEFT -> {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.bottomMargin = margin12
-                    newParams.leftMargin = margin12
+                    newParams.bottomMargin = bottomMarginVal
+                    newParams.leftMargin = sideMarginVal
                 }
                 FpsCounterPosition.BOTTOM_CENTER -> {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.bottomMargin = margin12
+                    newParams.bottomMargin = bottomMarginVal
                 }
                 FpsCounterPosition.BOTTOM_RIGHT -> {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.bottomMargin = margin12
-                    newParams.rightMargin = margin12
+                    newParams.bottomMargin = bottomMarginVal
+                    newParams.rightMargin = sideMarginVal
                 }
                 FpsCounterPosition.HIDDEN -> { /* Do nothing here */ }
             }
@@ -1877,8 +1883,12 @@ class EmulatorActivity : AppCompatActivity() {
         val height = 384 * effectiveScale
         binding.textResolution.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
 
+        val isSkin = prefs.getBoolean("video_console_skin_enabled", false)
         val density = resources.displayMetrics.density
-        val margin12 = (12 * density).toInt()
+        val topMarginVal = if (isSkin) (28 * density).toInt() else (8 * density).toInt()
+        val bottomMarginVal = (12 * density).toInt()
+        val sideMarginVal = (12 * density).toInt()
+
         val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
         val fpsPos = viewModel.getFpsCounterPosition()
 
@@ -1890,38 +1900,38 @@ class EmulatorActivity : AppCompatActivity() {
             "top_left" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (margin12 + 30 * density).toInt() else margin12
-                newParams.leftMargin = margin12
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (topMarginVal + 28 * density).toInt() else topMarginVal
+                newParams.leftMargin = sideMarginVal
             }
             "top_center" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_CENTER) (margin12 + 30 * density).toInt() else margin12
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_CENTER) (topMarginVal + 28 * density).toInt() else topMarginVal
             }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_RIGHT) (margin12 + 30 * density).toInt() else margin12
-                newParams.rightMargin = margin12
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_RIGHT) (topMarginVal + 28 * density).toInt() else topMarginVal
+                newParams.rightMargin = sideMarginVal
             }
             "bottom_left" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (margin12 + 30 * density).toInt() else margin12
-                newParams.leftMargin = margin12
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (bottomMarginVal + 28 * density).toInt() else bottomMarginVal
+                newParams.leftMargin = sideMarginVal
             }
             "bottom_center" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_CENTER) (margin12 + 30 * density).toInt() else margin12
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_CENTER) (bottomMarginVal + 28 * density).toInt() else bottomMarginVal
             }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (margin12 + 30 * density).toInt() else margin12
-                newParams.rightMargin = margin12
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (bottomMarginVal + 28 * density).toInt() else bottomMarginVal
+                newParams.rightMargin = sideMarginVal
             }
             else -> {
                 binding.textResolution.isGone = true
@@ -1948,10 +1958,15 @@ class EmulatorActivity : AppCompatActivity() {
                 layoutView.setLayoutComponentToggleState(LayoutComponent.BUTTON_MICROPHONE_TOGGLE, frontendInputHandler.microphoneEnabled)
             }
 
+            val isSkin = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
+            val shiftPx = (14f * resources.displayMetrics.density).toInt()
+            binding.viewLayoutControls.applyConsoleSkinButtonShift(isSkin, shiftPx)
+
             handler.post {
                 applyDualScreenPresetSwapState()
                 updateRendererScreenAreas()
                 presentation?.updateRendererScreenAreas()
+                binding.viewLayoutControls.applyConsoleSkinButtonShift(isSkin, shiftPx)
                 scheduleStartupPresentationRefreshes()
             }
         } else {

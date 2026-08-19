@@ -66,6 +66,37 @@ import me.magnum.melonds.domain.model.VulkanDriverInfo
 import me.magnum.melonds.domain.model.VulkanDriverMode
 import me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriver
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+
+enum class DriverStatus {
+    ACTIVE,
+    INSTALLED,
+    NOT_INSTALLED
+}
+
+@Composable
+fun DriverStatusBadge(status: DriverStatus, modifier: Modifier = Modifier) {
+    val (bg, fg, label) = when (status) {
+        DriverStatus.ACTIVE -> Triple(Color(0xFF059669), Color.White, "Включен")
+        DriverStatus.INSTALLED -> Triple(Color(0xFF0284C7), Color.White, "Установлен")
+        DriverStatus.NOT_INSTALLED -> Triple(Color(0xFF64748B), Color.White, "Отсутствует")
+    }
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = bg,
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = fg,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+        )
+    }
+}
+
 @Composable
 fun VulkanDriverManagerScreen(
     viewModel: VulkanDriverManagerViewModel,
@@ -89,6 +120,10 @@ fun VulkanDriverManagerScreen(
     }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
         topBar = {
             TopAppBar(
                 title = { Text("Драйверы Vulkan", color = MaterialTheme.colors.onSurface) },
@@ -120,30 +155,29 @@ fun VulkanDriverManagerScreen(
                 gpuSeriesName = state.gpuSeries.displayName
             )
 
-            // Recommended Hero Banner (if in online tab and not already installed/active)
+            // Recommended Hero Banner
             state.recommendedDriver?.let { recommended ->
                 val isInstalled = state.installedDrivers.any { it.displayName.contains(recommended.version, ignoreCase = true) }
                 val isActive = state.driverMode == VulkanDriverMode.CUSTOM &&
                     state.selectedDriverId != null &&
                     state.installedDrivers.find { it.id == state.selectedDriverId }?.displayName?.contains(recommended.version, ignoreCase = true) == true
 
-                if (!isActive) {
-                    RecommendedDriverBanner(
-                        driver = recommended,
-                        isDownloading = state.activeDownloadingId == recommended.id,
-                        downloadProgress = state.downloadProgress[recommended.id] ?: 0,
-                        isInstalled = isInstalled,
-                        onActionClick = {
-                            if (isInstalled) {
-                                state.installedDrivers.find { it.displayName.contains(recommended.version, ignoreCase = true) }?.let {
-                                    viewModel.selectDriver(it.id)
-                                }
-                            } else {
-                                viewModel.downloadAndInstall(recommended)
+                RecommendedDriverBanner(
+                    driver = recommended,
+                    isDownloading = state.activeDownloadingId == recommended.id,
+                    downloadProgress = state.downloadProgress[recommended.id] ?: 0,
+                    isInstalled = isInstalled,
+                    isActive = isActive,
+                    onActionClick = {
+                        if (isInstalled) {
+                            state.installedDrivers.find { it.displayName.contains(recommended.version, ignoreCase = true) }?.let {
+                                viewModel.selectDriver(it.id)
                             }
+                        } else {
+                            viewModel.downloadAndInstall(recommended)
                         }
-                    )
-                }
+                    }
+                )
             }
 
             // Tabs
@@ -248,6 +282,7 @@ fun RecommendedDriverBanner(
     isDownloading: Boolean,
     downloadProgress: Int,
     isInstalled: Boolean,
+    isActive: Boolean,
     onActionClick: () -> Unit,
 ) {
     Card(
@@ -255,24 +290,34 @@ fun RecommendedDriverBanner(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.15f),
-        elevation = 0.dp
+        backgroundColor = if (isActive) Color(0xFF059669).copy(alpha = 0.15f)
+            else if (isInstalled) MaterialTheme.colors.primary.copy(alpha = 0.15f)
+            else MaterialTheme.colors.surface,
+        elevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Star,
-                    contentDescription = null,
-                    tint = Color(0xFFFFB300),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Рекомендуемый драйвер",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colors.primary
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB300),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Рекомендуемый драйвер",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+                val status = if (isActive) DriverStatus.ACTIVE else if (isInstalled) DriverStatus.INSTALLED else DriverStatus.NOT_INSTALLED
+                DriverStatusBadge(status)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -305,20 +350,30 @@ fun RecommendedDriverBanner(
                     )
                 }
             } else {
-                Button(
-                    onClick = onActionClick,
-                    modifier = Modifier.align(Alignment.End),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Icon(
-                        if (isInstalled) Icons.Default.Check else Icons.Default.GetApp,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colors.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (isInstalled) "Активировать" else "Скачать и установить", color = MaterialTheme.colors.onPrimary)
+                    Button(
+                        onClick = onActionClick,
+                        enabled = !isActive,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = if (isActive) Color(0xFF059669) else MaterialTheme.colors.primary
+                        )
+                    ) {
+                        Icon(
+                            if (isActive || isInstalled) Icons.Default.Check else Icons.Default.GetApp,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colors.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isActive) "Уже включен" else if (isInstalled) "Включить" else "Скачать и установить",
+                            color = MaterialTheme.colors.onPrimary
+                        )
+                    }
                 }
             }
         }
@@ -388,7 +443,7 @@ fun OnlineDriverCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        backgroundColor = if (isActive) MaterialTheme.colors.primary.copy(alpha = 0.12f)
+        backgroundColor = if (isActive) Color(0xFF059669).copy(alpha = 0.12f)
         else MaterialTheme.colors.surface,
         elevation = 2.dp
     ) {
@@ -429,6 +484,8 @@ fun OnlineDriverCard(
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                     )
                 }
+                val status = if (isActive) DriverStatus.ACTIVE else if (isInstalled) DriverStatus.INSTALLED else DriverStatus.NOT_INSTALLED
+                DriverStatusBadge(status)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -463,16 +520,16 @@ fun OnlineDriverCard(
                     if (isActive) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                            color = Color(0xFF059669).copy(alpha = 0.2f),
                             modifier = Modifier.padding(4.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colors.primary)
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF059669))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Активен", fontWeight = FontWeight.Bold, color = MaterialTheme.colors.primary, fontSize = 13.sp)
+                                Text("Включен", fontWeight = FontWeight.Bold, color = Color(0xFF059669), fontSize = 13.sp)
                             }
                         }
                     } else if (isInstalled) {
@@ -481,7 +538,7 @@ fun OnlineDriverCard(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
                         ) {
-                            Text("Выбрать", color = MaterialTheme.colors.onPrimary)
+                            Text("Включить", color = MaterialTheme.colors.onPrimary)
                         }
                     } else {
                         Button(
@@ -517,13 +574,14 @@ fun InstalledDriversList(
     ) {
         // System Default Option
         item {
+            val isSysActive = driverMode == VulkanDriverMode.SYSTEM
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onSelectSystem() },
                 shape = RoundedCornerShape(12.dp),
-                backgroundColor = if (driverMode == VulkanDriverMode.SYSTEM)
-                    MaterialTheme.colors.primary.copy(alpha = 0.15f)
+                backgroundColor = if (isSysActive)
+                    Color(0xFF059669).copy(alpha = 0.15f)
                 else MaterialTheme.colors.surface,
                 elevation = 2.dp
             ) {
@@ -534,14 +592,14 @@ fun InstalledDriversList(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
-                        selected = driverMode == VulkanDriverMode.SYSTEM,
+                        selected = isSysActive,
                         onClick = { onSelectSystem() },
                         colors = androidx.compose.material.RadioButtonDefaults.colors(
-                            selectedColor = MaterialTheme.colors.primary
+                            selectedColor = if (isSysActive) Color(0xFF059669) else MaterialTheme.colors.primary
                         )
                     )
                     Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Системный драйвер Android (По умолчанию)",
                             fontWeight = FontWeight.Bold,
@@ -554,6 +612,7 @@ fun InstalledDriversList(
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                         )
                     }
+                    DriverStatusBadge(if (isSysActive) DriverStatus.ACTIVE else DriverStatus.INSTALLED)
                 }
             }
         }
@@ -568,7 +627,7 @@ fun InstalledDriversList(
                     .clickable { onSelectCustom(driver.id) },
                 shape = RoundedCornerShape(12.dp),
                 backgroundColor = if (isSelected)
-                    MaterialTheme.colors.primary.copy(alpha = 0.15f)
+                    Color(0xFF059669).copy(alpha = 0.15f)
                 else MaterialTheme.colors.surface,
                 elevation = 2.dp
             ) {
@@ -582,7 +641,7 @@ fun InstalledDriversList(
                         selected = isSelected,
                         onClick = { onSelectCustom(driver.id) },
                         colors = androidx.compose.material.RadioButtonDefaults.colors(
-                            selectedColor = MaterialTheme.colors.primary
+                            selectedColor = if (isSelected) Color(0xFF059669) else MaterialTheme.colors.primary
                         )
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -599,6 +658,7 @@ fun InstalledDriversList(
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                         )
                     }
+                    DriverStatusBadge(if (isSelected) DriverStatus.ACTIVE else DriverStatus.INSTALLED)
                     IconButton(onClick = { onDeleteCustom(driver.id) }) {
                         Icon(
                             Icons.Default.Delete,
