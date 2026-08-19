@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.emulator
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
+import android.widget.FrameLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import dagger.hilt.android.AndroidEntryPoint
@@ -217,6 +218,25 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         visibleComponents.forEach { component ->
             if (!component.isScreen()) {
                 getLayoutComponentView(component)?.view?.isVisible = true
+            }
+        }
+    }
+
+    fun applyConsoleSkinButtonShift(isConsoleSkinEnabled: Boolean, shiftPx: Int) {
+        if (!isConsoleSkinEnabled) return
+        val h = height
+        getLayoutComponentViews().forEach { compView ->
+            if (!compView.component.isScreen()) {
+                val v = compView.view
+                val lp = v.layoutParams as? FrameLayout.LayoutParams
+                if (lp != null) {
+                    val maxTop = if (h > 0) h - lp.height - 4 else Int.MAX_VALUE
+                    val newTop = (lp.topMargin + shiftPx).coerceAtMost(maxTop)
+                    if (newTop != lp.topMargin) {
+                        lp.topMargin = newTop
+                        v.layoutParams = lp
+                    }
+                }
             }
         }
     }

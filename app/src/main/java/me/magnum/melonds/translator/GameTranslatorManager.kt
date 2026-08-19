@@ -336,6 +336,9 @@ class GameTranslatorManager(
         }
 
         overlayView?.isTranslating = true
+        val prevShowFloating = overlayView?.showFloatingButton ?: true
+        overlayView?.showFloatingButton = false
+        overlayView?.invalidate()
 
         mainScope.launch {
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
@@ -377,6 +380,9 @@ class GameTranslatorManager(
                     capturedBitmap = null
                 }
             }
+
+            overlayView?.showFloatingButton = prevShowFloating
+            overlayView?.invalidate()
 
             // Step 2: Now that frame is captured, pause emulator if requested
             if (pauseOnTranslate) {

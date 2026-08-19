@@ -264,11 +264,11 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             val displayText = if (block.isShowingOriginal) block.originalText else block.translatedText.ifBlank { block.originalText }
 
             // Check if this text block is part of a dialogue box or wide banner
-            val isWideDialogue = (right - left) > w * 0.22f || displayText.length > 20 || (top > h * 0.35f && (right - left) > w * 0.18f)
-            val paddingH = if (isWideDialogue) 22f else 14f
-            val paddingV = if (isWideDialogue) 14f else 8f
+            val isWideDialogue = (right - left) > w * 0.20f || displayText.length > 18 || (top > h * 0.20f && (right - left) > w * 0.16f)
+            val paddingH = if (isWideDialogue) 24f else 12f
+            val paddingV = if (isWideDialogue) 12f else 6f
 
-            val minBoxWidth = if (isWideDialogue) (w * 0.88f) else (right - left + paddingH * 2)
+            val minBoxWidth = if (isWideDialogue) (w * 0.90f) else (right - left + paddingH * 2)
             val boxWidth = max(right - left + paddingH * 2, minBoxWidth).coerceAtMost(w - 16f)
 
             val boxLeft = if (isWideDialogue) {
@@ -278,27 +278,31 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             }
             val boxRight = (boxLeft + boxWidth).coerceAtMost(w - 8f)
 
-            val minBoxHeight = if (isWideDialogue) 72f else (bottom - top + paddingV * 2)
+            val minBoxHeight = if (isWideDialogue) 92f else (bottom - top + paddingV * 2)
             val boxHeight = max(bottom - top + paddingV * 2, minBoxHeight).coerceAtMost(h - 16f)
-            val boxTop = (top - paddingV).coerceIn(8f, (h - boxHeight - 8f).coerceAtLeast(8f))
+            val boxTop = if (isWideDialogue) {
+                (top - 8f).coerceIn(8f, (h - boxHeight - 8f).coerceAtLeast(8f))
+            } else {
+                (top - paddingV).coerceIn(8f, (h - boxHeight - 8f).coerceAtLeast(8f))
+            }
             val boxBottom = (boxTop + boxHeight).coerceAtMost(h - 8f)
 
             val rect = RectF(boxLeft, boxTop, boxRight, boxBottom)
-            val rx = 16f
+            val rx = 14f
 
             when (overlayStyle) {
                 TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> {
                     canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
                     val baseCol = block.backgroundColor
-                    val alpha = (bubbleOpacity.coerceIn(0.60f, 1.0f) * 255).toInt()
-                    // Blend sampled color with deep dark acrylic slate (#0F172A) for authentic contrast and readability
-                    val blendR = ((Color.red(baseCol) * 0.35f) + (15 * 0.65f)).toInt().coerceIn(0, 255)
-                    val blendG = ((Color.green(baseCol) * 0.35f) + (23 * 0.65f)).toInt().coerceIn(0, 255)
-                    val blendB = ((Color.blue(baseCol) * 0.35f) + (42 * 0.65f)).toInt().coerceIn(0, 255)
+                    val alpha = (bubbleOpacity.coerceIn(0.70f, 1.0f) * 255).toInt()
+                    // Blend sampled color with deep dark acrylic slate (#0B1120) for authentic contrast and readability
+                    val blendR = ((Color.red(baseCol) * 0.25f) + (11 * 0.75f)).toInt().coerceIn(0, 255)
+                    val blendG = ((Color.green(baseCol) * 0.25f) + (17 * 0.75f)).toInt().coerceIn(0, 255)
+                    val blendB = ((Color.blue(baseCol) * 0.25f) + (32 * 0.75f)).toInt().coerceIn(0, 255)
 
                     bgPaint.color = Color.argb(alpha, blendR, blendG, blendB)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
-                    borderPaint.color = Color.argb(100, 56, 189, 248)
+                    borderPaint.color = Color.argb(120, 56, 189, 248)
                     borderPaint.strokeWidth = 2.0f
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }
