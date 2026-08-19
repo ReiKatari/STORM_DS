@@ -754,8 +754,8 @@ class AndroidEmulatorManager(
             getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
         }
 
-        val showBootScreen = if (dsiWareTitleId != null && dsiWareTitleId != 0L) {
-            true
+        val showBootScreen = if (consoleType == ConsoleType.DSi) {
+            false
         } else {
             baseConfiguration.showBootScreen && mustUseCustomBios
         }
