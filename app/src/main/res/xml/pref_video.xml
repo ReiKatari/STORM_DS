@@ -206,6 +206,12 @@
             android:title="@string/video_vulkan_driver_category"
             app:iconSpaceReserved="false">
 
+        <Preference
+                android:key="video_vulkan_driver_manager"
+                android:title="@string/video_vulkan_driver_manager_title"
+                android:summary="@string/video_vulkan_driver_manager_summary"
+                app:iconSpaceReserved="false" />
+
         <ListPreference
                 android:key="video_vulkan_driver_mode"
                 android:title="@string/video_vulkan_driver_mode"
