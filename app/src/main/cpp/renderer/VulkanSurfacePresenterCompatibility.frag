@@ -801,11 +801,15 @@ vec4 FUNC_NAME() \
                 && !forceLive3dCompMode7 \
                 && !screenOwnsLive3D \
                 && (!screenHasPrevious3D || plainStructuredOppositeNoCurrentHandoff); \
+            bool belowIs3DSlot = isPacked3dPlaceholder(below2D) || isPacked3dLayerSlot(below2D); \
             if (!structuredPackedOnlyHandoff \
                 && (pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
-                composed = pixel3D; \
+                if (belowIs3DSlot || compMode == 4 || (compMode == 1 && structured2DAbove)) \
+                    composed = pixel3D; \
+                else \
+                    composed = below2D; \
                 if (compMode == 4) \
                 { \
                     int eva = (pixel3D.a & 0x1F) + 1; \

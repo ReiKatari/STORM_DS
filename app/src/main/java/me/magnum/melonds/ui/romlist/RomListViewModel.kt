@@ -254,6 +254,9 @@ class RomListViewModel @Inject constructor(
                     !isRawHexTitle && fileBase !in installedTitleHexes && rawName !in installedTitleHexes
                 }
 
+                // Automatically auto-import raw DSiWare ROMs found in user folders to DSi NAND
+                autoImportDsiWareRoms(roms)
+
                 val existingIds = deduplicatedRoms.mapNotNull { it.rom.installedDsiWareTitleId }.toSet()
                 val uniqueShortcuts = shortcuts.map { shortcut ->
                     val rom = shortcut.rom
@@ -569,14 +572,40 @@ class RomListViewModel @Inject constructor(
         )
     }
 
+    private val importedUris = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun autoImportDsiWareRoms(roms: List<RomWithParent>) {
+        val rawDsiWareRoms = roms.map { it.rom }.filter {
+            (it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true) &&
+                !it.isInstalledDsiWareShortcut &&
+                it.uri.toString() !in importedUris
+        }
+        if (rawDsiWareRoms.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var anyImported = false
+            for (rom in rawDsiWareRoms) {
+                importedUris.add(rom.uri.toString())
+                try {
+                    val res = dsiNandManager.importTitle(rom.uri)
+                    if (res == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS) {
+                        anyImported = true
+                    }
+                } catch (_: Throwable) {}
+            }
+            if (anyImported) {
+                refreshInstalledDsiWareShortcuts()
+            }
+        }
+    }
+
     private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {
-        val isRawDsiWare = (rom.isDsiWareTitle || rom.fileName.endsWith(".dsi", ignoreCase = true) || rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true) && !rom.isInstalledDsiWareShortcut
         return when (filter) {
-            RomFilter.ALL -> !isRawDsiWare
-            RomFilter.FAVORITES -> rom.isFavorite && !isRawDsiWare
-            RomFilter.DS_ONLY -> !isRawDsiWare && !rom.isInstalledDsiWareShortcut
-            RomFilter.DSIWARE_ONLY -> rom.isInstalledDsiWareShortcut
-            RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty() && !isRawDsiWare
+            RomFilter.ALL -> true
+            RomFilter.FAVORITES -> rom.isFavorite
+            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
+            RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
+            RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
         }
     }
 

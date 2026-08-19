@@ -410,8 +410,7 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
         DSi_NAND::DSiFirmwareSystemSettings settings {};
         if (!mount.ReadUserData(settings))
         {
-            Log(Error, "Failed to read DSi NAND user data\n");
-            return std::nullopt;
+            Log(Warn, "Could not read DSi NAND user data, continuing with defaults\n");
         }
 
         // override user settings, if needed
