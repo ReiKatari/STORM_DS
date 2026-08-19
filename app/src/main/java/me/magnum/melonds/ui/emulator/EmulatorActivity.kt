@@ -541,9 +541,6 @@ class EmulatorActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
             binding.listRewind.setPadding(insets.left, 0, insets.right, insets.bottom)
-            binding.textFps.updateLayoutParams<ConstraintLayout.LayoutParams> {
-                setMargins(insets.left, insets.top, insets.right, insets.bottom)
-            }
 
             val uiInsets = if (viewModel.shouldIgnoreDisplayCutoutInLayouts()) {
                 Insets.Zero
@@ -1183,7 +1180,6 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.Uninitialized -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
-                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1220,10 +1216,9 @@ class EmulatorActivity : AppCompatActivity() {
                             setupSustainedPerformanceMode()
                             setupFpsCounter()
                             setupResolutionHud()
-                            binding.layoutLoadingDevice.visibility = View.GONE
-                            binding.textLoading.visibility = View.GONE
-                            binding.progressLoading.visibility = View.GONE
-                            binding.textLoadingDetail.visibility = View.GONE
+                            binding.textLoading.isGone = true
+                            binding.progressLoading.isGone = true
+                            binding.textLoadingDetail.isGone = true
                             binding.surfaceMain.visibility = View.VISIBLE
                             binding.viewLayoutControls.visibility = View.VISIBLE
                             backPressedCallback.isEnabled = true
@@ -1238,7 +1233,6 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RomLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
-                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1249,7 +1243,6 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.FirmwareLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
-                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1260,7 +1253,6 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RomNotFoundError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
-                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1302,43 +1294,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun showLoadingState() {
-        binding.viewLayoutControls.isInvisible = true
-        binding.textFps.isGone = true
-
-        val args = LaunchArgs.fromIntent(intent)
-        if (args is LaunchArgs.Firmware) {
-            binding.textLoading.isGone = true
-            binding.progressLoading.isGone = true
-            binding.textLoadingDetail.isGone = true
-            binding.layoutLoadingDevice.isVisible = true
-
-            when (args.consoleType) {
-                ConsoleType.DSi -> {
-                    binding.textLoadingStorm.text = "STORM"
-                    binding.textLoadingConsoleLogo.text = " DSi"
-                    binding.textLoadingConsoleLogo.setTextColor(android.graphics.Color.parseColor("#06B6D4"))
-                    binding.textLoadingSubScreen.text = "NINTENDO DSi"
-                    binding.viewTopScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top_dsi)
-                    binding.viewBottomScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top_dsi)
-                    binding.viewHingeBar.setBackgroundResource(R.drawable.bg_console_hinge_dsi)
-                    binding.textLoadingStage.text = "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & NAND..."
-                    bootStatus.value = "Nintendo DSi"
-                }
-                ConsoleType.DS -> {
-                    binding.textLoadingStorm.text = "STORM"
-                    binding.textLoadingConsoleLogo.text = " DS"
-                    binding.textLoadingConsoleLogo.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
-                    binding.textLoadingSubScreen.text = "NINTENDO DS"
-                    binding.viewTopScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top)
-                    binding.viewBottomScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top)
-                    binding.viewHingeBar.setBackgroundResource(R.drawable.bg_console_hinge)
-                    binding.textLoadingStage.text = "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & BIOS..."
-                    bootStatus.value = "Nintendo DS"
-                }
-            }
-        } else {
-            // Classic game loading UI from v1.2.0
-            binding.layoutLoadingDevice.isGone = true
+        if (!bootRomReady.value) {
+            binding.viewLayoutControls.isInvisible = true
+            binding.textFps.isGone = true
             binding.textLoading.isVisible = true
             binding.progressLoading.isVisible = true
             binding.textLoadingDetail.isGone = true
@@ -1351,40 +1309,12 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun renderLoadingState(progress: VulkanCompileProgress?, raLoadStage: RetroAchievementsLoadStage? = null) {
         if (bootRomReady.value || viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware) {
-            binding.layoutLoadingDevice.isGone = true
             binding.textLoading.isGone = true
             binding.progressLoading.isGone = true
             binding.textLoadingDetail.isGone = true
             return
         }
 
-        val args = LaunchArgs.fromIntent(intent)
-        if (args is LaunchArgs.Firmware) {
-            binding.textLoading.isGone = true
-            binding.progressLoading.isGone = true
-            binding.textLoadingDetail.isGone = true
-            binding.layoutLoadingDevice.isVisible = true
-
-            if (progress == null || progress.total <= 0) {
-                when (args.consoleType) {
-                    ConsoleType.DS -> binding.textLoadingStage.text = "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & BIOS..."
-                    ConsoleType.DSi -> binding.textLoadingStage.text = "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & NAND..."
-                }
-                binding.progressLoadingConsole.isVisible = true
-                return
-            }
-
-            val stageLabel = getVulkanCompileStageLabel(progress.stageId).uppercase()
-            binding.textLoadingStage.text = "$stageLabel (${progress.current}/${progress.total})"
-            binding.progressLoadingConsole.isVisible = true
-            bootStatus.value = getString(
-                if (progress.stageId == 5) R.string.info_retroarch_compiling_title else R.string.info_vulkan_compiling_title,
-            )
-            return
-        }
-
-        // Standard Game Loading Experience (v1.2.0)
-        binding.layoutLoadingDevice.isGone = true
         if (raLoadStage == RetroAchievementsLoadStage.FETCHING_LATEST_DATA) {
             binding.textLoading.setText(R.string.info_refreshing_retroachievements_title)
             binding.progressLoading.isVisible = true
