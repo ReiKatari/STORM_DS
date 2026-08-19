@@ -1895,17 +1895,22 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
 
-    // Priority 1: Installed DSiWare shortcut (.app extracted from NAND)
-    // Boot via NAND Launcher using TLNC autoload record — requires showBootScreen=true
-    if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
+    // Priority 1: DSiWare title (Installed shortcut or standalone DSiWare ROM)
+    // Boot via DSi NAND Launcher using TLNC autoload record
+    if (nds->ConsoleType == 1 && (currentConfiguration->dsiWareAutoloadTitleId != 0 || (cart != nullptr && cart->GetHeader().IsDSiWare())))
     {
+        u32 titleIdLow = currentConfiguration->dsiWareAutoloadTitleId != 0
+            ? (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF)
+            : cart->GetHeader().DSiTitleIDLow;
+        u32 titleIdHigh = currentConfiguration->dsiWareAutoloadTitleId != 0
+            ? 0x00030004
+            : (cart->GetHeader().DSiTitleIDHigh != 0 ? cart->GetHeader().DSiTitleIDHigh : 0x00030004);
+
         nds->NDSCartSlot.EjectCart();
         auto dsi = (DSi*) nds;
-        u32 titleIdLow = (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF);
-        u32 titleIdHigh = 0x00030004; // DSiWare title ID high
         DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
     }
-    // Priority 2: Standalone DSiWare ROM or standard NDS/DSi direct boot
+    // Priority 2: Standalone DSi cartridge or standard NDS direct boot
     else
     {
         if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
@@ -1914,7 +1919,7 @@ void MelonInstance::start()
             auto dsi = (DSi*) nds;
             DSiSupport::SetupDSiDirectBoot(dsi);
         }
-        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot() || (cart != nullptr && cart->GetHeader().IsDSiWare()))
+        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
         {
             std::string romName;
             nds->SetupDirectBoot(romName);
