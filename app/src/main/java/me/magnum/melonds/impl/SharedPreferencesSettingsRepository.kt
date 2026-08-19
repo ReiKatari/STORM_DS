@@ -130,9 +130,16 @@ class SharedPreferencesSettingsRepository(
             return null
         }
 
-        return runCatching { DocumentFile.fromTreeUri(context, uri) }
-            .onFailure { Log.w(TAG, "Could not access restored tree preference $key=$uri", it) }
-            .getOrNull()
+        return runCatching {
+            if (uri.scheme == "file") {
+                val path = uri.path ?: return null
+                val file = File(path)
+                if (file.exists() && file.isDirectory) DocumentFile.fromFile(file) else null
+            } else {
+                DocumentFile.fromTreeUri(context, uri)
+            }
+        }.onFailure { Log.w(TAG, "Could not access restored tree preference $key=$uri", it) }
+        .getOrNull()
     }
 
     private fun getFileUri(document: DocumentFile?, fileName: String): Uri? {

@@ -166,22 +166,12 @@ class AdrenoVulkanDriverManager(
         runCatching {
             val tempFile = File(context.cacheDir, "driver_download_${System.currentTimeMillis()}.zip")
             try {
-                val url = java.net.URL(driver.downloadUrl)
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.connectTimeout = 15000
-                connection.readTimeout = 30000
-                connection.instanceFollowRedirects = true
-                connection.connect()
-
-                if (connection.responseCode !in 200..299) {
-                    throw java.io.IOException("HTTP error ${connection.responseCode}")
-                }
-
+                val connection = openConnectionWithRedirects(driver.downloadUrl)
                 val totalBytes = connection.contentLength
                 var downloadedBytes = 0
                 connection.inputStream.use { input ->
                     tempFile.outputStream().use { output ->
-                        val buffer = ByteArray(8192)
+                        val buffer = ByteArray(16384)
                         var bytesRead: Int
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
@@ -198,6 +188,42 @@ class AdrenoVulkanDriverManager(
                 tempFile.delete()
             }
         }
+    }
+
+    private fun openConnectionWithRedirects(initialUrl: String, maxRedirects: Int = 10): java.net.HttpURLConnection {
+        var currentUrl = initialUrl
+        var redirects = 0
+        while (redirects < maxRedirects) {
+            val url = java.net.URL(currentUrl)
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 20000
+            connection.readTimeout = 45000
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
+            connection.setRequestProperty("Accept", "*/*")
+            connection.connect()
+
+            val responseCode = connection.responseCode
+            if (responseCode in listOf(java.net.HttpURLConnection.HTTP_MOVED_PERM, java.net.HttpURLConnection.HTTP_MOVED_TEMP, java.net.HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
+                val location = connection.getHeaderField("Location")
+                connection.disconnect()
+                if (location.isNullOrBlank()) {
+                    throw java.io.IOException("HTTP redirect $responseCode with missing Location header")
+                }
+                currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                    location
+                } else {
+                    java.net.URL(url, location).toString()
+                }
+                redirects++
+            } else if (responseCode in 200..299) {
+                return connection
+            } else {
+                connection.disconnect()
+                throw java.io.IOException("HTTP error $responseCode")
+            }
+        }
+        throw java.io.IOException("Too many redirects ($redirects)")
     }
 
     private fun extractZip(uri: Uri, destination: File) {
