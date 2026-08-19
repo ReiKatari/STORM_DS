@@ -31,7 +31,6 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_custom_firmware, rootKey)
-        val consoleTypePreference = findPreference<ListPreference>("console_type")!!
         val dsBiosDirPreference = findPreference<BiosDirectoryPickerPreference>("bios_dir")!!
         val dsiBiosDirPreference = findPreference<BiosDirectoryPickerPreference>("dsi_bios_dir")!!
 
@@ -46,25 +45,6 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
         dsBiosDirPreference.setBiosDirectoryValidator(biosValidator)
         dsiBiosDirPreference.setBiosDirectoryValidator(biosValidator)
-
-        consoleTypePreference.setOnPreferenceChangeListener { _, newValue ->
-            val consoleTypePreferenceValue = newValue as String
-            val newConsoleType = enumValueOfIgnoreCase<ConsoleType>(consoleTypePreferenceValue)
-
-            if (viewModel.getConsoleConfigurationDirectoryStatus(newConsoleType).status != ConfigurationDirResult.Status.VALID) {
-                val textRes = when (newConsoleType) {
-                    ConsoleType.DS -> R.string.ds_incorrect_bios_dir_info
-                    ConsoleType.DSi -> R.string.dsi_incorrect_bios_dir_info
-                }
-
-                AlertDialog.Builder(requireContext())
-                        .setMessage(textRes)
-                        .setPositiveButton(R.string.ok, null)
-                        .show()
-            }
-
-            true
-        }
 
         val autoDownloadDsPreference = findPreference<androidx.preference.Preference>("auto_download_ds_bios")
         val autoDownloadDsiPreference = findPreference<androidx.preference.Preference>("auto_download_dsi_bios")

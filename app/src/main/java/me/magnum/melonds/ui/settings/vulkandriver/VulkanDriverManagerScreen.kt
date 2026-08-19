@@ -157,10 +157,11 @@ fun VulkanDriverManagerScreen(
 
             // Recommended Hero Banner
             state.recommendedDriver?.let { recommended ->
-                val isInstalled = state.installedDrivers.any { it.displayName.contains(recommended.version, ignoreCase = true) }
+                val installedMatch = findMatchingInstalledDriver(recommended, state.installedDrivers)
+                val isInstalled = installedMatch != null
                 val isActive = state.driverMode == VulkanDriverMode.CUSTOM &&
                     state.selectedDriverId != null &&
-                    state.installedDrivers.find { it.id == state.selectedDriverId }?.displayName?.contains(recommended.version, ignoreCase = true) == true
+                    (state.selectedDriverId == installedMatch?.id || installedMatch != null)
 
                 RecommendedDriverBanner(
                     driver = recommended,
@@ -169,10 +170,8 @@ fun VulkanDriverManagerScreen(
                     isInstalled = isInstalled,
                     isActive = isActive,
                     onActionClick = {
-                        if (isInstalled) {
-                            state.installedDrivers.find { it.displayName.contains(recommended.version, ignoreCase = true) }?.let {
-                                viewModel.selectDriver(it.id)
-                            }
+                        if (isInstalled && installedMatch != null) {
+                            viewModel.selectDriver(installedMatch.id)
                         } else {
                             viewModel.downloadAndInstall(recommended)
                         }
@@ -380,6 +379,15 @@ fun RecommendedDriverBanner(
     }
 }
 
+private fun findMatchingInstalledDriver(driver: OnlineVulkanDriver, installedDrivers: List<VulkanDriverInfo>): VulkanDriverInfo? {
+    return installedDrivers.firstOrNull { installed ->
+        installed.displayName.contains(driver.version, ignoreCase = true) ||
+        installed.displayName.contains(driver.id, ignoreCase = true) ||
+        (driver.version.length >= 4 && installed.displayName.contains(driver.version.take(6), ignoreCase = true)) ||
+        (driver.name.isNotBlank() && installed.displayName.contains(driver.name, ignoreCase = true))
+    }
+}
+
 @Composable
 fun OnlineDriversList(
     drivers: List<OnlineVulkanDriver>,
@@ -414,8 +422,8 @@ fun OnlineDriversList(
         items(drivers, key = { it.id }) { driver ->
             val isDownloading = activeDownloadingId == driver.id
             val progress = downloadProgress[driver.id] ?: 0
-            val installedMatch = installedDrivers.firstOrNull { it.displayName.contains(driver.version, ignoreCase = true) }
-            val isActive = isCustomActive && installedMatch != null && selectedDriverId == installedMatch.id
+            val installedMatch = findMatchingInstalledDriver(driver, installedDrivers)
+            val isActive = isCustomActive && installedMatch != null && (selectedDriverId == installedMatch.id || selectedDriverId == null)
 
             OnlineDriverCard(
                 driver = driver,
