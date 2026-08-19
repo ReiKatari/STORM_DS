@@ -42,6 +42,11 @@ class DSiWareTitlesMetadataStore @Inject constructor(
         return prefs.getString("file_name_${titleIdHex.lowercase()}", null)?.takeIf { it.isNotBlank() }
     }
 
+    fun getOriginalFileName(titleId: Long): String? {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        return getOriginalFileName(titleIdHex)
+    }
+
     fun setOriginalFileName(titleId: Long, fileName: String?) {
         val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
         prefs.edit().apply {

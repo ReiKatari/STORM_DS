@@ -1659,6 +1659,12 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    override fun setUseCustomBios(useCustomBios: Boolean) {
+        preferences.edit {
+            putBoolean("use_custom_bios", useCustomBios)
+        }
+    }
+
     override fun addRomSearchDirectory(directoryUri: Uri) {
         preferences.edit {
             val existingDirectories = preferences.getStringSet("rom_search_dirs", emptySet())?.toMutableSet() ?: mutableSetOf()
