@@ -1906,20 +1906,11 @@ void MelonInstance::start()
         auto dsi = (DSi*) nds;
         DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
     }
-    // Priority 2: Standalone ROM file (DS or DSi cartridge)
+    // Priority 2: Standalone ROM file (DS or DSi cartridge) -> direct cartridge boot
     else
     {
-        if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
-            && !cart->GetHeader().IsDSiWare() && currentConfiguration->showBootScreen)
-        {
-            auto dsi = (DSi*) nds;
-            DSiSupport::SetupDSiDirectBoot(dsi);
-        }
-        else
-        {
-            std::string romName;
-            nds->SetupDirectBoot(romName);
-        }
+        std::string romName;
+        nds->SetupDirectBoot(romName);
     }
     nds->ReleaseScreen();
     nds->Start();
