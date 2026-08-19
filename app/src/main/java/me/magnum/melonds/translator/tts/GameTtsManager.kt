@@ -217,9 +217,10 @@ class GameTtsManager(private val context: Context) {
         // 2. Normalization of accents, gaming terminology, and numbers for TTS engines
         val normalizedText = RussianTtsNormalizer.normalize(text, targetLang)
 
-        val engine = preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
-        val isNeural = engine == "neural_edge" || preferences.getBoolean(PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
-        val multiVoiceEnabled = engine != "single" && preferences.getBoolean(PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
+        val isLocalStudio = preferences.getBoolean("translator_local_voice_actor_studio", false)
+        val engine = if (isLocalStudio) "local_multi" else (preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge")
+        val isNeural = engine == "neural_edge" && !isLocalStudio
+        val multiVoiceEnabled = engine != "single"
         val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
 
         if (isNeural) {

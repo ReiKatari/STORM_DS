@@ -86,8 +86,8 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
      * Populates the given [layout] with default components if they were not placed by the user.
      */
     private fun populateLayoutIfRequired(layout: UILayout, variant: UILayoutVariant): UILayout {
-        val mainScreenRequiresDefaultLayout = layout.mainScreenLayout.components == null
-        val secondaryScreenRequiresDefaultLayout = layout.secondaryScreenLayout.components == null && variant.displays.secondaryScreenDisplay != null
+        val mainScreenRequiresDefaultLayout = layout.mainScreenLayout.components.isNullOrEmpty()
+        val secondaryScreenRequiresDefaultLayout = layout.secondaryScreenLayout.components.isNullOrEmpty() && variant.displays.secondaryScreenDisplay != null
         val requiresDefaultLayout = mainScreenRequiresDefaultLayout || secondaryScreenRequiresDefaultLayout
 
         return if (requiresDefaultLayout) {
