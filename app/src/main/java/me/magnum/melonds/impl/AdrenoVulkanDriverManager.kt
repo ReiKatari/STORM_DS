@@ -127,9 +127,11 @@ class AdrenoVulkanDriverManager(
             val metadata = readDriverMetadata(pendingRoot)
             val driverFile = selectDriverFile(pendingRoot, metadata)
             val driverDir = driverFile.parentFile ?: throw ImportException(ImportException.Reason.NoDriver)
-            val importedDisplayName = metadata.name
-                ?.takeIf { it.isNotBlank() }
-                ?: fallbackDisplayName
+            val importedDisplayName = if (fallbackDisplayName.isNotBlank()) {
+                fallbackDisplayName
+            } else {
+                metadata.name?.takeIf { it.isNotBlank() } ?: "Custom Vulkan driver"
+            }
 
             installedRoot.deleteRecursively()
             if (!pendingRoot.renameTo(installedRoot)) {
@@ -148,6 +150,7 @@ class AdrenoVulkanDriverManager(
                 driverName = driverFile.name,
                 displayName = importedDisplayName,
             )
+            settingsRepository.setSelectedVulkanDriver(driverId)
             settingsRepository.setVulkanDriverMode(VulkanDriverMode.CUSTOM)
             return ImportResult(driverId, importedDisplayName)
         } catch (e: ImportException) {
@@ -183,7 +186,7 @@ class AdrenoVulkanDriverManager(
                         }
                     }
                 }
-                importDriverFromFile(tempFile, driver.name)
+                importDriverFromFile(tempFile, "${driver.name} (${driver.version})")
             } finally {
                 tempFile.delete()
             }

@@ -70,181 +70,44 @@
             android:visibility="gone"
             tools:text="OpenGL | 512x768 (2x)"/>
 
-    <!-- 3D Console Authentic Loading Experience Screen -->
-    <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/layoutLoadingDevice"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#090A0F"
-            android:elevation="200dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone">
+    <!-- Classic 1.2.0 Loading Progress and Text -->
+    <ProgressBar
+            android:id="@+id/progressLoading"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"/>
 
-        <!-- Center 3D Console & Progress Container -->
-        <LinearLayout
-                android:id="@+id/layoutConsoleCenterGroup"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_horizontal"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-            <!-- 3D Console Shell -->
-            <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/viewConsoleChassis"
-                    android:layout_width="320dp"
-                    android:layout_height="wrap_content"
-                    android:padding="16dp"
-                    android:background="@drawable/bg_console_chassis">
-
-                <!-- Top Screen Frame -->
-                <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/viewTopScreenBezel"
-                        android:layout_width="0dp"
-                        android:layout_height="170dp"
-                        android:background="@drawable/bg_console_screen_top"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent">
-
-                    <LinearLayout
-                            android:id="@+id/layoutTopScreenLogo"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent">
-
-                        <TextView
-                                android:id="@+id/textLoadingStorm"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="STORM"
-                                android:textColor="#FFFFFF"
-                                android:textStyle="bold"
-                                android:textSize="20sp"
-                                android:letterSpacing="0.08" />
-
-                        <TextView
-                                android:id="@+id/textLoadingConsoleLogo"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="4dp"
-                                android:text="DS"
-                                android:textColor="#38BDF8"
-                                android:textStyle="bold"
-                                android:textSize="20sp"
-                                android:letterSpacing="0.08" />
-                    </LinearLayout>
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <!-- Hinge Separator Bar -->
-                <View
-                        android:id="@+id/viewHingeBar"
-                        android:layout_width="64dp"
-                        android:layout_height="3dp"
-                        android:layout_marginTop="8dp"
-                        android:layout_marginBottom="8dp"
-                        android:background="@drawable/bg_console_hinge"
-                        app:layout_constraintTop_toBottomOf="@id/viewTopScreenBezel"
-                        app:layout_constraintBottom_toTopOf="@id/viewBottomScreenBezel"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent" />
-
-                <!-- Bottom Screen Frame -->
-                <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/viewBottomScreenBezel"
-                        android:layout_width="0dp"
-                        android:layout_height="170dp"
-                        android:background="@drawable/bg_console_screen_top"
-                        app:layout_constraintTop_toBottomOf="@id/viewHingeBar"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent">
-
-                    <TextView
-                            android:id="@+id/textLoadingSubScreen"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="NINTENDO DS"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:letterSpacing="0.2"
-                            android:fontFamily="sans-serif-medium"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <!-- LED Power Glow Indicator -->
-                <View
-                        android:id="@+id/viewLedPower"
-                        android:layout_width="9dp"
-                        android:layout_height="9dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginBottom="8dp"
-                        android:background="@drawable/bg_console_led"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintBottom_toBottomOf="parent" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-            <!-- Bottom Status Subtext & Shimmer Progress -->
-            <TextView
-                    android:id="@+id/textLoadingStage"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.15"
-                    android:text="КОМПИЛЯЦИЯ ШЕЙДЕРОВ VULKAN" />
-
-            <ProgressBar
-                    android:id="@+id/progressLoadingConsole"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="160dp"
-                    android:layout_height="2dp"
-                    android:layout_marginTop="8dp"
-                    android:indeterminate="true"
-                    android:indeterminateTint="#38BDF8" />
-
-        </LinearLayout>
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <!-- Legacy / Compatibility View Bindings -->
     <TextView
             android:id="@+id/textLoading"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?textAppearanceHeadline6"
+            android:textColor="#FFFFFF"
             android:visibility="gone"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
-
-    <ProgressBar
-            android:id="@+id/progressLoading"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="260dp"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintEnd_toEndOf="@+id/progressLoading"
+            app:layout_constraintStart_toStartOf="@+id/progressLoading"
+            app:layout_constraintTop_toBottomOf="@+id/progressLoading"
+            tools:text="Loading..."/>
 
     <TextView
             android:id="@+id/textLoadingDetail"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?textAppearanceCaption"
+            android:textColor="#94A3B8"
             android:visibility="gone"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintEnd_toEndOf="@+id/progressLoading"
+            app:layout_constraintStart_toStartOf="@+id/progressLoading"
+            app:layout_constraintTop_toBottomOf="@+id/textLoading"
+            tools:text="Compiling Vulkan pipelines..."/>
 
     <RelativeLayout
             android:id="@+id/layout_rewind"
