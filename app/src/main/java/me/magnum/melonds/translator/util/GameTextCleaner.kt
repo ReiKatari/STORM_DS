@@ -3,13 +3,46 @@ package me.magnum.melonds.translator.util
 object GameTextCleaner {
 
     private val GLOSSARY_REPLACEMENTS = listOf(
+        // Speaker name translations (Chrono Trigger, Pokémon, Dragon Quest, Final Fantasy)
+        Regex("(?i)^TR\\s+Mother[i:;]?\\s*") to "Мама: ",
+        Regex("(?i)^TR\\s+Mom[i:;]?\\s*") to "Мама: ",
+        Regex("(?i)^TR\\s+") to "",
+        Regex("(?i)\\bMother[i:;]?\\s*") to "Мама: ",
+        Regex("(?i)\\bMom[i:;]?\\s*") to "Мама: ",
+        Regex("(?i)\\bFather[i:;]?\\s*") to "Папа: ",
+        Regex("(?i)\\bDad[i:;]?\\s*") to "Папа: ",
+        Regex("(?i)\\bBrother[i:;]?\\s*") to "Брат: ",
+        Regex("(?i)\\bSister[i:;]?\\s*") to "Сестра: ",
+        Regex("(?i)\\bGrandpa[i:;]?\\s*") to "Дедушка: ",
+        Regex("(?i)\\bGrandma[i:;]?\\s*") to "Бабушка: ",
+        Regex("(?i)\\bDoctor[i:;]?\\s*") to "Доктор: ",
+        Regex("(?i)\\bProfessor[i:;]?\\s*") to "Профессор: ",
+        Regex("(?i)\\bKing[i:;]?\\s*") to "Король: ",
+        Regex("(?i)\\bQueen[i:;]?\\s*") to "Королева: ",
+        Regex("(?i)\\bPrincess[i:;]?\\s*") to "Принцесса: ",
+        Regex("(?i)\\bMayor[i:;]?\\s*") to "Мэр: ",
+        Regex("(?i)\\bGuard[i:;]?\\s*") to "Стражник: ",
+        Regex("(?i)\\bSoldier[i:;]?\\s*") to "Солдат: ",
+        Regex("(?i)\\bVillager[i:;]?\\s*") to "Житель: ",
+        Regex("(?i)\\bMerchant[i:;]?\\s*") to "Торговец: ",
+        Regex("(?i)\\bShopkeeper[i:;]?\\s*") to "Продавец: ",
+        Regex("(?i)\\bInnkeeper[i:;]?\\s*") to "Трактирщик: ",
+        Regex("(?i)\\bElder[i:;]?\\s*") to "Старейшина: ",
+        Regex("(?i)\\bNarrator[i:;]?\\s*") to "Рассказчик: ",
+
         // Common JRPG / Nintendo phrases and idioms
         Regex("(?i)\\bCome on,?\\s+sleepyhead!?\\s*It'?s time to get up!?") to "Просыпайся, соня! Пора вставать!",
         Regex("(?i)\\bCome on,?\\s+sleepyhead!?") to "Просыпайся, соня!",
         Regex("(?i)\\bSleepyhead\\b") to "соня",
         Regex("(?i)\\bIt'?s time to get up!?") to "Пора вставать!",
+        Regex("(?i)\\bНу\\s+или,?\\s+соня!?") to "Просыпайся, соня!",
+        Regex("(?i)\\bДавай\\s+или\\s+соня!?") to "Просыпайся, соня!",
         Regex("(?i)\\bДавай или дурак!?") to "Просыпайся, соня!",
         Regex("(?i)\\bДавай\\s+или\\s+дурак\\b") to "Просыпайся, соня",
+        Regex("(?i)\\bНу\\s+давай,?\\s+соня!?") to "Просыпайся, соня!",
+        Regex("(?i)\\bДавай,?\\s+соня!?") to "Просыпайся, соня!",
+        Regex("(?i)\\bWake up!?") to "Просыпайся!",
+        Regex("(?i)\\bGet up!?") to "Вставай!",
         Regex("(?i)\\bNew Game\\b") to "Новая игра",
         Regex("(?i)\\bContinue\\b") to "Продолжить",
         Regex("(?i)\\bOptions\\b") to "Настройки",
@@ -103,6 +136,8 @@ object GameTextCleaner {
 
     private fun cleanOcrNoise(line: String): String {
         return line.trim()
+            // Clean stray leading floating button artifacts e.g. "TR ", "TR: ", "[TR] "
+            .replace(Regex("(?i)^\\[?TR\\]?[:\\s]+\\s*"), "")
             // Clean stray leading OCR artifacts like "l: P. ", "1: P. ", "| ", "> ", "• ", "[l] ", "I: "
             .replace(Regex("^[lI1|!:\'\"\\s\\.\\,\\-\\_~>•\\[\\]]+(?=[A-ZА-Яa-zа-я])"), "")
             .replace(Regex("(?i)^([lI1|!:\'\"\\.\\,\\-\\_]+\\s+)+"), "")
@@ -120,6 +155,9 @@ object GameTextCleaner {
         if (translatedText.isBlank()) return translatedText
 
         var text = translatedText.trim()
+
+        // Clean stray leading floating button artifacts
+        text = text.replace(Regex("(?i)^\\[?TR\\]?[:\\s]+\\s*"), "")
 
         if (targetLang.lowercase().startsWith("ru")) {
             // Clean stray initial OCR punctuation/artifacts
