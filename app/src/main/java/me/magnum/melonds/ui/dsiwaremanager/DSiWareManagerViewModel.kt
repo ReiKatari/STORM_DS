@@ -141,18 +141,33 @@ class DSiWareManagerViewModel @Inject constructor(
                 withContext(Dispatchers.Default) {
                     val openNandResult = dsiNandManager.openNand()
                     if (openNandResult.isSuccess()) {
-                        // Auto-install all DSiWare ROMs found in the search folders
                         try {
                             val scannedRoms = romsRepository.getRoms().first()
                             val dsiRoms = scannedRoms.filter {
                                 it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true
                             }
-                            var currentTitles = dsiNandManager.listTitles()
+                            val currentTitles = dsiNandManager.listTitles()
                             val existingNames = currentTitles.map { it.name.trim().lowercase() }.toSet()
+                            val validDsiNames = dsiRoms.map { it.name.trim().lowercase() }.toSet()
+                            val validDsiFileNames = dsiRoms.map { it.fileName.substringBeforeLast('.').trim().lowercase() }.toSet()
 
+                            // 1. Auto-install any new DSiWare games found in current search folders
                             for (rom in dsiRoms) {
                                 if (!existingNames.contains(rom.name.trim().lowercase())) {
                                     dsiNandManager.importTitle(rom.uri)
+                                }
+                            }
+
+                            // 2. Auto-delete any installed DSiWare titles that no longer exist in ANY current search folder
+                            for (title in currentTitles) {
+                                val titleName = title.name.trim().lowercase()
+                                val origName = dsiWareTitlesMetadataStore.getOriginalFileName(title.titleId)?.trim()?.lowercase()
+                                val isStillPresent = validDsiNames.contains(titleName) ||
+                                    (origName != null && validDsiFileNames.contains(origName)) ||
+                                    validDsiFileNames.contains(titleName)
+
+                                if (!isStillPresent) {
+                                    dsiNandManager.deleteTitle(title)
                                 }
                             }
                         } catch (_: Throwable) {}
@@ -162,8 +177,6 @@ class DSiWareManagerViewModel @Inject constructor(
                             _state.value = DSiWareManagerUiState.Ready(titles)
                         }
                     } else {
-                        // All pre-requirements are validate beforehand and no unexpected error should occur. As such,
-                        // there's no point in providing a detailed description of the error to the UI.
                         withContext(Dispatchers.Main) {
                             _state.value = DSiWareManagerUiState.Error
                         }

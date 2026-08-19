@@ -151,6 +151,7 @@ interface SettingsRepository {
 
     fun setDsBiosDirectory(directoryUri: Uri)
     fun setDsiBiosDirectory(directoryUri: Uri)
+    fun setUseCustomBios(useCustomBios: Boolean)
     fun addRomSearchDirectory(directoryUri: Uri)
     fun setControllerConfiguration(controllerConfiguration: ControllerConfiguration)
     fun setRomSortingMode(sortingMode: SortingMode)
