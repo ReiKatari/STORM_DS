@@ -94,10 +94,7 @@ bool hasPackedVisibleColor(Rgba6 color)
 
 bool isRegularCaptureBlankPixel(Rgba6 color)
 {
-    return isPacked3dPlaceholder(color)
-        || (!isPacked3dLayerSlot(color)
-            && color.a != 0
-            && ((color.r | color.g | color.b) == 0));
+    return isPacked3dPlaceholder(color);
 }
 
 bool hasStructured2D3DSlot(Rgba6 control)
@@ -962,11 +959,7 @@ vec4 FUNC_NAME() \
             bool plane2HasBlendControl = ((val3.r | val3.g | val3.b) != 0); \
             bool overlayOver3d = plane1Is3dLayer || plane2HadOverlayMarker || plane2HasBlendControl; \
             bool regularCaptureBackdropPixel = regularCaptureUses3d && isPacked3dPlaceholder(nearestPixel); \
-            bool regularCaptureVisibleBlackPixel = regularCaptureUses3d \
-                && !regularCaptureBackdropPixel \
-                && !isPacked3dLayerSlot(nearestPixel) \
-                && nearestPixel.a != 0 \
-                && ((nearestPixel.r | nearestPixel.g | nearestPixel.b) == 0); \
+            bool regularCaptureVisibleBlackPixel = false; \
             bool regularCaptureVisibleBlackHasLocalSupport = false; \
             if (regularCaptureVisibleBlackPixel) \
             { \
