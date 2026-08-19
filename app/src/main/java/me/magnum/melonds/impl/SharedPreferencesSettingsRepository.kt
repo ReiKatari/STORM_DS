@@ -152,6 +152,20 @@ class SharedPreferencesSettingsRepository(
             .getOrNull()
     }
 
+    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, fileName: String, fallbackDir: File): Uri? {
+        if (dirUri != null && (dirUri.scheme == "file" || dirUri.scheme == null)) {
+            val path = dirUri.path ?: dirUri.toString().removePrefix("file://")
+            val f = File(path, fileName)
+            if (f.exists()) return Uri.fromFile(f)
+        }
+        val fromTree = getFileUri(treeDoc, fileName)
+        if (fromTree != null) return fromTree
+
+        val fallbackFile = File(fallbackDir, fileName)
+        if (fallbackFile.exists()) return Uri.fromFile(fallbackFile)
+        return null
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     private val controllerConfiguration by lazy {
         val initialConfiguration = try {
@@ -342,14 +356,14 @@ class SharedPreferencesSettingsRepository(
         val internalDsDir = File(context.filesDir, "bios/ds")
         val internalDsiDir = File(context.filesDir, "bios/dsi")
 
-        val dsBios7 = getFileUri(dsDirDocument, "bios7.bin") ?: File(internalDsDir, "bios7.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
-        val dsBios9 = getFileUri(dsDirDocument, "bios9.bin") ?: File(internalDsDir, "bios9.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
-        val dsFirmware = getFileUri(dsDirDocument, "firmware.bin") ?: File(internalDsDir, "firmware.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", internalDsDir)
+        val dsBios9 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios9.bin", internalDsDir)
+        val dsFirmware = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "firmware.bin", internalDsDir)
 
-        val dsiBios7 = getFileUri(dsiDirDocument, "bios7.bin") ?: File(internalDsiDir, "bios7.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
-        val dsiBios9 = getFileUri(dsiDirDocument, "bios9.bin") ?: File(internalDsiDir, "bios9.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
-        val dsiFirmware = getFileUri(dsiDirDocument, "firmware.bin") ?: File(internalDsiDir, "firmware.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
-        val dsiNand = getFileUri(dsiDirDocument, "nand.bin") ?: File(internalDsiDir, "nand.bin").takeIf { it.exists() }?.let { Uri.fromFile(it) }
+        val dsiBios7 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7.bin", internalDsiDir)
+        val dsiBios9 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios9.bin", internalDsiDir)
+        val dsiFirmware = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "firmware.bin", internalDsiDir)
+        val dsiNand = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "nand.bin", internalDsiDir)
 
         return EmulatorConfiguration(
             useCustomBios(),
