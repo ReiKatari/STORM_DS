@@ -195,9 +195,9 @@ bool rgba6EqualExact(Rgba6 a, Rgba6 b)
 Rgba6 makeScreenWhite()
 {
     Rgba6 color;
-    color.r = 63;
-    color.g = 63;
-    color.b = 63;
+    color.r = 0;
+    color.g = 0;
+    color.b = 0;
     color.a = 0;
     return color;
 }
@@ -1902,30 +1902,6 @@ vec4 sampleDirectOverlay2DOnlyFallback(bool topScreen)
     if (useCompleteBottomCarry)
         return sampleComposedCarryColor(false);
 
-    if (!directColorLooksEmpty(composed))
-        return composed;
-
-    if (preserveCurrentEmptyPackedBlack)
-        return composed;
-
-    {
-        int blackSourceX = int(clamp(fragUv.x * 256.0, 0.0, 255.0));
-        int blackSourceY = int(clamp((1.0 - fragUv.y) * 192.0, 0.0, 191.0));
-        Rgba6 blackControl = unpackColor6(topScreen
-            ? readTopPacked(blackSourceY, 512 + blackSourceX)
-            : readBottomPacked(blackSourceY, 512 + blackSourceX));
-        if (hasStructured2DProtectedBlackOwned(blackControl, topScreen))
-            return composed;
-        uint blackLineMeta = topScreen
-            ? readTopPacked(blackSourceY, 256 * 3)
-            : readBottomPacked(blackSourceY, 256 * 3);
-        int blackDisplayMode = int((blackLineMeta >> 16u) & 0x3u);
-        int blackBrightnessMode = int(((blackLineMeta >> 8u) & 0xFFu) >> 6u);
-        int blackBrightnessFactor = min(16, int(blackLineMeta & 0x1Fu));
-        if (blackDisplayMode != 0 && blackBrightnessMode == 2 && blackBrightnessFactor >= 16)
-            return composed;
-    }
-
     if (directComposedCarryReady(topScreen))
     {
         vec4 carryColor = sampleComposedCarryColor(topScreen);
@@ -1933,8 +1909,7 @@ vec4 sampleDirectOverlay2DOnlyFallback(bool topScreen)
             return carryColor;
     }
 
-    Rgba6 blank = makeScreenWhite();
-    return vec4(color6ToRgb01(blank), fragAlpha);
+    return composed;
 }
 
 vec4 applyLineMasterBrightnessRgb01(bool topScreen, vec4 color)

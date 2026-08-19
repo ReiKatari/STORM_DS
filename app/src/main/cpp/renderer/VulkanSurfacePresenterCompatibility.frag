@@ -140,9 +140,9 @@ bool rgbClose6(Rgba6 a, Rgba6 b, int tolerance)
 Rgba6 makeScreenWhite()
 {
     Rgba6 color;
-    color.r = 63;
-    color.g = 63;
-    color.b = 63;
+    color.r = 0;
+    color.g = 0;
+    color.b = 0;
     color.a = 0;
     return color;
 }
