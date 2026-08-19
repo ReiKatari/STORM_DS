@@ -86,18 +86,20 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 progressDialog.dismiss()
                 if (result.isSuccess) {
                     val targetDir = result.getOrThrow()
+                    val targetUri = Uri.fromFile(targetDir)
                     val useCustomBiosPref = findPreference<androidx.preference.SwitchPreference>("use_custom_bios")
                     useCustomBiosPref?.isChecked = true
-                    dsBiosDirPreference.onDirectoryPicked(Uri.fromFile(targetDir))
+                    dsBiosDirPreference.onDirectoryPicked(targetUri)
+                    dsBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
                         .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin) успешно скачаны, переименованы и настроены!")
+                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin) успешно настроены!\n\nПапка: ${targetDir.absolutePath}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
                     AlertDialog.Builder(requireContext())
                         .setTitle("Ошибка")
-                        .setMessage("Не удалось скачать файлы BIOS: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setMessage("Не удалось настроить файлы BIOS: ${result.exceptionOrNull()?.localizedMessage}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 }
@@ -122,18 +124,20 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 progressDialog.dismiss()
                 if (result.isSuccess) {
                     val targetDir = result.getOrThrow()
+                    val targetUri = Uri.fromFile(targetDir)
                     val useCustomBiosPref = findPreference<androidx.preference.SwitchPreference>("use_custom_bios")
                     useCustomBiosPref?.isChecked = true
-                    dsiBiosDirPreference.onDirectoryPicked(Uri.fromFile(targetDir))
+                    dsiBiosDirPreference.onDirectoryPicked(targetUri)
+                    dsiBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
                         .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin) успешно скачаны, переименованы и настроены!")
+                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin) успешно настроены!\n\nПапка: ${targetDir.absolutePath}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
                     AlertDialog.Builder(requireContext())
                         .setTitle("Ошибка")
-                        .setMessage("Не удалось скачать файлы BIOS DSi: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setMessage("Не удалось настроить файлы BIOS DSi: ${result.exceptionOrNull()?.localizedMessage}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 }

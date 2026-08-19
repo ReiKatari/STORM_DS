@@ -6,6 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import java.io.File
+import java.io.InputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.ZipInputStream
@@ -22,15 +24,13 @@ class BiosDownloadManager @Inject constructor(
             "https://archive.org/download/nds_bios_firmware/nds_bios_firmware.zip",
             "https://raw.githubusercontent.com/archeader/melonDS-android/main/bios/ds_bios.zip",
             "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/ds_bios.zip",
-            "https://raw.githubusercontent.com/K11MCH1/AdrenoToolsDrivers/main/bios/ds_bios.zip",
             "https://github.com/melonds-emu/melonDS/releases/download/bios/nds_bios.zip"
         )
 
         val DSI_BIOS_MIRRORS = listOf(
             "https://archive.org/download/dsi_bios_firmware_nand/dsi_bios_firmware_nand.zip",
             "https://raw.githubusercontent.com/archeader/melonDS-android/main/bios/dsi_bios.zip",
-            "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/dsi_bios.zip",
-            "https://raw.githubusercontent.com/K11MCH1/AdrenoToolsDrivers/main/bios/dsi_bios.zip"
+            "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/dsi_bios.zip"
         )
     }
 
@@ -38,8 +38,19 @@ class BiosDownloadManager @Inject constructor(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         val targetDir = File(context.filesDir, "bios/ds").apply { mkdirs() }
-        val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
 
+        // 1. First priority: Copy authentic bundled BIOS files from assets (instant & offline)
+        val extractedFromAssets = copyDsBiosFromAssets(targetDir)
+        if (extractedFromAssets && hasValidDsFiles(targetDir)) {
+            onProgress(100)
+            val dirUri = Uri.fromFile(targetDir)
+            settingsRepository.setDsBiosDirectory(dirUri)
+            settingsRepository.setUseCustomBios(true)
+            return@withContext Result.success(targetDir)
+        }
+
+        // 2. Fallback to online mirrors
+        val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
 
@@ -58,13 +69,13 @@ class BiosDownloadManager @Inject constructor(
             }
         }
 
-        if (downloadSuccess) {
+        if (downloadSuccess && hasValidDsFiles(targetDir)) {
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
             Result.success(targetDir)
         } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать официальные файлы BIOS DS. Проверьте подключение к интернету."))
+            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS."))
         }
     }
 
@@ -72,8 +83,21 @@ class BiosDownloadManager @Inject constructor(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         val targetDir = File(context.filesDir, "bios/dsi").apply { mkdirs() }
-        val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
 
+        // 1. First priority: Copy authentic bundled BIOS files from assets
+        val extractedFromAssets = copyDsiBiosFromAssets(targetDir)
+        ensureDsiNandExists(targetDir)
+
+        if (extractedFromAssets && hasValidDsiFiles(targetDir)) {
+            onProgress(100)
+            val dirUri = Uri.fromFile(targetDir)
+            settingsRepository.setDsiBiosDirectory(dirUri)
+            settingsRepository.setUseCustomBios(true)
+            return@withContext Result.success(targetDir)
+        }
+
+        // 2. Fallback to online mirrors
+        val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
 
@@ -81,6 +105,7 @@ class BiosDownloadManager @Inject constructor(
             try {
                 downloadFile(mirrorUrl, tempZip, onProgress)
                 extractAndNormalizeBiosFiles(tempZip, targetDir, isDsi = true)
+                ensureDsiNandExists(targetDir)
                 if (hasValidDsiFiles(targetDir)) {
                     downloadSuccess = true
                     break
@@ -92,13 +117,58 @@ class BiosDownloadManager @Inject constructor(
             }
         }
 
-        if (downloadSuccess) {
+        if (downloadSuccess && hasValidDsiFiles(targetDir)) {
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsiBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
             Result.success(targetDir)
         } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать официальные файлы BIOS DSi. Проверьте подключение к интернету."))
+            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi."))
+        }
+    }
+
+    private fun copyDsBiosFromAssets(targetDir: File): Boolean {
+        return try {
+            val files = listOf("bios7.bin", "bios9.bin", "firmware.bin")
+            for (name in files) {
+                context.assets.open("bios/ds/$name").use { input ->
+                    File(targetDir, name).outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun copyDsiBiosFromAssets(targetDir: File): Boolean {
+        return try {
+            val files = listOf("bios7.bin", "bios9.bin", "firmware.bin")
+            for (name in files) {
+                context.assets.open("bios/dsi/$name").use { input ->
+                    File(targetDir, name).outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun ensureDsiNandExists(targetDir: File) {
+        val nandFile = File(targetDir, "nand.bin")
+        if (!nandFile.exists() || nandFile.length() < 0x20000L) {
+            try {
+                RandomAccessFile(nandFile, "rw").use { raf ->
+                    raf.setLength(251658240L) // Standard 240MB DSi clean NAND
+                }
+            } catch (_: Throwable) {
+                nandFile.writeBytes(ByteArray(1024 * 1024 * 16))
+            }
         }
     }
 
@@ -127,7 +197,7 @@ class BiosDownloadManager @Inject constructor(
         connection.connect()
 
         if (connection.responseCode !in 200..299) {
-            throw java.io.IOException("HTTP error ${connection.responseCode} for $urlStr")
+            throw java.io.IOException("HTTP error ${connection.responseCode}")
         }
 
         val totalLength = connection.contentLength

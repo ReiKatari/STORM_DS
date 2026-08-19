@@ -424,7 +424,7 @@ fun OnlineDriverCard(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "📅 ${driver.releaseDate} • 📦 ${driver.fileSizeMb} MB",
+                        text = "📅 ${driver.formattedReleaseDate} • 📦 ${driver.fileSizeMb} MB",
                         fontSize = 12.sp,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                     )
