@@ -18,6 +18,23 @@ class OnlineVulkanDriverRepository @Inject constructor() {
     }
 
     private val staticDrivers = listOf(
+        // --- 2026 RELEASES: MrPurple & Upstream Turnip Mesa & Qualcomm ---
+        OnlineVulkanDriver(
+            id = "turnip-mrpurple-26-2-0-r28",
+            name = "Turnip Mesa (MrPurple Build v26.2.0-r28 — Август 2026)",
+            version = "26.2.0-r28-MrP",
+            releaseDate = "2026-08-16",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "👑 Топовая оптимизированная сборка от MrPurple (Август 2026) с агрессивным компилятором шейдеров, увеличенными лимитами дескрипторов и максимальной плавностью 60 FPS на Adreno 6xx/7xx/8xx.",
+            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v26.2.0-r28/turnip_mesa_v26.2.0-r28_mrpurple.zip",
+            fileSizeMb = 5.3,
+            isRecommended = true
+        ),
         OnlineVulkanDriver(
             id = "turnip-mesa-26-2-0-r28",
             name = "Turnip Mesa v26.2.0 (Revision 28 — Август 2026)",
@@ -29,7 +46,7 @@ class OnlineVulkanDriverRepository @Inject constructor() {
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "🔥 Свежайший релиз Turnip Mesa (Август 2026) с поддержкой Vulkan 1.3/1.4, расширенными dynamic rendering пайплайнами и нулевыми задержками компиляции SPIR-V шейдеров.",
+            description = "🔥 Свежий официальный релиз Turnip Mesa (Август 2026) с поддержкой Vulkan 1.3/1.4 и расширенными dynamic rendering пайплайнами.",
             downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.2.0-r28/turnip_mesa_v26.2.0-r28.zip",
             fileSizeMb = 5.2,
             isRecommended = true
@@ -50,6 +67,22 @@ class OnlineVulkanDriverRepository @Inject constructor() {
             isRecommended = true
         ),
         OnlineVulkanDriver(
+            id = "turnip-mrpurple-26-1-0-r26",
+            name = "Turnip Mesa (MrPurple Build v26.1.0-r26 — Июнь 2026)",
+            version = "26.1.0-r26-MrP",
+            releaseDate = "2026-06-25",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "Сборка MrPurple с кастомными оптимизациями буферов команд и сниженным энергопотреблением в тяжелых 3D играх.",
+            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v26.1.0-r26/turnip_mesa_v26.1.0-r26_mrpurple.zip",
+            fileSizeMb = 5.1,
+            isRecommended = false
+        ),
+        OnlineVulkanDriver(
             id = "turnip-mesa-26-1-0-r26",
             name = "Turnip Mesa v26.1.0 (Revision 26 — Июнь 2026)",
             version = "26.1.0-r26",
@@ -60,8 +93,23 @@ class OnlineVulkanDriverRepository @Inject constructor() {
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Летний стабильный релиз Turnip Mesa 2026 с полным устранением артефактов растеризации и максимальным приростом FPS в играх.",
+            description = "Летний стабильный релиз Turnip Mesa 2026 с устранением графических артефактов и максимальным FPS.",
             downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.1.0-r26/turnip_mesa_v26.1.0-r26.zip",
+            fileSizeMb = 5.0,
+            isRecommended = false
+        ),
+        OnlineVulkanDriver(
+            id = "turnip-mrpurple-25-3-0-r24",
+            name = "Turnip Mesa (MrPurple Build v25.3.0-r24 — Март 2026)",
+            version = "25.3.0-r24-MrP",
+            releaseDate = "2026-03-20",
+            supportedGpuSeries = setOf(
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
+                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
+            ),
+            description = "Популярная сборка MrPurple с минимальным тепловыделением и оптимизацией памяти для Snapdragon 8 Gen 1/2/3.",
+            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v25.3.0-r24/turnip_mesa_v25.3.0-r24_mrpurple.zip",
             fileSizeMb = 5.0,
             isRecommended = false
         ),
@@ -75,7 +123,7 @@ class OnlineVulkanDriverRepository @Inject constructor() {
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Высокостабильная весенняя ветка Mesa с пониженным нагревом для Snapdragon 8 Gen 1/2/3.",
+            description = "Высокостабильная весенняя ветка Mesa 25.3.",
             downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v25.3.0-r24/turnip_mesa_v25.3.0-r24.zip",
             fileSizeMb = 4.9,
             isRecommended = false
@@ -96,18 +144,18 @@ class OnlineVulkanDriverRepository @Inject constructor() {
             isRecommended = false
         ),
         OnlineVulkanDriver(
-            id = "turnip-mesa-25-0-0-r22",
-            name = "Turnip Mesa v25.0.0 (Revision 22)",
-            version = "25.0.0-r22",
-            releaseDate = "2025-11-20",
+            id = "turnip-mrpurple-24-3-0-r20",
+            name = "Turnip Mesa (MrPurple Build v24.3.0-r20)",
+            version = "24.3.0-r20-MrP",
+            releaseDate = "2024-11-20",
             supportedGpuSeries = setOf(
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
                 AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
             ),
-            description = "Проверенный временем релиз Mesa 25 с отличной совместимостью для серии Adreno 6xx/7xx.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v25.0.0-r22/turnip_mesa_v25.0.0-r22.zip",
-            fileSizeMb = 4.7,
+            description = "Проверенный временем драйвер Turnip от MrPurple с улучшенной производительностью.",
+            downloadUrl = "https://github.com/MrPurple666/Turnip-Drivers/releases/download/v24.3.0-r20/turnip_mesa_v24.3.0-r20_mrpurple.zip",
+            fileSizeMb = 4.9,
             isRecommended = false
         ),
         OnlineVulkanDriver(
@@ -234,10 +282,12 @@ class OnlineVulkanDriverRepository @Inject constructor() {
         val compatible = getDriversForGpu(gpuSeries)
         return when (gpuSeries) {
             AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX -> {
-                compatible.firstOrNull { it.id == "qualcomm-v830-0" || it.id == "turnip-mesa-26-2-0-r28" } ?: compatible.firstOrNull()
+                compatible.firstOrNull { it.id == "qualcomm-v830-0" || it.id == "turnip-mrpurple-26-2-0-r28" } ?: compatible.firstOrNull()
             }
             else -> {
-                compatible.firstOrNull { it.id == "turnip-mesa-26-2-0-r28" } ?: compatible.firstOrNull()
+                compatible.firstOrNull { it.id == "turnip-mrpurple-26-2-0-r28" }
+                    ?: compatible.firstOrNull { it.id == "turnip-mesa-26-2-0-r28" }
+                    ?: compatible.firstOrNull()
             }
         }
     }
