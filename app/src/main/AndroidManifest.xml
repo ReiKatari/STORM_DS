@@ -80,6 +80,12 @@
             android:exported="false">
         </activity>
         <activity
+            android:name=".ui.settings.vulkandriver.VulkanDriverManagerActivity"
+            android:label="@string/video_vulkan_driver_manager_title"
+            android:parentActivityName=".ui.settings.SettingsActivity"
+            android:exported="false">
+        </activity>
+        <activity
             android:name=".ui.settings.SettingsActivity"
             android:label="@string/title_activity_settings"
             android:parentActivityName=".ui.romlist.RomListActivity"
