@@ -1183,6 +1183,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.Uninitialized -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1218,6 +1219,7 @@ class EmulatorActivity : AppCompatActivity() {
                             setupSustainedPerformanceMode()
                             setupFpsCounter()
                             setupResolutionHud()
+                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1234,6 +1236,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RomLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1244,6 +1247,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.FirmwareLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1254,6 +1258,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RomNotFoundError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.layoutLoadingDevice.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1297,40 +1302,66 @@ class EmulatorActivity : AppCompatActivity() {
     private fun showLoadingState() {
         binding.viewLayoutControls.isInvisible = true
         binding.textFps.isGone = true
-        binding.textLoading.isVisible = true
+        binding.layoutLoadingDevice.isVisible = true
 
         val args = LaunchArgs.fromIntent(intent)
-        if (args is LaunchArgs.Firmware) {
-            when (args.consoleType) {
-                ConsoleType.DS -> {
-                    binding.textLoading.text = "🎮 Nintendo DS"
-                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#E0E7FF"))
-                    binding.textLoadingDetail.isVisible = true
-                    binding.textLoadingDetail.text = "Загрузка системного меню & BIOS..."
-                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#93C5FD"))
-                    bootStatus.value = "Nintendo DS BIOS"
-                }
-                ConsoleType.DSi -> {
-                    binding.textLoading.text = "✨ Nintendo DSi"
-                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#F0FDFA"))
-                    binding.textLoadingDetail.isVisible = true
-                    binding.textLoadingDetail.text = "Загрузка системного меню & eMMC NAND..."
-                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
-                    bootStatus.value = "Nintendo DSi NAND"
-                }
-            }
-        } else if (bootStatus.value == null) {
-            bootStatus.value = getString(R.string.info_loading)
+        val isDsi = when (args) {
+            is LaunchArgs.Firmware -> args.consoleType == ConsoleType.DSi
+            is LaunchArgs.RomObject -> args.rom.isDsiWareTitle
+            else -> false
         }
+
+        if (isDsi) {
+            binding.textLoadingStorm.text = "STORM"
+            binding.textLoadingConsoleLogo.text = " DSi"
+            binding.textLoadingConsoleLogo.setTextColor(android.graphics.Color.parseColor("#06B6D4"))
+            binding.textLoadingSubScreen.text = "NINTENDO DSi"
+            binding.viewTopScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top_dsi)
+            binding.viewBottomScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top_dsi)
+            binding.viewHingeBar.setBackgroundResource(R.drawable.bg_console_hinge_dsi)
+            binding.textLoadingStage.text = if (args is LaunchArgs.Firmware) "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & NAND..." else "ЗАГРУЗКА ИГРЫ DSIWARE..."
+            bootStatus.value = "Nintendo DSi"
+        } else {
+            binding.textLoadingStorm.text = "STORM"
+            binding.textLoadingConsoleLogo.text = " DS"
+            binding.textLoadingConsoleLogo.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+            binding.textLoadingSubScreen.text = "NINTENDO DS"
+            binding.viewTopScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top)
+            binding.viewBottomScreenBezel.setBackgroundResource(R.drawable.bg_console_screen_top)
+            binding.viewHingeBar.setBackgroundResource(R.drawable.bg_console_hinge)
+            binding.textLoadingStage.text = if (args is LaunchArgs.Firmware) "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & BIOS..." else "ЗАГРУЗКА ИГРЫ NINTENDO DS..."
+            bootStatus.value = "Nintendo DS"
+        }
+
+        updateLoadingBadge()
+    }
+
+    private fun updateLoadingBadge() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val rendererPref = prefs.getString("video_renderer", "vulkan") ?: "vulkan"
+        val renderer = runCatching { VideoRenderer.valueOf(rendererPref.uppercase()) }.getOrDefault(VideoRenderer.VULKAN)
+        val resScaling = (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1).coerceAtLeast(1)
+        val effectiveScale = if (renderer == VideoRenderer.SOFTWARE) 1 else resScaling
+
+        val rendererName = when (renderer) {
+            VideoRenderer.SOFTWARE -> "Software"
+            VideoRenderer.OPENGL -> "OpenGL"
+            VideoRenderer.VULKAN -> "Vulkan"
+            else -> "Vulkan"
+        }
+        val width = 256 * effectiveScale
+        val height = 384 * effectiveScale
+        binding.textLoadingBadge.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
     }
 
     private fun renderLoadingState(progress: VulkanCompileProgress?, raLoadStage: RetroAchievementsLoadStage? = null) {
+        binding.layoutLoadingDevice.isVisible = true
+        updateLoadingBadge()
+
         if (raLoadStage == RetroAchievementsLoadStage.FETCHING_LATEST_DATA) {
-            binding.textLoading.setText(R.string.info_refreshing_retroachievements_title)
-            binding.progressLoading.isVisible = true
-            binding.progressLoading.isIndeterminate = true
-            binding.textLoadingDetail.isVisible = true
-            binding.textLoadingDetail.setText(R.string.info_refreshing_retroachievements_detail)
+            val label = getString(R.string.info_refreshing_retroachievements_title).uppercase()
+            binding.textLoadingStage.text = label
+            binding.progressLoadingConsole.isVisible = true
             bootStatus.value = getString(R.string.info_refreshing_retroachievements_title)
             return
         }
@@ -1339,45 +1370,27 @@ class EmulatorActivity : AppCompatActivity() {
         if (args is LaunchArgs.Firmware && (progress == null || progress.total <= 0)) {
             when (args.consoleType) {
                 ConsoleType.DS -> {
-                    binding.textLoading.text = "🎮 Nintendo DS"
-                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#E0E7FF"))
-                    binding.textLoadingDetail.isVisible = true
-                    binding.textLoadingDetail.text = "Загрузка системного меню & BIOS..."
-                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#93C5FD"))
+                    binding.textLoadingStage.text = "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & BIOS..."
                 }
                 ConsoleType.DSi -> {
-                    binding.textLoading.text = "✨ Nintendo DSi"
-                    binding.textLoading.setTextColor(android.graphics.Color.parseColor("#F0FDFA"))
-                    binding.textLoadingDetail.isVisible = true
-                    binding.textLoadingDetail.text = "Загрузка системного меню & eMMC NAND..."
-                    binding.textLoadingDetail.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+                    binding.textLoadingStage.text = "ЗАГРУЗКА СИСТЕМНОГО МЕНЮ & NAND..."
                 }
             }
-            binding.progressLoading.isVisible = true
-            binding.progressLoading.isIndeterminate = true
+            binding.progressLoadingConsole.isVisible = true
             return
         }
 
         if (progress == null || progress.total <= 0) {
-            binding.textLoading.setText(R.string.info_loading)
-            binding.progressLoading.isVisible = true
-            binding.progressLoading.isIndeterminate = true
-            binding.textLoadingDetail.isGone = true
+            val isDsi = (args as? LaunchArgs.Firmware)?.consoleType == ConsoleType.DSi || (args as? LaunchArgs.RomObject)?.rom?.isDsiWareTitle == true
+            binding.textLoadingStage.text = if (isDsi) "ЗАГРУЗКА NINTENDO DSI..." else "ЗАГРУЗКА NINTENDO DS..."
+            binding.progressLoadingConsole.isVisible = true
             bootStatus.value = getString(R.string.info_loading)
             return
         }
 
-        binding.textLoading.setText(
-            if (progress.stageId == 5) {
-                R.string.info_retroarch_compiling_title
-            } else {
-                R.string.info_vulkan_compiling_title
-            },
-        )
-        binding.progressLoading.isVisible = true
-        binding.progressLoading.isIndeterminate = true
-        binding.textLoadingDetail.isVisible = true
-        binding.textLoadingDetail.text = getVulkanCompileStageLabel(progress.stageId)
+        val stageLabel = getVulkanCompileStageLabel(progress.stageId).uppercase()
+        binding.textLoadingStage.text = "$stageLabel (${progress.current}/${progress.total})"
+        binding.progressLoadingConsole.isVisible = true
         bootStatus.value = getString(
             if (progress.stageId == 5) R.string.info_retroarch_compiling_title else R.string.info_vulkan_compiling_title,
         )
