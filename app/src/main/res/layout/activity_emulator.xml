@@ -81,32 +81,6 @@
             android:focusable="true"
             android:visibility="gone">
 
-        <!-- Top Right Badge Capsule (Vulkan / Resolution / FPS) -->
-        <TextView
-                android:id="@+id/textLoadingBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:layout_marginEnd="20dp"
-                android:background="@drawable/bg_console_badge"
-                android:fontFamily="monospace"
-                android:textColor="#38BDF8"
-                android:textSize="11sp"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                tools:text="Vulkan | 768x1152 (3x)" />
-
-        <!-- Top Left Camera / Sensor Cutout -->
-        <View
-                android:id="@+id/viewCameraSensor"
-                android:layout_width="12dp"
-                android:layout_height="12dp"
-                android:layout_margin="18dp"
-                android:background="@drawable/bg_console_led"
-                android:backgroundTint="#1E293B"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent" />
-
         <!-- Center 3D Console & Progress Container -->
         <LinearLayout
                 android:id="@+id/layoutConsoleCenterGroup"
