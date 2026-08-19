@@ -3,6 +3,24 @@ package me.magnum.melonds.translator.util
 object GameTextCleaner {
 
     private val GLOSSARY_REPLACEMENTS = listOf(
+        // Common JRPG / Nintendo phrases and idioms
+        Regex("(?i)\\bCome on,?\\s+sleepyhead!?\\s*It'?s time to get up!?") to "Просыпайся, соня! Пора вставать!",
+        Regex("(?i)\\bCome on,?\\s+sleepyhead!?") to "Просыпайся, соня!",
+        Regex("(?i)\\bSleepyhead\\b") to "соня",
+        Regex("(?i)\\bIt'?s time to get up!?") to "Пора вставать!",
+        Regex("(?i)\\bДавай или дурак!?") to "Просыпайся, соня!",
+        Regex("(?i)\\bДавай\\s+или\\s+дурак\\b") to "Просыпайся, соня",
+        Regex("(?i)\\bNew Game\\b") to "Новая игра",
+        Regex("(?i)\\bContinue\\b") to "Продолжить",
+        Regex("(?i)\\bOptions\\b") to "Настройки",
+        Regex("(?i)\\bSettings\\b") to "Настройки",
+        Regex("(?i)\\bLoad Game\\b") to "Загрузить игру",
+        Regex("(?i)\\bSave Game\\b") to "Сохранить игру",
+        Regex("(?i)\\bGame Over\\b") to "Игра окончена",
+        Regex("(?i)\\bPress Start\\b") to "Нажмите START",
+        Regex("(?i)\\bTouch the Touch Screen\\b") to "Коснитесь сенсорного экрана",
+        Regex("(?i)\\bTouch to Start\\b") to "Коснитесь для начала",
+        Regex("(?i)\\bTap to Begin\\b") to "Нажмите для старта",
         Regex("(?i)\\bPower Button\\b") to "кнопку питания",
         Regex("(?i)\\bPower button\\b") to "кнопку питания",
         Regex("(?i)\\bOperations Manual\\b") to "Руководство по эксплуатации",
@@ -14,6 +32,31 @@ object GameTextCleaner {
         Regex("(?i)\\bSystem Settings\\b") to "Системные настройки",
         Regex("(?i)\\bPress and hold\\b") to "Нажмите и удерживайте",
         Regex("(?i)\\bPress AND HOLD\\b") to "НАЖМИТЕ И УДЕРЖИВАЙТЕ",
+        Regex("(?i)\\bInventory\\b") to "Инвентарь",
+        Regex("(?i)\\bEquipment\\b") to "Снаряжение",
+        Regex("(?i)\\bStatus\\b") to "Статус",
+        Regex("(?i)\\bQuest\\b") to "Задание",
+        Regex("(?i)\\bQuests\\b") to "Задания",
+        Regex("(?i)\\bAttack\\b") to "Атака",
+        Regex("(?i)\\bMagic\\b") to "Магия",
+        Regex("(?i)\\bDefend\\b") to "Защита",
+        Regex("(?i)\\bItem\\b") to "Предмет",
+        Regex("(?i)\\bItems\\b") to "Предметы",
+        Regex("(?i)\\bRun away\\b") to "Сбежать",
+        Regex("(?i)\\bEscape\\b") to "Побег",
+        Regex("(?i)\\bLevel Up!?\\b") to "Новый уровень!",
+        Regex("(?i)\\bExperience\\b") to "Опыт",
+        Regex("(?i)\\bWhat'?s going on\\??") to "Что происходит?",
+        Regex("(?i)\\bWhat happened\\??") to "Что случилось?",
+        Regex("(?i)\\bAre you ready\\??") to "Ты готов?",
+        Regex("(?i)\\bLet'?s go!?") to "Погнали!",
+        Regex("(?i)\\bWait a minute!?") to "Минуточку!",
+        Regex("(?i)\\bHold on!?") to "Погоди-ка!",
+        Regex("(?i)\\bGood morning!?") to "Доброе утро!",
+        Regex("(?i)\\bGood night!?") to "Спокойной ночи!",
+        Regex("(?i)\\bThank you very much!?") to "Большое спасибо!",
+        Regex("(?i)\\bYou'?re welcome!?") to "Пожалуйста!",
+        Regex("(?i)\\bSee you later!?") to "Увидимся!",
     )
 
     /**
@@ -60,6 +103,9 @@ object GameTextCleaner {
 
     private fun cleanOcrNoise(line: String): String {
         return line.trim()
+            // Clean stray leading OCR artifacts like "l: P. ", "1: P. ", "| ", "> ", "• ", "[l] ", "I: "
+            .replace(Regex("^[lI1|!:\'\"\\s\\.\\,\\-\\_~>•\\[\\]]+(?=[A-ZА-Яa-zа-я])"), "")
+            .replace(Regex("(?i)^([lI1|!:\'\"\\.\\,\\-\\_]+\\s+)+"), "")
             .replace(Regex("^[|•>~_—\\-]+\\s*"), "")
             .replace(Regex("\\s*[|•>~_—\\-]+$"), "")
             .replace(Regex("\\s+"), " ")
@@ -76,6 +122,9 @@ object GameTextCleaner {
         var text = translatedText.trim()
 
         if (targetLang.lowercase().startsWith("ru")) {
+            // Clean stray initial OCR punctuation/artifacts
+            text = text.replace(Regex("^[lI1|!:\'\"\\s\\.\\,\\-\\_~>•\\[\\]]+(?=[A-ZА-Яa-zа-я])"), "")
+
             // Apply localization terms
             for ((pattern, replacement) in GLOSSARY_REPLACEMENTS) {
                 text = text.replace(pattern, replacement)

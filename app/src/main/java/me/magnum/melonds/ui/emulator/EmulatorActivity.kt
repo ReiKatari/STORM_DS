@@ -2060,9 +2060,31 @@ class EmulatorActivity : AppCompatActivity() {
         val bottomView = binding.viewLayoutControls.getLayoutComponentView(bottomScreen)
         val hybridView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
         val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
+
+        var topRect = topView?.getRect()
+        var bottomRect = bottomView?.getRect()
+
+        val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
+        if (consoleSkinEnabled && topRect != null && bottomRect != null) {
+            val isVertical = kotlin.math.abs(topRect.x - bottomRect.x) < 30
+            if (isVertical && topRect.bottom <= bottomRect.y + 16) {
+                val gapNeeded = (18f * resources.displayMetrics.density).toInt()
+                val currentGap = (bottomRect.y - topRect.bottom).coerceAtLeast(0)
+                if (currentGap < gapNeeded) {
+                    val shiftTotal = gapNeeded - currentGap
+                    val shiftTop = shiftTotal / 2
+                    val shiftBottom = shiftTotal - shiftTop
+                    val newTopY = (topRect.y - shiftTop).coerceAtLeast(0)
+                    val newBottomY = bottomRect.y + shiftBottom
+                    topRect = topRect.copy(y = newTopY)
+                    bottomRect = bottomRect.copy(y = newBottomY)
+                }
+            }
+        }
+
         return ScreenPresentationAreas(
-            topScreenRect = topView?.getRect(),
-            bottomScreenRect = bottomView?.getRect(),
+            topScreenRect = topRect,
+            bottomScreenRect = bottomRect,
             topAlpha = topView?.baseAlpha ?: 1f,
             bottomAlpha = bottomView?.baseAlpha ?: 1f,
             topOnTop = topView?.onTop ?: false,
