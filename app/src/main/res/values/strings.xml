@@ -1283,6 +1283,7 @@
     <string name="translator_enabled">Enable Auto-Translator</string>
     <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
     <string name="translator_engine">Translation Engine</string>
+    <string name="translator_engine_offline">Offline Hybrid (On-Device / No Internet Required)</string>
     <string name="translator_engine_yandex">Yandex Translate (Free / Best Russian)</string>
     <string name="translator_engine_google">Google Translate (Free / Fast)</string>
     <string name="translator_engine_lingva">Lingva Neural (Free / No Rate Limits)</string>

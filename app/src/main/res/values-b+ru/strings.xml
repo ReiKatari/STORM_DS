@@ -1209,6 +1209,7 @@
     <string name="translator_enabled">Включить авто-переводчик</string>
     <string name="translator_enabled_summary">Распознавать и переводить игровые диалоги на экране</string>
     <string name="translator_engine">Движок перевода</string>
+    <string name="translator_engine_offline">Автономный оффлайн-переводчик (Без интернета)</string>
     <string name="translator_engine_yandex">Яндекс Переводчик (Бесплатно / Идеальный русский)</string>
     <string name="translator_engine_google">Google Translate (Бесплатно / Быстрый)</string>
     <string name="translator_engine_lingva">Lingva Neural (Бесплатно / Без ограничений)</string>
