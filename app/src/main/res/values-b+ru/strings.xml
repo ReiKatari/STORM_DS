@@ -807,7 +807,11 @@
   <string name="internal_firmware_settings_summary">Имя, язык, цвет и дата рождения</string>
   <string name="custom_bios_firmware">Файлы BIOS и Прошивки</string>
   <string name="custom_bios_firmware_description">Пути к оригинальным дампам BIOS и NAND DSi</string>
+  <string name="auto_download_ds_bios_title">Скачать проверенные файлы BIOS DS</string>
+  <string name="auto_download_ds_bios_summary">Автоматическая загрузка и настройка bios7.bin, bios9.bin, firmware.bin</string>
   <string name="bios_directory">Папка с BIOS DS</string>
+  <string name="auto_download_dsi_bios_title">Скачать проверенные файлы BIOS DSi</string>
+  <string name="auto_download_dsi_bios_summary">Автоматическая загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin</string>
   <string name="dsi_bios_directory">Папка с BIOS DSi</string>
   <string name="show_boot_screen">Показывать заставку Nintendo DS</string>
   <string name="mac_address">MAC-адрес</string>

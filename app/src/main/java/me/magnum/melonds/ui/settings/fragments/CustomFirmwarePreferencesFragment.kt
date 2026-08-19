@@ -4,8 +4,10 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
@@ -25,6 +27,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
     private val helper by lazy { PreferenceFragmentHelper(this, uriPermissionManager, directoryAccessValidator) }
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
+    @Inject lateinit var biosDownloadManager: me.magnum.melonds.impl.bios.BiosDownloadManager
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_custom_firmware, rootKey)
@@ -60,6 +63,81 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                         .show()
             }
 
+            true
+        }
+
+        val autoDownloadDsPreference = findPreference<androidx.preference.Preference>("auto_download_ds_bios")
+        val autoDownloadDsiPreference = findPreference<androidx.preference.Preference>("auto_download_dsi_bios")
+
+        autoDownloadDsPreference?.setOnPreferenceClickListener {
+            val progressDialog = android.app.ProgressDialog(requireContext()).apply {
+                setTitle(getString(R.string.auto_download_ds_bios_title))
+                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin...")
+                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+                max = 100
+                setCancelable(false)
+                show()
+            }
+
+            lifecycleScope.launch {
+                val result = biosDownloadManager.downloadAndSetupDsBios { progress ->
+                    progressDialog.progress = progress
+                }
+                progressDialog.dismiss()
+                if (result.isSuccess) {
+                    val targetDir = result.getOrThrow()
+                    val useCustomBiosPref = findPreference<androidx.preference.SwitchPreference>("use_custom_bios")
+                    useCustomBiosPref?.isChecked = true
+                    dsBiosDirPreference.onDirectoryPicked(Uri.fromFile(targetDir))
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Успешно")
+                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin) успешно скачаны, переименованы и настроены!")
+                        .setPositiveButton(R.string.ok, null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Ошибка")
+                        .setMessage("Не удалось скачать файлы BIOS: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setPositiveButton(R.string.ok, null)
+                        .show()
+                }
+            }
+            true
+        }
+
+        autoDownloadDsiPreference?.setOnPreferenceClickListener {
+            val progressDialog = android.app.ProgressDialog(requireContext()).apply {
+                setTitle(getString(R.string.auto_download_dsi_bios_title))
+                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin...")
+                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+                max = 100
+                setCancelable(false)
+                show()
+            }
+
+            lifecycleScope.launch {
+                val result = biosDownloadManager.downloadAndSetupDsiBios { progress ->
+                    progressDialog.progress = progress
+                }
+                progressDialog.dismiss()
+                if (result.isSuccess) {
+                    val targetDir = result.getOrThrow()
+                    val useCustomBiosPref = findPreference<androidx.preference.SwitchPreference>("use_custom_bios")
+                    useCustomBiosPref?.isChecked = true
+                    dsiBiosDirPreference.onDirectoryPicked(Uri.fromFile(targetDir))
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Успешно")
+                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin) успешно скачаны, переименованы и настроены!")
+                        .setPositiveButton(R.string.ok, null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Ошибка")
+                        .setMessage("Не удалось скачать файлы BIOS DSi: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setPositiveButton(R.string.ok, null)
+                        .show()
+                }
+            }
             true
         }
 
