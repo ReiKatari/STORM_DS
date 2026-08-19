@@ -507,12 +507,6 @@ class AndroidEmulatorManager(
                     FirmwareLaunchResult.LaunchFailed(result)
                 } else {
                     messageQueue.start()
-                    if (!precompileVulkanPipelines(emulatorConfiguration)) {
-                        cameraManager.stopCurrentCameraSource()
-                        MelonEmulator.stopEmulation()
-                        messageQueue.stop()
-                        return@withContext FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
-                    }
                     MelonEmulator.startEmulation(startPaused = true)
                     FirmwareLaunchResult.LaunchSuccessful
                 }

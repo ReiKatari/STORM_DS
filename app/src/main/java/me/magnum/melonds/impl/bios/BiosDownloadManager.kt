@@ -41,18 +41,6 @@ class BiosDownloadManager @Inject constructor(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         val targetDir = File(context.filesDir, "bios/ds").apply { mkdirs() }
-
-        // 1. First priority: Copy authentic bundled BIOS files from assets (instant & offline)
-        val extractedFromAssets = copyDsBiosFromAssets(targetDir)
-        if (extractedFromAssets && hasValidDsFiles(targetDir)) {
-            onProgress(100)
-            val dirUri = Uri.fromFile(targetDir)
-            settingsRepository.setDsBiosDirectory(dirUri)
-            settingsRepository.setUseCustomBios(true)
-            return@withContext Result.success(targetDir)
-        }
-
-        // 2. Fallback to online mirrors
         val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
@@ -72,7 +60,16 @@ class BiosDownloadManager @Inject constructor(
             }
         }
 
+        if (!downloadSuccess) {
+            // Fallback to assets only if network download failed
+            val extractedFromAssets = copyDsBiosFromAssets(targetDir)
+            if (extractedFromAssets && hasValidDsFiles(targetDir)) {
+                downloadSuccess = true
+            }
+        }
+
         if (downloadSuccess && hasValidDsFiles(targetDir)) {
+            onProgress(100)
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
@@ -86,19 +83,6 @@ class BiosDownloadManager @Inject constructor(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         val targetDir = File(context.filesDir, "bios/dsi").apply { mkdirs() }
-
-        // 1. First priority: Copy authentic bundled BIOS files from assets (bios7, bios9, firmware)
-        copyDsiBiosFromAssets(targetDir)
-
-        if (hasValidDsiFiles(targetDir)) {
-            onProgress(100)
-            val dirUri = Uri.fromFile(targetDir)
-            settingsRepository.setDsiBiosDirectory(dirUri)
-            settingsRepository.setUseCustomBios(true)
-            return@withContext Result.success(targetDir)
-        }
-
-        // 2. Try online mirrors first
         val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
@@ -118,15 +102,21 @@ class BiosDownloadManager @Inject constructor(
             }
         }
 
-        // 3. Offline Zero-Failure Fallback: synthesize valid structured DSi NAND image if missing
-        if (!hasValidDsiFiles(targetDir)) {
-            val nandFile = File(targetDir, "nand.bin")
-            if (!nandFile.exists() || !hasValidDsiFiles(targetDir)) {
-                createCleanDsiNand(nandFile)
+        if (!downloadSuccess) {
+            // Fallback to assets only if network download failed
+            copyDsiBiosFromAssets(targetDir)
+            if (!hasValidDsiFiles(targetDir)) {
+                val nandFile = File(targetDir, "nand.bin")
+                if (!nandFile.exists() || !hasValidDsiFiles(targetDir)) {
+                    createCleanDsiNand(nandFile)
+                }
+            }
+            if (hasValidDsiFiles(targetDir)) {
+                downloadSuccess = true
             }
         }
 
-        if (hasValidDsiFiles(targetDir)) {
+        if (downloadSuccess && hasValidDsiFiles(targetDir)) {
             onProgress(100)
             val dirUri = Uri.fromFile(targetDir)
             settingsRepository.setDsiBiosDirectory(dirUri)

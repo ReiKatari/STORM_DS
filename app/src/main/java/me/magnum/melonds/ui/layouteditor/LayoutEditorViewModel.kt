@@ -239,6 +239,7 @@ class LayoutEditorViewModel @Inject constructor(
         secondaryDisplayLayoutComponents: List<PositionedLayoutComponent>?,
     ) {
         if (layoutComponents == null && secondaryDisplayLayoutComponents == null) return
+        if (layoutComponents?.isEmpty() == true && secondaryDisplayLayoutComponents == null) return
         val currentVariant = currentLayoutVariant ?: return
 
         _currentLayoutConfiguration.update {

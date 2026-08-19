@@ -81,7 +81,9 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
             lifecycleScope.launch {
                 val result = biosDownloadManager.downloadAndSetupDsBios { progress ->
-                    progressDialog.progress = progress
+                    activity?.runOnUiThread {
+                        progressDialog.progress = progress
+                    }
                 }
                 progressDialog.dismiss()
                 if (result.isSuccess) {
@@ -93,13 +95,13 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                     dsBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
                         .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin) успешно настроены!\n\nПапка: ${targetDir.absolutePath}")
+                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
                     AlertDialog.Builder(requireContext())
                         .setTitle("Ошибка")
-                        .setMessage("Не удалось настроить файлы BIOS: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setMessage("Не удалось скачать файлы BIOS: ${result.exceptionOrNull()?.localizedMessage}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 }
@@ -119,7 +121,9 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
             lifecycleScope.launch {
                 val result = biosDownloadManager.downloadAndSetupDsiBios { progress ->
-                    progressDialog.progress = progress
+                    activity?.runOnUiThread {
+                        progressDialog.progress = progress
+                    }
                 }
                 progressDialog.dismiss()
                 if (result.isSuccess) {
@@ -131,13 +135,13 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                     dsiBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
                         .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin) успешно настроены!\n\nПапка: ${targetDir.absolutePath}")
+                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
                     AlertDialog.Builder(requireContext())
                         .setTitle("Ошибка")
-                        .setMessage("Не удалось настроить файлы BIOS DSi: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setMessage("Не удалось скачать файлы BIOS DSi: ${result.exceptionOrNull()?.localizedMessage}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 }
