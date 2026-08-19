@@ -868,6 +868,8 @@
   <string name="renderer_debug_capture_logged">Дамп рендерера сохранен в Logcat. ID: %1$s</string>
   <string name="renderer_debug_capture_failed">Ошибка снимка</string>
   <string name="video_vulkan_driver_category">Драйвер Vulkan</string>
+  <string name="video_vulkan_driver_manager_title">Менеджер Vulkan драйверов</string>
+  <string name="video_vulkan_driver_manager_summary">Скачивание и переключение Turnip/Mesa драйверов из сети</string>
   <string name="video_vulkan_driver_mode">Режим драйвера</string>
   <string name="video_vulkan_driver_import">Загрузить кастомный драйвер</string>
   <string name="video_vulkan_driver_import_summary">Установка zip-архива AdrenoTools</string>

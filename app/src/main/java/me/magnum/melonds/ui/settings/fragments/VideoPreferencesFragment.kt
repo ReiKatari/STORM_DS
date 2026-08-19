@@ -229,6 +229,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val retroArchShaderParametersPreference = findPreference<EditTextPreference>("video_retroarch_shader_parameters")
         val retroArchShaderClearHistoryPreference = findPreference<SwitchPreference>("video_retroarch_shader_clear_history")
         val vulkanDriverCategory = findPreference<PreferenceCategory>("video_vulkan_driver_category")!!
+        val vulkanDriverManagerPreference = findPreference<Preference>("video_vulkan_driver_manager")
         val vulkanDriverModePreference = findPreference<ListPreference>("video_vulkan_driver_mode")!!
         val vulkanDriverImportPreference = findPreference<Preference>("video_vulkan_driver_import")!!
         val vulkanDriverRemovePreference = findPreference<Preference>("video_vulkan_driver_remove")!!
@@ -287,6 +288,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 updateVulkanDriverPreferenceState(
                     renderer = newRenderer,
                     category = vulkanDriverCategory,
+                    managerPreference = vulkanDriverManagerPreference,
                     modePreference = vulkanDriverModePreference,
                     importPreference = vulkanDriverImportPreference,
                     removePreference = vulkanDriverRemovePreference,
@@ -316,6 +318,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         setupVulkanDriverPreferences(
             renderer = enumValueOfIgnoreCase(rendererPreference.value),
             category = vulkanDriverCategory,
+            managerPreference = vulkanDriverManagerPreference,
             modePreference = vulkanDriverModePreference,
             importPreference = vulkanDriverImportPreference,
             removePreference = vulkanDriverRemovePreference,
@@ -410,11 +413,21 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private fun setupVulkanDriverPreferences(
         renderer: VideoRenderer,
         category: PreferenceCategory,
+        managerPreference: Preference?,
         modePreference: ListPreference,
         importPreference: Preference,
         removePreference: Preference,
         launchedInGame: Boolean,
     ) {
+        managerPreference?.setOnPreferenceClickListener {
+            val intent = android.content.Intent(
+                requireContext(),
+                me.magnum.melonds.ui.settings.vulkandriver.VulkanDriverManagerActivity::class.java
+            )
+            startActivity(intent)
+            true
+        }
+
         modePreference.isPersistent = false
         modePreference.setOnPreferenceClickListener {
             showVulkanDriverSelectionDialog(modePreference, removePreference)
@@ -441,6 +454,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         updateVulkanDriverPreferenceState(
             renderer = renderer,
             category = category,
+            managerPreference = managerPreference,
             modePreference = modePreference,
             importPreference = importPreference,
             removePreference = removePreference,
@@ -451,6 +465,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private fun updateVulkanDriverPreferenceState(
         renderer: VideoRenderer,
         category: PreferenceCategory,
+        managerPreference: Preference?,
         modePreference: ListPreference,
         importPreference: Preference,
         removePreference: Preference,
@@ -463,6 +478,22 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         category.summary = null
+
+        val series = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getGpuSeries()
+        val repo = me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriverRepository()
+        val recommended = repo.getRecommendedDriver(series)
+        val driverDisplayName = settingsRepository.getCustomVulkanDriverDisplayName()
+        val isRecommendedActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
+            driverDisplayName != null &&
+            recommended != null &&
+            driverDisplayName.contains(recommended.version, ignoreCase = true)
+
+        if (recommended != null && !isRecommendedActive) {
+            managerPreference?.summary = "⭐ Доступен рекомендуемый: ${recommended.name}"
+        } else {
+            managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
+        }
+
         updateVulkanDriverPreferenceSummaries(modePreference, removePreference)
     }
 
@@ -1666,6 +1697,26 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         if (::shaderPresetPreference.isInitialized) {
             updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = false)
             refreshShaderPreferenceVisibility()
+        }
+        val modePreference = findPreference<ListPreference>("video_vulkan_driver_mode")
+        val removePreference = findPreference<Preference>("video_vulkan_driver_remove")
+        val managerPreference = findPreference<Preference>("video_vulkan_driver_manager")
+        if (modePreference != null && removePreference != null) {
+            updateVulkanDriverPreferenceSummaries(modePreference, removePreference)
+            val series = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getGpuSeries()
+            val repo = me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriverRepository()
+            val recommended = repo.getRecommendedDriver(series)
+            val driverDisplayName = settingsRepository.getCustomVulkanDriverDisplayName()
+            val isRecommendedActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
+                driverDisplayName != null &&
+                recommended != null &&
+                driverDisplayName.contains(recommended.version, ignoreCase = true)
+
+            if (recommended != null && !isRecommendedActive) {
+                managerPreference?.summary = "⭐ Доступен рекомендуемый: ${recommended.name}"
+            } else {
+                managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
+            }
         }
     }
 

@@ -456,6 +456,8 @@
     <string name="renderer_debug_capture_logged">Renderer capture dumped to Logcat. Capture ID: %1$s</string>
     <string name="renderer_debug_capture_failed">Renderer capture could not be dumped. Check that Renderer debug tools is enabled.</string>
     <string name="video_vulkan_driver_category">Vulkan driver</string>
+    <string name="video_vulkan_driver_manager_title">Vulkan Driver Hub</string>
+    <string name="video_vulkan_driver_manager_summary">Download and switch Turnip/Mesa drivers directly from cloud</string>
     <string name="video_vulkan_driver_mode">Adreno Vulkan driver</string>
     <string name="video_vulkan_driver_import">Import custom driver</string>
     <string name="video_vulkan_driver_import_summary">Install a driver ZIP. Changes apply the next time a game starts.</string>
