@@ -196,6 +196,15 @@ class LayoutEditorActivity : AppCompatActivity() {
             }
         }
 
+        val displayMetrics = resources.displayMetrics
+        val initialWidth = displayMetrics.widthPixels
+        val initialHeight = displayMetrics.heightPixels
+        if (initialWidth > 0 && initialHeight > 0) {
+            viewModel.setCurrentUiSize(initialWidth, initialHeight)
+        }
+        viewModel.setUiInsets(Insets.Zero)
+        viewModel.setScreenFolds(emptyList())
+        updateDisplays()
         setupFullscreen()
         updateOrientation(resources.configuration)
 
