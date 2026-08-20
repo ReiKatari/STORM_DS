@@ -1895,22 +1895,30 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
 
-    // Priority 1: Installed DSiWare shortcut (.app in NAND)
-    // Boot via DSi NAND Launcher using TLNC autoload record
+    // Priority 1: Installed DSiWare shortcut (.app extracted from NAND)
+    // Boot via NAND Launcher using TLNC autoload record — requires showBootScreen=true
     if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
     {
-        u32 titleIdLow = (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF);
-        u32 titleIdHigh = 0x00030004;
-
         nds->NDSCartSlot.EjectCart();
         auto dsi = (DSi*) nds;
+        u32 titleIdLow = (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF);
+        u32 titleIdHigh = 0x00030004; // DSiWare title ID high
         DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
     }
-    // Priority 2: Standalone ROM file (DS or DSi cartridge) -> direct cartridge boot
+    // Priority 2: Standalone DSiWare ROM or standard NDS/DSi direct boot
     else
     {
-        std::string romName;
-        nds->SetupDirectBoot(romName);
+        if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
+            && !cart->GetHeader().IsDSiWare() && currentConfiguration->showBootScreen)
+        {
+            auto dsi = (DSi*) nds;
+            DSiSupport::SetupDSiDirectBoot(dsi);
+        }
+        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot() || (cart != nullptr && cart->GetHeader().IsDSiWare()))
+        {
+            std::string romName;
+            nds->SetupDirectBoot(romName);
+        }
     }
     nds->ReleaseScreen();
     nds->Start();
@@ -1931,8 +1939,12 @@ void MelonInstance::reset()
     // If there is a cart inserted, check if direct boot is required
     if (nds->GetNDSCart())
     {
-        std::string romName;
-        nds->SetupDirectBoot(romName);
+        if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+        {
+            // This seems to be unused, but it's required
+            std::string romName;
+            nds->SetupDirectBoot(romName);
+        }
     }
 
     rewindManager.Reset();
