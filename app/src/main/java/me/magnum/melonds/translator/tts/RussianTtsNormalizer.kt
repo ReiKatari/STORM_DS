@@ -90,15 +90,15 @@ object RussianTtsNormalizer {
 
     // Acronyms and short forms
     private val ABBREVIATIONS = listOf(
-        Pattern.compile("\\bHP\\b", Pattern.CASE_INSENSITIVE) to "хэ-пэ",
-        Pattern.compile("\\bMP\\b", Pattern.CASE_INSENSITIVE) to "магия",
-        Pattern.compile("\\bEXP\\b", Pattern.CASE_INSENSITIVE) to "опыт",
-        Pattern.compile("\\bXP\\b", Pattern.CASE_INSENSITIVE) to "опыт",
+        Pattern.compile("\\bHP\\b", Pattern.CASE_INSENSITIVE) to "хит-поинты",
+        Pattern.compile("\\bMP\\b", Pattern.CASE_INSENSITIVE) to "мана-поинты",
+        Pattern.compile("\\bEXP\\b", Pattern.CASE_INSENSITIVE) to "очки опыта",
+        Pattern.compile("\\bXP\\b", Pattern.CASE_INSENSITIVE) to "очки опыта",
+        Pattern.compile("\\bNPC\\b", Pattern.CASE_INSENSITIVE) to "неигровой персонаж",
         Pattern.compile("\\bLVL?\\b", Pattern.CASE_INSENSITIVE) to "уровень",
         Pattern.compile("\\bATK\\b", Pattern.CASE_INSENSITIVE) to "атака",
         Pattern.compile("\\bDEF\\b", Pattern.CASE_INSENSITIVE) to "защита",
         Pattern.compile("\\bCRIT\\b", Pattern.CASE_INSENSITIVE) to "критический удар",
-        Pattern.compile("\\bNPC\\b", Pattern.CASE_INSENSITIVE) to "нпц",
         Pattern.compile("\\bNDS\\b", Pattern.CASE_INSENSITIVE) to "Ниндендо Ди-Эс",
         Pattern.compile("\\bDS\\b", Pattern.CASE_INSENSITIVE) to "Ди-Эс",
         Pattern.compile("\\b3DS\\b", Pattern.CASE_INSENSITIVE) to "Три-Ди-Эс",
@@ -155,6 +155,11 @@ object RussianTtsNormalizer {
                 result = sb.toString()
             }
         }
+
+        // Japanese name phonetic rules (romaji → cyrillic approximation)
+        result = result.replace(Regex("(?i)\\b([Ss])hi\\b"), "\$1i")
+            .replace(Regex("(?i)\\b([Cc])hi\\b"), "ти")
+            .replace(Regex("(?i)\\b([Tt])su\\b"), "цу")
 
         // Clean up multiple exclamation / question marks that confuse TTS
         result = result.replace(Regex("!{2,}"), "!")

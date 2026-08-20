@@ -1378,4 +1378,10 @@
     <string name="video_console_skin_type_title">Console Model &amp; Color</string>
     <string name="video_oled_battery_saver_title">Smart OLED Battery Saver</string>
     <string name="video_oled_battery_saver_summary">Dynamically optimize refresh rate and power consumption on OLED/AMOLED screens during static scenes (save up to 40% battery)</string>
+    <string name="decrypt_rom_title">ROM Encrypted</string>
+    <string name="decrypt_rom_description">This DSi ROM uses Modcrypt encryption. Decrypt it to enable direct playback.</string>
+    <string name="decrypt_rom_button">Decrypt</string>
+    <string name="decrypt_rom_success">ROM successfully decrypted!</string>
+    <string name="decrypt_rom_error">Decryption failed</string>
+    <string name="decrypt_rom_progress">Decrypting...</string>
 </resources>

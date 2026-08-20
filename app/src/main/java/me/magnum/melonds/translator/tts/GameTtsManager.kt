@@ -129,6 +129,21 @@ class GameTtsManager(private val context: Context) {
             "этан", "хильберт", "нейт", "сора", "роксас", "вентус", "юси", "джинг", "данте",
             "mario", "luigi", "link", "sonic", "crono", "neku", "megaman", "red", "ethan", "sora", "roxas"
         )
+        
+        // 11. Pirates & Adventurers
+        private val PIRATE_ADVENTURER_KEYWORDS = setOf("капитан", "пират", "сироп", "тетра", "море", "сокровища", "корабль", "captain", "pirate", "syrup", "tetra", "sea", "treasure", "ship")
+        // 12. Mad Scientists
+        private val MAD_SCIENTIST_KEYWORDS = setOf("доктор", "ученый", "уайли", "эксперимент", "изобретение", "гений", "doctor", "scientist", "wily", "experiment", "invention", "genius")
+        // 13. Ghost / Ethereal
+        private val GHOST_ETHEREAL_KEYWORDS = setOf("призрак", "бу", "генгар", "фантом", "дух", "загробный", "кинг бу", "ghost", "boo", "gengar", "phantom", "spirit", "king boo")
+        // 14. Knights & Warriors
+        private val KNIGHT_WARRIOR_KEYWORDS = setOf("рыцарь", "воин", "мета найт", "март", "айк", "меч", "честь", "доблесть", "knight", "warrior", "meta knight", "marth", "ike", "sword", "honor")
+        // 15. Comedy Characters
+        private val COMEDY_CHARACTER_KEYWORDS = setOf("варио", "валуиджи", "тингл", "смех", "комедия", "глупец", "wario", "waluigi", "tingle", "comedy", "fool")
+        // 16. Merchants & NPCs
+        private val MERCHANT_NPC_KEYWORDS = setOf("торговец", "продавец", "том нук", "магазин", "товары", "покупатель", "монеты", "merchant", "shopkeeper", "tom nook", "shop", "goods", "customer", "coins")
+        // 17. Mystical Creatures
+        private val MYSTICAL_CREATURE_KEYWORDS = setOf("мистический", "волшебный", "существо", "селеби", "джирачи", "фея", "mystical", "magical", "creature", "celebi", "jirachi", "fairy")
     }
 
     enum class CharacterPersona {
@@ -142,7 +157,14 @@ class GameTtsManager(private val context: Context) {
         CHILD_FAIRY_COMPANION, // Luke, Tails, Pikachu, Navi, Starlow
         ROBOTIC_AI_TECH,       // Robo, Omega-Xis, Pokedex, System AI
         HERO_PROTAGONIST_MALE, // Mario, Link, Sonic, Crono, Sora
-        NARRATOR_CHRONICLE     // World chronicle & descriptions
+        NARRATOR_CHRONICLE,    // World chronicle & descriptions
+        PIRATE_ADVENTURER,
+        MAD_SCIENTIST,
+        GHOST_ETHEREAL,
+        KNIGHT_WARRIOR,
+        COMEDY_CHARACTER,
+        MERCHANT_NPC,
+        MYSTICAL_CREATURE
     }
 
     private val preferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -282,6 +304,13 @@ class GameTtsManager(private val context: Context) {
                         CharacterPersona.ROBOTIC_AI_TECH -> Triple("ru-RU-DmitryNeural", "-18%", "+5%")
                         CharacterPersona.HERO_PROTAGONIST_MALE -> Triple("ru-RU-DmitryNeural", "+6%", "+2%")
                         CharacterPersona.NARRATOR_CHRONICLE -> Triple("ru-RU-DmitryNeural", "0%", "0%")
+                        CharacterPersona.PIRATE_ADVENTURER -> Triple("ru-RU-DmitryNeural", "-5%", "+10%")
+                        CharacterPersona.MAD_SCIENTIST -> Triple("ru-RU-DmitryNeural", "+30%", "+20%")
+                        CharacterPersona.GHOST_ETHEREAL -> Triple("ru-RU-SvetlanaNeural", "+10%", "-30%")
+                        CharacterPersona.KNIGHT_WARRIOR -> Triple("ru-RU-DmitryNeural", "-10%", "-5%")
+                        CharacterPersona.COMEDY_CHARACTER -> Triple("ru-RU-DmitryNeural", "+40%", "+30%")
+                        CharacterPersona.MERCHANT_NPC -> Triple("ru-RU-DmitryNeural", "+5%", "+5%")
+                        CharacterPersona.MYSTICAL_CREATURE -> Triple("ru-RU-SvetlanaNeural", "+45%", "+10%")
                     }
                     "ja" -> when (persona) {
                         CharacterPersona.HEROINE_FEMALE, CharacterPersona.ANGELIC_DIVINE, CharacterPersona.CHILD_FAIRY_COMPANION ->
@@ -294,6 +323,13 @@ class GameTtsManager(private val context: Context) {
                         CharacterPersona.HEROINE_FEMALE -> Triple("en-US-JennyNeural", "+2%", "0%")
                         CharacterPersona.CHILD_FAIRY_COMPANION -> Triple("en-US-AnaNeural", "+15%", "+6%")
                         CharacterPersona.ELDER_ANCIENT_BOSS -> Triple("en-US-RogerNeural", "-15%", "-10%")
+                        CharacterPersona.PIRATE_ADVENTURER -> Triple("en-US-GuyNeural", "-5%", "+10%")
+                        CharacterPersona.MAD_SCIENTIST -> Triple("en-US-ChristopherNeural", "+30%", "+20%")
+                        CharacterPersona.GHOST_ETHEREAL -> Triple("en-US-AnaNeural", "+10%", "-30%")
+                        CharacterPersona.KNIGHT_WARRIOR -> Triple("en-US-RogerNeural", "-10%", "-5%")
+                        CharacterPersona.COMEDY_CHARACTER -> Triple("en-US-ChristopherNeural", "+40%", "+30%")
+                        CharacterPersona.MERCHANT_NPC -> Triple("en-US-GuyNeural", "+5%", "+5%")
+                        CharacterPersona.MYSTICAL_CREATURE -> Triple("en-US-AnaNeural", "+45%", "+10%")
                         else -> Triple("en-US-GuyNeural", "0%", "0%")
                     }
                 }
@@ -388,6 +424,13 @@ class GameTtsManager(private val context: Context) {
             if (CHILD_FAIRY_COMPANION_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.CHILD_FAIRY_COMPANION
             if (ROBOTIC_AI_TECH_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.ROBOTIC_AI_TECH
             if (HERO_PROTAGONIST_MALE_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.HERO_PROTAGONIST_MALE
+            if (PIRATE_ADVENTURER_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.PIRATE_ADVENTURER
+            if (MAD_SCIENTIST_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.MAD_SCIENTIST
+            if (GHOST_ETHEREAL_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.GHOST_ETHEREAL
+            if (KNIGHT_WARRIOR_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.KNIGHT_WARRIOR
+            if (COMEDY_CHARACTER_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.COMEDY_CHARACTER
+            if (MERCHANT_NPC_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.MERCHANT_NPC
+            if (MYSTICAL_CREATURE_KEYWORDS.any { candidateSpeaker.contains(it) || it.contains(candidateSpeaker) }) return CharacterPersona.MYSTICAL_CREATURE
         }
 
         // 2. Behavioral & Dialogue Vocative Triggers
@@ -422,6 +465,13 @@ class GameTtsManager(private val context: Context) {
         if (CHILD_FAIRY_COMPANION_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.CHILD_FAIRY_COMPANION
         if (ROBOTIC_AI_TECH_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.ROBOTIC_AI_TECH
         if (HERO_PROTAGONIST_MALE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.HERO_PROTAGONIST_MALE
+        if (PIRATE_ADVENTURER_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.PIRATE_ADVENTURER
+        if (MAD_SCIENTIST_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.MAD_SCIENTIST
+        if (GHOST_ETHEREAL_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.GHOST_ETHEREAL
+        if (KNIGHT_WARRIOR_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.KNIGHT_WARRIOR
+        if (COMEDY_CHARACTER_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.COMEDY_CHARACTER
+        if (MERCHANT_NPC_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.MERCHANT_NPC
+        if (MYSTICAL_CREATURE_KEYWORDS.any { lower.contains(it) }) return CharacterPersona.MYSTICAL_CREATURE
 
         return CharacterPersona.NARRATOR_CHRONICLE
     }
@@ -463,7 +513,12 @@ class GameTtsManager(private val context: Context) {
             CharacterPersona.ELDER_ANCIENT_BOSS,
             CharacterPersona.ROBOTIC_AI_TECH,
             CharacterPersona.HERO_PROTAGONIST_MALE,
-            CharacterPersona.NARRATOR_CHRONICLE -> true
+            CharacterPersona.NARRATOR_CHRONICLE,
+            CharacterPersona.PIRATE_ADVENTURER,
+            CharacterPersona.MAD_SCIENTIST,
+            CharacterPersona.KNIGHT_WARRIOR,
+            CharacterPersona.COMEDY_CHARACTER,
+            CharacterPersona.MERCHANT_NPC -> true
             else -> false
         }
 
@@ -569,6 +624,41 @@ class GameTtsManager(private val context: Context) {
                 // Balanced storyteller voice
                 tts?.setPitch(0.98f)
                 tts?.setSpeechRate(baseSpeed)
+            }
+            CharacterPersona.PIRATE_ADVENTURER -> {
+                if (primaryMaleVoice != null) { try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(0.95f)
+                tts?.setSpeechRate(baseSpeed * 1.10f)
+            }
+            CharacterPersona.MAD_SCIENTIST -> {
+                if (primaryMaleVoice != null) { try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(1.30f)
+                tts?.setSpeechRate(baseSpeed * 1.20f)
+            }
+            CharacterPersona.GHOST_ETHEREAL -> {
+                if (secondaryFemaleVoice != null) { try { tts?.voice = secondaryFemaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(1.10f)
+                tts?.setSpeechRate(baseSpeed * 0.70f)
+            }
+            CharacterPersona.KNIGHT_WARRIOR -> {
+                if (primaryMaleVoice != null) { try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(0.90f)
+                tts?.setSpeechRate(baseSpeed * 0.95f)
+            }
+            CharacterPersona.COMEDY_CHARACTER -> {
+                if (primaryMaleVoice != null) { try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(1.40f)
+                tts?.setSpeechRate(baseSpeed * 1.30f)
+            }
+            CharacterPersona.MERCHANT_NPC -> {
+                if (primaryMaleVoice != null) { try { tts?.voice = primaryMaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(1.05f)
+                tts?.setSpeechRate(baseSpeed * 1.05f)
+            }
+            CharacterPersona.MYSTICAL_CREATURE -> {
+                if (primaryFemaleVoice != null) { try { tts?.voice = primaryFemaleVoice } catch (_: Throwable) {} }
+                tts?.setPitch(1.45f)
+                tts?.setSpeechRate(baseSpeed * 1.10f)
             }
         }
     }

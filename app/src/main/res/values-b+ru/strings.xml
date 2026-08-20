@@ -1099,6 +1099,11 @@
   <string name="dsi_incorrect_bios_dir_info">Путь к BIOS Nintendo DSi содержит некорректные дамп-файлы</string>
   <string name="dsiware_manager_import_file_error">Ошибка импорта файла DSiWare</string>
   <string name="video_retroarch_shader_browser_passes">Проходов: %1$d</string>
+  <plurals name="video_retroarch_shader_browser_passes">
+      <item quantity="one">%1$d проход</item>
+      <item quantity="few">%1$d прохода</item>
+      <item quantity="many">%1$d проходов</item>
+  </plurals>
   <string name="dsiware_manager_import_title_error_insatll_failed">Сбой установки игры DSiWare</string>
   <string name="dsiware_manager_import_title_error_open_file_failed">Не удалось открыть файл DSiWare</string>
   <string name="invalid_auto_load_state">Файл автоматического сохранения поврежден</string>
@@ -1304,4 +1309,10 @@
     <string name="video_console_skin_type_title">Модель и цвет консоли</string>
     <string name="video_oled_battery_saver_title">Энергосбережение для OLED-экранов</string>
     <string name="video_oled_battery_saver_summary">Динамическая оптимизация частоты обновления и энергопотребления на OLED-дисплеях при статичных сценах (экономия до 40% батареи)</string>
+  <string name="decrypt_rom_title">ROM зашифрован</string>
+  <string name="decrypt_rom_description">Этот DSi ROM использует шифрование Modcrypt. Расшифруйте его для прямого воспроизведения.</string>
+  <string name="decrypt_rom_button">Расшифровать</string>
+  <string name="decrypt_rom_success">ROM успешно расшифрован!</string>
+  <string name="decrypt_rom_error">Ошибка расшифровки</string>
+  <string name="decrypt_rom_progress">Расшифровка...</string>
 </resources>
