@@ -51,6 +51,7 @@ fun RomContextMenu(
     onSendSaveFile: (Rom) -> Unit,
     onImportSaveFile: (Rom) -> Unit,
     onLaunchRom: (Rom) -> Unit = {},
+    onDecryptRom: (Rom) -> Unit = {},
 ) {
     if (rom == null) return
     val colors = watermelon
@@ -113,6 +114,17 @@ fun RomContextMenu(
                         onDismiss()
                     },
                 )
+                if (rom.isDsiWareTitle) {
+                    ContextItem(
+                        icon = Icons.Filled.Info, // Or another icon
+                        iconTint = colors.green,
+                        label = stringResource(R.string.decrypt_rom_title),
+                        onClick = {
+                            onDecryptRom(rom)
+                            onDismiss()
+                        },
+                    )
+                }
                 ContextItem(
                     icon = if (rom.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
                     iconTint = if (rom.isFavorite) WatermelonColors.favoriteStar else colors.text2,

@@ -116,71 +116,28 @@ class GameTranslatorManager(
     }
 
     fun showQuickEngineSelectorDialog() {
-        val currentPref = preferences.getString(PREF_TRANSLATOR_ENGINE, "google")
-        val currentEngine = TranslatorEngineType.fromPreference(currentPref)
-        val triggerMode = TranslatorTriggerMode.fromPreference(preferences.getString(PREF_TRANSLATOR_TRIGGER_MODE, "on_demand"))
-        val overlayStyle = TranslatorOverlayStyle.fromPreference(preferences.getString(PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match"))
-        val ttsEnabled = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
-        val voiceEngine = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
-        val voiceEngineName = when (voiceEngine) {
-            "neural_edge" -> "Живой Edge Neural HD"
-            "local_multi" -> "Многоголосая системная"
-            else -> "Один голос (Системный)"
-        }
-
-        val triggerModeName = when (triggerMode) {
-            TranslatorTriggerMode.ON_DEMAND -> "По нажатию кнопки"
-            TranslatorTriggerMode.AUTO_SCREEN_CHANGE -> "Автоматически при смене диалога"
-        }
-
-        val overlayStyleName = when (overlayStyle) {
-            TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> "Нативный блок с фоном"
-            TranslatorOverlayStyle.SEMI_TRANSPARENT -> "Полупрозрачный"
-            TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> "Полупрозрачный бабл"
-            TranslatorOverlayStyle.OUTLINE_ONLY -> "Только контур"
-        }
-
-        val ttsLang = preferences.getString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
-        val langName = when (ttsLang) {
-            "ru" -> "Русский (ru)"
-            "en" -> "English (en)"
-            "ja" -> "日本語 (ja)"
-            "zh" -> "中文 (zh)"
-            "de" -> "Deutsch (de)"
-            "fr" -> "Français (fr)"
-            "es" -> "Español (es)"
-            else -> "Авто (По переводу)"
-        }
-
-        val items = mutableListOf<CharSequence>()
-        items.add(android.text.Html.fromHtml("<b>⚡ Режим активации:</b> <font color='#4ADE80'>$triggerModeName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml("<b>🎨 Стиль наложения:</b> <font color='#38BDF8'>$overlayStyleName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml("<b>🌐 Движок:</b> <font color='#FACC15'>${currentEngine.displayName.substringBefore(" (")}</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml("<font color='#64748B'>────────────────────────</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml(if (ttsEnabled) "<b>🔊 Озвучка (TTS):</b> <font color='#4ADE80'>[ВКЛ]</font>" else "<b>🔇 Озвучка (TTS):</b> <font color='#94A3B8'>[ВЫКЛ]</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml("<b>🎙️ Режим озвучки:</b> <font color='#38BDF8'>$voiceEngineName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml("<b>🌐 Язык озвучки:</b> <font color='#38BDF8'>$langName</font>", android.text.Html.FROM_HTML_MODE_LEGACY))
-        items.add(android.text.Html.fromHtml("<b>📐 Настроить зоны перевода (OCR)</b>", android.text.Html.FROM_HTML_MODE_LEGACY))
-
-        androidx.appcompat.app.AlertDialog.Builder(activity)
-            .setTitle("Настройки перевода и озвучки")
-            .setItems(items.toTypedArray()) { _, which ->
-                when (which) {
-                    0 -> showTriggerModeSelectorDialog()
-                    1 -> showOverlayStyleSelectorDialog()
-                    2 -> showEngineListDialog()
-                    4 -> {
-                        val newTts = !ttsEnabled
-                        preferences.edit().putBoolean(PREF_TRANSLATOR_TTS_ENABLED, newTts).apply()
-                        Toast.makeText(activity, if (newTts) "🔊 Озвучка диалогов включена" else "🔇 Озвучка диалогов отключена", Toast.LENGTH_SHORT).show()
-                    }
-                    5 -> showVoiceEngineSelectorDialog()
-                    6 -> showTtsLanguageSelectorDialog()
-                    7 -> openRegionEditor()
+        val bottomSheetDialog = com.google.android.material.bottomsheet.BottomSheetDialog(activity)
+        val composeView = androidx.compose.ui.platform.ComposeView(activity).apply {
+            setContent {
+                me.magnum.melonds.ui.theme.MelonTheme {
+                    me.magnum.melonds.translator.ui.TranslatorSettingsContent(
+                        preferences = preferences,
+                        onClose = { bottomSheetDialog.dismiss() },
+                        onSyncOverlay = { syncOverlaySettings() },
+                        onStartAutoTranslate = { startAutoTranslateIfEnabled() },
+                        onOpenRegionEditor = {
+                            bottomSheetDialog.dismiss()
+                            openRegionEditor()
+                        },
+                        onPreviewTts = {
+                            ttsManager?.speak("This is a preview voice.", "en")
+                        }
+                    )
                 }
             }
-            .setNegativeButton(R.string.close, null)
-            .show()
+        }
+        bottomSheetDialog.setContentView(composeView)
+        bottomSheetDialog.show()
     }
 
     private fun showVoiceEngineSelectorDialog() {

@@ -100,6 +100,11 @@ class RomListFragment : Fragment() {
                     val boxArtByUri by romListViewModel.boxArtByUri.collectAsState()
                     var contextRomUri by remember { mutableStateOf<String?>(null) }
                     var searchQuery by remember { mutableStateOf("") }
+                    
+                    var decryptionRom by remember { mutableStateOf<Rom?>(null) }
+                    var decryptionState by remember { mutableStateOf(me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM) }
+                    var decryptionProgress by remember { mutableStateOf(0f) }
+                    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
                     backPressedCallback.isEnabled = state.canNavigateUp && !state.isSearchActive
 
@@ -108,6 +113,20 @@ class RomListFragment : Fragment() {
                         state.entries.firstNotNullOfOrNull {
                             (it as? RomBrowserEntry.RomItem)?.rom?.takeIf { r -> r.uri.toString() == target }
                         } ?: state.continuePlaying.firstOrNull { it.uri.toString() == target }
+                    }
+
+                    val checkAndLaunch = { rom: Rom ->
+                        if (rom.isDsiWareTitle) {
+                            val romPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), rom.uri)
+                            if (romPath != null && me.magnum.melonds.MelonRomDecryptor.checkEncryption(romPath) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                                decryptionRom = rom
+                                decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
+                            } else {
+                                romSelectedListener?.invoke(rom)
+                            }
+                        } else {
+                            romSelectedListener?.invoke(rom)
+                        }
                     }
 
                     RomBrowserScreen(
@@ -122,7 +141,7 @@ class RomListFragment : Fragment() {
                         onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
                         onRomClick = { rom ->
                             romListViewModel.setRomLastPlayedNow(rom)
-                            romSelectedListener?.invoke(rom)
+                            checkAndLaunch(rom)
                         },
                         onRomLongPress = { rom -> contextRomUri = rom.uri.toString() },
                         onRomConfigClick = { rom -> contextRomUri = rom.uri.toString() },
@@ -155,8 +174,47 @@ class RomListFragment : Fragment() {
                         onShowDetails = { rom -> openRomDetails(rom) },
                         onSendSaveFile = { rom -> shareSaveFile(rom) },
                         onImportSaveFile = { rom -> requestSaveFileImport(rom) },
-                        onLaunchRom = { rom -> romSelectedListener?.invoke(rom) },
+                        onLaunchRom = { rom -> checkAndLaunch(rom) },
+                        onDecryptRom = { rom ->
+                            val romPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), rom.uri)
+                            if (romPath != null) {
+                                decryptionRom = rom
+                                decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
+                            } else {
+                                Toast.makeText(requireContext(), "Cannot resolve file path", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     )
+
+                    decryptionRom?.let { rom ->
+                        val romPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), rom.uri) ?: ""
+                        me.magnum.melonds.ui.romlist.composables.DecryptionDialog(
+                            show = true,
+                            onDismiss = { decryptionRom = null },
+                            onDecrypt = {
+                                decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.DECRYPTING
+                                decryptionProgress = 0f
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(romPath, object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
+                                        override fun onProgress(current: Int, total: Int) {
+                                            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                                decryptionProgress = if (total > 0) current.toFloat() / total else 0f
+                                            }
+                                        }
+                                    })
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        if (result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.SUCCESS || result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.ALREADY_DECRYPTED) {
+                                            decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.SUCCESS
+                                        } else {
+                                            decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.ERROR
+                                        }
+                                    }
+                                }
+                            },
+                            state = decryptionState,
+                            progress = decryptionProgress
+                        )
+                    }
                 }
             }
         }
