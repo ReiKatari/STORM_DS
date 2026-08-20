@@ -273,7 +273,7 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM9BIOS(const EmulatorConfiguration& confi
         FileRead(bios->data(), bios->size(), 1, f);
         CloseFile(f);
 
-        if (!configuration.showBootScreen)
+        if (!configuration.showBootScreen && configuration.dsiWareAutoloadTitleId == 0)
         {
             // herp
             *(u32*)bios->data() = 0xEAFFFFFE; // overwrites the reset vector
@@ -306,7 +306,7 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM7BIOS(const EmulatorConfiguration& confi
         FileRead(bios->data(), bios->size(), 1, f);
         CloseFile(f);
 
-        if (!configuration.showBootScreen)
+        if (!configuration.showBootScreen && configuration.dsiWareAutoloadTitleId == 0)
         {
             // herp
             *(u32*)bios->data() = 0xEAFFFFFE; // overwrites the reset vector
@@ -459,7 +459,8 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
 
         if (!mount.ApplyUserData(settings))
         {
-            Log(LogLevel::Warn, "Could not write patched DSi NAND user data, continuing\n");
+            Log(LogLevel::Error, "Failed to write patched DSi NAND user data\n");
+            return std::nullopt;
         }
     }
 
