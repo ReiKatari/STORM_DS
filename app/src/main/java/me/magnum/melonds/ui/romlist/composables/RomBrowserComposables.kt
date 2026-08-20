@@ -188,10 +188,10 @@ fun WatermelonLibraryHeader(
                     }
                     DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDs() }) {
-                            Text(stringResource(R.string.action_boot_firmware) + " · " + stringResource(R.string.console_ds))
+                            Text(stringResource(R.string.action_boot_firmware_ds))
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDsi() }) {
-                            Text(stringResource(R.string.action_boot_firmware) + " · " + stringResource(R.string.console_dsi))
+                            Text(stringResource(R.string.action_boot_firmware_dsi))
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onOpenDsiWareManager() }) {
                             Text(stringResource(R.string.dsiware_manager))

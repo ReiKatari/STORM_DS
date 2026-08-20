@@ -1008,8 +1008,8 @@
   <string name="layout_export_success">Макет успешно экспортирован</string>
   <string name="layout_import_success">Макет успешно импортирован</string>
   <string name="layout_operation_failed">Не удалось выполнить операцию с макетом</string>
-  <string name="action_boot_firmware_ds">Nintendo DS (BIOS)</string>
-  <string name="action_boot_firmware_dsi">Nintendo DSi (NAND)</string>
+  <string name="action_boot_firmware_ds">Запустить прошивку Nintendo DS</string>
+  <string name="action_boot_firmware_dsi">Запустить прошивку Nintendo DSi</string>
   <string name="audio">Звук</string>
   <string name="video">Видео</string>
   <string name="general">Основные</string>
@@ -1113,7 +1113,7 @@
   <string name="rewind_unavailable_ra_hardcore_enabled">Перемотка недоступна в хардкорном режиме RetroAchievements</string>
   <string name="downloading_update">Загрузка обновления…</string>
   <string name="skip_update">Пропустить</string>
-  <string name="action_boot_firmware">Запустить прошивку Nintendo DS</string>
+  <string name="action_boot_firmware">Запустить прошивку</string>
   <string name="delete_bios_paths">Сбросить пути к BIOS</string>
   <string name="dsiware_import_from_file">Импорт из файла</string>
   <string name="failed_launch_dsiware_title_not_installed">Игра DSiWare не установлена в NAND</string>

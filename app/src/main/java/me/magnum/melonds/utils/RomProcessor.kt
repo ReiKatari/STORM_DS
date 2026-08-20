@@ -171,7 +171,7 @@ object RomProcessor {
 			val gameTitle = romHeader.decodeToString(endIndex = 12)
 			val gameCode = romHeader.decodeToString(startIndex = 12, endIndex = 12 + 4)
 			val headerChecksum = Crc32.compute(romHeader)
-			RomInfo(gameCode, headerChecksum, gameTitle, rom.name)
+			RomInfo(gameCode, headerChecksum, gameTitle, rom.name, rom.isDsiWareTitle)
 		}.getOrNull()
 	}
 

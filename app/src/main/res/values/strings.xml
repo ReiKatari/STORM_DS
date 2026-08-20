@@ -54,8 +54,8 @@
     <string name="renderer_init_failed_message">%1$s renderer could not be initialized. Change Video renderer in Settings.</string>
     <string name="action_search_roms">Search ROMs</string>
     <string name="action_sort_roms">Sort ROMs</string>
-    <string name="action_boot_firmware_ds">Nintendo DS (BIOS)</string>
-    <string name="action_boot_firmware_dsi">Nintendo DSi (NAND)</string>
+    <string name="action_boot_firmware_ds">Boot Nintendo DS firmware</string>
+    <string name="action_boot_firmware_dsi">Boot Nintendo DSi firmware</string>
     <string name="audio">Audio</string>
     <string name="general">General</string>
     <string name="save_files">Save files</string>

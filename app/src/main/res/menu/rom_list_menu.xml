@@ -58,12 +58,12 @@
         <menu>
             <item
                 android:id="@+id/action_boot_firmware_ds"
-                android:title="@string/console_ds"
+                android:title="@string/action_boot_firmware_ds"
                 android:orderInCategory="1" />
 
             <item
                 android:id="@+id/action_boot_firmware_dsi"
-                android:title="@string/console_dsi"
+                android:title="@string/action_boot_firmware_dsi"
                 android:orderInCategory="1" />
         </menu>
     </item>

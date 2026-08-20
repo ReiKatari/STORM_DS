@@ -56,6 +56,7 @@ class EmulatorLaunchValidatorDelegate(
                         is LaunchValidationResult.Rom -> {
                             when (it.result) {
                                 is RomLaunchPreconditionCheckResult.Success -> callback.onRomValidated(it.result.rom)
+                                is RomLaunchPreconditionCheckResult.RomEncrypted -> showRomEncryptedDialog(it.result.rom)
                                 is RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed -> showDsiWareTitleLoadIssueDialog(it.result.reason)
                                 is RomLaunchPreconditionCheckResult.BiosConfigurationIncorrect -> {
                                     showIncorrectConfigurationDirectoryDialogForRom(it.result.configurationDirectoryResult)
@@ -179,6 +180,48 @@ class EmulatorLaunchValidatorDelegate(
             .setPositiveButton(R.string.settings) { _, _ ->
                 val intent = Intent(context, SettingsActivity::class.java)
                 firmwareSettingsLauncher.launch(intent)
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
+            .setOnCancelListener { callback.onValidationAborted() }
+            .show()
+    }
+
+    private fun showRomEncryptedDialog(rom: Rom) {
+        AlertDialog.Builder(context)
+            .setTitle(R.string.decrypt_rom_title)
+            .setMessage(R.string.decrypt_rom_description)
+            .setPositiveButton(R.string.decrypt_rom_button) { _, _ ->
+                @Suppress("DEPRECATION")
+                val progressDialog = android.app.ProgressDialog(context).apply {
+                    setTitle(context.getString(R.string.decrypt_rom_title))
+                    setMessage(context.getString(R.string.decrypt_rom_progress))
+                    setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+                    max = 100
+                    setCancelable(false)
+                    show()
+                }
+
+                context.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri, object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
+                        override fun onProgress(current: Int, total: Int) {
+                            val percent = if (total > 0) ((current.toLong() * 100) / total).toInt() else 0
+                            context.runOnUiThread {
+                                progressDialog.progress = percent
+                            }
+                        }
+                    })
+
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        progressDialog.dismiss()
+                        if (result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.SUCCESS || result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.ALREADY_DECRYPTED) {
+                            android.widget.Toast.makeText(context, R.string.decrypt_rom_success, android.widget.Toast.LENGTH_SHORT).show()
+                            validateRom(rom)
+                        } else {
+                            android.widget.Toast.makeText(context, R.string.decrypt_rom_error, android.widget.Toast.LENGTH_LONG).show()
+                            callback.onValidationAborted()
+                        }
+                    }
+                }
             }
             .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
             .setOnCancelListener { callback.onValidationAborted() }

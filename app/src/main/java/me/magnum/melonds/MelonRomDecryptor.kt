@@ -1,8 +1,14 @@
 package me.magnum.melonds
 
+import android.content.Context
+import android.net.Uri
+import android.os.ParcelFileDescriptor
+import me.magnum.melonds.utils.FileUtils
+
 /**
  * JNI bridge for DSi ROM Modcrypt decryption.
  * Checks if a ROM file is encrypted (AES-128-CTR Modcrypt) and can decrypt it in-place on disk.
+ * Supports direct file paths and Android Storage Access Framework (SAF) content:// URIs via ParcelFileDescriptor.
  */
 object MelonRomDecryptor {
 
@@ -39,13 +45,59 @@ object MelonRomDecryptor {
     }
 
     fun checkEncryption(romPath: String): EncryptionStatus {
-        return EncryptionStatus.fromCode(checkEncryptionNative(romPath))
+        return try {
+            EncryptionStatus.fromCode(checkEncryptionNative(romPath))
+        } catch (_: Throwable) {
+            EncryptionStatus.ERROR_READING_FILE
+        }
+    }
+
+    fun checkEncryption(context: Context, uri: Uri): EncryptionStatus {
+        val path = FileUtils.getAbsolutePathFromSAFUri(context, uri)
+        if (path != null) {
+            val status = checkEncryption(path)
+            if (status != EncryptionStatus.ERROR_READING_FILE) {
+                return status
+            }
+        }
+
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                EncryptionStatus.fromCode(checkEncryptionFdNative(pfd.fd))
+            } ?: EncryptionStatus.ERROR_READING_FILE
+        } catch (_: Throwable) {
+            EncryptionStatus.ERROR_READING_FILE
+        }
     }
 
     fun decryptRom(romPath: String, progressCallback: DecryptProgressCallback? = null): DecryptResult {
-        return DecryptResult.fromCode(decryptRomNative(romPath, progressCallback))
+        return try {
+            DecryptResult.fromCode(decryptRomNative(romPath, progressCallback))
+        } catch (_: Throwable) {
+            DecryptResult.ERROR_READING_FILE
+        }
+    }
+
+    fun decryptRom(context: Context, uri: Uri, progressCallback: DecryptProgressCallback? = null): DecryptResult {
+        val path = FileUtils.getAbsolutePathFromSAFUri(context, uri)
+        if (path != null) {
+            val result = decryptRom(path, progressCallback)
+            if (result == DecryptResult.SUCCESS || result == DecryptResult.ALREADY_DECRYPTED) {
+                return result
+            }
+        }
+
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                DecryptResult.fromCode(decryptRomFdNative(pfd.fd, progressCallback))
+            } ?: DecryptResult.ERROR_READING_FILE
+        } catch (_: Throwable) {
+            DecryptResult.ERROR_READING_FILE
+        }
     }
 
     private external fun checkEncryptionNative(romPath: String): Int
+    private external fun checkEncryptionFdNative(fd: Int): Int
     private external fun decryptRomNative(romPath: String, progressCallback: DecryptProgressCallback?): Int
+    private external fun decryptRomFdNative(fd: Int, progressCallback: DecryptProgressCallback?): Int
 }
