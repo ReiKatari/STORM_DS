@@ -1,54 +1,51 @@
 package me.magnum.melonds.ui.inputsetup.ui
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.border
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Switch
+import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
-import androidx.compose.material.TopAppBar
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component1
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component2
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.Flow
@@ -58,8 +55,10 @@ import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.InputConfig
 import me.magnum.melonds.domain.model.Slot2AnalogMapping
 import me.magnum.melonds.ui.common.MelonPreviewSet
+import me.magnum.melonds.ui.common.WatermelonScreenScaffold
 import me.magnum.melonds.ui.inputsetup.InputSetupViewModel
 import me.magnum.melonds.ui.theme.MelonTheme
+import me.magnum.melonds.ui.theme.watermelon
 import java.util.Locale
 
 @Composable
@@ -85,12 +84,27 @@ fun InputSetupScreen(
         onSlot2AxisYClick = { viewModel.startSlot2AxisAssignment(InputSetupViewModel.Slot2AnalogAxisTarget.Y) },
         onSlot2InvertXChanged = viewModel::setSlot2InvertX,
         onSlot2InvertYChanged = viewModel::setSlot2InvertY,
-        onSlot2DeadzoneChanged = viewModel::setSlot2Deadzone,
-        onSlot2UseDeviceFilterChanged = viewModel::setSlot2UseDeviceFilter,
+        onDeadzoneChanged = viewModel::setSlot2Deadzone,
+        onUseDeviceFilterChanged = viewModel::setSlot2UseDeviceFilter,
         onCancelInputConfiguration = viewModel::stopAnyAssignment,
         onBackClick = onBackClick,
     )
 }
+
+private val CONSOLE_INPUTS = setOf(
+    Input.UP,
+    Input.DOWN,
+    Input.LEFT,
+    Input.RIGHT,
+    Input.A,
+    Input.B,
+    Input.X,
+    Input.Y,
+    Input.L,
+    Input.R,
+    Input.START,
+    Input.SELECT,
+)
 
 @Composable
 private fun InputSetupScreenContent(
@@ -105,8 +119,8 @@ private fun InputSetupScreenContent(
     onSlot2AxisYClick: () -> Unit,
     onSlot2InvertXChanged: (Boolean) -> Unit,
     onSlot2InvertYChanged: (Boolean) -> Unit,
-    onSlot2DeadzoneChanged: (Float) -> Unit,
-    onSlot2UseDeviceFilterChanged: (Boolean) -> Unit,
+    onDeadzoneChanged: (Float) -> Unit,
+    onUseDeviceFilterChanged: (Boolean) -> Unit,
     onCancelInputConfiguration: () -> Unit,
     onBackClick: () -> Unit,
 ) {
@@ -121,23 +135,33 @@ private fun InputSetupScreenContent(
         }
     }
 
-    me.magnum.melonds.ui.common.WatermelonScreenScaffold(
+    val consoleConfig = remember(inputConfig) {
+        inputConfig.filter { it.input in CONSOLE_INPUTS }
+    }
+    val hotkeyConfig = remember(inputConfig) {
+        inputConfig.filter { it.input !in CONSOLE_INPUTS }
+    }
+
+    WatermelonScreenScaffold(
         title = stringResource(R.string.key_mapping),
         onBack = onBackClick,
     ) { padding ->
         Box(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
                     top = padding.calculateTopPadding() + 12.dp,
-                    bottom = padding.calculateBottomPadding() + 12.dp,
+                    bottom = padding.calculateBottomPadding() + 24.dp,
                 ),
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                item {
+                    SectionHeader(title = stringResource(R.string.input_group_console))
+                }
                 items(
-                    items = inputConfig,
+                    items = consoleConfig,
                     key = { it.input },
                 ) {
                     Input(
@@ -147,6 +171,27 @@ private fun InputSetupScreenContent(
                         onClearClick = { onClearInputClick(it.input) },
                     )
                 }
+
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    SectionHeader(title = stringResource(R.string.input_group_hotkeys))
+                }
+                items(
+                    items = hotkeyConfig,
+                    key = { it.input },
+                ) {
+                    Input(
+                        config = it,
+                        isBeingConfigured = it.input == inputUnderConfiguration,
+                        onClick = { onInputClick(it.input) },
+                        onClearClick = { onClearInputClick(it.input) },
+                    )
+                }
+
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    SectionHeader(title = stringResource(R.string.slot2_analog_mapping_title))
+                }
                 item {
                     Slot2AnalogMappingSection(
                         slot2AnalogMapping = slot2AnalogMapping,
@@ -155,8 +200,8 @@ private fun InputSetupScreenContent(
                         onAxisYClick = onSlot2AxisYClick,
                         onInvertXChanged = onSlot2InvertXChanged,
                         onInvertYChanged = onSlot2InvertYChanged,
-                        onDeadzoneChanged = onSlot2DeadzoneChanged,
-                        onUseDeviceFilterChanged = onSlot2UseDeviceFilterChanged,
+                        onDeadzoneChanged = onDeadzoneChanged,
+                        onUseDeviceFilterChanged = onUseDeviceFilterChanged,
                     )
                 }
             }
@@ -178,6 +223,19 @@ private fun InputSetupScreenContent(
 }
 
 @Composable
+private fun SectionHeader(title: String) {
+    val colors = watermelon
+    Text(
+        text = title,
+        style = MaterialTheme.typography.subtitle2.copy(
+            color = colors.green,
+            fontWeight = FontWeight.Bold,
+        ),
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
 private fun Slot2AnalogMappingSection(
     slot2AnalogMapping: Slot2AnalogMapping,
     slot2AxisUnderConfiguration: InputSetupViewModel.Slot2AnalogAxisTarget?,
@@ -188,6 +246,10 @@ private fun Slot2AnalogMappingSection(
     onDeadzoneChanged: (Float) -> Unit,
     onUseDeviceFilterChanged: (Boolean) -> Unit,
 ) {
+    val colors = watermelon
+    val cardShape = RoundedCornerShape(14.dp)
+    val innerShape = RoundedCornerShape(10.dp)
+
     val axisXLabel = if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.X) {
         stringResource(R.string.press_any_button)
     } else {
@@ -199,157 +261,242 @@ private fun Slot2AnalogMappingSection(
         formatAxisName(slot2AnalogMapping.axisYCode)
     }
 
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Text(
-            text = stringResource(R.string.slot2_analog_mapping_title),
-            style = MaterialTheme.typography.subtitle1,
-        )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(colors.surface2)
+            .border(1.dp, colors.surface3, cardShape)
+            .padding(14.dp),
+    ) {
         Text(
             text = stringResource(R.string.slot2_analog_mapping_summary),
             style = MaterialTheme.typography.body2,
-            color = MaterialTheme.colors.onBackground,
-            modifier = Modifier.padding(top = 4.dp),
+            color = colors.text2,
+            modifier = Modifier.padding(bottom = 12.dp),
         )
 
+        // Axis X Tile
         Row(
             modifier = Modifier
+                .fillMaxWidth()
+                .clip(innerShape)
+                .background(if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.X) colors.surface3 else colors.surface)
+                .let {
+                    if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.X)
+                        it.border(1.5.dp, colors.green, innerShape)
+                    else
+                        it.border(1.dp, colors.surface3, innerShape)
+                }
                 .clickable(onClick = onAxisXClick)
-                .padding(top = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.slot2_analog_axis_x),
-                    style = MaterialTheme.typography.body1,
+                    style = MaterialTheme.typography.body1.copy(color = colors.text, fontWeight = FontWeight.Medium),
                 )
                 Text(
                     text = stringResource(R.string.slot2_analog_axis_x_expected),
-                    style = MaterialTheme.typography.body2,
-                    color = MaterialTheme.colors.onBackground,
+                    style = MaterialTheme.typography.caption,
+                    color = colors.text2,
                 )
             }
-            Text(
-                text = axisXLabel,
-                style = MaterialTheme.typography.body2,
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.surface3)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = axisXLabel,
+                    style = MaterialTheme.typography.body2.copy(
+                        color = if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.X) colors.green else colors.text,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                )
+            }
         }
 
+        Spacer(Modifier.height(8.dp))
+
+        // Axis Y Tile
         Row(
             modifier = Modifier
+                .fillMaxWidth()
+                .clip(innerShape)
+                .background(if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.Y) colors.surface3 else colors.surface)
+                .let {
+                    if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.Y)
+                        it.border(1.5.dp, colors.green, innerShape)
+                    else
+                        it.border(1.dp, colors.surface3, innerShape)
+                }
                 .clickable(onClick = onAxisYClick)
-                .padding(top = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.slot2_analog_axis_y),
-                    style = MaterialTheme.typography.body1,
+                    style = MaterialTheme.typography.body1.copy(color = colors.text, fontWeight = FontWeight.Medium),
                 )
                 Text(
                     text = stringResource(R.string.slot2_analog_axis_y_expected),
-                    style = MaterialTheme.typography.body2,
-                    color = MaterialTheme.colors.onBackground,
+                    style = MaterialTheme.typography.caption,
+                    color = colors.text2,
                 )
             }
-            Text(
-                text = axisYLabel,
-                style = MaterialTheme.typography.body2,
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.surface3)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = axisYLabel,
+                    style = MaterialTheme.typography.body2.copy(
+                        color = if (slot2AxisUnderConfiguration == InputSetupViewModel.Slot2AnalogAxisTarget.Y) colors.green else colors.text,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                )
+            }
         }
 
+        Spacer(Modifier.height(10.dp))
+
+        // Invert X
         Row(
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = stringResource(R.string.slot2_analog_invert_x),
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.body1.copy(color = colors.text),
                 modifier = Modifier.weight(1f),
             )
             Switch(
                 checked = slot2AnalogMapping.invertX,
                 onCheckedChange = onInvertXChanged,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = colors.green,
+                    checkedTrackColor = colors.greenDim,
+                    uncheckedThumbColor = colors.text3,
+                    uncheckedTrackColor = colors.switchOff,
+                ),
             )
         }
 
+        // Invert Y
         Row(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = stringResource(R.string.slot2_analog_invert_y),
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.body1.copy(color = colors.text),
                 modifier = Modifier.weight(1f),
             )
             Switch(
                 checked = slot2AnalogMapping.invertY,
                 onCheckedChange = onInvertYChanged,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = colors.green,
+                    checkedTrackColor = colors.greenDim,
+                    uncheckedThumbColor = colors.text3,
+                    uncheckedTrackColor = colors.switchOff,
+                ),
             )
         }
 
+        // Deadzone Stepper
         Row(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = stringResource(R.string.slot2_analog_deadzone),
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.body1.copy(color = colors.text),
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { onDeadzoneChanged((slot2AnalogMapping.deadzone - 0.01f).coerceAtLeast(0f)) }) {
-                Text(
-                    text = "-",
-                    color = MaterialTheme.colors.onSurface,
-                )
-            }
-            Text(
-                text = String.format(Locale.US, "%.2f", slot2AnalogMapping.normalizedDeadzone()),
-                style = MaterialTheme.typography.body2,
-            )
-            TextButton(onClick = { onDeadzoneChanged((slot2AnalogMapping.deadzone + 0.01f).coerceAtMost(1f)) }) {
-                Text(
-                    text = "+",
-                    color = MaterialTheme.colors.onSurface,
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(colors.surface3)
+                        .clickable { onDeadzoneChanged((slot2AnalogMapping.deadzone - 0.01f).coerceAtLeast(0f)) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("-", style = MaterialTheme.typography.body1.copy(color = colors.text, fontWeight = FontWeight.Bold))
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.surface)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = String.format(Locale.US, "%.2f", slot2AnalogMapping.normalizedDeadzone()),
+                        style = MaterialTheme.typography.body2.copy(color = colors.green, fontWeight = FontWeight.Bold),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(colors.surface3)
+                        .clickable { onDeadzoneChanged((slot2AnalogMapping.deadzone + 0.01f).coerceAtMost(1f)) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("+", style = MaterialTheme.typography.body1.copy(color = colors.text, fontWeight = FontWeight.Bold))
+                }
             }
         }
 
+        // Device Filter
         Row(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.slot2_analog_device),
-                    style = MaterialTheme.typography.body1,
+                    style = MaterialTheme.typography.body1.copy(color = colors.text),
                 )
+                val deviceDescription = if (slot2AnalogMapping.useDeviceFilter) {
+                    slot2AnalogMapping.deviceId?.toString() ?: stringResource(R.string.slot2_analog_map_axis_first)
+                } else {
+                    stringResource(R.string.slot2_analog_any_device)
+                }
                 Text(
-                    text = stringResource(R.string.slot2_analog_device_summary),
-                    style = MaterialTheme.typography.body2,
-                    color = MaterialTheme.colors.onBackground,
+                    text = deviceDescription,
+                    style = MaterialTheme.typography.caption,
+                    color = colors.text2,
                 )
             }
             Switch(
                 checked = slot2AnalogMapping.useDeviceFilter,
                 onCheckedChange = onUseDeviceFilterChanged,
                 enabled = slot2AnalogMapping.deviceId != null,
-            )
-        }
-
-        val deviceDescription = if (slot2AnalogMapping.useDeviceFilter) {
-            slot2AnalogMapping.deviceId?.toString() ?: stringResource(R.string.slot2_analog_map_axis_first)
-        } else {
-            stringResource(R.string.slot2_analog_any_device)
-        }
-
-        Row(
-            modifier = Modifier.padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = deviceDescription,
-                style = MaterialTheme.typography.body2,
-                color = MaterialTheme.colors.onBackground,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = colors.green,
+                    checkedTrackColor = colors.greenDim,
+                    uncheckedThumbColor = colors.text3,
+                    uncheckedTrackColor = colors.switchOff,
+                ),
             )
         }
     }
@@ -363,10 +510,10 @@ private fun Input(
     onClearClick: () -> Unit,
 ) {
     val (main, clear) = remember { FocusRequester.createRefs() }
-    val colors = me.magnum.melonds.ui.theme.watermelon
+    val colors = watermelon
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp)
+    val shape = RoundedCornerShape(13.dp)
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -374,17 +521,21 @@ private fun Input(
             .fillMaxWidth()
             .clip(shape)
             .background(if (isFocused || isBeingConfigured) colors.surface3 else colors.surface2)
-            .let { if (isFocused || isBeingConfigured) it.border(2.dp, colors.red, shape) else it }
+            .border(
+                width = if (isFocused || isBeingConfigured) 2.dp else 1.dp,
+                color = if (isFocused || isBeingConfigured) colors.green else colors.surface3,
+                shape = shape,
+            )
             .focusRequester(main)
             .focusProperties { end = if (config.hasKeyAssigned()) clear else FocusRequester.Default }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(start = 14.dp, top = 11.dp, end = 6.dp, bottom = 11.dp),
+            .padding(start = 14.dp, top = 10.dp, end = 8.dp, bottom = 10.dp),
     ) {
         Column(Modifier.weight(1f)) {
+            val assignments = listOf(config.assignment, config.altAssignment).filter { it != InputConfig.Assignment.None }
             val inputString = if (isBeingConfigured) {
                 stringResource(R.string.press_any_button)
             } else {
-                val assignments = listOf(config.assignment, config.altAssignment).filter { it != InputConfig.Assignment.None }
                 if (assignments.isEmpty()) {
                     stringResource(R.string.not_set)
                 } else {
@@ -408,13 +559,18 @@ private fun Input(
 
             Text(
                 text = getInputName(config.input) ?: "",
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.body1.copy(
+                    color = colors.text,
+                    fontWeight = FontWeight.Medium,
+                ),
             )
 
             Text(
                 text = inputString,
-                style = MaterialTheme.typography.body1,
-                color = MaterialTheme.colors.onBackground,
+                style = MaterialTheme.typography.body2.copy(
+                    color = if (isBeingConfigured) colors.green else if (assignments.isNotEmpty()) colors.text else colors.text2,
+                    fontWeight = if (isBeingConfigured || assignments.isNotEmpty()) FontWeight.SemiBold else FontWeight.Normal,
+                ),
             )
         }
         if (config.hasKeyAssigned()) {
@@ -425,6 +581,7 @@ private fun Input(
                 Icon(
                     imageVector = Icons.Default.Clear,
                     contentDescription = stringResource(R.string.clear),
+                    tint = colors.text2,
                 )
             }
         }
@@ -548,8 +705,8 @@ private fun PreviewInputSetupScreen() {
             onSlot2AxisYClick = { },
             onSlot2InvertXChanged = { },
             onSlot2InvertYChanged = { },
-            onSlot2DeadzoneChanged = { },
-            onSlot2UseDeviceFilterChanged = { },
+            onDeadzoneChanged = { },
+            onUseDeviceFilterChanged = { },
             onCancelInputConfiguration = { },
             onBackClick = { },
         )
