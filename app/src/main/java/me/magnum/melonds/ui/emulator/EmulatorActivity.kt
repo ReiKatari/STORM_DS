@@ -374,6 +374,10 @@ class EmulatorActivity : AppCompatActivity() {
         )
     }
 
+    private val motionSensorManager by lazy {
+        me.magnum.melonds.ui.emulator.input.MotionSensorManager(this)
+    }
+
     private val screenCaptureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         translatorManager.onMediaProjectionResult(result.resultCode, result.data)
     }
@@ -1702,6 +1706,23 @@ class EmulatorActivity : AppCompatActivity() {
         choreographerFrameRenderer.startRendering()
         startShaderDiagnosticsPolling()
         translatorManager.syncOverlaySettings()
+
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val gyroEnabled = prefs.getBoolean("pref_motion_gyro_enabled", true)
+        if (gyroEnabled) {
+            val modeStr = prefs.getString("pref_motion_gyro_mode", "touch_aim")
+            motionSensorManager.gyroMode = when (modeStr) {
+                "touch_aim" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.TOUCH_AIM
+                "dpad_steer" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.DPAD_STEER
+                "slot2_analog" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.SLOT2_ANALOG
+                else -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
+            }
+            motionSensorManager.gyroSensitivityX = prefs.getInt("pref_motion_gyro_sensitivity_x", 125) / 100f
+            motionSensorManager.gyroSensitivityY = prefs.getInt("pref_motion_gyro_sensitivity_y", 125) / 100f
+            motionSensorManager.invertX = prefs.getBoolean("pref_motion_gyro_invert_x", false)
+            motionSensorManager.invertY = prefs.getBoolean("pref_motion_gyro_invert_y", false)
+            motionSensorManager.startListening()
+        }
 
         if (
             !activeOverlays.hasActiveOverlays() &&
@@ -4169,6 +4190,7 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        motionSensorManager.stopListening()
         cancelStartupPresentationRefreshes()
         stopShaderDiagnosticsPolling()
         frontendInputHandler.clearFastForwardHold()

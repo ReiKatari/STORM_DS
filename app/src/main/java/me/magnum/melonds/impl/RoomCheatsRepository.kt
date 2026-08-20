@@ -49,25 +49,26 @@ class RoomCheatsRepository(
     }
 
     override suspend fun findGameForRom(romInfo: RomInfo): Game? {
+        val lookupCode = romInfo.cheatGameCode
         val checksumStr = romInfo.headerChecksumString()
-        var exact = database.gameDao().findGame(romInfo.gameCode, checksumStr)
+        var exact = database.gameDao().findGame(lookupCode, checksumStr)
         var byChecksum = exact ?: if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null
-        var byCode = byChecksum ?: database.gameDao().findGameByCode(romInfo.gameCode)
-        var byPrefix = byCode ?: if (romInfo.gameCode.length >= 3) database.gameDao().findGameByPrefix(romInfo.gameCode.take(3)) else null
+        var byCode = byChecksum ?: database.gameDao().findGameByCode(lookupCode)
+        var byPrefix = byCode ?: if (!romInfo.isDsiWareTitle && lookupCode.length >= 3) database.gameDao().findGameByPrefix(lookupCode.take(3)) else null
         var byTitle = byPrefix ?: if (romInfo.gameTitle.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameTitle.trim()) else null
         var gameEntity = byTitle ?: if (romInfo.gameName.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameName.trim()) else null
 
         if (gameEntity == null || database.cheatFolderDao().getFoldersForGame(gameEntity.id ?: -1).isEmpty()) {
             me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats.populateIfEmpty(
                 database,
-                romInfo.gameCode,
+                lookupCode,
                 romInfo.gameTitle.ifBlank { romInfo.gameName },
                 checksumStr
             )
-            exact = database.gameDao().findGame(romInfo.gameCode, checksumStr)
+            exact = database.gameDao().findGame(lookupCode, checksumStr)
             byChecksum = exact ?: if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null
-            byCode = byChecksum ?: database.gameDao().findGameByCode(romInfo.gameCode)
-            byPrefix = byCode ?: if (romInfo.gameCode.length >= 3) database.gameDao().findGameByPrefix(romInfo.gameCode.take(3)) else null
+            byCode = byChecksum ?: database.gameDao().findGameByCode(lookupCode)
+            byPrefix = byCode ?: if (!romInfo.isDsiWareTitle && lookupCode.length >= 3) database.gameDao().findGameByPrefix(lookupCode.take(3)) else null
             byTitle = byPrefix ?: if (romInfo.gameTitle.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameTitle.trim()) else null
             gameEntity = byTitle ?: if (romInfo.gameName.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameName.trim()) else null
         }
@@ -122,7 +123,10 @@ class RoomCheatsRepository(
     }
 
     override suspend fun getRomEnabledCheats(romInfo: RomInfo): List<Cheat> {
-        return database.cheatDao().getEnabledRomCheats(romInfo.gameCode, romInfo.headerChecksumString()).map { cheat ->
+        val lookupCode = romInfo.cheatGameCode
+        val cheats = database.cheatDao().getEnabledRomCheats(lookupCode, romInfo.headerChecksumString())
+        val effectiveCheats = if (cheats.isNotEmpty()) cheats else database.cheatDao().getEnabledRomCheats(romInfo.gameCode, romInfo.headerChecksumString())
+        return effectiveCheats.map { cheat ->
             Cheat(
                 cheat.id,
                 cheat.cheatDatabaseId,
