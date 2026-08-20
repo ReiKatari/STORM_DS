@@ -486,9 +486,7 @@ private fun GridContent(
                     showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut)),
                     onClick = { onRomClick(entry.rom) },
                     onLongPress = {
-                        if (!entry.rom.isInstalledDsiWareShortcut) {
-                            onRomLongPress(entry.rom)
-                        }
+                        onRomLongPress(entry.rom)
                     },
                     modifier = rememberRomBrowserItemFocusModifier(
                         index = entryIndex,
@@ -608,13 +606,11 @@ private fun ListContent(
                             coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                             boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                             boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
-                            allowConfiguration = allowConfiguration && !entry.rom.isInstalledDsiWareShortcut,
+                            allowConfiguration = allowConfiguration,
                             showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || (entry.rom.retroAchievementsHash.isNotBlank() && !entry.rom.isInstalledDsiWareShortcut)),
                             onClick = { onRomClick(entry.rom) },
                             onLongPress = {
-                                if (!entry.rom.isInstalledDsiWareShortcut) {
-                                    onRomLongPress(entry.rom)
-                                }
+                                onRomLongPress(entry.rom)
                             },
                             onConfigClick = { onRomConfigClick(entry.rom) },
                             modifier = rememberRomBrowserItemFocusModifier(
