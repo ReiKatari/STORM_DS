@@ -6,6 +6,7 @@ import me.magnum.melonds.domain.model.rom.Rom
 
 sealed class RomLaunchPreconditionCheckResult {
     data class Success(val rom: Rom) : RomLaunchPreconditionCheckResult()
+    data class RomEncrypted(val rom: Rom) : RomLaunchPreconditionCheckResult()
     data class DSiWareTitleValidationFailed(val reason: Reason) : RomLaunchPreconditionCheckResult() {
         sealed class Reason {
             object NandError : Reason()

@@ -104,7 +104,7 @@ fun RomCheatsUi(
 
             val checksum = parsedInfo?.headerChecksumString() ?: ""
             val effectiveCode = parsedInfo?.gameCode?.takeIf { it.isNotBlank() }
-                ?: extractCodeFromName(rom.name)
+                ?: extractDsiCode(rom)
             val effectiveTitle = parsedInfo?.gameTitle?.takeIf { it.isNotBlank() }
                 ?: romDisplayName(rom)
 
@@ -170,7 +170,7 @@ fun RomCheatsUi(
         if (isDownloadingDb) return
         isDownloadingDb = true
         coroutineScope.launch(Dispatchers.IO) {
-            val effectiveCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractCodeFromName(rom.name)
+            val effectiveCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractDsiCode(rom)
             val effectiveTitle = romInfo?.gameTitle?.takeIf { it.isNotBlank() } ?: romDisplayName(rom)
 
             // 1. First ensure embedded/online cheats are populated in database
@@ -229,7 +229,7 @@ fun RomCheatsUi(
         }
     }
 
-    val displayGameCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractCodeFromName(rom.name)
+    val displayGameCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractDsiCode(rom)
 
     LazyColumn(
         modifier = modifier
@@ -443,13 +443,41 @@ fun RomCheatsUi(
     }
 }
 
-private fun extractCodeFromName(name: String): String {
+private fun extractDsiCode(rom: Rom): String {
+    val titleId = rom.installedDsiWareTitleId
+    if (titleId != null) {
+        val low32 = (titleId and 0xFFFFFFFFL)
+        val b0 = ((low32 shr 24) and 0xFF).toInt().toChar()
+        val b1 = ((low32 shr 16) and 0xFF).toInt().toChar()
+        val b2 = ((low32 shr 8) and 0xFF).toInt().toChar()
+        val b3 = (low32 and 0xFF).toInt().toChar()
+        val forward = "$b0$b1$b2$b3"
+        if (forward.all { it.isLetterOrDigit() }) return forward.uppercase()
+        val reverse = "$b3$b2$b1$b0"
+        if (reverse.all { it.isLetterOrDigit() }) return reverse.uppercase()
+        return (low32 and 0xFFFFFFFFL).toString(16).padStart(8, '0').take(4).uppercase()
+    }
+    return extractCodeFromName(rom.name, rom.retroAchievementsHash)
+}
+
+private fun extractCodeFromName(name: String, hashFallback: String = ""): String {
     val regex = Regex("([A-Za-z0-9]{4})")
     val match = regex.find(name)
-    return match?.value?.uppercase() ?: name.take(4).uppercase().filter { it.isLetterOrDigit() }.ifBlank { "NTR0" }
+    if (match != null) return match.value.uppercase()
+    if (hashFallback.isNotBlank()) return hashFallback.take(4).uppercase()
+    val clean = name.filter { it.isLetterOrDigit() }.uppercase()
+    if (clean.length >= 4) return clean.take(4)
+    val hash = kotlin.math.abs(name.hashCode()).toString(16).padStart(4, '0').take(4).uppercase()
+    return "DS$hash".take(4)
 }
 
 private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInfo? {
+    if (rom.isInstalledDsiWareShortcut) {
+        val code = extractDsiCode(rom)
+        val checksum = (rom.installedDsiWareTitleId ?: 0L).toUInt()
+        return RomInfo(code, checksum, rom.name, rom.name)
+    }
+
     return try {
         val rawStream = context.contentResolver.openInputStream(rom.uri) ?: return null
         val buffered = rawStream.buffered()
@@ -474,7 +502,9 @@ private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInf
             buffered.use { RomProcessor.getRomInfo(rom, it) }
         }
     } catch (_: Throwable) {
-        null
+        val code = extractDsiCode(rom)
+        val checksum = kotlin.math.abs(rom.name.hashCode()).toUInt()
+        RomInfo(code, checksum, rom.name, rom.name)
     }
 }
 

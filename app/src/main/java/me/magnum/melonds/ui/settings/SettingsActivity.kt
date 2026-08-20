@@ -88,6 +88,7 @@ class SettingsActivity :
         const val KEY_RA_LOGOUT_REQUESTED = "ra_logout_requested"
 
         const val CUSTOM_FIRMWARE_ENTRY_POINT = "custom_firmware_entry_point"
+        const val TRANSLATOR_ENTRY_POINT = "translator"
     }
 
     private lateinit var binding: ActivitySettingsBinding
@@ -142,6 +143,7 @@ class SettingsActivity :
         if (savedInstanceState == null) {
             val entryPoint = when (intent.extras?.getString(KEY_ENTRY_POINT)) {
                 CUSTOM_FIRMWARE_ENTRY_POINT -> CustomFirmwarePreferencesFragment::class
+                TRANSLATOR_ENTRY_POINT -> me.magnum.melonds.ui.settings.fragments.TranslatorPreferencesFragment::class
                 else -> MainPreferencesFragment::class
             }
 

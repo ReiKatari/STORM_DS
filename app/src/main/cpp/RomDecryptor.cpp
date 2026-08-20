@@ -2,6 +2,8 @@
 #include <cstring>
 #include <cstdio>
 #include <vector>
+#include <unistd.h>
+#include <fcntl.h>
 
 extern "C" {
 #include "../../../melonDS-android-lib/src/tiny-AES-c/aes.h"
@@ -68,13 +70,23 @@ static constexpr uint32_t HEADER_SIZE             = 0x1000;
 namespace MelonDSAndroid {
 namespace RomDecryptor {
 
-EncryptionStatus CheckEncryption(const char* romPath)
+EncryptionStatus CheckEncryptionFd(int fd)
 {
-    FILE* f = fopen(romPath, "rb");
-    if (!f)
+    if (fd < 0)
         return EncryptionStatus::ERROR_READING_FILE;
 
-    // Read enough of the header
+    int dupFd = dup(fd);
+    if (dupFd < 0)
+        return EncryptionStatus::ERROR_READING_FILE;
+
+    FILE* f = fdopen(dupFd, "rb");
+    if (!f)
+    {
+        close(dupFd);
+        return EncryptionStatus::ERROR_READING_FILE;
+    }
+
+    fseek(f, 0, SEEK_SET);
     uint8_t header[HEADER_SIZE];
     size_t read = fread(header, 1, HEADER_SIZE, f);
     fclose(f);
@@ -95,11 +107,45 @@ EncryptionStatus CheckEncryption(const char* romPath)
     return EncryptionStatus::NOT_ENCRYPTED;
 }
 
-DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallback)
+EncryptionStatus CheckEncryption(const char* romPath)
 {
     FILE* f = fopen(romPath, "rb");
     if (!f)
+        return EncryptionStatus::ERROR_READING_FILE;
+
+    uint8_t header[HEADER_SIZE];
+    size_t read = fread(header, 1, HEADER_SIZE, f);
+    fclose(f);
+
+    if (read < 0x400)
+        return EncryptionStatus::ERROR_FILE_TOO_SMALL;
+
+    uint8_t unitCode = header[OFFSET_UNIT_CODE];
+    if (!(unitCode & 0x02))
+        return EncryptionStatus::ERROR_NOT_DSI_ROM;
+
+    uint8_t cryptoFlags = header[OFFSET_DSI_CRYPTO_FLAGS];
+    if (cryptoFlags & (1 << 1))
+        return EncryptionStatus::MODCRYPT_ENCRYPTED;
+
+    return EncryptionStatus::NOT_ENCRYPTED;
+}
+
+DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
+{
+    if (fd < 0)
         return DecryptResult::ERROR_READING_FILE;
+
+    int dupFd = dup(fd);
+    if (dupFd < 0)
+        return DecryptResult::ERROR_READING_FILE;
+
+    FILE* f = fdopen(dupFd, "r+b");
+    if (!f)
+    {
+        close(dupFd);
+        return DecryptResult::ERROR_READING_FILE;
+    }
 
     // Get file size
     fseek(f, 0, SEEK_END);
@@ -115,20 +161,27 @@ DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallb
     // Read entire ROM into memory
     std::vector<uint8_t> rom(fileSize);
     size_t read = fread(rom.data(), 1, fileSize, f);
-    fclose(f);
-
     if ((long)read != fileSize)
+    {
+        fclose(f);
         return DecryptResult::ERROR_READING_FILE;
+    }
 
     // Check if DSi ROM
     uint8_t unitCode = rom[OFFSET_UNIT_CODE];
     if (!(unitCode & 0x02))
+    {
+        fclose(f);
         return DecryptResult::ERROR_NOT_DSI_ROM;
+    }
 
     // Check if encrypted
     uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
     if (!(cryptoFlags & (1 << 1)))
+    {
+        fclose(f);
         return DecryptResult::ALREADY_DECRYPTED;
+    }
 
     // Read modcrypt area offsets and sizes
     uint32_t mod1Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT1_OFF];
@@ -141,7 +194,10 @@ DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallb
 
     // Validate bounds
     if (mod1Off + mod1Size > (uint32_t)fileSize || mod2Off + mod2Size > (uint32_t)fileSize)
+    {
+        fclose(f);
         return DecryptResult::ERROR_MODCRYPT_AREA_OUT_OF_BOUNDS;
+    }
 
     // Derive the AES key
     uint8_t normalKey[16];
@@ -188,7 +244,7 @@ DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallb
 
         for (uint32_t i = 0; i < mod1Size; i += 16)
         {
-            uint8_t block[16], dec[16];
+            uint8_t block[16];
             Bswap128(block, &rom[mod1Off + i]);
             AES_CTR_xcrypt_buffer(&ctx, block, 16);
             Bswap128(&rom[mod1Off + i], block);
@@ -209,7 +265,7 @@ DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallb
 
         for (uint32_t i = 0; i < mod2Size; i += 16)
         {
-            uint8_t block[16], dec[16];
+            uint8_t block[16];
             Bswap128(block, &rom[mod2Off + i]);
             AES_CTR_xcrypt_buffer(&ctx, block, 16);
             Bswap128(&rom[mod2Off + i], block);
@@ -223,12 +279,10 @@ DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallb
     // Clear Modcrypt encryption flag
     rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~(1 << 1);
 
-    // Write decrypted ROM back to disk
-    f = fopen(romPath, "wb");
-    if (!f)
-        return DecryptResult::ERROR_WRITING_FILE;
-
+    // Write decrypted ROM back in-place
+    fseek(f, 0, SEEK_SET);
     size_t written = fwrite(rom.data(), 1, fileSize, f);
+    fflush(f);
     fclose(f);
 
     if ((long)written != fileSize)
@@ -238,6 +292,17 @@ DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallb
         progressCallback(totalWork, totalWork);
 
     return DecryptResult::SUCCESS;
+}
+
+DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallback)
+{
+    int fd = open(romPath, O_RDWR);
+    if (fd < 0)
+        return DecryptResult::ERROR_READING_FILE;
+
+    DecryptResult result = DecryptRomFd(fd, progressCallback);
+    close(fd);
+    return result;
 }
 
 } // namespace RomDecryptor

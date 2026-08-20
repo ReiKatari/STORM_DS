@@ -10,14 +10,15 @@ class RomInfoParcelable(
     private val headerChecksum: Int,
     private val gameTitle: String,
     private val gameName: String,
+    private val isDsiWareTitle: Boolean = false,
 ) : Parcelable {
     companion object {
         fun fromRomInfo(romInfo: RomInfo): RomInfoParcelable {
-            return RomInfoParcelable(romInfo.gameCode, romInfo.headerChecksum.toInt(), romInfo.gameTitle, romInfo.gameName)
+            return RomInfoParcelable(romInfo.gameCode, romInfo.headerChecksum.toInt(), romInfo.gameTitle, romInfo.gameName, romInfo.isDsiWareTitle)
         }
     }
 
     fun toRomInfo(): RomInfo {
-        return RomInfo(gameCode, headerChecksum.toUInt(), gameTitle, gameName)
+        return RomInfo(gameCode, headerChecksum.toUInt(), gameTitle, gameName, isDsiWareTitle)
     }
 }
