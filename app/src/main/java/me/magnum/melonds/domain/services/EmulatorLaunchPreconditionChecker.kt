@@ -36,6 +36,12 @@ class EmulatorLaunchPreconditionChecker(
         }
 
         if (rom.isDsiWareTitle) {
+            try {
+                if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                    return RomLaunchPreconditionCheckResult.RomEncrypted(rom)
+                }
+            } catch (_: Throwable) { }
+
             val dsiWareCheckResult = checkDsiWarePreconditions(rom)
             if (dsiWareCheckResult !is RomLaunchPreconditionCheckResult.Success) {
                 return dsiWareCheckResult

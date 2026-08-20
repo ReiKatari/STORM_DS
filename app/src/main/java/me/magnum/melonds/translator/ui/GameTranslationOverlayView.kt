@@ -294,7 +294,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> {
                     canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
                     val baseCol = block.backgroundColor
-                    val alpha = 245
+                    val alpha = (bubbleOpacity.coerceIn(0.2f, 1.0f) * 255).toInt().coerceIn(50, 255)
                     val darkenFactor = 0.93f
                     val blendR = (Color.red(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
                     val blendG = (Color.green(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
@@ -306,7 +306,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                     val borderR = (Color.red(baseCol) * 1.15f).toInt().coerceIn(0, 255)
                     val borderG = (Color.green(baseCol) * 1.15f).toInt().coerceIn(0, 255)
                     val borderB = (Color.blue(baseCol) * 1.15f).toInt().coerceIn(0, 255)
-                    borderPaint.color = Color.argb(160, borderR, borderG, borderB)
+                    borderPaint.color = Color.argb((alpha * 0.65f).toInt().coerceIn(30, 200), borderR, borderG, borderB)
                     borderPaint.strokeWidth = 2.0f
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
                 }

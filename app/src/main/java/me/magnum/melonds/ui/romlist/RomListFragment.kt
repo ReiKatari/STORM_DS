@@ -117,8 +117,7 @@ class RomListFragment : Fragment() {
 
                     val checkAndLaunch = { rom: Rom ->
                         if (rom.isDsiWareTitle) {
-                            val romPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), rom.uri)
-                            if (romPath != null && me.magnum.melonds.MelonRomDecryptor.checkEncryption(romPath) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                            if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(requireContext(), rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
                                 decryptionRom = rom
                                 decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
                             } else {
@@ -176,18 +175,12 @@ class RomListFragment : Fragment() {
                         onImportSaveFile = { rom -> requestSaveFileImport(rom) },
                         onLaunchRom = { rom -> checkAndLaunch(rom) },
                         onDecryptRom = { rom ->
-                            val romPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), rom.uri)
-                            if (romPath != null) {
-                                decryptionRom = rom
-                                decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
-                            } else {
-                                Toast.makeText(requireContext(), "Cannot resolve file path", Toast.LENGTH_SHORT).show()
-                            }
+                            decryptionRom = rom
+                            decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
                         }
                     )
 
                     decryptionRom?.let { rom ->
-                        val romPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), rom.uri) ?: ""
                         me.magnum.melonds.ui.romlist.composables.DecryptionDialog(
                             show = true,
                             onDismiss = { decryptionRom = null },
@@ -195,7 +188,7 @@ class RomListFragment : Fragment() {
                                 decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.DECRYPTING
                                 decryptionProgress = 0f
                                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(romPath, object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
+                                    val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(requireContext(), rom.uri, object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
                                         override fun onProgress(current: Int, total: Int) {
                                             scope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                                 decryptionProgress = if (total > 0) current.toFloat() / total else 0f

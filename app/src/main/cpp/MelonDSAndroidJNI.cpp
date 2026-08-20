@@ -2669,6 +2669,13 @@ Java_me_magnum_melonds_MelonRomDecryptor_checkEncryptionNative(JNIEnv* env, jobj
 }
 
 JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonRomDecryptor_checkEncryptionFdNative(JNIEnv* env, jobject thiz, jint fd)
+{
+    auto result = MelonDSAndroid::RomDecryptor::CheckEncryptionFd(fd);
+    return static_cast<jint>(result);
+}
+
+JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonRomDecryptor_decryptRomNative(JNIEnv* env, jobject thiz, jstring romPath, jobject progressCallback)
 {
     env->GetJavaVM(&g_decryptorJavaVM);
@@ -2678,6 +2685,24 @@ Java_me_magnum_melonds_MelonRomDecryptor_decryptRomNative(JNIEnv* env, jobject t
     auto result = MelonDSAndroid::RomDecryptor::DecryptRomFile(path,
         progressCallback ? jniDecryptProgressCallback : nullptr);
     env->ReleaseStringUTFChars(romPath, path);
+
+    if (g_decryptorCallback)
+    {
+        env->DeleteGlobalRef(g_decryptorCallback);
+        g_decryptorCallback = nullptr;
+    }
+
+    return static_cast<jint>(result);
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonRomDecryptor_decryptRomFdNative(JNIEnv* env, jobject thiz, jint fd, jobject progressCallback)
+{
+    env->GetJavaVM(&g_decryptorJavaVM);
+    g_decryptorCallback = progressCallback ? env->NewGlobalRef(progressCallback) : nullptr;
+
+    auto result = MelonDSAndroid::RomDecryptor::DecryptRomFd(fd,
+        progressCallback ? jniDecryptProgressCallback : nullptr);
 
     if (g_decryptorCallback)
     {

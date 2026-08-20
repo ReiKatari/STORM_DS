@@ -42,6 +42,10 @@ fun TranslatorSettingsContent(
     var voiceEnginePref by remember { mutableStateOf(preferences.getString(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge") }
     var ttsLangPref by remember { mutableStateOf(preferences.getString(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto") }
     
+    var voiceActorStudioEnabled by remember { mutableStateOf(preferences.getBoolean("translator_local_voice_actor_studio", false)) }
+    var voiceModelPref by remember { mutableStateOf(preferences.getString("translator_local_voice_model", "piper_ru_dmitri_medium") ?: "piper_ru_dmitri_medium") }
+    var voicePitchVariance by remember { mutableStateOf(preferences.getInt("translator_local_voice_pitch_variance", 65).toFloat()) }
+
     var fontSizeScale by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_FONT_SIZE_SCALE, 100).toFloat()) }
     var bubbleOpacity by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_BUBBLE_OPACITY, 90).toFloat()) }
     var pauseOnTranslate by remember { mutableStateOf(preferences.getBoolean(GameTranslatorManager.PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)) }
@@ -221,15 +225,77 @@ fun TranslatorSettingsContent(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // AI Voice Actor Studio Card
+            SettingsSectionTitle("AI Voice Actor Studio (Piper INT8)")
+            SettingsCard {
+                SettingsSwitch(
+                    label = "AI Voice Actor Studio",
+                    checked = voiceActorStudioEnabled,
+                    onCheckedChange = { 
+                        voiceActorStudioEnabled = it
+                        updatePref("translator_local_voice_actor_studio", it)
+                    }
+                )
+                if (voiceActorStudioEnabled) {
+                    Divider(color = watermelon.line)
+                    SettingsOption(
+                        label = "Пакет нейромоделей",
+                        value = when(voiceModelPref) {
+                            "piper_ru_dmitri_medium" -> "Дмитрий (Баритон)"
+                            "piper_ru_elena_medium" -> "Елена (Сопрано)"
+                            "piper_ru_boss_grunt" -> "Босс (Тяжелый бас)"
+                            else -> voiceModelPref
+                        },
+                        onClick = {
+                            val models = listOf("piper_ru_dmitri_medium", "piper_ru_elena_medium", "piper_ru_boss_grunt")
+                            val nextIdx = (models.indexOf(voiceModelPref) + 1) % models.size
+                            voiceModelPref = models[nextIdx]
+                            updatePref("translator_local_voice_model", voiceModelPref)
+                        }
+                    )
+                    Divider(color = watermelon.line)
+                    SettingsSlider(
+                        label = "Вариативность тембра",
+                        value = voicePitchVariance,
+                        valueRange = 0f..100f,
+                        steps = 19,
+                        valueText = "${voicePitchVariance.toInt()}%",
+                        onValueChange = { 
+                            voicePitchVariance = it
+                            updatePref("translator_local_voice_pitch_variance", it.toInt())
+                        }
+                    )
+                }
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            Button(
-                onClick = onOpenRegionEditor,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.green, contentColor = watermelon.surface)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Настроить зоны перевода (OCR)", fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = onOpenRegionEditor,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.green, contentColor = watermelon.surface)
+                ) {
+                    Text("Зоны OCR", fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = {
+                        val intent = android.content.Intent(context, me.magnum.melonds.ui.settings.SettingsActivity::class.java).apply {
+                            putExtra(me.magnum.melonds.ui.settings.SettingsActivity.KEY_ENTRY_POINT, me.magnum.melonds.ui.settings.SettingsActivity.TRANSLATOR_ENTRY_POINT)
+                        }
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.surface3, contentColor = watermelon.text)
+                ) {
+                    Text("Все настройки ⚙️", fontWeight = FontWeight.Bold)
+                }
             }
             Spacer(modifier = Modifier.height(24.dp))
         }

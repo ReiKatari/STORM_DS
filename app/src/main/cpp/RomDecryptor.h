@@ -27,11 +27,13 @@ enum class DecryptResult : int {
 
 // Check if a ROM file is encrypted (reads only the header)
 EncryptionStatus CheckEncryption(const char* romPath);
+EncryptionStatus CheckEncryptionFd(int fd);
 
 // Decrypt a ROM file on disk in-place
 // progressCallback: called with (current_bytes, total_bytes) during decryption
 typedef void (*ProgressCallback)(uint32_t current, uint32_t total);
 DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallback);
+DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback);
 
 } // namespace RomDecryptor
 } // namespace MelonDSAndroid
