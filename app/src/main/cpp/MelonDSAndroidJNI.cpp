@@ -2624,3 +2624,68 @@ void* emulate(void*)
     MelonDSAndroid::stop();
     pthread_exit(NULL);
 }
+
+// ========== ROM Decryptor JNI ==========
+
+#include "RomDecryptor.h"
+
+static JavaVM* g_decryptorJavaVM = nullptr;
+static jobject g_decryptorCallback = nullptr;
+
+static void jniDecryptProgressCallback(uint32_t current, uint32_t total)
+{
+    if (!g_decryptorJavaVM || !g_decryptorCallback) return;
+
+    JNIEnv* env = nullptr;
+    bool attached = false;
+    int status = g_decryptorJavaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (status == JNI_EDETACHED)
+    {
+        g_decryptorJavaVM->AttachCurrentThread(&env, nullptr);
+        attached = true;
+    }
+
+    if (env)
+    {
+        jclass cls = env->GetObjectClass(g_decryptorCallback);
+        jmethodID mid = env->GetMethodID(cls, "onProgress", "(II)V");
+        if (mid)
+            env->CallVoidMethod(g_decryptorCallback, mid, (jint)current, (jint)total);
+    }
+
+    if (attached)
+        g_decryptorJavaVM->DetachCurrentThread();
+}
+
+extern "C" {
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonRomDecryptor_checkEncryptionNative(JNIEnv* env, jobject thiz, jstring romPath)
+{
+    const char* path = env->GetStringUTFChars(romPath, nullptr);
+    auto result = MelonDSAndroid::RomDecryptor::CheckEncryption(path);
+    env->ReleaseStringUTFChars(romPath, path);
+    return static_cast<jint>(result);
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonRomDecryptor_decryptRomNative(JNIEnv* env, jobject thiz, jstring romPath, jobject progressCallback)
+{
+    env->GetJavaVM(&g_decryptorJavaVM);
+    g_decryptorCallback = progressCallback ? env->NewGlobalRef(progressCallback) : nullptr;
+
+    const char* path = env->GetStringUTFChars(romPath, nullptr);
+    auto result = MelonDSAndroid::RomDecryptor::DecryptRomFile(path,
+        progressCallback ? jniDecryptProgressCallback : nullptr);
+    env->ReleaseStringUTFChars(romPath, path);
+
+    if (g_decryptorCallback)
+    {
+        env->DeleteGlobalRef(g_decryptorCallback);
+        g_decryptorCallback = nullptr;
+    }
+
+    return static_cast<jint>(result);
+}
+
+} // extern "C"

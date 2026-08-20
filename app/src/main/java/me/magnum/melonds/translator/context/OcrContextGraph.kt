@@ -111,6 +111,21 @@ object OcrContextGraph {
 
     fun sanitizeTranslation(translatedText: String): String {
         var result = translatedText
+        
+        // Emotion markers
+        if (result.contains("!!!")) {
+            result = "<prosody volume='+20%' rate='+10%'>\$result</prosody>"
+        } else if (result.contains("?!") || result.contains("!?")) {
+            result = "<prosody pitch='+10%'>\$result</prosody>"
+        } else if (result.contains("...")) {
+            result = "<prosody rate='-15%'>\$result</prosody>"
+        } else if (result == result.uppercase() && result.length > 3 && result.any { it.isLetter() }) {
+            result = "<prosody volume='+25%'>\$result</prosody>"
+        }
+        if (result.contains("*") || (result.startsWith("(") && result.endsWith(")"))) {
+            result = "<prosody volume='-30%' rate='-5%'>\$result</prosody>"
+        }
+
         glossary.forEach { (en, ru) ->
             result = result.replace(Regex("(?i)\\b$en\\b"), ru)
         }
