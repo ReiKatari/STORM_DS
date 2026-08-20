@@ -28,6 +28,7 @@ class ControllerConfiguration(
             Input.QUICK_SAVE,
             Input.QUICK_LOAD,
             Input.REWIND,
+            Input.TRANSLATE,
         )
     }
 

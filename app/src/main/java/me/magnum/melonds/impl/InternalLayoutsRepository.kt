@@ -6,6 +6,8 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -55,7 +57,9 @@ class InternalLayoutsRepository(
     override fun getLayouts(): Flow<List<LayoutConfiguration>> {
         return layouts
             .onStart { ensureLayoutsAreLoaded() }
+            .filter { areLayoutsLoaded }
             .map { it.filterNotDeleted() }
+            .distinctUntilChanged()
     }
 
     override suspend fun getLayout(id: UUID): LayoutConfiguration? {
@@ -84,9 +88,11 @@ class InternalLayoutsRepository(
     override fun observeLayout(id: UUID): Flow<LayoutConfiguration> {
         return layouts
             .onStart { ensureLayoutsAreLoaded() }
+            .filter { areLayoutsLoaded }
             .map { layouts -> layouts.firstOrNull { !it.isDeleted && it.data.id == id }?.data }
             .takeWhile { it != null }
             .filterNotNull()
+            .distinctUntilChanged()
     }
 
     override suspend fun saveLayout(layout: LayoutConfiguration) {

@@ -92,9 +92,9 @@ class LayoutEditorViewModel @Inject constructor(
                 val defaultLayout = layoutsRepository.getLayout(LayoutConfiguration.DEFAULT_ID)
                 val newLayout = defaultLayout?.copy(
                     id = null,
-                    name = if (layoutId == LayoutConfiguration.DEFAULT_ID) "Пользовательский (на основе стандарта)" else null,
+                    name = if (layoutId == LayoutConfiguration.DEFAULT_ID) "Пользовательский (на основе стандарта)" else "Пользовательская раскладка",
                     type = LayoutConfiguration.LayoutType.CUSTOM,
-                ) ?: LayoutConfiguration.newCustom()
+                ) ?: LayoutConfiguration.newCustom().copy(name = "Пользовательская раскладка")
                 initialLayoutConfiguration = newLayout
                 _currentLayoutConfiguration.value = newLayout
             }
