@@ -21,16 +21,27 @@ import kotlin.time.Duration.Companion.milliseconds
 class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider) {
 
     private val currentUiSize = MutableStateFlow<Point?>(null)
-    private val currentUiInsets = MutableStateFlow<Insets?>(null)
+    private val currentUiInsets = MutableStateFlow<Insets>(Insets.Zero)
     private val currentOrientation = MutableStateFlow<Orientation?>(null)
-    private val currentFolds = MutableStateFlow<List<ScreenFold>?>(null)
+    private val currentFolds = MutableStateFlow<List<ScreenFold>>(emptyList())
     private val currentDisplays = MutableStateFlow<LayoutDisplayPair?>(null)
 
     private val currentLayoutVariant = combine(currentUiSize, currentUiInsets, currentOrientation, currentFolds, currentDisplays) { size, insets, orientation, folds, displays ->
-        if (size == null || insets == null || orientation == null || folds == null || displays == null) {
+        val resolvedDisplays = displays ?: size?.let {
+            LayoutDisplayPair(
+                mainScreenDisplay = me.magnum.melonds.domain.model.layout.LayoutDisplay(
+                    id = 0,
+                    type = me.magnum.melonds.domain.model.layout.LayoutDisplay.Type.BUILT_IN,
+                    width = it.x,
+                    height = it.y,
+                ),
+                secondaryScreenDisplay = null,
+            )
+        }
+        if (size == null || orientation == null || resolvedDisplays == null) {
             null
         } else {
-            UILayoutVariant(size, insets, orientation, folds, displays)
+            UILayoutVariant(size, insets, orientation, folds, resolvedDisplays)
         }
     }.distinctUntilChanged().debounce(50.milliseconds)
 

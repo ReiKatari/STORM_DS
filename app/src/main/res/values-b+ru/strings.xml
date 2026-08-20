@@ -187,6 +187,7 @@
   <string name="input_swap_screens">Поменять экраны местами</string>
   <string name="input_quick_save">Быстрое сохранение</string>
   <string name="input_quick_load">Быстрая загрузка</string>
+  <string name="input_translate">Перевод экрана</string>
   <string name="layouts">Макеты экранов</string>
   <string name="layouts_summary">Управление макетами сенсорного интерфейса</string>
   <string name="action_layouts_new">Новый макет</string>
