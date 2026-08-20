@@ -152,20 +152,17 @@ class SharedPreferencesSettingsRepository(
             .getOrNull()
     }
 
-    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, fileName: String, fallbackDir: File, vararg aliases: String): Uri? {
-        val names = listOf(fileName) + aliases.toList()
-        for (name in names) {
-            if (dirUri != null && (dirUri.scheme == "file" || dirUri.scheme == null)) {
-                val path = dirUri.path ?: dirUri.toString().removePrefix("file://")
-                val f = File(path, name)
-                if (f.exists()) return Uri.fromFile(f)
-            }
-            val fromTree = getFileUri(treeDoc, name)
-            if (fromTree != null) return fromTree
-
-            val fallbackFile = File(fallbackDir, name)
-            if (fallbackFile.exists()) return Uri.fromFile(fallbackFile)
+    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, fileName: String, fallbackDir: File): Uri? {
+        if (dirUri != null && (dirUri.scheme == "file" || dirUri.scheme == null)) {
+            val path = dirUri.path ?: dirUri.toString().removePrefix("file://")
+            val f = File(path, fileName)
+            if (f.exists()) return Uri.fromFile(f)
         }
+        val fromTree = getFileUri(treeDoc, fileName)
+        if (fromTree != null) return fromTree
+
+        val fallbackFile = File(fallbackDir, fileName)
+        if (fallbackFile.exists()) return Uri.fromFile(fallbackFile)
         return null
     }
 
@@ -359,8 +356,8 @@ class SharedPreferencesSettingsRepository(
         val internalDsDir = File(context.filesDir, "bios/ds")
         val internalDsiDir = File(context.filesDir, "bios/dsi")
 
-        val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", internalDsDir, "nds7.bin")
-        val dsBios9 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios9.bin", internalDsDir, "nds9.bin")
+        val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", internalDsDir)
+        val dsBios9 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios9.bin", internalDsDir)
         val dsFirmware = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "firmware.bin", internalDsDir)
 
         val dsiBios7 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7.bin", internalDsiDir)
