@@ -1113,7 +1113,7 @@
   <string name="rewind_unavailable_ra_hardcore_enabled">Перемотка недоступна в хардкорном режиме RetroAchievements</string>
   <string name="downloading_update">Загрузка обновления…</string>
   <string name="skip_update">Пропустить</string>
-  <string name="action_boot_firmware">Запустить прошивку</string>
+  <string name="action_boot_firmware">Запустить прошивку Nintendo DS</string>
   <string name="delete_bios_paths">Сбросить пути к BIOS</string>
   <string name="dsiware_import_from_file">Импорт из файла</string>
   <string name="failed_launch_dsiware_title_not_installed">Игра DSiWare не установлена в NAND</string>
