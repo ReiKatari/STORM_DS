@@ -680,6 +680,8 @@
     <string name="input_quick_save">Quick Save</string>
     <string name="input_quick_load">Quick Load</string>
     <string name="input_translate">Translate Screen</string>
+    <string name="input_group_console">Console Controls</string>
+    <string name="input_group_hotkeys">Hotkeys &amp; Shortcuts</string>
 
     <string name="layouts">Layouts</string>
     <string name="layouts_summary">Manage custom layout configurations</string>
