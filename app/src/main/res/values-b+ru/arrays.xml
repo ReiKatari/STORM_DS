@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="video_console_skin_type_options">
+        <item>Nintendo DS Lite (Чёрный матовый)</item>
+        <item>Nintendo DS Lite (Полярный белый)</item>
+        <item>Nintendo DS Lite (Тёмно-красный)</item>
+        <item>Nintendo DSi XL (Полуночный синий)</item>
+        <item>Nintendo 3DS (Голубой)</item>
+        <item>New Nintendo 3DS XL (Космический чёрный)</item>
+    </string-array>
+</resources>
