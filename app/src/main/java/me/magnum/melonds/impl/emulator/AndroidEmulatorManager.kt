@@ -291,7 +291,7 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                if (rom.isInstalledDsiWareShortcut) {
+                if (rom.isInstalledDsiWareShortcut || rom.installedDsiWareTitleId != null) {
                     return@withContext loadInstalledDsiWareShortcut(rom, cheats)
                 }
 
