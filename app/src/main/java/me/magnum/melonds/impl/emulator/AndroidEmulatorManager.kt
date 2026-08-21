@@ -412,6 +412,7 @@ class AndroidEmulatorManager(
             }
             try {
                 cacheRomFile.delete()
+                dsiNandManager.repairTitleSaves(titleId)
                 val exported = dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
                 if (!exported || !cacheRomFile.exists() || cacheRomFile.length() == 0L) {
                     Log.e(TAG, "DSiWareShortcut: exportTitleExecutable failed for titleId=$titleIdHex")
