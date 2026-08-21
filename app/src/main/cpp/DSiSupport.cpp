@@ -32,8 +32,17 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
     {
         auto header = cart->GetHeader();
         uint8_t titleId[8];
-        memcpy(titleId, &header.DSiTitleIDLow, 4);
-        memcpy(titleId + 4, &header.DSiTitleIDHigh, 4);
+        if (header.DSiTitleIDLow != 0 || header.DSiTitleIDHigh != 0)
+        {
+            memcpy(titleId, &header.DSiTitleIDLow, 4);
+            memcpy(titleId + 4, &header.DSiTitleIDHigh, 4);
+        }
+        else
+        {
+            memcpy(titleId, header.GameCode, 4);
+            uint32_t high = 0x00030004;
+            memcpy(titleId + 4, &high, 4);
+        }
         setupAutoLoadRaw(dsi, titleId, 0x01);
     }
 }

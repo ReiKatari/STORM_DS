@@ -1,7 +1,9 @@
 package me.magnum.melonds.translator.ocr
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
@@ -16,14 +18,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.translator.model.TranslatedTextBlock
+import me.magnum.melonds.translator.model.TranslationRegion
 import kotlin.coroutines.resumeWithException
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
+/**
+ * Advanced Nintendo DS Pixel Font OCR Engine.
+ * Tailored for 256x192 / 256x384 retro bitmap fonts with:
+ * - 3x-4x Point-Sampled Nearest-Neighbor Upscaling
+ * - Min-Max Dynamic Contrast Stretching
+ * - Sauvola Fast Integral Adaptive Thresholding (O(1) local window binarization)
+ * - Otsu Inter-Class Optimal Binarization
+ * - Chromatic Text Color Isolation (White / Yellow / Cyan / Green text extraction)
+ */
 class GameTextRecognizer {
 
     companion object {
-        private const val TAG = "GameTranslator"
+        private const val TAG = "GameTextRecognizer"
     }
 
     var lastOcrError: String? = null
@@ -44,11 +57,11 @@ class GameTextRecognizer {
     suspend fun recognizeTextBlocks(
         bitmap: Bitmap,
         sourceLang: String,
-        regions: List<me.magnum.melonds.translator.model.TranslationRegion> = emptyList()
+        regions: List<TranslationRegion> = emptyList()
     ): List<TranslatedTextBlock> = withContext(Dispatchers.Default) {
         lastOcrError = null
         val safeBitmap = ensureSoftwareBitmap(bitmap)
-        Log.i(TAG, "OCR start: bitmap=${safeBitmap.width}x${safeBitmap.height} regions=${regions.size} lang=$sourceLang")
+        Log.i(TAG, "OCR start: bitmap=${safeBitmap.width}x${safeBitmap.height}, regions=${regions.size}, lang=$sourceLang")
 
         if (regions.isNotEmpty()) {
             val allRegionBlocks = mutableListOf<TranslatedTextBlock>()
@@ -75,8 +88,7 @@ class GameTextRecognizer {
                     null
                 } ?: continue
 
-                Log.i(TAG, "Region #$idx rect=[$leftPx,$topPx,$rightPx,$bottomPx] size=${cropW}x${cropH}")
-                // Process crop with multi-pass upscaled OCR
+                Log.i(TAG, "Region #$idx: crop=[$leftPx,$topPx,$rightPx,$bottomPx] size=${cropW}x${cropH}")
                 val localBlocks = recognizeWithMultiPass(cropBitmap, sourceLang)
                 cropBitmap.recycle()
 
@@ -84,7 +96,7 @@ class GameTextRecognizer {
                 val regionHeightRel = region.rect.height()
 
                 if (localBlocks.isNotEmpty()) {
-                    Log.i(TAG, "Region #$idx found ${localBlocks.size} local text blocks")
+                    Log.i(TAG, "Region #$idx found ${localBlocks.size} text blocks")
                     for (lb in localBlocks) {
                         val globalBox = RectF(
                             region.rect.left + lb.boundingBox.left * regionWidthRel,
@@ -94,8 +106,6 @@ class GameTextRecognizer {
                         )
                         allRegionBlocks.add(lb.copy(boundingBox = globalBox))
                     }
-                } else {
-                    Log.w(TAG, "Region #$idx returned 0 text blocks")
                 }
             }
 
@@ -105,7 +115,7 @@ class GameTextRecognizer {
             return@withContext merged
         }
 
-        // Full Screen OCR: Multi-pass upscaled pipeline
+        // Full Screen OCR: Multi-pass pixel preprocessing pipeline
         val blocks = recognizeWithMultiPass(safeBitmap, sourceLang)
         if (safeBitmap !== bitmap) safeBitmap.recycle()
         val merged = mergeAdjacentBlocks(blocks)
@@ -117,53 +127,57 @@ class GameTextRecognizer {
         inputBitmap: Bitmap,
         sourceLang: String
     ): List<TranslatedTextBlock> {
-        // Pass 1: Scaled bitmap (or original if already high resolution)
-        val scaledBitmap = createHighResBitmap(inputBitmap)
-        var blocks = recognizeOnBitmap(scaledBitmap, sourceLang)
+        // Base: Point-sampled 4x nearest neighbor scaling for pixel fonts
+        val pixelScaled = createPixelArtUpscaledBitmap(inputBitmap, scaleFactor = 4)
+
+        // Pass 1: Crisp Nearest-Neighbor Upscaled (Captures clean standard pixel text)
+        var blocks = recognizeOnBitmap(pixelScaled, sourceLang)
         if (blocks.isNotEmpty()) {
-            Log.i(TAG, "OCR Pass 1 (Standard/Upscaled) matched ${blocks.size} blocks")
+            Log.i(TAG, "OCR Pass 1 (4x Nearest-Neighbor) matched ${blocks.size} blocks")
+            if (pixelScaled !== inputBitmap) pixelScaled.recycle()
+            return blocks
         }
 
-        // Pass 2: Inverted luminance contrast (critical for white text on black/dark background)
-        if (blocks.isEmpty()) {
-            val inverted = createInvertedEnhancedBitmap(scaledBitmap)
-            if (inverted != null) {
-                blocks = recognizeOnBitmap(inverted, sourceLang)
-                if (blocks.isNotEmpty()) {
-                    Log.i(TAG, "OCR Pass 2 (Inverted Luminance) matched ${blocks.size} blocks")
-                }
-                inverted.recycle()
+        // Pass 2: Contrast Stretching + Sauvola Local Adaptive Thresholding (For gradients / textured boxes)
+        val sauvolaBitmap = createSauvolaBinarizedBitmap(pixelScaled)
+        if (sauvolaBitmap != null) {
+            blocks = recognizeOnBitmap(sauvolaBitmap, sourceLang)
+            sauvolaBitmap.recycle()
+            if (blocks.isNotEmpty()) {
+                Log.i(TAG, "OCR Pass 2 (Sauvola Adaptive Thresholding) matched ${blocks.size} blocks")
+                if (pixelScaled !== inputBitmap) pixelScaled.recycle()
+                return blocks
             }
         }
 
-        // Pass 3: High contrast enhanced grayscale
-        if (blocks.isEmpty()) {
-            val enhanced = createEnhancedBitmap(scaledBitmap)
-            if (enhanced != null) {
-                blocks = recognizeOnBitmap(enhanced, sourceLang)
-                if (blocks.isNotEmpty()) {
-                    Log.i(TAG, "OCR Pass 3 (High Contrast Grayscale) matched ${blocks.size} blocks")
-                }
-                enhanced.recycle()
+        // Pass 3: Otsu Global Optimal Inverted Binarization (For white/light text on dark dialogue boxes)
+        val otsuInverted = createOtsuBinarizedBitmap(pixelScaled, invert = true)
+        if (otsuInverted != null) {
+            blocks = recognizeOnBitmap(otsuInverted, sourceLang)
+            otsuInverted.recycle()
+            if (blocks.isNotEmpty()) {
+                Log.i(TAG, "OCR Pass 3 (Otsu Inverted Binarization) matched ${blocks.size} blocks")
+                if (pixelScaled !== inputBitmap) pixelScaled.recycle()
+                return blocks
             }
         }
 
-        // Pass 4: Extreme contrast binarization for pixel art fonts
-        if (blocks.isEmpty()) {
-            val binarized = createBinarizedBitmap(scaledBitmap)
-            if (binarized != null) {
-                blocks = recognizeOnBitmap(binarized, sourceLang)
-                if (blocks.isNotEmpty()) {
-                    Log.i(TAG, "OCR Pass 4 (Binarized) matched ${blocks.size} blocks")
-                }
-                binarized.recycle()
+        // Pass 4: Chromatic Text Color Isolation (Extracts White, Yellow, Cyan, Lime dialogue text)
+        val colorIsolated = createTextColorIsolatedBitmap(pixelScaled)
+        if (colorIsolated != null) {
+            blocks = recognizeOnBitmap(colorIsolated, sourceLang)
+            colorIsolated.recycle()
+            if (blocks.isNotEmpty()) {
+                Log.i(TAG, "OCR Pass 4 (Chromatic Text Isolation) matched ${blocks.size} blocks")
+                if (pixelScaled !== inputBitmap) pixelScaled.recycle()
+                return blocks
             }
         }
 
-        // Pass 5: Split top/bottom half passes (detecting dialogue boxes on DS screens)
-        if (blocks.isEmpty() && scaledBitmap.height > 100) {
-            val halfH = scaledBitmap.height / 2
-            val topHalf = Bitmap.createBitmap(scaledBitmap, 0, 0, scaledBitmap.width, halfH)
+        // Pass 5: Split Top / Bottom screen passes for Dual-Screen NDS layout
+        if (pixelScaled.height > 120) {
+            val halfH = pixelScaled.height / 2
+            val topHalf = Bitmap.createBitmap(pixelScaled, 0, 0, pixelScaled.width, halfH)
             val topBlocks = recognizeOnBitmap(topHalf, sourceLang).map { b ->
                 b.copy(
                     boundingBox = RectF(
@@ -176,7 +190,7 @@ class GameTextRecognizer {
             }
             topHalf.recycle()
 
-            val bottomHalf = Bitmap.createBitmap(scaledBitmap, 0, halfH, scaledBitmap.width, halfH)
+            val bottomHalf = Bitmap.createBitmap(pixelScaled, 0, halfH, pixelScaled.width, halfH)
             val bottomBlocks = recognizeOnBitmap(bottomHalf, sourceLang).map { b ->
                 b.copy(
                     boundingBox = RectF(
@@ -191,34 +205,299 @@ class GameTextRecognizer {
 
             blocks = topBlocks + bottomBlocks
             if (blocks.isNotEmpty()) {
-                Log.i(TAG, "OCR Pass 5 (Split screen) matched ${blocks.size} blocks")
+                Log.i(TAG, "OCR Pass 5 (Split Screen Dual-Pass) matched ${blocks.size} blocks")
             }
         }
 
-        if (scaledBitmap !== inputBitmap) {
-            scaledBitmap.recycle()
+        if (pixelScaled !== inputBitmap) {
+            pixelScaled.recycle()
         }
 
         return blocks
     }
 
     /**
-     * Ensures the bitmap is in ARGB_8888 software config AND has 100% opaque pixels (Alpha=255).
-     * Uses ColorMatrixColorFilter to guarantee that every single pixel has A=255 (0xFFRRGGBB),
-     * preventing transparent pixels from causing ML Kit to miss text.
+     * Preserves sharp retro 1-pixel font contours via nearest-neighbor point sampling.
      */
+    fun createPixelArtUpscaledBitmap(src: Bitmap, scaleFactor: Int = 4): Bitmap {
+        val minDim = min(src.width, src.height)
+        val scale = if (minDim >= 700) 1 else scaleFactor.coerceIn(2, 4)
+        if (scale == 1) return src
+
+        return try {
+            val dstW = src.width * scale
+            val dstH = src.height * scale
+            val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(out)
+            val nnPaint = Paint().apply {
+                isFilterBitmap = false
+                isAntiAlias = false
+                isDither = false
+            }
+            canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), nnPaint)
+            out
+        } catch (t: Throwable) {
+            src
+        }
+    }
+
+    /**
+     * Dynamic min-max percentile contrast stretching.
+     */
+    fun createContrastStretchedBitmap(src: Bitmap): Bitmap? {
+        return try {
+            val w = src.width
+            val h = src.height
+            val pixels = IntArray(w * h)
+            src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+            val hist = IntArray(256)
+            for (p in pixels) {
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = (0.299f * r + 0.587f * g + 0.114f * b).toInt().coerceIn(0, 255)
+                hist[lum]++
+            }
+
+            val totalPixels = w * h
+            val p2 = (totalPixels * 0.03f).toInt()
+            val p98 = (totalPixels * 0.97f).toInt()
+
+            var count = 0
+            var minLum = 0
+            var maxLum = 255
+
+            for (i in 0..255) {
+                count += hist[i]
+                if (count >= p2) { minLum = i; break }
+            }
+            count = 0
+            for (i in 255 downTo 0) {
+                count += hist[i]
+                if (count >= totalPixels - p98) { maxLum = i; break }
+            }
+
+            val lumRange = max(1, maxLum - minLum).toFloat()
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = (0.299f * r + 0.587f * g + 0.114f * b)
+                val stretched = ((lum - minLum) / lumRange * 255f).toInt().coerceIn(0, 255)
+                pixels[i] = Color.rgb(stretched, stretched, stretched)
+            }
+
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            out.setPixels(pixels, 0, w, 0, 0, w, h)
+            out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Sauvola Local Adaptive Thresholding with fast O(1) Integral Image (Summed Area Table).
+     * Formula: T(x,y) = mean * (1 + k * (std / 128.0 - 1.0))
+     */
+    fun createSauvolaBinarizedBitmap(src: Bitmap, windowRadius: Int = 12, k: Float = 0.18f): Bitmap? {
+        return try {
+            val w = src.width
+            val h = src.height
+            val pixels = IntArray(w * h)
+            src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+            // Convert to grayscale
+            val gray = IntArray(w * h)
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                gray[i] = (0.299f * r + 0.587f * g + 0.114f * b).toInt().coerceIn(0, 255)
+            }
+
+            // Build Integral Images for sum and squared sum: (w+1) x (h+1)
+            val integralSum = LongArray((w + 1) * (h + 1))
+            val integralSqSum = LongArray((w + 1) * (h + 1))
+
+            val stride = w + 1
+            for (y in 0 until h) {
+                var rowSum = 0L
+                var rowSqSum = 0L
+                for (x in 0 until w) {
+                    val gVal = gray[y * w + x].toLong()
+                    rowSum += gVal
+                    rowSqSum += (gVal * gVal)
+
+                    val idx = (y + 1) * stride + (x + 1)
+                    val prevIdx = y * stride + (x + 1)
+                    integralSum[idx] = integralSum[prevIdx] + rowSum
+                    integralSqSum[idx] = integralSqSum[prevIdx] + rowSqSum
+                }
+            }
+
+            val outPixels = IntArray(w * h)
+            val r = windowRadius
+
+            for (y in 0 until h) {
+                val y1 = max(0, y - r)
+                val y2 = min(h - 1, y + r)
+                val rowIdx = y * w
+
+                for (x in 0 until w) {
+                    val x1 = max(0, x - r)
+                    val x2 = min(w - 1, x + r)
+                    val count = (x2 - x1 + 1) * (y2 - y1 + 1)
+
+                    // Compute local sum & squared sum using integral table in O(1)
+                    val a = y1 * stride + x1
+                    val b = y1 * stride + (x2 + 1)
+                    val c = (y2 + 1) * stride + x1
+                    val d = (y2 + 1) * stride + (x2 + 1)
+
+                    val sum = integralSum[d] - integralSum[b] - integralSum[c] + integralSum[a]
+                    val sqSum = integralSqSum[d] - integralSqSum[b] - integralSqSum[c] + integralSqSum[a]
+
+                    val mean = sum.toDouble() / count
+                    val variance = max(0.0, (sqSum.toDouble() / count) - (mean * mean))
+                    val std = sqrt(variance)
+
+                    val threshold = mean * (1.0 + k * ((std / 128.0) - 1.0))
+                    val curVal = gray[rowIdx + x]
+
+                    // Produce clean high-contrast black text on white background (standard for OCR)
+                    val isForeground = curVal >= threshold
+                    outPixels[rowIdx + x] = if (isForeground) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+                }
+            }
+
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            out.setPixels(outPixels, 0, w, 0, 0, w, h)
+            out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Otsu Global Optimal Binarization maximizing between-class variance.
+     */
+    fun createOtsuBinarizedBitmap(src: Bitmap, invert: Boolean = false): Bitmap? {
+        return try {
+            val w = src.width
+            val h = src.height
+            val pixels = IntArray(w * h)
+            src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+            val hist = IntArray(256)
+            for (p in pixels) {
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = (0.299f * r + 0.587f * g + 0.114f * b).toInt().coerceIn(0, 255)
+                hist[lum]++
+            }
+
+            val total = w * h
+            var sum = 0.0
+            for (i in 0..255) sum += i * hist[i]
+
+            var sumB = 0.0
+            var wB = 0
+            var maxVar = 0.0
+            var optimalThreshold = 128
+
+            for (t in 0..255) {
+                wB += hist[t]
+                if (wB == 0) continue
+                val wF = total - wB
+                if (wF == 0) break
+
+                sumB += t * hist[t]
+                val mB = sumB / wB
+                val mF = (sum - sumB) / wF
+
+                val varBetween = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF)
+                if (varBetween > maxVar) {
+                    maxVar = varBetween
+                    optimalThreshold = t
+                }
+            }
+
+            val outPixels = IntArray(w * h)
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = (0.299f * r + 0.587f * g + 0.114f * b).toInt()
+
+                val isText = if (invert) lum >= optimalThreshold else lum < optimalThreshold
+                outPixels[i] = if (isText) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            }
+
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            out.setPixels(outPixels, 0, w, 0, 0, w, h)
+            out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Isolates dominant retro text color palettes (White, Yellow, Cyan, Lime) from noisy game art.
+     */
+    fun createTextColorIsolatedBitmap(src: Bitmap): Bitmap? {
+        return try {
+            val w = src.width
+            val h = src.height
+            val pixels = IntArray(w * h)
+            src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+            val outPixels = IntArray(w * h)
+
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+
+                // Text Color Palette Rules:
+                // 1. Crisp White / Off-White
+                val isWhite = (r > 180 && g > 180 && b > 180)
+                // 2. Yellow / Gold dialogue text
+                val isYellow = (r > 175 && g > 155 && b < 125 && (r - b) > 40)
+                // 3. Cyan / Ice-blue dialogue text
+                val isCyan = (r < 125 && g > 165 && b > 195)
+                // 4. Lime / Green text
+                val isLime = (r < 130 && g > 175 && b < 130)
+
+                val isTextColor = isWhite || isYellow || isCyan || isLime
+                outPixels[i] = if (isTextColor) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            }
+
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            out.setPixels(outPixels, 0, w, 0, 0, w, h)
+            out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private fun ensureSoftwareBitmap(src: Bitmap): Bitmap {
         if (src.isRecycled) return src
         return try {
             val opaque = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(opaque)
+            val canvas = Canvas(opaque)
             val cm = android.graphics.ColorMatrix(floatArrayOf(
                 1f, 0f, 0f, 0f, 0f,
                 0f, 1f, 0f, 0f, 0f,
                 0f, 0f, 1f, 0f, 0f,
                 0f, 0f, 0f, 0f, 255f
             ))
-            val paint = android.graphics.Paint().apply {
+            val paint = Paint().apply {
                 colorFilter = android.graphics.ColorMatrixColorFilter(cm)
             }
             canvas.drawBitmap(src, 0f, 0f, paint)
@@ -232,41 +511,6 @@ class GameTextRecognizer {
         }
     }
 
-    private fun createHighResBitmap(src: Bitmap): Bitmap {
-        val minDim = min(src.width, src.height)
-        // If image is already phone-screen resolution (e.g. 1080p+), don't upscale further
-        if (minDim >= 700) return src
-
-        // For low-resolution retro DS native buffers (256x384), upscale 4x to ~1024x1536
-        val targetScale = (1024f / minDim.toFloat()).coerceIn(2.0f, 4.5f)
-
-        return try {
-            val step1W = src.width * 3
-            val step1H = src.height * 3
-            val step1Bitmap = Bitmap.createBitmap(step1W, step1H, Bitmap.Config.ARGB_8888)
-            val step1Canvas = android.graphics.Canvas(step1Bitmap)
-            val nnPaint = android.graphics.Paint().apply {
-                isFilterBitmap = false
-                isAntiAlias = false
-            }
-            step1Canvas.drawBitmap(src, null, Rect(0, 0, step1W, step1H), nnPaint)
-
-            val dstW = (src.width * targetScale).toInt().coerceAtLeast(1)
-            val dstH = (src.height * targetScale).toInt().coerceAtLeast(1)
-            val outBitmap = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(outBitmap)
-            val smoothPaint = android.graphics.Paint().apply {
-                isFilterBitmap = true
-                isAntiAlias = true
-            }
-            canvas.drawBitmap(step1Bitmap, null, Rect(0, 0, dstW, dstH), smoothPaint)
-            step1Bitmap.recycle()
-            outBitmap
-        } catch (t: Throwable) {
-            src
-        }
-    }
-
     private suspend fun recognizeOnBitmap(
         bitmap: Bitmap,
         sourceLang: String
@@ -274,8 +518,7 @@ class GameTextRecognizer {
         val recognizersToTry = when (sourceLang.lowercase()) {
             "ja", "japanese" -> listOf(japaneseRecognizer, latinRecognizer, chineseRecognizer)
             "zh", "chinese" -> listOf(chineseRecognizer, latinRecognizer, japaneseRecognizer)
-            "en", "english", "es", "fr", "de", "it", "pt", "ru" -> listOf(latinRecognizer, japaneseRecognizer, chineseRecognizer)
-            else -> listOf(latinRecognizer, japaneseRecognizer, chineseRecognizer) // auto
+            else -> listOf(latinRecognizer, japaneseRecognizer, chineseRecognizer)
         }
 
         val inputImage = InputImage.fromBitmap(bitmap, 0)
@@ -291,7 +534,7 @@ class GameTextRecognizer {
                 }
             } catch (t: Throwable) {
                 lastOcrError = t.message ?: t.javaClass.simpleName
-                Log.w(TAG, "ML Kit Recognizer (${rec.javaClass.simpleName}) failed: ${t.message}", t)
+                Log.w(TAG, "ML Kit Recognizer failed: ${t.message}", t)
             }
         }
 
@@ -330,96 +573,14 @@ class GameTextRecognizer {
         return resultBlocks
     }
 
-    private fun createEnhancedBitmap(src: Bitmap): Bitmap? {
-        return try {
-            val outBitmap = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(outBitmap)
-            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
-
-            // High contrast grayscale
-            val cm = android.graphics.ColorMatrix()
-            cm.setSaturation(0f)
-            val contrast = 1.6f
-            val brightness = -15f
-            val scaleMatrix = android.graphics.ColorMatrix(floatArrayOf(
-                contrast, 0f, 0f, 0f, brightness,
-                0f, contrast, 0f, 0f, brightness,
-                0f, 0f, contrast, 0f, brightness,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            cm.postConcat(scaleMatrix)
-            paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm)
-
-            val srcRect = Rect(0, 0, src.width, src.height)
-            canvas.drawBitmap(src, srcRect, srcRect, paint)
-            outBitmap
-        } catch (t: Throwable) {
-            null
-        }
-    }
-
-    private fun createInvertedEnhancedBitmap(src: Bitmap): Bitmap? {
-        return try {
-            val outBitmap = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(outBitmap)
-            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
-
-            // Inverted luminance grayscale for light text on dark or vice versa
-            val cm = android.graphics.ColorMatrix(floatArrayOf(
-                -1.6f, 0f, 0f, 0f, 255f,
-                0f, -1.6f, 0f, 0f, 255f,
-                0f, 0f, -1.6f, 0f, 255f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm)
-
-            val srcRect = Rect(0, 0, src.width, src.height)
-            canvas.drawBitmap(src, srcRect, srcRect, paint)
-            outBitmap
-        } catch (t: Throwable) {
-            null
-        }
-    }
-
-    private fun createBinarizedBitmap(src: Bitmap): Bitmap? {
-        return try {
-            val outBitmap = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(outBitmap)
-            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
-
-            val cm = android.graphics.ColorMatrix()
-            cm.setSaturation(0f)
-            val contrast = 2.2f
-            val brightness = -30f
-            val scaleMatrix = android.graphics.ColorMatrix(floatArrayOf(
-                contrast, 0f, 0f, 0f, brightness,
-                0f, contrast, 0f, 0f, brightness,
-                0f, 0f, contrast, 0f, brightness,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            cm.postConcat(scaleMatrix)
-            paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm)
-
-            val srcRect = Rect(0, 0, src.width, src.height)
-            canvas.drawBitmap(src, srcRect, srcRect, paint)
-            outBitmap
-        } catch (t: Throwable) {
-            null
-        }
-    }
-
     private suspend fun TextRecognizer.processAsync(image: InputImage): Text =
         suspendCancellableCoroutine { continuation ->
             process(image)
                 .addOnSuccessListener { text ->
-                    if (continuation.isActive) {
-                        continuation.resume(text, onCancellation = null)
-                    }
+                    if (continuation.isActive) continuation.resume(text, onCancellation = null)
                 }
                 .addOnFailureListener { exception ->
-                    if (continuation.isActive) {
-                        continuation.resumeWithException(exception)
-                    }
+                    if (continuation.isActive) continuation.resumeWithException(exception)
                 }
         }
 
@@ -433,8 +594,6 @@ class GameTextRecognizer {
         val b = box.bottom.coerceIn(0, h - 1)
 
         val samples = mutableListOf<Int>()
-
-        // Sample along outer perimeter of bounding box
         val step = max(1, (r - l) / 10)
         for (x in l..r step step) {
             samples.add(bitmap.getPixel(x, t))
@@ -446,7 +605,7 @@ class GameTextRecognizer {
             samples.add(bitmap.getPixel(r, y))
         }
 
-        if (samples.isEmpty()) return Color.parseColor("#E61E293B")
+        if (samples.isEmpty()) return Color.parseColor("#E60F172A")
 
         var totalR = 0L
         var totalG = 0L
@@ -457,11 +616,7 @@ class GameTextRecognizer {
             totalB += Color.blue(c)
         }
         val count = samples.size
-        val avgR = (totalR / count).toInt()
-        val avgG = (totalG / count).toInt()
-        val avgB = (totalB / count).toInt()
-
-        return Color.rgb(avgR, avgG, avgB)
+        return Color.rgb((totalR / count).toInt(), (totalG / count).toInt(), (totalB / count).toInt())
     }
 
     private fun determineBestTextColor(bgColor: Int): Int {
@@ -469,12 +624,7 @@ class GameTextRecognizer {
         val g = Color.green(bgColor) / 255.0
         val b = Color.blue(bgColor) / 255.0
         val luminance = 0.299 * r + 0.587 * g + 0.114 * b
-
-        return if (luminance > 0.55) {
-            Color.parseColor("#0F172A") // Dark text on light parchment/background
-        } else {
-            Color.parseColor("#FFFFFF") // Crisp white text on dark/blue dialogue boxes
-        }
+        return if (luminance > 0.55) Color.parseColor("#0F172A") else Color.parseColor("#FFFFFF")
     }
 
     private fun mergeAdjacentBlocks(blocks: List<TranslatedTextBlock>): List<TranslatedTextBlock> {
@@ -492,12 +642,10 @@ class GameTextRecognizer {
             val cBox = current.boundingBox
             val bBox = block.boundingBox
 
-            // If blocks are vertically adjacent (same dialogue box)
             val verticalGap = bBox.top - cBox.bottom
             val isHorizontalOverlap = min(cBox.right, bBox.right) - max(cBox.left, bBox.left) > 0
 
             if (verticalGap in -0.05f..0.08f && isHorizontalOverlap) {
-                // Merge together
                 val combinedText = "${current.originalText} ${block.originalText}"
                 val combinedBox = RectF(
                     min(cBox.left, bBox.left),

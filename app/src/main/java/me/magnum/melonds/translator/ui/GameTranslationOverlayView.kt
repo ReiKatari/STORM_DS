@@ -12,18 +12,32 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import me.magnum.melonds.R
+import me.magnum.melonds.translator.dictionary.GameDictionaryService
 import me.magnum.melonds.translator.model.TranslatedTextBlock
 import me.magnum.melonds.translator.model.TranslationRegion
 import me.magnum.melonds.translator.model.TranslatorOverlayStyle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * Advanced In-Game Translation Overlay for Nintendo DS / DSi.
+ * Features:
+ * - Smart Comic/Manga Inpainting (Erases original pixel text with sampled background color & auto-fits translation)
+ * - Quick Lasso / Box Drag Selection (Real-time finger drag box to translate any sign/menu on the fly)
+ * - Tap-To-Dictionary & Furigana Lookup (Word breakdown, Romaji, definitions & TTS speech)
+ * - Per-game Persistent OCR Region Editor & Custom Left Control Dock
+ */
 class GameTranslationOverlayView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
+    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val blocks = mutableListOf<TranslatedTextBlock>()
     val customRegions = mutableListOf<TranslationRegion>()
 
@@ -37,8 +51,10 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         }
 
     var onTriggerTranslationRequested: (() -> Unit)? = null
+    var onLassoRegionSelected: ((TranslationRegion) -> Unit)? = null
     var onDismissRequested: (() -> Unit)? = null
     var onRegionsSaved: ((List<TranslationRegion>) -> Unit)? = null
+    var onSpeakWordRequested: ((String) -> Unit)? = null
 
     var showFloatingButton: Boolean = true
         set(value) {
@@ -51,6 +67,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             field = value
             if (value) {
                 blocks.clear()
+                activeDictionaryResult = null
             }
             invalidate()
         }
@@ -65,6 +82,24 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     private var hasMovedFloatBtn = false
     private val longPressHandler = Handler(Looper.getMainLooper())
 
+    // Lasso / Box Drag Selection State
+    var isLassoModeActive: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+    private var isLassoDragging = false
+    private var lassoStartX = 0f
+    private var lassoStartY = 0f
+    private val lassoRect = RectF()
+    private var lastFloatBtnClickTime = 0L
+
+    // Dictionary Card State
+    private var activeDictionaryResult: GameDictionaryService.LookupResult? = null
+    private val dictCardRect = RectF()
+    private val dictCloseRect = RectF()
+    private val dictSpeakRect = RectF()
+
     // Region Editor Touch State
     private enum class EditAction { NONE, DRAW_NEW, MOVE_REGION, RESIZE_REGION }
     private var currentEditAction = EditAction.NONE
@@ -74,7 +109,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     private var regionInitialRect = RectF()
     private var drawingNewRect = RectF()
 
-    // Paints
+    // Base Paints
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -112,6 +147,28 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         strokeWidth = 6f
         color = Color.parseColor("#00E5FF")
         strokeCap = Paint.Cap.ROUND
+    }
+
+    // Lasso Paints
+    private val lassoBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(55, 0, 229, 255)
+    }
+    private val lassoBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3.0f
+        color = Color.parseColor("#00E5FF")
+        pathEffect = DashPathEffect(floatArrayOf(15f, 10f), 0f)
+    }
+    private val lassoBadgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#E60F172A")
+    }
+    private val lassoBadgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00E5FF")
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = 22f
+        textAlign = Paint.Align.CENTER
     }
 
     // Region Editor Paints
@@ -175,6 +232,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         blocks.clear()
         blocks.addAll(newBlocks)
         isTranslating = false
+        activeDictionaryResult = null
         invalidate()
     }
 
@@ -186,11 +244,12 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
     fun clearTranslations() {
         blocks.clear()
+        activeDictionaryResult = null
         isTranslating = false
         invalidate()
     }
 
-    fun hasActiveTranslations(): Boolean = blocks.isNotEmpty()
+    fun hasActiveTranslations(): Boolean = blocks.isNotEmpty() || activeDictionaryResult != null
 
     fun enterRegionEditMode() {
         isEditRegionsMode = true
@@ -254,7 +313,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             return
         }
 
-        // 2. NORMAL TRANSLATION MODE
+        // 2. NORMAL TRANSLATION MODE (Smart Comic/Manga Inpainting & In-place Text Replacement)
         for (block in blocks) {
             val left = block.boundingBox.left * w
             val top = block.boundingBox.top * h
@@ -290,50 +349,63 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             val rect = RectF(boxLeft, boxTop, boxRight, boxBottom)
             val rx = 14f
 
-            when (overlayStyle) {
-                TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> {
-                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
-                    val baseCol = block.backgroundColor
-                    val alpha = (bubbleOpacity.coerceIn(0.2f, 1.0f) * 255).toInt().coerceIn(50, 255)
-                    val darkenFactor = 0.93f
-                    val blendR = (Color.red(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
-                    val blendG = (Color.green(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
-                    val blendB = (Color.blue(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
+            // Smart Comic/Manga Inpainting
+            canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
+            val baseCol = block.backgroundColor
+            val alpha = (bubbleOpacity.coerceIn(0.2f, 1.0f) * 255).toInt().coerceIn(60, 255)
+            val darkenFactor = 0.93f
+            val blendR = (Color.red(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
+            val blendG = (Color.green(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
+            val blendB = (Color.blue(baseCol) * darkenFactor).toInt().coerceIn(0, 255)
 
-                    bgPaint.color = Color.argb(alpha, blendR, blendG, blendB)
-                    canvas.drawRoundRect(rect, rx, rx, bgPaint)
-                    
-                    val borderR = (Color.red(baseCol) * 1.15f).toInt().coerceIn(0, 255)
-                    val borderG = (Color.green(baseCol) * 1.15f).toInt().coerceIn(0, 255)
-                    val borderB = (Color.blue(baseCol) * 1.15f).toInt().coerceIn(0, 255)
-                    borderPaint.color = Color.argb((alpha * 0.65f).toInt().coerceIn(30, 200), borderR, borderG, borderB)
-                    borderPaint.strokeWidth = 2.0f
-                    canvas.drawRoundRect(rect, rx, rx, borderPaint)
-                }
-                TranslatorOverlayStyle.SEMI_TRANSPARENT -> {
-                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
-                    bgPaint.color = Color.argb(220, 15, 23, 42)
-                    canvas.drawRoundRect(rect, rx, rx, bgPaint)
-                    borderPaint.color = Color.argb(80, 255, 255, 255)
-                    borderPaint.strokeWidth = 2.0f
-                    canvas.drawRoundRect(rect, rx, rx, borderPaint)
-                }
-                TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> {
-                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
-                    bgPaint.color = Color.argb(240, 10, 15, 26)
-                    canvas.drawRoundRect(rect, rx, rx, bgPaint)
-                    borderPaint.color = Color.parseColor("#9900E5FF")
-                    borderPaint.strokeWidth = 2.0f
-                    canvas.drawRoundRect(rect, rx, rx, borderPaint)
-                }
-                TranslatorOverlayStyle.OUTLINE_ONLY -> {
-                    // No background box, only text outline
-                }
-            }
+            bgPaint.color = Color.argb(alpha, blendR, blendG, blendB)
+            canvas.drawRoundRect(rect, rx, rx, bgPaint)
+
+            val borderR = (Color.red(baseCol) * 1.15f).toInt().coerceIn(0, 255)
+            val borderG = (Color.green(baseCol) * 1.15f).toInt().coerceIn(0, 255)
+            val borderB = (Color.blue(baseCol) * 1.15f).toInt().coerceIn(0, 255)
+            borderPaint.color = Color.argb((alpha * 0.65f).toInt().coerceIn(30, 200), borderR, borderG, borderB)
+            borderPaint.strokeWidth = 2.0f
+            canvas.drawRoundRect(rect, rx, rx, borderPaint)
 
             drawFittedText(canvas, displayText, rect, block.textColor)
         }
 
+        // 3. LASSO / BOX DRAG SELECTION OVERLAY
+        if (isLassoModeActive) {
+            val bannerText = "👆 Выделите рамку пальцем на экране"
+            val bannerW = min(w * 0.85f, 420f)
+            val bannerH = 44f
+            val bannerRect = RectF((w - bannerW) / 2f, 24f, (w + bannerW) / 2f, 24f + bannerH)
+            canvas.drawRoundRect(bannerRect, 12f, 12f, lassoBadgePaint)
+            canvas.drawRoundRect(bannerRect, 12f, 12f, regionBorderPaint)
+            canvas.drawText(bannerText, bannerRect.centerX(), bannerRect.centerY() + 7f, lassoBadgeTextPaint)
+        }
+
+        if (isLassoDragging && !lassoRect.isEmpty) {
+            canvas.drawRoundRect(lassoRect, 10f, 10f, lassoBgPaint)
+            canvas.drawRoundRect(lassoRect, 10f, 10f, lassoBorderPaint)
+
+            val badgeText = "🔍 Перевести область"
+            val badgeW = 200f
+            val badgeH = 36f
+            val badgeRect = RectF(
+                lassoRect.centerX() - badgeW / 2f,
+                max(8f, lassoRect.top - badgeH - 6f),
+                lassoRect.centerX() + badgeW / 2f,
+                max(8f + badgeH, lassoRect.top - 6f)
+            )
+            canvas.drawRoundRect(badgeRect, 8f, 8f, lassoBadgePaint)
+            canvas.drawRoundRect(badgeRect, 8f, 8f, regionBorderPaint)
+            canvas.drawText(badgeText, badgeRect.centerX(), badgeRect.centerY() + 7f, lassoBadgeTextPaint)
+        }
+
+        // 4. DICTIONARY & LINGUISTIC LOOKUP CARD (Tap-To-Dictionary)
+        activeDictionaryResult?.let { dict ->
+            drawDictionaryCard(canvas, dict, w, h)
+        }
+
+        // 5. TRANSLATION SPINNER
         if (isTranslating) {
             val cx = w / 2f
             val cy = h * 0.40f
@@ -348,6 +420,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             postInvalidateDelayed(16)
         }
 
+        // 6. FLOATING BUTTON
         if (showFloatingButton) {
             floatBtnX = floatBtnX.coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
             floatBtnY = floatBtnY.coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
@@ -374,6 +447,89 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 enterRegionEditMode()
             }
         }
+    }
+
+    private fun drawDictionaryCard(canvas: Canvas, dict: GameDictionaryService.LookupResult, w: Float, h: Float) {
+        val cardW = min(w * 0.92f, 540f)
+        val cardH = min(h * 0.70f, 380f)
+        val cardL = (w - cardW) / 2f
+        val cardT = (h - cardH) / 2f
+        dictCardRect.set(cardL, cardT, cardL + cardW, cardT + cardH)
+
+        // Backdrop
+        canvas.drawColor(Color.argb(130, 0, 0, 0))
+
+        // Card Shadow and Base
+        canvas.drawRoundRect(RectF(dictCardRect.left + 4f, dictCardRect.top + 6f, dictCardRect.right + 4f, dictCardRect.bottom + 6f), 18f, 18f, shadowPaint)
+        bgPaint.color = Color.parseColor("#F20F172A")
+        canvas.drawRoundRect(dictCardRect, 18f, 18f, bgPaint)
+        borderPaint.color = Color.parseColor("#FF00E5FF")
+        borderPaint.strokeWidth = 3f
+        canvas.drawRoundRect(dictCardRect, 18f, 18f, borderPaint)
+
+        // Close Button (✕)
+        dictCloseRect.set(dictCardRect.right - 44f, dictCardRect.top + 12f, dictCardRect.right - 12f, dictCardRect.top + 44f)
+        canvas.drawRoundRect(dictCloseRect, 8f, 8f, closeBtnPaint)
+        canvas.drawText("✕", dictCloseRect.centerX(), dictCloseRect.centerY() + 7f, closeBtnTextPaint)
+
+        // Header Title
+        val headerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#00E5FF")
+            typeface = Typeface.DEFAULT_BOLD
+            textSize = 24f
+        }
+        canvas.drawText("📖 Словарь & Разбор фразы", dictCardRect.left + 20f, dictCardRect.top + 34f, headerPaint)
+
+        var curY = dictCardRect.top + 64f
+
+        // Original Text
+        val origPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            typeface = Typeface.DEFAULT_BOLD
+            textSize = 28f
+        }
+        canvas.drawText(dict.query.take(45), dictCardRect.left + 20f, curY, origPaint)
+        curY += 34f
+
+        // Full Translation
+        val transPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#94A3B8")
+            typeface = Typeface.DEFAULT
+            textSize = 22f
+        }
+        canvas.drawText(dict.fullTranslation.take(55), dictCardRect.left + 20f, curY, transPaint)
+        curY += 36f
+
+        // Divider
+        val linePaint = Paint().apply { color = Color.parseColor("#334155"); strokeWidth = 1.5f }
+        canvas.drawLine(dictCardRect.left + 20f, curY, dictCardRect.right - 20f, curY, linePaint)
+        curY += 24f
+
+        // Word tokens breakdown
+        for (word in dict.words.take(3)) {
+            val tokenPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#38BDF8")
+                typeface = Typeface.DEFAULT_BOLD
+                textSize = 22f
+            }
+            val posPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#F59E0B")
+                typeface = Typeface.DEFAULT
+                textSize = 18f
+            }
+            val romajiStr = if (word.romaji.isNotBlank()) " [${word.romaji}]" else ""
+            canvas.drawText("• ${word.original}$romajiStr", dictCardRect.left + 20f, curY, tokenPaint)
+            canvas.drawText(" (${word.partOfSpeech})", dictCardRect.left + 20f + tokenPaint.measureText("• ${word.original}$romajiStr"), curY, posPaint)
+            curY += 28f
+        }
+
+        // "Озвучить ▶️" Action Button
+        dictSpeakRect.set(dictCardRect.left + 20f, dictCardRect.bottom - 52f, dictCardRect.left + 220f, dictCardRect.bottom - 14f)
+        topBarBtnPaint.color = Color.parseColor("#10B981")
+        canvas.drawRoundRect(dictSpeakRect, 10f, 10f, topBarBtnPaint)
+        topBarTextPaint.color = Color.WHITE
+        topBarTextPaint.textSize = 20f
+        canvas.drawText("Озвучить ▶️", dictSpeakRect.centerX(), dictSpeakRect.centerY() + 7f, topBarTextPaint)
     }
 
     private fun drawLeftControlDock(canvas: Canvas, w: Float, h: Float) {
@@ -484,6 +640,29 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         val w = width.toFloat()
         val h = height.toFloat()
 
+        // 1. DICTIONARY CARD TOUCH INTERACTION
+        if (activeDictionaryResult != null) {
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                if (dictCloseRect.contains(x, y)) {
+                    activeDictionaryResult = null
+                    invalidate()
+                    return true
+                }
+                if (dictSpeakRect.contains(x, y)) {
+                    onSpeakWordRequested?.invoke(activeDictionaryResult!!.query)
+                    return true
+                }
+                if (!dictCardRect.contains(x, y)) {
+                    activeDictionaryResult = null
+                    invalidate()
+                    return true
+                }
+                return true
+            }
+            return true
+        }
+
+        // 2. REGION EDIT MODE TOUCH
         if (isEditRegionsMode) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -521,14 +700,10 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                             invalidate()
                             return true
                         }
-                    }
 
-                    for (i in customRegions.indices.reversed()) {
-                        val region = customRegions[i]
-                        val r = region.rect.right * w
                         val b = region.rect.bottom * h
-                        val handleRect = RectF(r - 36f, b - 36f, r + 18f, b + 18f)
-                        if (handleRect.contains(x, y)) {
+                        val handleDist = Math.hypot((x - r).toDouble(), (y - b).toDouble()).toFloat()
+                        if (handleDist <= 36f) {
                             currentEditAction = EditAction.RESIZE_REGION
                             activeRegionIndex = i
                             touchDownX = x
@@ -536,14 +711,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                             regionInitialRect.set(region.rect)
                             return true
                         }
-                    }
 
-                    for (i in customRegions.indices.reversed()) {
-                        val region = customRegions[i]
                         val l = region.rect.left * w
-                        val t = region.rect.top * h
-                        val r = region.rect.right * w
-                        val b = region.rect.bottom * h
                         if (RectF(l, t, r, b).contains(x, y)) {
                             currentEditAction = EditAction.MOVE_REGION
                             activeRegionIndex = i
@@ -558,47 +727,44 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                     touchDownX = x
                     touchDownY = y
                     drawingNewRect.set(x, y, x, y)
+                    invalidate()
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     when (currentEditAction) {
                         EditAction.DRAW_NEW -> {
-                            drawingNewRect.set(
-                                min(touchDownX, x),
-                                min(touchDownY, y),
-                                max(touchDownX, x),
-                                max(touchDownY, y)
-                            )
+                            drawingNewRect.set(min(touchDownX, x), min(touchDownY, y), max(touchDownX, x), max(touchDownY, y))
                             invalidate()
-                            return true
                         }
                         EditAction.MOVE_REGION -> {
                             if (activeRegionIndex in customRegions.indices) {
                                 val dx = (x - touchDownX) / w
                                 val dy = (y - touchDownY) / h
-                                val regW = regionInitialRect.width()
-                                val regH = regionInitialRect.height()
-
-                                val newL = (regionInitialRect.left + dx).coerceIn(0f, 1f - regW)
-                                val newT = (regionInitialRect.top + dy).coerceIn(0f, 1f - regH)
-                                customRegions[activeRegionIndex].rect.set(newL, newT, newL + regW, newT + regH)
+                                val curW = regionInitialRect.width()
+                                val curH = regionInitialRect.height()
+                                val newL = (regionInitialRect.left + dx).coerceIn(0f, 1f - curW)
+                                val newT = (regionInitialRect.top + dy).coerceIn(0f, 1f - curH)
+                                customRegions[activeRegionIndex] = customRegions[activeRegionIndex].copy(
+                                    rect = RectF(newL, newT, newL + curW, newT + curH)
+                                )
                                 invalidate()
-                                return true
                             }
                         }
                         EditAction.RESIZE_REGION -> {
                             if (activeRegionIndex in customRegions.indices) {
-                                val reg = customRegions[activeRegionIndex]
-                                val newR = (x / w).coerceIn(reg.rect.left + 0.05f, 1f)
-                                val newB = (y / h).coerceIn(reg.rect.top + 0.05f, 1f)
-                                reg.rect.right = newR
-                                reg.rect.bottom = newB
+                                val dx = (x - touchDownX) / w
+                                val dy = (y - touchDownY) / h
+                                val newR = (regionInitialRect.right + dx).coerceIn(regionInitialRect.left + 0.05f, 1f)
+                                val newB = (regionInitialRect.bottom + dy).coerceIn(regionInitialRect.top + 0.05f, 1f)
+                                customRegions[activeRegionIndex] = customRegions[activeRegionIndex].copy(
+                                    rect = RectF(regionInitialRect.left, regionInitialRect.top, newR, newB)
+                                )
                                 invalidate()
-                                return true
                             }
                         }
                         else -> {}
                     }
+                    return true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (currentEditAction == EditAction.DRAW_NEW) {
@@ -614,7 +780,6 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                             )
                             customRegions.add(newRegion)
                         }
-                        drawingNewRect.set(0f, 0f, 0f, 0f)
                     }
                     currentEditAction = EditAction.NONE
                     activeRegionIndex = -1
@@ -622,69 +787,124 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                     return true
                 }
             }
-            return true
         }
 
+        // 3. LASSO MODE TOUCH (Active on double-tap)
+        if (isLassoModeActive) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    isLassoDragging = true
+                    lassoStartX = x
+                    lassoStartY = y
+                    lassoRect.set(x, y, x, y)
+                    invalidate()
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    lassoRect.set(min(lassoStartX, x), min(lassoStartY, y), max(lassoStartX, x), max(lassoStartY, y))
+                    invalidate()
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isLassoModeActive = false
+                    isLassoDragging = false
+                    val minDrag = 35f
+                    if (lassoRect.width() >= minDrag && lassoRect.height() >= minDrag) {
+                        val relRect = RectF(
+                            (lassoRect.left / w).coerceIn(0f, 1f),
+                            (lassoRect.top / h).coerceIn(0f, 1f),
+                            (lassoRect.right / w).coerceIn(0f, 1f),
+                            (lassoRect.bottom / h).coerceIn(0f, 1f)
+                        )
+                        lassoRect.setEmpty()
+                        invalidate()
+                        onLassoRegionSelected?.invoke(TranslationRegion(rect = relRect))
+                        return true
+                    }
+                    lassoRect.setEmpty()
+                    invalidate()
+                    return true
+                }
+            }
+        }
+
+        // 4. FLOATING BUTTON & ACTIVE TRANSLATION TOUCH
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                if (showFloatingButton) {
-                    val dist = Math.hypot((x - floatBtnX).toDouble(), (y - floatBtnY).toDouble()).toFloat()
-                    if (dist <= floatBtnRadius * 1.3f) {
-                        isDraggingFloatBtn = true
-                        dragStartX = x
-                        dragStartY = y
-                        hasMovedFloatBtn = false
-                        longPressHandler.postDelayed(longPressRunnable, 450)
-                        return true
-                    }
+                val distToFloatBtn = Math.hypot((x - floatBtnX).toDouble(), (y - floatBtnY).toDouble()).toFloat()
+                if (showFloatingButton && distToFloatBtn <= floatBtnRadius + 15f) {
+                    isDraggingFloatBtn = true
+                    hasMovedFloatBtn = false
+                    dragStartX = x
+                    dragStartY = y
+                    longPressHandler.postDelayed(longPressRunnable, 500)
+                    return true
                 }
 
-                for (block in blocks) {
-                    val left = block.boundingBox.left * w - 10f
-                    val top = block.boundingBox.top * h - 10f
-                    val right = block.boundingBox.right * w + 10f
-                    val bottom = block.boundingBox.bottom * h + 10f
-                    val rect = RectF(left, top, right, bottom)
-
-                    if (rect.contains(x, y)) {
-                        block.isShowingOriginal = !block.isShowingOriginal
-                        invalidate()
-                        return true
-                    }
-                }
-
+                // Check tap on active translated blocks -> Open Tap-To-Dictionary
                 if (blocks.isNotEmpty()) {
-                    clearTranslations()
+                    for (block in blocks) {
+                        val bl = block.boundingBox.left * w
+                        val bt = block.boundingBox.top * h
+                        val br = block.boundingBox.right * w
+                        val bb = block.boundingBox.bottom * h
+                        if (RectF(bl - 10f, bt - 10f, br + 10f, bb + 10f).contains(x, y)) {
+                            viewScope.launch {
+                                val lookupResult = GameDictionaryService.lookup(block.originalText, block.translatedText)
+                                activeDictionaryResult = lookupResult
+                                invalidate()
+                            }
+                            return true
+                        }
+                    }
+                    // Tap on empty area dismisses translations
                     onDismissRequested?.invoke()
                     return true
                 }
+
+                // If not touching floating button and no active translation, do NOT block game controls!
+                return false
             }
             MotionEvent.ACTION_MOVE -> {
                 if (isDraggingFloatBtn) {
-                    val dx = x - dragStartX
-                    val dy = y - dragStartY
-                    if (Math.hypot(dx.toDouble(), dy.toDouble()) > 10.0) {
+                    val moveDist = Math.hypot((x - dragStartX).toDouble(), (y - dragStartY).toDouble()).toFloat()
+                    if (moveDist > 16f) {
                         hasMovedFloatBtn = true
                         longPressHandler.removeCallbacks(longPressRunnable)
-                        floatBtnX = x
-                        floatBtnY = y
-                        invalidate()
                     }
+                    floatBtnX = x
+                    floatBtnY = y
+                    invalidate()
                     return true
                 }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
                 if (isDraggingFloatBtn) {
                     longPressHandler.removeCallbacks(longPressRunnable)
                     isDraggingFloatBtn = false
                     if (!hasMovedFloatBtn) {
-                        onTriggerTranslationRequested?.invoke()
+                        val now = System.currentTimeMillis()
+                        if (now - lastFloatBtnClickTime <= 350L) {
+                            lastFloatBtnClickTime = 0L
+                            // Double tap on floating button activates Lasso Box Selection!
+                            isLassoModeActive = true
+                            invalidate()
+                        } else {
+                            lastFloatBtnClickTime = now
+                            onTriggerTranslationRequested?.invoke()
+                        }
                     }
+                    invalidate()
                     return true
                 }
             }
+            MotionEvent.ACTION_CANCEL -> {
+                longPressHandler.removeCallbacks(longPressRunnable)
+                isDraggingFloatBtn = false
+                invalidate()
+            }
         }
 
-        return super.onTouchEvent(event)
+        return false
     }
 }

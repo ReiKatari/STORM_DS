@@ -1,7 +1,6 @@
 package me.magnum.melonds.ui.romlist.composables
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,27 +19,31 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import me.magnum.melonds.MelonRomDecryptor
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonColors
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
-import kotlin.time.Duration
 
 @Composable
 fun RomContextMenu(
@@ -55,6 +58,18 @@ fun RomContextMenu(
 ) {
     if (rom == null) return
     val colors = watermelon
+    val context = LocalContext.current
+
+    val isEncrypted = remember(rom) {
+        if (rom.isInstalledDsiWareShortcut) {
+            false
+        } else if (rom.isDsiWareTitle) {
+            MelonRomDecryptor.checkEncryption(context, rom.uri) == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED
+        } else {
+            false
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material.LocalElevationOverlay provides null) {
         Surface(
@@ -115,15 +130,26 @@ fun RomContextMenu(
                     },
                 )
                 if (rom.isDsiWareTitle) {
-                    ContextItem(
-                        icon = Icons.Filled.Info, // Or another icon
-                        iconTint = colors.green,
-                        label = stringResource(R.string.decrypt_rom_title),
-                        onClick = {
-                            onDecryptRom(rom)
-                            onDismiss()
-                        },
-                    )
+                    if (isEncrypted) {
+                        ContextItem(
+                            icon = Icons.Filled.Lock,
+                            iconTint = colors.red,
+                            label = stringResource(R.string.rom_status_encrypted),
+                            enabled = true,
+                            onClick = {
+                                onDecryptRom(rom)
+                                onDismiss()
+                            },
+                        )
+                    } else {
+                        ContextItem(
+                            icon = Icons.Filled.LockOpen,
+                            iconTint = colors.green,
+                            label = stringResource(R.string.rom_status_decrypted),
+                            enabled = false,
+                            onClick = {},
+                        )
+                    }
                 }
                 ContextItem(
                     icon = if (rom.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
@@ -174,6 +200,7 @@ private fun ContextItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     iconTint: androidx.compose.ui.graphics.Color,
     label: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val colors = watermelon
@@ -181,16 +208,21 @@ private fun ContextItem(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 18.dp, vertical = 12.dp),
     ) {
-        Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) iconTint else colors.green,
+            modifier = Modifier.size(20.dp)
+        )
         Spacer(Modifier.width(14.dp))
         Text(
             text = label,
-            color = colors.text,
+            color = if (enabled) colors.text else colors.green,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = if (enabled) FontWeight.Medium else FontWeight.SemiBold,
         )
     }
 }

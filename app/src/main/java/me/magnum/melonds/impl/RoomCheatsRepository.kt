@@ -50,27 +50,27 @@ class RoomCheatsRepository(
 
     override suspend fun findGameForRom(romInfo: RomInfo): Game? {
         val lookupCode = romInfo.cheatGameCode
+        val cleanGameCode = romInfo.gameCode.take(4).uppercase()
         val checksumStr = romInfo.headerChecksumString()
-        var exact = database.gameDao().findGame(lookupCode, checksumStr)
-        var byChecksum = exact ?: if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null
-        var byCode = byChecksum ?: database.gameDao().findGameByCode(lookupCode)
-        var byPrefix = byCode ?: if (!romInfo.isDsiWareTitle && lookupCode.length >= 3) database.gameDao().findGameByPrefix(lookupCode.take(3)) else null
-        var byTitle = byPrefix ?: if (romInfo.gameTitle.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameTitle.trim()) else null
-        var gameEntity = byTitle ?: if (romInfo.gameName.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameName.trim()) else null
+
+        var gameEntity = database.gameDao().findGame(lookupCode, checksumStr)
+            ?: (if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null)
+            ?: database.gameDao().findGameByCode(lookupCode)
+            ?: (if (!romInfo.isDsiWareTitle && cleanGameCode.length == 4) database.gameDao().findGameByCode(cleanGameCode) else null)
 
         if (gameEntity == null || database.cheatFolderDao().getFoldersForGame(gameEntity.id ?: -1).isEmpty()) {
-            me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats.populateIfEmpty(
+            val populated = me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats.populateIfEmpty(
                 database,
                 lookupCode,
                 romInfo.gameTitle.ifBlank { romInfo.gameName },
                 checksumStr
             )
-            exact = database.gameDao().findGame(lookupCode, checksumStr)
-            byChecksum = exact ?: if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null
-            byCode = byChecksum ?: database.gameDao().findGameByCode(lookupCode)
-            byPrefix = byCode ?: if (!romInfo.isDsiWareTitle && lookupCode.length >= 3) database.gameDao().findGameByPrefix(lookupCode.take(3)) else null
-            byTitle = byPrefix ?: if (romInfo.gameTitle.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameTitle.trim()) else null
-            gameEntity = byTitle ?: if (romInfo.gameName.isNotBlank()) database.gameDao().findGameByTitle(romInfo.gameName.trim()) else null
+            if (populated) {
+                gameEntity = database.gameDao().findGame(lookupCode, checksumStr)
+                    ?: (if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null)
+                    ?: database.gameDao().findGameByCode(lookupCode)
+                    ?: (if (!romInfo.isDsiWareTitle && cleanGameCode.length == 4) database.gameDao().findGameByCode(cleanGameCode) else null)
+            }
         }
 
         return gameEntity?.let {
