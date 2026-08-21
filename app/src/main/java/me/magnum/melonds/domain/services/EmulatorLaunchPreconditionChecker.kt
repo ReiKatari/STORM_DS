@@ -81,43 +81,10 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private suspend fun checkDsiWarePreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
-        if (rom.isInstalledDsiWareShortcut) {
+        if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
             return checkInstalledDsiWareShortcutPreconditions(rom)
         }
-
-        val romInfo = romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)?.getRomInfo(rom)
-
-        if (romInfo == null) {
-            return RomLaunchPreconditionCheckResult.Success(rom)
-        }
-
-        val gameCodePadded = romInfo.gameCode.padEnd(4, '0').take(4)
-        val dsiTitleIdByteData = gameCodePadded.toByteArray(Charsets.US_ASCII)
-        val dsiTitleId = ByteBuffer.wrap(dsiTitleIdByteData).order(ByteOrder.BIG_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
-
-        val openNandResult = dsiNandManager.openNand()
-        if (openNandResult.isFailure()) {
-            return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
-        }
-
-        val isTitleInstalled = try {
-            val list = dsiNandManager.listTitles()
-            val found = list.any { (it.titleId and 0xFFFFFFFFL) == dsiTitleId }
-            if (!found) {
-                val importResult = dsiNandManager.importTitle(rom.uri)
-                if (importResult == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS) {
-                    dsiNandManager.listTitles().any { (it.titleId and 0xFFFFFFFFL) == dsiTitleId }
-                } else {
-                    false
-                }
-            } else {
-                true
-            }
-        } finally {
-            dsiNandManager.closeNand()
-        }
-
-        return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
+        return RomLaunchPreconditionCheckResult.Success(rom)
     }
 
     private suspend fun checkInstalledDsiWareShortcutPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
