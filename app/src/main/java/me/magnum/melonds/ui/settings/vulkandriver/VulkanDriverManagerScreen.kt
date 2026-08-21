@@ -161,7 +161,8 @@ fun VulkanDriverManagerScreen(
                 val isInstalled = installedMatch != null
                 val isActive = state.driverMode == VulkanDriverMode.CUSTOM &&
                     state.selectedDriverId != null &&
-                    (state.selectedDriverId == installedMatch?.id || installedMatch != null)
+                    installedMatch != null &&
+                    state.selectedDriverId == installedMatch.id
 
                 RecommendedDriverBanner(
                     driver = recommended,
@@ -381,10 +382,10 @@ fun RecommendedDriverBanner(
 
 private fun findMatchingInstalledDriver(driver: OnlineVulkanDriver, installedDrivers: List<VulkanDriverInfo>): VulkanDriverInfo? {
     return installedDrivers.firstOrNull { installed ->
-        installed.displayName.contains(driver.version, ignoreCase = true) ||
-        installed.displayName.contains(driver.id, ignoreCase = true) ||
-        (driver.version.length >= 4 && installed.displayName.contains(driver.version.take(6), ignoreCase = true)) ||
-        (driver.name.isNotBlank() && installed.displayName.contains(driver.name, ignoreCase = true))
+        installed.id == driver.id ||
+        installed.displayName.equals(driver.name, ignoreCase = true) ||
+        installed.displayName.equals("${driver.name} (${driver.version})", ignoreCase = true) ||
+        (driver.version.length >= 6 && installed.displayName.contains(driver.version, ignoreCase = true))
     }
 }
 
@@ -423,7 +424,10 @@ fun OnlineDriversList(
             val isDownloading = activeDownloadingId == driver.id
             val progress = downloadProgress[driver.id] ?: 0
             val installedMatch = findMatchingInstalledDriver(driver, installedDrivers)
-            val isActive = isCustomActive && installedMatch != null && (selectedDriverId == installedMatch.id || selectedDriverId == null)
+            val isActive = isCustomActive &&
+                selectedDriverId != null &&
+                installedMatch != null &&
+                selectedDriverId == installedMatch.id
 
             OnlineDriverCard(
                 driver = driver,

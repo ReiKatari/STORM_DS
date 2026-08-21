@@ -302,12 +302,30 @@ class GameTtsManager(private val context: Context) {
 
         val activePersona = if (isLocalStudio && modelPref != "auto_multi") {
             when (modelPref) {
-                "piper_ru_boss_grunt" -> CharacterPersona.VILLAIN_BOSS
-                "piper_ru_dmitri_medium" -> CharacterPersona.HERO_DARK_VIGILANTE
+                "piper_ru_dmitri_medium" -> CharacterPersona.PROTAGONIST_MALE
                 "piper_ru_elena_medium" -> CharacterPersona.PROTAGONIST_FEMALE
+                "piper_ru_hero" -> CharacterPersona.PROTAGONIST_MALE
+                "piper_ru_dark_knight" -> CharacterPersona.HERO_DARK_VIGILANTE
+                "piper_ru_boss_grunt" -> CharacterPersona.VILLAIN_BOSS
+                "piper_ru_joker_manic" -> CharacterPersona.VILLAIN_MANIC
+                "piper_ru_deep_demon" -> CharacterPersona.DEEP_DEMON
                 "piper_ru_elder" -> CharacterPersona.WISE_ELDER
-                "piper_ru_hero" -> CharacterPersona.KNIGHT_WARRIOR
-                "piper_en_ryan_studio" -> CharacterPersona.PROTAGONIST_MALE
+                "piper_ru_young_boy" -> CharacterPersona.YOUNG_BOY
+                "piper_ru_young_girl" -> CharacterPersona.YOUNG_GIRL
+                "piper_ru_royal_queen" -> CharacterPersona.ROYAL_QUEEN
+                "piper_ru_merchant" -> CharacterPersona.MERCHANT
+                "piper_ru_soldier" -> CharacterPersona.SOLDIER
+                "piper_ru_robot" -> CharacterPersona.CYBORG_ROBOT
+                "piper_ru_narrator" -> CharacterPersona.NARRATOR
+                "piper_ru_tsundere" -> CharacterPersona.TSUNDERE
+                "piper_ru_whisper" -> CharacterPersona.WHISPER_MYSTERIOUS
+                "piper_ru_fairy" -> CharacterPersona.CHEERFUL_FAIRY
+                "piper_ru_pirate" -> CharacterPersona.PIRATE
+                "piper_ru_mad_scientist" -> CharacterPersona.MAD_SCIENTIST
+                "piper_ru_gentleman" -> CharacterPersona.GENTLEMAN_SCHOLAR
+                "piper_ru_ghost" -> CharacterPersona.GHOST_ETHEREAL
+                "piper_ru_knight" -> CharacterPersona.KNIGHT_WARRIOR
+                "piper_ru_angelic" -> CharacterPersona.ANGELIC_DIVINE
                 else -> resolvePersonaForSpeaker(extractedSpeaker, text)
             }
         } else {

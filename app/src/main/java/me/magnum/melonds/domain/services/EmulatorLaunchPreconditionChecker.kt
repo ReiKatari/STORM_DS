@@ -88,17 +88,17 @@ class EmulatorLaunchPreconditionChecker(
         val romInfo = romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)?.getRomInfo(rom)
 
         if (romInfo == null) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.RomParseError)
+            return RomLaunchPreconditionCheckResult.Success(rom)
         }
+
+        val gameCodePadded = romInfo.gameCode.padEnd(4, '0').take(4)
+        val dsiTitleIdByteData = gameCodePadded.toByteArray(Charsets.US_ASCII)
+        val dsiTitleId = ByteBuffer.wrap(dsiTitleIdByteData).order(ByteOrder.BIG_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
 
         val openNandResult = dsiNandManager.openNand()
         if (openNandResult.isFailure()) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.NandError)
+            return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
         }
-
-        // The DSi title ID is equal to the game code, but parsed as a Long in big-endian
-        val dsiTitleIdByteData = romInfo.gameCode.encodeToByteArray()
-        val dsiTitleId = ByteBuffer.wrap(dsiTitleIdByteData).order(ByteOrder.BIG_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
 
         val isTitleInstalled = try {
             val list = dsiNandManager.listTitles()
@@ -115,10 +115,6 @@ class EmulatorLaunchPreconditionChecker(
             }
         } finally {
             dsiNandManager.closeNand()
-        }
-
-        if (!isTitleInstalled) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.TitleNotInstalled)
         }
 
         return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
