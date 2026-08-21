@@ -1146,6 +1146,8 @@
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, авторы и лицензии</string>
     <string name="about_version_title">Версия</string>
     <string name="about_credits_title">Благодарности авторам</string>
+    <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
+    <string name="about_credits_jpeacekeeper_summary">Неоценимый вклад в тестирование, детальные отчеты об ошибках DSi, стандартизацию фреймрейта и развитие проекта STORM DS</string>
     <string name="about_credits_watermelonds_title">WatermelonDS</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite и контрибьюторы — порт на Android, высокоскоростной Vulkan рендер, поддержка шейдеров librashader и сенсорный интерфейс</string>
     <string name="about_credits_melonds_title">melonDS Core</string>
