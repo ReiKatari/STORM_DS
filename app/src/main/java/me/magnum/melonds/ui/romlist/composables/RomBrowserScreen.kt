@@ -191,93 +191,218 @@ fun RomBrowserScreen(
     }
 
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            WatermelonLibraryHeader(
-                isSearchActive = state.isSearchActive,
-                searchQuery = searchQuery,
-                viewMode = state.viewMode,
-                onSearchQueryChanged = onSearchQueryChanged,
-                onToggleViewMode = onToggleViewMode,
-                onBootFirmwareDs = onBootFirmwareDs,
-                onBootFirmwareDsi = onBootFirmwareDsi,
-                onOpenDsiWareManager = onOpenDsiWareManager,
-                onRefresh = onRefresh,
-                onOpenSettings = onOpenSettings,
-            )
-
-            if (scanningStatus == RomScanningStatus.SCANNING) {
-                LinearProgressIndicator(
-                    color = colors.green,
-                    backgroundColor = colors.surface2,
-                    modifier = Modifier.fillMaxWidth(),
+        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                WatermelonLibraryHeader(
+                    isSearchActive = state.isSearchActive,
+                    searchQuery = searchQuery,
+                    viewMode = state.viewMode,
+                    onSearchQueryChanged = onSearchQueryChanged,
+                    onToggleViewMode = onToggleViewMode,
+                    onBootFirmwareDs = onBootFirmwareDs,
+                    onBootFirmwareDsi = onBootFirmwareDsi,
+                    onOpenDsiWareManager = onOpenDsiWareManager,
+                    onRefresh = onRefresh,
+                    onOpenSettings = onOpenSettings,
                 )
-            }
 
-            BreadcrumbBar(
-                breadcrumbs = state.breadcrumbs,
-                canNavigateUp = state.canNavigateUp,
-                isAtVirtualRoot = state.isAtVirtualRoot,
-                isSearchActive = state.isSearchActive,
-                onNavigateUp = onNavigateUp,
-            )
+                if (scanningStatus == RomScanningStatus.SCANNING) {
+                    LinearProgressIndicator(
+                        color = colors.green,
+                        backgroundColor = colors.surface2,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
-            val configuration = LocalConfiguration.current
-            val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+                BreadcrumbBar(
+                    breadcrumbs = state.breadcrumbs,
+                    canNavigateUp = state.canNavigateUp,
+                    isAtVirtualRoot = state.isAtVirtualRoot,
+                    isSearchActive = state.isSearchActive,
+                    onNavigateUp = onNavigateUp,
+                )
 
-            if (isLandscape && showContinueShelf) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                ) {
-                    // Left 40%: Continue Playing
-                    Column(
+                val configuration = LocalConfiguration.current
+                val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+
+                if (isLandscape) {
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth(0.40f)
-                            .fillMaxHeight()
-                            .padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                            .fillMaxWidth()
+                            .weight(1f),
                     ) {
-                        ContinuePlayingLandscapeColumn(
-                            roms = state.continuePlaying,
-                            coverByHash = coverByHash,
-                            boxArtByUri = boxArtByUri,
-                            onRomClicked = onRomClick,
-                            onRomLongPressed = onRomLongPress,
-                            onRomFocused = onFocusedRomChanged,
-                            onRomVisible = onRomVisible,
-                        )
-                    }
+                        // Left 38%: Continue Playing or Quick Library Sidebar
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth(0.38f)
+                                .fillMaxHeight()
+                                .padding(start = 16.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
+                        ) {
+                            if (state.continuePlaying.isNotEmpty() && !state.isSearchActive && !state.canNavigateUp) {
+                                ContinuePlayingLandscapeColumn(
+                                    roms = state.continuePlaying,
+                                    coverByHash = coverByHash,
+                                    boxArtByUri = boxArtByUri,
+                                    onRomClicked = onRomClick,
+                                    onRomLongPressed = onRomLongPress,
+                                    onRomFocused = onFocusedRomChanged,
+                                    onRomVisible = onRomVisible,
+                                )
+                            } else {
+                                CompactLandscapeSidebar(
+                                    totalRoms = state.entries.size,
+                                    filter = state.filter,
+                                    onFilterSelected = onFilterSelected,
+                                )
+                            }
+                        }
 
-                    // Stylish Vertical Divider
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .padding(vertical = 8.dp)
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        colors.line.copy(alpha = 0.6f),
-                                        colors.red.copy(alpha = 0.5f),
-                                        colors.line.copy(alpha = 0.6f),
-                                        Color.Transparent,
+                        // Sleek Vertical Gradient Divider
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .fillMaxHeight()
+                                .padding(vertical = 8.dp)
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            colors.line.copy(alpha = 0.6f),
+                                            colors.red.copy(alpha = 0.5f),
+                                            colors.line.copy(alpha = 0.6f),
+                                            Color.Transparent,
+                                        )
                                     )
                                 )
-                            )
-                    )
+                        )
 
-                    // Right 60%: Filters, Section Header, and Game List
+                        // Right 62%: Filters, Section Header, and Game List
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .padding(start = 10.dp, end = 16.dp),
+                        ) {
+                            FilterChipsRow(
+                                selected = state.filter,
+                                onFilterSelected = onFilterSelected,
+                            )
+                            if (showSectionHeader) {
+                                val romsCount = state.entries.drop(folderCount).size
+                                LibrarySectionHeader(
+                                    title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
+                                    inFolder = state.canNavigateUp,
+                                    sortingMode = state.sortingMode,
+                                    sortingOrder = state.sortingOrder,
+                                    gamesCount = romsCount,
+                                    onNavigateUp = onNavigateUp,
+                                    onSortSelected = onSortSelected,
+                                    modifier = Modifier.padding(horizontal = 0.dp),
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .pullRefresh(refreshState),
+                            ) {
+                                if (state.entries.isEmpty()) {
+                                    Column(modifier = Modifier.fillMaxSize()) {
+                                        EmptyState(filter = state.filter)
+                                    }
+                                } else {
+                                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                        Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
+                                            when (mode) {
+                                                RomViewMode.GRID -> GridContent(
+                                                    state = state,
+                                                    gridState = gridState,
+                                                    coverByHash = coverByHash,
+                                                    boxArtByUri = boxArtByUri,
+                                                    confirmedAchievementHashes = confirmedAchievementHashes,
+                                                    isRaAuthenticated = isRaAuthenticated,
+                                                    showAlphabetBar = showAlphabetBar,
+                                                    showContinueShelf = false,
+                                                    showSectionHeader = false,
+                                                    folderCount = folderCount,
+                                                    viewportHeight = maxHeight,
+                                                    itemFocusRequesters = itemFocusRequesters,
+                                                    focusedEntryIndex = focusedEntryIndex,
+                                                    firstRomEntryIndexInLastGridRow = firstRomEntryIndexInLastGridRow,
+                                                    onFocusedEntryIndexChanged = { focusedEntryIndex = it },
+                                                    onRomFocused = onFocusedRomChanged,
+                                                    onFolderClick = onFolderClick,
+                                                    onRomClick = onRomClick,
+                                                    onRomLongPress = onRomLongPress,
+                                                    onFilterSelected = onFilterSelected,
+                                                    onSortSelected = onSortSelected,
+                                                    onNavigateUp = onNavigateUp,
+                                                    onRomVisible = onRomVisible,
+                                                )
+                                                RomViewMode.LIST -> ListContent(
+                                                    state = state,
+                                                    listState = listState,
+                                                    coverByHash = coverByHash,
+                                                    boxArtByUri = boxArtByUri,
+                                                    allowConfiguration = allowConfiguration,
+                                                    confirmedAchievementHashes = confirmedAchievementHashes,
+                                                    isRaAuthenticated = isRaAuthenticated,
+                                                    showAlphabetBar = showAlphabetBar,
+                                                    showContinueShelf = false,
+                                                    showSectionHeader = false,
+                                                    folderCount = folderCount,
+                                                    viewportHeight = maxHeight,
+                                                    itemFocusRequesters = itemFocusRequesters,
+                                                    focusedEntryIndex = focusedEntryIndex,
+                                                    onFocusedEntryIndexChanged = { focusedEntryIndex = it },
+                                                    onRomFocused = onFocusedRomChanged,
+                                                    onFolderClick = onFolderClick,
+                                                    onRomClick = onRomClick,
+                                                    onRomLongPress = onRomLongPress,
+                                                    onRomConfigClick = onRomConfigClick,
+                                                    onFilterSelected = onFilterSelected,
+                                                    onSortSelected = onSortSelected,
+                                                    onNavigateUp = onNavigateUp,
+                                                    onRomVisible = onRomVisible,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                PullRefreshIndicator(
+                                    refreshing = scanningStatus == RomScanningStatus.SCANNING,
+                                    state = refreshState,
+                                    modifier = Modifier.align(Alignment.TopCenter),
+                                    backgroundColor = colors.surface,
+                                    contentColor = colors.red,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Portrait mode
                     Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .padding(start = 12.dp, end = 16.dp),
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                     ) {
                         FilterChipsRow(
                             selected = state.filter,
                             onFilterSelected = onFilterSelected,
                         )
+                        if (showContinueShelf) {
+                            ContinuePlayingShelf(
+                                roms = state.continuePlaying,
+                                coverByHash = coverByHash,
+                                boxArtByUri = boxArtByUri,
+                                onRomClicked = onRomClick,
+                                onRomLongPressed = onRomLongPress,
+                                horizontalPadding = 0.dp,
+                                onRomFocused = onFocusedRomChanged,
+                                onRomVisible = onRomVisible,
+                            )
+                        }
                         if (showSectionHeader) {
                             val romsCount = state.entries.drop(folderCount).size
                             LibrarySectionHeader(
@@ -291,267 +416,155 @@ fun RomBrowserScreen(
                                 modifier = Modifier.padding(horizontal = 0.dp),
                             )
                         }
+                    }
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                                .pullRefresh(refreshState),
-                        ) {
-                            if (state.entries.isEmpty()) {
-                                Column(modifier = Modifier.fillMaxSize()) {
-                                    EmptyState(filter = state.filter)
-                                }
-                            } else {
-                                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                                    Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
-                                        when (mode) {
-                                            RomViewMode.GRID -> GridContent(
-                                                state = state,
-                                                gridState = gridState,
-                                                coverByHash = coverByHash,
-                                                boxArtByUri = boxArtByUri,
-                                                confirmedAchievementHashes = confirmedAchievementHashes,
-                                                isRaAuthenticated = isRaAuthenticated,
-                                                showAlphabetBar = showAlphabetBar,
-                                                showContinueShelf = false,
-                                                showSectionHeader = false,
-                                                folderCount = folderCount,
-                                                viewportHeight = maxHeight,
-                                                itemFocusRequesters = itemFocusRequesters,
-                                                focusedEntryIndex = focusedEntryIndex,
-                                                firstRomEntryIndexInLastGridRow = firstRomEntryIndexInLastGridRow,
-                                                onFocusedEntryIndexChanged = { focusedEntryIndex = it },
-                                                onRomFocused = onFocusedRomChanged,
-                                                onFolderClick = onFolderClick,
-                                                onRomClick = onRomClick,
-                                                onRomLongPress = onRomLongPress,
-                                                onFilterSelected = onFilterSelected,
-                                                onSortSelected = onSortSelected,
-                                                onNavigateUp = onNavigateUp,
-                                                onRomVisible = onRomVisible,
-                                            )
-                                            RomViewMode.LIST -> ListContent(
-                                                state = state,
-                                                listState = listState,
-                                                coverByHash = coverByHash,
-                                                boxArtByUri = boxArtByUri,
-                                                allowConfiguration = allowConfiguration,
-                                                confirmedAchievementHashes = confirmedAchievementHashes,
-                                                isRaAuthenticated = isRaAuthenticated,
-                                                showAlphabetBar = showAlphabetBar,
-                                                showContinueShelf = false,
-                                                showSectionHeader = false,
-                                                folderCount = folderCount,
-                                                viewportHeight = maxHeight,
-                                                itemFocusRequesters = itemFocusRequesters,
-                                                focusedEntryIndex = focusedEntryIndex,
-                                                onFocusedEntryIndexChanged = { focusedEntryIndex = it },
-                                                onRomFocused = onFocusedRomChanged,
-                                                onFolderClick = onFolderClick,
-                                                onRomClick = onRomClick,
-                                                onRomLongPress = onRomLongPress,
-                                                onRomConfigClick = onRomConfigClick,
-                                                onFilterSelected = onFilterSelected,
-                                                onSortSelected = onSortSelected,
-                                                onNavigateUp = onNavigateUp,
-                                                onRomVisible = onRomVisible,
-                                            )
-                                        }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .pullRefresh(refreshState),
+                    ) {
+                        if (state.entries.isEmpty() && !showContinueShelf) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                EmptyState(filter = state.filter)
+                            }
+                        } else {
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
+                                    when (mode) {
+                                        RomViewMode.GRID -> GridContent(
+                                            state = state,
+                                            gridState = gridState,
+                                            coverByHash = coverByHash,
+                                            boxArtByUri = boxArtByUri,
+                                            confirmedAchievementHashes = confirmedAchievementHashes,
+                                            isRaAuthenticated = isRaAuthenticated,
+                                            showAlphabetBar = showAlphabetBar,
+                                            showContinueShelf = false,
+                                            showSectionHeader = false,
+                                            folderCount = folderCount,
+                                            viewportHeight = maxHeight,
+                                            itemFocusRequesters = itemFocusRequesters,
+                                            focusedEntryIndex = focusedEntryIndex,
+                                            firstRomEntryIndexInLastGridRow = firstRomEntryIndexInLastGridRow,
+                                            onFocusedEntryIndexChanged = { focusedEntryIndex = it },
+                                            onRomFocused = onFocusedRomChanged,
+                                            onFolderClick = onFolderClick,
+                                            onRomClick = onRomClick,
+                                            onRomLongPress = onRomLongPress,
+                                            onFilterSelected = onFilterSelected,
+                                            onSortSelected = onSortSelected,
+                                            onNavigateUp = onNavigateUp,
+                                            onRomVisible = onRomVisible,
+                                        )
+                                        RomViewMode.LIST -> ListContent(
+                                            state = state,
+                                            listState = listState,
+                                            coverByHash = coverByHash,
+                                            boxArtByUri = boxArtByUri,
+                                            allowConfiguration = allowConfiguration,
+                                            confirmedAchievementHashes = confirmedAchievementHashes,
+                                            isRaAuthenticated = isRaAuthenticated,
+                                            showAlphabetBar = showAlphabetBar,
+                                            showContinueShelf = false,
+                                            showSectionHeader = false,
+                                            folderCount = folderCount,
+                                            viewportHeight = maxHeight,
+                                            itemFocusRequesters = itemFocusRequesters,
+                                            focusedEntryIndex = focusedEntryIndex,
+                                            onFocusedEntryIndexChanged = { focusedEntryIndex = it },
+                                            onRomFocused = onFocusedRomChanged,
+                                            onFolderClick = onFolderClick,
+                                            onRomClick = onRomClick,
+                                            onRomLongPress = onRomLongPress,
+                                            onRomConfigClick = onRomConfigClick,
+                                            onFilterSelected = onFilterSelected,
+                                            onSortSelected = onSortSelected,
+                                            onNavigateUp = onNavigateUp,
+                                            onRomVisible = onRomVisible,
+                                        )
                                     }
                                 }
                             }
-                            PullRefreshIndicator(
-                                refreshing = scanningStatus == RomScanningStatus.SCANNING,
-                                state = refreshState,
-                                modifier = Modifier.align(Alignment.TopCenter),
-                                backgroundColor = colors.surface,
-                                contentColor = colors.red,
-                            )
                         }
-                    }
-                }
-            } else {
-                // Portrait mode or when continue shelf is hidden
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                ) {
-                    FilterChipsRow(
-                        selected = state.filter,
-                        onFilterSelected = onFilterSelected,
-                    )
-                    if (showContinueShelf) {
-                        ContinuePlayingShelf(
-                            roms = state.continuePlaying,
-                            coverByHash = coverByHash,
-                            boxArtByUri = boxArtByUri,
-                            onRomClicked = onRomClick,
-                            onRomLongPressed = onRomLongPress,
-                            horizontalPadding = 0.dp,
-                            onRomFocused = onFocusedRomChanged,
-                            onRomVisible = onRomVisible,
+                        PullRefreshIndicator(
+                            refreshing = scanningStatus == RomScanningStatus.SCANNING,
+                            state = refreshState,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                            backgroundColor = colors.surface,
+                            contentColor = colors.red,
                         )
                     }
-                    if (showSectionHeader) {
-                        val romsCount = state.entries.drop(folderCount).size
-                        LibrarySectionHeader(
-                            title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
-                            inFolder = state.canNavigateUp,
-                            sortingMode = state.sortingMode,
-                            sortingOrder = state.sortingOrder,
-                            gamesCount = romsCount,
-                            onNavigateUp = onNavigateUp,
-                            onSortSelected = onSortSelected,
-                            modifier = Modifier.padding(horizontal = 0.dp),
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .pullRefresh(refreshState),
-                ) {
-                    if (state.entries.isEmpty() && !showContinueShelf) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            EmptyState(filter = state.filter)
-                        }
-                    } else {
-                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                            Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
-                                when (mode) {
-                                    RomViewMode.GRID -> GridContent(
-                                        state = state,
-                                        gridState = gridState,
-                                        coverByHash = coverByHash,
-                                        boxArtByUri = boxArtByUri,
-                                        confirmedAchievementHashes = confirmedAchievementHashes,
-                                        isRaAuthenticated = isRaAuthenticated,
-                                        showAlphabetBar = showAlphabetBar,
-                                        showContinueShelf = false,
-                                        showSectionHeader = false,
-                                        folderCount = folderCount,
-                                        viewportHeight = maxHeight,
-                                        itemFocusRequesters = itemFocusRequesters,
-                                        focusedEntryIndex = focusedEntryIndex,
-                                        firstRomEntryIndexInLastGridRow = firstRomEntryIndexInLastGridRow,
-                                        onFocusedEntryIndexChanged = { focusedEntryIndex = it },
-                                        onRomFocused = onFocusedRomChanged,
-                                        onFolderClick = onFolderClick,
-                                        onRomClick = onRomClick,
-                                        onRomLongPress = onRomLongPress,
-                                        onFilterSelected = onFilterSelected,
-                                        onSortSelected = onSortSelected,
-                                        onNavigateUp = onNavigateUp,
-                                        onRomVisible = onRomVisible,
-                                    )
-                                    RomViewMode.LIST -> ListContent(
-                                        state = state,
-                                        listState = listState,
-                                        coverByHash = coverByHash,
-                                        boxArtByUri = boxArtByUri,
-                                        allowConfiguration = allowConfiguration,
-                                        confirmedAchievementHashes = confirmedAchievementHashes,
-                                        isRaAuthenticated = isRaAuthenticated,
-                                        showAlphabetBar = showAlphabetBar,
-                                        showContinueShelf = false,
-                                        showSectionHeader = false,
-                                        folderCount = folderCount,
-                                        viewportHeight = maxHeight,
-                                        itemFocusRequesters = itemFocusRequesters,
-                                        focusedEntryIndex = focusedEntryIndex,
-                                        onFocusedEntryIndexChanged = { focusedEntryIndex = it },
-                                        onRomFocused = onFocusedRomChanged,
-                                        onFolderClick = onFolderClick,
-                                        onRomClick = onRomClick,
-                                        onRomLongPress = onRomLongPress,
-                                        onRomConfigClick = onRomConfigClick,
-                                        onFilterSelected = onFilterSelected,
-                                        onSortSelected = onSortSelected,
-                                        onNavigateUp = onNavigateUp,
-                                        onRomVisible = onRomVisible,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    PullRefreshIndicator(
-                        refreshing = scanningStatus == RomScanningStatus.SCANNING,
-                        state = refreshState,
-                        modifier = Modifier.align(Alignment.TopCenter),
-                        backgroundColor = colors.surface,
-                        contentColor = colors.red,
-                    )
                 }
             }
 
+            // Alphabet Index Bar: anchored as an overlay on the right edge of the screen
             if (showAlphabetBar) {
-                    val leadingItems = when (state.viewMode) {
-                        RomViewMode.GRID -> gridLeadingItems
-                        RomViewMode.LIST -> listLeadingItems
-                    }
-                    val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
-                        derivedStateOf {
-                            val firstVisItem = when (state.viewMode) {
-                                RomViewMode.GRID -> gridState.firstVisibleItemIndex
-                                RomViewMode.LIST -> listState.firstVisibleItemIndex
-                            }
-                            when (state.viewMode) {
-                                RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
-                                RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
-                            }
+                val leadingItems = when (state.viewMode) {
+                    RomViewMode.GRID -> gridLeadingItems
+                    RomViewMode.LIST -> listLeadingItems
+                }
+                val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
+                    derivedStateOf {
+                        val firstVisItem = when (state.viewMode) {
+                            RomViewMode.GRID -> gridState.firstVisibleItemIndex
+                            RomViewMode.LIST -> listState.firstVisibleItemIndex
+                        }
+                        when (state.viewMode) {
+                            RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
+                            RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
                         }
                     }
-                    val activeLetter by remember(state.alphabetIndex, state.viewMode) {
-                        derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
-                    }
-                    val isInFolderSection by remember(folderCount, state.viewMode) {
-                        derivedStateOf { hasFolders && activeFirstVis < folderCount }
-                    }
-                    AlphabetIndexBar(
-                        alphabetIndex = state.alphabetIndex,
-                        activeLetter = activeLetter,
-                        hasFolders = hasFolders,
-                        isInFolderSection = isInFolderSection,
-                        onFoldersClicked = {
-                            coroutineScope.launch {
-                                when (state.viewMode) {
-                                    RomViewMode.GRID -> gridState.scrollToItem(0)
-                                    RomViewMode.LIST -> listState.scrollToItem(0)
-                                }
-                                requestFirstVisibleRomFocus(
-                                    state = state,
-                                    gridState = gridState,
-                                    listState = listState,
-                                    itemFocusRequesters = itemFocusRequesters,
-                                )
-                            }
-                        },
-                        onLetterTouched = { idx, letter ->
-                            coroutineScope.launch {
-                                val targetItemIndex = when (state.viewMode) {
-                                    RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
-                                    RomViewMode.LIST -> leadingItems + idx
-                                }
-                                when (state.viewMode) {
-                                    RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex)
-                                    RomViewMode.LIST -> listState.scrollToItem(targetItemIndex)
-                                }
-                                requestRomFocusAtIndex(
-                                    state = state,
-                                    targetIndex = idx,
-                                    gridState = gridState,
-                                    listState = listState,
-                                    itemFocusRequesters = itemFocusRequesters,
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
                 }
+                val activeLetter by remember(state.alphabetIndex, state.viewMode) {
+                    derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
+                }
+                val isInFolderSection by remember(folderCount, state.viewMode) {
+                    derivedStateOf { hasFolders && activeFirstVis < folderCount }
+                }
+                AlphabetIndexBar(
+                    alphabetIndex = state.alphabetIndex,
+                    activeLetter = activeLetter,
+                    hasFolders = hasFolders,
+                    isInFolderSection = isInFolderSection,
+                    onFoldersClicked = {
+                        coroutineScope.launch {
+                            when (state.viewMode) {
+                                RomViewMode.GRID -> gridState.scrollToItem(0)
+                                RomViewMode.LIST -> listState.scrollToItem(0)
+                            }
+                            requestFirstVisibleRomFocus(
+                                state = state,
+                                gridState = gridState,
+                                listState = listState,
+                                itemFocusRequesters = itemFocusRequesters,
+                            )
+                        }
+                    },
+                    onLetterTouched = { idx, letter ->
+                        coroutineScope.launch {
+                            val targetItemIndex = when (state.viewMode) {
+                                RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
+                                RomViewMode.LIST -> leadingItems + idx
+                            }
+                            when (state.viewMode) {
+                                RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex)
+                                RomViewMode.LIST -> listState.scrollToItem(targetItemIndex)
+                            }
+                            requestRomFocusAtIndex(
+                                state = state,
+                                targetIndex = idx,
+                                gridState = gridState,
+                                listState = listState,
+                                itemFocusRequesters = itemFocusRequesters,
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(top = 56.dp, bottom = 16.dp, end = 2.dp),
+                )
+            }
         }
     }
 }

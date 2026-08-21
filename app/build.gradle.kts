@@ -604,6 +604,7 @@ dependencies {
     implementation(libs.markwon.imagepicasso)
     implementation(libs.markwon.linkify)
     implementation(libs.commons.compress)
+    implementation(libs.junrar)
     implementation(libs.xz)
     implementation(libs.okhttp)
     implementation(libs.mlkit.text.recognition)
