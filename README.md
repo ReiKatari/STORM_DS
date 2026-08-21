@@ -9,6 +9,7 @@
 
 ## 🌟 Благодарности и первоисточники (Credits & Acknowledgements)
 
+* <strong>JPeacekeeper</strong> (<a href="https://4pda.to/forum/index.php?showuser=5768740">4PDA Profile</a>) — неоценимый вклад в тестирование, баг-репорты, стандартизацию DSi/Vulkan пайплайна и развитие проекта STORM DS.
 * <strong>WatermelonDS</strong> (SapphireRhodonite & contributors) — современный порт для Android, интеграция Vulkan-рендерера, поддержка шейдеров librashader, сенсорное управление и Material Design UI.
 * <strong>melonDS</strong> (StapleButter, Nadia, RSDuck, genericretrogeek & melonDS team) — оригинальное высокоточное ядро эмуляции Nintendo DS и Nintendo DSi.
 * <strong>Open Source библиотеки</strong>: Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools.

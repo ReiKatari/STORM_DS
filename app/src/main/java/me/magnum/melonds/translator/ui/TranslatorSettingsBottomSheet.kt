@@ -43,8 +43,9 @@ fun TranslatorSettingsContent(
     var ttsLangPref by remember { mutableStateOf(preferences.getString(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto") }
     
     var voiceActorStudioEnabled by remember { mutableStateOf(preferences.getBoolean("translator_local_voice_actor_studio", false)) }
-    var voiceModelPref by remember { mutableStateOf(preferences.getString("translator_local_voice_model", "piper_ru_dmitri_medium") ?: "piper_ru_dmitri_medium") }
+    var voiceModelPref by remember { mutableStateOf(preferences.getString("translator_local_voice_model", "auto_multi") ?: "auto_multi") }
     var voicePitchVariance by remember { mutableStateOf(preferences.getInt("translator_local_voice_pitch_variance", 65).toFloat()) }
+    var showVoiceModelDialog by remember { mutableStateOf(false) }
 
     var fontSizeScale by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_FONT_SIZE_SCALE, 100).toFloat()) }
     var bubbleOpacity by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_BUBBLE_OPACITY, 90).toFloat()) }
@@ -247,9 +248,7 @@ fun TranslatorSettingsContent(
                         label = "Пакет нейромоделей",
                         value = currentPack.displayName,
                         onClick = {
-                            val nextIdx = (availablePacks.indexOfFirst { it.id == voiceModelPref }.coerceAtLeast(0) + 1) % availablePacks.size
-                            voiceModelPref = availablePacks[nextIdx].id
-                            updatePref("translator_local_voice_model", voiceModelPref)
+                            showVoiceModelDialog = true
                         }
                     )
                     Divider(color = watermelon.line)
@@ -265,6 +264,78 @@ fun TranslatorSettingsContent(
                         }
                     )
                 }
+            }
+
+            if (showVoiceModelDialog) {
+                val availablePacks = me.magnum.melonds.translator.tts.LocalAiVoiceActorStudio.getAvailableModelPacks(context)
+                AlertDialog(
+                    onDismissRequest = { showVoiceModelDialog = false },
+                    backgroundColor = watermelon.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    title = {
+                        Text(
+                            text = "🎭 Выберите голос персонажа (24 модели)",
+                            color = watermelon.text,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    },
+                    text = {
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(availablePacks.size) { index ->
+                                val pack = availablePacks[index]
+                                val isSelected = pack.id == voiceModelPref
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) watermelon.green.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent)
+                                        .clickable {
+                                            voiceModelPref = pack.id
+                                            updatePref("translator_local_voice_model", voiceModelPref)
+                                            showVoiceModelDialog = false
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = pack.displayName,
+                                        color = if (isSelected) watermelon.green else watermelon.text,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            voiceModelPref = pack.id
+                                            updatePref("translator_local_voice_model", voiceModelPref)
+                                            showVoiceModelDialog = false
+                                        },
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = watermelon.green,
+                                            unselectedColor = watermelon.text2
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    buttons = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { showVoiceModelDialog = false }) {
+                                Text("Закрыть", color = watermelon.green, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                )
             }
             
             Spacer(modifier = Modifier.height(16.dp))

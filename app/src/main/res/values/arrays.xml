@@ -368,16 +368,58 @@
     </string-array>
 
     <string-array name="translator_local_voice_model_options">
-        <item>Русский — Дмитрий и Ирина (Мультиголос Medium INT8)</item>
-        <item>Русский — Денис и Татьяна (RPG Актерский High-Q)</item>
-        <item>English — Ryan &amp; Samantha (Multi-Persona Studio)</item>
-        <item>Автовыбор по языку игры</item>
+        <item>🎭 24 голоса (Нейро-автораспределение по контексту и персонажам)</item>
+        <item>🎙️ Дмитрий (Нейро-Баритон)</item>
+        <item>🎙️ Елена (Нейро-Сопрано)</item>
+        <item>🗡️ Молодой герой (Звонкий тенор)</item>
+        <item>🦇 Темный рыцарь / Бэтмен (Хриплый бас)</item>
+        <item>👹 Босс / Тиран / Баузер (Тяжелый бас)</item>
+        <item>🃏 Джокер / Псих / Трикстер (Маниакальный тенор)</item>
+        <item>💀 Демон бездны / Дракула (Глубокий бас)</item>
+        <item>📜 Мудрый старец / Профессор (Хриплый)</item>
+        <item>👦 Мальчик / Спутник / Люк Тритон (Звонкий)</item>
+        <item>👧 Девочка / Перл Фей (Нежный детский)</item>
+        <item>👑 Принцесса / Королева Зельда (Величественный)</item>
+        <item>💰 Торговец / Том Нук (Услужливый бодрый)</item>
+        <item>🛡️ Стражник / Капитан (Командный суровый)</item>
+        <item>🤖 Робот / Киборг / Покедекс (Синтетический)</item>
+        <item>📖 Рассказчик / Летописец (Бархатный)</item>
+        <item>🎀 Цундере / Франциска (Капризное сопрано)</item>
+        <item>🤫 Таинственный шепот / Тень (Мистический)</item>
+        <item>✨ Веселая фея / Нави (Игривый высокий альт)</item>
+        <item>🏴‍☠️ Капитан пиратов (Грубый рычащий бас)</item>
+        <item>🔬 Безумный ученый / Вайли (Эксцентричный)</item>
+        <item>🎩 Джентльмен / Лейтон / Райт (Элегантный)</item>
+        <item>👻 Призрак / Фантом (Эфирный эхо-тон)</item>
+        <item>⚔️ Благородный рыцарь / Мета Найт (Твердый баритон)</item>
+        <item>🕊️ Богиня / Ангел Палютена (Священный кристальный)</item>
     </string-array>
 
     <string-array name="translator_local_voice_model_values">
+        <item>auto_multi</item>
         <item>piper_ru_dmitri_medium</item>
-        <item>piper_ru_denis_rpg</item>
-        <item>piper_en_ryan_studio</item>
-        <item>auto</item>
+        <item>piper_ru_elena_medium</item>
+        <item>piper_ru_hero</item>
+        <item>piper_ru_dark_knight</item>
+        <item>piper_ru_boss_grunt</item>
+        <item>piper_ru_joker_manic</item>
+        <item>piper_ru_deep_demon</item>
+        <item>piper_ru_elder</item>
+        <item>piper_ru_young_boy</item>
+        <item>piper_ru_young_girl</item>
+        <item>piper_ru_royal_queen</item>
+        <item>piper_ru_merchant</item>
+        <item>piper_ru_soldier</item>
+        <item>piper_ru_robot</item>
+        <item>piper_ru_narrator</item>
+        <item>piper_ru_tsundere</item>
+        <item>piper_ru_whisper</item>
+        <item>piper_ru_fairy</item>
+        <item>piper_ru_pirate</item>
+        <item>piper_ru_mad_scientist</item>
+        <item>piper_ru_gentleman</item>
+        <item>piper_ru_ghost</item>
+        <item>piper_ru_knight</item>
+        <item>piper_ru_angelic</item>
     </string-array>
 </resources>
