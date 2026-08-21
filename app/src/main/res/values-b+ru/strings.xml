@@ -1319,4 +1319,6 @@
   <string name="decrypt_rom_progress">Расшифровка...</string>
   <string name="rom_status_decrypted">ROM расшифрован</string>
   <string name="rom_status_encrypted">ROM зашифрован</string>
+  <string name="app_language">Язык приложения</string>
+  <string name="app_language_summary">Выбор языка интерфейса STORM DS</string>
 </resources>
