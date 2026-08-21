@@ -37,19 +37,23 @@ class EmulatorLaunchPreconditionChecker(
 
         var targetRom = rom
         if (rom.isDsiWareTitle) {
-            if (!rom.isInstalledDsiWareShortcut) {
-                try {
-                    if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                        return RomLaunchPreconditionCheckResult.RomEncrypted(rom)
-                    }
-                } catch (_: Throwable) { }
-            } else {
-                val dsiWareCheckResult = checkInstalledDsiWareShortcutPreconditions(rom)
-                if (dsiWareCheckResult !is RomLaunchPreconditionCheckResult.Success) {
-                    return dsiWareCheckResult
+            try {
+                if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                    me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
                 }
-                targetRom = dsiWareCheckResult.rom
+            } catch (_: Throwable) { }
+
+            val dsiWareCheckResult = checkDsiWarePreconditions(rom)
+            if (dsiWareCheckResult !is RomLaunchPreconditionCheckResult.Success) {
+                return dsiWareCheckResult
             }
+            targetRom = dsiWareCheckResult.rom
+        } else {
+            try {
+                if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                    me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
+                }
+            } catch (_: Throwable) { }
         }
 
         val configurationDirResult = getRomConfigurationDirectoryResult(targetRom)
