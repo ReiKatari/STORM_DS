@@ -3,14 +3,20 @@ package me.magnum.melonds
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.util.Log
+import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.utils.FileUtils
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 /**
  * JNI bridge for DSi ROM Modcrypt decryption.
  * Checks if a ROM file is encrypted (AES-128-CTR Modcrypt) and can decrypt it in-place on disk.
- * Supports direct file paths and Android Storage Access Framework (SAF) content:// URIs via ParcelFileDescriptor.
+ * Supports direct file paths, SAF ParcelFileDescriptors, and robust stream cache fallbacks.
  */
 object MelonRomDecryptor {
+    private const val TAG = "MelonRomDecryptor"
 
     enum class EncryptionStatus(val code: Int) {
         NOT_ENCRYPTED(0),
@@ -53,6 +59,10 @@ object MelonRomDecryptor {
     }
 
     fun checkEncryption(context: Context, uri: Uri): EncryptionStatus {
+        if (uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+            return EncryptionStatus.NOT_ENCRYPTED
+        }
+
         val path = FileUtils.getAbsolutePathFromSAFUri(context, uri)
         if (path != null) {
             val status = checkEncryption(path)
@@ -79,6 +89,10 @@ object MelonRomDecryptor {
     }
 
     fun decryptRom(context: Context, uri: Uri, progressCallback: DecryptProgressCallback? = null): DecryptResult {
+        if (uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+            return DecryptResult.ALREADY_DECRYPTED
+        }
+
         val path = FileUtils.getAbsolutePathFromSAFUri(context, uri)
         if (path != null) {
             val result = decryptRom(path, progressCallback)
@@ -87,11 +101,47 @@ object MelonRomDecryptor {
             }
         }
 
-        return try {
+        // Try direct file descriptor
+        val fdResult = try {
             context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                 DecryptResult.fromCode(decryptRomFdNative(pfd.fd, progressCallback))
-            } ?: DecryptResult.ERROR_READING_FILE
-        } catch (_: Throwable) {
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Direct FD decryption open failed: ${e.message}, trying stream copy fallback")
+            null
+        }
+
+        if (fdResult == DecryptResult.SUCCESS || fdResult == DecryptResult.ALREADY_DECRYPTED) {
+            return fdResult
+        }
+
+        // Fallback: Copy to cache -> Decrypt -> Write back to SAF output stream
+        return try {
+            val cacheFile = File(context.cacheDir, "modcrypt_temp_${System.currentTimeMillis()}.nds")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(cacheFile).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return DecryptResult.ERROR_READING_FILE
+
+            val tempResult = decryptRom(cacheFile.absolutePath, progressCallback)
+            if (tempResult == DecryptResult.SUCCESS || tempResult == DecryptResult.ALREADY_DECRYPTED) {
+                context.contentResolver.openOutputStream(uri, "wt")?.use { outStream ->
+                    FileInputStream(cacheFile).use { inStream ->
+                        inStream.copyTo(outStream)
+                    }
+                } ?: run {
+                    cacheFile.delete()
+                    return DecryptResult.ERROR_WRITING_FILE
+                }
+                cacheFile.delete()
+                DecryptResult.SUCCESS
+            } else {
+                cacheFile.delete()
+                tempResult
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Fallback decryption failed: ${e.message}")
             DecryptResult.ERROR_READING_FILE
         }
     }

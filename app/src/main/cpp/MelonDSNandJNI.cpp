@@ -1093,6 +1093,71 @@ Java_me_magnum_melonds_MelonDSiNand_exportTitleExecutable(JNIEnv* env, jobject t
 }
 
 JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonDSiNand_importTitleExecutable(JNIEnv* env, jobject thiz, jint titleId, jstring inputPath)
+{
+    if (!nand || !nandMount || inputPath == nullptr)
+        return false;
+
+    const char* filePath = env->GetStringUTFChars(inputPath, nullptr);
+    if (filePath == nullptr)
+        return false;
+
+    u32 version = 0xFFFFFFFF;
+    melonDS::NDSHeader header {};
+    nandMount->GetTitleInfo(DSI_NAND_FILE_CATEGORY, (u32) titleId, version, &header, nullptr);
+    if (version == 0xFFFFFFFF)
+    {
+        env->ReleaseStringUTFChars(inputPath, filePath);
+        return false;
+    }
+
+    char titlePath[128];
+    snprintf(
+        titlePath,
+        sizeof(titlePath),
+        "0:/title/%08x/%08x/content/%08x.app",
+        DSI_NAND_FILE_CATEGORY,
+        (u32) titleId,
+        version
+    );
+    bool result = nandMount->ImportFile(titlePath, filePath);
+
+    if (!result)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "DSiWareShortcut: failed to import executable title=%08x version=%08x\n",
+            (u32) titleId,
+            version
+        );
+    }
+
+    env->ReleaseStringUTFChars(inputPath, filePath);
+    return result;
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonDSiNand_checkTitleEncryption(JNIEnv* env, jobject thiz, jint titleId)
+{
+    if (!nand || !nandMount)
+        return -1;
+
+    u32 version = 0xFFFFFFFF;
+    melonDS::NDSHeader header {};
+    nandMount->GetTitleInfo(DSI_NAND_FILE_CATEGORY, (u32) titleId, version, &header, nullptr);
+    if (version == 0xFFFFFFFF)
+        return -1;
+
+    if (!(header.UnitCode & 0x02))
+        return 0; // NOT_ENCRYPTED
+
+    if (header.DSiCryptoFlags & (1 << 1))
+        return 1; // MODCRYPT_ENCRYPTED
+
+    return 0; // NOT_ENCRYPTED
+}
+
+JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_importTitleFile(JNIEnv* env, jobject thiz, jint titleId, jint fileType, jstring fileUri)
 {
     const char* filePath = env->GetStringUTFChars(fileUri, nullptr);

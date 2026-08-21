@@ -475,7 +475,7 @@ private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInf
     if (rom.isInstalledDsiWareShortcut) {
         val code = extractDsiCode(rom)
         val checksum = (rom.installedDsiWareTitleId ?: 0L).toUInt()
-        return RomInfo(code, checksum, rom.name, rom.name)
+        return RomInfo(code, checksum, rom.name, rom.name, isDsiWareTitle = true)
     }
 
     return try {
@@ -504,7 +504,7 @@ private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInf
     } catch (_: Throwable) {
         val code = extractDsiCode(rom)
         val checksum = kotlin.math.abs(rom.name.hashCode()).toUInt()
-        RomInfo(code, checksum, rom.name, rom.name)
+        RomInfo(code, checksum, rom.name, rom.name, isDsiWareTitle = rom.isDsiWareTitle)
     }
 }
 

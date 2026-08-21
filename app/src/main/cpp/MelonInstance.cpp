@@ -1908,13 +1908,12 @@ void MelonInstance::start()
     // Priority 2: Standalone DSiWare ROM or standard NDS/DSi direct boot
     else
     {
-        if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
-            && !cart->GetHeader().IsDSiWare() && currentConfiguration->showBootScreen)
+        if (nds->ConsoleType == 1 && cart != nullptr && (cart->GetHeader().DSiTitleIDHigh != 0 || cart->GetHeader().IsDSiWare()))
         {
             auto dsi = (DSi*) nds;
             DSiSupport::SetupDSiDirectBoot(dsi);
         }
-        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot() || (cart != nullptr && cart->GetHeader().IsDSiWare()))
+        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
         {
             std::string romName;
             nds->SetupDirectBoot(romName);
@@ -1939,7 +1938,12 @@ void MelonInstance::reset()
     // If there is a cart inserted, check if direct boot is required
     if (nds->GetNDSCart())
     {
-        if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+        if (nds->ConsoleType == 1 && (nds->GetNDSCart()->GetHeader().DSiTitleIDHigh != 0 || nds->GetNDSCart()->GetHeader().IsDSiWare()))
+        {
+            auto dsi = (DSi*) nds;
+            DSiSupport::SetupDSiDirectBoot(dsi);
+        }
+        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
         {
             // This seems to be unused, but it's required
             std::string romName;
