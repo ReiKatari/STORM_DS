@@ -484,25 +484,24 @@ class AndroidEmulatorManager(
     private fun writeDsiExecutionLog(rom: Rom, titleIdHex: String, success: Boolean, details: String) {
         try {
             val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            if (downloadDir != null && (downloadDir.exists() || downloadDir.mkdirs())) {
-                val safeName = rom.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                val logFile = File(downloadDir, "STORM_DS_${safeName}_${titleIdHex}.log")
-                val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())
-                val logText = buildString {
-                    appendLine("==================================================")
-                    appendLine("STORM DS v2.2.9 - DSi Execution Diagnostic Log")
-                    appendLine("Timestamp: $timestamp")
-                    appendLine("Game Name: ${rom.name}")
-                    appendLine("Game Code / Title ID: $titleIdHex")
-                    appendLine("ROM URI: ${rom.uri}")
-                    appendLine("Is DSiWare Shortcut: ${rom.isInstalledDsiWareShortcut}")
-                    appendLine("Execution Status: ${if (success) "SUCCESS" else "FAILED"}")
-                    appendLine("Details: $details")
-                    appendLine("==================================================")
-                }
-                logFile.writeText(logText, Charsets.UTF_8)
-                Log.i(TAG, "Wrote DSi diagnostic log to: ${logFile.absolutePath}")
+            val logsDir = File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
+            val safeName = rom.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val logFile = File(logsDir, "STORM_DS_${safeName}_${titleIdHex}.log")
+            val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+            val logText = buildString {
+                appendLine("==================================================")
+                appendLine("STORM DS v2.2.9 - DSi Execution Diagnostic Log")
+                appendLine("Timestamp: $timestamp")
+                appendLine("Game Name: ${rom.name}")
+                appendLine("Game Code / Title ID: $titleIdHex")
+                appendLine("ROM URI: ${rom.uri}")
+                appendLine("Is DSiWare Shortcut: ${rom.isInstalledDsiWareShortcut}")
+                appendLine("Execution Status: ${if (success) "SUCCESS" else "FAILED"}")
+                appendLine("Details: $details")
+                appendLine("==================================================")
             }
+            logFile.writeText(logText, Charsets.UTF_8)
+            Log.i(TAG, "Wrote DSi diagnostic log to: ${logFile.absolutePath}")
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to write diagnostic log for ${rom.name}", e)
         }
