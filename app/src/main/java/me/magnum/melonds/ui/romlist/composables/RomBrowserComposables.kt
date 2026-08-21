@@ -18,16 +18,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.style.TextAlign
+import me.magnum.melonds.ui.theme.WatermelonColors
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
@@ -524,6 +528,215 @@ private fun ContinuePlayingCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 1.dp, top = 5.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ContinuePlayingLandscapeColumn(
+    roms: List<Rom>,
+    coverByHash: Map<String, String>,
+    boxArtByUri: Map<String, String> = emptyMap(),
+    onRomClicked: (Rom) -> Unit,
+    onRomLongPressed: (Rom) -> Unit,
+    modifier: Modifier = Modifier,
+    onRomFocused: (Rom) -> Unit = {},
+    onRomVisible: (Rom) -> Unit = {},
+) {
+    val colors = watermelon
+    Column(modifier = modifier.fillMaxSize()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = colors.red,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.rom_continue_playing),
+                color = colors.text,
+                fontFamily = SpaceGrotesk,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            if (roms.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.surface2)
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = roms.size.toString(),
+                        color = WatermelonColors.gold,
+                        fontFamily = WatermelonMono,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+
+        if (roms.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.no_roms_found),
+                    color = colors.text2,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                items(roms, key = { it.uri.toString() }) { rom ->
+                    LaunchedEffect(rom.uri) {
+                        onRomVisible(rom)
+                    }
+                    ContinuePlayingLandscapeCard(
+                        rom = rom,
+                        coverUrl = coverByHash[rom.retroAchievementsHash],
+                        boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                        boxArtLoading = boxArtByUri[rom.uri.toString()] == null,
+                        onClick = { onRomClicked(rom) },
+                        onLongPress = { onRomLongPressed(rom) },
+                        onFocused = onRomFocused,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ContinuePlayingLandscapeCard(
+    rom: Rom,
+    coverUrl: String?,
+    boxArtUrl: String?,
+    boxArtLoading: Boolean = false,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    onFocused: (Rom) -> Unit = {},
+) {
+    val colors = watermelon
+    val shape = RoundedCornerShape(10.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    LaunchedEffect(isFocused) {
+        if (isFocused) onFocused(rom)
+    }
+
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        label = "press",
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(pressScale)
+            .clip(shape)
+            .background(if (isFocused) colors.surface2 else colors.surface)
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) colors.red else colors.line,
+                shape = shape,
+            )
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongPress,
+            )
+            .padding(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(52.dp)
+                .aspectRatio(DsBoxArtAspectRatio)
+                .clip(RoundedCornerShape(6.dp)),
+        ) {
+            WatermelonRomArt(
+                rom = rom,
+                boxArtUrl = boxArtUrl,
+                raCoverUrl = coverUrl,
+                initialsFontSize = 14.sp,
+                boxArtLoading = boxArtLoading,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = romDisplayName(rom),
+                color = colors.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.5.sp,
+                lineHeight = 16.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PlatformBadge(
+                    text = romPlatformLabel(rom),
+                    fontSize = 8.sp,
+                )
+                val lastPlayedLabel = rom.lastPlayed?.let {
+                    DateUtils.getRelativeTimeSpanString(it.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+                }
+                if (lastPlayedLabel != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = lastPlayedLabel,
+                        color = colors.text3,
+                        fontFamily = WatermelonMono,
+                        fontSize = 8.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(if (isFocused) colors.red else Color.White.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp),
             )
         }
     }
