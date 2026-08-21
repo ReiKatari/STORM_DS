@@ -2506,18 +2506,21 @@ MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const
     }
 }
 
+static inline int64_t getMonotonicNanos() {
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<int64_t>(ts.tv_sec) * 1000000000LL + static_cast<int64_t>(ts.tv_nsec);
+}
+
 double getCurrentMillis() {
-    timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return (now.tv_sec * 1000.0) + now.tv_nsec / 1000000.0;
+    return static_cast<double>(getMonotonicNanos()) / 1000000.0;
 }
 
 void* emulate(void*)
 {
-    double startTick = getCurrentMillis();
-    double lastTick = startTick;
-    double lastMeasureFpsTick = startTick;
-    double frameLimitError = 0.0;
+    int64_t nextFrameTimeNs = getMonotonicNanos();
+    int64_t lastMeasureFpsTimeNs = nextFrameTimeNs;
+    int observedFrames = 0;
 
     MelonDSAndroid::start();
 
@@ -2537,8 +2540,9 @@ void* emulate(void*)
             while (paused && !stop)
                 pthread_cond_wait(&emuThreadCond, &emuThreadMutex);
 
-            frameLimitError = 0;
-            lastTick = getCurrentMillis();
+            nextFrameTimeNs = getMonotonicNanos();
+            lastMeasureFpsTimeNs = nextFrameTimeNs;
+            observedFrames = 0;
             isThreadReallyPaused = false;
         }
 
@@ -2559,48 +2563,42 @@ void* emulate(void*)
         if (performanceHintSession != nullptr)
             performanceHintSession->reportActualWorkDuration(std::chrono::nanoseconds(frameDuration).count());
 
-        double currentTick = getCurrentMillis();
-        double delay = currentTick - lastTick;
+        const int currentTargetFps = (targetFps > 0) ? targetFps : 60;
+        const double linesRatio = (nLines > 0 && nLines <= 263) ? (static_cast<double>(nLines) / 263.0) : 1.0;
+        const int64_t targetFrameDurationNs = static_cast<int64_t>((1000000000.0 / static_cast<double>(currentTargetFps)) * linesRatio);
 
-        // All times are in ms
-        double frameTimeStep = (double) nLines / ((float) targetFps * 263.0) * 1000.0;
-        if (frameTimeStep < 1)
-            frameTimeStep = 1;
-
-        if (limitFps)
+        if (limitFps && targetFrameDurationNs > 0)
         {
-            frameLimitError += frameTimeStep - delay;
-            if (frameLimitError < -frameTimeStep)
-                frameLimitError = -frameTimeStep;
-            if (frameLimitError > frameTimeStep)
-                frameLimitError = frameTimeStep;
+            nextFrameTimeNs += targetFrameDurationNs;
+            int64_t nowNs = getMonotonicNanos();
 
-            if (round(frameLimitError) > 0.0)
+            // If behind schedule by more than 2 frames (due to loading/system hitch), resync target
+            if (nowNs > nextFrameTimeNs + (targetFrameDurationNs * 2))
             {
-                long long totalNsec = (long long) (frameLimitError * 1000000.0);
-                if (totalNsec > 0)
-                {
-                    timespec sleepTime = {
-                        .tv_sec = (time_t) (totalNsec / 1000000000LL),
-                        .tv_nsec = (long) (totalNsec % 1000000000LL),
-                    };
-                    clock_nanosleep(CLOCK_MONOTONIC, 0, &sleepTime, nullptr);
-                    double timeAfterSleep = getCurrentMillis();
-                    frameLimitError -= timeAfterSleep - currentTick;
-                    currentTick = timeAfterSleep;
-                }
+                nextFrameTimeNs = nowNs;
             }
-
-            lastTick = currentTick;
-        } else {
-            frameLimitError = 0;
-            lastTick = getCurrentMillis();
+            else if (nowNs < nextFrameTimeNs)
+            {
+                timespec targetTs = {
+                    .tv_sec = static_cast<time_t>(nextFrameTimeNs / 1000000000LL),
+                    .tv_nsec = static_cast<long>(nextFrameTimeNs % 1000000000LL),
+                };
+                clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &targetTs, nullptr);
+            }
+        }
+        else
+        {
+            nextFrameTimeNs = getMonotonicNanos();
         }
 
         observedFrames++;
+        int64_t currentNowNs = getMonotonicNanos();
         if (observedFrames >= 30) {
-            fps = (observedFrames * 1000.0) / (lastTick - lastMeasureFpsTick);
-            lastMeasureFpsTick = lastTick;
+            int64_t elapsedNs = currentNowNs - lastMeasureFpsTimeNs;
+            if (elapsedNs > 0) {
+                fps = (static_cast<double>(observedFrames) * 1000000000.0) / static_cast<double>(elapsedNs);
+            }
+            lastMeasureFpsTimeNs = currentNowNs;
             observedFrames = 0;
         }
 

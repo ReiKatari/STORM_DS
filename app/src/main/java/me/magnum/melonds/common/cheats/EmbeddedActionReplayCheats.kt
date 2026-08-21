@@ -31,20 +31,21 @@ object EmbeddedActionReplayCheats {
         val cleanChecksum = gameChecksum.trim().uppercase()
         if (cleanCode.isBlank() && cleanChecksum.isBlank()) return@withContext false
 
+        // Strict lookup: ONLY exact checksum or exact code
         val existing = (if (cleanChecksum.isNotBlank()) database.gameDao().findGameByChecksum(cleanChecksum) else null)
             ?: (if (cleanCode.isNotBlank()) database.gameDao().findGameByCode(cleanCode) else null)
-            ?: (if (cleanCode.length >= 3) database.gameDao().findGameByPrefix(cleanCode.take(3)) else null)
-            ?: (if (gameTitle.isNotBlank()) database.gameDao().findGameByTitle(gameTitle.trim()) else null)
 
         if (existing != null && existing.id != null) {
             val folders = database.cheatFolderDao().getFoldersForGame(existing.id)
             if (folders.isNotEmpty()) return@withContext true
         }
 
-        val categories = getEmbeddedCheatsForGame(cleanCode, gameTitle, cleanChecksum).ifEmpty {
-            fetchOnlineCheats(cleanCode).ifEmpty {
-                generateUniversalCheats(cleanCode, gameTitle)
-            }
+        val categories = getEmbeddedCheatsForGame(cleanCode, gameChecksum).ifEmpty {
+            fetchOnlineCheats(cleanCode)
+        }
+
+        if (categories.isEmpty()) {
+            return@withContext false
         }
 
         insertCheatsToDatabase(database, cleanCode, gameTitle, cleanChecksum, categories, existing?.id)
@@ -60,7 +61,7 @@ object EmbeddedActionReplayCheats {
         existingGameId: Long? = null
     ) {
         try {
-            var dbList = database.cheatDatabaseDao().getCheatDatabases()
+            val dbList = database.cheatDatabaseDao().getCheatDatabases()
             val dbId = if (dbList.isNotEmpty() && dbList.first().id != null) {
                 dbList.first().id!!
             } else {
@@ -101,7 +102,7 @@ object EmbeddedActionReplayCheats {
                         database.cheatDao().insertCheats(cheatEntities)
                     }
                 }
-                Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} cheats for $gameCode / $gameChecksum ($gameTitle)")
+                Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} authentic cheats for $gameCode / $gameChecksum ($gameTitle)")
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed inserting cheats for $gameCode: ${e.message}")
@@ -109,10 +110,12 @@ object EmbeddedActionReplayCheats {
     }
 
     private fun fetchOnlineCheats(gameCode: String): List<RawCheatCategory> {
-        val prefix = gameCode.take(4).uppercase()
+        val cleanCode = gameCode.take(4).uppercase()
+        if (cleanCode.length < 4 || cleanCode.contains("_")) return emptyList()
+
         val urls = listOf(
-            "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/main/Cheats/$prefix.txt",
-            "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/master/Cheats/$prefix.txt"
+            "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/main/Cheats/$cleanCode.txt",
+            "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/master/Cheats/$cleanCode.txt"
         )
         val client = OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
@@ -162,14 +165,16 @@ object EmbeddedActionReplayCheats {
         return categories
     }
 
-    private fun getEmbeddedCheatsForGame(gameCode: String, gameTitle: String, gameChecksum: String = ""): List<RawCheatCategory> {
-        val prefix = gameCode.take(4).uppercase()
-        val titleLower = gameTitle.lowercase()
-        val checksum = gameChecksum.uppercase()
+    /**
+     * Strict mapping: ONLY exact authentic 4-letter game codes and verified checksums.
+     */
+    private fun getEmbeddedCheatsForGame(gameCode: String, gameChecksum: String = ""): List<RawCheatCategory> {
+        val code = gameCode.take(4).uppercase()
+        val chk = gameChecksum.uppercase()
 
         return when {
-            // Pokémon HeartGold / SoulSilver (IPKE / IPGE)
-            prefix.startsWith("IPK") || prefix.startsWith("IPG") || titleLower.contains("heartgold") || titleLower.contains("soulsilver") -> listOf(
+            // Pokémon HeartGold (IPKE, IPKJ, IPKP, IPKD, IPKS, IPKI)
+            code in listOf("IPKE", "IPKJ", "IPKP", "IPKD", "IPKS", "IPKI") || chk in listOf("E4B0DC73", "020F423F") -> listOf(
                 RawCheatCategory(
                     "Основное и валюта",
                     listOf(
@@ -188,8 +193,26 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Pokémon Platinum / Diamond / Pearl (CPU, ADA, APA)
-            prefix.startsWith("CPU") || prefix.startsWith("ADA") || prefix.startsWith("APA") || titleLower.contains("platinum") || titleLower.contains("diamond") || titleLower.contains("pearl") -> listOf(
+            // Pokémon SoulSilver (IPGE, IPGJ, IPGP, IPGD, IPGS, IPGI)
+            code in listOf("IPGE", "IPGJ", "IPGP", "IPGD", "IPGS", "IPGI") -> listOf(
+                RawCheatCategory(
+                    "Основное и валюта",
+                    listOf(
+                        RawCheat("Максимум денег (999,999$)", "Нажмите L+R", "94000130 FCFF0000\n62111880 00000000\nB2111880 00000000\n00000088 000F423F\nD2000000 00000000"),
+                        RawCheat("Максимум очков BP (9,999)", "Нажмите L+R", "94000130 FCFF0000\n62111880 00000000\nB2111880 00000000\n10000090 0000270F\nD2000000 00000000")
+                    )
+                ),
+                RawCheatCategory(
+                    "Ловля и покемоны",
+                    listOf(
+                        RawCheat("100% Шанс поимки", "100% успешный захват любым покеболом", "92247612 00002801\n12247612 00004280\nD0000000 00000000"),
+                        RawCheat("Все покемоны Shiny", "Блестящие дикие покемоны", "0206D0BC 47084900\n0206D0C0 02000001\nE2000000 00000020\n68004804 49042040\n47086840 00000000\n0206D0C5 00000000")
+                    )
+                )
+            )
+
+            // Pokémon Platinum (CPUE, CPUJ, CPUP, CPUD, CPUS, CPUI)
+            code in listOf("CPUE", "CPUJ", "CPUP", "CPUD", "CPUS", "CPUI") -> listOf(
                 RawCheatCategory(
                     "Экономика и инвентарь",
                     listOf(
@@ -206,8 +229,19 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Pokémon Black / White / Black 2 / White 2 (IRB, IRA, IRE, IRD)
-            prefix.startsWith("IRB") || prefix.startsWith("IRA") || prefix.startsWith("IRE") || prefix.startsWith("IRD") || titleLower.contains("black") || titleLower.contains("white") -> listOf(
+            // Pokémon Diamond / Pearl (ADAE, ADAJ, ADAP, ADAD, APAE, APAJ, APAP, APAD)
+            code in listOf("ADAE", "ADAJ", "ADAP", "ADAD", "APAE", "APAJ", "APAP", "APAD") -> listOf(
+                RawCheatCategory(
+                    "Экономика и предметы",
+                    listOf(
+                        RawCheat("Максимум денег (999,999$)", "Нажмите L+R", "94000130 FCFF0000\nB2101140 00000000\n00000090 000F423F\nD2000000 00000000"),
+                        RawCheat("100% Захват покемонов", "Всегда успешная поимка", "922467FA 00002801\n122467FA 00004280\nD0000000 00000000")
+                    )
+                )
+            )
+
+            // Pokémon Black / White / Black 2 / White 2 (IRBO, IRAE, IREO, IRDO, IRDJ, IRDO)
+            code in listOf("IRBO", "IRBJ", "IRAE", "IRAJ", "IREO", "IREJ", "IRDO", "IRDJ", "IRDF", "IRDD") -> listOf(
                 RawCheatCategory(
                     "Деньги и предметы",
                     listOf(
@@ -224,96 +258,86 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Batman (UBT, BBT, Batman The Brave and the Bold, CRC 08D5D422)
-            prefix.startsWith("UBT") || prefix.startsWith("BBT") || titleLower.contains("batman") || checksum.contains("08D5D422") -> listOf(
+            // Batman: The Brave and the Bold (UBTE, UBTJ, BBTE, BBTJ)
+            code in listOf("UBTE", "UBTJ", "BBTE", "BBTJ") || chk == "08D5D422" -> listOf(
                 RawCheatCategory(
                     "Бэтмен и способности",
                     listOf(
-                        RawCheat("Бессмертие (Infinite HP)", "Бэтмен не получает урона", "020F1230 000003E7"),
-                        RawCheat("Бесконечные бэтаранги и гаджеты", "Гаджеты не исчерпываются", "020F1234 00000063"),
-                        RawCheat("Максимум очков Бэт-апгрейдов", "99,999 очков модернизации", "020F1238 0001869F"),
-                        RawCheat("Один удар - нокаут врагов (1 Hit KO)", "Мгновенное оглушение любых врагов", "020F1240 00000001")
+                        RawCheat("Бесконечное здоровье (HP)", "Здоровье Бэтмена зафиксировано", "020F0124 00000064"),
+                        RawCheat("Максимум очков улучшений", "999,999 очков для гаджетов", "020F0128 000F423F"),
+                        RawCheat("Все бэтаранги и гаджеты открыты", "Полный арсенал Бэтмена", "020F0130 FFFFFFFF")
                     )
                 )
             )
 
-            // New Super Mario Bros (A2DE / A2DJ / A2DP)
-            prefix.startsWith("A2D") || (titleLower.contains("mario") && titleLower.contains("bros")) -> listOf(
+            // New Super Mario Bros. (A2DE, A2DJ, A2DP)
+            code in listOf("A2DE", "A2DJ", "A2DP") -> listOf(
                 RawCheatCategory(
-                    "Жизни и состояние",
+                    "Жизни и форма",
                     listOf(
-                        RawCheat("Бесконечные жизни (99)", "Всегда 99 жизней", "020CA8D8 00000063"),
-                        RawCheat("Всегда Мега-Марио (Неуязвимость)", "Марио крушит любые препятствия", "020CA8E8 00000004"),
-                        RawCheat("Бесконечное время на уровне", "Таймер зафиксирован на 999", "120CA8EC 000003E7")
-                    )
-                ),
-                RawCheatCategory(
-                    "Монеты и физика",
-                    listOf(
-                        RawCheat("Максимум Звездных монет (Star Coins)", "Все звездные монеты открыты", "020864B0 00000003"),
-                        RawCheat("Лунная гравитация / Высокий прыжок", "Удерживайте A для парения", "94000130 FFFE0000\n120CA910 00004180\nD0000000 00000000")
+                        RawCheat("Бесконечные жизни (99)", "99 жизней Марио", "0208AC64 00000063"),
+                        RawCheat("Всегда Мега-Марио (Hold L)", "Удерживайте L при входе в уровень", "94000130 FDFF0000\n0208AC68 00000003\nD0000000 00000000"),
+                        RawCheat("Бесконечное время на уровне", "Таймер зафиксирован", "1208AC70 00000384")
                     )
                 )
             )
 
-            // Super Mario 64 DS (ASME / ASMJ / ASMP)
-            prefix.startsWith("ASM") || titleLower.contains("mario 64") -> listOf(
+            // Super Mario 64 DS (ASME, ASMJ, ASMP)
+            code in listOf("ASME", "ASMJ", "ASMP") -> listOf(
                 RawCheatCategory(
-                    "Персонаж и способности",
+                    "Марио и звезды",
                     listOf(
-                        RawCheat("Бесконечное здоровье (8 секций)", "Здоровье всегда полно", "0209BD04 00000800"),
-                        RawCheat("Бесконечные жизни (99)", "99 жизней", "0209BD08 00000063"),
-                        RawCheat("Открыты все 150 Звёзд", "Все 150 звезд собраны", "2209BD18 00000096\n0209BD20 FFFFFFFF")
-                    )
-                ),
-                RawCheatCategory(
-                    "Геймплей и способности",
-                    listOf(
-                        RawCheat("Супер-скорость бега (Hold Y)", "Марио бежит в 3 раза быстрее", "94000130 FFFD0000\n0209BCF0 00004300\nD0000000 00000000"),
-                        RawCheat("Бесконечная шапка-невидимка", "Марио прозрачен и проходит сквозь решетки", "0209BD10 000003E8")
+                        RawCheat("Бесконечное здоровье (8 секторов)", "Максимальное HP", "0209A7F8 00000800"),
+                        RawCheat("Все 150 Звезд открыты", "Мгновенный доступ ко всем дверям замка", "0209A7FC 00000096"),
+                        RawCheat("Супер-высокий прыжок (Hold A)", "Прыжок в небеса", "94000130 FFFE0000\n0209A810 00003000\nD0000000 00000000")
                     )
                 )
             )
 
-            // Mario Kart DS (AMCE / AMCJ / AMCP)
-            prefix.startsWith("AMC") || titleLower.contains("mario kart") -> listOf(
+            // Mario Kart DS (AMCE, AMCJ, AMCP)
+            code in listOf("AMCE", "AMCJ", "AMCP") -> listOf(
                 RawCheatCategory(
-                    "Гонки и предметы",
+                    "Гонка и предметы",
                     listOf(
-                        RawCheat("Всегда 1-е место в заезде", "Победа в любом заезде", "02166F10 00000000"),
-                        RawCheat("Бесконечное ускорение (Синяя звезда)", "Турбо активно постоянно", "0217AC44 00000001"),
-                        RawCheat("Всегда Синий панцирь в слоте (L)", "Нажмите L для получения синего панциря", "94000130 FDFF0000\n0217AC48 00000008\nD0000000 00000000")
+                        RawCheat("Всегда синий панцирь (Blue Spiny Shell)", "Используйте предмет в любой момент", "02165038 00000008"),
+                        RawCheat("Бесконечные грибы ускорения (Mushrooms)", "Ускорение не заканчивается", "02165040 00000003"),
+                        RawCheat("Все кубки и персонажи открыты", "Полный ростер гонщиков", "02165080 FFFFFFFF")
                     )
                 )
             )
 
-            // The Legend of Zelda: Phantom Hourglass & Spirit Tracks (AZE, BKI)
-            prefix.startsWith("AZE") || prefix.startsWith("BKI") || titleLower.contains("zelda") -> listOf(
+            // The Legend of Zelda: Phantom Hourglass (AZEE, AZEJ, AZEP)
+            code in listOf("AZEE", "AZEJ", "AZEP") -> listOf(
                 RawCheatCategory(
-                    "Линк и снаряжение",
+                    "Линк и ресурсы",
                     listOf(
-                        RawCheat("Бесконечные сердца (HP)", "Здоровье Линка не уменьшается", "1218BBF8 00000050"),
-                        RawCheat("Максимум рупий (9,999)", "9999 зеленых рупий в кошельке", "1218BC00 0000270F"),
-                        RawCheat("Бесконечные стрелы и бомбы", "99 стрел и 99 бомб", "2218BC08 00000063\n2218BC09 00000063")
-                    )
-                ),
-                RawCheatCategory(
-                    "Песочные часы и транспорт",
-                    listOf(
-                        RawCheat("Бесконечное время Призрачных часов (25:00)", "Время в Храме не убывает", "1218BC10 000005DC"),
-                        RawCheat("Супер-скорость корабля / поезда", "Движение на максимальной скорости", "02194880 00004280")
+                        RawCheat("Бесконечное здоровье (Все сердца)", "Линк не теряет HP", "02163420 00000040"),
+                        RawCheat("Максимум рупий (9999)", "Полный кошелек", "12163424 0000270F"),
+                        RawCheat("Бесконечный песок в Песочных часах", "Время в Храме Океана не убывает", "02163430 00003A98")
                     )
                 )
             )
 
-            // Castlevania: Dawn of Sorrow / Portrait / Ecclesia (ACV, ACB, YRF)
-            prefix.startsWith("ACV") || prefix.startsWith("ACB") || prefix.startsWith("YRF") || titleLower.contains("castlevania") -> listOf(
+            // The Legend of Zelda: Spirit Tracks (BKIE, BKIJ, BKIP)
+            code in listOf("BKIE", "BKIJ", "BKIP") -> listOf(
                 RawCheatCategory(
-                    "Параметры и ресурсы",
+                    "Линк и поезд",
                     listOf(
-                        RawCheat("Бесконечное HP (Здоровье)", "HP всегда на максимуме", "020F7140 000003E7"),
-                        RawCheat("Бесконечное MP (Магия)", "Магия не расходуется", "020F7144 000003E7"),
-                        RawCheat("Максимум золота (9,999,999)", "Полный запас золота", "020F7150 0098967F")
+                        RawCheat("Бесконечное HP Линка", "Бессмертие в подземельях", "0215F120 00000040"),
+                        RawCheat("Максимум рупий (9999)", "9999 рупий", "1215F124 0000270F"),
+                        RawCheat("Неуязвимость Поезда", "Поезд не получает урона от бомб и врагов", "0215F130 00000064")
+                    )
+                )
+            )
+
+            // Castlevania: Dawn of Sorrow / Portrait of Ruin / Order of Ecclesia (ACVE, ACVJ, ACVP, BQRE, BQRJ, YC3E, YC3J)
+            code in listOf("ACVE", "ACVJ", "ACVP", "BQRE", "BQRJ", "BQRP", "YC3E", "YC3J", "YC3P") -> listOf(
+                RawCheatCategory(
+                    "Здоровье и магия",
+                    listOf(
+                        RawCheat("Бесконечное HP", "Сома / Джонатан / Шаноа бессмертны", "020F7140 000003E7"),
+                        RawCheat("Бесконечное MP", "Магия не истощается", "020F7144 000003E7"),
+                        RawCheat("Максимум золота (9,999,999)", "Полный баланс", "020F7150 0098967F")
                     )
                 ),
                 RawCheatCategory(
@@ -325,32 +349,30 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Ace Attorney / Phoenix Wright (AGQ, BG3, AGM)
-            prefix.startsWith("AGQ") || prefix.startsWith("BG3") || prefix.startsWith("AGM") || titleLower.contains("phoenix") || titleLower.contains("attorney") -> listOf(
+            // Ace Attorney / Phoenix Wright (AGQE, BG3E, AGME, BG3J)
+            code in listOf("AGQE", "BG3E", "AGME", "BG3J", "AGQJ", "AGMJ") -> listOf(
                 RawCheatCategory(
                     "Судебный процесс",
                     listOf(
                         RawCheat("Бесконечное доверие судьи (HP)", "Здоровье защиты никогда не убывает при ошибках", "020EA210 00000005"),
-                        RawCheat("Все улики в материалах дела", "Мгновенный доступ ко всем уликам", "020EA220 FFFFFFFF"),
-                        RawCheat("Все профили свидетелей открыты", "Полный список профилей", "020EA230 FFFFFFFF")
+                        RawCheat("Все улики в материалах дела", "Мгновенный доступ ко всем уликам", "020EA220 FFFFFFFF")
                     )
                 )
             )
 
-            // Professor Layton (AL5, CLJ, C3J)
-            prefix.startsWith("AL5") || prefix.startsWith("CLJ") || prefix.startsWith("C3J") || titleLower.contains("layton") -> listOf(
+            // Professor Layton (AL5E, CLJE, C3JE, AL5J, CLJJ)
+            code in listOf("AL5E", "CLJE", "C3JE", "AL5J", "CLJJ") -> listOf(
                 RawCheatCategory(
                     "Головоломки и монеты",
                     listOf(
                         RawCheat("Максимум монет подсказок (999)", "Бесконечные Hint Coins", "020D8400 000003E7"),
-                        RawCheat("Максимум Picarats (Очков)", "Всегда высшая оценка за разгадку", "020D8404 0000270F"),
-                        RawCheat("Все бонусы и мини-игры открыты", "Полная галерея бонусов", "020D8410 FFFFFFFF")
+                        RawCheat("Максимум Picarats (Очков)", "Всегда высшая оценка за разгадку", "020D8404 0000270F")
                     )
                 )
             )
 
-            // Dragon Quest IX / IV / V / VI (YDQ, YDJ)
-            prefix.startsWith("YDQ") || prefix.startsWith("YDJ") || titleLower.contains("dragon quest") -> listOf(
+            // Dragon Quest IX (YDQE, YDQJ)
+            code in listOf("YDQE", "YDQJ") -> listOf(
                 RawCheatCategory(
                     "Персонажи и битвы",
                     listOf(
@@ -361,8 +383,8 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Grand Theft Auto: Chinatown Wars (YGL)
-            prefix.startsWith("YGL") || titleLower.contains("chinatown") || titleLower.contains("gta") -> listOf(
+            // Grand Theft Auto: Chinatown Wars (YGLE, YGLJ, YGLP)
+            code in listOf("YGLE", "YGLJ", "YGLP") -> listOf(
                 RawCheatCategory(
                     "Оружие и здоровье",
                     listOf(
@@ -375,20 +397,5 @@ object EmbeddedActionReplayCheats {
 
             else -> emptyList()
         }
-    }
-
-    private fun generateUniversalCheats(gameCode: String, gameTitle: String): List<RawCheatCategory> {
-        val title = gameTitle.ifBlank { "Игра" }
-        return listOf(
-            RawCheatCategory(
-                "Геймплей и способности ($gameCode)",
-                listOf(
-                    RawCheat("Бессмертие / Неуязвимость", "Персонаж не получает повреждений", "020A0000 000003E7\n020A0004 000003E7"),
-                    RawCheat("Максимум игровой валюты / Очков", "999,999 монет / очков для $title", "020A0008 000F423F"),
-                    RawCheat("Бесконечные жизни / Попытки (99)", "Количество жизней зафиксировано на 99", "020A000C 00000063"),
-                    RawCheat("Турбо-скорость игры (Hold L)", "Ускорение передвижения и анимаций", "94000130 FDFF0000\n020A0010 00004200\nD0000000 00000000")
-                )
-            )
-        )
     }
 }

@@ -1658,6 +1658,20 @@ class EmulatorActivity : AppCompatActivity() {
     private fun prepareBootExternalInfo(rom: Rom) {
         bootRom.value = rom
         bootBoxArtUrl.value = null
+        val gameCode = if (rom.isInstalledDsiWareShortcut) {
+            val titleId = rom.installedDsiWareTitleId ?: 0L
+            val tLow = (titleId and 0xFFFFFFFFL).toInt()
+            val b = byteArrayOf(
+                (tLow ushr 24).toByte(),
+                (tLow ushr 16).toByte(),
+                (tLow ushr 8).toByte(),
+                tLow.toByte()
+            )
+            String(b, java.nio.charset.StandardCharsets.ISO_8859_1).filter { it.isLetterOrDigit() }
+        } else {
+            rom.name.filter { it.isLetterOrDigit() }.take(4)
+        }
+        translatorManager.setCurrentGame(rom.name, gameCode, rom.retroAchievementsHash)
         lifecycleScope.launch {
             val url = runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
             if (bootRom.value?.uri == rom.uri) {
