@@ -122,8 +122,8 @@ fun RomBrowserScreen(
     val showContinueShelf = isAtLibraryTop && !state.isSearchActive && state.filter == RomFilter.ALL && state.continuePlaying.isNotEmpty()
     val showSectionHeader = !state.isSearchActive
 
-    val gridLeadingItems = 1 + (if (showContinueShelf) 1 else 0) + (if (showSectionHeader) 1 else 0) + (if (hasFolders) 1 else 0)
-    val listLeadingItems = 1 + (if (showContinueShelf) 1 else 0) + (if (showSectionHeader) 1 else 0)
+    val gridLeadingItems = if (hasFolders) 1 else 0
+    val listLeadingItems = 0
 
     LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive) {
         focusedEntryIndex = -1
@@ -213,6 +213,43 @@ fun RomBrowserScreen(
                 onNavigateUp = onNavigateUp,
             )
 
+            // Pinned Sticky Header: Filters, Continue Shelf, Section Header ("Все игры")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                FilterChipsRow(
+                    selected = state.filter,
+                    onFilterSelected = onFilterSelected,
+                )
+                if (showContinueShelf) {
+                    ContinuePlayingShelf(
+                        roms = state.continuePlaying,
+                        coverByHash = coverByHash,
+                        boxArtByUri = boxArtByUri,
+                        onRomClicked = onRomClick,
+                        onRomLongPressed = onRomLongPress,
+                        horizontalPadding = 0.dp,
+                        onRomFocused = onFocusedRomChanged,
+                        onRomVisible = onRomVisible,
+                    )
+                }
+                if (showSectionHeader) {
+                    val romsCount = state.entries.drop(folderCount).size
+                    LibrarySectionHeader(
+                        title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
+                        inFolder = state.canNavigateUp,
+                        sortingMode = state.sortingMode,
+                        sortingOrder = state.sortingOrder,
+                        gamesCount = romsCount,
+                        onNavigateUp = onNavigateUp,
+                        onSortSelected = onSortSelected,
+                        modifier = Modifier.padding(horizontal = 0.dp),
+                    )
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -221,10 +258,6 @@ fun RomBrowserScreen(
             ) {
                 if (state.entries.isEmpty() && !showContinueShelf) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        FilterChipsRow(
-                            selected = state.filter,
-                            onFilterSelected = onFilterSelected,
-                        )
                         EmptyState(filter = state.filter)
                     }
                 } else {
@@ -411,41 +444,6 @@ private fun GridContent(
             horizontalArrangement = Arrangement.spacedBy(11.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            item(key = "filters", span = { GridItemSpan(maxLineSpan) }) {
-                FilterChipsRow(
-                    selected = state.filter,
-                    onFilterSelected = onFilterSelected,
-                    modifier = Modifier.padding(start = 0.dp),
-                )
-            }
-            if (showContinueShelf) {
-                item(key = "continue", span = { GridItemSpan(maxLineSpan) }) {
-                    ContinuePlayingShelf(
-                        roms = state.continuePlaying,
-                        coverByHash = coverByHash,
-                        boxArtByUri = boxArtByUri,
-                        onRomClicked = onRomClick,
-                        onRomLongPressed = onRomLongPress,
-                        horizontalPadding = 0.dp,
-                        onRomFocused = onRomFocused,
-                        onRomVisible = onRomVisible,
-                    )
-                }
-            }
-            if (showSectionHeader) {
-                item(key = "section_header", span = { GridItemSpan(maxLineSpan) }) {
-                    LibrarySectionHeader(
-                        title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
-                        inFolder = state.canNavigateUp,
-                        sortingMode = state.sortingMode,
-                        sortingOrder = state.sortingOrder,
-                        gamesCount = roms.size,
-                        onNavigateUp = onNavigateUp,
-                        onSortSelected = onSortSelected,
-                        modifier = Modifier.padding(horizontal = 0.dp),
-                    )
-                }
-            }
             if (folders.isNotEmpty()) {
                 item(key = "folders", span = { GridItemSpan(maxLineSpan) }) {
                     FlowRow(
@@ -543,38 +541,6 @@ private fun ListContent(
                 ),
             ),
         ) {
-            item(key = "filters") {
-                FilterChipsRow(
-                    selected = state.filter,
-                    onFilterSelected = onFilterSelected,
-                )
-            }
-            if (showContinueShelf) {
-                item(key = "continue") {
-                    ContinuePlayingShelf(
-                        roms = state.continuePlaying,
-                        coverByHash = coverByHash,
-                        boxArtByUri = boxArtByUri,
-                        onRomClicked = onRomClick,
-                        onRomLongPressed = onRomLongPress,
-                        onRomFocused = onRomFocused,
-                        onRomVisible = onRomVisible,
-                    )
-                }
-            }
-            if (showSectionHeader) {
-                item(key = "section_header") {
-                    LibrarySectionHeader(
-                        title = if (state.canNavigateUp) state.breadcrumbs.lastOrNull() ?: stringResource(R.string.rom_all_games) else stringResource(R.string.rom_all_games),
-                        inFolder = state.canNavigateUp,
-                        sortingMode = state.sortingMode,
-                        sortingOrder = state.sortingOrder,
-                        gamesCount = state.entries.size - folderCount,
-                        onNavigateUp = onNavigateUp,
-                        onSortSelected = onSortSelected,
-                    )
-                }
-            }
             itemsIndexed(
                 items = state.entries,
                 key = { _, entry ->

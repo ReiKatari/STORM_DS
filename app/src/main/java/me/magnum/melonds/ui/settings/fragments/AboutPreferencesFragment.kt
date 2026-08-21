@@ -32,6 +32,12 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
+        findPreference<Preference>("credits_jpeacekeeper")?.setOnPreferenceClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://4pda.to/forum/index.php?showuser=5768740"))
+            startActivity(intent)
+            true
+        }
+
         findPreference<Preference>("credits_watermelonds")?.setOnPreferenceClickListener {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SapphireRhodonite/WatermelonDS"))
             startActivity(intent)

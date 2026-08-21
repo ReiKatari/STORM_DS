@@ -1215,6 +1215,8 @@
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors &amp; open source licenses</string>
     <string name="about_version_title">Version</string>
     <string name="about_credits_title">Credits &amp; Acknowledgements</string>
+    <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
+    <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
     <string name="about_credits_watermelonds_title">WatermelonDS</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite &amp; contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI &amp; touch controls</string>
     <string name="about_credits_melonds_title">melonDS</string>
