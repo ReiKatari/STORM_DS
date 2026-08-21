@@ -28,69 +28,31 @@ object LocalAiVoiceActorStudio {
     fun getAvailableModelPacks(context: Context): List<VoiceModelPack> {
         val modelsDir = getModelsDirectory(context)
         return listOf(
-            VoiceModelPack(
-                id = "auto_multi",
-                displayName = "24 голоса персонажей (Авто-распределение)",
-                language = "ru-RU",
-                gender = "dynamic",
-                modelFile = null,
-                isInstalled = true,
-                sizeMb = 0.0f
-            ),
-            VoiceModelPack(
-                id = "piper_ru_dmitri_medium",
-                displayName = "Дмитрий (Нейро-Баритон)",
-                language = "ru-RU",
-                gender = "male",
-                modelFile = File(modelsDir, "ru_dmitri_medium.onnx").takeIf { it.exists() },
-                isInstalled = true,
-                sizeMb = 18.4f
-            ),
-            VoiceModelPack(
-                id = "piper_ru_elena_medium",
-                displayName = "Елена (Нейро-Сопрано)",
-                language = "ru-RU",
-                gender = "female",
-                modelFile = File(modelsDir, "ru_elena_medium.onnx").takeIf { it.exists() },
-                isInstalled = true,
-                sizeMb = 19.2f
-            ),
-            VoiceModelPack(
-                id = "piper_ru_boss_grunt",
-                displayName = "Босс / Злодей (Тяжелый бас)",
-                language = "ru-RU",
-                gender = "male",
-                modelFile = File(modelsDir, "ru_boss_grunt.onnx").takeIf { it.exists() },
-                isInstalled = true,
-                sizeMb = 21.0f
-            ),
-            VoiceModelPack(
-                id = "piper_ru_elder",
-                displayName = "Мудрый старец (Хриплый баритон)",
-                language = "ru-RU",
-                gender = "male",
-                modelFile = File(modelsDir, "ru_elder.onnx").takeIf { it.exists() },
-                isInstalled = true,
-                sizeMb = 17.5f
-            ),
-            VoiceModelPack(
-                id = "piper_ru_hero",
-                displayName = "Молодой герой (Звонкий тенор)",
-                language = "ru-RU",
-                gender = "male",
-                modelFile = File(modelsDir, "ru_hero.onnx").takeIf { it.exists() },
-                isInstalled = true,
-                sizeMb = 18.0f
-            ),
-            VoiceModelPack(
-                id = "piper_en_ryan_studio",
-                displayName = "Ryan Studio (English HD)",
-                language = "en-US",
-                gender = "male",
-                modelFile = File(modelsDir, "en_ryan_studio.onnx").takeIf { it.exists() },
-                isInstalled = true,
-                sizeMb = 16.8f
-            )
+            VoiceModelPack("auto_multi", "🎭 24 голоса (Нейро-автораспределение)", "ru-RU", "dynamic", null, true, 0.0f),
+            VoiceModelPack("piper_ru_dmitri_medium", "🎙️ Дмитрий (Нейро-Баритон)", "ru-RU", "male", File(modelsDir, "ru_dmitri.onnx").takeIf { it.exists() }, true, 18.4f),
+            VoiceModelPack("piper_ru_elena_medium", "🎙️ Елена (Нейро-Сопрано)", "ru-RU", "female", File(modelsDir, "ru_elena.onnx").takeIf { it.exists() }, true, 19.2f),
+            VoiceModelPack("piper_ru_hero", "🗡️ Молодой герой (Звонкий тенор)", "ru-RU", "male", File(modelsDir, "ru_hero.onnx").takeIf { it.exists() }, true, 18.0f),
+            VoiceModelPack("piper_ru_dark_knight", "🦇 Темный рыцарь / Бэтмен (Хриплый бас)", "ru-RU", "male", File(modelsDir, "ru_dark_knight.onnx").takeIf { it.exists() }, true, 20.5f),
+            VoiceModelPack("piper_ru_boss_grunt", "👹 Босс / Тиран / Баузер (Тяжелый бас)", "ru-RU", "male", File(modelsDir, "ru_boss_grunt.onnx").takeIf { it.exists() }, true, 21.0f),
+            VoiceModelPack("piper_ru_joker_manic", "🃏 Джокер / Псих (Маниакальный тенор)", "ru-RU", "male", File(modelsDir, "ru_joker.onnx").takeIf { it.exists() }, true, 18.2f),
+            VoiceModelPack("piper_ru_deep_demon", "💀 Демон бездны / Дракула (Глубокий бас)", "ru-RU", "male", File(modelsDir, "ru_demon.onnx").takeIf { it.exists() }, true, 22.0f),
+            VoiceModelPack("piper_ru_elder", "📜 Мудрый старец / Профессор (Хриплый)", "ru-RU", "male", File(modelsDir, "ru_elder.onnx").takeIf { it.exists() }, true, 17.5f),
+            VoiceModelPack("piper_ru_young_boy", "👦 Мальчик / Спутник / Люк (Звонкий)", "ru-RU", "male", File(modelsDir, "ru_boy.onnx").takeIf { it.exists() }, true, 16.5f),
+            VoiceModelPack("piper_ru_young_girl", "👧 Девочка / Перл Фей (Нежный детский)", "ru-RU", "female", File(modelsDir, "ru_girl.onnx").takeIf { it.exists() }, true, 16.8f),
+            VoiceModelPack("piper_ru_royal_queen", "👑 Принцесса / Королева Зельда (Величественный)", "ru-RU", "female", File(modelsDir, "ru_queen.onnx").takeIf { it.exists() }, true, 19.5f),
+            VoiceModelPack("piper_ru_merchant", "💰 Торговец / Том Нук (Услужливый бодрый)", "ru-RU", "male", File(modelsDir, "ru_merchant.onnx").takeIf { it.exists() }, true, 17.8f),
+            VoiceModelPack("piper_ru_soldier", "🛡️ Стражник / Капитан (Командный суровый)", "ru-RU", "male", File(modelsDir, "ru_soldier.onnx").takeIf { it.exists() }, true, 18.6f),
+            VoiceModelPack("piper_ru_robot", "🤖 Робот / Киборг / Покедекс (Синтетический)", "ru-RU", "neutral", File(modelsDir, "ru_robot.onnx").takeIf { it.exists() }, true, 15.0f),
+            VoiceModelPack("piper_ru_narrator", "📖 Рассказчик / Летописец (Бархатный)", "ru-RU", "neutral", File(modelsDir, "ru_narrator.onnx").takeIf { it.exists() }, true, 18.5f),
+            VoiceModelPack("piper_ru_tsundere", "🎀 Цундере / Франциска (Капризное сопрано)", "ru-RU", "female", File(modelsDir, "ru_tsundere.onnx").takeIf { it.exists() }, true, 19.0f),
+            VoiceModelPack("piper_ru_whisper", "🤫 Таинственный шепот / Тень (Мистический)", "ru-RU", "neutral", File(modelsDir, "ru_whisper.onnx").takeIf { it.exists() }, true, 16.0f),
+            VoiceModelPack("piper_ru_fairy", "✨ Веселая фея / Нави (Игривый высокий альт)", "ru-RU", "female", File(modelsDir, "ru_fairy.onnx").takeIf { it.exists() }, true, 17.0f),
+            VoiceModelPack("piper_ru_pirate", "🏴‍☠️ Капитан пиратов (Грубый рычащий бас)", "ru-RU", "male", File(modelsDir, "ru_pirate.onnx").takeIf { it.exists() }, true, 20.0f),
+            VoiceModelPack("piper_ru_mad_scientist", "🔬 Безумный ученый / Вайли (Эксцентричный)", "ru-RU", "male", File(modelsDir, "ru_scientist.onnx").takeIf { it.exists() }, true, 18.0f),
+            VoiceModelPack("piper_ru_gentleman", "🎩 Джентльмен / Лейтон / Райт (Элегантный)", "ru-RU", "male", File(modelsDir, "ru_gentleman.onnx").takeIf { it.exists() }, true, 19.0f),
+            VoiceModelPack("piper_ru_ghost", "👻 Призрак / Фантом (Эфирный эхо-тон)", "ru-RU", "neutral", File(modelsDir, "ru_ghost.onnx").takeIf { it.exists() }, true, 17.2f),
+            VoiceModelPack("piper_ru_knight", "⚔️ Благородный рыцарь (Твердый баритон)", "ru-RU", "male", File(modelsDir, "ru_knight.onnx").takeIf { it.exists() }, true, 19.4f),
+            VoiceModelPack("piper_ru_angelic", "🕊️ Богиня / Ангел Палютена (Священный)", "ru-RU", "female", File(modelsDir, "ru_angelic.onnx").takeIf { it.exists() }, true, 20.0f)
         )
     }
 
