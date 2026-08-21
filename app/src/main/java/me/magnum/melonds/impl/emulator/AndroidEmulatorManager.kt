@@ -403,25 +403,23 @@ class AndroidEmulatorManager(
         val cacheDir = File(context.cacheDir, "dsiware_cache").apply { mkdirs() }
         val cacheRomFile = File(cacheDir, "${titleIdHex}.nds")
 
-        if (!cacheRomFile.exists() || cacheRomFile.length() == 0L) {
-            val openResult = dsiNandManager.openNand()
-            if (openResult != OpenDSiNandResult.SUCCESS && openResult != OpenDSiNandResult.NAND_ALREADY_OPEN) {
-                Log.e(TAG, "DSiWareShortcut: failed to open NAND: $openResult")
-                writeGameExecutionLog(rom, titleIdHex, false, "Failed to open NAND: $openResult", "Direct loadRom (DSi)")
-                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+        val openResult = dsiNandManager.openNand()
+        if (openResult != OpenDSiNandResult.SUCCESS && openResult != OpenDSiNandResult.NAND_ALREADY_OPEN) {
+            Log.e(TAG, "DSiWareShortcut: failed to open NAND: $openResult")
+            writeGameExecutionLog(rom, titleIdHex, false, "Failed to open NAND: $openResult", "Direct loadRom (DSi)")
+            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+        }
+        try {
+            cacheRomFile.delete()
+            dsiNandManager.repairTitleSaves(titleId)
+            val exported = dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
+            if (!exported || !cacheRomFile.exists() || cacheRomFile.length() == 0L) {
+                Log.e(TAG, "DSiWareShortcut: exportTitleExecutable failed for titleId=$titleIdHex")
+                writeGameExecutionLog(rom, titleIdHex, false, "exportTitleExecutable failed", "Direct loadRom (DSi)")
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
-            try {
-                cacheRomFile.delete()
-                dsiNandManager.repairTitleSaves(titleId)
-                val exported = dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
-                if (!exported || !cacheRomFile.exists() || cacheRomFile.length() == 0L) {
-                    Log.e(TAG, "DSiWareShortcut: exportTitleExecutable failed for titleId=$titleIdHex")
-                    writeGameExecutionLog(rom, titleIdHex, false, "exportTitleExecutable failed", "Direct loadRom (DSi)")
-                    return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-                }
-            } finally {
-                dsiNandManager.closeNand()
-            }
+        } finally {
+            dsiNandManager.closeNand()
         }
 
         val romUri = Uri.fromFile(cacheRomFile)
