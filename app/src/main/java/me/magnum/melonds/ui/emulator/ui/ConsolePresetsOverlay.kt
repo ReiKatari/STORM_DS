@@ -63,6 +63,14 @@ import me.magnum.melonds.ui.common.WatermelonSwitch
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.watermelon
 
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.ui.graphics.vector.ImageVector
+
 private val PresetsScrim = Color(0xF3080709)
 
 private enum class PresetsScreen { MAIN, FILL_AREA, VERTICAL_ALIGNMENT }
@@ -89,6 +97,7 @@ fun ConsolePresetsOverlay(
     onExternalAlignmentChanged: (ScreenAlignment?) -> Unit,
     onBack: () -> Unit,
 ) {
+    val colors = watermelon
     var screen by remember { mutableStateOf(PresetsScreen.MAIN) }
 
     BackHandler {
@@ -106,28 +115,81 @@ fun ConsolePresetsOverlay(
         when (screen) {
             PresetsScreen.MAIN -> {
                 val presetSelected = dualScreenPreset != DualScreenPreset.OFF
+
+                // Informative Card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Info, null, tint = me.magnum.melonds.ui.theme.WatermelonColors.gold, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text(
+                                text = stringResource(R.string.dual_screen_info_title),
+                                color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.dual_screen_info_desc),
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+
                 if (!presetSelected) {
                     ConsoleSectionLabel(stringResource(R.string.dual_screen_presets_disabled_hint))
                 }
                 ConsoleSectionLabel(stringResource(R.string.dual_screen_presets))
+
                 val presets = listOf(
-                    DualScreenPreset.OFF to stringResource(R.string.dual_screen_preset_off),
-                    DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM to stringResource(R.string.dual_screen_preset_internal_top_external_bottom),
-                    DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP to stringResource(R.string.dual_screen_preset_internal_bottom_external_top),
+                    Triple(
+                        DualScreenPreset.OFF,
+                        stringResource(R.string.dual_screen_preset_off),
+                        Icons.Filled.Block
+                    ),
+                    Triple(
+                        DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM,
+                        stringResource(R.string.dual_screen_preset_internal_top_external_bottom),
+                        Icons.Filled.Tv
+                    ),
+                    Triple(
+                        DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP,
+                        stringResource(R.string.dual_screen_preset_internal_bottom_external_top),
+                        Icons.Filled.Smartphone
+                    ),
                 )
-                presets.forEachIndexed { index, (preset, label) ->
+                presets.forEachIndexed { index, (preset, label, icon) ->
+                    val subtitle = when (preset) {
+                        DualScreenPreset.OFF -> "Оба экрана Nintendo DS выводятся на основном дисплее устройства"
+                        DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> "Основной экран смартфона — Верхний (игра), Внешний монитор — Нижний (тач)"
+                        DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> "Основной экран смартфона — Нижний (тач в руках), Внешний монитор — Верхний (игра)"
+                    }
                     ConsoleRow(
                         label = label,
+                        subtitle = subtitle,
+                        icon = icon,
                         selected = preset == dualScreenPreset,
                         focusRequester = if (index == 0) rememberFirstFocus() else null,
                         onClick = { onDualScreenPresetSelected(preset) },
                     ) {
                         if (preset == dualScreenPreset) {
-                            Icon(Icons.Filled.Check, null, tint = watermelon.green, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Filled.Check, null, tint = colors.green, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 ConsoleToggleRow(
                     label = stringResource(R.string.keep_ds_ratio),
                     checked = keepAspectRatio,
@@ -140,10 +202,12 @@ fun ConsolePresetsOverlay(
                     onToggle = onIntegerScaleChanged,
                     enabled = presetSelected,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 val fillEnabled = presetSelected && (keepAspectRatio || integerScaleEnabled)
                 ConsoleRow(
                     label = stringResource(R.string.dual_screen_fill_area_button),
+                    subtitle = "Настройка заполнения пространства по ширине и высоте для обоих экранов",
+                    icon = Icons.Filled.FitScreen,
                     enabled = fillEnabled,
                     onClick = { screen = PresetsScreen.FILL_AREA },
                 ) {
@@ -151,6 +215,8 @@ fun ConsolePresetsOverlay(
                 }
                 ConsoleRow(
                     label = stringResource(R.string.dual_screen_vertical_alignment_button),
+                    subtitle = "Точное позиционирование и выравнивание кадров (сверху, по центру, снизу)",
+                    icon = Icons.Filled.AspectRatio,
                     enabled = fillEnabled,
                     onClick = { screen = PresetsScreen.VERTICAL_ALIGNMENT },
                 ) {
@@ -184,7 +250,7 @@ fun ConsolePresetsOverlay(
                         focusRequester = if (index == 0) rememberFirstFocus() else null,
                         onClick = { onInternalAlignmentChanged(alignment) },
                     ) {
-                        if (alignment == internalAlignment) Icon(Icons.Filled.Check, null, tint = watermelon.green, modifier = Modifier.size(20.dp))
+                        if (alignment == internalAlignment) Icon(Icons.Filled.Check, null, tint = colors.green, modifier = Modifier.size(20.dp))
                     }
                 }
                 Spacer(Modifier.height(6.dp))
@@ -195,7 +261,7 @@ fun ConsolePresetsOverlay(
                         selected = alignment == externalAlignment,
                         onClick = { onExternalAlignmentChanged(alignment) },
                     ) {
-                        if (alignment == externalAlignment) Icon(Icons.Filled.Check, null, tint = watermelon.green, modifier = Modifier.size(20.dp))
+                        if (alignment == externalAlignment) Icon(Icons.Filled.Check, null, tint = colors.green, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -296,6 +362,8 @@ private fun ConsoleSectionLabel(text: String) {
 @Composable
 private fun ConsoleRow(
     label: String,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
     selected: Boolean = false,
     focusRequester: FocusRequester? = null,
     enabled: Boolean = true,
@@ -305,30 +373,49 @@ private fun ConsoleRow(
     val colors = watermelon
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(12.dp)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 42.dp)
+            .heightIn(min = 46.dp)
             .clip(shape)
             .alpha(if (enabled) 1f else 0.4f)
-            .background(if (isFocused) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.045f))
-            .let { if (isFocused) it.border(2.dp, colors.red, shape) else it }
+            .background(if (isFocused) Color.White.copy(alpha = 0.16f) else if (selected) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.045f))
+            .let { if (isFocused) it.border(2.dp, colors.red, shape) else if (selected) it.border(1.dp, Color.White.copy(alpha = 0.22f), shape) else it }
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 13.5.sp,
-            lineHeight = 17.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) colors.red else Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 13.5.sp,
+                lineHeight = 17.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                )
+            }
+        }
         Spacer(Modifier.width(10.dp))
         trailing()
     }

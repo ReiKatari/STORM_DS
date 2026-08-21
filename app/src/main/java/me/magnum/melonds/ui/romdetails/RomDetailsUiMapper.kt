@@ -57,6 +57,9 @@ class RomDetailsUiMapper(
             hasValidRetroArchShaderRoot = hasValidRetroArchShaderRoot,
             retroAchievementsEnabled = romConfig.retroAchievementsEnabled,
             globalRetroAchievementsEnabled = globalRetroAchievementsEnabled,
+            dualScreenPreset = romConfig.dualScreenPreset,
+            dualScreenKeepAspectRatio = romConfig.dualScreenKeepAspectRatio,
+            dualScreenIntegerScale = romConfig.dualScreenIntegerScale,
         )
     }
 

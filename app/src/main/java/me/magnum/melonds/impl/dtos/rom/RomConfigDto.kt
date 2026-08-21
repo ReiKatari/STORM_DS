@@ -41,6 +41,12 @@ data class RomConfigDto(
     val retroArchShaderParameters: String? = null,
     @SerializedName("retroAchievementsEnabled")
     val retroAchievementsEnabled: Boolean? = null,
+    @SerializedName("dualScreenPreset")
+    val dualScreenPreset: me.magnum.melonds.domain.model.DualScreenPreset? = null,
+    @SerializedName("dualScreenKeepAspectRatio")
+    val dualScreenKeepAspectRatio: Boolean? = null,
+    @SerializedName("dualScreenIntegerScale")
+    val dualScreenIntegerScale: Boolean? = null,
 ) {
 
     companion object {
@@ -61,6 +67,9 @@ data class RomConfigDto(
                 romConfig.retroArchShaderPresetPath,
                 romConfig.retroArchShaderParameters,
                 romConfig.retroAchievementsEnabled,
+                romConfig.dualScreenPreset,
+                romConfig.dualScreenKeepAspectRatio,
+                romConfig.dualScreenIntegerScale,
             )
         }
     }
@@ -82,6 +91,9 @@ data class RomConfigDto(
             retroArchShaderPresetPath = retroArchShaderPresetPath,
             retroArchShaderParameters = retroArchShaderParameters,
             retroAchievementsEnabled = retroAchievementsEnabled,
+            dualScreenPreset = dualScreenPreset,
+            dualScreenKeepAspectRatio = dualScreenKeepAspectRatio,
+            dualScreenIntegerScale = dualScreenIntegerScale,
         )
     }
 }
