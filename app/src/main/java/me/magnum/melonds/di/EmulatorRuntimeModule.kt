@@ -126,6 +126,7 @@ object EmulatorRuntimeModule {
         emulatorSession: EmulatorSession,
         dsiNandManager: DSiNandManager,
         shaderCompileTimeStore: ShaderCompileTimeStore,
+        configurationDirectoryVerifier: me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier,
     ): EmulatorManager {
         return AndroidEmulatorManager(
             context,
@@ -138,6 +139,7 @@ object EmulatorRuntimeModule {
             emulatorSession,
             dsiNandManager,
             shaderCompileTimeStore,
+            configurationDirectoryVerifier,
         )
     }
 
