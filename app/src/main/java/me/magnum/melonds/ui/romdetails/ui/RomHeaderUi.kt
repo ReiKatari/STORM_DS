@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -160,6 +161,43 @@ fun SaveActionsButton(
                 Text(stringResource(R.string.rom_action_import_save_file))
             }
         }
+    }
+}
+
+@Composable
+fun NetplayLobbyButton(
+    size: Dp,
+    rom: Rom,
+    modifier: Modifier = Modifier,
+) {
+    var dialogOpen by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val colors = watermelon
+
+    if (dialogOpen) {
+        NetplayLobbyDialog(
+            rom = rom,
+            onDismiss = { dialogOpen = false },
+            onJoinRoom = { dialogOpen = false },
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(13.dp))
+            .background(Color.Black.copy(alpha = 0.3f))
+            .let { if (isFocused) it.background(colors.red.copy(alpha = 0.5f)) else it }
+            .clickable(interactionSource = interactionSource, indication = null) { dialogOpen = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Wifi,
+            contentDescription = "Netplay / NiFi",
+            tint = Color(0xFF00E5FF),
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
@@ -471,7 +509,9 @@ fun RomHeroVertical(
                     focusRequester = initialFocusRequester,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(9.dp))
+                Spacer(Modifier.width(8.dp))
+                NetplayLobbyButton(size = 50.dp, rom = rom)
+                Spacer(Modifier.width(8.dp))
                 SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
             }
         }
@@ -597,12 +637,20 @@ fun RomHeroSidePanel(
                     )
                 }
             }
-            PlayButton(
-                height = 50.dp,
-                onClick = onLaunchRom,
-                focusRequester = initialFocusRequester,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                PlayButton(
+                    height = 50.dp,
+                    onClick = onLaunchRom,
+                    focusRequester = initialFocusRequester,
+                    modifier = Modifier.weight(1f),
+                )
+                NetplayLobbyButton(size = 50.dp, rom = rom)
+                SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
+            }
         }
     }
 }
