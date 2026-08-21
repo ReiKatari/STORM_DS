@@ -36,4 +36,7 @@ data class RomConfigUiModel(
     val hasValidRetroArchShaderRoot: Boolean = false,
     val retroAchievementsEnabled: Boolean? = null,
     val globalRetroAchievementsEnabled: Boolean = true,
+    val dualScreenPreset: me.magnum.melonds.domain.model.DualScreenPreset? = null,
+    val dualScreenKeepAspectRatio: Boolean? = null,
+    val dualScreenIntegerScale: Boolean? = null,
 )

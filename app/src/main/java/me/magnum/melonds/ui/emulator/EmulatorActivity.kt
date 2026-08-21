@@ -2498,6 +2498,11 @@ class EmulatorActivity : AppCompatActivity() {
                 }
                 romLayoutSettingsLauncher.launch(intent)
             })
+            add(romSettingsMenuLabel(getString(R.string.dual_screen_presets_settings_title), menuState.dualScreenPresetValue) to {
+                popConsoleOverlay()
+                showDualScreenPresets.value = true
+                activeOverlays.addActiveOverlay(EmulatorOverlay.PRESETS_DIALOG)
+            })
             add(romSettingsMenuLabel(getString(R.string.filter), menuState.videoFilteringValue) to {
                 showRomVideoFilteringDialog(
                     renderer = renderer,
