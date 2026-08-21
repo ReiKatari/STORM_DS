@@ -362,137 +362,103 @@ class AndroidEmulatorManager(
     private suspend fun loadInstalledDsiWareShortcut(rom: Rom, cheats: List<Cheat>): RomLaunchResult = withContext(Dispatchers.IO) {
         val titleId = rom.installedDsiWareTitleId ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
         val titleIdHex = titleId.toDsiWareTitleIdHex()
-        val cacheDir = File(context.cacheDir, "dsiware_cache").apply { mkdirs() }
-        val cacheRomFile = File(cacheDir, "${titleIdHex}.nds")
 
-        if (!cacheRomFile.exists() || cacheRomFile.length() == 0L) {
-            val openResult = dsiNandManager.openNand()
-            if (openResult != OpenDSiNandResult.SUCCESS && openResult != OpenDSiNandResult.NAND_ALREADY_OPEN) {
-                Log.e(TAG, "DSiWareShortcut: failed to open NAND: $openResult")
-                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
-            }
-            try {
-                val exported = dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
-                if (!exported || !cacheRomFile.exists() || cacheRomFile.length() == 0L) {
-                    Log.e(TAG, "DSiWareShortcut: exportTitleExecutable failed for titleId=$titleIdHex")
-                    return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-                }
-            } finally {
-                dsiNandManager.closeNand()
-            }
-        }
-
-        val romUri = Uri.fromFile(cacheRomFile)
-        val sram = try {
-            sramProvider.getSramForRom(rom)
-        } catch (exception: SramLoadException) {
-            return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
-        }
-
-        val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+        // Priority 1: Direct DSi NAND autoload via TLNC warmboot (100% native melonDS DSiWare launcher)
+        Log.i(TAG, "DSiWareShortcut: booting title $titleIdHex from NAND via bootFirmware")
+        val firmwareConfiguration = getRomEmulatorConfiguration(rom)
             .copy(
                 consoleType = ConsoleType.DSi,
                 useCustomBios = true,
-                showBootScreen = false,
-                dsiWareAutoloadTitleId = 0L,
+                showBootScreen = true,
+                dsiWareAutoloadTitleId = titleId,
             )
             .withPreparedDldiConfiguration()
             ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
 
-        setupEmulator(emulatorConfiguration)
-
-        Log.i(TAG, "DSiWareShortcut: direct booting title $titleIdHex via loadRom")
-        val loadResult = MelonEmulator.loadRom(
-            romUri = romUri,
-            sramUri = sram,
-            gbaSlotType = MelonEmulator.GbaSlotType.NONE,
-            gbaRomUri = null,
-            gbaSramUri = null
-        )
-        if (loadResult.isTerminal || !isActive) {
-            cameraManager.stopCurrentCameraSource()
-            MelonEmulator.stopEmulation()
-            dldiFolderSyncManager.syncBackIfNeeded()
-            return@withContext RomLaunchResult.LaunchFailed(loadResult)
+        setupEmulator(firmwareConfiguration)
+        val firmwareLoadResult = MelonEmulator.bootFirmware()
+        if (firmwareLoadResult == MelonEmulator.FirmwareLoadResult.SUCCESS && isActive) {
+            messageQueue.start()
+            if (!precompileVulkanPipelines(firmwareConfiguration)) {
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                messageQueue.stop()
+                dldiFolderSyncManager.syncBackIfNeeded()
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+            }
+            MelonEmulator.setupCheats(cheats.toTypedArray())
+            MelonEmulator.startEmulation(startPaused = true)
+            return@withContext RomLaunchResult.LaunchSuccessful(true)
         }
 
-        messageQueue.start()
-        if (!precompileVulkanPipelines(emulatorConfiguration)) {
-            cameraManager.stopCurrentCameraSource()
-            MelonEmulator.stopEmulation()
-            messageQueue.stop()
-            dldiFolderSyncManager.syncBackIfNeeded()
-            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+        // Secondary fallback for standalone extracted cartridge ROM: loadRom
+        val cacheDir = File(context.cacheDir, "dsiware_cache").apply { mkdirs() }
+        val cacheRomFile = File(cacheDir, "${titleIdHex}.nds")
+        val hasCachedRom = cacheRomFile.exists() && cacheRomFile.length() > 0L
+        if (!hasCachedRom) {
+            val openResult = dsiNandManager.openNand()
+            if (openResult == OpenDSiNandResult.SUCCESS || openResult == OpenDSiNandResult.NAND_ALREADY_OPEN) {
+                try {
+                    dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "exportTitleExecutable exception: ${e.message}")
+                } finally {
+                    dsiNandManager.closeNand()
+                }
+            }
         }
-        MelonEmulator.setupCheats(cheats.toTypedArray())
-        activeInstalledDsiWareShortcutSession = null
-        MelonEmulator.startEmulation(startPaused = true)
-        return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
+
+        if (cacheRomFile.exists() && cacheRomFile.length() > 0L) {
+            val romUri = Uri.fromFile(cacheRomFile)
+            val sram = try {
+                sramProvider.getSramForRom(rom)
+            } catch (exception: SramLoadException) {
+                return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
+            }
+
+            val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+                .copy(
+                    consoleType = ConsoleType.DSi,
+                    useCustomBios = true,
+                    showBootScreen = false,
+                    dsiWareAutoloadTitleId = 0L,
+                )
+                .withPreparedDldiConfiguration()
+                ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+
+            setupEmulator(emulatorConfiguration)
+
+            Log.i(TAG, "DSiWareShortcut: direct booting title $titleIdHex via loadRom")
+            val loadResult = MelonEmulator.loadRom(
+                romUri = romUri,
+                sramUri = sram,
+                gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                gbaRomUri = null,
+                gbaSramUri = null
+            )
+            if (!loadResult.isTerminal && isActive) {
+                messageQueue.start()
+                if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                    cameraManager.stopCurrentCameraSource()
+                    MelonEmulator.stopEmulation()
+                    messageQueue.stop()
+                    dldiFolderSyncManager.syncBackIfNeeded()
+                    return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                }
+                MelonEmulator.setupCheats(cheats.toTypedArray())
+                MelonEmulator.startEmulation(startPaused = true)
+                return@withContext RomLaunchResult.LaunchSuccessful(true)
+            }
+        }
+
+        cameraManager.stopCurrentCameraSource()
+        MelonEmulator.stopEmulation()
+        dldiFolderSyncManager.syncBackIfNeeded()
+        return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
     }
 
     private fun Long.toDsiWareTitleIdHex(): String {
         return (this and 0xFFFFFFFFL).toString(16).padStart(8, '0')
-    }
-
-    private suspend fun ensureDsiWareInstalledInNand(rom: Rom): Long? {
-        val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return null
-        val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
-        val romUri = fileRomProcessor?.getRealRomUri(rom) ?: return null
-
-        val header = ByteArray(0x240)
-        val readBytes = try {
-            context.contentResolver.openInputStream(romUri)?.use { it.read(header) } ?: 0
-        } catch (_: Throwable) {
-            0
-        }
-        if (readBytes < 0x160) return null
-
-        val category = if (readBytes >= 0x238) {
-            ((header[0x234].toInt() and 0xFF) or
-                ((header[0x235].toInt() and 0xFF) shl 8) or
-                ((header[0x236].toInt() and 0xFF) shl 16) or
-                ((header[0x237].toInt() and 0xFF) shl 24)).toLong() and 0xFFFFFFFFL
-        } else 0L
-
-        val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
-        val unitCode = header.getOrNull(0x12)?.toInt() ?: 0
-        val isDsiWare = category == 0x00030004L || (gameCode.isNotEmpty() && gameCode[0] in listOf('H', 'K') && unitCode == 3) || rom.isDsiWareTitle
-        if (!isDsiWare) return null
-
-        val rawTitleId = if (readBytes >= 0x234) {
-            ((header[0x230].toInt() and 0xFF) or
-                ((header[0x231].toInt() and 0xFF) shl 8) or
-                ((header[0x232].toInt() and 0xFF) shl 16) or
-                ((header[0x233].toInt() and 0xFF) shl 24)).toLong() and 0xFFFFFFFFL
-        } else 0L
-
-        val titleId = if (rawTitleId != 0L) rawTitleId else {
-            val b0 = (gameCode.getOrNull(0)?.code ?: 0).toLong() and 0xFF
-            val b1 = (gameCode.getOrNull(1)?.code ?: 0).toLong() and 0xFF
-            val b2 = (gameCode.getOrNull(2)?.code ?: 0).toLong() and 0xFF
-            val b3 = (gameCode.getOrNull(3)?.code ?: 0).toLong() and 0xFF
-            (b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)) and 0xFFFFFFFFL
-        }
-
-        if (titleId == 0L) return null
-
-        try {
-            val openResult = dsiNandManager.openNand()
-            if (!openResult.isFailure()) {
-                val installed = dsiNandManager.listTitles()
-                val alreadyInstalled = installed.any { (it.titleId and 0xFFFFFFFFL) == titleId }
-                dsiNandManager.closeNand()
-
-                if (!alreadyInstalled) {
-                    Log.i(TAG, "DSiWareAutoInstall: importing ROM into NAND titleId=${titleId.toString(16)}")
-                    dsiNandManager.importTitle(romUri)
-                }
-                return titleId
-            }
-        } catch (e: Throwable) {
-            Log.w(TAG, "DSiWareAutoInstall: exception during NAND check/import", e)
-        }
-        return titleId
     }
 
     override suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult {

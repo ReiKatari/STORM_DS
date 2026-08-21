@@ -258,16 +258,36 @@ object EdgeNeuralTtsClient {
                 voiceName.startsWith("it-") -> "it"
                 else -> "en"
             }
-            val encoded = URLEncoder.encode(text.take(200), "UTF-8")
-            val url = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=$lang&q=$encoded"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile)")
-                .build()
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful && response.body != null) {
-                response.body!!.bytes()
-            } else null
+            val clean = text.trim()
+            if (clean.length <= 180) {
+                val encoded = URLEncoder.encode(clean, "UTF-8")
+                val url = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=$lang&q=$encoded"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile)")
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful && response.body != null) {
+                    return response.body!!.bytes()
+                }
+            } else {
+                val chunks = clean.chunked(150)
+                val out = ByteArrayOutputStream()
+                for (chunk in chunks) {
+                    val encoded = URLEncoder.encode(chunk, "UTF-8")
+                    val url = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=$lang&q=$encoded"
+                    val request = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile)")
+                        .build()
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful && response.body != null) {
+                        out.write(response.body!!.bytes())
+                    }
+                }
+                if (out.size() > 0) return out.toByteArray()
+            }
+            null
         } catch (_: Throwable) {
             null
         }

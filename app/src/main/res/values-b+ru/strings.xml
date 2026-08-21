@@ -1315,4 +1315,6 @@
   <string name="decrypt_rom_success">ROM успешно расшифрован!</string>
   <string name="decrypt_rom_error">Ошибка расшифровки</string>
   <string name="decrypt_rom_progress">Расшифровка...</string>
+  <string name="rom_status_decrypted">ROM расшифрован</string>
+  <string name="rom_status_encrypted">ROM зашифрован</string>
 </resources>
