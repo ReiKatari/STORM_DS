@@ -241,30 +241,14 @@ fun TranslatorSettingsContent(
                 )
                 if (voiceActorStudioEnabled) {
                     Divider(color = watermelon.line)
+                    val availablePacks = me.magnum.melonds.translator.tts.LocalAiVoiceActorStudio.getAvailableModelPacks(context)
+                    val currentPack = availablePacks.firstOrNull { it.id == voiceModelPref } ?: availablePacks.first()
                     SettingsOption(
                         label = "Пакет нейромоделей",
-                        value = when(voiceModelPref) {
-                            "auto_multi" -> "24 голоса (Авто-актеры)"
-                            "piper_ru_dmitri_medium" -> "Дмитрий (Баритон)"
-                            "piper_ru_elena_medium" -> "Елена (Сопрано)"
-                            "piper_ru_boss_grunt" -> "Босс / Злодей (Бас)"
-                            "piper_ru_elder" -> "Старец (Хриплый)"
-                            "piper_ru_hero" -> "Герой (Тенор)"
-                            "piper_en_ryan_studio" -> "Ryan (English HD)"
-                            else -> "24 голоса (Авто-актеры)"
-                        },
+                        value = currentPack.displayName,
                         onClick = {
-                            val models = listOf(
-                                "auto_multi",
-                                "piper_ru_dmitri_medium",
-                                "piper_ru_elena_medium",
-                                "piper_ru_boss_grunt",
-                                "piper_ru_elder",
-                                "piper_ru_hero",
-                                "piper_en_ryan_studio"
-                            )
-                            val nextIdx = (models.indexOf(voiceModelPref).coerceAtLeast(0) + 1) % models.size
-                            voiceModelPref = models[nextIdx]
+                            val nextIdx = (availablePacks.indexOfFirst { it.id == voiceModelPref }.coerceAtLeast(0) + 1) % availablePacks.size
+                            voiceModelPref = availablePacks[nextIdx].id
                             updatePref("translator_local_voice_model", voiceModelPref)
                         }
                     )
