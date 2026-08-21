@@ -1049,6 +1049,48 @@ Java_me_magnum_melonds_MelonDSiNand_deleteTitle(JNIEnv* env, jobject thiz, jint 
 }
 
 JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, jint titleId)
+{
+    if (!nand || !nandMount)
+        return false;
+
+    u32 version = 0xFFFFFFFF;
+    melonDS::NDSHeader header {};
+    nandMount->GetTitleInfo(DSI_NAND_FILE_CATEGORY, (u32) titleId, version, &header, nullptr);
+    if (version == 0xFFFFFFFF)
+        return false;
+
+    char dataDir[128];
+    snprintf(dataDir, sizeof(dataDir), "0:/title/%08x/%08x/data", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    f_mkdir(dataDir);
+
+    char pubSavPath[128];
+    snprintf(pubSavPath, sizeof(pubSavPath), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    u32 pubSavSize = header.DSiPublicSavSize > 0 ? header.DSiPublicSavSize : 0x80000;
+    nandMount->CreateSaveFile(pubSavPath, pubSavSize);
+
+    char privSavPath[128];
+    snprintf(privSavPath, sizeof(privSavPath), "0:/title/%08x/%08x/data/private.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    u32 privSavSize = header.DSiPrivateSavSize > 0 ? header.DSiPrivateSavSize : 0x20000;
+    nandMount->CreateSaveFile(privSavPath, privSavSize);
+
+    char bannerSavPath[128];
+    snprintf(bannerSavPath, sizeof(bannerSavPath), "0:/title/%08x/%08x/data/banner.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    FF_FIL file;
+    if (f_open(&file, bannerSavPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+    {
+        u8 bannersav[0x4000];
+        memset(bannersav, 0, sizeof(bannersav));
+        u32 nwrite;
+        f_write(&file, bannersav, sizeof(bannersav), &nwrite);
+        f_close(&file);
+    }
+
+    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: successfully repaired/recreated FAT12 saves for title=%08x pubSavSize=%x privSavSize=%x\n", (u32) titleId, pubSavSize, privSavSize);
+    return true;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_exportTitleExecutable(JNIEnv* env, jobject thiz, jint titleId, jstring outputPath)
 {
     if (!nand || !nandMount || outputPath == nullptr)

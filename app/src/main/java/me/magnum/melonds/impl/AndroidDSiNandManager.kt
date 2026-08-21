@@ -248,6 +248,14 @@ class AndroidDSiNandManager(
         MelonDSiNand.deleteTitle((title.titleId and 0xFFFFFFFF).toInt())
     }
 
+    override suspend fun repairTitleSaves(titleId: Long): Boolean = nandControlLock.withLock {
+        if (!isNandOpen.get()) {
+            return false
+        }
+
+        return MelonDSiNand.repairTitleSaves((titleId and 0xFFFFFFFF).toInt())
+    }
+
     override suspend fun exportTitleExecutable(titleId: Long, outputPath: String): Boolean = nandControlLock.withLock {
         if (!isNandOpen.get()) {
             return false
