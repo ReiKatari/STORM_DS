@@ -95,6 +95,7 @@ markwon-imagepicasso = { module = "io.noties.markwon:image-picasso", version.ref
 markwon-linkify = { module = "io.noties.markwon:linkify", version.ref = "markwon" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okHttp" }
 commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
+junrar = { module = "com.github.junrar:junrar", version = "7.5.5" }
 xz = { module = "org.tukaani:xz", version.ref = "xz" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
 mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-japanese", version = "16.0.1" }

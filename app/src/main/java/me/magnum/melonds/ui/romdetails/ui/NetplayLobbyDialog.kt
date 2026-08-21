@@ -12,7 +12,8 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SportsEsports
@@ -53,6 +54,7 @@ fun NetplayLobbyDialog(
 ) {
     val context = LocalContext.current
     val colors = watermelon
+    var selectedTab by remember { mutableStateOf(0) } // 0 = NiFi Local Wireless, 1 = Wiimmfi / WFC Online
 
     val rooms = remember(rom) {
         val title = romDisplayName(rom)
@@ -84,89 +86,193 @@ fun NetplayLobbyDialog(
                     .background(Color(0xFF131722))
                     .padding(20.dp)
             ) {
-                // Header
+                // Header with Back Button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Filled.Language,
-                            contentDescription = null,
-                            tint = Color(0xFF00E5FF),
-                            modifier = Modifier.size(28.dp).padding(end = 8.dp)
-                        )
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.12f)),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Назад",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "NETPLAY ОНЛАЙН ЛОББИ",
+                                text = "NETPLAY & NIFI МУЛЬТИПЛЕЕР",
                                 color = Color.White,
                                 fontFamily = SpaceGrotesk,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Поиск соперников в Mario Kart, Pokemon и других NDS играх",
+                                text = "Беспроводная игра вдвоем (Wi-Fi / Hotspot) и онлайн",
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontFamily = WatermelonMono,
                                 fontSize = 9.sp
                             )
                         }
                     }
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
-                    }
                 }
 
                 Spacer(Modifier.height(14.dp))
 
-                // Actions bar
+                // Mode Tabs
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1E2433))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
-                            .clickable {
-                                Toast.makeText(context, "Комната создана! Ожидание игроков...", Toast.LENGTH_SHORT).show()
-                            }
-                            .padding(vertical = 10.dp),
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (selectedTab == 0) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.Transparent)
+                            .clickable { selectedTab = 0 }
+                            .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.SportsEsports, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Wifi, contentDescription = null, tint = if (selectedTab == 0) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("СОЗДАТЬ КОМНАТУ", color = Color.White, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("NiFi Local (Wi-Fi)", color = if (selectedTab == 0) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.7f), fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.12f))
-                            .clickable {
-                                Toast.makeText(context, "Список комнат обновлен", Toast.LENGTH_SHORT).show()
-                            }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .weight(1f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (selectedTab == 1) Color(0xFF10B981).copy(alpha = 0.25f) else Color.Transparent)
+                            .clickable { selectedTab = 1 }
+                            .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Language, contentDescription = null, tint = if (selectedTab == 1) Color(0xFF10B981) else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("WFC Онлайн", color = if (selectedTab == 1) Color(0xFF10B981) else Color.White.copy(alpha = 0.7f), fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
-                // Rooms List
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(rooms) { room ->
-                        RoomCard(room = room, onJoin = { onJoinRoom(room) })
+                if (selectedTab == 0) {
+                    // NiFi Local Mesh Wireless Guide & Start
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF1E2433))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Wifi, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Локальный беспроводной NiFi (Прямой Wi-Fi / Hotspot)",
+                                    color = Color.White,
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = "• Подключите оба устройства к одной Wi-Fi сети или раздайте точку доступа (Wi-Fi Hotspot) с одного из телефонов.\n\n• Запустите игру на обоих смартфонах.\n\n• В меню игры выберите «Wireless Communications» или «Multi-Card Play».\n\n• STORM DS автоматически пересылает 802.11b пакеты между эмуляторами в локальной сети без проводов!",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 11.5.sp,
+                                lineHeight = 17.sp,
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Brush.horizontalGradient(listOf(Color(0xFF0284C7), Color(0xFF00E5FF))))
+                                .clickable {
+                                    Toast.makeText(context, "NiFi Local Mesh активен. Запустите игру для поиска игроков!", Toast.LENGTH_LONG).show()
+                                    onDismiss()
+                                }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "ЗАПУСТИТЬ С NIFI LOCAL WIRELESS",
+                                color = Color.Black,
+                                fontFamily = WatermelonMono,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else {
+                    // Actions bar for Online
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
+                                .clickable {
+                                    Toast.makeText(context, "Комната создана! Ожидание игроков...", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.SportsEsports, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("СОЗДАТЬ ОНЛАЙН КОМНАТУ", color = Color.White, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.12f))
+                                .clickable {
+                                    Toast.makeText(context, "Список комнат обновлен", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Rooms List
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(rooms) { room ->
+                            RoomCard(room = room, onJoin = { onJoinRoom(room) })
+                        }
                     }
                 }
             }
