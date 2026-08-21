@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudSync
@@ -180,6 +181,22 @@ fun PauseMenuOverlay(
                     .fillMaxWidth()
                     .padding(horizontal = if (isLandscape) 22.dp else 16.dp, vertical = 10.dp),
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.12f))
+                        .clickable(onClick = onResume),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 Box(
                     modifier = Modifier
                         .size(40.dp)

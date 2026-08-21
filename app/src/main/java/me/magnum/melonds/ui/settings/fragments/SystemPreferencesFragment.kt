@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreference
@@ -122,6 +123,17 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         val jitPreference = findPreference<SwitchPreference>("enable_jit")!!
         val mirrorPreference = findPreference<SwitchPreference>("save_internal_config_as_file")!!
         val dldiDirectoryPreference = findPreference<StoragePickerPreference>("system_dldi_sd_card_dir")!!
+
+        val appLanguagePreference = findPreference<ListPreference>("app_language")
+        appLanguagePreference?.setOnPreferenceChangeListener { _, newValue ->
+            val langTag = newValue as? String ?: "default"
+            if (langTag == "default") {
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.getEmptyLocaleList())
+            } else {
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.forLanguageTags(langTag))
+            }
+            true
+        }
 
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             jitPreference.isChecked = false
