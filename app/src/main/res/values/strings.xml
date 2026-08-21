@@ -1390,4 +1390,6 @@
     <string name="rom_status_encrypted">ROM Encrypted</string>
     <string name="app_language">App Language</string>
     <string name="app_language_summary">Select the interface language for STORM DS</string>
+    <string name="dual_screen_info_title">How Dual Screen Presets Work</string>
+    <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area &amp; Alignment: customize vertical alignment and display coverage.</string>
 </resources>

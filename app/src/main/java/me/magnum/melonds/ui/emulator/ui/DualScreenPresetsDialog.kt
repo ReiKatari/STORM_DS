@@ -19,7 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.foundation.border
 import me.magnum.melonds.ui.theme.SpaceGrotesk
+import me.magnum.melonds.ui.theme.WatermelonColors
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -244,143 +248,302 @@ private fun DualScreenPresetsContent(
     externalVerticalAlignmentOverride: ScreenAlignment?,
     onVerticalAlignmentOptionsClick: () -> Unit,
 ) {
+    val colors = me.magnum.melonds.ui.theme.watermelon
     androidx.compose.foundation.layout.Box {
         var selectedPreset by remember(dualScreenPreset) { mutableStateOf(dualScreenPreset) }
         var keepAspect by remember(keepAspectRatio) { mutableStateOf(keepAspectRatio) }
         var integerScale by remember(isDualScreenIntegerScaleEnabled) { mutableStateOf(isDualScreenIntegerScaleEnabled) }
 
-        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
             val presetSelected = selectedPreset != DualScreenPreset.OFF
+
+            // Informational Card
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material.Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = WatermelonColors.gold,
+                            modifier = Modifier.size(17.dp),
+                        )
+                        Spacer(Modifier.width(7.dp))
+                        Text(
+                            text = stringResource(R.string.dual_screen_info_title),
+                            color = WatermelonColors.gold,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.dual_screen_info_desc),
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+
             if (!presetSelected) {
                 Text(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                     text = stringResource(R.string.dual_screen_presets_disabled_hint),
-                    style = MaterialTheme.typography.caption,
-                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                    color = colors.red,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 8.dp),
                 )
-                Spacer(Modifier.height(8.dp))
             }
-            val presetOptions = listOf(
-                DualScreenPreset.OFF,
-                DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM,
-                DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP,
+
+            Text(
+                text = stringResource(R.string.dual_screen_presets).uppercase(),
+                color = Color.White.copy(alpha = 0.5f),
+                fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                modifier = Modifier.padding(start = 2.dp, bottom = 8.dp),
             )
-            Column(Modifier.selectableGroup()) {
-                presetOptions.forEach { preset ->
+
+            val presetOptions = listOf(
+                Triple(
+                    DualScreenPreset.OFF,
+                    stringResource(R.string.dual_screen_preset_off),
+                    "Оба экрана Nintendo DS выводятся на основном дисплее устройства",
+                ),
+                Triple(
+                    DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM,
+                    stringResource(R.string.dual_screen_preset_internal_top_external_bottom),
+                    "Основной экран смартфона — Верхний (игра), Внешний монитор — Нижний (тач)",
+                ),
+                Triple(
+                    DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP,
+                    stringResource(R.string.dual_screen_preset_internal_bottom_external_top),
+                    "Основной экран смартфона — Нижний (тач в руках), Внешний монитор — Верхний (игра)",
+                ),
+            )
+
+            Column(
+                modifier = Modifier.selectableGroup(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                presetOptions.forEach { (preset, title, desc) ->
+                    val isSelected = preset == selectedPreset
+                    val shape = RoundedCornerShape(12.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
+                            .clip(shape)
+                            .background(if (isSelected) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.04f))
+                            .border(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) colors.red else Color.White.copy(alpha = 0.10f),
+                                shape = shape,
+                            )
                             .selectable(
-                                selected = preset == selectedPreset,
+                                selected = isSelected,
                                 onClick = {
                                     selectedPreset = preset
                                     onDualScreenPresetSelected(preset)
-                                }
-                            ),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                                },
+                            )
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                            text = when (preset) {
-                                DualScreenPreset.OFF -> stringResource(R.string.dual_screen_preset_off)
-                                DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> stringResource(R.string.dual_screen_preset_internal_top_external_bottom)
-                                DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> stringResource(R.string.dual_screen_preset_internal_bottom_external_top)
-                            },
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                color = Color.White,
+                                fontSize = 13.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = desc,
+                                color = Color.White.copy(alpha = 0.55f),
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp,
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
                         RadioButton(
-                            selected = preset == selectedPreset,
+                            selected = isSelected,
                             onClick = null,
                         )
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+
+            Spacer(Modifier.height(14.dp))
+
+            // Keep DS aspect ratio
+            val shape = RoundedCornerShape(12.dp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .alpha(if (presetSelected) 1f else 0.5f)
+                    .clip(shape)
+                    .alpha(if (presetSelected) 1f else 0.45f)
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
                     .toggleable(
                         value = keepAspect,
                         enabled = presetSelected,
                         onValueChange = {
                             keepAspect = it
                             onKeepAspectRatioChanged(it)
-                        }
-                    ),
+                        },
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 24.dp)
-                        .padding(vertical = 8.dp),
-                    text = stringResource(R.string.keep_ds_ratio),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.keep_ds_ratio),
+                        color = Color.White,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Сохранение исходных пропорций 4:3 без растягивания картинки",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 11.sp,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 Switch(checked = keepAspect, onCheckedChange = null, enabled = presetSelected)
             }
+
             Spacer(Modifier.height(8.dp))
+
+            // Integer Scale
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .alpha(if (presetSelected) 1f else 0.5f)
+                    .clip(shape)
+                    .alpha(if (presetSelected) 1f else 0.45f)
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
                     .toggleable(
                         value = integerScale,
                         enabled = presetSelected,
                         onValueChange = {
                             integerScale = it
                             onDualScreenIntegerScaleChanged(it)
-                        }
-                    ),
+                        },
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 24.dp)
-                        .padding(vertical = 8.dp),
-                    text = stringResource(R.string.dual_screen_integer_scale),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.dual_screen_integer_scale),
+                        color = Color.White,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Кратное целочисленное масштабирование пикселей (1x, 2x, 3x)",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 11.sp,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 Switch(
                     checked = integerScale,
                     onCheckedChange = null,
                     enabled = presetSelected,
                 )
             }
-            Spacer(Modifier.height(16.dp))
+
+            Spacer(Modifier.height(14.dp))
             val fillAreaEnabled = presetSelected && (integerScale || keepAspect)
-            Button(
+
+            Row(
                 modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .fillMaxWidth(),
-                enabled = fillAreaEnabled,
-                onClick = { onFillAreaOptionsClick(fillAreaEnabled) },
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .alpha(if (fillAreaEnabled) 1f else 0.45f)
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
+                    .clickable(enabled = fillAreaEnabled) { onFillAreaOptionsClick(fillAreaEnabled) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = stringResource(R.string.dual_screen_fill_area_button))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.dual_screen_fill_area_button),
+                        color = Color.White,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Заполнение пространства по высоте и ширине экрана",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 11.sp,
+                    )
+                }
+                androidx.compose.material.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            val verticalAlignmentEnabled = fillAreaEnabled
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .alpha(if (verticalAlignmentEnabled) 1f else 0.45f)
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
+                    .clickable(enabled = verticalAlignmentEnabled) {
+                        if (verticalAlignmentEnabled) {
+                            onVerticalAlignmentOptionsClick()
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.dual_screen_vertical_alignment_button),
+                        color = Color.White,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Позиционирование кадров по вертикали (сверху / центр / снизу)",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 11.sp,
+                    )
+                }
+                androidx.compose.material.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(20.dp),
+                )
             }
             Spacer(Modifier.height(12.dp))
-            val verticalAlignmentEnabled = fillAreaEnabled
-            Button(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .fillMaxWidth(),
-                enabled = verticalAlignmentEnabled,
-                onClick = {
-                    if (verticalAlignmentEnabled) {
-                        onVerticalAlignmentOptionsClick()
-                    }
-                },
-            ) {
-                Text(text = stringResource(R.string.dual_screen_vertical_alignment_button))
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }

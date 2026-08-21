@@ -740,6 +740,9 @@ class EmulatorViewModel @Inject constructor(
             _emulatorState.value = EmulatorState.LoadingRom()
             currentRom = rom
             activeRomConfig.value = rom
+            rom.config.dualScreenPreset?.let { _dualScreenPreset.value = it }
+            rom.config.dualScreenKeepAspectRatio?.let { _externalDisplayKeepAspectRatioEnabled.value = it }
+            rom.config.dualScreenIntegerScale?.let { _dualScreenIntegerScaleEnabled.value = it }
             val isRetroAchievementsEnabledForLaunch = isRetroAchievementsEnabledForLaunch(rom)
             val endpointSnapshot = if (isRetroAchievementsEnabledForLaunch) {
                 retroAchievementsEndpointProvider.beginSession()
@@ -1193,17 +1196,38 @@ class EmulatorViewModel @Inject constructor(
 
     fun setExternalDisplayKeepAspectRatioEnabled(enabled: Boolean) {
         _externalDisplayKeepAspectRatioEnabled.value = enabled
-        settingsRepository.setExternalDisplayKeepAspectRatioEnabled(enabled)
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+        if (runningRom != null) {
+            val updatedConfig = runningRom.config.copy(dualScreenKeepAspectRatio = enabled)
+            romsRepository.updateRomConfig(runningRom, updatedConfig)
+            currentRom = runningRom.copy(config = updatedConfig)
+        } else {
+            settingsRepository.setExternalDisplayKeepAspectRatioEnabled(enabled)
+        }
     }
 
     fun setDualScreenPreset(preset: DualScreenPreset) {
         _dualScreenPreset.value = preset
-        settingsRepository.setDualScreenPreset(preset)
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+        if (runningRom != null) {
+            val updatedConfig = runningRom.config.copy(dualScreenPreset = preset)
+            romsRepository.updateRomConfig(runningRom, updatedConfig)
+            currentRom = runningRom.copy(config = updatedConfig)
+        } else {
+            settingsRepository.setDualScreenPreset(preset)
+        }
     }
 
     fun setDualScreenIntegerScaleEnabled(enabled: Boolean) {
         _dualScreenIntegerScaleEnabled.value = enabled
-        settingsRepository.setDualScreenIntegerScaleEnabled(enabled)
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+        if (runningRom != null) {
+            val updatedConfig = runningRom.config.copy(dualScreenIntegerScale = enabled)
+            romsRepository.updateRomConfig(runningRom, updatedConfig)
+            currentRom = runningRom.copy(config = updatedConfig)
+        } else {
+            settingsRepository.setDualScreenIntegerScaleEnabled(enabled)
+        }
     }
 
     fun setDualScreenInternalFillHeightEnabled(enabled: Boolean) {
@@ -6362,6 +6386,13 @@ class EmulatorViewModel @Inject constructor(
             effectiveVideoFiltering == VideoFiltering.RETROARCH &&
             hasValidRetroArchShaderRoot
 
+        val effectiveDualScreenPreset = rom.config.dualScreenPreset ?: settingsRepository.getDualScreenPreset()
+        val dualScreenPresetLabel = when (effectiveDualScreenPreset) {
+            DualScreenPreset.OFF -> context.getString(R.string.dual_screen_preset_off)
+            DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> context.getString(R.string.dual_screen_preset_internal_top_external_bottom)
+            DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> context.getString(R.string.dual_screen_preset_internal_bottom_external_top)
+        }
+
         return InGameRomSettingsMenuState(
             controllerMappingValue = if (rom.config.inputMode == me.magnum.melonds.domain.model.rom.config.RomInputMode.GLOBAL) {
                 useGlobalWithValue(context.getString(R.string.global_controller_mapping))
@@ -6384,6 +6415,11 @@ class EmulatorViewModel @Inject constructor(
                 useGlobalWithValue(micOptions[effectiveMicSource.ordinal])
             } else {
                 micOptions[rom.config.runtimeMicSource.ordinal]
+            },
+            dualScreenPresetValue = if (rom.config.dualScreenPreset == null) {
+                useGlobalWithValue(dualScreenPresetLabel)
+            } else {
+                dualScreenPresetLabel
             },
         )
     }
