@@ -59,6 +59,7 @@ class AndroidEmulatorManager(
     private val emulatorSession: EmulatorSession,
     private val dsiNandManager: DSiNandManager,
     private val shaderCompileTimeStore: ShaderCompileTimeStore,
+    private val configurationDirectoryVerifier: me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier,
 ) : EmulatorManager {
     private companion object {
         private const val TAG = "AndroidEmulatorManager"
@@ -295,6 +296,15 @@ class AndroidEmulatorManager(
                     return@withContext loadInstalledDsiWareShortcut(rom, cheats)
                 }
 
+                // Auto-decrypt Modcrypt if needed
+                try {
+                    if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                        me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
+                    }
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Auto Modcrypt decryption failed for ${rom.name}: ${e.message}")
+                }
+
                 val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
                 val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
                 val romUri = fileRomProcessor?.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
@@ -319,13 +329,45 @@ class AndroidEmulatorManager(
                 }
                 Log.w(TAG, "loadRom: rom='${rom.name}' gbaSlotType=${gbaSlotType.name}")
 
-                val loadResult = MelonEmulator.loadRom(
+                var loadResult = MelonEmulator.loadRom(
                     romUri = romUri,
                     sramUri = sram,
                     gbaSlotType = gbaSlotType,
                     gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
                     gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
                 )
+
+                // Fallback: If loading failed in DSi mode, retry immediately in standard DS mode
+                if ((loadResult.isTerminal || !isActive) && emulatorConfiguration.consoleType == ConsoleType.DSi) {
+                    Log.w(TAG, "Loading ROM '${rom.name}' in DSi mode failed ($loadResult), attempting fallback in DS mode")
+                    val fallbackConfig = emulatorConfiguration.copy(
+                        consoleType = ConsoleType.DS,
+                        useCustomBios = false,
+                        showBootScreen = false
+                    )
+                    setupEmulator(fallbackConfig)
+                    val retryResult = MelonEmulator.loadRom(
+                        romUri = romUri,
+                        sramUri = sram,
+                        gbaSlotType = gbaSlotType,
+                        gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
+                        gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
+                    )
+                    if (!retryResult.isTerminal && isActive) {
+                        messageQueue.start()
+                        if (!precompileVulkanPipelines(fallbackConfig)) {
+                            cameraManager.stopCurrentCameraSource()
+                            MelonEmulator.stopEmulation()
+                            messageQueue.stop()
+                            dldiFolderSyncManager.syncBackIfNeeded()
+                            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                        }
+                        MelonEmulator.setupCheats(cheats.toTypedArray())
+                        MelonEmulator.startEmulation(startPaused = true)
+                        return@withContext RomLaunchResult.LaunchSuccessful(retryResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
+                    }
+                }
+
                 if (loadResult.isTerminal || !isActive) {
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
@@ -765,14 +807,25 @@ class AndroidEmulatorManager(
             else -> ConsoleType.DS
         }
 
-        val mustUseCustomBios = (targetConsoleType == ConsoleType.DSi) || baseConfiguration.useCustomBios || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT)
+        val isDsiBiosValid = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
+        val finalConsoleType = if (targetConsoleType == ConsoleType.DSi && !isDsiBiosValid && !isInstalledDsi) {
+            ConsoleType.DS
+        } else {
+            targetConsoleType
+        }
+
+        val mustUseCustomBios = if (finalConsoleType == ConsoleType.DSi) {
+            true
+        } else {
+            baseConfiguration.useCustomBios || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT && isDsiBiosValid)
+        }
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
-            showBootScreen = if (targetConsoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
+            showBootScreen = if (finalConsoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
             frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
-            consoleType = targetConsoleType,
+            consoleType = finalConsoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),
             dsiWareAutoloadTitleId = 0L,
         ).run { getPermissionAdjustedConfiguration(this) }
