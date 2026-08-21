@@ -224,44 +224,41 @@ fun ConsoleSubmenuOverlayDetailed(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
                                     text = item.title,
                                     color = Color.White,
-                                    fontSize = 14.sp,
-                                    lineHeight = 18.sp,
+                                    fontSize = 13.5.sp,
+                                    lineHeight = 17.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false),
+                                    modifier = Modifier.weight(1f),
                                 )
                                 if (item.value != null) {
-                                    Spacer(Modifier.width(8.dp))
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
                                             .background(Color.White.copy(alpha = 0.12f))
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                            .padding(horizontal = 8.dp, vertical = 3.dp),
                                     ) {
                                         Text(
                                             text = item.value,
                                             color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                            lineHeight = 14.sp,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
                                         )
                                     }
                                 }
                             }
                             if (item.description != null) {
-                                Spacer(Modifier.height(3.dp))
+                                Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = item.description,
-                                    color = Color.White.copy(alpha = 0.58f),
-                                    fontSize = 11.5.sp,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontSize = 11.sp,
                                     lineHeight = 15.sp,
                                 )
                             }
