@@ -81,6 +81,7 @@ class ExternalPresentation(
         container.addView(pauseOverlay)
         container.addView(infoOverlayView)
 
+        infoOverlayView.setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
         infoOverlayView.setContent {
             me.magnum.melonds.ui.theme.MelonTheme(isDarkTheme = true) {
                 infoOverlayContent.value?.invoke()
@@ -100,12 +101,15 @@ class ExternalPresentation(
 
         (context as? LifecycleOwner)?.let { owner ->
             container.setViewTreeLifecycleOwner(owner)
+            window?.decorView?.setViewTreeLifecycleOwner(owner)
         }
         (context as? ViewModelStoreOwner)?.let { owner ->
             container.setViewTreeViewModelStoreOwner(owner)
+            window?.decorView?.setViewTreeViewModelStoreOwner(owner)
         }
         (context as? SavedStateRegistryOwner)?.let { owner ->
             container.setViewTreeSavedStateRegistryOwner(owner)
+            window?.decorView?.setViewTreeSavedStateRegistryOwner(owner)
         }
 
         setContentView(container)
