@@ -362,38 +362,9 @@ class AndroidEmulatorManager(
     private suspend fun loadInstalledDsiWareShortcut(rom: Rom, cheats: List<Cheat>): RomLaunchResult = withContext(Dispatchers.IO) {
         val titleId = rom.installedDsiWareTitleId ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
         val titleIdHex = titleId.toDsiWareTitleIdHex()
-
-        // Priority 1: Direct DSi NAND autoload via TLNC warmboot (100% native melonDS DSiWare launcher)
-        Log.i(TAG, "DSiWareShortcut: booting title $titleIdHex from NAND via bootFirmware")
-        val firmwareConfiguration = getRomEmulatorConfiguration(rom)
-            .copy(
-                consoleType = ConsoleType.DSi,
-                useCustomBios = true,
-                showBootScreen = true,
-                dsiWareAutoloadTitleId = titleId,
-            )
-            .withPreparedDldiConfiguration()
-            ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-
-        setupEmulator(firmwareConfiguration)
-        val firmwareLoadResult = MelonEmulator.bootFirmware()
-        if (firmwareLoadResult == MelonEmulator.FirmwareLoadResult.SUCCESS && isActive) {
-            messageQueue.start()
-            if (!precompileVulkanPipelines(firmwareConfiguration)) {
-                cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
-                messageQueue.stop()
-                dldiFolderSyncManager.syncBackIfNeeded()
-                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-            }
-            MelonEmulator.setupCheats(cheats.toTypedArray())
-            MelonEmulator.startEmulation(startPaused = true)
-            return@withContext RomLaunchResult.LaunchSuccessful(true)
-        }
-
-        // Secondary fallback for standalone extracted cartridge ROM: loadRom
         val cacheDir = File(context.cacheDir, "dsiware_cache").apply { mkdirs() }
         val cacheRomFile = File(cacheDir, "${titleIdHex}.nds")
+
         val hasCachedRom = cacheRomFile.exists() && cacheRomFile.length() > 0L
         if (!hasCachedRom) {
             val openResult = dsiNandManager.openNand()
@@ -449,6 +420,34 @@ class AndroidEmulatorManager(
                 MelonEmulator.startEmulation(startPaused = true)
                 return@withContext RomLaunchResult.LaunchSuccessful(true)
             }
+        }
+
+        // Secondary fallback: Direct DSi NAND autoload via TLNC warmboot
+        Log.i(TAG, "DSiWareShortcut: fallback to direct DSi firmware autoload for $titleIdHex")
+        val firmwareConfiguration = getRomEmulatorConfiguration(rom)
+            .copy(
+                consoleType = ConsoleType.DSi,
+                useCustomBios = true,
+                showBootScreen = true,
+                dsiWareAutoloadTitleId = titleId,
+            )
+            .withPreparedDldiConfiguration()
+            ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+
+        setupEmulator(firmwareConfiguration)
+        val firmwareLoadResult = MelonEmulator.bootFirmware()
+        if (firmwareLoadResult == MelonEmulator.FirmwareLoadResult.SUCCESS && isActive) {
+            messageQueue.start()
+            if (!precompileVulkanPipelines(firmwareConfiguration)) {
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                messageQueue.stop()
+                dldiFolderSyncManager.syncBackIfNeeded()
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+            }
+            MelonEmulator.setupCheats(cheats.toTypedArray())
+            MelonEmulator.startEmulation(startPaused = true)
+            return@withContext RomLaunchResult.LaunchSuccessful(true)
         }
 
         cameraManager.stopCurrentCameraSource()
