@@ -37,23 +37,11 @@ class EmulatorLaunchPreconditionChecker(
 
         var targetRom = rom
         if (rom.isDsiWareTitle) {
-            try {
-                if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                    me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
-                }
-            } catch (_: Throwable) { }
-
             val dsiWareCheckResult = checkDsiWarePreconditions(rom)
             if (dsiWareCheckResult !is RomLaunchPreconditionCheckResult.Success) {
                 return dsiWareCheckResult
             }
             targetRom = dsiWareCheckResult.rom
-        } else {
-            try {
-                if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                    me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
-                }
-            } catch (_: Throwable) { }
         }
 
         val configurationDirResult = getRomConfigurationDirectoryResult(targetRom)
@@ -84,7 +72,44 @@ class EmulatorLaunchPreconditionChecker(
         if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
             return checkInstalledDsiWareShortcutPreconditions(rom)
         }
-        return RomLaunchPreconditionCheckResult.Success(rom)
+
+        val romInfo = romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)?.getRomInfo(rom)
+
+        if (romInfo == null) {
+            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.RomParseError)
+        }
+
+        val openNandResult = dsiNandManager.openNand()
+        if (openNandResult.isFailure()) {
+            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.NandError)
+        }
+
+        // The DSi title ID is equal to the game code, but parsed as a Long in big-endian
+        val dsiTitleIdByteData = romInfo.gameCode.encodeToByteArray()
+        val dsiTitleId = ByteBuffer.wrap(dsiTitleIdByteData).order(ByteOrder.BIG_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
+
+        val isTitleInstalled = try {
+            val list = dsiNandManager.listTitles()
+            val found = list.any { (it.titleId and 0xFFFFFFFFL) == dsiTitleId }
+            if (!found) {
+                val importResult = dsiNandManager.importTitle(rom.uri)
+                if (importResult == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS) {
+                    dsiNandManager.listTitles().any { (it.titleId and 0xFFFFFFFFL) == dsiTitleId }
+                } else {
+                    false
+                }
+            } else {
+                true
+            }
+        } finally {
+            dsiNandManager.closeNand()
+        }
+
+        if (!isTitleInstalled) {
+            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.TitleNotInstalled)
+        }
+
+        return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
     }
 
     private suspend fun checkInstalledDsiWareShortcutPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
@@ -110,33 +135,16 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private fun getRomConfigurationDirectoryResult(rom: Rom): ConfigurationDirResult {
-        if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
-            return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
-        }
-
         if (!settingsRepository.useCustomBios() && rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
         val romTargetConsoleType = rom.config.runtimeConsoleType.targetConsoleType ?: settingsRepository.getDefaultConsoleType()
-        if (romTargetConsoleType == ConsoleType.DS) {
-            if (!settingsRepository.useCustomBios()) {
-                return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
-            }
-            return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DS)
-        }
-
-        val dsiResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
-        if (dsiResult.status == ConfigurationDirResult.Status.VALID) {
-            return dsiResult
-        }
-
-        // If custom BIOS is not strictly enforced in global settings, allow graceful fallback to DS mode
-        if (!settingsRepository.useCustomBios()) {
+        if (!settingsRepository.useCustomBios() && romTargetConsoleType == ConsoleType.DS) {
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
-        return dsiResult
+        return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
     }
 
     private suspend fun getRendererValidationFailureOrNull(renderer: VideoRenderer): RendererValidationFailure? {
