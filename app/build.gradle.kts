@@ -626,3 +626,18 @@ dependencies {
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)
 }
+
+tasks.register("renameReleaseApk") {
+    doLast {
+        val releaseDir = layout.buildDirectory.dir("outputs/apk/gitHubProd/release").get().asFile
+        val defaultApk = File(releaseDir, "app-gitHub-prod-release.apk")
+        val targetApk = File(releaseDir, "STORM_DS_${AppConfig.versionName}.apk")
+        if (defaultApk.exists()) {
+            defaultApk.copyTo(targetApk, overwrite = true)
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleGitHubProdRelease" }.configureEach {
+    finalizedBy("renameReleaseApk")
+}
