@@ -292,17 +292,8 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+                if (rom.isInstalledDsiWareShortcut || rom.installedDsiWareTitleId != null || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
                     return@withContext loadInstalledDsiWareShortcut(rom, cheats)
-                }
-
-                // Auto-decrypt Modcrypt if needed
-                try {
-                    if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                        me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
-                    }
-                } catch (e: Throwable) {
-                    Log.w(TAG, "Auto Modcrypt decryption failed for ${rom.name}: ${e.message}")
                 }
 
                 val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
@@ -795,33 +786,22 @@ class AndroidEmulatorManager(
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isInstalledDsi = rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME
-        val targetConsoleType = when {
-            isInstalledDsi -> ConsoleType.DSi
-            rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT -> getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
-            baseConfiguration.useCustomBios -> baseConfiguration.consoleType
-            else -> ConsoleType.DS
-        }
-
-        val isDsiBiosValid = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
-        val finalConsoleType = if (targetConsoleType == ConsoleType.DSi && !isDsiBiosValid && !isInstalledDsi) {
+        val isDsi = rom.isInstalledDsiWareShortcut || rom.isDsiWareTitle
+        val mustUseCustomBios = isDsi || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
+        val consoleType = if (isDsi) {
+            ConsoleType.DSi
+        } else if (!baseConfiguration.useCustomBios && rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
             ConsoleType.DS
         } else {
-            targetConsoleType
-        }
-
-        val mustUseCustomBios = if (finalConsoleType == ConsoleType.DSi) {
-            true
-        } else {
-            baseConfiguration.useCustomBios || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT && isDsiBiosValid)
+            getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
         }
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
-            showBootScreen = if (finalConsoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
+            showBootScreen = if (isDsi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
             frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
-            consoleType = finalConsoleType,
+            consoleType = consoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),
             dsiWareAutoloadTitleId = 0L,
         ).run { getPermissionAdjustedConfiguration(this) }
