@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.runtime.Composable
@@ -626,6 +627,70 @@ fun ContinuePlayingLandscapeColumn(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun CompactLandscapeSidebar(
+    totalRoms: Int,
+    filter: RomFilter,
+    onFilterSelected: (RomFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = watermelon
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.line, RoundedCornerShape(14.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(colors.surface2),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SportsEsports,
+                contentDescription = null,
+                tint = colors.red,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "STORM DS",
+            color = colors.text,
+            fontFamily = SpaceGrotesk,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "Всего игр: $totalRoms",
+            color = colors.text2,
+            fontFamily = WatermelonMono,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(14.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (filter == RomFilter.FAVORITES) colors.red else colors.surface2)
+                .clickable { onFilterSelected(if (filter == RomFilter.FAVORITES) RomFilter.ALL else RomFilter.FAVORITES) }
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+        ) {
+            Text(
+                text = "★ Избранное",
+                color = if (filter == RomFilter.FAVORITES) Color.White else colors.text2,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

@@ -78,7 +78,12 @@
 -keep class com.google.android.gms.common.** { *; }
 -keep class com.google.android.gms.dynamite.** { *; }
 -dontwarn com.google.android.gms.**
-
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# Junrar & SLF4J
+-dontwarn org.slf4j.**
+-dontwarn com.github.junrar.**
+-keep class com.github.junrar.** { *; }
+-dontwarn org.apache.commons.compress.**
