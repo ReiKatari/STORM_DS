@@ -142,7 +142,9 @@ class GameTranslatorManager(
     }
 
     fun speakTts(text: String, targetLang: String = "ru") {
-        if (!preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)) return
+        val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false) ||
+                    preferences.getBoolean("translator_local_voice_actor_studio", false)
+        if (!ttsOn) return
         ttsManager.speak(text, targetLang)
     }
 
@@ -579,7 +581,9 @@ class GameTranslatorManager(
                 }
 
                 overlayView?.setTranslatedBlocks(blocks)
-                if (preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)) {
+                val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false) ||
+                            preferences.getBoolean("translator_local_voice_actor_studio", false)
+                if (ttsOn) {
                     val speechText = blocks.joinToString(". ") { it.translatedText }
                     speakTts(speechText, targetLang)
                 }

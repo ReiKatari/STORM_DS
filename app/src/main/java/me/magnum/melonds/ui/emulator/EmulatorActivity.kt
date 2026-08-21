@@ -230,6 +230,8 @@ class EmulatorActivity : AppCompatActivity() {
     lateinit var boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository
 
     private var presentation: ExternalPresentation? = null
+    private var lastKnownGoodTopRect: Rect? = null
+    private var lastKnownGoodBottomRect: Rect? = null
 
     private lateinit var handler: Handler
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -2041,8 +2043,8 @@ class EmulatorActivity : AppCompatActivity() {
         val hybridView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
         val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
 
-        var topRect = topView?.getRect()
-        var bottomRect = bottomView?.getRect()
+        var topRect = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 } ?: lastKnownGoodTopRect
+        var bottomRect = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 } ?: lastKnownGoodBottomRect
 
         val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
         if (consoleSkinEnabled && topRect != null && bottomRect != null) {
@@ -2060,6 +2062,13 @@ class EmulatorActivity : AppCompatActivity() {
                     bottomRect = bottomRect.copy(y = newBottomY)
                 }
             }
+        }
+
+        if (topRect != null && topRect.width > 0 && topRect.height > 0) {
+            lastKnownGoodTopRect = topRect
+        }
+        if (bottomRect != null && bottomRect.width > 0 && bottomRect.height > 0) {
+            lastKnownGoodBottomRect = bottomRect
         }
 
         return ScreenPresentationAreas(

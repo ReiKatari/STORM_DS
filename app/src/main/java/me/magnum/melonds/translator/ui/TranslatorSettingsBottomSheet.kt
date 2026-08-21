@@ -46,6 +46,8 @@ fun TranslatorSettingsContent(
     var voiceModelPref by remember { mutableStateOf(preferences.getString("translator_local_voice_model", "auto_multi") ?: "auto_multi") }
     var voicePitchVariance by remember { mutableStateOf(preferences.getInt("translator_local_voice_pitch_variance", 65).toFloat()) }
     var showVoiceModelDialog by remember { mutableStateOf(false) }
+    var showVoiceEngineDialog by remember { mutableStateOf(false) }
+    var showTtsLangDialog by remember { mutableStateOf(false) }
 
     var fontSizeScale by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_FONT_SIZE_SCALE, 100).toFloat()) }
     var bubbleOpacity by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_BUBBLE_OPACITY, 90).toFloat()) }
@@ -182,40 +184,46 @@ fun TranslatorSettingsContent(
             SettingsSectionTitle("Озвучка (TTS)")
             SettingsCard {
                 SettingsSwitch(
-                    label = "Включить озвучку",
-                    checked = ttsEnabled,
+                    label = "Включить озвучку диалогов",
+                    checked = ttsEnabled || voiceActorStudioEnabled,
                     onCheckedChange = { 
                         ttsEnabled = it
                         updatePref(GameTranslatorManager.PREF_TRANSLATOR_TTS_ENABLED, it)
+                        if (!it && voiceActorStudioEnabled) {
+                            voiceActorStudioEnabled = false
+                            updatePref("translator_local_voice_actor_studio", false)
+                        }
                     }
                 )
-                if (ttsEnabled) {
+                if (ttsEnabled || voiceActorStudioEnabled) {
                     Divider(color = watermelon.line)
                     SettingsOption(
-                        label = "Голос",
+                        label = "Голос / Движок озвучки",
                         value = when(voiceEnginePref) {
-                            "neural_edge" -> "Живой Edge"
-                            "local_multi" -> "Многоголосая"
-                            else -> "Стандартный"
+                            "neural_edge" -> "⚡ Нейро-голоса Edge Cloud"
+                            "local_multi" -> "🎙️ Локальный AI Studio (Piper INT8)"
+                            else -> "🤖 Системный Android TTS"
                         },
                         onClick = {
-                            val engines = listOf("neural_edge", "local_multi", "single")
-                            val nextIdx = (engines.indexOf(voiceEnginePref) + 1) % engines.size
-                            voiceEnginePref = engines[nextIdx]
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, voiceEnginePref)
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, voiceEnginePref == "neural_edge")
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, voiceEnginePref != "single")
+                            showVoiceEngineDialog = true
                         }
                     )
                     Divider(color = watermelon.line)
                     SettingsOption(
-                        label = "Язык",
-                        value = if (ttsLangPref == "auto") "Авто" else ttsLangPref.uppercase(),
+                        label = "Язык озвучки",
+                        value = when(ttsLangPref) {
+                            "auto" -> "🌐 Автовыбор (по языку)"
+                            "ru" -> "🇷🇺 Русский"
+                            "en" -> "🇬🇧 Английский"
+                            "ja" -> "🇯🇵 Японский"
+                            "zh" -> "🇨🇳 Китайский"
+                            "de" -> "🇩🇪 Немецкий"
+                            "fr" -> "🇫🇷 Французский"
+                            "es" -> "🇪🇸 Испанский"
+                            else -> ttsLangPref.uppercase()
+                        },
                         onClick = {
-                            val langs = listOf("auto", "ru", "en", "ja", "zh")
-                            val nextIdx = (langs.indexOf(ttsLangPref) + 1) % langs.size
-                            ttsLangPref = langs[nextIdx]
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, ttsLangPref)
+                            showTtsLangDialog = true
                         }
                     )
                     Divider(color = watermelon.line)
@@ -238,6 +246,14 @@ fun TranslatorSettingsContent(
                     onCheckedChange = { 
                         voiceActorStudioEnabled = it
                         updatePref("translator_local_voice_actor_studio", it)
+                        if (it) {
+                            ttsEnabled = true
+                            updatePref(GameTranslatorManager.PREF_TRANSLATOR_TTS_ENABLED, true)
+                            voiceEnginePref = "local_multi"
+                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "local_multi")
+                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
+                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
+                        }
                     }
                 )
                 if (voiceActorStudioEnabled) {
@@ -266,6 +282,173 @@ fun TranslatorSettingsContent(
                 }
             }
 
+            if (showVoiceEngineDialog) {
+                val engines = listOf(
+                    "neural_edge" to "⚡ Нейро-голоса Edge Cloud (Высокое качество, 24 характера)",
+                    "local_multi" to "🎙️ Локальный AI Voice Actor Studio (Piper INT8 оффлайн)",
+                    "single" to "🤖 Системный Android TTS (Базовый синтезатор)"
+                )
+                AlertDialog(
+                    onDismissRequest = { showVoiceEngineDialog = false },
+                    backgroundColor = watermelon.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    title = {
+                        Text(
+                            text = "Движок и режим озвучки",
+                            color = watermelon.text,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            engines.forEach { (id, title) ->
+                                val isSelected = id == voiceEnginePref
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) watermelon.green.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent)
+                                        .clickable {
+                                            voiceEnginePref = id
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, id)
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, id == "neural_edge")
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, id != "single")
+                                            if (id == "local_multi") {
+                                                voiceActorStudioEnabled = true
+                                                updatePref("translator_local_voice_actor_studio", true)
+                                            }
+                                            showVoiceEngineDialog = false
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) watermelon.green else watermelon.text,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            voiceEnginePref = id
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, id)
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, id == "neural_edge")
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, id != "single")
+                                            if (id == "local_multi") {
+                                                voiceActorStudioEnabled = true
+                                                updatePref("translator_local_voice_actor_studio", true)
+                                            }
+                                            showVoiceEngineDialog = false
+                                        },
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = watermelon.green,
+                                            unselectedColor = watermelon.text2
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    buttons = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { showVoiceEngineDialog = false }) {
+                                Text("Закрыть", color = watermelon.green, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                )
+            }
+
+            if (showTtsLangDialog) {
+                val languages = listOf(
+                    "auto" to "🌐 Автовыбор (по языку перевода)",
+                    "ru" to "🇷🇺 Русский (ru)",
+                    "en" to "🇬🇧 Английский (en)",
+                    "ja" to "🇯🇵 Японский (ja)",
+                    "zh" to "🇨🇳 Китайский (zh)",
+                    "de" to "🇩🇪 Немецкий (de)",
+                    "fr" to "🇫🇷 Французский (fr)",
+                    "es" to "🇪🇸 Испанский (es)"
+                )
+                AlertDialog(
+                    onDismissRequest = { showTtsLangDialog = false },
+                    backgroundColor = watermelon.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    title = {
+                        Text(
+                            text = "Язык озвучки",
+                            color = watermelon.text,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            languages.forEach { (code, title) ->
+                                val isSelected = code == ttsLangPref
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) watermelon.green.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent)
+                                        .clickable {
+                                            ttsLangPref = code
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, code)
+                                            showTtsLangDialog = false
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) watermelon.green else watermelon.text,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            ttsLangPref = code
+                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, code)
+                                            showTtsLangDialog = false
+                                        },
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = watermelon.green,
+                                            unselectedColor = watermelon.text2
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    buttons = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { showTtsLangDialog = false }) {
+                                Text("Закрыть", color = watermelon.green, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                )
+            }
+
             if (showVoiceModelDialog) {
                 val availablePacks = me.magnum.melonds.translator.tts.LocalAiVoiceActorStudio.getAvailableModelPacks(context)
                 AlertDialog(
@@ -274,7 +457,7 @@ fun TranslatorSettingsContent(
                     shape = RoundedCornerShape(16.dp),
                     title = {
                         Text(
-                            text = "🎭 Выберите голос персонажа (24 модели)",
+                            text = "🎭 Пакет нейромоделей голоса (24 голоса)",
                             color = watermelon.text,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -298,7 +481,7 @@ fun TranslatorSettingsContent(
                                             updatePref("translator_local_voice_model", voiceModelPref)
                                             showVoiceModelDialog = false
                                         }
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
