@@ -110,16 +110,33 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private fun getRomConfigurationDirectoryResult(rom: Rom): ConfigurationDirResult {
+        if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+            return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
+        }
+
         if (!settingsRepository.useCustomBios() && rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
         val romTargetConsoleType = rom.config.runtimeConsoleType.targetConsoleType ?: settingsRepository.getDefaultConsoleType()
-        if (!settingsRepository.useCustomBios() && romTargetConsoleType == ConsoleType.DS) {
+        if (romTargetConsoleType == ConsoleType.DS) {
+            if (!settingsRepository.useCustomBios()) {
+                return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
+            }
+            return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DS)
+        }
+
+        val dsiResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
+        if (dsiResult.status == ConfigurationDirResult.Status.VALID) {
+            return dsiResult
+        }
+
+        // If custom BIOS is not strictly enforced in global settings, allow graceful fallback to DS mode
+        if (!settingsRepository.useCustomBios()) {
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
-        return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
+        return dsiResult
     }
 
     private suspend fun getRendererValidationFailureOrNull(renderer: VideoRenderer): RendererValidationFailure? {
