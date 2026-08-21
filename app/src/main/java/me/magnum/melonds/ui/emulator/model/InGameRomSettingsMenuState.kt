@@ -9,4 +9,5 @@ data class InGameRomSettingsMenuState(
     val retroArchParametersValue: String,
     val hasValidRetroArchShaderRoot: Boolean,
     val micSourceValue: String,
+    val dualScreenPresetValue: String,
 )

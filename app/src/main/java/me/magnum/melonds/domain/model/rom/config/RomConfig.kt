@@ -21,6 +21,9 @@ data class RomConfig(
     val retroArchShaderPresetPath: String? = null,
     val retroArchShaderParameters: String? = null,
     val retroAchievementsEnabled: Boolean? = null,
+    val dualScreenPreset: me.magnum.melonds.domain.model.DualScreenPreset? = null,
+    val dualScreenKeepAspectRatio: Boolean? = null,
+    val dualScreenIntegerScale: Boolean? = null,
 ) {
 
     fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
@@ -51,6 +54,9 @@ data class RomConfig(
                 retroArchShaderPresetPath = null,
                 retroArchShaderParameters = null,
                 retroAchievementsEnabled = null,
+                dualScreenPreset = null,
+                dualScreenKeepAspectRatio = null,
+                dualScreenIntegerScale = null,
             )
         }
     }
