@@ -170,6 +170,7 @@ object EmbeddedActionReplayCheats {
      */
     private fun getEmbeddedCheatsForGame(gameCode: String, gameChecksum: String = ""): List<RawCheatCategory> {
         val code = gameCode.take(4).uppercase()
+        val pfx = code.take(3)
         val chk = gameChecksum.uppercase()
 
         return when {
@@ -383,14 +384,111 @@ object EmbeddedActionReplayCheats {
                 )
             )
 
-            // Grand Theft Auto: Chinatown Wars (YGLE, YGLJ, YGLP)
-            code in listOf("YGLE", "YGLJ", "YGLP") -> listOf(
+            // Chrono Trigger DS (YQTE, YQTJ, YQTP)
+            pfx == "YQT" || code in listOf("YQTE", "YQTJ", "YQTP") -> listOf(
                 RawCheatCategory(
-                    "Оружие и здоровье",
+                    "Персонажи и золото",
                     listOf(
-                        RawCheat("Бессмертие (Infinite HP & Armor)", "Хуанг бессмертен", "02123450 000003E7\n02123454 000003E7"),
-                        RawCheat("Максимум наличных ($99,999,999)", "Полный кошелек", "02123460 05F5E0FF"),
-                        RawCheat("Никакой полиции (0 звезд розыска)", "Полиция никогда не преследует", "02123470 00000000")
+                        RawCheat("Бесконечное HP (Кроно и отряд)", "Все персонажи бессмертны в бою", "0205D120 000003E7"),
+                        RawCheat("Бесконечное MP", "Магические очки не убывают", "0205D124 00000063"),
+                        RawCheat("Максимум золота (9,999,999G)", "Максимальное количество денег", "0205D130 0098967F"),
+                        RawCheat("Опыт x16 после боя", "Мгновенное повышение уровня", "0205D140 00000010")
+                    )
+                )
+            )
+
+            // Kingdom Hearts: 358/2 Days (CLTE, CLTJ, CLTP)
+            pfx == "CLT" || code in listOf("CLTE", "CLTJ", "CLTP") -> listOf(
+                RawCheatCategory(
+                    "Роксас и магия",
+                    listOf(
+                        RawCheat("Бесконечное HP Роксаса", "Роксас не получает урона", "021C4510 000003E7"),
+                        RawCheat("Максимум очков Munny (9,999,999)", "Максимум валюты", "021C4520 0098967F"),
+                        RawCheat("Бесконечный Limit Break", "Постоянный режим Limit Break", "021C4530 000003E7")
+                    )
+                )
+            )
+
+            // Animal Crossing: Wild World (ADME, ADMJ, ADMP)
+            pfx == "ADM" || code in listOf("ADME", "ADMJ", "ADMP") -> listOf(
+                RawCheatCategory(
+                    "Карманы и колокольчики",
+                    listOf(
+                        RawCheat("Максимум колокольчиков (Bells 99,999)", "Нажмите L+R", "94000130 FCFF0000\n021D88FC 0001869F\nD2000000 00000000"),
+                        RawCheat("Все золотые инструменты (Gold Tools)", "В сумке появляются все золотые инструменты", "021D8910 0000101F"),
+                        RawCheat("Сорняки никогда не растут", "Идеальный город", "021D8940 00000000")
+                    )
+                )
+            )
+
+            // The World Ends With You (AWLE, AWLJ, AWLP)
+            pfx == "AWL" || code in listOf("AWLE", "AWLJ", "AWLP") -> listOf(
+                RawCheatCategory(
+                    "Нэку и значки",
+                    listOf(
+                        RawCheat("Бесконечное HP Нэку", "Бессмертие в боях Сибуи", "02148110 0000270F"),
+                        RawCheat("Максимум денег (9,999,999 Yen)", "Максимум йен", "02148120 0098967F"),
+                        RawCheat("Быстрая перезарядка всех значков", "Значки готовы к атаке мгновенно", "02148130 00000000")
+                    )
+                )
+            )
+
+            // Kirby Super Star Ultra & Squeak Squad (YAKE, YAKJ, YAKP, AKWE, AKWJ)
+            pfx in listOf("YAK", "AKW", "AK8") || code in listOf("YAKE", "YAKJ", "YAKP") -> listOf(
+                RawCheatCategory(
+                    "Кирби и жизни",
+                    listOf(
+                        RawCheat("Бесконечное HP Кирби", "Кирби не теряет здоровье", "020F3120 00000050"),
+                        RawCheat("Бесконечные жизни (99)", "99 жизней", "020F3124 00000063"),
+                        RawCheat("Постоянный полет", "Неограниченное время парения", "020F3130 00000001")
+                    )
+                )
+            )
+
+            // Sonic Rush & Sonic Colors (ASCE, ASCJ, ASCP, VSNE, VSNJ)
+            pfx in listOf("ASC", "VSN", "VSJ") || code in listOf("ASCE", "ASCJ", "ASCP") -> listOf(
+                RawCheatCategory(
+                    "Соник и кольца",
+                    listOf(
+                        RawCheat("Бесконечные кольца (999 Rings)", "Кольца не заканчиваются", "02159110 000003E7"),
+                        RawCheat("Бесконечные жизни (99)", "99 жизней", "02159114 00000063"),
+                        RawCheat("Постоянное ускорение (Infinite Boost)", "Шкала Boost всегда заполнена", "02159120 00000064")
+                    )
+                )
+            )
+
+            // Metroid Prime Hunters (AMHE, AMHJ, AMHP)
+            pfx == "AMH" || code in listOf("AMHE", "AMHJ", "AMHP") -> listOf(
+                RawCheatCategory(
+                    "Самус и оружие",
+                    listOf(
+                        RawCheat("Бесконечная энергия (Energy Tanks)", "Самус бессмертна", "020DE110 000003E7"),
+                        RawCheat("Бесконечные ракеты (Missiles)", "Ракеты не истощаются", "020DE120 000003E7"),
+                        RawCheat("Бесконечные боеприпасы универсального оружия", "Максимум патронов", "020DE130 000003E7")
+                    )
+                )
+            )
+
+            // Golden Sun: Dark Dawn (BO5E, BO5J, BO5P)
+            pfx == "BO5" || code in listOf("BO5E", "BO5J", "BO5P") -> listOf(
+                RawCheatCategory(
+                    "Адепты и джинны",
+                    listOf(
+                        RawCheat("Бесконечное HP отряда", "Все адепты бессмертны", "02179120 000003E7"),
+                        RawCheat("Бесконечное PP (Псинергия)", "Очки псинергии зафиксированы", "02179124 000003E7"),
+                        RawCheat("Максимум золота (9,999,999)", "Максимум монет", "02179130 0098967F")
+                    )
+                )
+            )
+
+            // Inazuma Eleven (BEBE, BEBJ, BEBP, INAZ)
+            pfx in listOf("BEB", "INA") || code in listOf("BEBE", "BEBJ", "BEBP") -> listOf(
+                RawCheatCategory(
+                    "Команда и энергия",
+                    listOf(
+                        RawCheat("Бесконечное GP (Выносливость)", "Футболисты не устают", "02162120 000003E7"),
+                        RawCheat("Бесконечное TP (Очки суперприемов)", "Любые спецприемы без затрат", "02162124 000003E7"),
+                        RawCheat("Максимум очков Prestige / Бонусных очков", "Максимальный баланс", "02162130 0098967F")
                     )
                 )
             )

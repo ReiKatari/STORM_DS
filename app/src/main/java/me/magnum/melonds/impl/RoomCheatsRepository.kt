@@ -57,6 +57,7 @@ class RoomCheatsRepository(
             ?: (if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null)
             ?: database.gameDao().findGameByCode(lookupCode)
             ?: (if (!romInfo.isDsiWareTitle && cleanGameCode.length == 4) database.gameDao().findGameByCode(cleanGameCode) else null)
+            ?: (if (cleanGameCode.length >= 3) database.gameDao().findGameByPrefix(cleanGameCode.take(3)) else null)
 
         if (gameEntity == null || database.cheatFolderDao().getFoldersForGame(gameEntity.id ?: -1).isEmpty()) {
             val populated = me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats.populateIfEmpty(
@@ -70,6 +71,7 @@ class RoomCheatsRepository(
                     ?: (if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null)
                     ?: database.gameDao().findGameByCode(lookupCode)
                     ?: (if (!romInfo.isDsiWareTitle && cleanGameCode.length == 4) database.gameDao().findGameByCode(cleanGameCode) else null)
+                    ?: (if (cleanGameCode.length >= 3) database.gameDao().findGameByPrefix(cleanGameCode.take(3)) else null)
             }
         }
 

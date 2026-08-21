@@ -291,7 +291,7 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                if (rom.isInstalledDsiWareShortcut || rom.installedDsiWareTitleId != null) {
+                if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
                     return@withContext loadInstalledDsiWareShortcut(rom, cheats)
                 }
 
@@ -757,22 +757,22 @@ class AndroidEmulatorManager(
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isDsi = rom.isInstalledDsiWareShortcut || rom.isDsiWareTitle
-        val mustUseCustomBios = isDsi || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
-        val consoleType = if (isDsi) {
-            ConsoleType.DSi
-        } else if (!baseConfiguration.useCustomBios && rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
-            ConsoleType.DS
-        } else {
-            getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
+        val isInstalledDsi = rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME
+        val targetConsoleType = when {
+            isInstalledDsi -> ConsoleType.DSi
+            rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT -> getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
+            baseConfiguration.useCustomBios -> baseConfiguration.consoleType
+            else -> ConsoleType.DS
         }
+
+        val mustUseCustomBios = (targetConsoleType == ConsoleType.DSi) || baseConfiguration.useCustomBios || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT)
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
-            showBootScreen = if (isDsi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
+            showBootScreen = if (targetConsoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
             frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
-            consoleType = consoleType,
+            consoleType = targetConsoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),
             dsiWareAutoloadTitleId = 0L,
         ).run { getPermissionAdjustedConfiguration(this) }
