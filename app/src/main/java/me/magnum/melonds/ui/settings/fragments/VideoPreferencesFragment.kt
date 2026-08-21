@@ -1786,7 +1786,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         var internalAlignmentOverride = internalAlignmentInitial
         var externalAlignmentOverride = externalAlignmentInitial
 
-        radioGroup.check(presetToButtonId.getValue(currentPreset))
+        radioGroup.check(presetToButtonId[currentPreset] ?: R.id.radioPresetOff)
         keepAspectSwitch.isChecked = keepAspectRatio
         integerScaleSwitch.isChecked = integerScale
 
@@ -1808,7 +1808,8 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         updateDualScreenButtonsState()
 
         radioGroup.setOnCheckedChangeListener { _, checkedId ->
-            selectedPreset = presetToButtonId.entries.first { it.value == checkedId }.key
+            val matching = presetToButtonId.entries.firstOrNull { it.value == checkedId }?.key ?: return@setOnCheckedChangeListener
+            selectedPreset = matching
             if (selectedPreset == DualScreenPreset.OFF) {
                 integerScaleSwitch.isChecked = false
                 integerScale = false
@@ -2003,13 +2004,15 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         fun applyInternalSelection() {
             updatingInternalRadios = true
-            internalRadioGroup.check(internalRadios.getValue(currentInternalSelection).id)
+            val id = internalRadios[currentInternalSelection]?.id ?: R.id.radioInternalAlignmentTop
+            internalRadioGroup.check(id)
             updatingInternalRadios = false
         }
 
         fun applyExternalSelection() {
             updatingExternalRadios = true
-            externalRadioGroup.check(externalRadios.getValue(currentExternalSelection).id)
+            val id = externalRadios[currentExternalSelection]?.id ?: R.id.radioExternalAlignmentTop
+            externalRadioGroup.check(id)
             updatingExternalRadios = false
         }
 
