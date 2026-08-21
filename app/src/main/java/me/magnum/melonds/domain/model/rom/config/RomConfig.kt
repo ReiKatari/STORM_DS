@@ -39,7 +39,7 @@ data class RomConfig(
 
         fun forDsiWareTitle(): RomConfig {
             return RomConfig(
-                runtimeConsoleType = RuntimeConsoleType.DEFAULT,
+                runtimeConsoleType = RuntimeConsoleType.DSi,
                 runtimeMicSource = RuntimeMicSource.DEFAULT,
                 layoutId = null,
                 gbaSlotConfig = RomGbaSlotConfig.None,
