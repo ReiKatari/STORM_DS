@@ -109,10 +109,12 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     }
 
     private fun screenXToViewportX(x: Int): Float {
+        if (width <= 0f) return 0f
         return (x / width) * 2f - 1f
     }
 
     private fun screenYToViewportY(y: Int): Float {
+        if (height <= 0f) return 0f
         return 1f - y / height * 2f
     }
 
@@ -219,6 +221,10 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         val screenVertexData = (underTargets + overTargets).flatMap {
             buildScreenVertexData(it.rect, it.uvs, it.alpha).asIterable()
         }.toFloatArray()
+        if (screenVertexData.isEmpty()) {
+            screenIndices = 0
+            return
+        }
         val vertexBufferSize = screenVertexData.size * Float.SIZE_BYTES
         val vertexBuffer = ByteBuffer.allocateDirect(vertexBufferSize)
             .order(ByteOrder.nativeOrder())
