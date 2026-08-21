@@ -412,38 +412,27 @@ class AndroidEmulatorManager(
         val cacheDir = File(context.cacheDir, "dsiware_cache").apply { mkdirs() }
         val cacheRomFile = File(cacheDir, "${titleIdHex}.nds")
 
-        // 1. Check DSi BIOS & NAND validity
-        val dsiBiosValid = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
-
-        // 2. Auto-provision, repair FAT12 NAND save files, and export fresh app
-        val openResult = dsiNandManager.openNand()
-        var exportedApp = false
-        if (openResult == OpenDSiNandResult.SUCCESS || openResult == OpenDSiNandResult.NAND_ALREADY_OPEN) {
+        if (!cacheRomFile.exists() || cacheRomFile.length() == 0L) {
+            val openResult = dsiNandManager.openNand()
+            if (openResult != OpenDSiNandResult.SUCCESS && openResult != OpenDSiNandResult.NAND_ALREADY_OPEN) {
+                Log.e(TAG, "DSiWareShortcut: failed to open NAND: $openResult")
+                writeGameExecutionLog(rom, titleIdHex, false, "Failed to open NAND: $openResult", "Direct loadRom (DSi)")
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+            }
             try {
-                if (rom.uri.scheme != "dsiware-installed") {
-                    dsiNandManager.importTitle(rom.uri)
+                cacheRomFile.delete()
+                val exported = dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
+                if (!exported || !cacheRomFile.exists() || cacheRomFile.length() == 0L) {
+                    Log.e(TAG, "DSiWareShortcut: exportTitleExecutable failed for titleId=$titleIdHex")
+                    writeGameExecutionLog(rom, titleIdHex, false, "exportTitleExecutable failed", "Direct loadRom (DSi)")
+                    return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                 }
-                dsiNandManager.repairTitleSaves(titleId)
-                dsiNandManager.exportTitleExecutable(titleId, cacheRomFile.absolutePath)
-                exportedApp = cacheRomFile.exists() && cacheRomFile.length() > 0L
-            } catch (e: Throwable) {
-                Log.w(TAG, "dsiNandManager repairTitleSaves warning: ${e.message}")
             } finally {
                 dsiNandManager.closeNand()
             }
         }
 
-        // 3. Modcrypt decryption for cached app
-        if (exportedApp) {
-            try {
-                me.magnum.melonds.MelonRomDecryptor.decryptRom(cacheRomFile.absolutePath)
-            } catch (e: Throwable) {
-                Log.w(TAG, "cacheRomFile decrypt warning: ${e.message}")
-            }
-        }
-
-        val targetRomFile = if (exportedApp) cacheRomFile else null
-        val romUri = if (targetRomFile != null) Uri.fromFile(targetRomFile) else rom.uri
+        val romUri = Uri.fromFile(cacheRomFile)
         val sram = try {
             sramProvider.getSramForRom(rom)
         } catch (exception: SramLoadException) {
@@ -451,91 +440,51 @@ class AndroidEmulatorManager(
             return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
         }
 
-        // PRIMARY: Direct loadRom in DSi mode (direct execution, bypasses DSi System Menu DRM/region/signature checks)
-        if (dsiBiosValid) {
-            Log.i(TAG, "DSiWareShortcut: Direct boot via loadRom in DSi console mode for $titleIdHex ($romUri)")
-            val directDsiConfiguration = getRomEmulatorConfiguration(rom)
-                .copy(
-                    consoleType = ConsoleType.DSi,
-                    useCustomBios = true,
-                    showBootScreen = false,
-                    dsiWareAutoloadTitleId = 0L,
-                )
-                .withPreparedDldiConfiguration()
-
-            if (directDsiConfiguration != null) {
-                setupEmulator(directDsiConfiguration)
-                val loadResult = MelonEmulator.loadRom(
-                    romUri = romUri,
-                    sramUri = sram,
-                    gbaSlotType = MelonEmulator.GbaSlotType.NONE,
-                    gbaRomUri = null,
-                    gbaSramUri = null
-                )
-                if (!loadResult.isTerminal && isActive) {
-                    messageQueue.start()
-                    if (!precompileVulkanPipelines(directDsiConfiguration)) {
-                        cameraManager.stopCurrentCameraSource()
-                        MelonEmulator.stopEmulation()
-                        messageQueue.stop()
-                        dldiFolderSyncManager.syncBackIfNeeded()
-                        writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed", "Direct loadRom (DSi)")
-                        return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-                    }
-                    MelonEmulator.setupCheats(cheats.toTypedArray())
-                    MelonEmulator.startEmulation(startPaused = true)
-                    writeGameExecutionLog(rom, titleIdHex, true, "Direct loadRom boot successful in DSi mode with decrypted app and repaired saves", "Direct loadRom (DSi)")
-                    return@withContext RomLaunchResult.LaunchSuccessful(true)
-                } else {
-                    Log.w(TAG, "Direct loadRom in DSi mode failed ($loadResult), attempting safe DS FreeBIOS fallback")
-                }
-            }
-        }
-
-        // SECONDARY FALLBACK: Safe DS FreeBIOS mode (Guarantees 100% successful boot and zero crashes!)
-        Log.w(TAG, "DSiWareShortcut: Fallback to safe DS FreeBIOS mode for $titleIdHex")
-        val dsFallbackConfiguration = getRomEmulatorConfiguration(rom)
+        val emulatorConfiguration = getRomEmulatorConfiguration(rom)
             .copy(
-                consoleType = ConsoleType.DS,
-                useCustomBios = false,
+                consoleType = ConsoleType.DSi,
+                useCustomBios = true,
                 showBootScreen = false,
                 dsiWareAutoloadTitleId = 0L,
             )
             .withPreparedDldiConfiguration()
             ?: run {
-                writeGameExecutionLog(rom, titleIdHex, false, "Failed to prepare DS fallback configuration", "DS FreeBIOS Fallback")
+                writeGameExecutionLog(rom, titleIdHex, false, "Failed to prepare DLDI configuration", "Direct loadRom (DSi)")
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
 
-        setupEmulator(dsFallbackConfiguration)
-        val dsLoadResult = MelonEmulator.loadRom(
+        setupEmulator(emulatorConfiguration)
+
+        Log.i(TAG, "DSiWareShortcut: direct booting title $titleIdHex via loadRom")
+        val loadResult = MelonEmulator.loadRom(
             romUri = romUri,
             sramUri = sram,
             gbaSlotType = MelonEmulator.GbaSlotType.NONE,
             gbaRomUri = null,
             gbaSramUri = null
         )
-
-        if (!dsLoadResult.isTerminal && isActive) {
-            messageQueue.start()
-            if (!precompileVulkanPipelines(dsFallbackConfiguration)) {
-                cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
-                messageQueue.stop()
-                dldiFolderSyncManager.syncBackIfNeeded()
-                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-            }
-            MelonEmulator.setupCheats(cheats.toTypedArray())
-            MelonEmulator.startEmulation(startPaused = true)
-            writeGameExecutionLog(rom, titleIdHex, true, "Fallback boot successful on standard DS FreeBIOS engine", "DS FreeBIOS Fallback")
-            return@withContext RomLaunchResult.LaunchSuccessful(true)
+        if (loadResult.isTerminal || !isActive) {
+            cameraManager.stopCurrentCameraSource()
+            MelonEmulator.stopEmulation()
+            dldiFolderSyncManager.syncBackIfNeeded()
+            writeGameExecutionLog(rom, titleIdHex, false, "Direct loadRom returned terminal error: $loadResult", "Direct loadRom (DSi)")
+            return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
 
-        cameraManager.stopCurrentCameraSource()
-        MelonEmulator.stopEmulation()
-        dldiFolderSyncManager.syncBackIfNeeded()
-        writeGameExecutionLog(rom, titleIdHex, false, "All launch pathways failed: dsLoadResult=$dsLoadResult", "All Failed")
-        return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+        messageQueue.start()
+        if (!precompileVulkanPipelines(emulatorConfiguration)) {
+            cameraManager.stopCurrentCameraSource()
+            MelonEmulator.stopEmulation()
+            messageQueue.stop()
+            dldiFolderSyncManager.syncBackIfNeeded()
+            writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed", "Direct loadRom (DSi)")
+            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+        }
+        MelonEmulator.setupCheats(cheats.toTypedArray())
+        activeInstalledDsiWareShortcutSession = null
+        MelonEmulator.startEmulation(startPaused = true)
+        writeGameExecutionLog(rom, titleIdHex, true, "Direct loadRom boot successful in DSi mode (2.1.7 exact pipeline)", "Direct loadRom (DSi)")
+        return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
     }
 
     private fun writeGameExecutionLog(
