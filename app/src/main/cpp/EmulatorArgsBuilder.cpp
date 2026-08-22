@@ -463,6 +463,8 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
             memcpy(&settings.SystemMenuMostRecentTitleID[4], &titleIdHigh, sizeof(titleIdHigh));
         }
 
+        settings.EULAVersion = 0x01;
+
         settings.UpdateHash();
 
         if (!mount.ApplyUserData(settings))
