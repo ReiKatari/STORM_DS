@@ -62,11 +62,21 @@ class RomListViewModel @Inject constructor(
 
     private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())
 
-    val boxArtByUri: StateFlow<Map<String, String>> = _boxArtByUri.asStateFlow()
+    val isRaCoverEnabled: StateFlow<Boolean> = settingsRepository.observeRaCoverEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, settingsRepository.isRaCoverEnabled())
+
+    val boxArtByUri: StateFlow<Map<String, String>> = combine(
+        _boxArtByUri,
+        isRaCoverEnabled,
+    ) { artMap, enabled ->
+        if (enabled) artMap else emptyMap()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     private val boxArtRequestsInFlight = mutableSetOf<String>()
     private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(4)
 
     fun requestBoxArt(rom: Rom) {
+        if (!settingsRepository.isRaCoverEnabled()) return
         val key = rom.uri.toString()
         if (_boxArtByUri.value.containsKey(key)) return
         synchronized(boxArtRequestsInFlight) {
