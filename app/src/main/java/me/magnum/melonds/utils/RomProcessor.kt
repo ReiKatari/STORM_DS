@@ -17,6 +17,7 @@ import kotlin.math.min
 
 object RomProcessor {
 	private val DSIWARE_CATEGORY = 0x00030004.toUInt()
+	private val DSIWARE_SYSTEM_CATEGORY = 0x00030005.toUInt()
 	private const val MAX_ARM_BOOTCODE_SIZE = 0x3BFE00
 
 	fun getRomMetadata(channel: java.nio.channels.FileChannel): RomMetadata? {
@@ -38,12 +39,12 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68).toLong()
 
 			val unitCode = header[0x12].toInt() and 0xFF
-			val isDsiWareTitle = if (unitCode == 0x03) {
+			val isDsiWareTitle = if ((unitCode and 0x02) != 0) {
 				val categoryBuffer = ByteBuffer.allocate(4)
 				channel.position(0x234)
 				channel.read(categoryBuffer)
 				val category = byteArrayToInt(categoryBuffer.array()).toUInt()
-				category == DSIWARE_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K'))
+				category == DSIWARE_CATEGORY || category == DSIWARE_SYSTEM_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == '4'))
 			} else {
 				false
 			}
