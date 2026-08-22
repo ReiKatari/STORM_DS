@@ -290,7 +290,7 @@ object RomProcessor {
 	}
 
 	private class ForwardRomSectionReader(private val stream: InputStream) {
-		private val buffer = ByteArray(8192)
+		private val buffer = ByteArray(65536)
 		private var position = 0L
 
 		fun readSection(offset: Int, size: Int): ByteArray? {
@@ -327,13 +327,19 @@ object RomProcessor {
 		private fun skipTo(targetOffset: Long): Boolean {
 			var remaining = targetOffset - position
 			while (remaining > 0) {
-				val toRead = min(buffer.size.toLong(), remaining).toInt()
-				val read = stream.read(buffer, 0, toRead)
-				if (read <= 0) {
-					return false
+				val skipped = stream.skip(remaining)
+				if (skipped > 0) {
+					position += skipped
+					remaining -= skipped
+				} else {
+					val toRead = min(buffer.size.toLong(), remaining).toInt()
+					val read = stream.read(buffer, 0, toRead)
+					if (read <= 0) {
+						return false
+					}
+					position += read
+					remaining -= read
 				}
-				position += read
-				remaining -= read
 			}
 			return true
 		}
