@@ -569,6 +569,7 @@ class AndroidEmulatorManager(
         setupEmulator(emulatorConfiguration)
 
         Log.i(TAG, "loadDsiWare: booting title $titleIdHex via direct boot from NAND-exported .app")
+        MelonEmulator.startBootDiagnosticCapture()
         val loadResult = MelonEmulator.loadRom(
             romUri = Uri.fromFile(executableFile),
             sramUri = Uri.fromFile(saveFile),
@@ -577,20 +578,22 @@ class AndroidEmulatorManager(
             gbaSramUri = null,
         )
         if (loadResult.isTerminal || !isActive) {
+            val diag = MelonEmulator.stopAndGetBootDiagnostic()
             cameraManager.stopCurrentCameraSource()
             MelonEmulator.stopEmulation()
             dldiFolderSyncManager.syncBackIfNeeded()
-            writeGameExecutionLog(rom, titleIdHex, false, "loadRom returned terminal error: $loadResult", "loadDsiWare")
+            writeGameExecutionLog(rom, titleIdHex, false, "loadRom returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
 
         messageQueue.start()
         if (!precompileVulkanPipelines(emulatorConfiguration)) {
+            val diag = MelonEmulator.stopAndGetBootDiagnostic()
             cameraManager.stopCurrentCameraSource()
             MelonEmulator.stopEmulation()
             messageQueue.stop()
             dldiFolderSyncManager.syncBackIfNeeded()
-            writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed", "loadDsiWare")
+            writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
         }
 
@@ -605,7 +608,8 @@ class AndroidEmulatorManager(
             fileType = primaryFileType ?: DSiWareTitleFileType.PUBLIC_SAV,
         )
         MelonEmulator.startEmulation(startPaused = true)
-        writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)", "loadDsiWare")
+        val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+        writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)\n--- Native Boot Diagnostic ---\n$nativeDiag", "loadDsiWare")
         return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
     }
 
