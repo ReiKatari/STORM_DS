@@ -34,14 +34,9 @@ class AppLogFileRecorder @Inject constructor(
 
     fun start() {
         scope.launch {
-            combine(
-                settingsRepository.observeAppLogFileEnabled(),
-                settingsRepository.observeRomSearchDirectories(),
-            ) { enabled, romDirectories ->
-                if (enabled) romDirectories.firstOrNull() else null
-            }.collectLatest { logDirectory ->
-                if (logDirectory != null) {
-                    recordLogcat(logDirectory)
+            settingsRepository.observeAppLogFileEnabled().collectLatest { enabled ->
+                if (enabled) {
+                    recordLogcat()
                 }
             }
         }
@@ -51,64 +46,59 @@ class AppLogFileRecorder @Inject constructor(
         scope.cancel()
     }
 
-    private suspend fun recordLogcat(logDirectory: Uri) {
-        val root = DocumentFile.fromTreeUri(context, logDirectory)
-        if (root == null || !root.canWrite()) {
-            Log.w(TAG, "App log file requested but ROM directory is not writable: $logDirectory")
-            return
-        }
+    private suspend fun recordLogcat() {
+        val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+        val logsDir = java.io.File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
+        val logFile = java.io.File(logsDir, LOG_FILE_NAME)
 
-        val logDocument = root.findFile(LOG_FILE_NAME)
-            ?: root.createFile("text/plain", LOG_FILE_NAME)
-        if (logDocument == null) {
-            Log.w(TAG, "Could not create app log file in ROM directory: $logDirectory")
-            return
-        }
+        try {
+            java.io.FileOutputStream(logFile, true).use { outputStream ->
+                BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
+                    writer.appendLine()
+                    writer.appendLine("STORM DS app log")
+                    writer.appendLine("started=${DATE_FORMAT.format(Date())}")
+                    writer.appendLine("pid=${Process.myPid()}")
+                    writer.appendLine("logsDirectory=${logsDir.absolutePath}")
+                    writer.appendLine()
+                    writer.flush()
 
-        context.contentResolver.openOutputStream(logDocument.uri, "wa")?.use { outputStream ->
-            BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
-                writer.appendLine()
-                writer.appendLine("STORM DS app log")
-                writer.appendLine("started=${DATE_FORMAT.format(Date())}")
-                writer.appendLine("pid=${Process.myPid()}")
-                writer.appendLine("directory=$logDirectory")
-                writer.appendLine()
-                writer.flush()
+                    val logcatProcess = ProcessBuilder(
+                        "logcat",
+                        "-v",
+                        "threadtime",
+                        "--pid=${Process.myPid()}",
+                        "-T",
+                        "1",
+                    )
+                        .redirectErrorStream(true)
+                        .start()
 
-                val logcatProcess = ProcessBuilder(
-                    "logcat",
-                    "-v",
-                    "threadtime",
-                    "--pid=${Process.myPid()}",
-                    "-T",
-                    "1",
-                )
-                    .redirectErrorStream(true)
-                    .start()
-
-                val coroutineContext = currentCoroutineContext()
-                val cancellationHandle = coroutineContext.job.invokeOnCompletion {
-                    logcatProcess.destroy()
-                }
-                try {
-                    logcatProcess.inputStream.bufferedReader().useLines { lines ->
-                        for (line in lines) {
-                            if (!coroutineContext.isActive) {
-                                break
+                    val coroutineContext = currentCoroutineContext()
+                    val cancellationHandle = coroutineContext.job.invokeOnCompletion {
+                        logcatProcess.destroy()
+                    }
+                    try {
+                        logcatProcess.inputStream.bufferedReader().useLines { lines ->
+                            for (line in lines) {
+                                if (!coroutineContext.isActive) {
+                                    break
+                                }
+                                writer.appendLine(line)
+                                writer.flush()
                             }
-                            writer.appendLine(line)
-                            writer.flush()
                         }
+                    } finally {
+                        logcatProcess.destroy()
+                        runCatching {
+                            logcatProcess.waitFor()
+                        }
+                        cancellationHandle.dispose()
                     }
-                } finally {
-                    logcatProcess.destroy()
-                    runCatching {
-                        logcatProcess.waitFor()
-                    }
-                    cancellationHandle.dispose()
                 }
             }
-        } ?: Log.w(TAG, "Could not open app log file for writing: ${logDocument.uri}")
+        } catch (e: Throwable) {
+            Log.w(TAG, "Could not open app log file for writing: ${logFile.absolutePath}", e)
+        }
     }
 
     private companion object {
