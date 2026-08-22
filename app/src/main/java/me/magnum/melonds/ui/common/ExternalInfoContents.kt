@@ -197,93 +197,123 @@ fun ExternalBootInfo(
                 model = boxArtUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                alpha = 0.40f,
-                modifier = Modifier.fillMaxSize().blur(22.dp),
+                alpha = 0.38f,
+                modifier = Modifier.fillMaxSize().blur(26.dp),
             )
         } else {
             AsyncImage(
                 model = romIconRequest(context, rom),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                alpha = 0.38f,
-                modifier = Modifier.fillMaxSize().blur(24.dp),
+                alpha = 0.35f,
+                modifier = Modifier.fillMaxSize().blur(28.dp),
             )
         }
         Box(
             Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.78f), Color.Black.copy(alpha = 0.42f))),
+                Brush.verticalGradient(
+                    listOf(
+                        Color.Black.copy(alpha = 0.82f),
+                        Color.Black.copy(alpha = 0.65f),
+                        Color.Black.copy(alpha = 0.88f),
+                    ),
+                ),
             ),
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 30.dp),
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp),
         ) {
+            // 1. Platform name: Nintendo DS or Nintendo DSi
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.White.copy(alpha = 0.16f))
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = if (rom.isDsiWareTitle) "Nintendo DSi" else "Nintendo DS",
+                    color = Color.White,
+                    fontFamily = WatermelonMono,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // 2. Cover art centered at top
             Box(
                 modifier = Modifier
-                    .width(150.dp)
+                    .width(140.dp)
                     .aspectRatio(DsBoxArtAspectRatio)
-                    .shadow(14.dp, RoundedCornerShape(12.dp))
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(12.dp)),
+                    .shadow(16.dp, RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(14.dp)),
             ) {
                 WatermelonRomArt(
                     rom = rom,
                     boxArtUrl = boxArtUrl,
                     raCoverUrl = null,
-                    initialsFontSize = 44.sp,
+                    initialsFontSize = 42.sp,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Spacer(Modifier.width(26.dp))
-            Column(Modifier.weight(1f)) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color.White.copy(alpha = 0.14f))
-                        .padding(horizontal = 9.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        text = romPlatformLabel(rom),
-                        color = Color.White,
-                        fontFamily = WatermelonMono,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.6.sp,
-                    )
-                }
+
+            Spacer(Modifier.height(18.dp))
+
+            // 3. Title in bold, centered container with left text alignment and wrapping
+            Box(
+                modifier = Modifier.fillMaxWidth(0.88f),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
                     text = romDisplayName(rom),
                     color = Color.White,
                     fontFamily = SpaceGrotesk,
-                    fontSize = 27.sp,
-                    lineHeight = 31.sp,
+                    fontSize = 21.sp,
+                    lineHeight = 25.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 3,
+                    textAlign = TextAlign.Start,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 10.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                if (rom.developerName.isNotBlank()) {
+            }
+
+            // 4. Developer below title
+            if (rom.developerName.isNotBlank()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(0.88f),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
                     Text(
                         text = rom.developerName,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = Color.White.copy(alpha = 0.70f),
+                        fontFamily = me.magnum.melonds.ui.theme.Manrope,
                         fontSize = 13.sp,
+                        textAlign = TextAlign.Start,
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 20.dp),
-                ) {
-                    Text(
-                        text = (statusText?.takeIf { it.isNotBlank() } ?: "Iniciando juego").uppercase(),
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontFamily = WatermelonMono,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.sp,
-                    )
-                    ExternalLoadingDots(color = Color(0xFF6FBF4A))
-                }
+            }
+
+            // 5. Status text with loading animation
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 22.dp),
+            ) {
+                Text(
+                    text = (statusText?.takeIf { it.isNotBlank() } ?: "Загрузка").uppercase(),
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontFamily = WatermelonMono,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                )
+                ExternalLoadingDots(color = Color(0xFF6FBF4A))
             }
         }
     }
