@@ -9,20 +9,18 @@ import me.magnum.melonds.domain.model.RomMetadata
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.extensions.isBlank
-import me.magnum.melonds.extensions.nameWithoutExtension
 import me.magnum.melonds.utils.RomProcessor
+import java.io.BufferedInputStream
 
 class NdsRomFileProcessor(private val context: Context, private val uriHandler: UriHandler) : RomFileProcessor {
 
     override fun getRomFromUri(romUri: Uri, parentUri: Uri?): Rom? {
         return try {
             val metadata = getRomMetadata(romUri)
-            val romDocument = uriHandler.getUriDocument(romUri)
-            val fallbackName = romDocument?.nameWithoutExtension?.takeUnless { it.isBlank() }
-                ?: romUri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
-                ?: "NDS Game"
+            val uriLastSegment = romUri.lastPathSegment?.substringAfterLast('/')
+            val fallbackName = uriLastSegment?.substringBeforeLast('.')?.takeUnless { it.isBlank() } ?: "NDS Game"
             val romName = metadata?.romTitle?.takeUnless { it.isBlank() } ?: fallbackName
-            val fileName = romDocument?.name ?: "$fallbackName.nds"
+            val fileName = uriLastSegment?.takeUnless { it.isBlank() } ?: "$fallbackName.nds"
             val isDsi = metadata?.isDSiWareTitle ?: false
 
             Rom(
@@ -44,7 +42,7 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
 
     override fun getRomIcon(rom: Rom): Bitmap? {
         return try {
-            context.contentResolver.openInputStream(rom.uri)?.use { inputStream ->
+            context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
                 RomProcessor.getRomIcon(inputStream)
             }
         } catch (e: Exception) {
@@ -55,7 +53,7 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
 
     override fun getRomInfo(rom: Rom): RomInfo? {
         return try {
-            context.contentResolver.openInputStream(rom.uri)?.use { inputStream ->
+            context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
                 RomProcessor.getRomInfo(rom, inputStream)
             }
         } catch (e: Exception) {
@@ -69,7 +67,7 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     private fun getRomMetadata(uri: Uri): RomMetadata? {
-        return context.contentResolver.openInputStream(uri)?.use { inputStream ->
+        return context.contentResolver.openInputStream(uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
             RomProcessor.getRomMetadata(inputStream)
         }
     }
