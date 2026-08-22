@@ -19,6 +19,73 @@ object RomProcessor {
 	private val DSIWARE_CATEGORY = 0x00030004.toUInt()
 	private const val MAX_ARM_BOOTCODE_SIZE = 0x3BFE00
 
+	fun getRomMetadata(channel: java.nio.channels.FileChannel): RomMetadata? {
+		return runCatching {
+			val headerBuffer = ByteBuffer.allocate(0x160)
+			channel.position(0)
+			channel.read(headerBuffer)
+			val header = headerBuffer.array()
+			val gameCode = String(header, 0x0C, 4)
+
+			val arm9Offset = byteArrayToInt(header, 0x20).toLong()
+			val arm9Size = byteArrayToInt(header, 0x2C)
+			if (arm9Size !in 0..MAX_ARM_BOOTCODE_SIZE) return null
+
+			val arm7Offset = byteArrayToInt(header, 0x30).toLong()
+			val arm7Size = byteArrayToInt(header, 0x3C)
+			if (arm7Size !in 0..MAX_ARM_BOOTCODE_SIZE) return null
+
+			val bannerOffset = byteArrayToInt(header, 0x68).toLong()
+
+			val unitCode = header[0x12].toInt() and 0xFF
+			val isDsiWareTitle = if (unitCode == 0x03) {
+				val categoryBuffer = ByteBuffer.allocate(4)
+				channel.position(0x234)
+				channel.read(categoryBuffer)
+				val category = byteArrayToInt(categoryBuffer.array()).toUInt()
+				category == DSIWARE_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K'))
+			} else {
+				false
+			}
+
+			val arm9Buffer = ByteBuffer.allocate(arm9Size)
+			channel.position(arm9Offset)
+			channel.read(arm9Buffer)
+			val arm9Data = arm9Buffer.array()
+
+			val arm7Buffer = ByteBuffer.allocate(arm7Size)
+			channel.position(arm7Offset)
+			channel.read(arm7Buffer)
+			val arm7Data = arm7Buffer.array()
+
+			val bannerBuffer = ByteBuffer.allocate(0xA00)
+			channel.position(bannerOffset)
+			channel.read(bannerBuffer)
+			val bannerData = bannerBuffer.array()
+
+			val bannerText = readBannerTitleAndDeveloper(bannerData)
+			val romName = bannerText?.first.orEmpty()
+			val developerName = bannerText?.second.orEmpty()
+
+			val retroAchievementsMd5Digest = MessageDigest.getInstance("MD5").run {
+				update(header)
+				update(arm9Data)
+				update(arm7Data)
+				update(bannerData)
+				digest()
+			}
+
+			val retroAchievementsHash = BigInteger(1, retroAchievementsMd5Digest).toString(16).padStart(32, '0')
+
+			RomMetadata(
+				romName,
+				developerName,
+				isDsiWareTitle,
+				retroAchievementsHash,
+			)
+		}.getOrNull()
+	}
+
 	@Suppress("NAME_SHADOWING")
 	fun getRomMetadata(inputStream: InputStream): RomMetadata? {
 		return runCatching {
@@ -120,6 +187,41 @@ object RomProcessor {
 		return null
 	}
 
+	fun getRomIcon(channel: java.nio.channels.FileChannel): Bitmap? {
+		return runCatching {
+			val offsetBuffer = ByteBuffer.allocate(4)
+			channel.position(0x68)
+			channel.read(offsetBuffer)
+			val bannerOffset = byteArrayToInt(offsetBuffer.array())
+			if (bannerOffset <= 0) return null
+
+			val tileBuffer = ByteBuffer.allocate(512)
+			channel.position(bannerOffset.toLong() + 32)
+			channel.read(tileBuffer)
+			val tileData = tileBuffer.array()
+
+			val paletteBuffer = ByteBuffer.allocate(32)
+			channel.read(paletteBuffer)
+			val paletteData = paletteBuffer.array()
+
+			val palette = UShortArray(16)
+			for (i in 0 until 16) {
+				val lower = paletteData[i * 2]
+				val upper = paletteData[(i * 2) + 1]
+				val value = ((upper.toInt() and 0xFF).shl(8) or (lower.toInt() and 0xFF)).toUShort()
+				palette[i] = value
+			}
+
+			val argbPalette = paletteToArgb(palette)
+			val icon = processTiles(tileData, argbPalette)
+			val bitmapData = iconToBitmapArray(icon)
+
+			val bitmap = createBitmap(32, 32)
+			bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bitmapData))
+			bitmap
+		}.getOrNull()
+	}
+
 	fun getRomIcon(inputStream: InputStream): Bitmap? {
 		return runCatching {
 			// Banner offset is at header offset 0x68
@@ -158,6 +260,20 @@ object RomProcessor {
 			val bitmap = createBitmap(32, 32)
 			bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bitmapData))
 			bitmap
+		}.getOrNull()
+	}
+
+	fun getRomInfo(rom: Rom, channel: java.nio.channels.FileChannel): RomInfo? {
+		return runCatching {
+			val headerBuffer = ByteBuffer.allocate(0x200)
+			channel.position(0)
+			channel.read(headerBuffer)
+			val romHeader = headerBuffer.array()
+
+			val gameTitle = romHeader.decodeToString(endIndex = 12)
+			val gameCode = romHeader.decodeToString(startIndex = 12, endIndex = 12 + 4)
+			val headerChecksum = Crc32.compute(romHeader)
+			RomInfo(gameCode, headerChecksum, gameTitle, rom.name, rom.isDsiWareTitle)
 		}.getOrNull()
 	}
 
