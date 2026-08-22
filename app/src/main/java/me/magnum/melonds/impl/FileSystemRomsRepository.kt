@@ -13,6 +13,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -127,8 +130,17 @@ class FileSystemRomsRepository(
         if (addedDirectoryStrings.isNotEmpty()) {
             coroutineScope.launch {
                 scanningStatusSubject.emit(RomScanningStatus.SCANNING)
+                val buffer = mutableListOf<Rom>()
                 scanForNewRoms(targetDirectories = addedDirectoryStrings).collect {
-                    addRom(it)
+                    buffer.add(it)
+                    if (buffer.size >= 25) {
+                        addRoms(buffer)
+                        buffer.clear()
+                    }
+                }
+                if (buffer.isNotEmpty()) {
+                    addRoms(buffer)
+                    buffer.clear()
                 }
                 scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
             }
@@ -252,11 +264,18 @@ class FileSystemRomsRepository(
     override fun rescanRoms() {
         coroutineScope.launch {
             scanningStatusSubject.emit(RomScanningStatus.SCANNING)
-
+            val buffer = mutableListOf<Rom>()
             scanForNewRoms().collect {
-                addRom(it)
+                buffer.add(it)
+                if (buffer.size >= 25) {
+                    addRoms(buffer)
+                    buffer.clear()
+                }
             }
-
+            if (buffer.isNotEmpty()) {
+                addRoms(buffer)
+                buffer.clear()
+            }
             scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
         }
     }
@@ -285,28 +304,40 @@ class FileSystemRomsRepository(
     }
 
     private fun addRom(rom: Rom) {
-        val optionsConfig = readRomOptionsConfig(rom)
-        val incomingRom = applyRestoredRomMetadata(rom, optionsConfig)
-        val existingRom = roms.find { it.hasSameFileAsRom(rom) }
-        if (existingRom == incomingRom) {
-            return
+        addRoms(listOf(rom))
+    }
+
+    private fun addRoms(newRoms: List<Rom>) {
+        if (newRoms.isEmpty()) return
+        val restoredMetadata = loadRestoredRomMetadata()
+        var hasChanges = false
+
+        for (rom in newRoms) {
+            val optionsConfig = readRomOptionsConfig(rom)
+            val incomingRom = applyRestoredRomMetadataWithCachedMirror(rom, optionsConfig, restoredMetadata)
+            val existingRom = roms.find { it.hasSameFileAsRom(rom) }
+            if (existingRom == incomingRom) continue
+
+            if (existingRom != null) {
+                val updatedRom = existingRom.copy(
+                    name = incomingRom.name,
+                    developerName = incomingRom.developerName,
+                    isDsiWareTitle = incomingRom.isDsiWareTitle,
+                    retroAchievementsHash = incomingRom.retroAchievementsHash,
+                    config = optionsConfig ?: existingRom.config,
+                )
+                roms.remove(existingRom)
+                roms.add(updatedRom)
+                hasChanges = true
+            } else {
+                roms.add(incomingRom)
+                hasChanges = true
+            }
         }
 
-        if (existingRom != null) {
-            val updatedRom = existingRom.copy(
-                name = incomingRom.name,
-                developerName = incomingRom.developerName,
-                isDsiWareTitle = incomingRom.isDsiWareTitle,
-                retroAchievementsHash = incomingRom.retroAchievementsHash,
-                config = optionsConfig ?: existingRom.config,
-            )
-            roms.remove(existingRom)
-            roms.add(updatedRom)
-        } else {
-            roms.add(incomingRom)
+        if (hasChanges) {
+            onRomsChanged()
         }
-
-        onRomsChanged()
     }
 
     private fun refreshRomConfigFromOptions(rom: Rom): Rom {
@@ -325,26 +356,25 @@ class FileSystemRomsRepository(
     }
 
     private fun applyRestoredRomMetadata(rom: Rom, optionsConfig: RomConfig?): Rom {
-        val metadata = findRestoredRomMetadata(rom)
-        return if (metadata != null) {
+        val metadata = loadRestoredRomMetadata()
+        return applyRestoredRomMetadataWithCachedMirror(rom, optionsConfig, metadata)
+    }
+
+    private fun applyRestoredRomMetadataWithCachedMirror(rom: Rom, optionsConfig: RomConfig?, metadata: List<RomMetadataMirrorDto>): Rom {
+        val found = metadata.firstOrNull {
+            rom.retroAchievementsHash.isNotBlank() && it.retroAchievementsHash == rom.retroAchievementsHash
+        } ?: metadata.firstOrNull {
+            it.fileName == rom.fileName && it.isDsiWareTitle == rom.isDsiWareTitle
+        }
+        return if (found != null) {
             rom.copy(
-                config = optionsConfig ?: metadata.config.toModel(),
-                lastPlayed = metadata.lastPlayed,
-                totalPlayTime = metadata.totalPlayTime.milliseconds,
-                isFavorite = metadata.isFavorite,
+                config = optionsConfig ?: found.config.toModel(),
+                lastPlayed = found.lastPlayed,
+                totalPlayTime = found.totalPlayTime.milliseconds,
+                isFavorite = found.isFavorite,
             )
         } else {
             optionsConfig?.let { rom.copy(config = it) } ?: rom
-        }
-    }
-
-    private fun findRestoredRomMetadata(rom: Rom): RomMetadataMirrorDto? {
-        val metadata = loadRestoredRomMetadata()
-        return metadata.firstOrNull {
-            rom.retroAchievementsHash.isNotBlank() &&
-                it.retroAchievementsHash == rom.retroAchievementsHash
-        } ?: metadata.firstOrNull {
-            it.fileName == rom.fileName && it.isDsiWareTitle == rom.isDsiWareTitle
         }
     }
 
@@ -545,9 +575,18 @@ class FileSystemRomsRepository(
 
             var scannedRom = false
             try {
+                val buffer = mutableListOf<Rom>()
                 scanForNewRoms().collect {
                     scannedRom = true
-                    addRom(it)
+                    buffer.add(it)
+                    if (buffer.size >= 25) {
+                        addRoms(buffer)
+                        buffer.clear()
+                    }
+                }
+                if (buffer.isNotEmpty()) {
+                    addRoms(buffer)
+                    buffer.clear()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during scanForNewRoms", e)
@@ -637,19 +676,29 @@ class FileSystemRomsRepository(
         removeRomsByUriStrings(updatedExistingUris)
 
         val updatedFileUris = updatedFiles.map { it.uri.toString() }.toSet()
-        val processedUpdatedFileUris = mutableSetOf<String>()
-        for (fileState in updatedFiles) {
-            runCatching {
-                val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
-                    ?: fileState.documentFile.name?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
-                    ?: fileState.uri.lastPathSegment?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
-                    ?: return@runCatching
-                val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
-                    ?: return@runCatching
+        val processedUpdatedFileUris = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-                processedUpdatedFileUris.add(fileState.uri.toString())
-                collector.emit(rom)
-            }.onFailure { Log.e(TAG, "Failed to process file at ${fileState.uri}", it) }
+        val parallelism = (Runtime.getRuntime().availableProcessors() * 2).coerceIn(4, 16)
+        val semaphore = Semaphore(parallelism)
+
+        coroutineScope {
+            updatedFiles.map { fileState ->
+                launch(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        runCatching {
+                            val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
+                            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
+                                ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
+                                ?: return@runCatching
+                            val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
+                                ?: return@runCatching
+
+                            processedUpdatedFileUris.add(fileState.uri.toString())
+                            collector.emit(rom)
+                        }.onFailure { Log.e(TAG, "Failed to process file at ${fileState.uri}", it) }
+                    }
+                }
+            }.forEach { it.join() }
         }
 
         val cacheableFiles = currentFiles.filterKeys { uri ->
@@ -739,11 +788,9 @@ class FileSystemRomsRepository(
                     }
                 } else {
                     val processor = romFileProcessorFactory.getFileRomProcessorForFileName(displayName)
-                        ?: (DocumentFile.fromSingleUri(context, fileUri)?.let { romFileProcessorFactory.getFileRomProcessorForDocument(it) })
 
                     if (processor != null) {
-                        val docFile = DocumentFile.fromSingleUri(context, fileUri)
-                            ?: DocumentFile.fromTreeUri(context, fileUri)
+                        val docFile = DocumentFile.fromTreeUri(context, fileUri)
                             ?: DocumentFile.fromFile(java.io.File(displayName))
                         accumulator.add(
                             DirectoryFileState(
