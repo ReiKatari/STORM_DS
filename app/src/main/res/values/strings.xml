@@ -401,7 +401,7 @@
     <string name="dsi_bios_directory">DSi BIOS directory</string>
     <string name="show_boot_screen">Show boot screen</string>
     <string name="dsiware_boot_mode_title">DSiWare Boot Mode</string>
-    <string name="dsiware_boot_mode_autoload">System Autoload (Recommended)</string>
+    <string name="dsiware_boot_mode_autoload">System Autoload</string>
     <string name="dsiware_boot_mode_direct">Direct Boot</string>
     <string name="dsiware_boot_mode_system_menu">DSi System Menu (NAND Launcher)</string>
     <string name="mac_address">MAC address</string>
