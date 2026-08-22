@@ -23,6 +23,7 @@ class TouchscreenInputHandler(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 val actionIndex = event.actionIndex
                 activePointerId = event.getPointerId(actionIndex)
                 touchActive = true
@@ -30,6 +31,7 @@ class TouchscreenInputHandler(
                 inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 val actionIndex = event.actionIndex
                 val pointerId = event.getPointerId(actionIndex)
                 activePointerId = pointerId
@@ -40,6 +42,7 @@ class TouchscreenInputHandler(
                 inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
             }
             MotionEvent.ACTION_MOVE -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 if (touchActive) {
                     inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
                 }
