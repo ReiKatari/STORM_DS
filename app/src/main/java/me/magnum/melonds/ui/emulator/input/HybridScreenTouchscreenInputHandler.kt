@@ -20,6 +20,7 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 val actionIndex = event.actionIndex
                 if (event.getY(actionIndex) >= bottomScreenTop) {
                     activePointerId = event.getPointerId(actionIndex)
@@ -29,13 +30,11 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
                 }
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 val actionIndex = event.actionIndex
                 if (event.getY(actionIndex) >= bottomScreenTop) {
                     val pointerId = event.getPointerId(actionIndex)
-                    val tool = event.getToolType(actionIndex)
-                    if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER || !touchActive || activePointerId == MotionEvent.INVALID_POINTER_ID) {
-                        activePointerId = pointerId
-                    }
+                    activePointerId = pointerId
                     if (!touchActive) {
                         touchActive = true
                         inputListener.onKeyPress(Input.TOUCHSCREEN)
@@ -44,6 +43,7 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 if (touchActive) {
                     inputListener.onTouch(normalizeTouchCoordinates(event, width, height, bottomScreenTop))
                 }
