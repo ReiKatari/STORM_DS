@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -608,6 +609,8 @@ class AndroidEmulatorManager(
             fileType = primaryFileType ?: DSiWareTitleFileType.PUBLIC_SAV,
         )
         MelonEmulator.startEmulation(startPaused = true)
+        // Wait for emulation thread to complete SetupDirectBoot + DecryptModcryptArea
+        delay(500)
         val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
         writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)\n--- Native Boot Diagnostic ---\n$nativeDiag", "loadDsiWare")
         return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
