@@ -9,6 +9,8 @@ abstract class ScreenLayoutComponentViewBuilder : LayoutComponentViewBuilder() {
     override fun build(context: Context): View {
         return View(context).apply {
             background = getBackgroundDrawable(context)
+            isClickable = true
+            isFocusable = false
         }
     }
 
