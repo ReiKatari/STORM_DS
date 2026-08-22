@@ -1292,6 +1292,17 @@ Java_me_magnum_melonds_MelonEmulator_bootFirmwareInternal(JNIEnv* env, jobject t
 }
 
 JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_startBootDiagnosticCapture(JNIEnv* env, jobject thiz) {
+    melonDS::Platform::StartBootDiagnosticCapture();
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_stopAndGetBootDiagnostic(JNIEnv* env, jobject thiz) {
+    std::string diag = melonDS::Platform::StopAndGetBootDiagnostic();
+    return env->NewStringUTF(diag.c_str());
+}
+
+JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, jboolean startPaused)
 {
     stop = false;
