@@ -1680,7 +1680,9 @@ class EmulatorActivity : AppCompatActivity() {
         }
         translatorManager.setCurrentGame(rom.name, gameCode, rom.retroAchievementsHash)
         lifecycleScope.launch {
-            val url = runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+            val url = if (settingsRepository.isRaCoverEnabled()) {
+                runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+            } else null
             if (bootRom.value?.uri == rom.uri) {
                 bootBoxArtUrl.value = url
             }
