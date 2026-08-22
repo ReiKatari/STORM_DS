@@ -62,6 +62,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
         runCatching { createNotificationChannels() }
         runCatching { applyTheme() }
         runCatching { performMigrations() }
+        runCatching { File(cacheDir, "installed_dsiware").deleteRecursively() }
         runCatching { settingsBackupManager.initializeMirror() }
         runCatching { appLogFileRecorder.start() }
         runCatching { recoverUnexpectedHardcoreOfflineLossIfNeeded() }
