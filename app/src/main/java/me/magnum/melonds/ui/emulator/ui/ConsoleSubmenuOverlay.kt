@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -145,12 +144,13 @@ fun ConsoleSubmenuOverlayDetailed(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp),
+                    .padding(start = 12.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             ) {
                 Box(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
                         .focusProperties { canFocus = false }
                         .clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
@@ -162,7 +162,7 @@ fun ConsoleSubmenuOverlayDetailed(
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 Icon(
                     imageVector = Icons.Filled.Tune,
                     contentDescription = null,
@@ -174,101 +174,112 @@ fun ConsoleSubmenuOverlayDetailed(
                     text = title,
                     color = Color.White,
                     fontFamily = SpaceGrotesk,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.09f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.10f)))
 
             Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .widthIn(max = 680.dp)
+                    .widthIn(max = 640.dp)
                     .align(Alignment.CenterHorizontally)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 items.forEachIndexed { index, item ->
                     val interactionSource = remember { MutableInteractionSource() }
                     val isFocused by interactionSource.collectIsFocusedAsState()
-                    val shape = RoundedCornerShape(12.dp)
+                    val shape = RoundedCornerShape(14.dp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp)
                             .clip(shape)
-                            .background(if (isFocused) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.05f))
+                            .background(if (isFocused) Color(0xFF2A1C22) else Color(0xFF141318))
                             .border(
                                 width = if (isFocused) 2.dp else 1.dp,
-                                color = if (isFocused) colors.red else Color.White.copy(alpha = 0.10f),
+                                color = if (isFocused) colors.red else Color.White.copy(alpha = 0.08f),
                                 shape = shape,
                             )
                             .let { if (index == 0) it.focusRequester(firstFocusRequester) else it }
                             .clickable(interactionSource = interactionSource, indication = null) { onEntrySelected(index) }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 11.dp),
                     ) {
                         if (item.icon != null) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = null,
-                                tint = if (isFocused) colors.red else Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(14.dp))
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isFocused) colors.red.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f)),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = item.title,
-                                    color = Color.White,
-                                    fontSize = 13.5.sp,
-                                    lineHeight = 17.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f),
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = null,
+                                    tint = if (isFocused) colors.red else Color.White.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(20.dp),
                                 )
-                                if (item.value != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.White.copy(alpha = 0.12f))
-                                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                                    ) {
-                                        Text(
-                                            text = item.value,
-                                            color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            lineHeight = 14.sp,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                        )
-                                    }
+                            }
+                            Spacer(Modifier.width(13.dp))
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.title,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+
+                            if (item.value != null) {
+                                Spacer(Modifier.height(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0x22F59E0B))
+                                        .border(0.5.dp, Color(0x66F59E0B), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 7.dp, vertical = 2.5.dp),
+                                ) {
+                                    Text(
+                                        text = item.value,
+                                        color = Color(0xFFFBBF24),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        lineHeight = 14.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                             }
+
                             if (item.description != null) {
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(Modifier.height(3.dp))
                                 Text(
                                     text = item.description,
-                                    color = Color.White.copy(alpha = 0.65f),
+                                    color = Color.White.copy(alpha = 0.50f),
                                     fontSize = 11.sp,
-                                    lineHeight = 15.sp,
+                                    lineHeight = 14.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }
+
                         Spacer(Modifier.width(10.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.45f),
-                            modifier = Modifier.size(18.dp),
+                            tint = Color.White.copy(alpha = 0.40f),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
@@ -290,22 +301,22 @@ fun ConsoleSubmenuOverlayDetailed(
 private fun getMetadataForSetting(title: String): Pair<ImageVector, String> {
     val lower = title.lowercase()
     return when {
-        lower.contains("mapping") || lower.contains("назнач") || lower.contains("кноп") || lower.contains("клавиш") ->
-            Icons.Filled.SportsEsports to "Настройка назначения физических кнопок геймпада или клавиатуры"
-        lower.contains("layout") || lower.contains("расклад") || lower.contains("управлен") || lower.contains("экранн") ->
-            Icons.Filled.TouchApp to "Выбор и редактирование расположения сенсорных кнопок на экране"
+        lower.contains("mapping") || lower.contains("назнач") || lower.contains("клавиш") ->
+            Icons.Filled.SportsEsports to "Назначение физических кнопок геймпада или клавиатуры"
+        lower.contains("layout") || lower.contains("макет") || lower.contains("расклад") ->
+            Icons.Filled.TouchApp to "Выбор и редактирование сенсорных кнопок"
         lower.contains("dual") || lower.contains("двух") || lower.contains("экран") ->
-            Icons.Filled.Tv to "Распределение экранов DS на внешнем мониторе/ТВ с автосохранением для игры"
+            Icons.Filled.Tv to "Пресеты и вывод экранов на ТВ/монитор"
         lower.contains("filter") || lower.contains("фильтр") ->
-            Icons.Filled.Filter to "Графический фильтр или шейдерная постобработка изображения"
+            Icons.Filled.Filter to "Шейдерная постобработка и графические фильтры"
         lower.contains("preset") || lower.contains("пресет") ->
-            Icons.Filled.AutoAwesome to "Выбор файла шейдера RetroArch (.slangp / .glslp)"
+            Icons.Filled.AutoAwesome to "Файл шейдера RetroArch (.slangp / .glslp)"
         lower.contains("parameter") || lower.contains("параметр") ->
-            Icons.Filled.Tune to "Пользовательские параметры и переменные активного шейдера"
+            Icons.Filled.Tune to "Пользовательские параметры активного шейдера"
         lower.contains("mic") || lower.contains("микрофон") ->
-            Icons.Filled.Mic to "Выбор источника звука микрофона DS (микрофон устройства или шум)"
+            Icons.Filled.Mic to "Выбор источника микрофона DS"
         else ->
-            Icons.Filled.Tune to "Параметры и конфигурация для текущей игры"
+            Icons.Filled.Tune to "Параметры для текущей игры"
     }
 }
 
