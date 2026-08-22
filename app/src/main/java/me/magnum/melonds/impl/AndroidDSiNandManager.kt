@@ -240,12 +240,14 @@ class AndroidDSiNandManager(
         }
     }
 
-    override suspend fun deleteTitle(title: DSiWareTitle): Unit = nandControlLock.withLock {
+    override suspend fun deleteTitle(title: DSiWareTitle): Unit = deleteTitle(title.titleId)
+
+    override suspend fun deleteTitle(titleId: Long): Unit = nandControlLock.withLock {
         if (!isNandOpen.get()) {
             return
         }
 
-        MelonDSiNand.deleteTitle((title.titleId and 0xFFFFFFFF).toInt())
+        MelonDSiNand.deleteTitle((titleId and 0xFFFFFFFFL).toInt())
     }
 
     override suspend fun repairTitleSaves(titleId: Long): Boolean = nandControlLock.withLock {
@@ -280,7 +282,11 @@ class AndroidDSiNandManager(
         return MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, filePath)
     }
 
-    override suspend fun importTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean = nandControlLock.withLock {
+    override suspend fun importTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean {
+        return importTitleFile(title.titleId, fileType, fileUri)
+    }
+
+    override suspend fun importTitleFile(titleId: Long, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean = nandControlLock.withLock {
         if (!isNandOpen.get()) {
             return false
         }
@@ -299,7 +305,7 @@ class AndroidDSiNandManager(
                 return false
             }
             try {
-                return MelonDSiNand.importTitleFile((title.titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, tempFile.absolutePath)
+                return MelonDSiNand.importTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
             } finally {
                 runCatching { tempFile.delete() }
             }
@@ -307,15 +313,36 @@ class AndroidDSiNandManager(
             fileUri.path ?: fileUri.toString()
         }
 
-        return MelonDSiNand.importTitleFile((title.titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, targetPath)
+        return MelonDSiNand.importTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, targetPath)
     }
 
-    override suspend fun exportTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean = nandControlLock.withLock {
+    override suspend fun exportTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean {
+        return exportTitleFile(title.titleId, fileType, fileUri)
+    }
+
+    override suspend fun exportTitleFile(titleId: Long, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean = nandControlLock.withLock {
         if (!isNandOpen.get()) {
             return false
         }
 
-        return MelonDSiNand.exportTitleFile((title.titleId and 0xFFFFFFFF).toInt(), fileType.ordinal, fileUri.toString())
+        return if (fileUri.scheme == "content") {
+            val tempFile = File(context.cacheDir, "dsiware_export_data_${System.currentTimeMillis()}.bin")
+            val exported = MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
+            if (exported && tempFile.exists()) {
+                runCatching {
+                    context.contentResolver.openOutputStream(fileUri, "wt")?.use { output ->
+                        tempFile.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+            }
+            runCatching { tempFile.delete() }
+            exported
+        } else {
+            val path = fileUri.path ?: fileUri.toString()
+            MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, path)
+        }
     }
 
     override fun closeNand() {
