@@ -41,6 +41,15 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     override fun getRomIcon(rom: Rom): Bitmap? {
+        try {
+            context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                    val icon = RomProcessor.getRomIcon(channel)
+                    if (icon != null) return icon
+                }
+            }
+        } catch (_: Throwable) {}
+
         return try {
             context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
                 RomProcessor.getRomIcon(inputStream)
@@ -52,6 +61,15 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     override fun getRomInfo(rom: Rom): RomInfo? {
+        try {
+            context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                    val info = RomProcessor.getRomInfo(rom, channel)
+                    if (info != null) return info
+                }
+            }
+        } catch (_: Throwable) {}
+
         return try {
             context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
                 RomProcessor.getRomInfo(rom, inputStream)
@@ -67,6 +85,15 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     private fun getRomMetadata(uri: Uri): RomMetadata? {
+        try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                    val metadata = RomProcessor.getRomMetadata(channel)
+                    if (metadata != null) return metadata
+                }
+            }
+        } catch (_: Throwable) {}
+
         return context.contentResolver.openInputStream(uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
             RomProcessor.getRomMetadata(inputStream)
         }

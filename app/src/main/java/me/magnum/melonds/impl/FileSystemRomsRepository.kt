@@ -625,15 +625,13 @@ class FileSystemRomsRepository(
 
     private suspend fun processDirectory(directoryUri: Uri, directoryDocument: DocumentFile, collector: FlowCollector<Rom>) {
         val cachedState = getDirectoryState(directoryUri)
-        if (!directoryDocument.exists() || !directoryDocument.canRead()) {
-            Log.w(TAG, "ROM directory is not readable; preserving cached ROM data for $directoryUri")
-            markDirectoryNotScanned(directoryUri, cachedState?.lastScanned)
-            return
-        }
-
         val fileStates = collectDirectoryFileStates(directoryDocument)
         if (fileStates == null) {
-            Log.w(TAG, "ROM directory scan failed; preserving cached ROM data for $directoryUri")
+            if (!directoryDocument.exists() || !directoryDocument.canRead()) {
+                Log.w(TAG, "ROM directory is not readable; preserving cached ROM data for $directoryUri")
+            } else {
+                Log.w(TAG, "ROM directory scan failed; preserving cached ROM data for $directoryUri")
+            }
             markDirectoryNotScanned(directoryUri, cachedState?.lastScanned)
             return
         }
