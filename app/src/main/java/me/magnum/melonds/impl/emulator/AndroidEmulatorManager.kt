@@ -552,14 +552,19 @@ class AndroidEmulatorManager(
             dsiNandManager.closeNand()
         }
 
-        // Direct boot: showBootScreen=false bypasses DSi firmware/launcher entirely
-        // dsiWareAutoloadTitleId=0 ensures start() uses SetupDirectBoot() for the cart ROM
+        val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
+        val (showBootScreen, autoloadTitleId) = when (dsiWareBootMode) {
+            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> true to (titleId.toLong() and 0xFFFFFFFFL)
+            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> false to 0L
+            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> true to 0L
+        }
+
         val emulatorConfiguration = getRomEmulatorConfiguration(rom)
             .copy(
                 consoleType = ConsoleType.DSi,
                 useCustomBios = true,
-                showBootScreen = false,
-                dsiWareAutoloadTitleId = 0L,
+                showBootScreen = showBootScreen,
+                dsiWareAutoloadTitleId = autoloadTitleId,
             )
             .withPreparedDldiConfiguration()
             ?: run {
@@ -569,7 +574,7 @@ class AndroidEmulatorManager(
 
         setupEmulator(emulatorConfiguration)
 
-        Log.i(TAG, "loadDsiWare: booting title $titleIdHex via direct boot from NAND-exported .app")
+        Log.i(TAG, "loadDsiWare: booting title $titleIdHex via mode $dsiWareBootMode (autoloadId=0x${java.lang.Long.toHexString(autoloadTitleId)}, showBootScreen=$showBootScreen)")
         MelonEmulator.startBootDiagnosticCapture()
         val loadResult = MelonEmulator.loadRom(
             romUri = Uri.fromFile(executableFile),
@@ -639,7 +644,7 @@ class AndroidEmulatorManager(
             val renderer = settingsRepository.getCurrentVideoRenderer()
             val jitEnabled = settingsRepository.isJitEnabled()
             val customBios = settingsRepository.useCustomBios()
-            val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.4.1"
+            val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.4.2"
 
             val logText = buildString {
                 appendLine("==================================================")
@@ -663,6 +668,9 @@ class AndroidEmulatorManager(
                 appendLine("  Custom BIOS Enabled: $customBios")
                 appendLine("  DS Custom BIOS Status: ${dsBiosResult.status}")
                 appendLine("  DSi Custom BIOS/NAND Status: ${dsiBiosResult.status}")
+                if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
+                    appendLine("  DSiWare Boot Mode: ${settingsRepository.getDsiWareBootMode()}")
+                }
                 appendLine("--------------------------------------------------")
                 appendLine("EXECUTION TELEMETRY:")
                 appendLine("  Boot Method: $bootMethod")
