@@ -41,11 +41,11 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
 void MelonDSAndroid::DSiSupport::SetupDSiWareDirectBoot(melonDS::DSi* dsi, uint32_t titleIdLow, uint32_t titleIdHigh)
 {
     uint8_t titleId[8];
-    // Bytes 0..3: titleIdLow in little-endian (matching DSi NAND folder naming)
-    titleId[0] = static_cast<uint8_t>(titleIdLow & 0xFF);
-    titleId[1] = static_cast<uint8_t>((titleIdLow >> 8) & 0xFF);
-    titleId[2] = static_cast<uint8_t>((titleIdLow >> 16) & 0xFF);
-    titleId[3] = static_cast<uint8_t>((titleIdLow >> 24) & 0xFF);
+    // Bytes 0..3: ASCII Game Code characters in order (e.g. 'K', 'C', 'M', 'E' for 0x4B434D45)
+    titleId[0] = static_cast<uint8_t>((titleIdLow >> 24) & 0xFF);
+    titleId[1] = static_cast<uint8_t>((titleIdLow >> 16) & 0xFF);
+    titleId[2] = static_cast<uint8_t>((titleIdLow >> 8) & 0xFF);
+    titleId[3] = static_cast<uint8_t>(titleIdLow & 0xFF);
     // Bytes 4..7: category in little-endian (0x04, 0x00, 0x03, 0x00 for DSiWare category 0x00030004)
     titleId[4] = static_cast<uint8_t>(titleIdHigh & 0xFF);
     titleId[5] = static_cast<uint8_t>((titleIdHigh >> 8) & 0xFF);
