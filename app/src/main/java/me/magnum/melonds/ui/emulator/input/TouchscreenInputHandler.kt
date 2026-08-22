@@ -32,10 +32,7 @@ class TouchscreenInputHandler(
             MotionEvent.ACTION_POINTER_DOWN -> {
                 val actionIndex = event.actionIndex
                 val pointerId = event.getPointerId(actionIndex)
-                val tool = event.getToolType(actionIndex)
-                if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER || !touchActive || activePointerId == MotionEvent.INVALID_POINTER_ID) {
-                    activePointerId = pointerId
-                }
+                activePointerId = pointerId
                 if (!touchActive) {
                     touchActive = true
                     inputListener.onKeyPress(Input.TOUCHSCREEN)
