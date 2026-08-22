@@ -550,7 +550,7 @@ class AndroidEmulatorManager(
                 consoleType = ConsoleType.DSi,
                 useCustomBios = true,
                 showBootScreen = false,
-                dsiWareAutoloadTitleId = titleId,
+                dsiWareAutoloadTitleId = 0L,
             )
             .withPreparedDldiConfiguration()
             ?: run {
@@ -610,8 +610,12 @@ class AndroidEmulatorManager(
         try {
             val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             val logsDir = File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
-            val safeName = rom.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-            val logFile = File(logsDir, "STORM_DS_${safeName}_${gameCodeOrTitleId}.log")
+            val logFileName = if (rom.fileName.isNotBlank()) {
+                "${rom.fileName.substringBeforeLast('.')}.log"
+            } else {
+                "${rom.name}.log"
+            }
+            val logFile = File(logsDir, logFileName)
             val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
 
             val dsBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DS)
