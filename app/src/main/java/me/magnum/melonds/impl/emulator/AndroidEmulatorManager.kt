@@ -495,6 +495,9 @@ class AndroidEmulatorManager(
         }
 
         var isTemp = false
+        var hasPublicSave = false
+        var hasPrivateSave = false
+        var primaryFileType: DSiWareTitleFileType? = null
         try {
             val installedTitles = dsiNandManager.listTitles()
             val installedTitle = installedTitles.firstOrNull { it.titleId == titleId }
@@ -517,16 +520,45 @@ class AndroidEmulatorManager(
             } catch (e: Throwable) {
                 Log.w(TAG, "loadDsiWare: error importing user public save into NAND", e)
             }
+
+            // Export executable from NAND for direct boot
+            executableFile.delete()
+            val exportResult = dsiNandManager.exportTitleExecutable(titleId, executableFile.absolutePath)
+            if (!exportResult || !executableFile.exists() || executableFile.length() == 0L) {
+                Log.w(TAG, "loadDsiWare: failed to export executable title=$titleIdHex")
+                writeGameExecutionLog(rom, titleIdHex, false, "Failed to export executable from NAND", "loadDsiWare")
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+            }
+
+            val titleNow = dsiNandManager.listTitles().firstOrNull { it.titleId == titleId }
+            hasPublicSave = titleNow?.hasPublicSavFile() ?: false
+            hasPrivateSave = titleNow?.hasPrivateSavFile() ?: false
+            primaryFileType = if (hasPublicSave) DSiWareTitleFileType.PUBLIC_SAV else if (hasPrivateSave) DSiWareTitleFileType.PRIVATE_SAV else null
+
+            if (primaryFileType != null) {
+                val exportedSave = dsiNandManager.exportTitleFileToPath(
+                    titleId = titleId,
+                    fileType = primaryFileType,
+                    filePath = saveFile.absolutePath,
+                )
+                if (!exportedSave) {
+                    saveFile.writeBytes(ByteArray(0))
+                }
+            } else {
+                saveFile.writeBytes(ByteArray(0))
+            }
         } finally {
             dsiNandManager.closeNand()
         }
 
+        // Direct boot: showBootScreen=false bypasses DSi firmware/launcher entirely
+        // dsiWareAutoloadTitleId=0 ensures start() uses SetupDirectBoot() for the cart ROM
         val emulatorConfiguration = getRomEmulatorConfiguration(rom)
             .copy(
                 consoleType = ConsoleType.DSi,
                 useCustomBios = true,
-                showBootScreen = true,
-                dsiWareAutoloadTitleId = titleId,
+                showBootScreen = false,
+                dsiWareAutoloadTitleId = 0L,
             )
             .withPreparedDldiConfiguration()
             ?: run {
@@ -536,14 +568,20 @@ class AndroidEmulatorManager(
 
         setupEmulator(emulatorConfiguration)
 
-        Log.i(TAG, "loadDsiWare: booting title $titleIdHex via NAND-only bootFirmware (TLNC Warmboot 0x17)")
-        val bootResult = MelonEmulator.bootFirmware()
-        if (bootResult != MelonEmulator.FirmwareLoadResult.SUCCESS || !isActive) {
+        Log.i(TAG, "loadDsiWare: booting title $titleIdHex via direct boot from NAND-exported .app")
+        val loadResult = MelonEmulator.loadRom(
+            romUri = Uri.fromFile(executableFile),
+            sramUri = Uri.fromFile(saveFile),
+            gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+            gbaRomUri = null,
+            gbaSramUri = null,
+        )
+        if (loadResult.isTerminal || !isActive) {
             cameraManager.stopCurrentCameraSource()
             MelonEmulator.stopEmulation()
             dldiFolderSyncManager.syncBackIfNeeded()
-            writeGameExecutionLog(rom, titleIdHex, false, "bootFirmware returned error: $bootResult", "loadDsiWare")
-            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+            writeGameExecutionLog(rom, titleIdHex, false, "loadRom returned terminal error: $loadResult", "loadDsiWare")
+            return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
 
         messageQueue.start()
@@ -562,11 +600,12 @@ class AndroidEmulatorManager(
             titleId = titleId,
             titleIdHex = titleIdHex,
             sramUri = sram,
-            cachePublicSaveFile = null,
+            cachePublicSaveFile = if (hasPublicSave || hasPrivateSave) saveFile else null,
             isTemporaryInjected = isTemp,
+            fileType = primaryFileType ?: DSiWareTitleFileType.PUBLIC_SAV,
         )
         MelonEmulator.startEmulation(startPaused = true)
-        writeGameExecutionLog(rom, titleIdHex, true, "DSiWare boot successful in NAND-only DSi mode", "loadDsiWare")
+        writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)", "loadDsiWare")
         return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
     }
 
@@ -832,7 +871,23 @@ class AndroidEmulatorManager(
         val session = activeDsiWareSession ?: return
         activeDsiWareSession = null
 
+        val cacheSave = session.cachePublicSaveFile
         runBlocking(Dispatchers.IO) {
+            // Step 1: Copy the emulated .sav from cache to user's save folder
+            if (cacheSave != null && cacheSave.exists()) {
+                runCatching {
+                    context.contentResolver.openOutputStream(session.sramUri, "wt")?.use { output ->
+                        cacheSave.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                    Log.i(TAG, "DSiWare session: synced save to user save folder (${session.sramUri})")
+                }.onFailure {
+                    Log.w(TAG, "DSiWare session: failed to sync save to user save folder", it)
+                }
+            }
+
+            // Step 2: Sync save back into NAND and cleanup
             val openNandResult = dsiNandManager.openNand()
             if (openNandResult.isFailure()) {
                 Log.w(TAG, "DSiWare session: failed to reopen NAND for save sync title=${session.titleIdHex} result=$openNandResult")
@@ -840,20 +895,21 @@ class AndroidEmulatorManager(
             }
 
             try {
-                // Export public.sav from NAND directly into user save location
-                val exportedPublic = dsiNandManager.exportTitleFile(
-                    titleId = session.titleId,
-                    fileType = DSiWareTitleFileType.PUBLIC_SAV,
-                    fileUri = session.sramUri,
-                )
-                Log.i(TAG, "DSiWare session: exported public.sav from NAND to ${session.sramUri} (success=$exportedPublic)")
+                if (cacheSave != null && cacheSave.exists()) {
+                    val imported = dsiNandManager.importTitleFileFromPath(
+                        titleId = session.titleId,
+                        fileType = session.fileType,
+                        filePath = cacheSave.absolutePath,
+                    )
+                    Log.i(TAG, "DSiWare session: synced save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
+                }
 
                 if (session.isTemporaryInjected) {
                     Log.i(TAG, "DSiWare session: cleaning up temporary injected title ${session.titleIdHex} from NAND")
                     dsiNandManager.deleteTitle(session.titleId)
                 }
             } catch (e: Throwable) {
-                Log.w(TAG, "DSiWare session: error during save export / cleanup title=${session.titleIdHex}", e)
+                Log.w(TAG, "DSiWare session: error during save sync / cleanup title=${session.titleIdHex}", e)
             } finally {
                 dsiNandManager.closeNand()
             }
