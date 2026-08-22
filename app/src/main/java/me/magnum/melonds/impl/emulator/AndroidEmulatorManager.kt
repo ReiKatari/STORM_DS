@@ -79,6 +79,7 @@ class AndroidEmulatorManager(
         val sramUri: Uri,
         val cachePublicSaveFile: File?,
         val isTemporaryInjected: Boolean,
+        val fileType: DSiWareTitleFileType = DSiWareTitleFileType.PUBLIC_SAV,
     )
 
     private val _emulatorEvents = MutableSharedFlow<EmulatorEvent>(extraBufferCapacity = Int.MAX_VALUE)
@@ -495,6 +496,8 @@ class AndroidEmulatorManager(
 
         var isTemp = false
         var hasPublicSave = false
+        var hasPrivateSave = false
+        var primaryFileType: DSiWareTitleFileType? = null
         try {
             val installedTitles = dsiNandManager.listTitles()
             val installedTitle = installedTitles.firstOrNull { it.titleId == titleId }
@@ -529,10 +532,13 @@ class AndroidEmulatorManager(
 
             val titleNow = dsiNandManager.listTitles().firstOrNull { it.titleId == titleId }
             hasPublicSave = titleNow?.hasPublicSavFile() ?: false
-            if (hasPublicSave) {
+            hasPrivateSave = titleNow?.hasPrivateSavFile() ?: false
+            primaryFileType = if (hasPublicSave) DSiWareTitleFileType.PUBLIC_SAV else if (hasPrivateSave) DSiWareTitleFileType.PRIVATE_SAV else null
+
+            if (primaryFileType != null) {
                 val exportedSave = dsiNandManager.exportTitleFileToPath(
                     titleId = titleId,
-                    fileType = DSiWareTitleFileType.PUBLIC_SAV,
+                    fileType = primaryFileType,
                     filePath = saveFile.absolutePath,
                 )
                 if (!exportedSave) {
@@ -592,8 +598,9 @@ class AndroidEmulatorManager(
             titleId = titleId,
             titleIdHex = titleIdHex,
             sramUri = sram,
-            cachePublicSaveFile = if (hasPublicSave) saveFile else null,
+            cachePublicSaveFile = if (hasPublicSave || hasPrivateSave) saveFile else null,
             isTemporaryInjected = isTemp,
+            fileType = primaryFileType ?: DSiWareTitleFileType.PUBLIC_SAV,
         )
         MelonEmulator.startEmulation(startPaused = true)
         writeGameExecutionLog(rom, titleIdHex, true, "DSiWare boot successful in DSi mode", "loadDsiWare")
@@ -887,10 +894,10 @@ class AndroidEmulatorManager(
                 if (cacheSave != null && cacheSave.exists()) {
                     val imported = dsiNandManager.importTitleFileFromPath(
                         titleId = session.titleId,
-                        fileType = DSiWareTitleFileType.PUBLIC_SAV,
+                        fileType = session.fileType,
                         filePath = cacheSave.absolutePath,
                     )
-                    Log.i(TAG, "DSiWare session: synced public save into NAND title=${session.titleIdHex} result=$imported")
+                    Log.i(TAG, "DSiWare session: synced save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
                 }
 
                 if (session.isTemporaryInjected) {
