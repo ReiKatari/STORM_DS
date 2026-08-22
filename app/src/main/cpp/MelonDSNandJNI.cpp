@@ -1082,14 +1082,18 @@ Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, 
     {
         char bannerSavPath[128];
         snprintf(bannerSavPath, sizeof(bannerSavPath), "0:/title/%08x/%08x/data/banner.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        FF_FIL file;
-        if (f_open(&file, bannerSavPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+        FF_FILINFO binfo;
+        if (f_stat(bannerSavPath, &binfo) != FR_OK || binfo.fsize != 0x4000)
         {
-            u8 bannersav[0x4000];
-            memset(bannersav, 0, sizeof(bannersav));
-            u32 nwrite;
-            f_write(&file, bannersav, sizeof(bannersav), &nwrite);
-            f_close(&file);
+            FF_FIL file;
+            if (f_open(&file, bannerSavPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+            {
+                u8 bannersav[0x4000];
+                memset(bannersav, 0, sizeof(bannersav));
+                u32 nwrite;
+                f_write(&file, bannersav, sizeof(bannersav), &nwrite);
+                f_close(&file);
+            }
         }
     }
 
