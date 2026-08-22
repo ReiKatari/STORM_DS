@@ -455,6 +455,14 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
         settings.TouchCalibrationADC2 = {255 << 4, 191 << 4};
         settings.TouchCalibrationPixel2 = {255, 191};
 
+        if (configuration.dsiWareAutoloadTitleId != 0)
+        {
+            u32 titleIdLow = (u32)(configuration.dsiWareAutoloadTitleId & 0xFFFFFFFF);
+            u32 titleIdHigh = 0x00030004;
+            memcpy(&settings.SystemMenuMostRecentTitleID[0], &titleIdLow, sizeof(titleIdLow));
+            memcpy(&settings.SystemMenuMostRecentTitleID[4], &titleIdHigh, sizeof(titleIdHigh));
+        }
+
         settings.UpdateHash();
 
         if (!mount.ApplyUserData(settings))

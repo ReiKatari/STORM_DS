@@ -925,7 +925,7 @@ class AndroidEmulatorManager(
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isDsi = rom.isInstalledDsiWareShortcut || rom.isDsiWareTitle
+        val isDsi = rom.isInstalledDsiWareShortcut || isRealDsiWareTitle(rom)
         val mustUseCustomBios = isDsi || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
         val consoleType = if (isDsi) {
             ConsoleType.DSi
