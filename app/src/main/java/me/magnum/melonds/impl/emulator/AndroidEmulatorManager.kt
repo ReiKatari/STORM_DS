@@ -644,7 +644,7 @@ class AndroidEmulatorManager(
             val renderer = settingsRepository.getCurrentVideoRenderer()
             val jitEnabled = settingsRepository.isJitEnabled()
             val customBios = settingsRepository.useCustomBios()
-            val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.4.5"
+            val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.4.6"
 
             val logText = buildString {
                 appendLine("==================================================")
