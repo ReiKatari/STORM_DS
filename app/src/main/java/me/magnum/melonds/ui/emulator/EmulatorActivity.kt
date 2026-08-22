@@ -611,8 +611,13 @@ class EmulatorActivity : AppCompatActivity() {
             val newHeight = bottom - top
 
             if (newWidth != oldWith || newHeight != oldHeight) {
-                updateRendererScreenAreas()
+                lastKnownGoodTopRect = null
+                lastKnownGoodBottomRect = null
                 viewModel.setUiSize(newWidth, newHeight)
+                handler.post {
+                    updateRendererScreenAreas()
+                    presentation?.updateRendererScreenAreas()
+                }
             }
         }
         binding.viewLayoutControls.addOnLayoutChangeListener(layoutChangeListener)
@@ -1913,6 +1918,8 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {
         if (layoutConfiguration != null) {
+            lastKnownGoodTopRect = null
+            lastKnownGoodBottomRect = null
             setLayoutOrientation(layoutConfiguration.layoutOrientation)
             with(binding.viewLayoutControls) {
                 instantiateLayout(layoutConfiguration, LayoutTarget.MAIN_SCREEN)
@@ -1943,7 +1950,7 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun applyDualScreenPresetSwapState(preset: DualScreenPreset = viewModel.dualScreenPreset.value) {
-        if (preset == DualScreenPreset.OFF) {
+        if (preset == DualScreenPreset.OFF || presentation == null) {
             return
         }
 
@@ -1972,8 +1979,8 @@ class EmulatorActivity : AppCompatActivity() {
         return when {
             hasTop && !hasBottom -> LayoutComponent.TOP_SCREEN
             hasBottom && !hasTop -> LayoutComponent.BOTTOM_SCREEN
-            hasBottom -> LayoutComponent.BOTTOM_SCREEN
             hasTop -> LayoutComponent.TOP_SCREEN
+            hasBottom -> LayoutComponent.BOTTOM_SCREEN
             else -> null
         }
     }
@@ -4231,11 +4238,15 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        lastKnownGoodTopRect = null
+        lastKnownGoodBottomRect = null
         updateOrientation(newConfig)
         // There is an issue in which, after moving the app to a different display, the app reports that it is still running on the previous display. Adding a frame of delay
         // seems to fix the problem.
         handler.post {
             updateDisplays()
+            updateRendererScreenAreas()
+            presentation?.updateRendererScreenAreas()
         }
     }
 
