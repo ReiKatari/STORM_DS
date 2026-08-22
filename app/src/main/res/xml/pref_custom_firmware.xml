@@ -54,7 +54,7 @@
             android:summary="%s"
             android:entries="@array/dsiware_boot_mode_entries"
             android:entryValues="@array/dsiware_boot_mode_values"
-            android:defaultValue="autoload"
+            android:defaultValue="direct"
             app:iconSpaceReserved="false" />
 
     <SwitchPreference

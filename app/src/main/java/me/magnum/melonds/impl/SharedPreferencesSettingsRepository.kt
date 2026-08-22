@@ -569,11 +569,11 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode {
-        val raw = preferences.getString("dsiware_boot_mode", "autoload") ?: "autoload"
+        val raw = preferences.getString("dsiware_boot_mode", "direct") ?: "direct"
         return when (raw.lowercase()) {
-            "direct" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT
+            "autoload" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD
             "system_menu" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU
-            else -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD
+            else -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT
         }
     }
 
