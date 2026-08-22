@@ -609,11 +609,11 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getCurrentVideoRenderer(): VideoRenderer {
-        val videoRendererPreference = preferences.getString("video_renderer", "software")!!
+        val videoRendererPreference = preferences.getString("video_renderer", "opengl")!!
         return sanitizeVideoRenderer(
             runCatching { VideoRenderer.valueOf(videoRendererPreference.uppercase()) }
-                .getOrDefault(VideoRenderer.SOFTWARE),
-            fallback = VideoRenderer.SOFTWARE,
+                .getOrDefault(VideoRenderer.OPENGL),
+            fallback = VideoRenderer.OPENGL,
         )
     }
 
