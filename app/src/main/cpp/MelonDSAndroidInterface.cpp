@@ -362,9 +362,9 @@ bool createVulkanInstance(VkInstance* instance)
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "melonDS-android";
+    appInfo.pApplicationName = "STORM_DS-android";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "melonDS";
+    appInfo.pEngineName = "STORM_DS";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_1;
 

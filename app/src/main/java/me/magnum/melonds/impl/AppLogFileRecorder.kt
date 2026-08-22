@@ -68,7 +68,7 @@ class AppLogFileRecorder @Inject constructor(
         context.contentResolver.openOutputStream(logDocument.uri, "wa")?.use { outputStream ->
             BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
                 writer.appendLine()
-                writer.appendLine("melonDualDS app log")
+                writer.appendLine("STORM DS app log")
                 writer.appendLine("started=${DATE_FORMAT.format(Date())}")
                 writer.appendLine("pid=${Process.myPid()}")
                 writer.appendLine("directory=$logDirectory")
@@ -113,7 +113,7 @@ class AppLogFileRecorder @Inject constructor(
 
     private companion object {
         const val TAG = "AppLogFileRecorder"
-        const val LOG_FILE_NAME = "melonDualLog.log"
+        const val LOG_FILE_NAME = "STORM_DS.log"
         val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
     }
 }
