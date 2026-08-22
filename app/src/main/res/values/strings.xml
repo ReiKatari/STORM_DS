@@ -391,6 +391,8 @@
     <string name="internal_firmware_settings_summary">Adjust the settings of the internal firmware.</string>
     <string name="custom_bios_firmware">Custom BIOS and firmware</string>
     <string name="custom_bios_firmware_description">Using a custom BIOS and firmware allows you to launch and navigate in the DS\'s firmware without loading a ROM, just like in a real system</string>
+    <string name="block_bios_download_title">Block downloading BIOS files</string>
+    <string name="block_bios_download_summary">Hides the automatic download buttons for verified BIOS and firmware files</string>
     <string name="auto_download_ds_bios_title">Download Official DS BIOS Files</string>
     <string name="auto_download_ds_bios_summary">Auto-download and configure bios7.bin, bios9.bin, and firmware.bin</string>
     <string name="bios_directory">DS BIOS directory</string>
