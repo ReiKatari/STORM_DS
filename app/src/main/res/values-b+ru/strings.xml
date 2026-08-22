@@ -808,8 +808,10 @@
   <string name="console_type">Тип консоли</string>
   <string name="internal_firmware_settings">Встроенные настройки прошивки</string>
   <string name="internal_firmware_settings_summary">Имя, язык, цвет и дата рождения</string>
-  <string name="custom_bios_firmware">Файлы BIOS и Прошивки</string>
+  <string name="custom_bios_firmware">Файлы BIOS и прошивки</string>
   <string name="custom_bios_firmware_description">Пути к оригинальным дампам BIOS и NAND DSi</string>
+  <string name="block_bios_download_title">Блокировать скачивание проверенных файлов</string>
+  <string name="block_bios_download_summary">Скрывает кнопки автоматической загрузки проверенных дампов BIOS и прошивки</string>
   <string name="auto_download_ds_bios_title">Скачать проверенные файлы BIOS DS</string>
   <string name="auto_download_ds_bios_summary">Автоматическая загрузка и настройка bios7.bin, bios9.bin, firmware.bin</string>
   <string name="bios_directory">Папка с BIOS DS</string>
@@ -940,7 +942,7 @@
   <string name="auto_save_state_on_exit_summary">Автоматически сохранять состояние при закрытии игры</string>
   <string name="auto_load_state_on_launch">Автозагрузка при запуске</string>
   <string name="auto_load_state_on_launch_summary">Автоматически загружать последнее состояние при запуске игры</string>
-  <string name="input">Управление и Геймпады</string>
+  <string name="input">Управление и геймпады</string>
   <string name="input_summary">Экранные кнопки, физические геймпады, вибрация и сенсор</string>
   <string name="key_mapping">Назначение физических клавиш</string>
   <string name="key_mapping_summary">Настройка геймпада и клавиатуры</string>

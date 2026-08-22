@@ -48,6 +48,21 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
         val autoDownloadDsPreference = findPreference<androidx.preference.Preference>("auto_download_ds_bios")
         val autoDownloadDsiPreference = findPreference<androidx.preference.Preference>("auto_download_dsi_bios")
+        val blockDownloadPreference = findPreference<androidx.preference.SwitchPreference>("block_bios_download")
+
+        fun updateDownloadVisibility(blocked: Boolean) {
+            autoDownloadDsPreference?.isVisible = !blocked
+            autoDownloadDsiPreference?.isVisible = !blocked
+        }
+
+        val isBlocked = blockDownloadPreference?.isChecked ?: false
+        updateDownloadVisibility(isBlocked)
+
+        blockDownloadPreference?.setOnPreferenceChangeListener { _, newValue ->
+            val blocked = newValue as Boolean
+            updateDownloadVisibility(blocked)
+            true
+        }
 
         autoDownloadDsPreference?.setOnPreferenceClickListener {
             val progressDialog = android.app.ProgressDialog(requireContext()).apply {
