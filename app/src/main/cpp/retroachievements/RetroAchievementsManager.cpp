@@ -57,7 +57,7 @@ constexpr long long RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT = 50000;
 constexpr int RC_CLIENT_PERF_WINDOW_SLOW_FRAME_COUNT_LIMIT = 12;
 constexpr int RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_WARNING = 2;
 constexpr const char* RC_CLIENT_DEFAULT_IMAGE = "https://media.retroachievements.org/Images/000001.png";
-constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "melonDualDS-android/0.7.0";
+constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "STORM_DS-android/2.3.6";
 constexpr int RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr int RC_CLIENT_HTTP_READ_TIMEOUT_MS = 15000;
 constexpr size_t RC_CLIENT_MAX_LOGGED_VALUE_LENGTH = 200;
@@ -2711,12 +2711,12 @@ std::string RetroAchievementsManager::BuildRcClientResolveHashResponse() const
 std::string RetroAchievementsManager::BuildRcClientAchievementSetsResponse() const
 {
     const auto gameId = (runtimeBridgeConfig && runtimeBridgeConfig->gameId > 0) ? runtimeBridgeConfig->gameId : 1;
-    const auto username = runtimeBridgeConfig ? runtimeBridgeConfig->username : "melonDualDS";
+    const auto username = runtimeBridgeConfig ? runtimeBridgeConfig->username : "STORM_DS";
 
     std::ostringstream response;
     response << "{\"Success\":true,"
              << "\"GameId\":" << gameId << ","
-             << "\"Title\":\"melonDualDS\","
+             << "\"Title\":\"STORM DS\","
              << "\"ConsoleId\":" << RC_CONSOLE_NINTENDO_DS << ","
              << "\"ImageIconUrl\":\"" << RC_CLIENT_DEFAULT_IMAGE << "\","
              << "\"RichPresenceGameId\":" << gameId << ","
