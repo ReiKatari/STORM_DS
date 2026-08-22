@@ -52,5 +52,6 @@ void MelonDSAndroid::DSiSupport::SetupDSiWareDirectBoot(melonDS::DSi* dsi, uint3
     titleId[6] = static_cast<uint8_t>((titleIdHigh >> 16) & 0xFF);
     titleId[7] = static_cast<uint8_t>((titleIdHigh >> 24) & 0xFF);
 
-    setupAutoLoadRaw(dsi, titleId, 0x00);
+    // BootType 0x03 = DSiWare Title (0x01 = Cartridge, 0x02 = System Landing)
+    setupAutoLoadRaw(dsi, titleId, 0x03);
 }
