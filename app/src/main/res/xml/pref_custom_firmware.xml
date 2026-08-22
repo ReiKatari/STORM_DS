@@ -17,6 +17,13 @@
             android:defaultValue="false"
             android:dependency="use_custom_bios" />
 
+    <SwitchPreference
+            android:key="block_bios_download"
+            android:title="@string/block_bios_download_title"
+            android:summary="@string/block_bios_download_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
     <Preference
             android:key="auto_download_ds_bios"
             android:title="@string/auto_download_ds_bios_title"

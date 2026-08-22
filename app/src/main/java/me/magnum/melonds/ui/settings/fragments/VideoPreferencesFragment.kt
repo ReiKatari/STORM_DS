@@ -1120,10 +1120,26 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             if (isSoftware) {
                 aiSwitch.isChecked = false
                 aiSwitch.isEnabled = false
-                aiSwitch.summary = "AI-Upscale 2D-спрайтов (Anime4K) недоступен при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
+                aiSwitch.summary = "AI-Upscale 2D-спрайтов (Anime4K / xBRZ) недоступен при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
             } else {
                 aiSwitch.isEnabled = true
                 aiSwitch.summary = getString(R.string.video_ai_upscale_summary)
+                aiSwitch.setOnPreferenceChangeListener { _, newValue ->
+                    val enabled = newValue as Boolean
+                    if (enabled && !shaderLibraryManager.isInstalled()) {
+                        AlertDialog.Builder(requireContext())
+                            .setTitle(R.string.video_ai_upscale_title)
+                            .setMessage("Для работы AI-Upscale 2D-спрайтов (Anime4K / xBRZ) требуется загрузить пакет шейдеров RetroArch.\n\nСкачать и установить сейчас?")
+                            .setPositiveButton("Скачать") { _, _ ->
+                                showInstallShaderLibraryDialog()
+                            }
+                            .setNegativeButton(R.string.cancel, null)
+                            .show()
+                        true
+                    } else {
+                        true
+                    }
+                }
             }
         }
 
