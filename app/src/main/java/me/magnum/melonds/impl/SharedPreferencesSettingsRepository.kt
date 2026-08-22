@@ -860,15 +860,20 @@ class SharedPreferencesSettingsRepository(
             }?.relativeTo(rootDir)?.path?.replace('\\', '/')
     }
 
+    private fun observeAiUpscaleConfiguration(): Flow<Pair<Boolean, String>> {
+        return combine(observeAiUpscaleEnabled(), observeAiUpscaleScale()) { enabled, scale ->
+            enabled to scale
+        }
+    }
+
     private fun observeRetroArchShaderConfiguration(): Flow<RetroArchShaderConfiguration> {
         return combine(
             observeRetroArchShaderRootLocation(),
             observeRetroArchShaderPreset(),
             observeRetroArchShaderParameters(),
             observeRetroArchShaderClearHistory(),
-            observeAiUpscaleEnabled(),
-            observeAiUpscaleScale(),
-        ) { root, presetRelativePath, parameters, clearHistory, aiEnabled, aiScale ->
+            observeAiUpscaleConfiguration(),
+        ) { root, presetRelativePath, parameters, clearHistory, (aiEnabled, aiScale) ->
             val effectivePreset = if (aiEnabled && (presetRelativePath.isNullOrBlank() || presetRelativePath == "none")) {
                 findAiUpscalePreset(root, aiScale) ?: presetRelativePath
             } else {
