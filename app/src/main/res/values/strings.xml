@@ -400,6 +400,10 @@
     <string name="auto_download_dsi_bios_summary">Auto-download and configure bios7.bin, bios9.bin, firmware.bin, and nand.bin</string>
     <string name="dsi_bios_directory">DSi BIOS directory</string>
     <string name="show_boot_screen">Show boot screen</string>
+    <string name="dsiware_boot_mode_title">DSiWare Boot Mode</string>
+    <string name="dsiware_boot_mode_autoload">System Autoload (Recommended)</string>
+    <string name="dsiware_boot_mode_direct">Direct Boot</string>
+    <string name="dsiware_boot_mode_system_menu">DSi System Menu (NAND Launcher)</string>
     <string name="mac_address">MAC address</string>
     <string name="randomize_mac_address">Randomize MAC address</string>
     <string name="randomize_mac_address_summary">When enabled, a random MAC address is used at every boot. This may cause some games to think its running on a different system and can break time based events.</string>

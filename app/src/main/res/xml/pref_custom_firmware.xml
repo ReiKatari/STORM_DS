@@ -48,6 +48,15 @@
             app:iconSpaceReserved="false"
             app:consoleType="dsi" />
 
+    <ListPreference
+            android:key="dsiware_boot_mode"
+            android:title="@string/dsiware_boot_mode_title"
+            android:summary="%s"
+            android:entries="@array/dsiware_boot_mode_entries"
+            android:entryValues="@array/dsiware_boot_mode_values"
+            android:defaultValue="autoload"
+            app:iconSpaceReserved="false" />
+
     <SwitchPreference
             android:key="custom_randomize_mac_address"
             android:title="@string/randomize_mac_address"
