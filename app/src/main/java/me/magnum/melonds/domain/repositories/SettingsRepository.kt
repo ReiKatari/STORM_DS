@@ -52,6 +52,8 @@ interface SettingsRepository {
     fun getDldiSdCardImageSize(): Int
     fun showBootScreen(): Boolean
     fun isJitEnabled(): Boolean
+    fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode
+    fun setDsiWareBootMode(mode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode)
 
     fun getCurrentVideoRenderer(): VideoRenderer
     fun getEffectiveVideoRenderer(romConfig: RomConfig): VideoRenderer

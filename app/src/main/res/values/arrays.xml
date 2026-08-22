@@ -446,4 +446,15 @@
         <item>id</item>
         <item>zh-Hans</item>
     </string-array>
+
+    <string-array name="dsiware_boot_mode_entries">
+        <item>@string/dsiware_boot_mode_autoload</item>
+        <item>@string/dsiware_boot_mode_direct</item>
+        <item>@string/dsiware_boot_mode_system_menu</item>
+    </string-array>
+    <string-array name="dsiware_boot_mode_values">
+        <item>autoload</item>
+        <item>direct</item>
+        <item>system_menu</item>
+    </string-array>
 </resources>

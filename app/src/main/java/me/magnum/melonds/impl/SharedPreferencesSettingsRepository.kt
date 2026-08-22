@@ -568,6 +568,25 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("use_custom_bios", false)
     }
 
+    override fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode {
+        val raw = preferences.getString("dsiware_boot_mode", "autoload") ?: "autoload"
+        return when (raw.lowercase()) {
+            "direct" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT
+            "system_menu" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU
+            else -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD
+        }
+    }
+
+    override fun setDsiWareBootMode(mode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode) {
+        preferences.edit {
+            putString("dsiware_boot_mode", when (mode) {
+                me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> "direct"
+                me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> "system_menu"
+                me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> "autoload"
+            })
+        }
+    }
+
     override fun getDsBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("bios_dir", null)?.firstOrNull()
         return dirPreference?.toUri()
