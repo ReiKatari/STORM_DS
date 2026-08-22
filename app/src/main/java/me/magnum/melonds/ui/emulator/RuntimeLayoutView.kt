@@ -161,11 +161,19 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         } else {
             LayoutComponent.BOTTOM_SCREEN to LayoutComponent.TOP_SCREEN
         }
-        systemInputHandler?.let {
-            getLayoutComponentView(touchScreenComponent)?.view?.setOnTouchListener(TouchscreenInputHandler(it))
-            getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)?.view?.setOnTouchListener(HybridScreenTouchscreenInputHandler(it))
+        systemInputHandler?.let { handler ->
+            val touchView = getLayoutComponentView(touchScreenComponent)?.view
+            if (touchView != null) {
+                touchView.setOnTouchListener(TouchscreenInputHandler(handler))
+            } else {
+                // Fallback for single-screen layouts where only one screen is rendered on this display
+                getLayoutComponentView(nonTouchScreenComponent)?.view?.setOnTouchListener(TouchscreenInputHandler(handler))
+            }
+            getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)?.view?.setOnTouchListener(HybridScreenTouchscreenInputHandler(handler))
         }
-        getLayoutComponentView(nonTouchScreenComponent)?.view?.setOnTouchListener(null)
+        if (getLayoutComponentView(touchScreenComponent)?.view != null) {
+            getLayoutComponentView(nonTouchScreenComponent)?.view?.setOnTouchListener(null)
+        }
     }
 
     private fun updateVisibility() {

@@ -18,37 +18,43 @@ class TouchscreenInputHandler(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, event: MotionEvent): Boolean {
+        val width = if (v.width > 0) v.width else 1
+        val height = if (v.height > 0) v.height else 1
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                val actionIndex = event.actionIndex
+                activePointerId = event.getPointerId(actionIndex)
                 touchActive = true
-                activePointerId = findBestPointerId(event)
                 inputListener.onKeyPress(Input.TOUCHSCREEN)
-                inputListener.onTouch(normalizeTouchCoordinates(event, v.width, v.height))
+                inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
-                val bestId = findBestPointerId(event)
-                activePointerId = bestId
-                if (touchActive) {
-                    inputListener.onTouch(normalizeTouchCoordinates(event, v.width, v.height))
-                } else {
+                val actionIndex = event.actionIndex
+                val pointerId = event.getPointerId(actionIndex)
+                val tool = event.getToolType(actionIndex)
+                if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER || !touchActive || activePointerId == MotionEvent.INVALID_POINTER_ID) {
+                    activePointerId = pointerId
+                }
+                if (!touchActive) {
                     touchActive = true
                     inputListener.onKeyPress(Input.TOUCHSCREEN)
-                    inputListener.onTouch(normalizeTouchCoordinates(event, v.width, v.height))
                 }
+                inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
             }
             MotionEvent.ACTION_MOVE -> {
                 if (touchActive) {
-                    inputListener.onTouch(normalizeTouchCoordinates(event, v.width, v.height))
+                    inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 val actionIndex = event.actionIndex
                 val releasedPointerId = event.getPointerId(actionIndex)
                 if (activePointerId == releasedPointerId) {
-                    val remainingCount = event.pointerCount - 1
-                    if (remainingCount > 0) {
-                        activePointerId = findRemainingBestPointerId(event, actionIndex)
-                        inputListener.onTouch(normalizeTouchCoordinates(event, v.width, v.height))
+                    val remainingPointerId = findRemainingBestPointerId(event, actionIndex)
+                    if (remainingPointerId != MotionEvent.INVALID_POINTER_ID) {
+                        activePointerId = remainingPointerId
+                        inputListener.onTouch(normalizeTouchCoordinates(event, width, height))
                     } else {
                         endTouch()
                     }
@@ -70,16 +76,6 @@ class TouchscreenInputHandler(
         }
     }
 
-    private fun findBestPointerId(event: MotionEvent): Int {
-        for (i in 0 until event.pointerCount) {
-            val tool = event.getToolType(i)
-            if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
-                return event.getPointerId(i)
-            }
-        }
-        return event.getPointerId(event.actionIndex)
-    }
-
     private fun findRemainingBestPointerId(event: MotionEvent, excludeIndex: Int): Int {
         for (i in 0 until event.pointerCount) {
             if (i == excludeIndex) continue
@@ -97,35 +93,23 @@ class TouchscreenInputHandler(
     }
 
     private fun normalizeTouchCoordinates(event: MotionEvent, viewWidth: Int, viewHeight: Int): Point {
-        var touchX = 0f
-        var touchY = 0f
-
-        var stylusIndex = -1
-        for (i in 0 until event.pointerCount) {
-            val tool = event.getToolType(i)
-            if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
-                stylusIndex = i
-                break
-            }
-        }
-
-        if (stylusIndex != -1) {
-            touchX = event.getX(stylusIndex)
-            touchY = event.getY(stylusIndex)
+        val pointerIndex = if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
+            val idx = event.findPointerIndex(activePointerId)
+            if (idx >= 0 && idx < event.pointerCount) idx else event.actionIndex.coerceIn(0, event.pointerCount - 1)
         } else {
-            val pointerIndex = if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
-                event.findPointerIndex(activePointerId).takeIf { it >= 0 } ?: 0
-            } else {
-                0
-            }
-            touchX = event.getX(pointerIndex)
-            touchY = event.getY(pointerIndex)
+            event.actionIndex.coerceIn(0, event.pointerCount - 1)
         }
+
+        val touchX = event.getX(pointerIndex)
+        val touchY = event.getY(pointerIndex)
+
+        val safeWidth = if (viewWidth > 0) viewWidth.toFloat() else 256f
+        val safeHeight = if (viewHeight > 0) viewHeight.toFloat() else 192f
 
         val rect = viewRectProvider?.invoke()
         if (rect == null || rect.width() <= 0f || rect.height() <= 0f) {
-            touchPoint.x = (touchX / viewWidth * 256).toInt().coerceIn(0, 255)
-            touchPoint.y = (touchY / viewHeight * 192).toInt().coerceIn(0, 191)
+            touchPoint.x = ((touchX / safeWidth) * 256f).toInt().coerceIn(0, 255)
+            touchPoint.y = ((touchY / safeHeight) * 192f).toInt().coerceIn(0, 191)
             return touchPoint
         }
 
