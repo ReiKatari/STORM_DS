@@ -283,10 +283,12 @@ class SharedPreferencesSettingsRepository(
         renderConfigurationFlow = combine(
             renderInputsFlow,
             observeRetroArchShaderConfiguration(),
-        ) { renderInputs, retroArchShader ->
+            observeAiUpscaleEnabled(),
+        ) { renderInputs, retroArchShader, aiEnabled ->
             val effectiveFiltering = when {
                 renderInputs.core.renderer == VideoRenderer.VULKAN && !renderInputs.core.filtering.isSupportedByVulkan() -> VideoFiltering.NONE
                 renderInputs.core.renderer != VideoRenderer.VULKAN && !renderInputs.core.filtering.isSupportedByOpenGlSurface() -> VideoFiltering.NONE
+                aiEnabled && !retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.RETROARCH
                 renderInputs.core.filtering == VideoFiltering.RETROARCH &&
                     retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.NONE
                 else -> renderInputs.core.filtering
@@ -815,14 +817,64 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    private fun observeAiUpscaleEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("video_ai_upscale_enabled") {
+            preferences.getBoolean("video_ai_upscale_enabled", false)
+        }
+    }
+
+    private fun observeAiUpscaleScale(): Flow<String> {
+        return getOrCreatePreferenceSharedFlow("video_ai_upscale_scale") {
+            preferences.getString("video_ai_upscale_scale", "4x") ?: "4x"
+        }
+    }
+
+    private fun findAiUpscalePreset(root: ResolvedShaderRoot?, scale: String): String? {
+        val rootDir = when (root) {
+            is ResolvedShaderRoot.Local -> root.dir
+            else -> return null
+        }
+        val cleanScale = scale.filter { it.isDigit() }.ifEmpty { "4" }
+        val candidates = listOf(
+            "xbrz/${cleanScale}xbrz-freescale.slangp",
+            "xbrz/${cleanScale}xbrz.slangp",
+            "xbrz/4xbrz-freescale.slangp",
+            "anime4k/anime4k-all-in-one.slangp",
+            "anime4k/anime4k-ultrafast.slangp",
+            "scale_fx/scalefx.slangp",
+            "scale_fx/scalefx-9-pass.slangp",
+            "edge-smoothing/xbrz/${cleanScale}xbrz-freescale.slangp",
+            "edge-smoothing/xbrz/4xbrz-freescale.slangp",
+        )
+        for (candidate in candidates) {
+            val file = File(rootDir, candidate)
+            if (file.exists() && file.isFile) {
+                return candidate
+            }
+        }
+        return rootDir.walkTopDown().maxDepth(4)
+            .filter { it.isFile && it.extension.equals("slangp", ignoreCase = true) }
+            .firstOrNull { file ->
+                val name = file.name.lowercase()
+                name.contains("xbrz") || name.contains("anime4k") || name.contains("scalefx") || name.contains("scale_fx")
+            }?.relativeTo(rootDir)?.path?.replace('\\', '/')
+    }
+
     private fun observeRetroArchShaderConfiguration(): Flow<RetroArchShaderConfiguration> {
         return combine(
             observeRetroArchShaderRootLocation(),
             observeRetroArchShaderPreset(),
             observeRetroArchShaderParameters(),
             observeRetroArchShaderClearHistory(),
-        ) { root, presetRelativePath, parameters, clearHistory ->
-            importRetroArchShader(root, presetRelativePath, parameters, clearHistory)
+            observeAiUpscaleEnabled(),
+            observeAiUpscaleScale(),
+        ) { root, presetRelativePath, parameters, clearHistory, aiEnabled, aiScale ->
+            val effectivePreset = if (aiEnabled && (presetRelativePath.isNullOrBlank() || presetRelativePath == "none")) {
+                findAiUpscalePreset(root, aiScale) ?: presetRelativePath
+            } else {
+                presetRelativePath
+            }
+            importRetroArchShader(root, effectivePreset, parameters, clearHistory)
         }
     }
 
