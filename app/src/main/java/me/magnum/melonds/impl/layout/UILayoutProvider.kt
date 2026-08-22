@@ -215,14 +215,28 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             // Proportional scaling so user customizations are never lost on window resizing or backgrounding
             val scaleX = if (sourceVariant.uiSize.x > 0) variant.uiSize.x.toFloat() / sourceVariant.uiSize.x else 1f
             val scaleY = if (sourceVariant.uiSize.y > 0) variant.uiSize.y.toFloat() / sourceVariant.uiSize.y else 1f
+            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant)
             val scaledComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
-                val scaledRect = Rect(
-                    (comp.rect.x * scaleX).toInt(),
-                    (comp.rect.y * scaleY).toInt(),
-                    (comp.rect.width * scaleX).toInt(),
-                    (comp.rect.height * scaleY).toInt()
-                )
-                comp.copy(rect = scaledRect)
+                if (comp.isScreen()) {
+                    val defaultScreenComp = defaultLayout.mainScreenLayout.components?.firstOrNull { it.component == comp.component }
+                    if (defaultScreenComp != null) {
+                        comp.copy(rect = defaultScreenComp.rect)
+                    } else {
+                        val scaledWidth = (comp.rect.width * scaleX).toInt()
+                        val scaledHeight = (scaledWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                        val scaledX = (comp.rect.x * scaleX).toInt()
+                        val scaledY = (comp.rect.y * scaleY).toInt()
+                        comp.copy(rect = Rect(scaledX, scaledY, scaledWidth, scaledHeight))
+                    }
+                } else {
+                    val scaledRect = Rect(
+                        (comp.rect.x * scaleX).toInt(),
+                        (comp.rect.y * scaleY).toInt(),
+                        (comp.rect.width * scaleX).toInt(),
+                        (comp.rect.height * scaleY).toInt()
+                    )
+                    comp.copy(rect = scaledRect)
+                }
             }
             return sourceLayout.copy(mainScreenLayout = sourceLayout.mainScreenLayout.copy(components = scaledComponents))
         }
