@@ -1131,7 +1131,8 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                             .setTitle(R.string.video_ai_upscale_title)
                             .setMessage("Для работы AI-Upscale 2D-спрайтов (Anime4K / xBRZ) требуется загрузить пакет шейдеров RetroArch.\n\nСкачать и установить сейчас?")
                             .setPositiveButton("Скачать") { _, _ ->
-                                showInstallShaderLibraryDialog()
+                                persistShaderSource(RetroArchShaderSource.INTERNAL)
+                                startShaderInstall()
                             }
                             .setNegativeButton(R.string.cancel, null)
                             .show()
