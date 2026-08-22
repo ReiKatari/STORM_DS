@@ -819,6 +819,10 @@
   <string name="auto_download_dsi_bios_summary">Автоматическая загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin</string>
   <string name="dsi_bios_directory">Папка с BIOS DSi</string>
   <string name="show_boot_screen">Показывать заставку Nintendo DS</string>
+  <string name="dsiware_boot_mode_title">Режим запуска DSiWare</string>
+  <string name="dsiware_boot_mode_autoload">Системный автозапуск (Autoload) — Рекомендуется</string>
+  <string name="dsiware_boot_mode_direct">Прямой запуск (Direct Boot)</string>
+  <string name="dsiware_boot_mode_system_menu">Системное меню DSi (NAND Launcher)</string>
   <string name="mac_address">MAC-адрес</string>
   <string name="randomize_mac_address">Случайный MAC-адрес</string>
   <string name="randomize_mac_address_summary">Генерировать новый MAC-адрес при каждом запуске</string>

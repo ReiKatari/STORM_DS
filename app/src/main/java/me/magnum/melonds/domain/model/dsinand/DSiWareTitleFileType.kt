@@ -5,3 +5,9 @@ enum class DSiWareTitleFileType(val fileName: String) {
     PRIVATE_SAV("private.sav"),
     BANNER_SAV("banner.sav"),
 }
+
+enum class DSiWareBootMode {
+    AUTOLOAD,
+    DIRECT,
+    SYSTEM_MENU,
+}
