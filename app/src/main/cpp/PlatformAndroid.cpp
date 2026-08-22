@@ -20,6 +20,7 @@
 #include <chrono>
 #include <dlfcn.h>
 #include <filesystem>
+#include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -297,6 +298,27 @@ namespace Platform
         return len;
     }
 
+    // Boot diagnostic buffer — captures DSi-related native logs for the game execution log
+    static std::mutex sDiagMutex;
+    static std::string sDiagBuffer;
+    static bool sDiagCapturing = false;
+
+    void StartBootDiagnosticCapture()
+    {
+        std::lock_guard<std::mutex> lock(sDiagMutex);
+        sDiagBuffer.clear();
+        sDiagCapturing = true;
+    }
+
+    std::string StopAndGetBootDiagnostic()
+    {
+        std::lock_guard<std::mutex> lock(sDiagMutex);
+        sDiagCapturing = false;
+        std::string result = std::move(sDiagBuffer);
+        sDiagBuffer.clear();
+        return result;
+    }
+
     void Log(LogLevel level, const char* fmt, ...)
     {
         if (fmt == nullptr)
@@ -322,6 +344,20 @@ namespace Platform
         }
 
         va_end(args);
+
+        // Also capture to diagnostic buffer if active
+        {
+            std::lock_guard<std::mutex> lock(sDiagMutex);
+            if (sDiagCapturing && sDiagBuffer.size() < 16384)
+            {
+                va_list args2;
+                va_start(args2, fmt);
+                char buf[2048];
+                vsnprintf(buf, sizeof(buf), fmt, args2);
+                va_end(args2);
+                sDiagBuffer += buf;
+            }
+        }
     }
 
     Thread* Thread_Create(std::function<void()> func)

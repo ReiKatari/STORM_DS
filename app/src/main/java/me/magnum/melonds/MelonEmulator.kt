@@ -108,6 +108,12 @@ object MelonEmulator {
 
     private external fun bootFirmwareInternal(): Int
 
+    @JvmStatic
+    external fun startBootDiagnosticCapture()
+
+    @JvmStatic
+    external fun stopAndGetBootDiagnostic(): String
+
 	external fun startEmulation(startPaused: Boolean)
     external fun precompileVulkanPipelines(
         videoFilteringOrdinal: Int,
