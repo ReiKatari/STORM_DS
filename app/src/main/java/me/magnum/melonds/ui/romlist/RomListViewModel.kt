@@ -95,20 +95,12 @@ class RomListViewModel @Inject constructor(
 
     private fun DSiWareTitle.toInstalledDsiWareRom(): Rom {
         val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
-        val gameCodeChars = try {
-            val b0 = ((titleId shr 24) and 0xFF).toInt()
-            val b1 = ((titleId shr 16) and 0xFF).toInt()
-            val b2 = ((titleId shr 8) and 0xFF).toInt()
-            val b3 = (titleId and 0xFF).toInt()
-            if (b0 in 32..126 && b1 in 32..126 && b2 in 32..126 && b3 in 32..126) {
-                "${b0.toChar()}${b1.toChar()}${b2.toChar()}${b3.toChar()}"
-            } else ""
-        } catch (e: Throwable) {
-            ""
-        }
+        val originalFileName = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)
+        val customName = dsiWareTitlesMetadataStore.getCustomName(titleIdHex)
         val cleanName = when {
-            name.isNotBlank() && !name.equals(titleIdHex, ignoreCase = true) -> name
-            gameCodeChars.isNotEmpty() -> "DSiWare ($gameCodeChars)"
+            !customName.isNullOrBlank() -> customName
+            !originalFileName.isNullOrBlank() -> originalFileName
+            name.isNotBlank() && !name.equals(titleIdHex, ignoreCase = true) -> name.substringBeforeLast('\n').replace("\n", " ").trim()
             else -> "DSiWare ($titleIdHex)"
         }
         val savedRaHash = dsiWareTitlesMetadataStore.getRaHash(titleIdHex) ?: ""
@@ -252,27 +244,25 @@ class RomListViewModel @Inject constructor(
                 val raHashMapByHex = roms.filter { it.rom.retroAchievementsHash.isNotEmpty() }
                     .associate { it.rom.fileName.substringBeforeLast('.').lowercase().trim() to it.rom.retroAchievementsHash }
 
-                val installedTitleHexes = shortcuts.mapNotNull {
-                    it.rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase()
-                }.toSet()
+                val existingRomNames = roms.map { it.rom.name.lowercase().trim() }.toSet()
+                val existingFileBases = roms.map { it.rom.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
+                val existingTitleIds = roms.mapNotNull { it.rom.installedDsiWareTitleId }.toSet()
 
-                val hexTitleIdPattern = Regex("^[0-9a-fA-F]{8}$")
-                val deduplicatedRoms = roms.filter { romWithParent ->
-                    val rom = romWithParent.rom
-                    if (!rom.isDsiWareTitle) {
-                        true
-                    } else {
-                        val fileBase = rom.fileName.substringBeforeLast('.').lowercase().trim()
-                        val rawName = rom.name.lowercase().trim()
-                        val isRawHexTitle = hexTitleIdPattern.matches(fileBase) || hexTitleIdPattern.matches(rawName)
-                        !isRawHexTitle && fileBase !in installedTitleHexes && rawName !in installedTitleHexes
-                    }
-                }
-
-                val existingIds = deduplicatedRoms.mapNotNull { it.rom.installedDsiWareTitleId }.toSet()
-                val uniqueShortcuts = shortcuts.map { shortcut ->
+                val uniqueShortcuts = shortcuts.filter { shortcut ->
                     val rom = shortcut.rom
-                    val titleHex = rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase()
+                    val titleId = rom.installedDsiWareTitleId
+                    val titleHex = titleId?.toString(16)?.padStart(8, '0')?.lowercase() ?: ""
+                    val isAuto = dsiWareTitlesMetadataStore.isAutoImported(titleHex)
+                    val name = rom.name.lowercase().trim()
+                    val fileBase = rom.fileName.substringBeforeLast('.').lowercase().trim()
+
+                    !isAuto &&
+                        titleId !in existingTitleIds &&
+                        name !in existingRomNames &&
+                        fileBase !in existingFileBases
+                }.map { shortcut ->
+                    val rom = shortcut.rom
+                    val titleHex = rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase() ?: ""
                     val matchedHash = rom.retroAchievementsHash.takeIf { it.isNotEmpty() }
                         ?: raHashMapByHex[titleHex]
                         ?: raHashMapByName[rom.name.lowercase().trim()]
@@ -289,10 +279,9 @@ class RomListViewModel @Inject constructor(
                     } else {
                         shortcut
                     }
-                }.filter { shortcut ->
-                    shortcut.rom.installedDsiWareTitleId !in existingIds
                 }
-                sortRoms(deduplicatedRoms + uniqueShortcuts, mode, order) to mode
+
+                sortRoms(roms + uniqueShortcuts, mode, order) to mode
             }
         }.distinctUntilChanged()
 
@@ -547,7 +536,7 @@ class RomListViewModel @Inject constructor(
                                     dsiWareTitlesMetadataStore.setAutoImported(matchingTitle.titleId, true)
                                     dsiWareTitlesMetadataStore.setParentFolderUri(matchingTitle.titleId, rom.parentTreeUri?.toString())
                                     dsiWareTitlesMetadataStore.setSourceUri(matchingTitle.titleId, rom.uri.toString())
-                                    dsiWareTitlesMetadataStore.setOriginalFileName(matchingTitle.titleId, cleanFileName)
+                                    dsiWareTitlesMetadataStore.setOriginalFileName(matchingTitle.titleId, rom.fileName.substringBeforeLast('.'))
                                 }
                             }
                         } catch (e: Throwable) {
@@ -674,7 +663,14 @@ class RomListViewModel @Inject constructor(
         }
 
         try {
+            val activeSearchDirs = settingsRepository.getRomSearchDirectories().map { it.toString() }.toSet()
             dsiNandManager.listTitles()
+                .filter { title ->
+                    val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+                    val isAuto = dsiWareTitlesMetadataStore.isAutoImported(titleIdHex)
+                    val parentFolder = dsiWareTitlesMetadataStore.getParentFolderUri(titleIdHex)
+                    !isAuto || (parentFolder != null && parentFolder in activeSearchDirs)
+                }
                 .map { title -> buildRomWithParent(title.toInstalledDsiWareRom(), null) }
         } finally {
             dsiNandManager.closeNand()

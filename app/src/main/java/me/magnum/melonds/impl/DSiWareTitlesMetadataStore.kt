@@ -20,6 +20,8 @@ class DSiWareTitlesMetadataStore @Inject constructor(
         if (!custom.isNullOrBlank()) return custom
         val originalFile = getOriginalFileName(titleIdHex)
         if (!originalFile.isNullOrBlank()) return originalFile
+        val cleanDefault = defaultName.substringBeforeLast('\n').replace("\n", " ").trim()
+        if (cleanDefault.isNotBlank() && !cleanDefault.equals(titleIdHex, ignoreCase = true)) return cleanDefault
         return defaultName
     }
 
