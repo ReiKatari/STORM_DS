@@ -63,6 +63,7 @@ fun DsBootOverlay(
     romReady: Boolean,
     romTitle: String?,
     modifier: Modifier = Modifier,
+    isDsi: Boolean = false,
     statusText: String? = null,
     onFinished: () -> Unit,
 ) {
@@ -123,6 +124,7 @@ fun DsBootOverlay(
                 if (showTop) {
                     DsScreen(
                         backlight = backlight,
+                        isDsi = isDsi,
                         modifier = Modifier
                             .height(dsScreenHeight)
                             .aspectRatio(4f / 3f)
@@ -137,30 +139,33 @@ fun DsBootOverlay(
                                 },
                             ),
                     ) {
-                        DsWordmark(alpha = logoAlpha)
+                        DsWordmark(isDsi = isDsi, alpha = logoAlpha)
                     }
                 }
 
                 if (bothScreens) {
+                    val hingeColor = if (isDsi) Color(0xFF00E5FF) else watermelon.red
                     Box(
                         modifier = Modifier
                             .padding(vertical = 5.dp)
                             .width(52.dp)
                             .height(2.dp)
                             .clip(CircleShape)
-                            .background(watermelon.red.copy(alpha = 0.20f + 0.45f * openProgress)),
+                            .background(hingeColor.copy(alpha = 0.20f + 0.45f * openProgress)),
                     )
                 }
 
                 if (showBottom) {
                     DsScreen(
                         backlight = backlight,
+                        isDsi = isDsi,
                         modifier = Modifier
                             .height(dsScreenHeight)
                             .aspectRatio(4f / 3f),
                     ) {
                         DsBottomLabel(
                             title = romTitle,
+                            isDsi = isDsi,
                             waiting = introDone && !romReady,
                             alpha = logoAlpha,
                         )
@@ -169,6 +174,7 @@ fun DsBootOverlay(
             }
 
             PowerLed(
+                isDsi = isDsi,
                 lit = ledLit,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -198,10 +204,11 @@ fun DsBootOverlay(
 @Composable
 private fun DsScreen(
     backlight: Float,
+    isDsi: Boolean = false,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val glow = watermelon.red
+    val glow = if (isDsi) Color(0xFF00E5FF) else watermelon.red
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(9.dp))
@@ -211,7 +218,7 @@ private fun DsScreen(
                     drawRect(
                         brush = Brush.verticalGradient(
                             listOf(
-                                Color(0xFF2B3852).copy(alpha = 0.55f * backlight),
+                                (if (isDsi) Color(0xFF1E3A5F) else Color(0xFF2B3852)).copy(alpha = 0.55f * backlight),
                                 Color(0xFF11151F).copy(alpha = 0.55f * backlight),
                             ),
                         ),
@@ -231,7 +238,7 @@ private fun DsScreen(
                     )
                 }
             }
-            .border(1.dp, glow.copy(alpha = 0.30f * backlight), RoundedCornerShape(9.dp)),
+            .border(1.dp, glow.copy(alpha = (if (isDsi) 0.35f else 0.30f) * backlight), RoundedCornerShape(9.dp)),
         contentAlignment = Alignment.Center,
     ) {
         content()
@@ -239,14 +246,14 @@ private fun DsScreen(
 }
 
 @Composable
-private fun DsWordmark(alpha: Float) {
+private fun DsWordmark(isDsi: Boolean, alpha: Float) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.alpha(alpha),
     ) {
         Text(
             text = "STORM ",
-            color = Color(0xFFE2E8F0),
+            color = Color(0xFFF1F5F9),
             fontFamily = SpaceGrotesk,
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
@@ -260,32 +267,44 @@ private fun DsWordmark(alpha: Float) {
             fontSize = 20.sp,
             lineHeight = 20.sp,
         )
+        if (isDsi) {
+            Text(
+                text = "i",
+                color = Color(0xFF38BDF8),
+                fontFamily = SpaceGrotesk,
+                fontWeight = FontWeight.Bold,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                fontSize = 22.sp,
+                lineHeight = 20.sp,
+            )
+        }
     }
 }
 
 @Composable
-private fun DsBottomLabel(title: String?, waiting: Boolean, alpha: Float) {
+private fun DsBottomLabel(title: String?, isDsi: Boolean, waiting: Boolean, alpha: Float) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .alpha(alpha)
             .padding(horizontal = 10.dp),
     ) {
+        val label = title?.uppercase() ?: if (isDsi) "NINTENDO DSi" else "NINTENDO DS"
         Text(
-            text = title?.uppercase() ?: "NINTENDO DS",
-            color = Color(0xFFB3BBC7),
+            text = label,
+            color = Color(0xFFCAD4E0),
             fontFamily = WatermelonMono,
             fontWeight = FontWeight.SemiBold,
             fontSize = 11.sp,
             lineHeight = 14.sp,
-            letterSpacing = 1.sp,
+            letterSpacing = 1.2.sp,
             maxLines = 2,
             textAlign = TextAlign.Center,
             overflow = TextOverflow.Ellipsis,
         )
         if (waiting) {
             Spacer(Modifier.height(7.dp))
-            LoadingDots(color = Color(0xFF7C8492))
+            LoadingDots(color = if (isDsi) Color(0xFF38BDF8) else Color(0xFF7C8492))
         }
     }
 }
@@ -314,7 +333,7 @@ private fun LoadingDots(color: Color) {
 }
 
 @Composable
-private fun PowerLed(lit: Float, modifier: Modifier = Modifier) {
+private fun PowerLed(isDsi: Boolean, lit: Float, modifier: Modifier = Modifier) {
     val infinite = rememberInfiniteTransition(label = "dsBootLed")
     val breathe by infinite.animateFloat(
         initialValue = 0.75f,
@@ -322,20 +341,20 @@ private fun PowerLed(lit: Float, modifier: Modifier = Modifier) {
         animationSpec = infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Reverse),
         label = "dsBootLedBreathe",
     )
-    val green = watermelon.green
+    val ledColor = if (isDsi) Color(0xFF00E5FF) else watermelon.green
     val intensity = lit * breathe
     Box(modifier = modifier.size(14.dp), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
                 .size(14.dp)
                 .clip(CircleShape)
-                .background(green.copy(alpha = 0.30f * intensity)),
+                .background(ledColor.copy(alpha = 0.30f * intensity)),
         )
         Box(
             modifier = Modifier
                 .size(6.dp)
                 .clip(CircleShape)
-                .background(green.copy(alpha = 0.45f + 0.55f * intensity)),
+                .background(ledColor.copy(alpha = 0.45f + 0.55f * intensity)),
         )
     }
 }

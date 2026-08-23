@@ -469,6 +469,7 @@ class EmulatorActivity : AppCompatActivity() {
     private val showBootAnimation = mutableStateOf(true)
     private val bootRomReady = mutableStateOf(false)
     private val bootRomTitle = mutableStateOf<String?>(null)
+    private val bootIsDsi = mutableStateOf(false)
     private val bootRom = mutableStateOf<Rom?>(null)
     private val bootBoxArtUrl = mutableStateOf<String?>(null)
 
@@ -861,6 +862,7 @@ class EmulatorActivity : AppCompatActivity() {
                             half = me.magnum.melonds.ui.emulator.ui.DsBootScreenHalf.BOTH,
                             romReady = bootRomReady.value,
                             romTitle = bootRomTitle.value,
+                            isDsi = bootIsDsi.value,
                             statusText = bootStatus.value,
                             onFinished = { showBootAnimation.value = false },
                         )
@@ -1196,10 +1198,13 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoadingDetail.isGone = true
                         }
                         is EmulatorState.ValidatingFirmware -> {
+                            bootIsDsi.value = it.consoleType == me.magnum.melonds.domain.model.ConsoleType.DSi
+                            bootRomTitle.value = if (it.consoleType == me.magnum.melonds.domain.model.ConsoleType.DSi) "Nintendo DSi" else "Nintendo DS"
                             showLoadingState()
                             emulatorLaunchValidatorDelegate.validateFirmware(it.consoleType)
                         }
                         is EmulatorState.ValidatingRom -> {
+                            bootIsDsi.value = it.rom.isDsiWareTitle
                             bootRomTitle.value = it.rom.config.customName ?: it.rom.name
                             prepareBootExternalInfo(it.rom)
                             showLoadingState()
@@ -1219,7 +1224,12 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RunningFirmware -> {
                             prewarmOpenGlShadersIfNeeded()
                             (it as? EmulatorState.RunningRom)?.let { running ->
+                                bootIsDsi.value = running.rom.isDsiWareTitle
                                 bootRomTitle.value = running.rom.config.customName ?: running.rom.name
+                            }
+                            (it as? EmulatorState.RunningFirmware)?.let { running ->
+                                bootIsDsi.value = running.console == me.magnum.melonds.domain.model.ConsoleType.DSi
+                                bootRomTitle.value = if (running.console == me.magnum.melonds.domain.model.ConsoleType.DSi) "Nintendo DSi" else "Nintendo DS"
                             }
                             bootRomReady.value = true
                             showBootAnimation.value = false
@@ -1656,6 +1666,7 @@ class EmulatorActivity : AppCompatActivity() {
                 half = me.magnum.melonds.ui.emulator.ui.DsBootScreenHalf.BOTH,
                 romReady = bootRomReady.value,
                 romTitle = bootRomTitle.value,
+                isDsi = bootIsDsi.value,
                 statusText = bootStatus.value,
                 onFinished = { presentation?.setInfoOverlayContent(null) },
             )
