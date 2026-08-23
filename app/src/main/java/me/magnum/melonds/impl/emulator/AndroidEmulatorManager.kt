@@ -625,7 +625,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.6.9"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.0"
 
         val logFileName = if (rom.fileName.isNotBlank()) {
             "${rom.fileName.substringBeforeLast('.')}.log"
