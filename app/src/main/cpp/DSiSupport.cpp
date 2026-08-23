@@ -38,17 +38,19 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
     if (cart != nullptr)
     {
         auto header = cart->GetHeader();
-        uint32_t titleIdLow = header.DSiTitleIDLow ? header.DSiTitleIDLow : *(const uint32_t*)&header.GameCode;
-        uint32_t titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : melonDS::DSiWareTitleIDHigh;
-
         uint8_t titleId[8];
-        memcpy(&titleId[0], &titleIdLow, 4);
+
+        // Byte 0-3: 4-character Title ID Low / GameCode ('K', 'C', 'M', 'E')
+        memcpy(&titleId[0], header.GameCode, 4);
+
+        // Byte 4-7: Title ID High (0x00030004 -> 04 00 03 00 in LE)
+        uint32_t titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : melonDS::DSiWareTitleIDHigh;
         memcpy(&titleId[4], &titleIdHigh, 4);
 
         uint32_t bootType = header.IsDSiWare() ? 0x03 : 0x01;
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Info,
-            "DSiSupport::SetupDSiDirectBoot: Setting up Autoload for Cart GameCode=%.4s TitleIdLow=0x%08X TitleIdHigh=0x%08X bootType=0x%02X (IsDSiWare=%d)\n",
-            header.GameCode, titleIdLow, titleIdHigh, bootType, header.IsDSiWare() ? 1 : 0);
+            "DSiSupport::SetupDSiDirectBoot: Setting up Autoload for Cart GameCode=%.4s TitleIdLowBytes=%02X%02X%02X%02X TitleIdHigh=0x%08X bootType=0x%02X (IsDSiWare=%d)\n",
+            header.GameCode, titleId[0], titleId[1], titleId[2], titleId[3], titleIdHigh, bootType, header.IsDSiWare() ? 1 : 0);
         setupAutoLoadRaw(dsi, titleId, bootType);
     }
 }
@@ -56,9 +58,13 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
 void MelonDSAndroid::DSiSupport::SetupDSiWareDirectBoot(melonDS::DSi* dsi, uint32_t titleIdLow, uint32_t titleIdHigh)
 {
     uint8_t titleId[8];
-    memcpy(&titleId[0], &titleIdLow, 4);
+    // Convert 32-bit hex titleIdLow (e.g. 0x4B434D45) to big-endian ASCII bytes ('K', 'C', 'M', 'E')
+    titleId[0] = (uint8_t)((titleIdLow >> 24) & 0xFF);
+    titleId[1] = (uint8_t)((titleIdLow >> 16) & 0xFF);
+    titleId[2] = (uint8_t)((titleIdLow >> 8) & 0xFF);
+    titleId[3] = (uint8_t)(titleIdLow & 0xFF);
+
     memcpy(&titleId[4], &titleIdHigh, 4);
 
-    // BootType 0x03 = DSiWare Title (0x01 = Cartridge, 0x02 = System Landing)
     setupAutoLoadRaw(dsi, titleId, 0x03);
 }
