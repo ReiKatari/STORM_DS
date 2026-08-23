@@ -915,7 +915,7 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
     {
         const char gc0 = static_cast<char>(titleData[0x0C]);
         const u8 unitCode = titleData[0x12];
-        if (titleId[1] == 0 || titleId[1] == 0x00030005 || titleId[1] == 0x00030015 || unitCode == 2 || unitCode == 3 || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z')
+        if (titleId[1] == 0 || titleId[1] == 0x00030005 || titleId[1] == 0x00030015 || (unitCode & 0x02) != 0 || unitCode == 2 || unitCode == 3 || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z' || gc0 == '4')
         {
             titleId[1] = DSI_NAND_FILE_CATEGORY;
             memcpy(titleData.data() + 0x234, &titleId[1], sizeof(u32));
