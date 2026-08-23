@@ -72,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import me.magnum.melonds.domain.model.RomIconFiltering
 import me.magnum.melonds.domain.model.rom.Rom
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -644,52 +645,82 @@ private fun DSiEnhancedItem(
             }
         }
 
-        Box {
-            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(onClick = { menuOpen = false; onRename() }) {
-                    Text("✏️ Переименовать", color = colors.text, fontSize = 13.5.sp)
-                }
-                DropdownMenuItem(onClick = { menuOpen = false; infoOpen = true }) {
-                    Text("ℹ️ Особенности DSi Enhanced версии", color = colors.text, fontSize = 13.5.sp)
-                }
-                DropdownMenuItem(onClick = { menuOpen = false; onDelete() }) {
-                    Text("🗑️ Удалить", color = colors.red, fontSize = 13.5.sp)
-                }
-            }
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .clickable { menuOpen = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                modifier = Modifier.size(22.dp),
+                painter = painterResource(id = R.drawable.ic_menu),
+                contentDescription = null,
+                tint = colors.text3,
+            )
+        }
+    }
+
+    if (menuOpen) {
+        ConsoleActionDialog(
+            title = rom.fileName.substringBeforeLast('.'),
+            onDismiss = { menuOpen = false },
+        ) {
+            ConsoleActionRow(
+                label = stringResource(id = R.string.dsiware_manager_rename),
+                onClick = {
+                    menuOpen = false
+                    onRename()
+                },
+            )
+            ConsoleActionRow(
+                label = "Особенности DSi Enhanced версии",
+                onClick = {
+                    menuOpen = false
+                    infoOpen = true
+                },
+            )
+            ConsoleActionRow(
+                label = stringResource(id = R.string.delete),
+                onClick = {
+                    menuOpen = false
+                    onDelete()
+                },
+            )
         }
     }
 
     if (infoOpen) {
-        androidx.compose.material.AlertDialog(
-            onDismissRequest = { infoOpen = false },
-            title = {
+        ConsoleActionDialog(
+            title = "Особенности DSi Enhanced",
+            onDismiss = { infoOpen = false },
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
-                    text = "DSi-Enhanced: ${rom.name.ifBlank { rom.fileName.substringBeforeLast('.') }}",
-                    fontWeight = FontWeight.Bold,
+                    text = rom.name.ifBlank { rom.fileName.substringBeforeLast('.') },
                     color = colors.text,
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
                 )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Картридж стандарта Nintendo DS со встроенными аппаратно-программными расширениями DSi:", color = colors.text2, fontSize = 13.sp)
-                    Text("• 🚀 ARM9i CPU на удвоенной частоте 133.79 МГц (вместо 67 МГц DS)", color = colors.text, fontSize = 12.5.sp)
-                    Text("• 💾 16 МБ системной памяти RAM (в 4 раза больше памяти для текстур и уровней)", color = colors.text, fontSize = 12.5.sp)
-                    Text("• 📷 Доступ к фронтальной и тыльной камерам DSi для интерактивного геймплея", color = colors.text, fontSize = 12.5.sp)
-                    Text("• 📶 Поддержка защищенных беспроводных сетей WPA / WPA2", color = colors.text, fontSize = 12.5.sp)
-                }
-            },
-            confirmButton = {
-                androidx.compose.material.TextButton(onClick = { infoOpen = false }) {
-                    Text("Понятно", color = colors.green)
-                }
-            },
-            backgroundColor = colors.surface,
-            contentColor = colors.text,
-        )
+                Text(
+                    text = "Картридж стандарта Nintendo DS со встроенными аппаратно-программными расширениями DSi:",
+                    color = colors.text2,
+                    fontSize = 12.5.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("• 🚀 ARM9i CPU на удвоенной частоте 133.79 МГц (вместо 67 МГц DS)", color = colors.text, fontSize = 12.sp)
+                Text("• 💾 16 МБ системной памяти RAM (в 4 раза больше памяти)", color = colors.text, fontSize = 12.sp)
+                Text("• 📷 Доступ к камерам DSi для интерактивного геймплея", color = colors.text, fontSize = 12.sp)
+                Text("• 📶 Поддержка защищенных сетей WPA / WPA2", color = colors.text, fontSize = 12.sp)
+            }
+            ConsoleActionRow(
+                label = "Закрыть",
+                onClick = { infoOpen = false },
+            )
+        }
     }
 }
 

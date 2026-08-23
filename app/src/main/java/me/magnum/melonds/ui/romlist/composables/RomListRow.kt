@@ -70,7 +70,23 @@ fun RomListRow(
 ) {
     val colors = watermelon
     val context = LocalContext.current
-    val shape = RoundedCornerShape(8.dp)
+    val cardStyle = me.magnum.melonds.ui.theme.AppThemeManager.cardStyleState.value
+    val cornerRadius = when (cardStyle) {
+        "3d_boxart" -> 4.dp
+        "flat_minimal" -> 0.dp
+        else -> 8.dp
+    }
+    val shape = RoundedCornerShape(cornerRadius)
+    val borderWidth = when (cardStyle) {
+        "3d_boxart" -> 1.2.dp
+        "flat_minimal" -> 0.5.dp
+        else -> 0.75.dp
+    }
+    val borderColor = when (cardStyle) {
+        "3d_boxart" -> Color.White.copy(alpha = 0.22f)
+        "flat_minimal" -> colors.line
+        else -> colors.line
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -87,7 +103,7 @@ fun RomListRow(
             .padding(horizontal = 10.dp, vertical = 2.5.dp)
             .clip(shape)
             .background(colors.surface)
-            .border(0.75.dp, colors.line, shape)
+            .border(borderWidth, borderColor, shape)
             .then(if (isFocused) Modifier.border(2.5.dp, colors.red, shape) else Modifier)
             .combinedClickable(
                 interactionSource = interactionSource,
