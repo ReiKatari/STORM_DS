@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,14 +78,14 @@ fun RomGridCard(
     val colors = watermelon
     val cardStyle = me.magnum.melonds.ui.theme.AppThemeManager.cardStyleState.value
     val cornerRadius = when (cardStyle) {
-        "3d_boxart" -> 4.dp
-        "flat_minimal" -> 2.dp
-        else -> 7.dp
+        "3d_boxart" -> 5.dp
+        "flat_minimal" -> 0.dp
+        else -> 10.dp
     }
     val shadowElevation = when (cardStyle) {
-        "3d_boxart" -> 9.dp
+        "3d_boxart" -> 10.dp
         "flat_minimal" -> 0.dp
-        else -> 5.dp
+        else -> 4.dp
     }
     val shape = RoundedCornerShape(cornerRadius)
     val interactionSource = remember { MutableInteractionSource() }
@@ -123,20 +124,43 @@ fun RomGridCard(
 
         val borderColor = when (cardStyle) {
             "flat_minimal" -> colors.line
-            "3d_boxart" -> Color.White.copy(alpha = 0.22f)
-            else -> Color.White.copy(alpha = 0.14f)
+            "3d_boxart" -> Color.White.copy(alpha = 0.35f)
+            else -> Color.White.copy(alpha = 0.15f)
         }
-        Box(Modifier.aspectRatio(DsBoxArtAspectRatio).fillMaxWidth().border(1.dp, borderColor, shape))
+        val borderWidth = when (cardStyle) {
+            "3d_boxart" -> 1.5.dp
+            "flat_minimal" -> 0.75.dp
+            else -> 1.dp
+        }
+        Box(Modifier.aspectRatio(DsBoxArtAspectRatio).fillMaxWidth().border(borderWidth, borderColor, shape))
 
         if (cardStyle == "3d_boxart") {
-            // Authentic 3D box spine highlight
+            // Authentic 3D Nintendo DS plastic box case edge
             Box(
                 Modifier
                     .fillMaxHeight()
-                    .width(6.dp)
+                    .width(8.dp)
                     .background(
                         androidx.compose.ui.graphics.Brush.horizontalGradient(
-                            listOf(Color.White.copy(alpha = 0.35f), Color.Transparent)
+                            listOf(
+                                Color.Black.copy(alpha = 0.45f),
+                                Color.White.copy(alpha = 0.30f),
+                                Color.Transparent,
+                            )
+                        )
+                    )
+            )
+            // Top gloss reflection
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.25f),
+                                Color.Transparent,
+                            )
                         )
                     )
             )

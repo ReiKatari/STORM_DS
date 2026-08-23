@@ -52,6 +52,16 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
             val recyclerView = this
             addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
                 override fun onChildViewAttachedToWindow(view: View) {
+                    view.post {
+                        val color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
+                        val states = arrayOf(
+                            intArrayOf(-android.R.attr.state_checked),
+                            intArrayOf(android.R.attr.state_checked),
+                        )
+                        val thumbColors = intArrayOf(0xFF888888.toInt(), color)
+                        val trackColors = intArrayOf(0x44888888.toInt(), (color and 0x00FFFFFF) or 0x66000000.toInt())
+                        tintChildControls(view, android.content.res.ColorStateList(states, thumbColors), android.content.res.ColorStateList(states, trackColors), color)
+                    }
                     view.setOnFocusChangeListener { v, hasFocus ->
                         if (hasFocus) {
                             val pos = recyclerView.getChildAdapterPosition(v)
