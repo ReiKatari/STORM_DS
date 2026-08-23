@@ -54,6 +54,23 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             updateMaxCacheSizePreferenceSummary(preference as SeekBarPreference, newValue as Int)
             true
         }
+        val raCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_ra_covers_enabled")
+        val gameTdbCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_covers_enabled")
+
+        raCoversPref?.setOnPreferenceChangeListener { _, newValue ->
+            if (newValue as Boolean) {
+                gameTdbCoversPref?.isChecked = false
+            }
+            true
+        }
+
+        gameTdbCoversPref?.setOnPreferenceChangeListener { _, newValue ->
+            if (newValue as Boolean) {
+                raCoversPref?.isChecked = false
+            }
+            true
+        }
+
         clearRomCachePreference.setOnPreferenceClickListener {
             if (!viewModel.clearRomCache()) {
                 Toast.makeText(requireContext(), R.string.error_clear_rom_cache, Toast.LENGTH_LONG).show()

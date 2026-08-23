@@ -22,7 +22,7 @@ object RomProcessor {
 
 	fun getRomMetadata(channel: java.nio.channels.FileChannel): RomMetadata? {
 		return runCatching {
-			val headerBuffer = ByteBuffer.allocate(0x160)
+			val headerBuffer = ByteBuffer.allocate(0x280)
 			channel.position(0)
 			channel.read(headerBuffer)
 			val header = headerBuffer.array()
@@ -40,8 +40,13 @@ object RomProcessor {
 
 			val unitCode = header[0x12].toInt() and 0xFF
 			val gc0 = gameCode.getOrNull(0)
+			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
+			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
+			val arm9iOffset = if (header.size >= 0x1C0) byteArrayToInt(header, 0x1B8) else 0
 			val isDsiWareTitle = (unitCode and 0x02) != 0 || unitCode == 0x03 ||
-				(gc0 != null && (gc0 == '4' || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z'))
+				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
+				categoryLow == 0x00030004 || arm9iOffset > 0 ||
+				(gc0 != null && (gc0 in '0'..'9' || gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == 'B' || gc0 == 'N' || gc0 == 'P' || gc0 == 'T' || gc0 == 'C' || gc0 == 'W' || gc0 == 'Q' || gc0 == 'A'))
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
 			channel.position(arm9Offset)
@@ -85,7 +90,7 @@ object RomProcessor {
 	fun getRomMetadata(inputStream: InputStream): RomMetadata? {
 		return runCatching {
 			val sectionReader = ForwardRomSectionReader(inputStream)
-			val header = sectionReader.readSection(0, 0x160) ?: return null
+			val header = sectionReader.readSection(0, 0x280) ?: return null
 			val gameCode = String(header, 0x0C, 4)
 
 			val arm9Offset = byteArrayToInt(header, 0x20)
@@ -100,8 +105,13 @@ object RomProcessor {
 
 			val unitCode = header[0x12].toInt() and 0xFF
 			val gc0 = gameCode.getOrNull(0)
+			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
+			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
+			val arm9iOffset = if (header.size >= 0x1C0) byteArrayToInt(header, 0x1B8) else 0
 			val isDsiWareTitle = (unitCode and 0x02) != 0 || unitCode == 0x03 ||
-				(gc0 != null && (gc0 == '4' || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z'))
+				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
+				categoryLow == 0x00030004 || arm9iOffset > 0 ||
+				(gc0 != null && (gc0 in '0'..'9' || gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == 'B' || gc0 == 'N' || gc0 == 'P' || gc0 == 'T' || gc0 == 'C' || gc0 == 'W' || gc0 == 'Q' || gc0 == 'A'))
 
 			var arm9Bootcode: ByteArray? = null
 			var arm7Bootcode: ByteArray? = null
