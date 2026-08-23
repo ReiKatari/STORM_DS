@@ -200,6 +200,23 @@ fun PlatformBadge(
     }
 }
 
+fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
+    val clean = rom.fileName.substringBeforeLast('.').trim()
+    val file = java.io.File(java.io.File(context.filesDir, "custom_covers"), "$clean.png")
+    return if (file.exists()) file else null
+}
+
+fun getGameTdbCover3dUrl(rom: Rom): String? {
+    val clean = rom.fileName.uppercase()
+    val region = when {
+        clean.contains("JAP") || clean.contains("JPN") || clean.contains("(J)") -> "JA"
+        clean.contains("EUR") || clean.contains("(E)") -> "EN"
+        else -> "US"
+    }
+    val code = rom.name.filter { it.isLetterOrDigit() }.take(4).uppercase()
+    return if (code.length == 4) "https://art.gametdb.com/ds/cover3D/$region/$code.png" else null
+}
+
 @Composable
 fun WatermelonRomArt(
     rom: Rom,
@@ -212,13 +229,18 @@ fun WatermelonRomArt(
     onArtLoadedChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val customCover = remember(rom.fileName) { getCustomCoverFile(context, rom) }
+    val gameTdbUrl = remember(rom.fileName) { getGameTdbCover3dUrl(rom) }
+    var gameTdbFailed by remember(rom.uri) { mutableStateOf(false) }
     var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(false) }
     var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(false) }
-    var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl) { mutableStateOf(false) }
+    var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
-    val activeUrl = when {
+    val activeModel: Any? = when {
+        customCover != null -> customCover
         boxArtUrl != null && !boxArtFailed -> boxArtUrl
         raCoverUrl != null && !raFailed -> raCoverUrl
+        gameTdbUrl != null && !gameTdbFailed -> gameTdbUrl
         else -> null
     }
 
@@ -233,7 +255,7 @@ fun WatermelonRomArt(
                 fontSize = initialsFontSize,
                 modifier = Modifier.align(Alignment.Center),
             )
-            if (activeUrl == null) {
+            if (activeModel == null) {
                 if (boxArtLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center).size(22.dp),
@@ -253,7 +275,7 @@ fun WatermelonRomArt(
                 }
             }
         }
-        if (activeUrl != null) {
+        if (activeModel != null) {
             if (!artLoaded) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center).size(22.dp),
@@ -263,7 +285,7 @@ fun WatermelonRomArt(
             }
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(activeUrl)
+                    .data(activeModel)
                     .crossfade(true)
                     .listener(
                         onSuccess = { _, _ ->
@@ -271,7 +293,13 @@ fun WatermelonRomArt(
                             onArtLoadedChanged(true)
                         },
                         onError = { _, _ ->
-                            if (activeUrl == boxArtUrl) boxArtFailed = true else raFailed = true
+                            if (activeModel == boxArtUrl) {
+                                boxArtFailed = true
+                            } else if (activeModel == raCoverUrl) {
+                                raFailed = true
+                            } else if (activeModel == gameTdbUrl) {
+                                gameTdbFailed = true
+                            }
                             artLoaded = false
                             onArtLoadedChanged(false)
                         },
@@ -279,6 +307,7 @@ fun WatermelonRomArt(
                     .build(),
                 contentDescription = title,
                 contentScale = contentScale,
+                filterQuality = FilterQuality.High,
                 modifier = Modifier.fillMaxSize(),
             )
         }

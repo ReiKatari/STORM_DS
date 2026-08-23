@@ -297,7 +297,7 @@ class AndroidEmulatorManager(
     }
 
     private fun isRealDsiWareTitle(rom: Rom): Boolean {
-        if (rom.isInstalledDsiWareShortcut || rom.installedDsiWareTitleId != null || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+        if (rom.isInstalledDsiWareShortcut || rom.isDsiWareTitle || rom.installedDsiWareTitleId != null || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME || rom.fileName.endsWith(".dsi", ignoreCase = true)) {
             return true
         }
         return runCatching {
@@ -309,14 +309,11 @@ class AndroidEmulatorManager(
                     if (count <= 0) break
                     read += count
                 }
-                if (read >= 0x238) {
+                if (read >= 0x160) {
+                    val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
+                    val gc0 = gameCode.getOrNull(0)
                     val unitCode = header[0x012].toInt() and 0xFF
-                    val isDsi = (unitCode and 0x02) != 0 || (unitCode and 0x01) != 0 || unitCode == 0x03
-                    val rawCategoryId = ((header[0x234].toInt() and 0xFF) or
-                        ((header[0x235].toInt() and 0xFF) shl 8) or
-                        ((header[0x236].toInt() and 0xFF) shl 16) or
-                        ((header[0x237].toInt() and 0xFF) shl 24)).toLong() and 0xFFFFFFFFL
-                    isDsi && (rawCategoryId == 0x00030004L || rawCategoryId == 0x00030005L)
+                    (unitCode and 0x02) != 0 || unitCode == 0x03 || (gc0 != null && (gc0 == '4' || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z'))
                 } else false
             }
         }.getOrNull() ?: false
@@ -644,7 +641,7 @@ class AndroidEmulatorManager(
             val renderer = settingsRepository.getCurrentVideoRenderer()
             val jitEnabled = settingsRepository.isJitEnabled()
             val customBios = settingsRepository.useCustomBios()
-            val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.5.1"
+            val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.6.0"
 
             val logText = buildString {
                 appendLine("==================================================")

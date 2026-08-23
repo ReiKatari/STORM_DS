@@ -539,6 +539,18 @@ class FileSystemRomsRepository(
     private suspend fun loadCachedRoms() {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
         try {
+            val prefs = context.getSharedPreferences("fs_roms_repo_meta", Context.MODE_PRIVATE)
+            val appCacheVersion = prefs.getInt("rom_cache_schema_version", 0)
+            if (appCacheVersion < 260) {
+                prefs.edit().putInt("rom_cache_schema_version", 260).apply()
+                synchronized(directoryStatesLock) {
+                    directoryStates.clear()
+                    directoryScanStatuses.clear()
+                    emitDirectoryScanStatusesLocked()
+                }
+                saveDirectoryStates()
+            }
+
             val searchDirectories = settingsRepository.getRomSearchDirectories()
             val unavailableDirectories = updateUnavailableSearchDirectories(searchDirectories)
             val cacheReadResult = getCachedRoms()
