@@ -730,6 +730,15 @@ class FileSystemRomsRepository(
                             val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
                                 ?: return@runCatching null
 
+                            if (rom.isDsiWareTitle || rom.isDsiEnhanced) {
+                                runCatching {
+                                    if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                                        Log.i(TAG, "Auto-decrypting newly scanned ROM: ${rom.name}")
+                                        me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
+                                    }
+                                }
+                            }
+
                             processedUpdatedFileUris.add(fileState.uri.toString())
                             rom
                         }.getOrElse {

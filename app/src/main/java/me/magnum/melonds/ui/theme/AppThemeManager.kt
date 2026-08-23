@@ -52,12 +52,10 @@ object AppThemeManager {
     fun getAccentColor(accentKey: String = accentColorState.value): Int {
         return when (accentKey) {
             "electric_cyan" -> 0xFF00E5FF.toInt()
-            "neon_magenta" -> 0xFFFF007F.toInt()
-            "plasma_amber" -> 0xFFFFB300.toInt()
-            "acid_green" -> 0xFF00E676.toInt()
-            "matrix_emerald" -> 0xFF00FF66.toInt()
-            "cyber_purple" -> 0xFF7C4DFF.toInt()
-            "solar_flare" -> 0xFFFF5722.toInt()
+            "amber_gold", "plasma_amber" -> 0xFFFFB300.toInt()
+            "cyber_red", "neon_magenta", "solar_flare" -> 0xFFFF3366.toInt()
+            "emerald_jade", "acid_green", "matrix_emerald" -> 0xFF00E676.toInt()
+            "royal_violet", "cyber_purple" -> 0xFF9C27B0.toInt()
             "deep_sapphire" -> 0xFF2979FF.toInt()
             else -> 0xFF00E5FF.toInt()
         }
