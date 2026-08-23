@@ -335,6 +335,7 @@ class FileSystemRomsRepository(
                     name = incomingRom.name,
                     developerName = incomingRom.developerName,
                     isDsiWareTitle = incomingRom.isDsiWareTitle,
+                    isDsiEnhanced = incomingRom.isDsiEnhanced,
                     retroAchievementsHash = incomingRom.retroAchievementsHash,
                     config = optionsConfig ?: existingRom.config,
                 )
@@ -1101,6 +1102,7 @@ class FileSystemRomsRepository(
                 config = RomConfigDto.fromModel(it.config),
                 lastPlayed = it.lastPlayed,
                 isDsiWareTitle = it.isDsiWareTitle,
+                isDsiEnhanced = it.isDsiEnhanced,
                 retroAchievementsHash = it.retroAchievementsHash,
                 totalPlayTime = it.totalPlayTime.inWholeMilliseconds,
                 isFavorite = it.isFavorite,
@@ -1176,6 +1178,7 @@ class FileSystemRomsRepository(
         val config: RomConfigDto,
         val lastPlayed: Date? = null,
         val isDsiWareTitle: Boolean,
+        val isDsiEnhanced: Boolean = false,
         val retroAchievementsHash: String,
         val totalPlayTime: Long = 0,
         val isFavorite: Boolean = false,

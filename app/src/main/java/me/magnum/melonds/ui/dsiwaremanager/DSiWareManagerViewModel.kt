@@ -167,8 +167,9 @@ class DSiWareManagerViewModel @Inject constructor(
                     if (openNandResult.isSuccess()) {
                         val activeRomsList = romsRepository.getRoms().first()
                         val initialTitles = filterActiveTitles(dsiNandManager.listTitles(), activeRomsList)
+                        val initialEnhanced = activeRomsList.filter { it.isDsiEnhanced }
                         withContext(Dispatchers.Main) {
-                            _state.value = DSiWareManagerUiState.Ready(initialTitles)
+                            _state.value = DSiWareManagerUiState.Ready(initialTitles, initialEnhanced)
                         }
 
                         runCatching {
@@ -201,8 +202,9 @@ class DSiWareManagerViewModel @Inject constructor(
                                     }
                                 }
                                 val finalTitles = filterActiveTitles(dsiNandManager.listTitles(), activeRoms)
+                                val finalEnhanced = activeRoms.filter { it.isDsiEnhanced }
                                 withContext(Dispatchers.Main) {
-                                    _state.value = DSiWareManagerUiState.Ready(finalTitles)
+                                    _state.value = DSiWareManagerUiState.Ready(finalTitles, finalEnhanced)
                                 }
                             }
                         }

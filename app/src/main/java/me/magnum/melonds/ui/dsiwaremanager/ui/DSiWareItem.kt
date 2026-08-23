@@ -99,21 +99,21 @@ fun DSiWareItem(
                 text = item.name,
                 color = colors.text,
                 fontFamily = SpaceGrotesk,
-                fontSize = 15.sp,
-                lineHeight = 19.sp,
+                fontSize = 14.5.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.SemiBold,
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1,
+                softWrap = true,
             )
-            Text(
-                text = item.producer,
-                color = colors.text3,
-                fontFamily = WatermelonMono,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1,
-            )
+            if (item.producer.isNotBlank()) {
+                Text(
+                    text = item.producer,
+                    color = colors.text3,
+                    fontFamily = WatermelonMono,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    softWrap = true,
+                )
+            }
         }
         Box(
             modifier = Modifier
