@@ -232,7 +232,10 @@ class RomListViewModel @Inject constructor(
                 }
                 romsWithParents.value = romsWithDocIds
                 if (romsWithDocIds.isNotEmpty()) {
-                    syncDsiWareWithNand(romsWithDocIds)
+                    viewModelScope.launch(Dispatchers.IO) {
+                        kotlinx.coroutines.delay(600)
+                        syncDsiWareWithNand(romsWithDocIds)
+                    }
                 }
             }
         }

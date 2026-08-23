@@ -1022,7 +1022,7 @@ class FileSystemRomsRepository(
         }
 
         runCatching {
-            FileReader(cacheFile).use { reader ->
+            java.io.BufferedReader(java.io.InputStreamReader(java.io.FileInputStream(cacheFile), Charsets.UTF_8), 65536).use { reader ->
                 gson.fromJson<List<RomDirectoryStateDto>>(reader, directoryStateListType)
             }
         }.onSuccess { stateDtos ->
@@ -1072,7 +1072,7 @@ class FileSystemRomsRepository(
         }
 
         return runCatching {
-            FileReader(cacheFile).use { reader ->
+            java.io.BufferedReader(java.io.InputStreamReader(java.io.FileInputStream(cacheFile), Charsets.UTF_8), 65536).use { reader ->
                 gson.fromJson<List<RomDto>>(reader, romListType).orEmpty().map {
                     it.toModel()
                 }
