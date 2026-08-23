@@ -94,6 +94,29 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             }
         }
 
+        val accentPreference = findPreference<ListPreference>("theme_accent_color")
+        if (accentPreference != null) {
+            helper.bindPreferenceSummaryToValue(accentPreference)
+            accentPreference.setOnPreferenceChangeListener { _, newValue ->
+                val newAccent = newValue as String
+                me.magnum.melonds.ui.theme.AppThemeManager.accentColorState.value = newAccent
+                accentPreference.sharedPreferences?.edit()?.putString("theme_accent_color", newAccent)?.apply()
+                view?.post { applyAccentColorToViews() }
+                true
+            }
+        }
+
+        val cardStylePreference = findPreference<ListPreference>("rom_card_style")
+        if (cardStylePreference != null) {
+            helper.bindPreferenceSummaryToValue(cardStylePreference)
+            cardStylePreference.setOnPreferenceChangeListener { _, newValue ->
+                val newStyle = newValue as String
+                me.magnum.melonds.ui.theme.AppThemeManager.cardStyleState.value = newStyle
+                cardStylePreference.sharedPreferences?.edit()?.putString("rom_card_style", newStyle)?.apply()
+                true
+            }
+        }
+
         helper.bindPreferenceSummaryToValue(rewindPreference)
         helper.bindPreferenceSummaryToValue(frameLimitSpeedPreference)
         updateFrameLimitSpeedPreferenceState()
