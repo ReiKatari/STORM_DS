@@ -148,14 +148,13 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         } else if (view is android.widget.Switch) {
             view.thumbTintList = thumb
             view.trackTintList = track
+        } else if (view is android.widget.CompoundButton) {
+            view.buttonTintList = thumb
         } else if (view is android.widget.SeekBar) {
             view.thumbTintList = android.content.res.ColorStateList.valueOf(accent)
             view.progressTintList = android.content.res.ColorStateList.valueOf(accent)
-        } else if (view is android.widget.CheckBox) {
-            view.buttonTintList = thumb
-        } else if (view is android.widget.RadioButton) {
-            view.buttonTintList = thumb
-        } else if (view is ViewGroup) {
+        }
+        if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 tintChildControls(view.getChildAt(i), thumb, track, accent)
             }
