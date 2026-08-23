@@ -76,7 +76,11 @@ fun romGradient(title: String): Brush {
     return Brush.linearGradient(colors = listOf(start, end))
 }
 
-fun romPlatformLabel(rom: Rom): String = if (rom.isDsiWareTitle) "DSi" else "DS"
+fun romPlatformLabel(rom: Rom): String = when {
+    rom.isDsiWareTitle -> "DSiWare"
+    rom.isDsiEnhanced -> "DSi E."
+    else -> "DS"
+}
 
 fun resolveRomRegionBadge(rom: Rom): Pair<String, String>? {
     val candidates = listOf(rom.fileName, rom.name, rom.uri.lastPathSegment.orEmpty())
@@ -182,10 +186,15 @@ fun PlatformBadge(
     modifier: Modifier = Modifier,
     fontSize: TextUnit = 8.sp,
 ) {
+    val (bgColor, fgColor) = when (text) {
+        "DSiWare" -> Color(0xFF6200EA).copy(alpha = 0.70f) to Color(0xFFE1BEE7)
+        "DSi E." -> Color(0xFF00695C).copy(alpha = 0.75f) to Color(0xFF80E27E)
+        else -> Color.Black.copy(alpha = 0.55f) to Color.White
+    }
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(3.dp))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(bgColor)
             .padding(horizontal = 4.dp, vertical = 1.5.dp),
     ) {
         Text(
@@ -194,7 +203,7 @@ fun PlatformBadge(
             fontSize = fontSize,
             lineHeight = fontSize * 1.15f,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = fgColor,
             letterSpacing = 0.5.sp,
         )
     }
