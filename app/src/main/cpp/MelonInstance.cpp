@@ -1896,29 +1896,30 @@ void MelonInstance::start()
     auto cart = nds->NDSCartSlot.GetCart();
 
     // Priority 1: Installed DSiWare shortcut (.app extracted from NAND)
-    // Boot via NAND Launcher using TLNC autoload record — requires showBootScreen=true and FullBIOSBoot=true
+    // Boot via NAND Launcher using TLNC autoload record — requires showBootScreen=true
     if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
     {
+        nds->NDSCartSlot.EjectCart();
         auto dsi = (DSi*) nds;
         u32 titleIdLow = (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF);
         u32 titleIdHigh = 0x00030004; // DSiWare title ID high
         DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
     }
-    // Priority 2: Standalone DSi cartridge direct warmboot (if boot screen enabled)
-    else if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
-             && !cart->GetHeader().IsDSiWare() && currentConfiguration->showBootScreen)
+    // Priority 2: Standalone DSiWare ROM or standard NDS/DSi direct boot
+    else
     {
-        auto dsi = (DSi*) nds;
-        DSiSupport::SetupDSiDirectBoot(dsi);
+        if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0
+            && !cart->GetHeader().IsDSiWare() && currentConfiguration->showBootScreen)
+        {
+            auto dsi = (DSi*) nds;
+            DSiSupport::SetupDSiDirectBoot(dsi);
+        }
+        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+        {
+            std::string romName;
+            nds->SetupDirectBoot(romName);
+        }
     }
-    // Priority 3: Direct boot (when showBootScreen is disabled or console forces direct boot)
-    else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
-    {
-        std::string romName;
-        nds->SetupDirectBoot(romName);
-    }
-    // Priority 4: Full DSi System Menu / NAND firmware boot (when showBootScreen is true and not autoloading)
-    // Console starts with FullBIOSBoot=true directly into the official DSi System Menu.
     nds->ReleaseScreen();
     nds->Start();
 
