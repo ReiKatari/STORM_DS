@@ -49,6 +49,12 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             startActivity(intent)
             true
         }
+
+        findPreference<Preference>("credits_melonds_ds")?.setOnPreferenceClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/JesseTG/melonds-ds"))
+            startActivity(intent)
+            true
+        }
     }
 
     override fun getTitle(): String = getString(R.string.about_app_title)

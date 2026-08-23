@@ -45,6 +45,12 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
+                android:key="credits_melonds_ds"
+                android:title="@string/about_credits_melonds_ds_title"
+                android:summary="@string/about_credits_melonds_ds_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="credits_libraries"
                 android:title="@string/about_credits_libraries_title"
                 android:summary="@string/about_credits_libraries_summary"
