@@ -23,6 +23,13 @@ static void setupAutoLoadRaw(melonDS::DSi* dsi, const uint8_t newTitleId[8], uin
     autoLoad.Flags = (bootType << 1) | 0x01 | UNKNOWN_BOOT_BIT;
     autoLoad.CRC16 = melonDS::CRC16((uint8_t*) &autoLoad.PrevTitleID, autoLoad.Length, 0xFFFF);
     memcpy(&dsi->MainRAM[DSI_AUTOLOAD_OFFSET], &autoLoad, sizeof(autoLoad));
+
+    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info,
+        "DSiSupport::setupAutoLoadRaw: TLNC warmboot initialized at 0x%08X (RAM offset 0x%X) TitleID=%02X%02X%02X%02X%02X%02X%02X%02X bootType=0x%02X Flags=0x%08X CRC16=0x%04X\n",
+        (uint32_t)(0x02000000 + DSI_AUTOLOAD_OFFSET), (uint32_t)DSI_AUTOLOAD_OFFSET,
+        newTitleId[0], newTitleId[1], newTitleId[2], newTitleId[3],
+        newTitleId[4], newTitleId[5], newTitleId[6], newTitleId[7],
+        bootType, autoLoad.Flags, autoLoad.CRC16);
 }
 
 void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
@@ -39,6 +46,9 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
         memcpy(&titleId[4], &titleIdHigh, 4);
 
         uint32_t bootType = header.IsDSiWare() ? 0x03 : 0x01;
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Info,
+            "DSiSupport::SetupDSiDirectBoot: Setting up Autoload for Cart GameCode=%.4s TitleIdLow=0x%08X TitleIdHigh=0x%08X bootType=0x%02X (IsDSiWare=%d)\n",
+            header.GameCode, titleIdLow, titleIdHigh, bootType, header.IsDSiWare() ? 1 : 0);
         setupAutoLoadRaw(dsi, titleId, bootType);
     }
 }
