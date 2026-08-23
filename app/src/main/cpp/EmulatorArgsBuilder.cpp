@@ -547,7 +547,7 @@ std::optional<std::unique_ptr<NDSArgs>> BuildArgsFromConfiguration(const Emulato
             std::move(arm7ibios),
             std::move(*nand),
             std::move(sdcard),
-            false,
+            true,
             true,
         };
 

@@ -29,6 +29,7 @@ class RomParcelable : Parcelable {
         val totalPlayTime = parcel.readLong().milliseconds
         val installedDsiWareTitleId = parcel.readLong().takeIf { it != -1L }
         val installedDsiWareIcon = parcel.createByteArray()
+        val isDsiEnhanced = parcel.readInt() == 1
         rom = Rom(
             name!!,
             developerName,
@@ -42,6 +43,7 @@ class RomParcelable : Parcelable {
             totalPlayTime,
             installedDsiWareTitleId = installedDsiWareTitleId,
             installedDsiWareIcon = installedDsiWareIcon,
+            isDsiEnhanced = isDsiEnhanced,
         )
     }
 
@@ -58,6 +60,7 @@ class RomParcelable : Parcelable {
         dest.writeLong(rom.totalPlayTime.inWholeMilliseconds)
         dest.writeLong(rom.installedDsiWareTitleId ?: -1L)
         dest.writeByteArray(rom.installedDsiWareIcon)
+        dest.writeInt(if (rom.isDsiEnhanced) 1 else 0)
     }
 
     override fun describeContents(): Int {

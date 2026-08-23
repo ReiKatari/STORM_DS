@@ -47,7 +47,7 @@ object RomProcessor {
 				categoryLow == 0x00030004 ||
 				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == '4')) ||
 				(gc0 == 'K' || gc0 == 'H' || gc0 == '4')
-			val isDsiEnhanced = !isDsiWareTitle && ((unitCode and 0x02 != 0) || gc0 == 'I' || gc0 == 'T' || gc0 == 'V')
+			val isDsiEnhanced = !isDsiWareTitle && (unitCode and 0x02 != 0)
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
 			channel.position(arm9Offset)
@@ -114,7 +114,7 @@ object RomProcessor {
 				categoryLow == 0x00030004 ||
 				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == '4')) ||
 				(gc0 == 'K' || gc0 == 'H' || gc0 == '4')
-			val isDsiEnhanced = !isDsiWareTitle && ((unitCode and 0x02 != 0) || gc0 == 'I' || gc0 == 'T' || gc0 == 'V')
+			val isDsiEnhanced = !isDsiWareTitle && (unitCode and 0x02 != 0)
 
 			var arm9Bootcode: ByteArray? = null
 			var arm7Bootcode: ByteArray? = null
