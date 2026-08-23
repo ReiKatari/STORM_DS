@@ -568,8 +568,16 @@ class FileSystemRomsRepository(
                 saveDirectoryStates()
             }
 
-            roms.addAll(validCachedRoms)
-            if (validCachedRoms.isNotEmpty() || cacheReadResult.isValid) {
+            val fixedCachedRoms = validCachedRoms.map { rom ->
+                if (!rom.isDsiWareTitle && (rom.fileName.endsWith(".dsi", ignoreCase = true) || rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true)) {
+                    rom.copy(isDsiWareTitle = true, config = RomConfig.forDsiWareTitle())
+                } else {
+                    rom
+                }
+            }
+
+            roms.addAll(fixedCachedRoms)
+            if (fixedCachedRoms.isNotEmpty() || cacheReadResult.isValid) {
                 onRomsChanged(persist = unavailableDirectories.isEmpty())
             }
 

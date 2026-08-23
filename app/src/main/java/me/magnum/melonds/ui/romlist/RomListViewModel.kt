@@ -607,12 +607,13 @@ class RomListViewModel @Inject constructor(
 
                     // 1. Auto-import missing DSiWare ROMs found in active folders
                     for (rom in currentDsiRoms) {
+                        val cleanName = rom.name.lowercase().trim()
+                        val cleanFileName = rom.fileName.substringBeforeLast('.').lowercase().trim()
+
                         val isInstalled = installedTitles.any { title ->
                             val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
                             val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
                             val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)
-                            val cleanName = rom.name.lowercase().trim()
-                            val cleanFileName = rom.fileName.substringBeforeLast('.').lowercase().trim()
 
                             storedSourceUri == rom.uri.toString() ||
                                 (storedOrigFile != null && (storedOrigFile.equals(cleanFileName, true) || storedOrigFile.equals(cleanName, true))) ||
@@ -626,6 +627,12 @@ class RomListViewModel @Inject constructor(
                                 val res = dsiNandManager.importTitle(rom.uri)
                                 if (res == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS) {
                                     anyChanged = true
+                                    val updatedTitles = dsiNandManager.listTitles()
+                                    val importedTitle = updatedTitles.find { it.name.equals(cleanName, true) || it.name.equals(cleanFileName, true) }
+                                    if (importedTitle != null) {
+                                        dsiWareTitlesMetadataStore.setAutoImported(importedTitle.titleId, true)
+                                        dsiWareTitlesMetadataStore.setParentFolderUri(importedTitle.titleId, rom.parentTreeUri?.toString())
+                                    }
                                 }
                             } catch (e: Throwable) {
                                 android.util.Log.w("RomListViewModel", "Failed to auto-import DSiWare title from ${rom.uri}", e)
@@ -633,25 +640,28 @@ class RomListViewModel @Inject constructor(
                         }
                     }
 
-                    // 2. Auto-delete installed titles from NAND only if active ROMs are fully loaded and source was deleted
+                    // 2. Auto-delete installed titles ONLY if they were auto-imported from a search directory that was removed
                     if (roms.isNotEmpty()) {
+                        val activeSearchDirs = settingsRepository.getRomSearchDirectories().map { it.toString() }.toSet()
                         val activeUris = roms.map { it.rom.uri.toString() }.toSet()
                         val activeFileNames = roms.map { it.rom.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
                         val activeNames = roms.map { it.rom.name.lowercase().trim() }.toSet()
 
                         for (title in installedTitles) {
                             val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+                            val isAutoImported = dsiWareTitlesMetadataStore.isAutoImported(titleIdHex)
+                            val parentFolderUri = dsiWareTitlesMetadataStore.getParentFolderUri(titleIdHex)
                             val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
                             val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
                             val titleName = title.name.lowercase().trim()
 
-                            val wasImportedFromUserFolder = storedSourceUri != null || storedOrigFile != null
-                            if (wasImportedFromUserFolder) {
-                                val stillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
+                            if (isAutoImported) {
+                                val folderStillActive = parentFolderUri == null || parentFolderUri in activeSearchDirs
+                                val fileStillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
                                     (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
                                     (titleName in activeFileNames || titleName in activeNames)
 
-                                if (!stillExists) {
+                                if (!folderStillActive || !fileStillExists) {
                                     android.util.Log.i("RomListViewModel", "Auto-deleting removed DSiWare title 0x${titleIdHex} (${title.name}) from NAND")
                                     try {
                                         dsiNandManager.deleteTitle(title.titleId)
@@ -678,14 +688,11 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {
-        val isRawDsiWare = rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
-        if (isRawDsiWare) return false // Raw DSiWare files are imported to NAND and represented by installed shortcuts
-
         return when (filter) {
             RomFilter.ALL -> true
             RomFilter.FAVORITES -> rom.isFavorite
-            RomFilter.DS_ONLY -> !rom.isInstalledDsiWareShortcut
-            RomFilter.DSIWARE_ONLY -> rom.isInstalledDsiWareShortcut
+            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
+            RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
         }
     }
