@@ -2207,7 +2207,11 @@ class EmulatorViewModel @Inject constructor(
         }
 
         sessionCoroutineScope.launch {
-            emulatorManager.loadRewindState(rewindSaveState)
+            val success = emulatorManager.loadRewindState(rewindSaveState)
+            if (!success) {
+                _toastEvent.tryEmit(ToastEvent.StateLoadFailed)
+            }
+            resumeEmulatorIfSessionCanRun()
         }
     }
 
