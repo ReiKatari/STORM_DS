@@ -12,6 +12,7 @@
 * <strong>JPeacekeeper</strong> (<a href="https://4pda.to/forum/index.php?showuser=5768740">4PDA Profile</a>) — неоценимый вклад в тестирование, баг-репорты, стандартизацию DSi/Vulkan пайплайна и развитие проекта STORM DS.
 * <strong>WatermelonDS</strong> (SapphireRhodonite & contributors) — современный порт для Android, интеграция Vulkan-рендерера, поддержка шейдеров librashader, сенсорное управление и Material Design UI.
 * <strong>melonDS</strong> (StapleButter, Nadia, RSDuck, genericretrogeek & melonDS team) — оригинальное высокоточное ядро эмуляции Nintendo DS и Nintendo DSi.
+* <strong>melonDS DS (RetroArch Core)</strong> (JesseTG & Libretro team) — архитектура Libretro-ядра, механики DSiWare Autoload и спецификации TLNC warmboot.
 * <strong>Open Source библиотеки</strong>: Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools.
 </p>
 
@@ -119,6 +120,8 @@ STORM DS выражает глубокую признательность авт
 
 * **[melonDS](https://melonds.kuribo64.net/)** (Оригинальное ядро эмулятора Nintendo DS & DSi):
   * **StapleButter**, **Nadia**, **RSDuck**, **genericretrogeek**, **Arisotura** и всей команде разработчиков melonDS за эталонную точность, быстродействие и чистую архитектуру эмуляции Nintendo DS и DSi.
+* **[melonDS DS (RetroArch Core)](https://github.com/JesseTG/melonds-ds)** (Ядро эмулятора melonDS для RetroArch / Libretro):
+  * **JesseTG** и контрибьюторам melonDS DS / Libretro за передовые наработки по автозагрузке DSiWare, исследования структуры TLNC warmboot и оптимизацию архитектуры ядра.
 * **[WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS)** (Форк melonDS для Android):
   * **SapphireRhodonite** и всем участникам проекта WatermelonDS за разработку мощного порта на Android, высокоскоростной аппаратный рендер Vulkan Fastpath, интеграцию шейдерного движка librashader, улучшенные экранные раскладки и современный сенсорный интерфейс.
   * **rafaelvcaetano** за создание первой основы Android-порта melonDS.
