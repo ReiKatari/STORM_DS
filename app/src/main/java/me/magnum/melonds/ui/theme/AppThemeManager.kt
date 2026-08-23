@@ -11,6 +11,8 @@ object AppThemeManager {
     val accentColorState = mutableStateOf("electric_cyan")
     val cardStyleState = mutableStateOf("glassmorphism")
 
+    private var prefChangeListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+
     val currentTheme: Theme
         get() = themeState.value
 
@@ -21,7 +23,7 @@ object AppThemeManager {
         accentColorState.value = prefs.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
         cardStyleState.value = prefs.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
 
-        prefs.registerOnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
             if (key == "theme") {
                 val newKey = sp.getString("theme", "dark") ?: "dark"
                 themeState.value = Theme.fromPreference(newKey)
@@ -31,6 +33,8 @@ object AppThemeManager {
                 cardStyleState.value = sp.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
             }
         }
+        prefChangeListener = listener
+        prefs.registerOnSharedPreferenceChangeListener(listener)
     }
 
     fun updateTheme(context: Context, themeKey: String) {
