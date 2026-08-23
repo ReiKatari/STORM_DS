@@ -1400,4 +1400,51 @@
     <string name="app_language_summary">Select the interface language for STORM DS</string>
     <string name="dual_screen_info_title">How Dual Screen Presets Work</string>
     <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area &amp; Alignment: customize vertical alignment and display coverage.</string>
+
+    <!-- STORM Theme Studio & Colors -->
+    <string name="theme_accent_color_title">Accent Color</string>
+    <string name="theme_accent_color_summary">Select accent neon color for STORM NIGHT theme</string>
+    <string name="accent_electric_cyan">Electric Cyan</string>
+    <string name="accent_amber_gold">Amber Gold</string>
+    <string name="accent_cyber_red">Cyber Neon Red</string>
+    <string name="accent_emerald_jade">Emerald Jade</string>
+    <string name="accent_royal_violet">Royal Violet</string>
+
+    <!-- Card Styles -->
+    <string name="rom_card_style_title">Library Card Style</string>
+    <string name="rom_card_style_summary">Visual card representation in game grid</string>
+    <string name="card_style_glassmorphism">Glassmorphism</string>
+    <string name="card_style_flat_minimal">Flat Minimal</string>
+    <string name="card_style_3d_boxart">3D Boxart</string>
+
+    <!-- JIT Overclock & CPU Tuning -->
+    <string name="arm9_overclock_title">ARM9 CPU Clock (Overclock)</string>
+    <string name="arm9_overclock_summary">Overclock CPU to eliminate frame drops in demanding 3D games</string>
+    <string name="arm9_overclock_1x">67 MHz (Default / 1x)</string>
+    <string name="arm9_overclock_2x">133 MHz (DSi Mode / 2x)</string>
+    <string name="arm9_overclock_3x">200 MHz (3x Overclock)</string>
+    <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
+
+    <!-- Scraper Pro & Covers -->
+    <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart &amp; High-Res Covers</string>
+    <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
+    <string name="pick_custom_cover">Change Cover from Gallery</string>
+    <string name="reset_custom_cover">Reset Custom Cover</string>
+    <string name="custom_cover_updated">Cover updated successfully</string>
+    <string name="custom_cover_removed">Custom cover removed</string>
+
+    <!-- Input Macros & Gyro Mic -->
+    <string name="input_turbo_macros_title">Turbo Buttons &amp; Macros</string>
+    <string name="input_turbo_macros_summary">Enable virtual Turbo A/B/X/Y rapid-fire buttons</string>
+    <string name="input_gyro_mic_title">Gyro Microphone Emulation</string>
+    <string name="input_gyro_mic_summary">Shake or tilt device to blow into virtual microphone</string>
+
+    <!-- Dual-Screen & Soft Patching -->
+    <string name="video_widescreen_3d_title">3D Widescreen (16:9 Aspect Ratio)</string>
+    <string name="video_widescreen_3d_summary">Anamorphic widescreen aspect ratio rendering for 3D games</string>
+    <string name="video_60fps_patch_title">60 FPS Unlock Hack</string>
+    <string name="video_60fps_patch_summary">Force 60 FPS in supported 30 FPS 3D titles</string>
+    <string name="video_dual_screen_cast_title">Dual-Screen Cast Mode (TV / HDMI)</string>
+    <string name="video_dual_screen_cast_summary">Display touchscreen on device and 4K top screen on TV</string>
+    <string name="soft_patch_applied">Applied patch: %s</string>
 </resources>

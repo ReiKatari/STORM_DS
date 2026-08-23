@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,7 +75,18 @@ fun RomGridCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = watermelon
-    val shape = RoundedCornerShape(7.dp)
+    val cardStyle = me.magnum.melonds.ui.theme.AppThemeManager.cardStyleState.value
+    val cornerRadius = when (cardStyle) {
+        "3d_boxart" -> 4.dp
+        "flat_minimal" -> 2.dp
+        else -> 7.dp
+    }
+    val shadowElevation = when (cardStyle) {
+        "3d_boxart" -> 9.dp
+        "flat_minimal" -> 0.dp
+        else -> 5.dp
+    }
+    val shape = RoundedCornerShape(cornerRadius)
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -89,7 +102,7 @@ fun RomGridCard(
             .scale(pressScale)
             .fillMaxWidth()
             .aspectRatio(DsBoxArtAspectRatio)
-            .shadow(5.dp, shape)
+            .shadow(shadowElevation, shape)
             .clip(shape)
             .combinedClickable(
                 interactionSource = interactionSource,
@@ -108,7 +121,26 @@ fun RomGridCard(
             onArtLoadedChanged = { artLoaded = it },
         )
 
-        Box(Modifier.aspectRatio(DsBoxArtAspectRatio).fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.13f), shape))
+        val borderColor = when (cardStyle) {
+            "flat_minimal" -> colors.line
+            "3d_boxart" -> Color.White.copy(alpha = 0.22f)
+            else -> Color.White.copy(alpha = 0.14f)
+        }
+        Box(Modifier.aspectRatio(DsBoxArtAspectRatio).fillMaxWidth().border(1.dp, borderColor, shape))
+
+        if (cardStyle == "3d_boxart") {
+            // Authentic 3D box spine highlight
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .width(6.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            listOf(Color.White.copy(alpha = 0.35f), Color.Transparent)
+                        )
+                    )
+            )
+        }
 
         Row(
             modifier = Modifier.align(Alignment.TopStart).padding(7.dp),

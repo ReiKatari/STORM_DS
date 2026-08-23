@@ -32,5 +32,8 @@ data class EmulatorConfiguration(
         val firmwareConfiguration: FirmwareConfiguration,
         val rendererConfiguration: RendererConfiguration,
         val dldiSdCardConfiguration: DldiSdCardConfiguration,
-        val dsiWareAutoloadTitleId: Long = 0L
+        val dsiWareAutoloadTitleId: Long = 0L,
+        val arm9OverclockMultiplier: Int = 1,
+        val enable3dWidescreen: Boolean = false,
+        val enable60FpsPatch: Boolean = false
 )

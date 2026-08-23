@@ -401,6 +401,10 @@ class SharedPreferencesSettingsRepository(
                 folderSync = isDldiSdCardEnabled() && getDldiSdCardDirectory() != null,
                 folderPath = File(context.filesDir, "dldi/sync").absolutePath,
             ),
+            dsiWareAutoloadTitleId = 0L,
+            arm9OverclockMultiplier = getArm9Overclock(),
+            enable3dWidescreen = is3dWidescreenEnabled(),
+            enable60FpsPatch = is60FpsPatchEnabled(),
         )
     }
 
@@ -1987,5 +1991,41 @@ class SharedPreferencesSettingsRepository(
 
     private fun isComputeRendererSupported(): Boolean {
         return isOpenGlRendererSupported() && Build.HARDWARE.equals("qcom", ignoreCase = true)
+    }
+
+    override fun getThemeAccentColor(): String {
+        return preferences.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
+    }
+
+    override fun getRomCardStyle(): String {
+        return preferences.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
+    }
+
+    override fun getArm9Overclock(): Int {
+        return preferences.getString("arm9_overclock", "1")?.toIntOrNull() ?: 1
+    }
+
+    override fun isGameTdbCoversEnabled(): Boolean {
+        return preferences.getBoolean("rom_gametdb_covers_enabled", true)
+    }
+
+    override fun is3dWidescreenEnabled(): Boolean {
+        return preferences.getBoolean("video_widescreen_3d", false)
+    }
+
+    override fun is60FpsPatchEnabled(): Boolean {
+        return preferences.getBoolean("video_60fps_patch", false)
+    }
+
+    override fun isDualScreenCastEnabled(): Boolean {
+        return preferences.getBoolean("video_dual_screen_cast_enabled", false)
+    }
+
+    override fun isTurboMacrosEnabled(): Boolean {
+        return preferences.getBoolean("input_turbo_macros_enabled", false)
+    }
+
+    override fun isGyroMicEnabled(): Boolean {
+        return preferences.getBoolean("input_gyro_mic_enabled", false)
     }
 }

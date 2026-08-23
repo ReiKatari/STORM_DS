@@ -13,6 +13,26 @@
             android:defaultValue="dark" />
 
     <ListPreference
+            android:key="theme_accent_color"
+            android:title="@string/theme_accent_color_title"
+            android:summary="@string/theme_accent_color_summary"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true"
+            android:entries="@array/theme_accent_color_options"
+            android:entryValues="@array/theme_accent_color_values"
+            android:defaultValue="electric_cyan" />
+
+    <ListPreference
+            android:key="rom_card_style"
+            android:title="@string/rom_card_style_title"
+            android:summary="@string/rom_card_style_summary"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true"
+            android:entries="@array/rom_card_style_options"
+            android:entryValues="@array/rom_card_style_values"
+            android:defaultValue="glassmorphism" />
+
+    <ListPreference
             android:key="fast_forward_speed_multiplier"
             android:title="@string/fast_forward_max_speed"
             android:summary="%s"

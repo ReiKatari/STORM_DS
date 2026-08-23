@@ -125,6 +125,35 @@ fun FullScreenCoverDialog(
         }
     }
 
+    val customCoversDir = remember { java.io.File(context.filesDir, "custom_covers").apply { mkdirs() } }
+    val cleanTitle = remember(rom.fileName) { rom.fileName.substringBeforeLast('.').trim() }
+    val customCoverFile = remember(cleanTitle) { java.io.File(customCoversDir, "$cleanTitle.png") }
+    var hasCustomCover by remember { mutableStateOf(customCoverFile.exists()) }
+
+    val pickCoverLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        java.io.FileOutputStream(customCoverFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        hasCustomCover = true
+                        Toast.makeText(context, context.getString(me.magnum.melonds.R.string.custom_cover_updated), Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Throwable) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -149,26 +178,21 @@ fun FullScreenCoverDialog(
                     .transformable(state = transformState),
                 contentAlignment = Alignment.Center
             ) {
-                if (boxArtUrl != null) {
-                    AsyncImage(
-                        model = boxArtUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .clip(RoundedCornerShape(16.dp))
-                    )
-                } else {
-                    AsyncImage(
-                        model = romIconRequest(context, rom),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        filterQuality = FilterQuality.None,
-                        modifier = Modifier
-                            .size(240.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                    )
+                val displayModel = when {
+                    hasCustomCover -> customCoverFile
+                    boxArtUrl != null -> boxArtUrl
+                    else -> romIconRequest(context, rom)
                 }
+
+                AsyncImage(
+                    model = displayModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    filterQuality = if (hasCustomCover || boxArtUrl != null) FilterQuality.High else FilterQuality.None,
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .clip(RoundedCornerShape(16.dp))
+                )
             }
 
             // Top Bar: Game Title & Close Button
@@ -200,7 +224,7 @@ fun FullScreenCoverDialog(
                 }
             }
 
-            // Bottom Actions Bar: Save Button & Format Selection
+            // Bottom Actions Bar: Save Button & Format Selection & Pick from Gallery
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -227,23 +251,70 @@ fun FullScreenCoverDialog(
                 }
 
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(colors.red)
-                        .clickable { showFormatSelector = !showFormatSelector }
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Text(
-                        text = "СОХРАНИТЬ ОБЛОЖКУ",
-                        color = Color.White,
-                        fontFamily = WatermelonMono,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(colors.red)
+                            .clickable { showFormatSelector = !showFormatSelector }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "СОХРАНИТЬ",
+                            color = Color.White,
+                            fontFamily = WatermelonMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .clickable { pickCoverLauncher.launch("image/*") }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "ИЗ ГАЛЕРЕИ",
+                            color = Color.White,
+                            fontFamily = WatermelonMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    if (hasCustomCover) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color.Red.copy(alpha = 0.4f))
+                                .clickable {
+                                    customCoverFile.delete()
+                                    hasCustomCover = false
+                                    Toast.makeText(context, context.getString(me.magnum.melonds.R.string.custom_cover_removed), Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "СБРОСИТЬ",
+                                color = Color.White,
+                                fontFamily = WatermelonMono,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         }
