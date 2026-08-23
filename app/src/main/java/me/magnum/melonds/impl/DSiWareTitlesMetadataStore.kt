@@ -72,4 +72,34 @@ class DSiWareTitlesMetadataStore @Inject constructor(
             }
         }.apply()
     }
+
+    fun getSourceUri(titleIdHex: String): String? {
+        return prefs.getString("source_uri_${titleIdHex.lowercase()}", null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun getSourceUri(titleId: Long): String? {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        return getSourceUri(titleIdHex)
+    }
+
+    fun setSourceUri(titleId: Long, sourceUri: String?) {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        prefs.edit().apply {
+            if (sourceUri.isNullOrBlank()) {
+                remove("source_uri_$titleIdHex")
+            } else {
+                putString("source_uri_$titleIdHex", sourceUri.trim())
+            }
+        }.apply()
+    }
+
+    fun removeTitleMetadata(titleId: Long) {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        prefs.edit().apply {
+            remove("custom_name_$titleIdHex")
+            remove("file_name_$titleIdHex")
+            remove("ra_hash_$titleIdHex")
+            remove("source_uri_$titleIdHex")
+        }.apply()
+    }
 }
