@@ -93,6 +93,30 @@ class DSiWareTitlesMetadataStore @Inject constructor(
         }.apply()
     }
 
+    fun isAutoImported(titleIdHex: String): Boolean {
+        return prefs.getBoolean("auto_imported_${titleIdHex.lowercase()}", false)
+    }
+
+    fun setAutoImported(titleId: Long, autoImported: Boolean) {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        prefs.edit().putBoolean("auto_imported_$titleIdHex", autoImported).apply()
+    }
+
+    fun getParentFolderUri(titleIdHex: String): String? {
+        return prefs.getString("parent_folder_${titleIdHex.lowercase()}", null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun setParentFolderUri(titleId: Long, parentFolderUri: String?) {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        prefs.edit().apply {
+            if (parentFolderUri.isNullOrBlank()) {
+                remove("parent_folder_$titleIdHex")
+            } else {
+                putString("parent_folder_$titleIdHex", parentFolderUri.trim())
+            }
+        }.apply()
+    }
+
     fun removeTitleMetadata(titleId: Long) {
         val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
         prefs.edit().apply {
@@ -100,6 +124,8 @@ class DSiWareTitlesMetadataStore @Inject constructor(
             remove("file_name_$titleIdHex")
             remove("ra_hash_$titleIdHex")
             remove("source_uri_$titleIdHex")
+            remove("auto_imported_$titleIdHex")
+            remove("parent_folder_$titleIdHex")
         }.apply()
     }
 }
