@@ -43,11 +43,10 @@ object RomProcessor {
 			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
 			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
 			val isDsiWareTitle = unitCode == 0x03 ||
-				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == '4')) ||
 				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
 				categoryLow == 0x00030004 ||
-				(gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z')
-
+				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == '4')) ||
+				(gc0 == 'K' || gc0 == 'H' || gc0 == '4')
 			val isDsiEnhanced = !isDsiWareTitle && ((unitCode and 0x02 != 0) || gc0 == 'I' || gc0 == 'T' || gc0 == 'B' || gc0 == 'V')
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
@@ -111,10 +110,10 @@ object RomProcessor {
 			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
 			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
 			val isDsiWareTitle = unitCode == 0x03 ||
-				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == '4')) ||
 				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
 				categoryLow == 0x00030004 ||
-				(gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z')
+				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == '4')) ||
+				(gc0 == 'K' || gc0 == 'H' || gc0 == '4')
 			val isDsiEnhanced = !isDsiWareTitle && ((unitCode and 0x02 != 0) || gc0 == 'I' || gc0 == 'T' || gc0 == 'B' || gc0 == 'V')
 
 			var arm9Bootcode: ByteArray? = null
