@@ -597,7 +597,8 @@ class RomListViewModel @Inject constructor(
         return when (filter) {
             RomFilter.ALL -> true
             RomFilter.FAVORITES -> rom.isFavorite
-            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut
+            RomFilter.DS_ONLY -> !rom.isDsiWareTitle && !rom.isInstalledDsiWareShortcut && !rom.isDsiEnhanced
+            RomFilter.DSI_ENHANCED_ONLY -> rom.isDsiEnhanced
             RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
         }
