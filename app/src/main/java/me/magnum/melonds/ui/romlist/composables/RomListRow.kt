@@ -181,59 +181,58 @@ fun RomListRow(
 
         Spacer(Modifier.width(10.dp))
 
-        // 3. Column 3: Region Badge, Platform Tag & RA Badge
+        // 3. Column 3: Badges stacked vertically (RA, Region, Platform)
         val regionBadge = resolveRomRegionBadge(rom)
-        Column(horizontalAlignment = Alignment.End) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (showAchievementBadge) {
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 5.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFF0F172A).copy(alpha = 0.85f))
-                            .border(0.7.dp, WatermelonColors.gold.copy(alpha = 0.70f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.EmojiEvents,
-                                contentDescription = "Achievements",
-                                tint = WatermelonColors.gold,
-                                modifier = Modifier.size(10.dp),
-                            )
-                            Spacer(Modifier.width(2.dp))
-                            Text(
-                                text = "RA",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = WatermelonColors.gold
-                                )
-                            )
-                        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (showAchievementBadge) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFF0F172A).copy(alpha = 0.85f))
+                        .border(0.7.dp, WatermelonColors.gold.copy(alpha = 0.70f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 3.5.dp, vertical = 1.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.EmojiEvents,
+                            contentDescription = "Achievements",
+                            tint = WatermelonColors.gold,
+                            modifier = Modifier.size(9.dp),
+                        )
+                        Spacer(Modifier.width(1.5.dp))
+                        Text(
+                            text = "RA",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = WatermelonColors.gold,
+                            ),
+                        )
                     }
                 }
-                if (regionBadge != null) {
-                    RegionBadge(
-                        flag = regionBadge.first,
-                        code = regionBadge.second,
-                        modifier = Modifier.padding(end = 5.dp),
-                    )
-                }
-                PlatformBadge(
-                    text = romPlatformLabel(rom),
-                    fontSize = 8.5.sp,
+            }
+            if (regionBadge != null) {
+                RegionBadge(
+                    flag = regionBadge.first,
+                    code = regionBadge.second,
                 )
             }
+            PlatformBadge(
+                text = romPlatformLabel(rom),
+                fontSize = 8.sp,
+            )
             val hours = formatHoursLabel(rom.totalPlayTime)
             if (hours.isNotEmpty()) {
                 Text(
                     text = hours,
                     color = colors.text3,
                     fontFamily = WatermelonMono,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    modifier = Modifier.padding(top = 4.dp),
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
+                    modifier = Modifier.padding(top = 1.dp),
                 )
             }
         }
