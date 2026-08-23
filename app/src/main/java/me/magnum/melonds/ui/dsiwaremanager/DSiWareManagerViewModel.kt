@@ -54,10 +54,14 @@ class DSiWareManagerViewModel @Inject constructor(
         _importingTitle.value = true
 
         viewModelScope.launch {
-            withContext(Dispatchers.Default) {
+            withContext(Dispatchers.IO) {
                 val result = dsiNandManager.importTitle(titleUri)
                 if (result == ImportDSiWareTitleResult.SUCCESS) {
                     val titles = dsiNandManager.listTitles()
+                    val justImported = titles.maxByOrNull { it.titleId }
+                    if (justImported != null) {
+                        dsiWareTitlesMetadataStore.setAutoImported(justImported.titleId, false)
+                    }
                     _state.value = DSiWareManagerUiState.Ready(titles)
                 } else {
                     _importTitleError.tryEmit(result)
@@ -141,29 +145,6 @@ class DSiWareManagerViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
                     val openNandResult = dsiNandManager.openNand()
                     if (openNandResult.isSuccess()) {
-                        try {
-                            // Safe auto-install of missing DSi games from search folders without deleting anything
-                            val scannedRoms = romsRepository.getRoms().first()
-                            val dsiRoms = scannedRoms.filter {
-                                it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true
-                            }
-                            if (dsiRoms.isNotEmpty()) {
-                                val currentTitles = dsiNandManager.listTitles()
-                                val existingNames = currentTitles.map { it.name.trim().lowercase() }.toSet()
-                                val existingIds = currentTitles.map { it.titleId and 0xFFFFFFFFL }.toSet()
-
-                                for (rom in dsiRoms) {
-                                    val cleanName = rom.name.trim().lowercase()
-                                    val cleanFileName = rom.fileName.substringBeforeLast('.').trim().lowercase()
-                                    val isInstalled = existingNames.contains(cleanName) || existingNames.contains(cleanFileName) ||
-                                        (rom.installedDsiWareTitleId != null && existingIds.contains(rom.installedDsiWareTitleId))
-                                    if (!isInstalled) {
-                                        dsiNandManager.importTitle(rom.uri)
-                                    }
-                                }
-                            }
-                        } catch (_: Throwable) {}
-
                         val titles = dsiNandManager.listTitles()
                         withContext(Dispatchers.Main) {
                             _state.value = DSiWareManagerUiState.Ready(titles)

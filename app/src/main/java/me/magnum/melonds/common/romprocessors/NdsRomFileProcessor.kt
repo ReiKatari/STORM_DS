@@ -21,7 +21,10 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
             val fallbackName = uriLastSegment?.substringBeforeLast('.')?.takeUnless { it.isBlank() } ?: "NDS Game"
             val romName = metadata?.romTitle?.takeUnless { it.isBlank() } ?: fallbackName
             val fileName = uriLastSegment?.takeUnless { it.isBlank() } ?: "$fallbackName.nds"
-            val isDsi = metadata?.isDSiWareTitle ?: false
+            val isDsi = (metadata?.isDSiWareTitle ?: false) ||
+                fileName.endsWith(".dsi", ignoreCase = true) ||
+                romUri.path?.endsWith(".dsi", ignoreCase = true) == true ||
+                uriLastSegment?.endsWith(".dsi", ignoreCase = true) == true
 
             Rom(
                 name = romName,

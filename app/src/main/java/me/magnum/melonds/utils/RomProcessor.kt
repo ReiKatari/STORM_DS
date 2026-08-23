@@ -39,15 +39,9 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68).toLong()
 
 			val unitCode = header[0x12].toInt() and 0xFF
-			val isDsiWareTitle = if ((unitCode and 0x02) != 0 || unitCode == 0x03) {
-				val categoryBuffer = ByteBuffer.allocate(4)
-				channel.position(0x234)
-				channel.read(categoryBuffer)
-				val category = byteArrayToInt(categoryBuffer.array()).toUInt()
-				category == DSIWARE_CATEGORY || category == DSIWARE_SYSTEM_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == '4' || gameCode[0] == 'V' || gameCode[0] == 'Z'))
-			} else {
-				gameCode.isNotEmpty() && (gameCode[0] == '4' || gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == 'V' || gameCode[0] == 'Z')
-			}
+			val gc0 = gameCode.getOrNull(0)
+			val isDsiWareTitle = (unitCode and 0x02) != 0 || unitCode == 0x03 ||
+				(gc0 != null && (gc0 == '4' || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z'))
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
 			channel.position(arm9Offset)
@@ -105,13 +99,9 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68)
 
 			val unitCode = header[0x12].toInt() and 0xFF
-			val isDsiWareTitle = if ((unitCode and 0x02) != 0 || unitCode == 0x03) {
-				val categoryData = sectionReader.readSection(0x234, 4)
-				val category = categoryData?.let { byteArrayToInt(it).toUInt() } ?: 0u
-				category == DSIWARE_CATEGORY || category == DSIWARE_SYSTEM_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == '4' || gameCode[0] == 'V' || gameCode[0] == 'Z'))
-			} else {
-				gameCode.isNotEmpty() && (gameCode[0] == '4' || gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == 'V' || gameCode[0] == 'Z')
-			}
+			val gc0 = gameCode.getOrNull(0)
+			val isDsiWareTitle = (unitCode and 0x02) != 0 || unitCode == 0x03 ||
+				(gc0 != null && (gc0 == '4' || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z'))
 
 			var arm9Bootcode: ByteArray? = null
 			var arm7Bootcode: ByteArray? = null
