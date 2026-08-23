@@ -610,33 +610,28 @@ class RomListViewModel @Inject constructor(
                         val cleanName = rom.name.lowercase().trim()
                         val cleanFileName = rom.fileName.substringBeforeLast('.').lowercase().trim()
 
-                        val isInstalled = installedTitles.any { title ->
-                            val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
-                            val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
-                            val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)
+                        try {
+                            val res = dsiNandManager.importTitle(rom.uri)
+                            if (res == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS ||
+                                res == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED) {
+                                anyChanged = true
+                                val updatedTitles = dsiNandManager.listTitles()
+                                val matchingTitle = updatedTitles.find {
+                                    it.name.equals(cleanName, true) ||
+                                    it.name.equals(cleanFileName, true) ||
+                                    cleanName.contains(it.name.lowercase()) ||
+                                    it.name.lowercase().contains(cleanName)
+                                } ?: updatedTitles.maxByOrNull { it.titleId }
 
-                            storedSourceUri == rom.uri.toString() ||
-                                (storedOrigFile != null && (storedOrigFile.equals(cleanFileName, true) || storedOrigFile.equals(cleanName, true))) ||
-                                title.name.equals(cleanName, true) ||
-                                title.name.equals(cleanFileName, true) ||
-                                titleIdHex == cleanFileName
-                        }
-
-                        if (!isInstalled) {
-                            try {
-                                val res = dsiNandManager.importTitle(rom.uri)
-                                if (res == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS) {
-                                    anyChanged = true
-                                    val updatedTitles = dsiNandManager.listTitles()
-                                    val importedTitle = updatedTitles.find { it.name.equals(cleanName, true) || it.name.equals(cleanFileName, true) }
-                                    if (importedTitle != null) {
-                                        dsiWareTitlesMetadataStore.setAutoImported(importedTitle.titleId, true)
-                                        dsiWareTitlesMetadataStore.setParentFolderUri(importedTitle.titleId, rom.parentTreeUri?.toString())
-                                    }
+                                if (matchingTitle != null) {
+                                    dsiWareTitlesMetadataStore.setAutoImported(matchingTitle.titleId, true)
+                                    dsiWareTitlesMetadataStore.setParentFolderUri(matchingTitle.titleId, rom.parentTreeUri?.toString())
+                                    dsiWareTitlesMetadataStore.setSourceUri(matchingTitle.titleId, rom.uri.toString())
+                                    dsiWareTitlesMetadataStore.setOriginalFileName(matchingTitle.titleId, cleanFileName)
                                 }
-                            } catch (e: Throwable) {
-                                android.util.Log.w("RomListViewModel", "Failed to auto-import DSiWare title from ${rom.uri}", e)
                             }
+                        } catch (e: Throwable) {
+                            android.util.Log.w("RomListViewModel", "Failed to auto-import DSiWare title from ${rom.uri}", e)
                         }
                     }
 
@@ -646,7 +641,8 @@ class RomListViewModel @Inject constructor(
                     val activeFileNames = roms.map { it.rom.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
                     val activeNames = roms.map { it.rom.name.lowercase().trim() }.toSet()
 
-                    for (title in installedTitles) {
+                    val currentInstalled = dsiNandManager.listTitles()
+                    for (title in currentInstalled) {
                         val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
                         val isAutoImported = dsiWareTitlesMetadataStore.isAutoImported(titleIdHex)
                         val parentFolderUri = dsiWareTitlesMetadataStore.getParentFolderUri(titleIdHex)
@@ -654,13 +650,13 @@ class RomListViewModel @Inject constructor(
                         val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
                         val titleName = title.name.lowercase().trim()
 
-                        if (isAutoImported) {
+                        if (isAutoImported || activeSearchDirs.isEmpty()) {
                             val folderStillActive = parentFolderUri != null && parentFolderUri in activeSearchDirs
                             val fileStillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
                                 (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
                                 (titleName in activeFileNames || titleName in activeNames)
 
-                            if (!folderStillActive || !fileStillExists) {
+                            if (!folderStillActive || !fileStillExists || activeSearchDirs.isEmpty()) {
                                 android.util.Log.i("RomListViewModel", "Auto-deleting removed DSiWare title 0x${titleIdHex} (${title.name}) from NAND")
                                 try {
                                     dsiNandManager.deleteTitle(title.titleId)
