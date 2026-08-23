@@ -929,7 +929,10 @@ private fun EmptyState(filter: RomFilter) {
         val msg = when (filter) {
             RomFilter.ALL -> stringResource(R.string.no_roms_found)
             RomFilter.FAVORITES -> stringResource(R.string.rom_no_favorites)
-            else -> stringResource(R.string.rom_no_results_filter)
+            RomFilter.DS_ONLY -> stringResource(R.string.rom_filter_ds_empty)
+            RomFilter.DSI_ENHANCED_ONLY -> stringResource(R.string.rom_filter_dsi_enhanced_empty)
+            RomFilter.DSIWARE_ONLY -> stringResource(R.string.rom_filter_dsiware_empty)
+            RomFilter.WITH_RETRO_ACHIEVEMENTS -> stringResource(R.string.rom_filter_retro_achievements_empty)
         }
         Text(
             text = msg,
