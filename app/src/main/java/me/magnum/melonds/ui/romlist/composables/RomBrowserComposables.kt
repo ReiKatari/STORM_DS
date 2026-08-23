@@ -90,6 +90,8 @@ fun WatermelonLibraryHeader(
     isSearchActive: Boolean,
     searchQuery: String,
     viewMode: RomViewMode,
+    dsiWareBootMode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode = me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD,
+    onDsiWareBootModeChanged: (me.magnum.melonds.domain.model.dsinand.DSiWareBootMode) -> Unit = {},
     onSearchQueryChanged: (String?) -> Unit,
     onToggleViewMode: () -> Unit,
     onBootFirmwareDs: () -> Unit,
@@ -102,6 +104,7 @@ fun WatermelonLibraryHeader(
     val colors = watermelon
     var searchOpen by remember { mutableStateOf(isSearchActive) }
     var overflowOpen by remember { mutableStateOf(false) }
+    var bootModeMenuOpen by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
 
     Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
@@ -158,7 +161,7 @@ fun WatermelonLibraryHeader(
             } else {
                 WatermelonMark(height = 24.dp)
                 Spacer(Modifier.width(9.dp))
-                Row(modifier = Modifier.weight(1f)) {
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "STORM ",
                         color = colors.text,
@@ -176,20 +179,89 @@ fun WatermelonLibraryHeader(
                         letterSpacing = (-0.3).sp,
                     )
                 }
-                IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(42.dp)) {
-                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(22.dp))
+
+                // Styled DSiWare Boot Mode Quick Switcher
+                Box(modifier = Modifier.padding(end = 4.dp)) {
+                    val (modeIcon, modeLabel, modeColor) = when (dsiWareBootMode) {
+                        me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> Triple("🚀", "Auto", Color(0xFF00E5FF))
+                        me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> Triple("⚡", "Direct", Color(0xFFFFAB00))
+                        me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> Triple("🎮", "NAND", Color(0xFFE040FB))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, modeColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .clickable { bootModeMenuOpen = true }
+                            .padding(horizontal = 7.dp, vertical = 4.5.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = modeIcon, fontSize = 11.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = modeLabel,
+                                color = modeColor,
+                                fontFamily = WatermelonMono,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = bootModeMenuOpen,
+                        onDismissRequest = { bootModeMenuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            onClick = {
+                                bootModeMenuOpen = false
+                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD)
+                            }
+                        ) {
+                            Column {
+                                Text("🚀 Autoload (Рекомендуется)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                Text("Прямой запуск через DSi Firmware TLNC (как в RetroArch)", color = colors.text3, fontSize = 11.sp)
+                            }
+                        }
+                        DropdownMenuItem(
+                            onClick = {
+                                bootModeMenuOpen = false
+                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT)
+                            }
+                        ) {
+                            Column {
+                                Text("⚡ Direct Boot (Прямой старт)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                Text("Быстрый старт картриджа напрямую в RAM", color = colors.text3, fontSize = 11.sp)
+                            }
+                        }
+                        DropdownMenuItem(
+                            onClick = {
+                                bootModeMenuOpen = false
+                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU)
+                            }
+                        ) {
+                            Column {
+                                Text("🎮 NAND Launcher (Меню DSi)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                Text("Полный запуск в официальное меню DSi", color = colors.text3, fontSize = 11.sp)
+                            }
+                        }
+                    }
                 }
-                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(42.dp)) {
+
+                IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(38.dp)) {
                     Icon(
                         imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
                         contentDescription = stringResource(R.string.rom_view_toggle),
                         tint = colors.text2,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
                 Box {
-                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.size(42.dp)) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(22.dp))
+                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.size(38.dp)) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
                     }
                     DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDs() }) {
@@ -206,8 +278,8 @@ fun WatermelonLibraryHeader(
                         }
                     }
                 }
-                IconButton(onClick = onOpenSettings, modifier = Modifier.size(42.dp)) {
-                    Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.settings), tint = colors.text2, modifier = Modifier.size(22.dp))
+                IconButton(onClick = onOpenSettings, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.settings), tint = colors.text2, modifier = Modifier.size(20.dp))
                 }
             }
         }

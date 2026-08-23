@@ -138,6 +138,14 @@ class RomListViewModel @Inject constructor(
         }
     }
 
+    private val _dsiWareBootMode = MutableStateFlow(settingsRepository.getDsiWareBootMode())
+    val dsiWareBootMode: StateFlow<me.magnum.melonds.domain.model.dsinand.DSiWareBootMode> = _dsiWareBootMode.asStateFlow()
+
+    fun setDsiWareBootMode(mode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode) {
+        settingsRepository.setDsiWareBootMode(mode)
+        _dsiWareBootMode.value = mode
+    }
+
     init {
         refreshAuthenticationState()
     }

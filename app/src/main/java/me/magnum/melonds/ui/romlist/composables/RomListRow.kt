@@ -220,22 +220,10 @@ fun RomListRow(
                         modifier = Modifier.padding(end = 5.dp),
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(colors.surface2)
-                        .padding(horizontal = 5.5.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = if (rom.isDsiWareTitle) "DSi" else "DS",
-                        color = colors.text2,
-                        fontFamily = WatermelonMono,
-                        fontSize = 8.5.sp,
-                        lineHeight = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                    )
-                }
+                PlatformBadge(
+                    text = romPlatformLabel(rom),
+                    fontSize = 8.5.sp,
+                )
             }
             val hours = formatHoursLabel(rom.totalPlayTime)
             if (hours.isNotEmpty()) {

@@ -7,11 +7,13 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -26,9 +28,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
@@ -61,6 +65,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.createBitmap
@@ -153,6 +158,7 @@ fun DSiWareManagerScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = padding,
                     titles = currentState.titles,
+                    dsiEnhancedRoms = currentState.dsiEnhancedRoms,
                     onRenameTitle = { title ->
                         renameDialogState.show(
                             initialText = title.name,
@@ -291,14 +297,16 @@ private fun Ready(
     modifier: Modifier,
     contentPadding: PaddingValues,
     titles: List<DSiWareTitle>,
+    dsiEnhancedRoms: List<me.magnum.melonds.domain.model.rom.Rom>,
     onRenameTitle: (DSiWareTitle) -> Unit,
     onDeleteTitle: (DSiWareTitle) -> Unit,
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     onExportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     retrieveTitleIcon: (DSiWareTitle) -> RomIcon,
 ) {
+    val colors = watermelon
     Box(modifier = modifier) {
-        if (titles.isEmpty()) {
+        if (titles.isEmpty() && dsiEnhancedRoms.isEmpty()) {
             Text(
                 modifier = Modifier
                     .padding(contentPadding)
@@ -306,12 +314,14 @@ private fun Ready(
                     .align(Alignment.Center)
                     .padding(24.dp),
                 text = stringResource(R.string.no_dsiware_titles_installed),
+                color = colors.text3,
             )
         } else {
             DSiWareTitleList(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding,
                 titles = titles,
+                dsiEnhancedRoms = dsiEnhancedRoms,
                 onRenameTitle = onRenameTitle,
                 onDeleteTitle = onDeleteTitle,
                 onImportTitleFile = onImportTitleFile,
@@ -324,6 +334,7 @@ private fun Ready(
 
 @Composable
 private fun Error(modifier: Modifier) {
+    val colors = watermelon
     Box(
         modifier = modifier.padding(24.dp),
         contentAlignment = Alignment.Center,
@@ -331,6 +342,7 @@ private fun Error(modifier: Modifier) {
         Text(
             text = stringResource(R.string.dsiware_manager_load_error),
             textAlign = TextAlign.Center,
+            color = colors.red,
         )
     }
 }
@@ -340,34 +352,137 @@ private fun DSiWareTitleList(
     modifier: Modifier,
     contentPadding: PaddingValues,
     titles: List<DSiWareTitle>,
+    dsiEnhancedRoms: List<me.magnum.melonds.domain.model.rom.Rom>,
     onRenameTitle: (DSiWareTitle) -> Unit,
     onDeleteTitle: (DSiWareTitle) -> Unit,
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     onExportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     retrieveTitleIcon: (DSiWareTitle) -> RomIcon,
 ) {
+    val colors = watermelon
     LazyColumn(
         modifier = modifier.consumeWindowInsets(contentPadding),
         contentPadding = PaddingValues(
             start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
             top = contentPadding.calculateTopPadding(),
             end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
-            bottom = contentPadding.calculateBottomPadding() + 16.dp + 56.dp + 16.dp, // Add FAB size and FAB padding
+            bottom = contentPadding.calculateBottomPadding() + 16.dp + 56.dp + 16.dp,
         ),
     ) {
-        items(
-            items = titles,
-            key = { it.titleId },
-        ) { dSiWareTitle ->
-            DSiWareItem(
-                modifier = Modifier.fillMaxWidth(),
-                item = dSiWareTitle,
-                onRenameClicked = { onRenameTitle(dSiWareTitle) },
-                onDeleteClicked = { onDeleteTitle(dSiWareTitle) },
-                onImportFile = { onImportTitleFile(dSiWareTitle, it) },
-                onExportFile = { onExportTitleFile(dSiWareTitle, it) },
-                retrieveTitleIcon = { retrieveTitleIcon(dSiWareTitle) },
-            )
+        if (titles.isNotEmpty()) {
+            item(key = "header_dsiware") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(androidx.compose.ui.graphics.Color(0xFF6200EA).copy(alpha = 0.25f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "DSiWare",
+                            color = androidx.compose.ui.graphics.Color(0xFFD1C4E9),
+                            fontSize = 11.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Системная память NAND (${titles.size})",
+                        color = colors.text2,
+                        fontSize = 12.5.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    )
+                }
+            }
+            items(
+                items = titles,
+                key = { it.titleId },
+            ) { dSiWareTitle ->
+                DSiWareItem(
+                    modifier = Modifier.fillMaxWidth(),
+                    item = dSiWareTitle,
+                    onRenameClicked = { onRenameTitle(dSiWareTitle) },
+                    onDeleteClicked = { onDeleteTitle(dSiWareTitle) },
+                    onImportFile = { onImportTitleFile(dSiWareTitle, it) },
+                    onExportFile = { onExportTitleFile(dSiWareTitle, it) },
+                    retrieveTitleIcon = { retrieveTitleIcon(dSiWareTitle) },
+                )
+            }
+        }
+
+        if (dsiEnhancedRoms.isNotEmpty()) {
+            item(key = "header_dsi_enhanced") {
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.25f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "DSi E.",
+                            color = androidx.compose.ui.graphics.Color(0xFF80CBC4),
+                            fontSize = 11.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Картриджи с DSi-улучшениями (${dsiEnhancedRoms.size})",
+                        color = colors.text2,
+                        fontSize = 12.5.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    )
+                }
+            }
+            items(
+                items = dsiEnhancedRoms,
+                key = { it.uri.toString() },
+            ) { rom ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colors.surface)
+                        .border(1.dp, colors.line, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = rom.name.takeIf { it.isNotBlank() } ?: rom.fileName.substringBeforeLast('.'),
+                            color = colors.text,
+                            fontSize = 14.5.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            softWrap = true,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = rom.fileName,
+                            color = colors.text3,
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                            softWrap = true,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -411,6 +526,7 @@ private fun PreviewDSiWareManagerReady() {
                 DSiWareTitle("Legit Game: Snapped!", "Upasuft", 1, ByteArray(0), 0, 0, 0),
                 DSiWareTitle("Highway 4 - Mediocre Racing", "Microware", 2, ByteArray(0), 0, 0, 0),
             ),
+            dsiEnhancedRoms = emptyList(),
             onRenameTitle = {},
             onDeleteTitle = {},
             onImportTitleFile = { _, _ -> },
