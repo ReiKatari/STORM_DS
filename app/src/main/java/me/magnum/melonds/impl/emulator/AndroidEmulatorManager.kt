@@ -577,7 +577,7 @@ class AndroidEmulatorManager(
         val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
         val (showBootScreen, autoloadTitleId) = when (dsiWareBootMode) {
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> true to 0L
-            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD,
+            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> true to titleId
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> false to 0L
         }
 
@@ -656,7 +656,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.9"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.8.0"
 
         val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
             "_${settingsRepository.getDsiWareBootMode().name}"
