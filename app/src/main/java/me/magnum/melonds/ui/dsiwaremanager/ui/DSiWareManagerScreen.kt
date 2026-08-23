@@ -597,22 +597,24 @@ private fun DSiEnhancedItem(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = rom.fileName.substringBeforeLast('.'),
+                text = rom.name.ifBlank { rom.fileName.substringBeforeLast('.') },
                 color = colors.text,
                 fontSize = 14.sp,
                 lineHeight = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 softWrap = true,
             )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = rom.fileName,
-                color = colors.text3,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
-                softWrap = true,
-            )
+            if (rom.developerName.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = rom.developerName,
+                    color = colors.text3,
+                    fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    softWrap = true,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,

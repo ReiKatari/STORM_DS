@@ -753,8 +753,13 @@
   <string name="rom_filter_all">Все игры</string>
   <string name="rom_filter_favorites">Избранные</string>
   <string name="rom_filter_ds">Игры Nintendo DS</string>
+  <string name="rom_filter_dsi_enhanced">Игры Nintendo DSi Enhanced</string>
   <string name="rom_filter_dsiware">Игры DSiWare</string>
   <string name="rom_filter_retro_achievements">С достижениями</string>
+  <string name="rom_filter_ds_empty">Игры Nintendo DS не найдены</string>
+  <string name="rom_filter_dsi_enhanced_empty">Игры Nintendo DSi Enhanced не найдены</string>
+  <string name="rom_filter_dsiware_empty">Игры DSiWare не найдены</string>
+  <string name="rom_filter_retro_achievements_empty">Игры с достижениями не найдены</string>
   <string name="rom_continue_playing">Продолжить игру</string>
   <string name="rom_no_results_filter">Нет игр по выбранному фильтру</string>
   <string name="rom_no_favorites">У вас пока нет избранных игр</string>
