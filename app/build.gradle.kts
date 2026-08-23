@@ -27,6 +27,14 @@ android {
             storePassword = props["MELONDS_KEYSTORE_PASSWORD"] as String? ?: ""
             keyAlias = props["MELONDS_KEY_ALIAS"] as String? ?: ""
             keyPassword = props["MELONDS_KEY_PASSWORD"] as String? ?: ""
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 
