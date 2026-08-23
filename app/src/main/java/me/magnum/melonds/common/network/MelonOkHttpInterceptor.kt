@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets
 
 private const val MAX_LOGGED_RA_PARAMETER_VALUE_LENGTH = 200
 private val REDACTED_RA_PARAMETER_KEYS = setOf("m", "p", "t", "u", "v", "x")
-const val RETROACHIEVEMENTS_USER_AGENT = "STORM_DS-android/2.7.6"
+const val RETROACHIEVEMENTS_USER_AGENT = "STORM_DS-android/2.7.7"
 
 internal fun sanitizeRaRequestParameterValue(key: String, value: String): String {
     if (key in REDACTED_RA_PARAMETER_KEYS) {
