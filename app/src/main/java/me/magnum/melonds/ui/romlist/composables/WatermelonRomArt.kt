@@ -200,6 +200,8 @@ fun PlatformBadge(
     }
 }
 
+private val failedCoverUrls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
 fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
     val clean = rom.fileName.substringBeforeLast('.').trim()
     val file = java.io.File(java.io.File(context.filesDir, "custom_covers"), "$clean.png")
@@ -207,14 +209,20 @@ fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
 }
 
 fun getGameTdbCover3dUrl(rom: Rom): String? {
+    if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return null
     val clean = rom.fileName.uppercase()
     val region = when {
         clean.contains("JAP") || clean.contains("JPN") || clean.contains("(J)") -> "JA"
         clean.contains("EUR") || clean.contains("(E)") -> "EN"
         else -> "US"
     }
-    val code = rom.name.filter { it.isLetterOrDigit() }.take(4).uppercase()
-    return if (code.length == 4) "https://art.gametdb.com/ds/cover3D/$region/$code.png" else null
+    val code = if (rom.name.length == 4 && rom.name.all { it.isLetterOrDigit() }) {
+        rom.name.uppercase()
+    } else {
+        rom.fileName.filter { it.isLetterOrDigit() }.take(4).uppercase()
+    }
+    val url = if (code.length == 4 && !code.startsWith("NDS", true)) "https://art.gametdb.com/ds/cover3D/$region/$code.png" else null
+    return if (url != null && !failedCoverUrls.contains(url)) url else null
 }
 
 @Composable
@@ -231,16 +239,16 @@ fun WatermelonRomArt(
     val context = LocalContext.current
     val customCover = remember(rom.fileName) { getCustomCoverFile(context, rom) }
     val gameTdbUrl = remember(rom.fileName) { getGameTdbCover3dUrl(rom) }
-    var gameTdbFailed by remember(rom.uri) { mutableStateOf(false) }
-    var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(false) }
-    var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(false) }
+    var gameTdbFailed by remember(rom.uri) { mutableStateOf(gameTdbUrl == null || failedCoverUrls.contains(gameTdbUrl)) }
+    var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(boxArtUrl == null || failedCoverUrls.contains(boxArtUrl)) }
+    var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || failedCoverUrls.contains(raCoverUrl)) }
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
     val activeModel: Any? = when {
         customCover != null -> customCover
-        boxArtUrl != null && !boxArtFailed -> boxArtUrl
-        raCoverUrl != null && !raFailed -> raCoverUrl
-        gameTdbUrl != null && !gameTdbFailed -> gameTdbUrl
+        boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
+        raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
+        gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
         else -> null
     }
 
@@ -296,6 +304,9 @@ fun WatermelonRomArt(
                             onArtLoadedChanged(true)
                         },
                         onError = { _, _ ->
+                            if (activeModel is String) {
+                                failedCoverUrls.add(activeModel)
+                            }
                             if (activeModel == boxArtUrl) {
                                 boxArtFailed = true
                             } else if (activeModel == raCoverUrl) {
