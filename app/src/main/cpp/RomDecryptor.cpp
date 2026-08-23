@@ -67,6 +67,28 @@ static constexpr uint32_t OFFSET_DSI_ARM7_HASH    = 0x314; // IV for area 2
 static constexpr uint32_t OFFSET_DSI_ARM9I_HASH   = 0x328; // KeyY source
 static constexpr uint32_t HEADER_SIZE             = 0x1000;
 
+static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
+{
+    if (offset == 0 || size == 0) return false;
+    if (fseek(f, offset, SEEK_SET) != 0) return false;
+
+    uint8_t sample[512];
+    size_t sampleRead = fread(sample, 1, sizeof(sample), f);
+    if (sampleRead < 64) return false;
+
+    int zeroCount = 0;
+    for (size_t i = 0; i < sampleRead; i++)
+    {
+        if (sample[i] == 0x00) zeroCount++;
+    }
+
+    // In compiled ARM/Thumb code, 20-30% of bytes are 0x00.
+    // In AES ciphertext, zero count is ~0.4% (2 zeros per 512 bytes).
+    // If zero count is >= 12 in 512 bytes (~2.3%), data is cleartext ARM code (ALREADY DECRYPTED).
+    int threshold = (sampleRead >= 256) ? 12 : 4;
+    return (zeroCount < threshold);
+}
+
 namespace MelonDSAndroid {
 namespace RomDecryptor {
 
@@ -89,22 +111,42 @@ EncryptionStatus CheckEncryptionFd(int fd)
     fseek(f, 0, SEEK_SET);
     uint8_t header[HEADER_SIZE];
     size_t read = fread(header, 1, HEADER_SIZE, f);
-    fclose(f);
 
     if (read < 0x400)
+    {
+        fclose(f);
         return EncryptionStatus::ERROR_FILE_TOO_SMALL;
+    }
 
     // Check if DSi ROM (UnitCode bit 1)
     uint8_t unitCode = header[OFFSET_UNIT_CODE];
     if (!(unitCode & 0x02))
+    {
+        fclose(f);
         return EncryptionStatus::ERROR_NOT_DSI_ROM;
+    }
 
     // Check Modcrypt flag (bit 1 of DSiCryptoFlags)
     uint8_t cryptoFlags = header[OFFSET_DSI_CRYPTO_FLAGS];
-    if (cryptoFlags & (1 << 1))
-        return EncryptionStatus::MODCRYPT_ENCRYPTED;
+    if (!(cryptoFlags & (1 << 1)))
+    {
+        fclose(f);
+        return EncryptionStatus::NOT_ENCRYPTED;
+    }
 
-    return EncryptionStatus::NOT_ENCRYPTED;
+    uint32_t mod1Off  = *(uint32_t*)&header[OFFSET_MODCRYPT1_OFF];
+    uint32_t mod1Size = *(uint32_t*)&header[OFFSET_MODCRYPT1_SIZE];
+    uint32_t mod2Off  = *(uint32_t*)&header[OFFSET_MODCRYPT2_OFF];
+    uint32_t mod2Size = *(uint32_t*)&header[OFFSET_MODCRYPT2_SIZE];
+
+    bool isEncrypted = false;
+    if (mod1Off > 0 && mod1Size > 0)
+        isEncrypted = IsModcryptAreaEncrypted(f, mod1Off, mod1Size);
+    if (!isEncrypted && mod2Off > 0 && mod2Size > 0)
+        isEncrypted = IsModcryptAreaEncrypted(f, mod2Off, mod2Size);
+
+    fclose(f);
+    return isEncrypted ? EncryptionStatus::MODCRYPT_ENCRYPTED : EncryptionStatus::NOT_ENCRYPTED;
 }
 
 EncryptionStatus CheckEncryption(const char* romPath)
@@ -115,20 +157,40 @@ EncryptionStatus CheckEncryption(const char* romPath)
 
     uint8_t header[HEADER_SIZE];
     size_t read = fread(header, 1, HEADER_SIZE, f);
-    fclose(f);
 
     if (read < 0x400)
+    {
+        fclose(f);
         return EncryptionStatus::ERROR_FILE_TOO_SMALL;
+    }
 
     uint8_t unitCode = header[OFFSET_UNIT_CODE];
     if (!(unitCode & 0x02))
+    {
+        fclose(f);
         return EncryptionStatus::ERROR_NOT_DSI_ROM;
+    }
 
     uint8_t cryptoFlags = header[OFFSET_DSI_CRYPTO_FLAGS];
-    if (cryptoFlags & (1 << 1))
-        return EncryptionStatus::MODCRYPT_ENCRYPTED;
+    if (!(cryptoFlags & (1 << 1)))
+    {
+        fclose(f);
+        return EncryptionStatus::NOT_ENCRYPTED;
+    }
 
-    return EncryptionStatus::NOT_ENCRYPTED;
+    uint32_t mod1Off  = *(uint32_t*)&header[OFFSET_MODCRYPT1_OFF];
+    uint32_t mod1Size = *(uint32_t*)&header[OFFSET_MODCRYPT1_SIZE];
+    uint32_t mod2Off  = *(uint32_t*)&header[OFFSET_MODCRYPT2_OFF];
+    uint32_t mod2Size = *(uint32_t*)&header[OFFSET_MODCRYPT2_SIZE];
+
+    bool isEncrypted = false;
+    if (mod1Off > 0 && mod1Size > 0)
+        isEncrypted = IsModcryptAreaEncrypted(f, mod1Off, mod1Size);
+    if (!isEncrypted && mod2Off > 0 && mod2Size > 0)
+        isEncrypted = IsModcryptAreaEncrypted(f, mod2Off, mod2Size);
+
+    fclose(f);
+    return isEncrypted ? EncryptionStatus::MODCRYPT_ENCRYPTED : EncryptionStatus::NOT_ENCRYPTED;
 }
 
 DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
@@ -175,6 +237,12 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         return DecryptResult::ERROR_NOT_DSI_ROM;
     }
 
+    // Read modcrypt area offsets and sizes
+    uint32_t mod1Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT1_OFF];
+    uint32_t mod1Size = *(uint32_t*)&rom[OFFSET_MODCRYPT1_SIZE];
+    uint32_t mod2Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT2_OFF];
+    uint32_t mod2Size = *(uint32_t*)&rom[OFFSET_MODCRYPT2_SIZE];
+
     // Check if encrypted
     uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
     if (!(cryptoFlags & (1 << 1)))
@@ -183,17 +251,43 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         return DecryptResult::ALREADY_DECRYPTED;
     }
 
-    // Read modcrypt area offsets and sizes
-    uint32_t mod1Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT1_OFF];
-    uint32_t mod1Size = *(uint32_t*)&rom[OFFSET_MODCRYPT1_SIZE];
-    uint32_t mod2Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT2_OFF];
-    uint32_t mod2Size = *(uint32_t*)&rom[OFFSET_MODCRYPT2_SIZE];
+    // Validate if data is actually encrypted
+    bool mod1Encrypted = false;
+    if (mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
+    {
+        int zCount = 0;
+        size_t sLen = (mod1Size < 512) ? mod1Size : 512;
+        for (size_t i = 0; i < sLen; i++)
+            if (rom[mod1Off + i] == 0) zCount++;
+        mod1Encrypted = (zCount < 12);
+    }
 
-    uint32_t totalWork = mod1Size + mod2Size;
+    bool mod2Encrypted = false;
+    if (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
+    {
+        int zCount = 0;
+        size_t sLen = (mod2Size < 512) ? mod2Size : 512;
+        for (size_t i = 0; i < sLen; i++)
+            if (rom[mod2Off + i] == 0) zCount++;
+        mod2Encrypted = (zCount < 12);
+    }
+
+    if (!mod1Encrypted && !mod2Encrypted)
+    {
+        // Already decrypted: clear header flag
+        rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~(1 << 1);
+        fseek(f, 0, SEEK_SET);
+        fwrite(rom.data(), 1, fileSize, f);
+        fflush(f);
+        fclose(f);
+        return DecryptResult::ALREADY_DECRYPTED;
+    }
+
+    uint32_t totalWork = (mod1Encrypted ? mod1Size : 0) + (mod2Encrypted ? mod2Size : 0);
     uint32_t currentWork = 0;
 
     // Validate bounds
-    if (mod1Off + mod1Size > (uint32_t)fileSize || mod2Off + mod2Size > (uint32_t)fileSize)
+    if ((mod1Off + mod1Size > (uint32_t)fileSize) || (mod2Off + mod2Size > (uint32_t)fileSize))
     {
         fclose(f);
         return DecryptResult::ERROR_MODCRYPT_AREA_OUT_OF_BOUNDS;
@@ -205,17 +299,14 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
     if (devKey)
     {
-        // Dev key: first 16 bytes of ROM
         uint8_t tmp[16];
         memcpy(tmp, &rom[0], 16);
         Bswap128(normalKey, tmp);
     }
     else
     {
-        // Retail key derivation
         uint8_t keyX[16], keyY[16], tmp[16];
 
-        // KeyX = "Nintendo" + GameCode + GameCode_reversed
         *(uint32_t*)&keyX[0] = 0x746E694E; // "Nint" (little-endian)
         *(uint32_t*)&keyX[4] = 0x6F646E65; // "endo"
         keyX[8]  = rom[OFFSET_GAME_CODE + 0];
@@ -227,7 +318,6 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         keyX[14] = rom[OFFSET_GAME_CODE + 1];
         keyX[15] = rom[OFFSET_GAME_CODE + 0];
 
-        // KeyY = first 16 bytes of DSiARM9iHash
         memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
 
         DeriveNormalKey(keyX, keyY, tmp);
@@ -235,7 +325,7 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     }
 
     // --- Decrypt Modcrypt Area 1 (ARM9i) ---
-    if (mod1Off > 0 && mod1Size > 0)
+    if (mod1Encrypted && mod1Off > 0 && mod1Size > 0)
     {
         AES_ctx ctx;
         uint8_t iv[16];
@@ -244,19 +334,23 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 
         for (uint32_t i = 0; i < mod1Size; i += 16)
         {
-            uint8_t block[16];
-            Bswap128(block, &rom[mod1Off + i]);
-            AES_CTR_xcrypt_buffer(&ctx, block, 16);
-            Bswap128(&rom[mod1Off + i], block);
+            uint32_t blockLen = (i + 16 <= mod1Size) ? 16 : (mod1Size - i);
+            uint8_t block[16] = {0};
+            memcpy(block, &rom[mod1Off + i], blockLen);
+            uint8_t swapped[16];
+            Bswap128(swapped, block);
+            AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
+            Bswap128(block, swapped);
+            memcpy(&rom[mod1Off + i], block, blockLen);
 
-            currentWork += 16;
-            if (progressCallback && (i % 4096 == 0))
+            currentWork += blockLen;
+            if (progressCallback && (i % 65536 == 0))
                 progressCallback(currentWork, totalWork);
         }
     }
 
     // --- Decrypt Modcrypt Area 2 (ARM7i) ---
-    if (mod2Off > 0 && mod2Size > 0)
+    if (mod2Encrypted && mod2Off > 0 && mod2Size > 0)
     {
         AES_ctx ctx;
         uint8_t iv[16];
@@ -265,13 +359,17 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 
         for (uint32_t i = 0; i < mod2Size; i += 16)
         {
-            uint8_t block[16];
-            Bswap128(block, &rom[mod2Off + i]);
-            AES_CTR_xcrypt_buffer(&ctx, block, 16);
-            Bswap128(&rom[mod2Off + i], block);
+            uint32_t blockLen = (i + 16 <= mod2Size) ? 16 : (mod2Size - i);
+            uint8_t block[16] = {0};
+            memcpy(block, &rom[mod2Off + i], blockLen);
+            uint8_t swapped[16];
+            Bswap128(swapped, block);
+            AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
+            Bswap128(block, swapped);
+            memcpy(&rom[mod2Off + i], block, blockLen);
 
-            currentWork += 16;
-            if (progressCallback && (i % 4096 == 0))
+            currentWork += blockLen;
+            if (progressCallback && (i % 65536 == 0))
                 progressCallback(currentWork, totalWork);
         }
     }

@@ -2650,16 +2650,27 @@ static void jniDecryptProgressCallback(uint32_t current, uint32_t total)
     int status = g_decryptorJavaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
     if (status == JNI_EDETACHED)
     {
-        g_decryptorJavaVM->AttachCurrentThread(&env, nullptr);
+        if (g_decryptorJavaVM->AttachCurrentThread(&env, nullptr) != JNI_OK)
+            return;
         attached = true;
     }
 
-    if (env)
+    if (env && g_decryptorCallback)
     {
         jclass cls = env->GetObjectClass(g_decryptorCallback);
-        jmethodID mid = env->GetMethodID(cls, "onProgress", "(II)V");
-        if (mid)
-            env->CallVoidMethod(g_decryptorCallback, mid, (jint)current, (jint)total);
+        if (cls)
+        {
+            jmethodID mid = env->GetMethodID(cls, "onProgress", "(II)V");
+            if (mid)
+            {
+                env->CallVoidMethod(g_decryptorCallback, mid, (jint)current, (jint)total);
+            }
+            env->DeleteLocalRef(cls);
+        }
+        if (env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+        }
     }
 
     if (attached)
