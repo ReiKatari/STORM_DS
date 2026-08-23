@@ -264,7 +264,7 @@ fun ExternalBootInfo(
 
             Spacer(Modifier.height(18.dp))
 
-            // 3. Title in bold, centered container with left text alignment and wrapping
+            // 3. Title in bold, centered container with centered text alignment and wrapping
             Box(
                 modifier = Modifier.fillMaxWidth(0.88f),
                 contentAlignment = Alignment.Center,
@@ -276,26 +276,26 @@ fun ExternalBootInfo(
                     fontSize = 21.sp,
                     lineHeight = 25.sp,
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Start,
+                    textAlign = TextAlign.Center,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
 
-            // 4. Developer below title
+            // 4. Developer below title centered
             if (rom.developerName.isNotBlank()) {
                 Box(
                     modifier = Modifier.fillMaxWidth(0.88f),
-                    contentAlignment = Alignment.CenterStart,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = rom.developerName,
                         color = Color.White.copy(alpha = 0.70f),
                         fontFamily = me.magnum.melonds.ui.theme.Manrope,
                         fontSize = 13.sp,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.padding(top = 6.dp),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                     )
                 }
             }

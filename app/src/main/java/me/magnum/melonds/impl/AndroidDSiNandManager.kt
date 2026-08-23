@@ -229,6 +229,8 @@ class AndroidDSiNandManager(
                         }
                     }.getOrNull()?.takeIf { it.isNotBlank() }
 
+                    dsiWareTitlesMetadataStore.setSourceUri(titleId.toLong(), titleUri.toString())
+
                     if (!raHash.isNullOrBlank()) {
                         dsiWareTitlesMetadataStore.setRaHash(titleId.toLong(), raHash)
                     }
