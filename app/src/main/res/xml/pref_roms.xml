@@ -46,6 +46,13 @@
             app:iconSpaceReserved="false"
             android:defaultValue="true" />
 
+    <SwitchPreference
+            android:key="rom_gametdb_covers_enabled"
+            android:title="@string/enable_gametdb_covers_title"
+            android:summary="@string/enable_gametdb_covers_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="true" />
+
     <!-- 7 steps of cache size. Real cache size is equal to 128MB * (2 ^ rom_cache_max_size) -->
     <SeekBarPreference
             android:key="rom_cache_max_size"

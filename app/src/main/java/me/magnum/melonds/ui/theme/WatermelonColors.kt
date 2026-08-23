@@ -174,4 +174,19 @@ val SakuraWatermelonColors = WatermelonColors(
     shadow = Color(0x1A000000),
 )
 
+fun getCustomizedAccentColors(base: WatermelonColors, accentKey: String): WatermelonColors {
+    val (accent, accentGlow, accentDim) = when (accentKey) {
+        "amber_gold" -> Triple(Color(0xFFFFB703), Color(0x66FFB703), Color(0x33FFB703))
+        "cyber_red" -> Triple(Color(0xFFFF0055), Color(0x66FF0055), Color(0x33FF0055))
+        "emerald_jade" -> Triple(Color(0xFF00F5A0), Color(0x6600F5A0), Color(0x3300F5A0))
+        "royal_violet" -> Triple(Color(0xFF9D4EDD), Color(0x669D4EDD), Color(0x339D4EDD))
+        else -> Triple(Color(0xFF00E5FF), Color(0x6600E5FF), Color(0x3300E5FF))
+    }
+    return base.copy(
+        green = accent,
+        greenDim = accentDim,
+        line = if (base.isDark) accent.copy(alpha = 0.22f) else base.line,
+    )
+}
+
 val LocalWatermelonColors = staticCompositionLocalOf { DarkWatermelonColors }

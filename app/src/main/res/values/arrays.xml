@@ -457,4 +457,43 @@
         <item>direct</item>
         <item>system_menu</item>
     </string-array>
+
+    <string-array name="theme_accent_color_options">
+        <item>@string/accent_electric_cyan</item>
+        <item>@string/accent_amber_gold</item>
+        <item>@string/accent_cyber_red</item>
+        <item>@string/accent_emerald_jade</item>
+        <item>@string/accent_royal_violet</item>
+    </string-array>
+    <string-array name="theme_accent_color_values">
+        <item>electric_cyan</item>
+        <item>amber_gold</item>
+        <item>cyber_red</item>
+        <item>emerald_jade</item>
+        <item>royal_violet</item>
+    </string-array>
+
+    <string-array name="rom_card_style_options">
+        <item>@string/card_style_glassmorphism</item>
+        <item>@string/card_style_flat_minimal</item>
+        <item>@string/card_style_3d_boxart</item>
+    </string-array>
+    <string-array name="rom_card_style_values">
+        <item>glassmorphism</item>
+        <item>flat_minimal</item>
+        <item>3d_boxart</item>
+    </string-array>
+
+    <string-array name="arm9_overclock_options">
+        <item>@string/arm9_overclock_1x</item>
+        <item>@string/arm9_overclock_2x</item>
+        <item>@string/arm9_overclock_3x</item>
+        <item>@string/arm9_overclock_4x</item>
+    </string-array>
+    <string-array name="arm9_overclock_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+    </string-array>
 </resources>

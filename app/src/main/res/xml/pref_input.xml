@@ -75,4 +75,18 @@
             app:min="10"
             android:max="200"
             app:showSeekBarValue="true" />
+
+    <SwitchPreference
+            android:key="input_turbo_macros_enabled"
+            android:title="@string/input_turbo_macros_title"
+            android:summary="@string/input_turbo_macros_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SwitchPreference
+            android:key="input_gyro_mic_enabled"
+            android:title="@string/input_gyro_mic_title"
+            android:summary="@string/input_gyro_mic_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
 </PreferenceScreen>

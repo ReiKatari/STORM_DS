@@ -53,7 +53,7 @@ fun MelonTheme(
     content: @Composable () -> Unit
 ) {
     val theme = AppThemeManager.themeState.value
-    val watermelonColors = when (theme) {
+    val baseColors = when (theme) {
         Theme.LIGHT -> LightWatermelonColors
         Theme.MIDNIGHT -> MidnightWatermelonColors
         Theme.CYBERPUNK -> CyberpunkWatermelonColors
@@ -64,6 +64,8 @@ fun MelonTheme(
         Theme.DARK -> DarkWatermelonColors
         Theme.SYSTEM -> if (isDarkTheme) DarkWatermelonColors else LightWatermelonColors
     }
+    val accentKey = AppThemeManager.accentColorState.value
+    val watermelonColors = getCustomizedAccentColors(baseColors, accentKey)
 
     CompositionLocalProvider(LocalWatermelonColors provides watermelonColors) {
         MaterialTheme(
