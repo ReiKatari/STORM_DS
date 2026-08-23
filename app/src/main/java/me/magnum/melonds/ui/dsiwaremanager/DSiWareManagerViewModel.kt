@@ -138,36 +138,28 @@ class DSiWareManagerViewModel @Inject constructor(
             _state.value = DSiWareManagerUiState.DSiSetupInvalid(dsiConfiguration.status)
         } else {
             viewModelScope.launch {
-                withContext(Dispatchers.Default) {
+                withContext(Dispatchers.IO) {
                     val openNandResult = dsiNandManager.openNand()
                     if (openNandResult.isSuccess()) {
                         try {
+                            // Safe auto-install of missing DSi games from search folders without deleting anything
                             val scannedRoms = romsRepository.getRoms().first()
                             val dsiRoms = scannedRoms.filter {
                                 it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true
                             }
-                            val currentTitles = dsiNandManager.listTitles()
-                            val existingNames = currentTitles.map { it.name.trim().lowercase() }.toSet()
-                            val validDsiNames = dsiRoms.map { it.name.trim().lowercase() }.toSet()
-                            val validDsiFileNames = dsiRoms.map { it.fileName.substringBeforeLast('.').trim().lowercase() }.toSet()
+                            if (dsiRoms.isNotEmpty()) {
+                                val currentTitles = dsiNandManager.listTitles()
+                                val existingNames = currentTitles.map { it.name.trim().lowercase() }.toSet()
+                                val existingIds = currentTitles.map { it.titleId and 0xFFFFFFFFL }.toSet()
 
-                            // 1. Auto-install any new DSiWare games found in current search folders
-                            for (rom in dsiRoms) {
-                                if (!existingNames.contains(rom.name.trim().lowercase())) {
-                                    dsiNandManager.importTitle(rom.uri)
-                                }
-                            }
-
-                            // 2. Auto-delete any installed DSiWare titles that no longer exist in ANY current search folder
-                            for (title in currentTitles) {
-                                val titleName = title.name.trim().lowercase()
-                                val origName = dsiWareTitlesMetadataStore.getOriginalFileName(title.titleId)?.trim()?.lowercase()
-                                val isStillPresent = validDsiNames.contains(titleName) ||
-                                    (origName != null && validDsiFileNames.contains(origName)) ||
-                                    validDsiFileNames.contains(titleName)
-
-                                if (!isStillPresent) {
-                                    dsiNandManager.deleteTitle(title)
+                                for (rom in dsiRoms) {
+                                    val cleanName = rom.name.trim().lowercase()
+                                    val cleanFileName = rom.fileName.substringBeforeLast('.').trim().lowercase()
+                                    val isInstalled = existingNames.contains(cleanName) || existingNames.contains(cleanFileName) ||
+                                        (rom.installedDsiWareTitleId != null && existingIds.contains(rom.installedDsiWareTitleId))
+                                    if (!isInstalled) {
+                                        dsiNandManager.importTitle(rom.uri)
+                                    }
                                 }
                             }
                         } catch (_: Throwable) {}
