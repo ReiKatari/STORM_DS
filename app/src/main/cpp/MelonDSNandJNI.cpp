@@ -1125,13 +1125,13 @@ static bool ensureValidSaveFile(const char* path, u32 expectedSize)
             u32 nread = 0;
             f_read(&file, bootSec, sizeof(bootSec), &nread);
             f_close(&file);
+            u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
             if (nread < sizeof(bootSec) ||
                 bootSec[0x1FE] != 0x55 || bootSec[0x1FF] != 0xAA ||
                 (bootSec[0] != 0xEB && bootSec[0] != 0xE9) ||
-                memcmp(&bootSec[0x003], "MSDOS5.0", 8) != 0 ||
-                bootSec[0x010] != 2 ||
-                bootSec[0x011] < 64 ||
-                bootSec[0x200] != 0xF8 || bootSec[0x201] != 0xFF || bootSec[0x202] != 0xFF)
+                bootSec[0x010] < 1 ||
+                rootEntries < 16 ||
+                bootSec[0x200] != 0xF8)
             {
                 needsFormatting = true;
             }

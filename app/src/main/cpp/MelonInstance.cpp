@@ -1895,10 +1895,13 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
 
-    if (nds->ConsoleType == 1 && currentConfiguration->showBootScreen && cart != nullptr && currentConfiguration->dsiWareAutoloadTitleId != 0)
+    if (nds->ConsoleType == 1 && currentConfiguration->showBootScreen && currentConfiguration->dsiWareAutoloadTitleId != 0)
     {
         auto dsi = (DSi*) nds;
-        DSiSupport::SetupDSiDirectBoot(dsi);
+        if (cart != nullptr)
+            DSiSupport::SetupDSiDirectBoot(dsi);
+        else
+            DSiSupport::SetupDSiWareDirectBoot(dsi, currentConfiguration->dsiWareAutoloadTitleId, 0x00030004);
     }
     else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
     {
