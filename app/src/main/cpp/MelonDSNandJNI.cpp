@@ -910,24 +910,8 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
     }
 
     memcpy(titleId, titleData.data() + 0x230, sizeof(titleId));
-
-    if (titleId[1] != DSI_NAND_FILE_CATEGORY)
-    {
-        const char gc0 = static_cast<char>(titleData[0x0C]);
-        const u8 unitCode = titleData[0x12];
-        if (titleId[1] == 0 || titleId[1] == 0x00030005 || titleId[1] == 0x00030015 || (unitCode & 0x02) != 0 || unitCode == 2 || unitCode == 3 || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z' || gc0 == '4')
-        {
-            titleId[1] = DSI_NAND_FILE_CATEGORY;
-            memcpy(titleData.data() + 0x234, &titleId[1], sizeof(u32));
-        }
-        else
-        {
-            // Not a DSiWare title
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: rejected non-DSiWare title category=%08x title=%08x\n", titleId[1], titleId[0]);
-            env->ReleaseStringUTFChars(titleUri, titlePath);
-            return TITLE_IMPORT_NOT_DSIWARE_TITLE;
-        }
-    }
+    titleId[1] = DSI_NAND_FILE_CATEGORY;
+    memcpy(titleData.data() + 0x234, &titleId[1], sizeof(u32));
 
     if (titleId[0] == 0)
     {
@@ -1048,6 +1032,129 @@ Java_me_magnum_melonds_MelonDSiNand_deleteTitle(JNIEnv* env, jobject thiz, jint 
     }
 }
 
+static void formatFatSaveBuffer(std::vector<u8>& buf, u32 size)
+{
+    buf.assign(size, 0);
+    if (size < 0x200)
+        return;
+
+    const u16 bytesPerSector = 512;
+    const u32 totalSectors = size / bytesPerSector;
+    const u8 sectorsPerCluster = 1;
+    const u16 reservedSectors = 1;
+    const u8 numFats = 2;
+    const u16 rootDirEntries = (size <= 0x20000) ? 64 : 128;
+    const u16 sectorsPerFat = (size <= 0x80000) ? 1 : 2;
+
+    // Boot Sector (Sector 0)
+    buf[0x00] = 0xEB; buf[0x01] = 0x3C; buf[0x02] = 0x90;
+    memcpy(&buf[0x03], "MSDOS5.0", 8);
+    buf[0x0B] = static_cast<u8>(bytesPerSector & 0xFF);
+    buf[0x0C] = static_cast<u8>((bytesPerSector >> 8) & 0xFF);
+    buf[0x0D] = sectorsPerCluster;
+    buf[0x0E] = static_cast<u8>(reservedSectors & 0xFF);
+    buf[0x0F] = static_cast<u8>((reservedSectors >> 8) & 0xFF);
+    buf[0x10] = numFats;
+    buf[0x11] = static_cast<u8>(rootDirEntries & 0xFF);
+    buf[0x12] = static_cast<u8>((rootDirEntries >> 8) & 0xFF);
+    if (totalSectors < 0x10000)
+    {
+        buf[0x13] = static_cast<u8>(totalSectors & 0xFF);
+        buf[0x14] = static_cast<u8>((totalSectors >> 8) & 0xFF);
+    }
+    else
+    {
+        buf[0x20] = static_cast<u8>(totalSectors & 0xFF);
+        buf[0x21] = static_cast<u8>((totalSectors >> 8) & 0xFF);
+        buf[0x22] = static_cast<u8>((totalSectors >> 16) & 0xFF);
+        buf[0x23] = static_cast<u8>((totalSectors >> 24) & 0xFF);
+    }
+    buf[0x15] = 0xF8;
+    buf[0x16] = static_cast<u8>(sectorsPerFat & 0xFF);
+    buf[0x17] = static_cast<u8>((sectorsPerFat >> 8) & 0xFF);
+    buf[0x18] = 0x01; buf[0x19] = 0x00;
+    buf[0x1A] = 0x01; buf[0x1B] = 0x00;
+    buf[0x24] = 0x80;
+    buf[0x26] = 0x29;
+    buf[0x27] = 0x12; buf[0x28] = 0x34; buf[0x29] = 0x56; buf[0x2A] = 0x78;
+    memcpy(&buf[0x2B], "NO NAME    ", 11);
+    memcpy(&buf[0x36], (size <= 0x80000) ? "FAT12   " : "FAT16   ", 8);
+    buf[0x1FE] = 0x55;
+    buf[0x1FF] = 0xAA;
+
+    // FAT1
+    const size_t fat1Offset = reservedSectors * bytesPerSector;
+    if (fat1Offset + 3 <= size)
+    {
+        buf[fat1Offset + 0] = 0xF8;
+        buf[fat1Offset + 1] = 0xFF;
+        buf[fat1Offset + 2] = 0xFF;
+        if (size > 0x80000 && fat1Offset + 4 <= size)
+            buf[fat1Offset + 3] = 0xFF;
+    }
+
+    // FAT2
+    const size_t fat2Offset = (reservedSectors + sectorsPerFat) * bytesPerSector;
+    if (fat2Offset + 3 <= size)
+    {
+        buf[fat2Offset + 0] = 0xF8;
+        buf[fat2Offset + 1] = 0xFF;
+        buf[fat2Offset + 2] = 0xFF;
+        if (size > 0x80000 && fat2Offset + 4 <= size)
+            buf[fat2Offset + 3] = 0xFF;
+    }
+}
+
+static bool ensureValidSaveFile(const char* path, u32 expectedSize)
+{
+    if (expectedSize == 0)
+        return true;
+
+    FF_FILINFO info;
+    bool needsFormatting = false;
+    if (f_stat(path, &info) != FR_OK || info.fsize != expectedSize)
+    {
+        needsFormatting = true;
+    }
+    else
+    {
+        FF_FIL file;
+        if (f_open(&file, path, FA_READ) == FR_OK)
+        {
+            u8 bootSig[2] = {0, 0};
+            f_lseek(&file, 0x1FE);
+            u32 nread = 0;
+            f_read(&file, bootSig, 2, &nread);
+            f_close(&file);
+            if (bootSig[0] != 0x55 || bootSig[1] != 0xAA)
+            {
+                needsFormatting = true;
+            }
+        }
+        else
+        {
+            needsFormatting = true;
+        }
+    }
+
+    if (needsFormatting)
+    {
+        std::vector<u8> fatData;
+        formatFatSaveBuffer(fatData, expectedSize);
+        FF_FIL file;
+        if (f_open(&file, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+        {
+            u32 nwrite = 0;
+            f_write(&file, fatData.data(), fatData.size(), &nwrite);
+            f_close(&file);
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: formatted valid FAT save for %s (size=0x%x)\n", path, expectedSize);
+            return true;
+        }
+        return false;
+    }
+    return true;
+}
+
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, jint titleId)
 {
@@ -1068,14 +1175,14 @@ Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, 
     {
         char pubSavPath[128];
         snprintf(pubSavPath, sizeof(pubSavPath), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        nandMount->CreateSaveFile(pubSavPath, header.DSiPublicSavSize);
+        ensureValidSaveFile(pubSavPath, header.DSiPublicSavSize);
     }
 
     if (header.DSiPrivateSavSize > 0)
     {
         char privSavPath[128];
         snprintf(privSavPath, sizeof(privSavPath), "0:/title/%08x/%08x/data/private.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        nandMount->CreateSaveFile(privSavPath, header.DSiPrivateSavSize);
+        ensureValidSaveFile(privSavPath, header.DSiPrivateSavSize);
     }
 
     if (header.AppFlags & 0x04)
