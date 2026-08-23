@@ -118,6 +118,8 @@ cd STORM_DS
 
 STORM DS выражает глубокую признательность авторам и сообществу открытых проектов, сделавших этот эмулятор возможным:
 
+* **[JPeacekeeper](https://4pda.to/forum/index.php?showuser=5768740)** (4PDA):
+  * **JPeacekeeper** — неоценимый вклад в тестирование, детальные отчеты об ошибках DSi, стандартизацию фреймрейта и развитие проекта STORM DS.
 * **[melonDS](https://melonds.kuribo64.net/)** (Оригинальное ядро эмулятора Nintendo DS & DSi):
   * **StapleButter**, **Nadia**, **RSDuck**, **genericretrogeek**, **Arisotura** и всей команде разработчиков melonDS за эталонную точность, быстродействие и чистую архитектуру эмуляции Nintendo DS и DSi.
 * **[melonDS DS (RetroArch Core)](https://github.com/JesseTG/melonds-ds)** (Ядро эмулятора melonDS для RetroArch / Libretro):
