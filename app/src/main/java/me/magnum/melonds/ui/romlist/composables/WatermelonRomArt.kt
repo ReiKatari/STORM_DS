@@ -287,6 +287,9 @@ fun WatermelonRomArt(
                 model = ImageRequest.Builder(context)
                     .data(activeModel)
                     .crossfade(true)
+                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .networkCachePolicy(coil.request.CachePolicy.ENABLED)
                     .listener(
                         onSuccess = { _, _ ->
                             artLoaded = true
