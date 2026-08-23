@@ -11,8 +11,18 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_translator, rootKey)
 
+        val translatorEnabledPref = findPreference<androidx.preference.SwitchPreferenceCompat>("translator_enabled")
+        val ttsEnabledPref = findPreference<androidx.preference.SwitchPreferenceCompat>("translator_tts_enabled")
         val voiceEnginePref = findPreference<androidx.preference.ListPreference>(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE)
         val localVoiceStudioPref = findPreference<androidx.preference.SwitchPreferenceCompat>("translator_local_voice_actor_studio")
+
+        translatorEnabledPref?.setOnPreferenceChangeListener { _, newValue ->
+            val isEnabled = newValue as? Boolean ?: false
+            if (!isEnabled) {
+                ttsEnabledPref?.isChecked = false
+            }
+            true
+        }
 
         voiceEnginePref?.setOnPreferenceChangeListener { _, newValue ->
             val chosen = newValue as? String ?: "neural_edge"
