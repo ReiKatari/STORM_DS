@@ -271,12 +271,19 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.rewindLengthSeconds = rewindWindowSeconds;
     finalEmulatorConfiguration.renderSettings = std::move(buildRenderSettings(env, videoRenderer, rendererConfigurationObject));
     finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
+    jfieldID arm9OverclockMultiplierField = getFieldIdOrClear(env, emulatorConfigurationClass, "arm9OverclockMultiplier", "I");
+    jfieldID enable3dWidescreenField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable3dWidescreen", "Z");
+    jfieldID enable60FpsPatchField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable60FpsPatch", "Z");
+
     finalEmulatorConfiguration.dldiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
     finalEmulatorConfiguration.renderer = videoRenderer;
     finalEmulatorConfiguration.dsiWareAutoloadTitleId =
         dsiWareAutoloadTitleIdField != nullptr
             ? static_cast<uint32_t>(env->GetLongField(emulatorConfiguration, dsiWareAutoloadTitleIdField))
             : 0u;
+    finalEmulatorConfiguration.arm9OverclockMultiplier = arm9OverclockMultiplierField != nullptr ? env->GetIntField(emulatorConfiguration, arm9OverclockMultiplierField) : 1;
+    finalEmulatorConfiguration.enable3dWidescreen = enable3dWidescreenField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable3dWidescreenField) : false;
+    finalEmulatorConfiguration.enable60FpsPatch = enable60FpsPatchField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable60FpsPatchField) : false;
     return finalEmulatorConfiguration;
 }
 

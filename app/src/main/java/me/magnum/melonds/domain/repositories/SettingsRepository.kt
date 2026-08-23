@@ -172,4 +172,14 @@ interface SettingsRepository {
 
     fun observeRenderConfiguration(): Flow<RendererConfiguration>
     fun observeRenderConfiguration(romConfig: RomConfig): Flow<RendererConfiguration>
+
+    fun getThemeAccentColor(): String
+    fun getRomCardStyle(): String
+    fun getArm9Overclock(): Int
+    fun isGameTdbCoversEnabled(): Boolean
+    fun is3dWidescreenEnabled(): Boolean
+    fun is60FpsPatchEnabled(): Boolean
+    fun isDualScreenCastEnabled(): Boolean
+    fun isTurboMacrosEnabled(): Boolean
+    fun isGyroMicEnabled(): Boolean
 }

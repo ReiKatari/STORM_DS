@@ -95,7 +95,7 @@ typedef struct
     char macAddress[18];
 } FirmwareConfiguration;
 
-typedef struct
+struct EmulatorConfiguration
 {
     bool userInternalFirmwareAndBios;
     char* dsBios7Path;
@@ -122,7 +122,10 @@ typedef struct
     SdCardSettings dldiSdCardSettings;
     Renderer renderer;
     uint32_t dsiWareAutoloadTitleId;
-} EmulatorConfiguration;
+    int arm9OverclockMultiplier = 1;
+    bool enable3dWidescreen = false;
+    bool enable60FpsPatch = false;
+};
 
 }
 

@@ -1331,4 +1331,50 @@
   <string name="app_language_summary">Выбор языка интерфейса STORM DS</string>
   <string name="dual_screen_info_title">Как работают пресеты двух экранов</string>
   <string name="dual_screen_info_desc">Позволяет разделить верхний и нижний дисплеи Nintendo DS между экраном смартфона и внешним подключенным монитором/ТВ (через USB-C, HDMI или трансляцию).\n\n• 📱 Сохранять пропорции DS: фиксирует классическое соотношение сторон 4:3 без растягивания.\n• 🔲 Целочисленный масштаб (Integer Scale): пиксели увеличиваются строго кратно (1x, 2x, 3x), обеспечивая идеальную четкость без мыла и размытия.\n• 📏 Области заполнения и выравнивание: точная подгонка позиции картинки по вертикали и заполнения краев.</string>
+    <!-- STORM Theme Studio & Colors -->
+    <string name="theme_accent_color_title">Акцентный цвет темы</string>
+    <string name="theme_accent_color_summary">Выбор неонового акцента для темы STORM NIGHT</string>
+    <string name="accent_electric_cyan">Электрический Циан (Cyan)</string>
+    <string name="accent_amber_gold">Янтарное Золото (Amber Gold)</string>
+    <string name="accent_cyber_red">Кибер-Неон Красный (Cyber Red)</string>
+    <string name="accent_emerald_jade">Изумрудный Нефрит (Jade)</string>
+    <string name="accent_royal_violet">Королевский Фиолетовый (Violet)</string>
+
+    <!-- Card Styles -->
+    <string name="rom_card_style_title">Стиль карточек игр</string>
+    <string name="rom_card_style_summary">Визуальное оформление игр в сетке библиотеки</string>
+    <string name="card_style_glassmorphism">Glassmorphism (Матовое стекло)</string>
+    <string name="card_style_flat_minimal">Flat Minimal (Минимализм)</string>
+    <string name="card_style_3d_boxart">3D Boxart (Объемные боксы)</string>
+
+    <!-- JIT Overclock & CPU Tuning -->
+    <string name="arm9_overclock_title">Частота CPU ARM9 (Разгон / Overclock)</string>
+    <string name="arm9_overclock_summary">Разгон виртуального процессора для устранения просадок FPS в тяжелых 3D-играх</string>
+    <string name="arm9_overclock_1x">67 МГц (По умолчанию / 1x)</string>
+    <string name="arm9_overclock_2x">133 МГц (Режим DSi / 2x)</string>
+    <string name="arm9_overclock_3x">200 МГц (3x Разгон)</string>
+    <string name="arm9_overclock_4x">266 МГц (4x Турбо-режим)</string>
+
+    <!-- Scraper Pro & Covers -->
+    <string name="enable_gametdb_covers_title">Scraper Pro: 3D-боксы и HD-обложки</string>
+    <string name="enable_gametdb_covers_summary">Автоматическая загрузка объемных 3D-боксов и обложек высокого разрешения с GameTDB</string>
+    <string name="pick_custom_cover">Сменить обложку из галереи</string>
+    <string name="reset_custom_cover">Сбросить кастомную обложку</string>
+    <string name="custom_cover_updated">Обложка успешно обновлена</string>
+    <string name="custom_cover_removed">Кастомная обложка удалена</string>
+
+    <!-- Input Macros & Gyro Mic -->
+    <string name="input_turbo_macros_title">Турбо-кнопки и макросы</string>
+    <string name="input_turbo_macros_summary">Включить виртуальные кнопки скорострельности Turbo A/B/X/Y</string>
+    <string name="input_gyro_mic_title">Эмуляция микрофона гироскопом</string>
+    <string name="input_gyro_mic_summary">Встряхивание или наклон устройства для дуновения в виртуальный микрофон</string>
+
+    <!-- Dual-Screen & Soft Patching -->
+    <string name="video_widescreen_3d_title">Широкоэкранный 3D-режим (16:9 Aspect Ratio)</string>
+    <string name="video_widescreen_3d_summary">Анаморфный широкоформатный рендеринг 16:9 для 3D-игр Nintendo DS</string>
+    <string name="video_60fps_patch_title">Разблокировка 60 FPS</string>
+    <string name="video_60fps_patch_summary">Форсирование 60 кадров/сек в поддерживаемых 3D-играх</string>
+    <string name="video_dual_screen_cast_title">Режим двух экранов (ТВ / HDMI Cast)</string>
+    <string name="video_dual_screen_cast_summary">Сенсорный экран на телефоне, а верхний экран в 4K на телевизоре</string>
+    <string name="soft_patch_applied">Применен патч: %s</string>
 </resources>

@@ -32,6 +32,16 @@
             app:iconSpaceReserved="false"
             android:defaultValue="true" />
 
+    <ListPreference
+            android:key="arm9_overclock"
+            android:title="@string/arm9_overclock_title"
+            android:summary="@string/arm9_overclock_summary"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true"
+            android:entries="@array/arm9_overclock_options"
+            android:entryValues="@array/arm9_overclock_values"
+            android:defaultValue="1" />
+
     <SwitchPreference
             android:key="save_internal_config_as_file"
             android:title="@string/save_internal_config_as_file"

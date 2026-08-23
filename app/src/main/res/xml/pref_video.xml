@@ -36,6 +36,27 @@
             android:defaultValue="true" />
 
     <SwitchPreference
+            android:key="video_widescreen_3d"
+            android:title="@string/video_widescreen_3d_title"
+            android:summary="@string/video_widescreen_3d_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SwitchPreference
+            android:key="video_60fps_patch"
+            android:title="@string/video_60fps_patch_title"
+            android:summary="@string/video_60fps_patch_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SwitchPreference
+            android:key="video_dual_screen_cast_enabled"
+            android:title="@string/video_dual_screen_cast_title"
+            android:summary="@string/video_dual_screen_cast_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <SwitchPreference
             android:key="video_ai_upscale_enabled"
             android:title="@string/video_ai_upscale_title"
             android:summary="@string/video_ai_upscale_summary"
