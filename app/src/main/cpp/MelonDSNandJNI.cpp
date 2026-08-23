@@ -1043,7 +1043,7 @@ static void formatFatSaveBuffer(std::vector<u8>& buf, u32 size)
     const u8 sectorsPerCluster = 1;
     const u16 reservedSectors = 1;
     const u8 numFats = 2;
-    const u16 rootDirEntries = (size < 0x8C000) ? 0x20 : 0x200;
+    const u16 rootDirEntries = (size <= 0x20000) ? 64 : 128;
     const u16 sectorsPerFat = (size <= 0x80000) ? 1 : 2;
 
     // Boot Sector (Sector 0)
@@ -1072,8 +1072,8 @@ static void formatFatSaveBuffer(std::vector<u8>& buf, u32 size)
     buf[0x15] = 0xF8;
     buf[0x16] = static_cast<u8>(sectorsPerFat & 0xFF);
     buf[0x17] = static_cast<u8>((sectorsPerFat >> 8) & 0xFF);
-    buf[0x18] = 0x01; buf[0x19] = 0x00;
-    buf[0x1A] = 0x01; buf[0x1B] = 0x00;
+    buf[0x18] = 0x00; buf[0x19] = 0x00;
+    buf[0x1A] = 0x00; buf[0x1B] = 0x00;
     buf[0x24] = 0x80;
     buf[0x26] = 0x29;
     buf[0x27] = 0x12; buf[0x28] = 0x34; buf[0x29] = 0x56; buf[0x2A] = 0x78;

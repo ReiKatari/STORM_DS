@@ -636,13 +636,22 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.5"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.6"
 
-        val logFileName = if (rom.fileName.isNotBlank()) {
-            "${rom.fileName.substringBeforeLast('.')}.log"
+        val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
+            "_${settingsRepository.getDsiWareBootMode().name}"
+        } else if (rom.isDsiEnhanced) {
+            "_DSi_ENHANCED"
         } else {
-            "${rom.name}.log"
+            "_${rom.config.runtimeConsoleType.name}"
         }
+
+        val baseName = if (rom.fileName.isNotBlank()) {
+            rom.fileName.substringBeforeLast('.')
+        } else {
+            rom.name
+        }
+        val logFileName = "${baseName}${modeSuffix}.log"
         val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
 
         val dsBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DS)
@@ -684,12 +693,15 @@ class AndroidEmulatorManager(
             appendLine("==================================================")
         }
 
-        // 1. Direct file write in Downloads/STORM DS LOGS
+        // 1. Direct file write in Downloads/STORM DS LOGS (always overwrite)
         var written = false
         try {
             val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             val logsDir = File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
             val logFile = File(logsDir, logFileName)
+            if (logFile.exists()) {
+                logFile.delete()
+            }
             logFile.writeText(logText, Charsets.UTF_8)
             written = true
             Log.i(TAG, "Wrote diagnostic log to: ${logFile.absolutePath}")
@@ -700,6 +712,12 @@ class AndroidEmulatorManager(
         // 2. MediaStore write for Android 10+
         if (!written && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             try {
+                // Delete previous MediaStore entry if exists to ensure overwrite
+                val relativePath = "${android.os.Environment.DIRECTORY_DOWNLOADS}/STORM DS LOGS/"
+                val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+                val selectionArgs = arrayOf(logFileName, relativePath)
+                context.contentResolver.delete(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, selection, selectionArgs)
+
                 val contentValues = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, logFileName)
                     put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
