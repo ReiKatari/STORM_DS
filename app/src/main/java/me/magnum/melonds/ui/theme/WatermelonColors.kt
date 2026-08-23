@@ -175,16 +175,24 @@ val SakuraWatermelonColors = WatermelonColors(
 )
 
 fun getCustomizedAccentColors(base: WatermelonColors, accentKey: String): WatermelonColors {
-    val (accent, accentGlow, accentDim) = when (accentKey) {
-        "amber_gold" -> Triple(Color(0xFFFFB703), Color(0x66FFB703), Color(0x33FFB703))
-        "cyber_red" -> Triple(Color(0xFFFF0055), Color(0x66FF0055), Color(0x33FF0055))
-        "emerald_jade" -> Triple(Color(0xFF00F5A0), Color(0x6600F5A0), Color(0x3300F5A0))
-        "royal_violet" -> Triple(Color(0xFF9D4EDD), Color(0x669D4EDD), Color(0x339D4EDD))
-        else -> Triple(Color(0xFF00E5FF), Color(0x6600E5FF), Color(0x3300E5FF))
+    val accent = when (accentKey) {
+        "electric_cyan" -> Color(0xFF00E5FF)
+        "neon_magenta" -> Color(0xFFFF007F)
+        "plasma_amber", "amber_gold" -> Color(0xFFFFB300)
+        "acid_green" -> Color(0xFF00E676)
+        "matrix_emerald", "emerald_jade" -> Color(0xFF00FF66)
+        "cyber_purple", "royal_violet" -> Color(0xFF7C4DFF)
+        "solar_flare", "cyber_red" -> Color(0xFFFF5722)
+        "deep_sapphire" -> Color(0xFF2979FF)
+        else -> Color(0xFF00E5FF)
     }
+    val accentGlow = accent.copy(alpha = 0.45f)
+    val accentDim = accent.copy(alpha = 0.20f)
+
     return base.copy(
         green = accent,
         greenDim = accentDim,
+        red = if (accentKey in listOf("neon_magenta", "solar_flare", "cyber_red", "cyber_purple")) accent else base.red,
         line = if (base.isDark) accent.copy(alpha = 0.22f) else base.line,
     )
 }
