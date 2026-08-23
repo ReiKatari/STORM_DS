@@ -333,6 +333,7 @@ fun FilterChipsRow(
         RomFilter.ALL to R.string.rom_filter_all,
         RomFilter.FAVORITES to R.string.rom_filter_favorites,
         RomFilter.DS_ONLY to R.string.rom_filter_ds,
+        RomFilter.DSI_ENHANCED_ONLY to R.string.rom_filter_dsi_enhanced,
         RomFilter.DSIWARE_ONLY to R.string.rom_filter_dsiware,
         RomFilter.WITH_RETRO_ACHIEVEMENTS to R.string.rom_filter_retro_achievements,
     )

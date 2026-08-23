@@ -551,9 +551,9 @@ class AndroidEmulatorManager(
 
         val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
         val (showBootScreen, autoloadTitleId) = when (dsiWareBootMode) {
-            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> true to (titleId.toLong() and 0xFFFFFFFFL)
-            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> false to 0L
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> true to 0L
+            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD,
+            me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> false to 0L
         }
 
         val emulatorConfiguration = getRomEmulatorConfiguration(rom)
@@ -569,10 +569,10 @@ class AndroidEmulatorManager(
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
 
-        val targetRomUri = if (dsiWareBootMode == me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD && !rom.isInstalledDsiWareShortcut) {
-            rom.uri
-        } else {
+        val targetRomUri = if (executableFile.exists() && executableFile.length() > 0L) {
             Uri.fromFile(executableFile)
+        } else {
+            rom.uri
         }
 
         setupEmulator(emulatorConfiguration)
@@ -631,7 +631,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.3"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.4"
 
         val logFileName = if (rom.fileName.isNotBlank()) {
             "${rom.fileName.substringBeforeLast('.')}.log"

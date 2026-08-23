@@ -334,8 +334,13 @@
     <string name="rom_filter_all">All</string>
     <string name="rom_filter_favorites">Favorites</string>
     <string name="rom_filter_ds">DS</string>
+    <string name="rom_filter_dsi_enhanced">DSi Enhanced</string>
     <string name="rom_filter_dsiware">DSiWare</string>
     <string name="rom_filter_retro_achievements">RA</string>
+    <string name="rom_filter_ds_empty">No DS games found</string>
+    <string name="rom_filter_dsi_enhanced_empty">No DSi Enhanced games found</string>
+    <string name="rom_filter_dsiware_empty">No DSiWare games found</string>
+    <string name="rom_filter_retro_achievements_empty">No games with RetroAchievements found</string>
     <string name="rom_continue_playing">Continue playing</string>
     <string name="rom_no_results_filter">No ROMs match this filter</string>
   <string name="rom_no_favorites">No favorites yet long-press a ROM to mark one</string>
