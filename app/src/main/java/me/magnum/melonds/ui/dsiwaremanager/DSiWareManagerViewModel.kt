@@ -25,13 +25,19 @@ import me.magnum.melonds.ui.romlist.RomIcon
 import java.nio.ByteBuffer
 import javax.inject.Inject
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import me.magnum.melonds.impl.RomIconProvider
+
 @HiltViewModel
 class DSiWareManagerViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val dsiNandManager: DSiNandManager,
     private val settingsRepository: SettingsRepository,
     private val configurationDirectoryVerifier: ConfigurationDirectoryVerifier,
     private val dsiWareTitlesMetadataStore: DSiWareTitlesMetadataStore,
     private val romsRepository: me.magnum.melonds.domain.repositories.RomsRepository,
+    private val romIconProvider: RomIconProvider,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<DSiWareManagerUiState>(DSiWareManagerUiState.Loading)
@@ -129,6 +135,35 @@ class DSiWareManagerViewModel @Inject constructor(
         }
         val iconFiltering = settingsRepository.getRomIconFiltering()
         return RomIcon(bitmap, iconFiltering)
+    }
+
+    suspend fun getRomIcon(rom: me.magnum.melonds.domain.model.rom.Rom): RomIcon {
+        val bitmap = romIconProvider.getRomIcon(rom)
+        val iconFiltering = settingsRepository.getRomIconFiltering()
+        return RomIcon(bitmap, iconFiltering)
+    }
+
+    fun renameEnhancedRomFile(rom: me.magnum.melonds.domain.model.rom.Rom, newBaseName: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val doc = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, rom.uri)
+                val ext = rom.fileName.substringAfterLast('.', "nds")
+                doc?.renameTo("$newBaseName.$ext")
+                romsRepository.invalidateRoms()
+                romsRepository.rescanRoms()
+            }
+        }
+    }
+
+    fun deleteEnhancedRomFile(rom: me.magnum.melonds.domain.model.rom.Rom) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val doc = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, rom.uri)
+                doc?.delete()
+                romsRepository.invalidateRoms()
+                romsRepository.rescanRoms()
+            }
+        }
     }
 
     fun revalidateBiosConfiguration() {

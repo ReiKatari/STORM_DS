@@ -23,6 +23,8 @@ data class RomDto(
     var lastPlayed: Date? = null,
     @SerializedName("isDsiWareTitle")
     val isDsiWareTitle: Boolean,
+    @SerializedName("isDsiEnhanced")
+    val isDsiEnhanced: Boolean = false,
     @SerializedName("retroAchievementsHash")
     val retroAchievementsHash: String,
     @SerializedName("totalPlayTime")
@@ -42,6 +44,7 @@ data class RomDto(
                 RomConfigDto.fromModel(rom.config),
                 rom.lastPlayed,
                 rom.isDsiWareTitle,
+                rom.isDsiEnhanced,
                 rom.retroAchievementsHash,
                 rom.totalPlayTime.inWholeMilliseconds,
                 rom.isFavorite,
@@ -62,6 +65,9 @@ data class RomDto(
             retroAchievementsHash,
             totalPlayTime.milliseconds,
             isFavorite,
+            null,
+            null,
+            isDsiEnhanced,
         )
     }
 }
