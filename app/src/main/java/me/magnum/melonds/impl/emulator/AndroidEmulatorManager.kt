@@ -340,6 +340,16 @@ class AndroidEmulatorManager(
                     return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
                 }
 
+                // Auto-decrypt encrypted DSi/DSiWare ROM before launch
+                if (rom.isDsiWareTitle || rom.isDsiEnhanced) {
+                    runCatching {
+                        if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                            Log.i(TAG, "loadRom: Auto-decrypting encrypted ROM: ${rom.name}")
+                            me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
+                        }
+                    }
+                }
+
                 val emulatorConfiguration = getRomEmulatorConfiguration(rom)
                     .withPreparedDldiConfiguration()
                     ?: return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
@@ -470,6 +480,16 @@ class AndroidEmulatorManager(
         if (dsiStatus.status != ConfigurationDirResult.Status.VALID) {
             writeGameExecutionLog(rom, rom.fileName, false, "DSi custom BIOS/Firmware/NAND configuration is invalid: ${dsiStatus.status}", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
+        }
+
+        // Auto-decrypt encrypted DSi/DSiWare ROM before launch
+        if (rom.isDsiWareTitle || rom.isDsiEnhanced) {
+            runCatching {
+                if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(context, rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                    Log.i(TAG, "loadDsiWare: Auto-decrypting encrypted ROM: ${rom.name}")
+                    me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri)
+                }
+            }
         }
 
         val titleId = extractDsiWareTitleId(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
@@ -636,7 +656,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.7"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.8"
 
         val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
             "_${settingsRepository.getDsiWareBootMode().name}"
