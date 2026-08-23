@@ -102,6 +102,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 me.magnum.melonds.ui.theme.AppThemeManager.accentColorState.value = newAccent
                 accentPreference.sharedPreferences?.edit()?.putString("theme_accent_color", newAccent)?.apply()
                 view?.post { applyAccentColorToViews() }
+                activity?.recreate()
                 true
             }
         }

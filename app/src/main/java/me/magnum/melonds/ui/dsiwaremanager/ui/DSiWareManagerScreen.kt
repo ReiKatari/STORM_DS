@@ -597,7 +597,7 @@ private fun DSiEnhancedItem(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = rom.fileName.ifBlank { rom.name },
+                text = rom.fileName.substringBeforeLast('.').ifBlank { rom.name },
                 color = colors.text,
                 fontSize = 14.sp,
                 lineHeight = 18.sp,
@@ -702,7 +702,7 @@ private fun DSiEnhancedItem(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = rom.fileName.ifBlank { rom.name },
+                    text = rom.fileName.substringBeforeLast('.').ifBlank { rom.name },
                     color = colors.text,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,

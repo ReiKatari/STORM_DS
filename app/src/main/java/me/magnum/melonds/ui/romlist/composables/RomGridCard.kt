@@ -79,13 +79,13 @@ fun RomGridCard(
     val cardStyle = me.magnum.melonds.ui.theme.AppThemeManager.cardStyleState.value
     val cornerRadius = when (cardStyle) {
         "3d_boxart" -> 5.dp
-        "flat_minimal" -> 0.dp
-        else -> 10.dp
+        "flat_minimal" -> 2.dp
+        else -> 14.dp
     }
     val shadowElevation = when (cardStyle) {
-        "3d_boxart" -> 10.dp
+        "3d_boxart" -> 12.dp
         "flat_minimal" -> 0.dp
-        else -> 4.dp
+        else -> 6.dp
     }
     val shape = RoundedCornerShape(cornerRadius)
     val interactionSource = remember { MutableInteractionSource() }
@@ -124,27 +124,28 @@ fun RomGridCard(
 
         val borderColor = when (cardStyle) {
             "flat_minimal" -> colors.line
-            "3d_boxart" -> Color.White.copy(alpha = 0.35f)
-            else -> Color.White.copy(alpha = 0.15f)
+            "3d_boxart" -> Color.White.copy(alpha = 0.40f)
+            else -> Color.White.copy(alpha = 0.20f)
         }
         val borderWidth = when (cardStyle) {
             "3d_boxart" -> 1.5.dp
-            "flat_minimal" -> 0.75.dp
-            else -> 1.dp
+            "flat_minimal" -> 1.dp
+            else -> 1.2.dp
         }
         Box(Modifier.aspectRatio(DsBoxArtAspectRatio).fillMaxWidth().border(borderWidth, borderColor, shape))
 
         if (cardStyle == "3d_boxart") {
-            // Authentic 3D Nintendo DS plastic box case edge
+            // Authentic 3D Nintendo DS plastic box case spine on left edge
             Box(
                 Modifier
                     .fillMaxHeight()
-                    .width(8.dp)
+                    .width(10.dp)
                     .background(
                         androidx.compose.ui.graphics.Brush.horizontalGradient(
                             listOf(
-                                Color.Black.copy(alpha = 0.45f),
-                                Color.White.copy(alpha = 0.30f),
+                                Color.Black.copy(alpha = 0.65f),
+                                Color.Black.copy(alpha = 0.40f),
+                                Color.White.copy(alpha = 0.35f),
                                 Color.Transparent,
                             )
                         )
@@ -154,11 +155,27 @@ fun RomGridCard(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(28.dp)
+                    .height(32.dp)
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
                             listOf(
-                                Color.White.copy(alpha = 0.25f),
+                                Color.White.copy(alpha = 0.30f),
+                                Color.White.copy(alpha = 0.05f),
+                                Color.Transparent,
+                            )
+                        )
+                    )
+            )
+        } else if (cardStyle == "glassmorphism") {
+            // Frosted glass gloss overlay
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(24.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.15f),
                                 Color.Transparent,
                             )
                         )

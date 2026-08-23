@@ -349,7 +349,7 @@ fun FilterChipsRow(
                 RomFilter.ALL -> "🎮 $titleText"
                 RomFilter.FAVORITES -> "★ $titleText"
                 RomFilter.DS_ONLY -> "🎮 Nintendo DS"
-                RomFilter.DSI_ENHANCED_ONLY -> "⚡ DSi Enhanced"
+                RomFilter.DSI_ENHANCED_ONLY -> "⚡ Nintendo DSi Enhanced"
                 RomFilter.DSIWARE_ONLY -> "🕹️ Nintendo DSiWare"
                 RomFilter.WITH_RETRO_ACHIEVEMENTS -> "🏆 RA"
             }
