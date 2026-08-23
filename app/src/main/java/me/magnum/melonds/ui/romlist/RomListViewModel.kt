@@ -649,14 +649,14 @@ class RomListViewModel @Inject constructor(
                         val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
                         val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
                         val titleName = title.name.lowercase().trim()
+                        val isUserGame = (title.titleId ushr 32) == 0x00030004L || (title.titleId ushr 32) == 0x04000300L
+                        val folderStillActive = parentFolderUri != null && parentFolderUri in activeSearchDirs
+                        val fileStillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
+                            (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
+                            (titleName in activeFileNames || titleName in activeNames)
 
-                        if (isAutoImported || activeSearchDirs.isEmpty()) {
-                            val folderStillActive = parentFolderUri != null && parentFolderUri in activeSearchDirs
-                            val fileStillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
-                                (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
-                                (titleName in activeFileNames || titleName in activeNames)
-
-                            if (!folderStillActive || !fileStillExists || activeSearchDirs.isEmpty()) {
+                        if (isUserGame && (isAutoImported || !folderStillActive || !fileStillExists || activeSearchDirs.isEmpty())) {
+                            if (!fileStillExists || activeSearchDirs.isEmpty() || !folderStillActive) {
                                 android.util.Log.i("RomListViewModel", "Auto-deleting removed DSiWare title 0x${titleIdHex} (${title.name}) from NAND")
                                 try {
                                     dsiNandManager.deleteTitle(title.titleId)
