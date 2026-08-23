@@ -526,6 +526,7 @@ fun RomBrowserScreen(
                 val isInFolderSection by remember(folderCount, state.viewMode) {
                     derivedStateOf { hasFolders && activeFirstVis < folderCount }
                 }
+                val alphabetTopPadding = if (state.continuePlaying.isNotEmpty() && state.filter == RomFilter.ALL && !state.isSearchActive) 210.dp else 115.dp
                 AlphabetIndexBar(
                     alphabetIndex = state.alphabetIndex,
                     activeLetter = activeLetter,
@@ -566,7 +567,7 @@ fun RomBrowserScreen(
                     },
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(top = 56.dp, bottom = 16.dp, end = 2.dp),
+                        .padding(top = alphabetTopPadding, bottom = 24.dp, end = 2.dp),
                 )
             }
         }

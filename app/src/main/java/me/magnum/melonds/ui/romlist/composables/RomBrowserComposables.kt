@@ -337,16 +337,26 @@ fun FilterChipsRow(
         RomFilter.DSIWARE_ONLY to R.string.rom_filter_dsiware,
         RomFilter.WITH_RETRO_ACHIEVEMENTS to R.string.rom_filter_retro_achievements,
     )
+    val accentColor = Color(me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor())
     LazyRow(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(items) { (filter, label) ->
-            val prefix = if (filter == RomFilter.FAVORITES) "★ " else ""
+            val titleText = stringResource(label)
+            val displayText = when (filter) {
+                RomFilter.ALL -> "🎮 $titleText"
+                RomFilter.FAVORITES -> "★ $titleText"
+                RomFilter.DS_ONLY -> "🎮 Nintendo DS"
+                RomFilter.DSI_ENHANCED_ONLY -> "⚡ DSi Enhanced"
+                RomFilter.DSIWARE_ONLY -> "🕹️ Nintendo DSiWare"
+                RomFilter.WITH_RETRO_ACHIEVEMENTS -> "🏆 RA"
+            }
             WatermelonChip(
-                label = prefix + stringResource(label).uppercase(),
+                label = displayText,
                 selected = filter == selected,
+                selectedBg = accentColor,
                 onClick = { onFilterSelected(filter) },
             )
         }
