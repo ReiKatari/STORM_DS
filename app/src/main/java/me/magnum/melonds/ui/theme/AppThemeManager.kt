@@ -28,13 +28,39 @@ object AppThemeManager {
                 val newKey = sp.getString("theme", "dark") ?: "dark"
                 themeState.value = Theme.fromPreference(newKey)
             } else if (key == "theme_accent_color") {
-                accentColorState.value = sp.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
+                val newAccent = sp.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
+                accentColorState.value = newAccent
+                accentChangeListeners.forEach { it.invoke(newAccent) }
             } else if (key == "rom_card_style") {
                 cardStyleState.value = sp.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
             }
         }
         prefChangeListener = listener
         prefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    private val accentChangeListeners = mutableListOf<(String) -> Unit>()
+
+    fun addAccentChangeListener(listener: (String) -> Unit) {
+        accentChangeListeners.add(listener)
+    }
+
+    fun removeAccentChangeListener(listener: (String) -> Unit) {
+        accentChangeListeners.remove(listener)
+    }
+
+    fun getAccentColor(accentKey: String = accentColorState.value): Int {
+        return when (accentKey) {
+            "electric_cyan" -> 0xFF00E5FF.toInt()
+            "neon_magenta" -> 0xFFFF007F.toInt()
+            "plasma_amber" -> 0xFFFFB300.toInt()
+            "acid_green" -> 0xFF00E676.toInt()
+            "matrix_emerald" -> 0xFF00FF66.toInt()
+            "cyber_purple" -> 0xFF7C4DFF.toInt()
+            "solar_flare" -> 0xFFFF5722.toInt()
+            "deep_sapphire" -> 0xFF2979FF.toInt()
+            else -> 0xFF00E5FF.toInt()
+        }
     }
 
     fun updateTheme(context: Context, themeKey: String) {
