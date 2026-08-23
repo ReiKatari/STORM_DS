@@ -569,12 +569,18 @@ class AndroidEmulatorManager(
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
 
+        val targetRomUri = if (dsiWareBootMode == me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD && !rom.isInstalledDsiWareShortcut) {
+            rom.uri
+        } else {
+            Uri.fromFile(executableFile)
+        }
+
         setupEmulator(emulatorConfiguration)
 
-        Log.i(TAG, "loadDsiWare: booting title $titleIdHex via mode $dsiWareBootMode (autoloadId=0x${java.lang.Long.toHexString(autoloadTitleId)}, showBootScreen=$showBootScreen)")
+        Log.i(TAG, "loadDsiWare: booting title $titleIdHex via mode $dsiWareBootMode (targetUri=$targetRomUri, showBootScreen=$showBootScreen)")
         MelonEmulator.startBootDiagnosticCapture()
         val loadResult = MelonEmulator.loadRom(
-            romUri = Uri.fromFile(executableFile),
+            romUri = targetRomUri,
             sramUri = Uri.fromFile(saveFile),
             gbaSlotType = MelonEmulator.GbaSlotType.NONE,
             gbaRomUri = null,
@@ -625,7 +631,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.0"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.1"
 
         val logFileName = if (rom.fileName.isNotBlank()) {
             "${rom.fileName.substringBeforeLast('.')}.log"

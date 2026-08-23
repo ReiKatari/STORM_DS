@@ -1895,34 +1895,15 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
 
-    // Priority 1: Installed DSiWare shortcut (.app extracted from NAND)
-    // Boot via NAND Launcher using TLNC autoload record — requires showBootScreen=true
-    if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
+    if (nds->ConsoleType == 1 && currentConfiguration->showBootScreen && cart != nullptr)
     {
-        nds->NDSCartSlot.EjectCart();
         auto dsi = (DSi*) nds;
-        u32 titleIdLow = (u32)(currentConfiguration->dsiWareAutoloadTitleId & 0xFFFFFFFF);
-        u32 titleIdHigh = 0x00030004; // DSiWare title ID high
-        DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
+        DSiSupport::SetupDSiDirectBoot(dsi);
     }
-    // Priority 2: Standalone DSiWare ROM or standard NDS/DSi direct boot
-    else
+    else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
     {
-        if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().IsDSiWare())
-        {
-            std::string romName;
-            nds->SetupDirectBoot(romName);
-        }
-        else if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().DSiTitleIDHigh != 0 && currentConfiguration->showBootScreen)
-        {
-            auto dsi = (DSi*) nds;
-            DSiSupport::SetupDSiDirectBoot(dsi);
-        }
-        else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
-        {
-            std::string romName;
-            nds->SetupDirectBoot(romName);
-        }
+        std::string romName;
+        nds->SetupDirectBoot(romName);
     }
     nds->ReleaseScreen();
     nds->Start();
