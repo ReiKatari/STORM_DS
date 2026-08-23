@@ -116,16 +116,7 @@ class RomListFragment : Fragment() {
                     }
 
                     val checkAndLaunch = { rom: Rom ->
-                        if (rom.isDsiWareTitle) {
-                            if (me.magnum.melonds.MelonRomDecryptor.checkEncryption(requireContext(), rom.uri) == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                                decryptionRom = rom
-                                decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
-                            } else {
-                                romSelectedListener?.invoke(rom)
-                            }
-                        } else {
-                            romSelectedListener?.invoke(rom)
-                        }
+                        romSelectedListener?.invoke(rom)
                     }
 
                     RomBrowserScreen(
