@@ -512,8 +512,13 @@ class AndroidEmulatorManager(
             // If user has existing .sav in their save folder, sync it into NAND before launching
             try {
                 val sramDoc = DocumentFile.fromSingleUri(context, sram)
-                if (sramDoc != null && sramDoc.exists() && sramDoc.length() > 0L) {
-                    dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
+                    val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
+                    if (sramBytes != null && sramBytes.size >= 512 &&
+                        sramBytes[0x1FE] == 0x55.toByte() && sramBytes[0x1FF] == 0xAA.toByte() &&
+                        (sramBytes[0] == 0xEB.toByte() || sramBytes[0] == 0xE9.toByte())) {
+                        dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                    }
                 }
             } catch (e: Throwable) {
                 Log.w(TAG, "loadDsiWare: error importing user public save into NAND", e)
@@ -631,7 +636,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.4"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.7.5"
 
         val logFileName = if (rom.fileName.isNotBlank()) {
             "${rom.fileName.substringBeforeLast('.')}.log"
