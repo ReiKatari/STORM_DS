@@ -56,13 +56,12 @@ class AndroidDSiNandManager(
             }
 
             val result = MelonDSiNand.openNand(settingsRepository.getEmulatorConfiguration())
-            mapOpenNandReturnCodeToResult(result).also {
-                if (!it.isFailure()) {
-                    if (nandUsageCount.getAndIncrement() == 0) {
-                        isNandOpen.set(true)
-                    }
-                }
+            val mapped = mapOpenNandReturnCodeToResult(result)
+            if (!mapped.isFailure()) {
+                isNandOpen.set(true)
+                nandUsageCount.set(1)
             }
+            mapped
         }
     }
 
@@ -348,7 +347,8 @@ class AndroidDSiNandManager(
     }
 
     override fun closeNand() {
-        if (nandUsageCount.decrementAndGet() == 0) {
+        if (nandUsageCount.decrementAndGet() <= 0) {
+            nandUsageCount.set(0)
             isNandOpen.set(false)
             MelonDSiNand.closeNand()
         }
