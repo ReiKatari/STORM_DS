@@ -891,7 +891,7 @@ class FileSystemRomsRepository(
 
     private fun computeDirectoryHash(fileStates: List<DirectoryFileState>): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("rom-directory-cache-v5".toByteArray())
+        digest.update("rom-directory-cache-v7".toByteArray())
         fileStates.sortedBy { it.uri.toString() }.forEach { state ->
             val entry = "${state.uri}|${state.lastModified}|${state.size}"
             digest.update(entry.toByteArray())
