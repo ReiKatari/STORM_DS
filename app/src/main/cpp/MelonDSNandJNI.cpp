@@ -1043,7 +1043,7 @@ static void formatFatSaveBuffer(std::vector<u8>& buf, u32 size)
     const u8 sectorsPerCluster = 1;
     const u16 reservedSectors = 1;
     const u8 numFats = 2;
-    const u16 rootDirEntries = (size <= 0x20000) ? 64 : 128;
+    const u16 rootDirEntries = (size < 0x8C000) ? 0x20 : 0x200;
     const u16 sectorsPerFat = (size <= 0x80000) ? 1 : 2;
 
     // Boot Sector (Sector 0)
@@ -1121,12 +1121,14 @@ static bool ensureValidSaveFile(const char* path, u32 expectedSize)
         FF_FIL file;
         if (f_open(&file, path, FA_READ) == FR_OK)
         {
-            u8 bootSig[2] = {0, 0};
-            f_lseek(&file, 0x1FE);
+            u8 bootSec[1024];
             u32 nread = 0;
-            f_read(&file, bootSig, 2, &nread);
+            f_read(&file, bootSec, sizeof(bootSec), &nread);
             f_close(&file);
-            if (bootSig[0] != 0x55 || bootSig[1] != 0xAA)
+            if (nread < sizeof(bootSec) ||
+                bootSec[0x1FE] != 0x55 || bootSec[0x1FF] != 0xAA ||
+                (bootSec[0] != 0xEB && bootSec[0] != 0xE9) ||
+                bootSec[0x200] != 0xF8 || bootSec[0x201] != 0xFF || bootSec[0x202] != 0xFF)
             {
                 needsFormatting = true;
             }
