@@ -215,23 +215,23 @@ fun WatermelonLibraryHeader(
                         DropdownMenuItem(
                             onClick = {
                                 bootModeMenuOpen = false
-                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD)
-                            }
-                        ) {
-                            Column {
-                                Text("🚀 Autoload (Рекомендуется)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-                                Text("Прямой запуск через DSi Firmware TLNC (как в RetroArch)", color = colors.text3, fontSize = 11.sp)
-                            }
-                        }
-                        DropdownMenuItem(
-                            onClick = {
-                                bootModeMenuOpen = false
                                 onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT)
                             }
                         ) {
                             Column {
                                 Text("⚡ Direct Boot (Прямой старт)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-                                Text("Быстрый старт картриджа напрямую в RAM", color = colors.text3, fontSize = 11.sp)
+                                Text("Быстрый старт игры напрямую в память RAM", color = colors.text3, fontSize = 11.sp)
+                            }
+                        }
+                        DropdownMenuItem(
+                            onClick = {
+                                bootModeMenuOpen = false
+                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD)
+                            }
+                        ) {
+                            Column {
+                                Text("🚀 Autoload (Запуск через прошивку)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                Text("Запуск через DSi Firmware warmboot (как в RetroArch)", color = colors.text3, fontSize = 11.sp)
                             }
                         }
                         DropdownMenuItem(

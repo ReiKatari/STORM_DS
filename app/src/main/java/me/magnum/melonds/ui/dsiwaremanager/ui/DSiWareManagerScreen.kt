@@ -36,6 +36,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -452,6 +455,9 @@ private fun DSiWareTitleList(
                 items = dsiEnhancedRoms,
                 key = { it.uri.toString() },
             ) { rom ->
+                var menuOpen by remember { mutableStateOf(false) }
+                var infoOpen by remember { mutableStateOf(false) }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -459,14 +465,14 @@ private fun DSiWareTitleList(
                         .clip(RoundedCornerShape(10.dp))
                         .background(colors.surface)
                         .border(1.dp, colors.line, RoundedCornerShape(10.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = rom.name.takeIf { it.isNotBlank() } ?: rom.fileName.substringBeforeLast('.'),
+                            text = rom.fileName.substringBeforeLast('.'),
                             color = colors.text,
-                            fontSize = 14.5.sp,
+                            fontSize = 14.sp,
                             lineHeight = 18.sp,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                             softWrap = true,
@@ -480,7 +486,78 @@ private fun DSiWareTitleList(
                             fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                             softWrap = true,
                         )
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text("⚡ 133 MHz", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text("💾 16 MB RAM", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text("📷 DSi Camera / Wi-Fi", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            }
+                        }
                     }
+
+                    Box {
+                        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(onClick = { menuOpen = false; infoOpen = true }) {
+                                Text("ℹ️ Особенности DSi-версии", color = colors.text, fontSize = 13.5.sp)
+                            }
+                        }
+                    }
+                }
+
+                if (infoOpen) {
+                    androidx.compose.material.AlertDialog(
+                        onDismissRequest = { infoOpen = false },
+                        title = {
+                            Text(
+                                text = "DSi-Enhanced: ${rom.name.ifBlank { rom.fileName.substringBeforeLast('.') }}",
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = colors.text,
+                                fontSize = 16.sp,
+                            )
+                        },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Картридж стандарта Nintendo DS со встроенными аппаратно-программными расширениями DSi:", color = colors.text2, fontSize = 13.sp)
+                                Text("• 🚀 ARM9i CPU на удвоенной частоте 133.79 МГц (вместо 67 МГц DS)", color = colors.text, fontSize = 12.5.sp)
+                                Text("• 💾 16 МБ системной памяти RAM (в 4 раза больше памяти для текстур и уровней)", color = colors.text, fontSize = 12.5.sp)
+                                Text("• 📷 Доступ к фронтальной и тыльной камерам DSi для интерактивного геймплея", color = colors.text, fontSize = 12.5.sp)
+                                Text("• 📶 Поддержка защищенных беспроводных сетей WPA / WPA2", color = colors.text, fontSize = 12.5.sp)
+                            }
+                        },
+                        confirmButton = {
+                            androidx.compose.material.TextButton(onClick = { infoOpen = false }) {
+                                Text("Понятно", color = colors.green)
+                            }
+                        },
+                        backgroundColor = colors.surface,
+                        contentColor = colors.text,
+                    )
                 }
             }
         }
