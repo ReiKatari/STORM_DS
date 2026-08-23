@@ -13,6 +13,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -678,6 +680,7 @@ class FileSystemRomsRepository(
 
         val cachedFiles = cachedState?.files ?: emptyMap()
         val currentFiles = fileStates.associateBy { it.uri.toString() }
+        val currentRomUris = roms.map { it.uri.toString() }.toSet()
 
         val directoryMetadataChanged = cachedState != null &&
             cachedState.hash != directoryHash &&
@@ -691,8 +694,12 @@ class FileSystemRomsRepository(
             fileStates
         } else {
             fileStates.filter { fileState ->
-                val cachedFile = cachedFiles[fileState.uri.toString()]
-                cachedFile == null || cachedFile.lastModified != fileState.lastModified || cachedFile.size != fileState.size
+                val uriStr = fileState.uri.toString()
+                val cachedFile = cachedFiles[uriStr]
+                cachedFile == null ||
+                    cachedFile.lastModified != fileState.lastModified ||
+                    cachedFile.size != fileState.size ||
+                    uriStr !in currentRomUris
             }
         }
 
@@ -710,24 +717,31 @@ class FileSystemRomsRepository(
         val parallelism = (Runtime.getRuntime().availableProcessors() * 2).coerceIn(4, 16)
         val semaphore = Semaphore(parallelism)
 
-        coroutineScope {
+        val scannedRoms = coroutineScope {
             updatedFiles.map { fileState ->
-                launch(Dispatchers.IO) {
+                async(Dispatchers.IO) {
                     semaphore.withPermit {
                         runCatching {
                             val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
                             val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
                                 ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
-                                ?: return@runCatching
+                                ?: return@runCatching null
                             val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
-                                ?: return@runCatching
+                                ?: return@runCatching null
 
                             processedUpdatedFileUris.add(fileState.uri.toString())
-                            collector.emit(rom)
-                        }.onFailure { Log.e(TAG, "Failed to process file at ${fileState.uri}", it) }
+                            rom
+                        }.getOrElse {
+                            Log.e(TAG, "Failed to process file at ${fileState.uri}", it)
+                            null
+                        }
                     }
                 }
-            }.forEach { it.join() }
+            }.awaitAll().filterNotNull()
+        }
+
+        for (rom in scannedRoms) {
+            collector.emit(rom)
         }
 
         val cacheableFiles = currentFiles.filterKeys { uri ->
