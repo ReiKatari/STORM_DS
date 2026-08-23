@@ -231,6 +231,9 @@ class RomListViewModel @Inject constructor(
                     }
                 }
                 romsWithParents.value = romsWithDocIds
+                if (romsWithDocIds.isNotEmpty()) {
+                    syncDsiWareWithNand(romsWithDocIds)
+                }
             }
         }
 
@@ -253,19 +256,18 @@ class RomListViewModel @Inject constructor(
                     it.rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase()
                 }.toSet()
 
-                // Filter out any scanned files that are raw .app/.nds dump files, 8-hex Title ID files (e.g. "4b443945")
-                // or entries matching installed NAND titles so "4b443945" duplicate entries never appear
                 val hexTitleIdPattern = Regex("^[0-9a-fA-F]{8}$")
                 val deduplicatedRoms = roms.filter { romWithParent ->
                     val rom = romWithParent.rom
-                    val fileBase = rom.fileName.substringBeforeLast('.').lowercase().trim()
-                    val rawName = rom.name.lowercase().trim()
-                    val isRawHexTitle = hexTitleIdPattern.matches(fileBase) || hexTitleIdPattern.matches(rawName)
-                    !isRawHexTitle && fileBase !in installedTitleHexes && rawName !in installedTitleHexes
+                    if (!rom.isDsiWareTitle) {
+                        true
+                    } else {
+                        val fileBase = rom.fileName.substringBeforeLast('.').lowercase().trim()
+                        val rawName = rom.name.lowercase().trim()
+                        val isRawHexTitle = hexTitleIdPattern.matches(fileBase) || hexTitleIdPattern.matches(rawName)
+                        !isRawHexTitle && fileBase !in installedTitleHexes && rawName !in installedTitleHexes
+                    }
                 }
-
-                // Automatically sync raw DSiWare ROMs with DSi NAND
-                syncDsiWareWithNand(roms)
 
                 val existingIds = deduplicatedRoms.mapNotNull { it.rom.installedDsiWareTitleId }.toSet()
                 val uniqueShortcuts = shortcuts.map { shortcut ->
@@ -481,98 +483,16 @@ class RomListViewModel @Inject constructor(
         val currentLocation = effectiveStack.lastOrNull() ?: baseLocation
         val isVirtualRoot = currentLocation is BrowserLocation.VirtualRoot
 
-        val visibleRoots = roots.filter { root ->
-            sortedRoms.any { item ->
-                val pDocId = item.parentDocId ?: return@any false
-                val r = findRootForDocId(pDocId, roots)
-                r?.docId == root.docId && matchesFilter(item.rom, filter)
-            }
-        }
-        val hasSingleVisibleRoot = visibleRoots.size <= 1
-        val showFolders = filter == RomFilter.ALL && !hasSingleVisibleRoot
-
-        val entries = if (hasSingleVisibleRoot) {
-            sortedRoms
-                .filter { matchesFilter(it.rom, filter) }
-                .map { RomBrowserEntry.RomItem(it.rom) }
-        } else if (isVirtualRoot) {
-            val folders = if (showFolders) {
-                visibleRoots.sortedBy { it.displayName.lowercase() }
-                    .map {
-                        RomBrowserEntry.Folder(
-                            docId = it.docId,
-                            name = it.displayName,
-                            relativePath = it.relativePath,
-                            isRoot = true
-                        )
-                    }
-            } else {
-                emptyList()
-            }
-            // When filtering, show ALL ROMs (flat) at virtual root so favorites/RA chips work across folders
-            if (filter != RomFilter.ALL) {
-                sortedRoms.filter { matchesFilter(it.rom, filter) }
-                    .map { RomBrowserEntry.RomItem(it.rom) }
-            } else {
-                val installedDsiEntries = sortedRoms
-                    .filter { it.rom.isInstalledDsiWareShortcut && matchesFilter(it.rom, filter) }
-                    .map { RomBrowserEntry.RomItem(it.rom) }
-                folders + installedDsiEntries
-            }
-        } else {
-            val docId = (currentLocation as BrowserLocation.Directory).docId
-            val node = directoryNodes[docId] ?: createPlaceholderNode(docId, roots)
-            val childFolders = if (showFolders) {
-                node.childDirectories
-                    .mapNotNull { directoryNodes[it] }
-                    .filter { childNode ->
-                        sortedRoms.any { it.parentDocId == childNode.docId && matchesFilter(it.rom, filter) }
-                    }
-                    .sortedBy { it.displayName.lowercase() }
-                    .map {
-                        RomBrowserEntry.Folder(
-                            docId = it.docId,
-                            name = it.displayName,
-                            relativePath = it.relativePath,
-                            isRoot = it.docId == it.root.docId
-                        )
-                    }
-            } else {
-                emptyList()
-            }
-            val romEntries = sortedRoms
-                .filter { matchesFilter(it.rom, filter) }
-                .filter { romWithParent ->
-                    if (filter == RomFilter.ALL) {
-                        romWithParent.rom.isInstalledDsiWareShortcut ||
-                        romWithParent.parentDocId == docId ||
-                        matchesRoot(romWithParent.parentDocId ?: "", docId) ||
-                        (roots.size == 1 && (romWithParent.parentDocId == null || matchesRoot(romWithParent.parentDocId, roots.first().docId)))
-                    } else {
-                        // When filtering, show all matching ROMs in the current root, regardless of subfolder
-                        romWithParent.rom.isInstalledDsiWareShortcut ||
-                        romWithParent.parentDocId == null ||
-                        romWithParent.parentDocId.startsWith(node.root.docId) ||
-                        roots.size == 1
-                    }
-                }
-                .map { RomBrowserEntry.RomItem(it.rom) }
-            childFolders + romEntries
-        }
-
-        val breadcrumbs = if (hasSingleVisibleRoot || isVirtualRoot) {
-            emptyList()
-        } else {
-            val docId = (currentLocation as BrowserLocation.Directory).docId
-            buildBreadcrumbs(docId, directoryNodes, roots)
-        }
+        val entries = sortedRoms
+            .filter { matchesFilter(it.rom, filter) }
+            .map { RomBrowserEntry.RomItem(it.rom) }
 
         RomBrowserUiState(
             entries = entries,
-            breadcrumbs = breadcrumbs,
-            canNavigateUp = !hasSingleVisibleRoot && effectiveStack.size > 1,
+            breadcrumbs = emptyList(),
+            canNavigateUp = false,
             isSearchActive = false,
-            isAtVirtualRoot = hasSingleVisibleRoot || isVirtualRoot,
+            isAtVirtualRoot = true,
             viewMode = viewMode,
             filter = filter,
             sortingMode = sortingMode,
