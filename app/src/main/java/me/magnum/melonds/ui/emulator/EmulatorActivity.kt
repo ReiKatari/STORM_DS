@@ -968,6 +968,12 @@ class EmulatorActivity : AppCompatActivity() {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.toastEvent.collectLatest {
                     val (message, duration) = when (it) {
+                        is ToastEvent.EnhancementActiveNotification -> {
+                            val items = mutableListOf<String>()
+                            if (it.is60Fps) items.add("⚡ 60 FPS")
+                            if (it.isWidescreen3d) items.add("🖥️ 3D 16:9")
+                            "Активно: ${items.joinToString(" • ")}" to Toast.LENGTH_SHORT
+                        }
                         ToastEvent.GbaLoadFailed -> getString(R.string.error_load_gba_rom) to Toast.LENGTH_SHORT
                         ToastEvent.QuickSaveSuccessful -> getString(R.string.saved) to Toast.LENGTH_SHORT
                         ToastEvent.QuickLoadSuccessful -> getString(R.string.loaded) to Toast.LENGTH_SHORT

@@ -821,6 +821,11 @@ class EmulatorViewModel @Inject constructor(
                     if (!result.isGbaLoadSuccessful) {
                         _toastEvent.tryEmit(ToastEvent.GbaLoadFailed)
                     }
+                    val is60Fps = settingsRepository.is60FpsPatchEnabled()
+                    val isWidescreen3d = settingsRepository.is3dWidescreenEnabled()
+                    if (is60Fps || isWidescreen3d) {
+                        _toastEvent.tryEmit(ToastEvent.EnhancementActiveNotification(is60Fps, isWidescreen3d))
+                    }
                     _emulatorState.value = EmulatorState.RunningRom(rom)
                     maybeAutoLoadStateOnLaunch(rom)
                     DebugCommandStateStore.onRunningRomReady(rom.uri, rom.name)
