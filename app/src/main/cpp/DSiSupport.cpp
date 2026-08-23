@@ -31,10 +31,15 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
     if (cart != nullptr)
     {
         auto header = cart->GetHeader();
+        uint32_t titleIdLow = header.DSiTitleIDLow ? header.DSiTitleIDLow : *(const uint32_t*)&header.GameCode;
+        uint32_t titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : melonDS::DSiWareTitleIDHigh;
+
         uint8_t titleId[8];
-        memcpy(titleId, &header.DSiTitleIDLow, 4);
-        memcpy(titleId + 4, &header.DSiTitleIDHigh, 4);
-        setupAutoLoadRaw(dsi, titleId, 0x01);
+        memcpy(&titleId[0], &titleIdLow, 4);
+        memcpy(&titleId[4], &titleIdHigh, 4);
+
+        uint32_t bootType = header.IsDSiWare() ? 0x03 : 0x01;
+        setupAutoLoadRaw(dsi, titleId, bootType);
     }
 }
 
