@@ -469,8 +469,7 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
 
         if (!mount.ApplyUserData(settings))
         {
-            Log(LogLevel::Error, "Failed to write patched DSi NAND user data\n");
-            return std::nullopt;
+            Log(LogLevel::Warn, "Could not write patched DSi NAND user data, proceeding with unmodified NAND\n");
         }
     }
 
