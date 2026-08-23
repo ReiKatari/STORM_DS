@@ -50,19 +50,27 @@ import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import me.magnum.melonds.domain.model.RomIconFiltering
+import me.magnum.melonds.domain.model.rom.Rom
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -79,7 +87,6 @@ import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.contracts.FilePickerContract
 import me.magnum.melonds.domain.model.ConfigurationDirResult
 import me.magnum.melonds.domain.model.DSiWareTitle
-import me.magnum.melonds.domain.model.RomIconFiltering
 import me.magnum.melonds.domain.model.dsinand.DSiWareTitleFileType
 import me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult
 import me.magnum.melonds.ui.common.FabActionItem
@@ -125,6 +132,7 @@ fun DSiWareManagerScreen(
 
     val currentState = state
     var showImportMenu by remember { mutableStateOf(false) }
+    var enhancedRomToDelete by remember { mutableStateOf<Rom?>(null) }
     WatermelonScreenScaffold(
         title = stringResource(R.string.dsiware_manager),
         onBack = onBackClick,
@@ -174,10 +182,63 @@ fun DSiWareManagerScreen(
                     onImportTitleFile = importTitleFilePickLauncher::launch,
                     onExportTitleFile = exportTitleFilePickLauncher::launch,
                     retrieveTitleIcon = viewModel::getTitleIcon,
+                    onRenameEnhancedRom = { rom ->
+                        renameDialogState.show(
+                            initialText = rom.fileName.substringBeforeLast('.'),
+                            onConfirm = { newName ->
+                                viewModel.renameEnhancedRomFile(rom, newName)
+                            },
+                        )
+                    },
+                    onDeleteEnhancedRom = { rom ->
+                        enhancedRomToDelete = rom
+                    },
+                    retrieveRomIcon = viewModel::getRomIcon,
                 )
             }
             is DSiWareManagerUiState.Error -> Error(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize())
         }
+    }
+
+    if (enhancedRomToDelete != null) {
+        val rom = enhancedRomToDelete!!
+        androidx.compose.material.AlertDialog(
+            onDismissRequest = { enhancedRomToDelete = null },
+            title = {
+                Text(
+                    text = "Удалить файл игры?",
+                    color = watermelon.text,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+            },
+            text = {
+                Text(
+                    text = "Файл «${rom.fileName}» будет безвозвратно удален из хранилища устройства.",
+                    color = watermelon.text2,
+                    fontSize = 13.5.sp,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material.TextButton(
+                    onClick = {
+                        viewModel.deleteEnhancedRomFile(rom)
+                        enhancedRomToDelete = null
+                    }
+                ) {
+                    Text("Удалить", color = watermelon.red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material.TextButton(
+                    onClick = { enhancedRomToDelete = null }
+                ) {
+                    Text("Отмена", color = watermelon.text2)
+                }
+            },
+            backgroundColor = watermelon.surface,
+            contentColor = watermelon.text,
+        )
     }
 
     TextInputDialog(
@@ -306,6 +367,9 @@ private fun Ready(
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     onExportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     retrieveTitleIcon: (DSiWareTitle) -> RomIcon,
+    onRenameEnhancedRom: (me.magnum.melonds.domain.model.rom.Rom) -> Unit,
+    onDeleteEnhancedRom: (me.magnum.melonds.domain.model.rom.Rom) -> Unit,
+    retrieveRomIcon: suspend (me.magnum.melonds.domain.model.rom.Rom) -> RomIcon,
 ) {
     val colors = watermelon
     Box(modifier = modifier) {
@@ -330,6 +394,9 @@ private fun Ready(
                 onImportTitleFile = onImportTitleFile,
                 onExportTitleFile = onExportTitleFile,
                 retrieveTitleIcon = retrieveTitleIcon,
+                onRenameEnhancedRom = onRenameEnhancedRom,
+                onDeleteEnhancedRom = onDeleteEnhancedRom,
+                retrieveRomIcon = retrieveRomIcon,
             )
         }
     }
@@ -361,6 +428,9 @@ private fun DSiWareTitleList(
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     onExportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
     retrieveTitleIcon: (DSiWareTitle) -> RomIcon,
+    onRenameEnhancedRom: (me.magnum.melonds.domain.model.rom.Rom) -> Unit,
+    onDeleteEnhancedRom: (me.magnum.melonds.domain.model.rom.Rom) -> Unit,
+    retrieveRomIcon: suspend (me.magnum.melonds.domain.model.rom.Rom) -> RomIcon,
 ) {
     val colors = watermelon
     LazyColumn(
@@ -390,7 +460,7 @@ private fun DSiWareTitleList(
                             text = "DSiWare",
                             color = androidx.compose.ui.graphics.Color(0xFFD1C4E9),
                             fontSize = 11.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            fontWeight = FontWeight.Bold,
                             fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         )
                     }
@@ -399,7 +469,7 @@ private fun DSiWareTitleList(
                         text = "Системная память NAND (${titles.size})",
                         color = colors.text2,
                         fontSize = 12.5.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
@@ -438,7 +508,7 @@ private fun DSiWareTitleList(
                             text = "DSi E.",
                             color = androidx.compose.ui.graphics.Color(0xFF80CBC4),
                             fontSize = 11.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            fontWeight = FontWeight.Bold,
                             fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         )
                     }
@@ -447,7 +517,7 @@ private fun DSiWareTitleList(
                         text = "Картриджи с DSi-улучшениями (${dsiEnhancedRoms.size})",
                         color = colors.text2,
                         fontSize = 12.5.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
@@ -455,112 +525,171 @@ private fun DSiWareTitleList(
                 items = dsiEnhancedRoms,
                 key = { it.uri.toString() },
             ) { rom ->
-                var menuOpen by remember { mutableStateOf(false) }
-                var infoOpen by remember { mutableStateOf(false) }
+                DSiEnhancedItem(
+                    modifier = Modifier.fillMaxWidth(),
+                    rom = rom,
+                    onRename = { onRenameEnhancedRom(rom) },
+                    onDelete = { onDeleteEnhancedRom(rom) },
+                    retrieveRomIcon = retrieveRomIcon,
+                )
+            }
+        }
+    }
+}
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(colors.surface)
-                        .border(1.dp, colors.line, RoundedCornerShape(10.dp))
-                        .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+@Composable
+private fun DSiEnhancedItem(
+    modifier: Modifier = Modifier,
+    rom: Rom,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    retrieveRomIcon: suspend (Rom) -> RomIcon,
+) {
+    val colors = watermelon
+    var menuOpen by remember { mutableStateOf(false) }
+    var infoOpen by remember { mutableStateOf(false) }
+    val romIcon by produceState<RomIcon?>(initialValue = null, key1 = rom.uri) {
+        value = retrieveRomIcon(rom)
+    }
+
+    Row(
+        modifier = modifier
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.line, RoundedCornerShape(10.dp))
+            .padding(start = 10.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.surface2),
+        ) {
+            if (romIcon?.bitmap != null) {
+                Image(
+                    modifier = Modifier.fillMaxSize(),
+                    bitmap = romIcon!!.bitmap!!.asImageBitmap(),
+                    contentDescription = null,
+                    filterQuality = when (romIcon!!.filtering) {
+                        RomIconFiltering.NONE -> FilterQuality.None
+                        RomIconFiltering.LINEAR -> DrawScope.DefaultFilterQuality
+                    },
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = rom.fileName.substringBeforeLast('.'),
-                            color = colors.text,
-                            fontSize = 14.sp,
-                            lineHeight = 18.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                            softWrap = true,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = rom.fileName,
-                            color = colors.text3,
-                            fontSize = 11.sp,
-                            lineHeight = 14.sp,
-                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
-                            softWrap = true,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
-                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                            ) {
-                                Text("⚡ 133 MHz", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
-                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                            ) {
-                                Text("💾 16 MB RAM", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
-                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                            ) {
-                                Text("📷 DSi Camera / Wi-Fi", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                            }
-                        }
-                    }
-
-                    Box {
-                        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(onClick = { menuOpen = false; infoOpen = true }) {
-                                Text("ℹ️ Особенности DSi-версии", color = colors.text, fontSize = 13.5.sp)
-                            }
-                        }
-                    }
-                }
-
-                if (infoOpen) {
-                    androidx.compose.material.AlertDialog(
-                        onDismissRequest = { infoOpen = false },
-                        title = {
-                            Text(
-                                text = "DSi-Enhanced: ${rom.name.ifBlank { rom.fileName.substringBeforeLast('.') }}",
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                color = colors.text,
-                                fontSize = 16.sp,
-                            )
-                        },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Картридж стандарта Nintendo DS со встроенными аппаратно-программными расширениями DSi:", color = colors.text2, fontSize = 13.sp)
-                                Text("• 🚀 ARM9i CPU на удвоенной частоте 133.79 МГц (вместо 67 МГц DS)", color = colors.text, fontSize = 12.5.sp)
-                                Text("• 💾 16 МБ системной памяти RAM (в 4 раза больше памяти для текстур и уровней)", color = colors.text, fontSize = 12.5.sp)
-                                Text("• 📷 Доступ к фронтальной и тыльной камерам DSi для интерактивного геймплея", color = colors.text, fontSize = 12.5.sp)
-                                Text("• 📶 Поддержка защищенных беспроводных сетей WPA / WPA2", color = colors.text, fontSize = 12.5.sp)
-                            }
-                        },
-                        confirmButton = {
-                            androidx.compose.material.TextButton(onClick = { infoOpen = false }) {
-                                Text("Понятно", color = colors.green)
-                            }
-                        },
-                        backgroundColor = colors.surface,
-                        contentColor = colors.text,
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
+                        contentDescription = null,
+                        tint = colors.text3,
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             }
         }
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = rom.fileName.substringBeforeLast('.'),
+                color = colors.text,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                softWrap = true,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = rom.fileName,
+                color = colors.text3,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                softWrap = true,
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
+                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                ) {
+                    Text("⚡ 133 MHz", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = FontWeight.Medium)
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
+                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                ) {
+                    Text("💾 16 MB RAM", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = FontWeight.Medium)
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(androidx.compose.ui.graphics.Color(0xFF00695C).copy(alpha = 0.2f))
+                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                ) {
+                    Text("📷 DSi Camera / Wi-Fi", color = androidx.compose.ui.graphics.Color(0xFF80CBC4), fontSize = 9.5.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+
+        Box {
+            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(onClick = { menuOpen = false; onRename() }) {
+                    Text("✏️ Переименовать", color = colors.text, fontSize = 13.5.sp)
+                }
+                DropdownMenuItem(onClick = { menuOpen = false; infoOpen = true }) {
+                    Text("ℹ️ Особенности DSi Enhanced версии", color = colors.text, fontSize = 13.5.sp)
+                }
+                DropdownMenuItem(onClick = { menuOpen = false; onDelete() }) {
+                    Text("🗑️ Удалить", color = colors.red, fontSize = 13.5.sp)
+                }
+            }
+        }
+    }
+
+    if (infoOpen) {
+        androidx.compose.material.AlertDialog(
+            onDismissRequest = { infoOpen = false },
+            title = {
+                Text(
+                    text = "DSi-Enhanced: ${rom.name.ifBlank { rom.fileName.substringBeforeLast('.') }}",
+                    fontWeight = FontWeight.Bold,
+                    color = colors.text,
+                    fontSize = 16.sp,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Картридж стандарта Nintendo DS со встроенными аппаратно-программными расширениями DSi:", color = colors.text2, fontSize = 13.sp)
+                    Text("• 🚀 ARM9i CPU на удвоенной частоте 133.79 МГц (вместо 67 МГц DS)", color = colors.text, fontSize = 12.5.sp)
+                    Text("• 💾 16 МБ системной памяти RAM (в 4 раза больше памяти для текстур и уровней)", color = colors.text, fontSize = 12.5.sp)
+                    Text("• 📷 Доступ к фронтальной и тыльной камерам DSi для интерактивного геймплея", color = colors.text, fontSize = 12.5.sp)
+                    Text("• 📶 Поддержка защищенных беспроводных сетей WPA / WPA2", color = colors.text, fontSize = 12.5.sp)
+                }
+            },
+            confirmButton = {
+                androidx.compose.material.TextButton(onClick = { infoOpen = false }) {
+                    Text("Понятно", color = colors.green)
+                }
+            },
+            backgroundColor = colors.surface,
+            contentColor = colors.text,
+        )
     }
 }
 
@@ -609,6 +738,9 @@ private fun PreviewDSiWareManagerReady() {
             onImportTitleFile = { _, _ -> },
             onExportTitleFile = { _, _ -> },
             retrieveTitleIcon = { RomIcon(bitmap, RomIconFiltering.NONE) },
+            onRenameEnhancedRom = {},
+            onDeleteEnhancedRom = {},
+            retrieveRomIcon = { RomIcon(bitmap, RomIconFiltering.NONE) },
         )
     }
 }
