@@ -33,10 +33,27 @@ import me.magnum.melonds.migrations.Migrator
 import javax.inject.Inject
 
 @HiltAndroidApp
-class MelonDSApplication : Application(), Configuration.Provider {
+class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoaderFactory {
     companion object {
         const val NOTIFICATION_CHANNEL_ID_BACKGROUND_TASKS = "channel_cheat_importing"
         private const val NOTIFICATION_ID_HARDCORE_OFFLINE_LOSS = 2002
+    }
+
+    override fun newImageLoader(): coil.ImageLoader {
+        return coil.ImageLoader.Builder(this)
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(File(cacheDir, "covers_cache"))
+                    .maxSizeBytes(256L * 1024 * 1024)
+                    .build()
+            }
+            .crossfade(true)
+            .build()
     }
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
