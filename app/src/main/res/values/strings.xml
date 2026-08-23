@@ -1227,6 +1227,8 @@
     <string name="about_credits_watermelonds_summary">SapphireRhodonite &amp; contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI &amp; touch controls</string>
     <string name="about_credits_melonds_title">melonDS</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek &amp; melonDS team — original Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG &amp; Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
     <string name="about_credits_libraries_title">Open Source Libraries</string>
     <string name="about_credits_libraries_summary">Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools</string>
     <string name="about_github_title">STORM DS Repository</string>

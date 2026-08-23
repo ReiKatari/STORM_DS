@@ -1158,6 +1158,8 @@
     <string name="about_credits_watermelonds_summary">SapphireRhodonite и контрибьюторы — порт на Android, высокоскоростной Vulkan рендер, поддержка шейдеров librashader и сенсорный интерфейс</string>
     <string name="about_credits_melonds_title">melonDS Core</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek и команда melonDS — разработка оригинального ядра эмулятора Nintendo DS и DSi</string>
+    <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG и команда Libretro — механика DSiWare Autoload, спецификации TLNC warmboot и архитектура ядра Libretro</string>
     <string name="about_credits_libraries_title">Сторонние библиотеки</string>
     <string name="about_credits_libraries_summary">Google Oboe, librashader, RetroAchievements (rcheevos), libslirp, libadrenotools</string>
     <string name="about_github_title">Репозиторий STORM DS</string>
