@@ -540,7 +540,6 @@ std::optional<std::unique_ptr<NDSArgs>> BuildArgsFromConfiguration(const Emulato
             return std::nullopt;
 
         auto sdcard = loadSDCard(configuration.dsiSdCardSettings);
-        bool fullBiosBoot = configuration.showBootScreen || configuration.dsiWareAutoloadTitleId != 0;
 
         DSiArgs _dsiArgs = DSiArgs {
             std::move(*ndsArgs),
@@ -548,7 +547,7 @@ std::optional<std::unique_ptr<NDSArgs>> BuildArgsFromConfiguration(const Emulato
             std::move(arm7ibios),
             std::move(*nand),
             std::move(sdcard),
-            fullBiosBoot,
+            false,
             true,
         };
 
