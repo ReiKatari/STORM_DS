@@ -138,16 +138,21 @@ class DSiWareManagerViewModel @Inject constructor(
 
     private fun filterActiveTitles(titles: List<DSiWareTitle>, activeRoms: List<me.magnum.melonds.domain.model.rom.Rom>? = null): List<DSiWareTitle> {
         val currentRoms = activeRoms ?: emptyList()
-        val activeUris = currentRoms.map { it.uri.toString() }.toSet()
-        val activeFileNames = currentRoms.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-        val activeNames = currentRoms.map { it.name.lowercase().trim() }.toSet()
+        val enhancedNames = currentRoms.filter { it.isDsiEnhanced }.map { it.name.lowercase().trim() }.toSet()
+        val enhancedFileNames = currentRoms.filter { it.isDsiEnhanced }.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
+        val activeUris = currentRoms.filter { !it.isDsiEnhanced }.map { it.uri.toString() }.toSet()
+        val activeFileNames = currentRoms.filter { !it.isDsiEnhanced }.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
+        val activeNames = currentRoms.filter { !it.isDsiEnhanced }.map { it.name.lowercase().trim() }.toSet()
 
         return titles.filter { title ->
+            val titleName = title.name.lowercase().trim()
+            val isEnhanced = titleName in enhancedNames || titleName in enhancedFileNames
+            if (isEnhanced) return@filter false
+
             val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
             val isAuto = dsiWareTitlesMetadataStore.isAutoImported(titleIdHex)
             val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
             val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
-            val titleName = title.name.lowercase().trim()
 
             !isAuto ||
                 (storedSourceUri != null && storedSourceUri in activeUris) ||
@@ -176,7 +181,7 @@ class DSiWareManagerViewModel @Inject constructor(
                             romsRepository.getRoms().collectLatest { activeRoms ->
                                 val dsiRoms = activeRoms.filter {
                                     (it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true) &&
-                                        !it.isInstalledDsiWareShortcut
+                                        !it.isInstalledDsiWareShortcut && !it.isDsiEnhanced
                                 }
                                 for (rom in dsiRoms) {
                                     val cleanName = rom.name.lowercase().trim()
