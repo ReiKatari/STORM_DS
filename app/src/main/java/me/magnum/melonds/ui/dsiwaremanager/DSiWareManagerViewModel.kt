@@ -136,6 +136,16 @@ class DSiWareManagerViewModel @Inject constructor(
         loadDSiWareData()
     }
 
+    private fun filterActiveTitles(titles: List<DSiWareTitle>): List<DSiWareTitle> {
+        val activeSearchDirs = settingsRepository.getRomSearchDirectories().map { it.toString() }.toSet()
+        return titles.filter { title ->
+            val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+            val isAuto = dsiWareTitlesMetadataStore.isAutoImported(titleIdHex)
+            val parentFolder = dsiWareTitlesMetadataStore.getParentFolderUri(titleIdHex)
+            !isAuto || (parentFolder != null && parentFolder in activeSearchDirs)
+        }
+    }
+
     private fun loadDSiWareData() {
         val dsiConfiguration = configurationDirectoryVerifier.checkDsiConfigurationDirectory()
         if (dsiConfiguration.status != ConfigurationDirResult.Status.VALID) {
@@ -145,7 +155,7 @@ class DSiWareManagerViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
                     val openNandResult = dsiNandManager.openNand()
                     if (openNandResult.isSuccess()) {
-                        val initialTitles = dsiNandManager.listTitles()
+                        val initialTitles = filterActiveTitles(dsiNandManager.listTitles())
                         withContext(Dispatchers.Main) {
                             _state.value = DSiWareManagerUiState.Ready(initialTitles)
                         }
@@ -160,6 +170,7 @@ class DSiWareManagerViewModel @Inject constructor(
                                 for (rom in dsiRoms) {
                                     val cleanName = rom.name.lowercase().trim()
                                     val cleanFileName = rom.fileName.substringBeforeLast('.').lowercase().trim()
+                                    val exactFileName = rom.fileName.substringBeforeLast('.')
 
                                     val res = dsiNandManager.importTitle(rom.uri)
                                     if (res == ImportDSiWareTitleResult.SUCCESS || res == ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED) {
@@ -176,15 +187,13 @@ class DSiWareManagerViewModel @Inject constructor(
                                             dsiWareTitlesMetadataStore.setAutoImported(matchingTitle.titleId, true)
                                             dsiWareTitlesMetadataStore.setParentFolderUri(matchingTitle.titleId, rom.parentTreeUri?.toString())
                                             dsiWareTitlesMetadataStore.setSourceUri(matchingTitle.titleId, rom.uri.toString())
-                                            dsiWareTitlesMetadataStore.setOriginalFileName(matchingTitle.titleId, cleanFileName)
+                                            dsiWareTitlesMetadataStore.setOriginalFileName(matchingTitle.titleId, exactFileName)
                                         }
                                     }
                                 }
-                                if (changed) {
-                                    val finalTitles = dsiNandManager.listTitles()
-                                    withContext(Dispatchers.Main) {
-                                        _state.value = DSiWareManagerUiState.Ready(finalTitles)
-                                    }
+                                val finalTitles = filterActiveTitles(dsiNandManager.listTitles())
+                                withContext(Dispatchers.Main) {
+                                    _state.value = DSiWareManagerUiState.Ready(finalTitles)
                                 }
                             }
                         }
