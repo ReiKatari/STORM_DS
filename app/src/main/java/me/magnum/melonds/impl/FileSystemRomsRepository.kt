@@ -262,6 +262,16 @@ class FileSystemRomsRepository(
     }
 
     override fun rescanRoms() {
+        synchronized(directoryStatesLock) {
+            directoryStates.clear()
+            directoryScanStatuses.clear()
+            emitDirectoryScanStatusesLocked()
+        }
+        val directoryCacheFile = File(context.filesDir, ROM_DIRECTORY_STATE_FILE)
+        if (directoryCacheFile.isFile) {
+            directoryCacheFile.delete()
+        }
+
         coroutineScope.launch {
             scanningStatusSubject.emit(RomScanningStatus.SCANNING)
             val buffer = mutableListOf<Rom>()
@@ -659,7 +669,8 @@ class FileSystemRomsRepository(
         val directoryHash = computeDirectoryHash(fileStates)
         val now = System.currentTimeMillis()
 
-        if (cachedState != null && cachedState.hash == directoryHash) {
+        val hasRomsForDirectory = roms.any { isRomInDirectory(it, directoryUri) }
+        if (cachedState != null && cachedState.hash == directoryHash && hasRomsForDirectory) {
             val refreshedState = cachedState.copy(lastScanned = now)
             updateDirectoryState(refreshedState, RomDirectoryScanStatus.ScanResult.UNCHANGED)
             return
@@ -959,13 +970,25 @@ class FileSystemRomsRepository(
     }
 
     private fun isRomInDirectory(rom: Rom, directoryUri: Uri): Boolean {
-        val parentUri = rom.parentTreeUri ?: return false
-        val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull() ?: return false
-        val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull()
-            ?: runCatching { DocumentsContract.getTreeDocumentId(parentUri) }.getOrNull()
-            ?: parentUri.lastPathSegment
-            ?: return false
-        return parentDocId.startsWith(directoryDocId)
+        val parentUri = rom.parentTreeUri
+        val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull()
+        if (directoryDocId != null) {
+            val parentDocId = parentUri?.let {
+                runCatching { DocumentsContract.getDocumentId(it) }.getOrNull()
+                    ?: runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull()
+                    ?: it.lastPathSegment
+            }
+            if (parentDocId != null && parentDocId.startsWith(directoryDocId)) {
+                return true
+            }
+            val romDocId = runCatching { DocumentsContract.getDocumentId(rom.uri) }.getOrNull()
+                ?: rom.uri.lastPathSegment
+            if (romDocId != null && romDocId.startsWith(directoryDocId)) {
+                return true
+            }
+        }
+        val dirSegment = directoryUri.lastPathSegment ?: directoryUri.toString()
+        return rom.uri.toString().contains(dirSegment) || rom.parentTreeUri?.toString() == directoryUri.toString()
     }
 
     private fun loadDirectoryStates() {
