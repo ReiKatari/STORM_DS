@@ -39,14 +39,14 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68).toLong()
 
 			val unitCode = header[0x12].toInt() and 0xFF
-			val isDsiWareTitle = if ((unitCode and 0x02) != 0) {
+			val isDsiWareTitle = if ((unitCode and 0x02) != 0 || unitCode == 0x03) {
 				val categoryBuffer = ByteBuffer.allocate(4)
 				channel.position(0x234)
 				channel.read(categoryBuffer)
 				val category = byteArrayToInt(categoryBuffer.array()).toUInt()
-				category == DSIWARE_CATEGORY || category == DSIWARE_SYSTEM_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == '4'))
+				category == DSIWARE_CATEGORY || category == DSIWARE_SYSTEM_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == '4' || gameCode[0] == 'V' || gameCode[0] == 'Z'))
 			} else {
-				false
+				gameCode.isNotEmpty() && (gameCode[0] == '4' || gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == 'V' || gameCode[0] == 'Z')
 			}
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
@@ -105,12 +105,12 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68)
 
 			val unitCode = header[0x12].toInt() and 0xFF
-			val isDsiWareTitle = if (unitCode == 0x03) {
+			val isDsiWareTitle = if ((unitCode and 0x02) != 0 || unitCode == 0x03) {
 				val categoryData = sectionReader.readSection(0x234, 4)
 				val category = categoryData?.let { byteArrayToInt(it).toUInt() } ?: 0u
-				category == DSIWARE_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K'))
+				category == DSIWARE_CATEGORY || category == DSIWARE_SYSTEM_CATEGORY || (gameCode.isNotEmpty() && (gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == '4' || gameCode[0] == 'V' || gameCode[0] == 'Z'))
 			} else {
-				false
+				gameCode.isNotEmpty() && (gameCode[0] == '4' || gameCode[0] == 'H' || gameCode[0] == 'K' || gameCode[0] == 'V' || gameCode[0] == 'Z')
 			}
 
 			var arm9Bootcode: ByteArray? = null

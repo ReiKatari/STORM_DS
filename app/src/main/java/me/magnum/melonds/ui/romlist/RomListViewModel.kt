@@ -617,7 +617,8 @@ class RomListViewModel @Inject constructor(
                             storedSourceUri == rom.uri.toString() ||
                                 (storedOrigFile != null && (storedOrigFile.equals(cleanFileName, true) || storedOrigFile.equals(cleanName, true))) ||
                                 title.name.equals(cleanName, true) ||
-                                title.name.equals(cleanFileName, true)
+                                title.name.equals(cleanFileName, true) ||
+                                titleIdHex == cleanFileName
                         }
 
                         if (!isInstalled) {
@@ -632,31 +633,33 @@ class RomListViewModel @Inject constructor(
                         }
                     }
 
-                    // 2. Auto-delete installed titles from NAND if their source file / folder is no longer present
-                    val activeUris = roms.map { it.rom.uri.toString() }.toSet()
-                    val activeFileNames = roms.map { it.rom.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-                    val activeNames = roms.map { it.rom.name.lowercase().trim() }.toSet()
+                    // 2. Auto-delete installed titles from NAND only if active ROMs are fully loaded and source was deleted
+                    if (roms.isNotEmpty()) {
+                        val activeUris = roms.map { it.rom.uri.toString() }.toSet()
+                        val activeFileNames = roms.map { it.rom.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
+                        val activeNames = roms.map { it.rom.name.lowercase().trim() }.toSet()
 
-                    for (title in installedTitles) {
-                        val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
-                        val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
-                        val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
-                        val titleName = title.name.lowercase().trim()
+                        for (title in installedTitles) {
+                            val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+                            val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
+                            val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
+                            val titleName = title.name.lowercase().trim()
 
-                        val wasImportedFromUserFolder = storedSourceUri != null || storedOrigFile != null
-                        if (wasImportedFromUserFolder) {
-                            val stillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
-                                (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
-                                (titleName in activeFileNames || titleName in activeNames)
+                            val wasImportedFromUserFolder = storedSourceUri != null || storedOrigFile != null
+                            if (wasImportedFromUserFolder) {
+                                val stillExists = (storedSourceUri != null && storedSourceUri in activeUris) ||
+                                    (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
+                                    (titleName in activeFileNames || titleName in activeNames)
 
-                            if (!stillExists) {
-                                android.util.Log.i("RomListViewModel", "Auto-deleting removed DSiWare title 0x${titleIdHex} (${title.name}) from NAND")
-                                try {
-                                    dsiNandManager.deleteTitle(title.titleId)
-                                    dsiWareTitlesMetadataStore.removeTitleMetadata(title.titleId)
-                                    anyChanged = true
-                                } catch (e: Throwable) {
-                                    android.util.Log.w("RomListViewModel", "Failed to auto-delete DSiWare title 0x${titleIdHex}", e)
+                                if (!stillExists) {
+                                    android.util.Log.i("RomListViewModel", "Auto-deleting removed DSiWare title 0x${titleIdHex} (${title.name}) from NAND")
+                                    try {
+                                        dsiNandManager.deleteTitle(title.titleId)
+                                        dsiWareTitlesMetadataStore.removeTitleMetadata(title.titleId)
+                                        anyChanged = true
+                                    } catch (e: Throwable) {
+                                        android.util.Log.w("RomListViewModel", "Failed to auto-delete DSiWare title 0x${titleIdHex}", e)
+                                    }
                                 }
                             }
                         }
