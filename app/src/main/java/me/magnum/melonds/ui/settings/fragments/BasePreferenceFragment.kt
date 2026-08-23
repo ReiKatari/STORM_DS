@@ -77,11 +77,79 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         return super.onPreferenceTreeClick(preference)
     }
 
+    private val accentListener: (String) -> Unit = {
+        view?.post { applyAccentColorToViews() }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        view.post { applyAccentColorToViews() }
+    }
+
     override fun onResume() {
         super.onResume()
+        me.magnum.melonds.ui.theme.AppThemeManager.addAccentChangeListener(accentListener)
+        view?.post { applyAccentColorToViews() }
         val key = lastActivatedKey ?: return
         val recyclerView = listView ?: return
         recyclerView.post { restoreFocusToPreference(recyclerView, key) }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        me.magnum.melonds.ui.theme.AppThemeManager.removeAccentChangeListener(accentListener)
+    }
+
+    protected fun applyAccentColorToViews() {
+        val color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
+        val states = arrayOf(
+            intArrayOf(-android.R.attr.state_checked),
+            intArrayOf(android.R.attr.state_checked),
+        )
+        val thumbColors = intArrayOf(
+            0xFF888888.toInt(),
+            color,
+        )
+        val trackColors = intArrayOf(
+            0x44888888.toInt(),
+            (color and 0x00FFFFFF) or 0x66000000.toInt(),
+        )
+        val thumbColorStateList = android.content.res.ColorStateList(states, thumbColors)
+        val trackColorStateList = android.content.res.ColorStateList(states, trackColors)
+
+        val rv = listView ?: return
+        rv.post {
+            for (i in 0 until rv.childCount) {
+                val child = rv.getChildAt(i)
+                tintChildControls(child, thumbColorStateList, trackColorStateList, color)
+            }
+        }
+    }
+
+    private fun tintChildControls(
+        view: View,
+        thumb: android.content.res.ColorStateList,
+        track: android.content.res.ColorStateList,
+        accent: Int,
+    ) {
+        if (view is androidx.appcompat.widget.SwitchCompat) {
+            view.thumbTintList = thumb
+            view.trackTintList = track
+        } else if (view is android.widget.Switch) {
+            view.thumbTintList = thumb
+            view.trackTintList = track
+        } else if (view is android.widget.SeekBar) {
+            view.thumbTintList = android.content.res.ColorStateList.valueOf(accent)
+            view.progressTintList = android.content.res.ColorStateList.valueOf(accent)
+        } else if (view is android.widget.CheckBox) {
+            view.buttonTintList = thumb
+        } else if (view is android.widget.RadioButton) {
+            view.buttonTintList = thumb
+        } else if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                tintChildControls(view.getChildAt(i), thumb, track, accent)
+            }
+        }
     }
 
     private fun restoreFocusToPreference(recyclerView: RecyclerView, key: String, attempt: Int = 0) {

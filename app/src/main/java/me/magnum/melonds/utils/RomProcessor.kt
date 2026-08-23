@@ -42,11 +42,11 @@ object RomProcessor {
 			val gc0 = gameCode.getOrNull(0)
 			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
 			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
-			val arm9iOffset = if (header.size >= 0x1C0) byteArrayToInt(header, 0x1B8) else 0
-			val isDsiWareTitle = (unitCode and 0x02) != 0 || unitCode == 0x03 ||
+			val isDsiWareTitle = unitCode == 0x03 ||
+				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == '4')) ||
 				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
-				categoryLow == 0x00030004 || arm9iOffset > 0 ||
-				(gc0 != null && (gc0 in '0'..'9' || gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == 'B' || gc0 == 'N' || gc0 == 'P' || gc0 == 'T' || gc0 == 'C' || gc0 == 'W' || gc0 == 'Q' || gc0 == 'A'))
+				categoryLow == 0x00030004 ||
+				(gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z')
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
 			channel.position(arm9Offset)
@@ -68,7 +68,7 @@ object RomProcessor {
 			val developerName = bannerText?.second.orEmpty()
 
 			val retroAchievementsMd5Digest = MessageDigest.getInstance("MD5").run {
-				update(header)
+				update(header, 0, 0x160)
 				update(arm9Data)
 				update(arm7Data)
 				update(bannerData)
@@ -107,11 +107,11 @@ object RomProcessor {
 			val gc0 = gameCode.getOrNull(0)
 			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
 			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
-			val arm9iOffset = if (header.size >= 0x1C0) byteArrayToInt(header, 0x1B8) else 0
-			val isDsiWareTitle = (unitCode and 0x02) != 0 || unitCode == 0x03 ||
+			val isDsiWareTitle = unitCode == 0x03 ||
+				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == '4')) ||
 				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
-				categoryLow == 0x00030004 || arm9iOffset > 0 ||
-				(gc0 != null && (gc0 in '0'..'9' || gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z' || gc0 == 'B' || gc0 == 'N' || gc0 == 'P' || gc0 == 'T' || gc0 == 'C' || gc0 == 'W' || gc0 == 'Q' || gc0 == 'A'))
+				categoryLow == 0x00030004 ||
+				(gc0 == 'K' || gc0 == 'H' || gc0 == 'V' || gc0 == 'Z')
 
 			var arm9Bootcode: ByteArray? = null
 			var arm7Bootcode: ByteArray? = null
@@ -120,30 +120,27 @@ object RomProcessor {
 				RequiredRomSection(arm9Offset, arm9Size, RequiredRomSection.Type.ARM9),
 				RequiredRomSection(arm7Offset, arm7Size, RequiredRomSection.Type.ARM7),
 				RequiredRomSection(bannerOffset, 0xA00, RequiredRomSection.Type.BANNER),
-			).sortedBy { it.offset }
+			)
 
-			for (section in requiredSections) {
-				val data = sectionReader.readSection(section.offset, section.size) ?: return null
+			val sortedSections = requiredSections.sortedBy { it.offset }
+			for (section in sortedSections) {
+				val sectionData = sectionReader.readSection(section.offset, section.size)
 				when (section.type) {
-					RequiredRomSection.Type.ARM9 -> arm9Bootcode = data
-					RequiredRomSection.Type.ARM7 -> arm7Bootcode = data
-					RequiredRomSection.Type.BANNER -> banner = data
+					RequiredRomSection.Type.ARM9 -> arm9Bootcode = sectionData
+					RequiredRomSection.Type.ARM7 -> arm7Bootcode = sectionData
+					RequiredRomSection.Type.BANNER -> banner = sectionData
 				}
 			}
 
-			val arm9Data = arm9Bootcode ?: return null
-			val arm7Data = arm7Bootcode ?: return null
-			val bannerData = banner ?: return null
-
-			val bannerText = readBannerTitleAndDeveloper(bannerData)
+			val bannerText = banner?.let { readBannerTitleAndDeveloper(it) }
 			val romName = bannerText?.first.orEmpty()
 			val developerName = bannerText?.second.orEmpty()
 
 			val retroAchievementsMd5Digest = MessageDigest.getInstance("MD5").run {
-				update(header)
-				update(arm9Data)
-				update(arm7Data)
-				update(bannerData)
+				update(header, 0, 0x160)
+				update(arm9Bootcode ?: return null)
+				update(arm7Bootcode ?: return null)
+				update(banner ?: return null)
 				digest()
 			}
 
