@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="20dp" app:cardBackgroundColor="#13141b" app:cardCornerRadius="16dp" app:cardElevation="10dp">
+    <LinearLayout android:orientation="vertical" android:padding="20dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffff" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Доступно обновление STORM DS" android:fontFamily="sans-serif-medium"/>
+        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:layout_marginBottom="12dp">
+            <TextView android:textSize="12sp" android:textStyle="bold" android:textColor="#94a3b8" android:id="@+id/tv_current_version" android:background="#26ffffff" android:paddingTop="3dp" android:paddingBottom="3dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="v1.0.0" android:fontFamily="monospace" android:paddingStart="8dp" android:paddingEnd="8dp"/>
+            <TextView android:textSize="14sp" android:textStyle="bold" android:textColor="#00e5ff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="  ➜  "/>
+            <TextView android:textSize="12sp" android:textStyle="bold" android:textColor="#00e5ff" android:id="@+id/tv_new_version" android:background="#3300e5ff" android:paddingTop="3dp" android:paddingBottom="3dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="v1.1.0" android:fontFamily="monospace" android:paddingStart="8dp" android:paddingEnd="8dp"/>
+        </LinearLayout>
+        <TextView android:textSize="13sp" android:textStyle="bold" android:textColor="#cbd5e1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" android:text="Что нового:"/>
+        <ScrollView android:background="#1a1c24" android:padding="10dp" android:layout_width="match_parent" android:layout_height="140dp" android:fadeScrollbars="false">
+            <TextView android:textSize="12.5sp" android:textColor="#e2e8f0" android:id="@+id/tv_changelog" android:layout_width="match_parent" android:layout_height="wrap_content" android:lineSpacingExtra="3dp"/>
+        </ScrollView>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+            <Button android:textSize="13sp" android:textColor="#94a3b8" android:id="@+id/btn_update_later" android:layout_width="0dp" android:layout_height="44dp" android:text="@string/cancel" android:layout_weight="1" android:textAllCaps="false" style="?android:attr/borderlessButtonStyle"/>
+            <Space android:layout_width="8dp" android:layout_height="wrap_content"/>
+            <Button android:textSize="14sp" android:textStyle="bold" android:textColor="#000000" android:id="@+id/btn_update_now" android:layout_width="0dp" android:layout_height="44dp" android:text="@string/update" android:layout_weight="1.2" android:textAllCaps="false" android:backgroundTint="#00e5ff"/>
+        </LinearLayout>
+        <Button android:textSize="11.5sp" android:textColor="#64748b" android:id="@+id/btn_skip_version" android:layout_width="match_parent" android:layout_height="36dp" android:layout_marginTop="4dp" android:text="@string/skip_update" android:textAllCaps="false" style="?android:attr/borderlessButtonStyle"/>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

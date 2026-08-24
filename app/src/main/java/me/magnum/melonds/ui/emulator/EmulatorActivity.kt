@@ -626,10 +626,12 @@ class EmulatorActivity : AppCompatActivity() {
                 handler.post {
                     updateRendererScreenAreas()
                     presentation?.updateRendererScreenAreas()
+                    scheduleStartupPresentationRefreshes()
                 }
             }
         }
         binding.viewLayoutControls.addOnLayoutChangeListener(layoutChangeListener)
+        binding.surfaceMain.addOnLayoutChangeListener(layoutChangeListener)
 
         updateOrientation(resources.configuration)
         disableScreenTimeOut()
@@ -2166,25 +2168,38 @@ class EmulatorActivity : AppCompatActivity() {
         val hybridView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
         val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
 
-        var topRect = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 } ?: lastKnownGoodTopRect
-        var bottomRect = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 } ?: lastKnownGoodBottomRect
+        val surfaceW = binding.surfaceMain.width.coerceAtLeast(binding.viewLayoutControls.width)
+        val surfaceH = binding.surfaceMain.height.coerceAtLeast(binding.viewLayoutControls.height)
+        val isLandscape = surfaceW > surfaceH
 
-        val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
-        if (consoleSkinEnabled && topRect != null && bottomRect != null) {
-            val isVertical = kotlin.math.abs(topRect.x - bottomRect.x) < 30
-            if (isVertical && topRect.bottom <= bottomRect.y + 16) {
-                val gapNeeded = (18f * resources.displayMetrics.density).toInt()
-                val currentGap = (bottomRect.y - topRect.bottom).coerceAtLeast(0)
-                if (currentGap < gapNeeded) {
-                    val shiftTotal = gapNeeded - currentGap
-                    val shiftTop = shiftTotal / 2
-                    val shiftBottom = shiftTotal - shiftTop
-                    val newTopY = (topRect.y - shiftTop).coerceAtLeast(0)
-                    val newBottomY = bottomRect.y + shiftBottom
-                    topRect = topRect.copy(y = newTopY)
-                    bottomRect = bottomRect.copy(y = newBottomY)
-                }
+        var rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+        var rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+
+        // Discard stale rects if they overflow current surface dimensions on rotation
+        if (rawTop != null && surfaceW > 0 && surfaceH > 0) {
+            if (rawTop.x + rawTop.width > surfaceW + 10 || rawTop.y + rawTop.height > surfaceH + 10) {
+                rawTop = null
+                rawBottom = null
             }
+        }
+
+        var topRect = rawTop ?: lastKnownGoodTopRect
+        var bottomRect = rawBottom ?: lastKnownGoodBottomRect
+
+        // Fallback default calculation if views are not yet laid out
+        if ((topRect == null || bottomRect == null) && surfaceW > 0 && surfaceH > 0) {
+            val defLayout = if (isLandscape) {
+                val sWidth = surfaceW / 2
+                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                val vMargin = (surfaceH - sHeight) / 2
+                Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
+            } else {
+                val sWidth = surfaceW
+                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
+            }
+            topRect = topRect ?: defLayout.first
+            bottomRect = bottomRect ?: defLayout.second
         }
 
         if (topRect != null && topRect.width > 0 && topRect.height > 0) {

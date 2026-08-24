@@ -1,0 +1,73 @@
+package com.google.android.gms.internal.mlkit_vision_text_bundled_common;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* loaded from: classes.dex */
+public final class zbsp extends com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf implements com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbvn {
+    private static final com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp zbb = null;
+    private java.lang.String zbd;
+    private com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbtc zbe;
+
+    static {
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp r0 = new com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp
+            r0.<init>()
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp.zbb = r0
+            java.lang.Class<com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp> r1 = com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp.class
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf.zbD(r1, r0)
+            return
+    }
+
+    private zbsp() {
+            r1 = this;
+            r1.<init>()
+            java.lang.String r0 = ""
+            r1.zbd = r0
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbtc r0 = com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbtc.zbb
+            r1.zbe = r0
+            return
+    }
+
+    public static /* synthetic */ com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp zbc() {
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp r0 = com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp.zbb
+            return r0
+    }
+
+    @Override // com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf
+    public final java.lang.Object zbb(int r1, java.lang.Object r2, java.lang.Object r3) {
+            r0 = this;
+            int r1 = r1 + (-1)
+            if (r1 == 0) goto L33
+            r0 = 2
+            if (r1 == r0) goto L21
+            r0 = 3
+            if (r1 == r0) goto L1b
+            r0 = 4
+            r2 = 0
+            if (r1 == r0) goto L15
+            r0 = 5
+            if (r1 == r0) goto L12
+            return r2
+        L12:
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp r0 = com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp.zbb
+            return r0
+        L15:
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbso r0 = new com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbso
+            r0.<init>(r2)
+            return r0
+        L1b:
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp r0 = new com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp
+            r0.<init>()
+            return r0
+        L21:
+            java.lang.String r0 = "zbd"
+            java.lang.String r1 = "zbe"
+            java.lang.Object[] r0 = new java.lang.Object[]{r0, r1}
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp r1 = com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbsp.zbb
+            com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbvw r2 = new com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbvw
+            java.lang.String r3 = "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001Ȉ\u0002\n"
+            r2.<init>(r1, r3, r0)
+            return r2
+        L33:
+            r0 = 1
+            java.lang.Byte r0 = java.lang.Byte.valueOf(r0)
+            return r0
+    }
+}

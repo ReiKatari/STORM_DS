@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:background="@android:color/transparent" android:paddingTop="4dp" android:paddingBottom="4dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:defaultFocusHighlightEnabled="false">
+    <LinearLayout android:orientation="vertical" android:background="@drawable/bg_watermelon_setting_row" android:paddingTop="11dp" android:paddingBottom="11dp" android:duplicateParentState="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="15dp" android:paddingEnd="12dp">
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <TextView android:textSize="13.5sp" android:textColor="@color/watermelon_pref_title" android:ellipsize="end" android:id="@android:id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="2" android:fontFamily="@font/manrope" android:textFontWeight="600"/>
+            <TextView android:textSize="11.5sp" android:textColor="@color/watermelon_pref_summary" android:id="@android:id/summary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:fontFamily="@font/manrope"/>
+        </LinearLayout>
+        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp">
+            <SeekBar android:id="@+id/seekbar" android:background="@null" android:focusable="false" android:clickable="true" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" style="?android:attr/seekBarStyle"/>
+            <TextView android:textSize="11sp" android:textColor="@color/watermelon_pref_summary" android:ellipsize="end" android:id="@+id/seekbar_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:fontFamily="monospace" android:layout_marginStart="10dp"/>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

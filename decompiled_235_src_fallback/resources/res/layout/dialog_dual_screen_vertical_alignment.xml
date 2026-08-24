@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <LinearLayout android:orientation="vertical" android:paddingTop="16dp" android:paddingBottom="16dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="24dp" android:paddingEnd="24dp">
+        <TextView android:textAppearance="?android:attr/textAppearanceMedium" android:id="@+id/textVerticalAlignmentDescription" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:textStyle="bold" android:layout_width="0dp" android:layout_height="wrap_content" android:text="@string/dual_screen_vertical_alignment_internal_label" android:layout_weight="1"/>
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchInternalAlignmentOverride" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            </LinearLayout>
+            <RadioGroup android:orientation="vertical" android:id="@+id/radioGroupInternalAlignment" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp">
+                <RadioButton android:id="@+id/radioInternalAlignmentTop" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/dual_screen_vertical_alignment_option_top"/>
+                <RadioButton android:id="@+id/radioInternalAlignmentCenter" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/dual_screen_vertical_alignment_option_center"/>
+                <RadioButton android:id="@+id/radioInternalAlignmentBottom" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/dual_screen_vertical_alignment_option_bottom"/>
+            </RadioGroup>
+        </LinearLayout>
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:textStyle="bold" android:layout_width="0dp" android:layout_height="wrap_content" android:text="@string/dual_screen_vertical_alignment_external_label" android:layout_weight="1"/>
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchExternalAlignmentOverride" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            </LinearLayout>
+            <RadioGroup android:orientation="vertical" android:id="@+id/radioGroupExternalAlignment" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp">
+                <RadioButton android:id="@+id/radioExternalAlignmentTop" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/dual_screen_vertical_alignment_option_top"/>
+                <RadioButton android:id="@+id/radioExternalAlignmentCenter" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/dual_screen_vertical_alignment_option_center"/>
+                <RadioButton android:id="@+id/radioExternalAlignmentBottom" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/dual_screen_vertical_alignment_option_bottom"/>
+            </RadioGroup>
+        </LinearLayout>
+        <TextView android:textAppearance="?android:attr/textAppearanceSmall" android:textColor="?android:attr/textColorSecondary" android:id="@+id/textVerticalAlignmentDefaults" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp"/>
+    </LinearLayout>
+</ScrollView>

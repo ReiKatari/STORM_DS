@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.magnum.melonds.ui.settings.preferences.RetroAchievementsProfilePreference android:key="ra_profile" app:iconSpaceReserved="false"/>
+    <Preference android:title="@string/login_with_retro_achievements" android:key="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/enable_retroachievements" android:key="ra_enabled" android:summary="@string/enable_retroachievements_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/hardcore_mode" android:key="ra_hardcore_enabled" android:summary="@string/hardcore_mode_summary" android:defaultValue="false" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/enable_rich_presence" android:key="ra_rich_presence" android:summary="@string/rich_presence_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/show_unofficial_achievements" android:key="ra_unofficial_enabled" android:summary="@string/show_unofficial_achievements_summary" android:defaultValue="false" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/enable_encore_mode" android:key="ra_encore_enabled" android:summary="@string/enable_encore_mode_summary" android:defaultValue="false" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/ra_offline_backend_options" android:title="@string/ra_offline_backend_title" android:key="ra_offline_backend" android:summary="@string/ra_offline_backend_summary" android:defaultValue="built_in" android:entryValues="@array/ra_offline_backend_values" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/offline_ra_softcore_enabled" android:key="ra_offline_softcore_enabled" android:summary="@string/offline_ra_softcore_enabled_summary" android:defaultValue="true" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/show_active_challenge_indicators" android:key="ra_active_challenge_indicators" android:summary="@string/show_active_challenge_indicators_summary" android:defaultValue="true" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/show_progress_indicators" android:key="ra_progress_indicators" android:summary="@string/show_progress_indicators_summary" android:defaultValue="true" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/show_leaderboard_indicators" android:key="ra_leaderboard_indicators" android:summary="@string/show_leaderboard_indicators_summary" android:defaultValue="true" app:dependency="ra_login" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

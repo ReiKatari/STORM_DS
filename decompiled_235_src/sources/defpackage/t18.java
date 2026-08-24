@@ -1,0 +1,48 @@
+package defpackage;
+
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbtz;
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf;
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbvn;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: t18  reason: default package */
+/* loaded from: classes.dex */
+public final class t18 extends zbuf implements zbvn {
+    private static final t18 zbb;
+    private int zbd;
+    private e18 zbe;
+    private n08 zbf;
+    private i08 zbg;
+    private e28 zbh;
+    private boolean zbi;
+    private o08 zbj;
+    private f18 zbk;
+    private a18 zbl;
+
+    /* JADX WARN: Type inference failed for: r0v0, types: [com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf, t18] */
+    static {
+        ?? zbufVar = new zbuf();
+        zbb = zbufVar;
+        zbuf.zbD(t18.class, zbufVar);
+    }
+
+    @Override // com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf
+    public final Object zbb(int i, Object obj, Object obj2) {
+        int i2 = i - 1;
+        if (i2 != 0) {
+            if (i2 != 2) {
+                if (i2 != 3) {
+                    if (i2 != 4) {
+                        if (i2 != 5) {
+                            return null;
+                        }
+                        return zbb;
+                    }
+                    return new zbtz(zbb);
+                }
+                return new zbuf();
+            }
+            return zbuf.zbA(zbb, "\u0001\b\u0000\u0001\u0001\t\b\u0000\u0000\u0000\u0001ဉ\u0001\u0003ဉ\u0005\u0004ဉ\u0000\u0005ဉ\u0002\u0006ဉ\u0003\u0007ဇ\u0004\bဉ\u0006\tဉ\u0007", new Object[]{"zbd", "zbf", "zbj", "zbe", "zbg", "zbh", "zbi", "zbk", "zbl"});
+        }
+        return (byte) 1;
+    }
+}

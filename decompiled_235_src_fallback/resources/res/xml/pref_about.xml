@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory android:title="@string/about_app_title">
+        <Preference android:title="STORM DS" android:key="about_app_name" android:summary="@string/about_app_description" app:iconSpaceReserved="false"/>
+        <Preference android:title="@string/about_version_title" android:key="about_version" android:summary="%s" app:iconSpaceReserved="false"/>
+        <Preference android:title="@string/about_github_title" android:key="about_github" android:summary="@string/about_github_summary" app:iconSpaceReserved="false"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="@string/about_credits_title">
+        <Preference android:title="@string/about_credits_jpeacekeeper_title" android:key="credits_jpeacekeeper" android:summary="@string/about_credits_jpeacekeeper_summary" app:iconSpaceReserved="false"/>
+        <Preference android:title="@string/about_credits_watermelonds_title" android:key="credits_watermelonds" android:summary="@string/about_credits_watermelonds_summary" app:iconSpaceReserved="false"/>
+        <Preference android:title="@string/about_credits_melonds_title" android:key="credits_melonds" android:summary="@string/about_credits_melonds_summary" app:iconSpaceReserved="false"/>
+        <Preference android:title="@string/about_credits_libraries_title" android:key="credits_libraries" android:summary="@string/about_credits_libraries_summary" app:iconSpaceReserved="false"/>
+    </PreferenceCategory>
+</PreferenceScreen>

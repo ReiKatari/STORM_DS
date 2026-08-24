@@ -1,0 +1,38 @@
+package me.magnum.melonds.ui.settings.fragments;
+
+import com.stormds.emulator.R;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+@mc1(c = "me.magnum.melonds.ui.settings.fragments.SystemPreferencesFragment$restoreInternalLayoutLauncher$1$1$2$1", f = "SystemPreferencesFragment.kt", l = {}, m = "invokeSuspend", v = 2)
+/* loaded from: classes.dex */
+final class SystemPreferencesFragment$restoreInternalLayoutLauncher$1$1$2$1 extends hw6 implements eo2 {
+    public final /* synthetic */ SystemPreferencesFragment X;
+
+    /* JADX WARN: 'super' call moved to the top of the method (can break code semantics) */
+    public SystemPreferencesFragment$restoreInternalLayoutLauncher$1$1$2$1(SystemPreferencesFragment systemPreferencesFragment, r41 r41Var) {
+        super(2, r41Var);
+        this.X = systemPreferencesFragment;
+    }
+
+    @Override // defpackage.eo2
+    public final Object o(Object obj, Object obj2) {
+        jg7 jg7Var = jg7.a;
+        ((SystemPreferencesFragment$restoreInternalLayoutLauncher$1$1$2$1) q((r41) obj2, (w61) obj)).s(jg7Var);
+        return jg7Var;
+    }
+
+    @Override // defpackage.d20
+    public final r41 q(r41 r41Var, Object obj) {
+        return new SystemPreferencesFragment$restoreInternalLayoutLauncher$1$1$2$1(this.X, r41Var);
+    }
+
+    @Override // defpackage.d20
+    public final Object s(Object obj) {
+        x61 x61Var = x61.COROUTINE_SUSPENDED;
+        oi2.Y(obj);
+        zb zbVar = new zb(this.X.requireContext());
+        zbVar.w(R.string.internal_layout_restore_success);
+        zbVar.y(17039370, null);
+        zbVar.B();
+        return jg7.a;
+    }
+}

@@ -1,0 +1,70 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: fr5  reason: default package */
+/* loaded from: classes.dex */
+public final class fr5 extends hw6 implements eo2 {
+    public final /* synthetic */ int X;
+    public final /* synthetic */ qn2 Y;
+    public final /* synthetic */ pq5 Z;
+    public final /* synthetic */ qa4 d0;
+
+    /* JADX WARN: 'super' call moved to the top of the method (can break code semantics) */
+    public /* synthetic */ fr5(qn2 qn2Var, pq5 pq5Var, qa4 qa4Var, r41 r41Var, int i) {
+        super(2, r41Var);
+        this.X = i;
+        this.Y = qn2Var;
+        this.Z = pq5Var;
+        this.d0 = qa4Var;
+    }
+
+    @Override // defpackage.eo2
+    public final Object o(Object obj, Object obj2) {
+        int i = this.X;
+        jg7 jg7Var = jg7.a;
+        w61 w61Var = (w61) obj;
+        r41 r41Var = (r41) obj2;
+        switch (i) {
+            case 0:
+                ((fr5) q(r41Var, w61Var)).s(jg7Var);
+                return jg7Var;
+            default:
+                ((fr5) q(r41Var, w61Var)).s(jg7Var);
+                return jg7Var;
+        }
+    }
+
+    @Override // defpackage.d20
+    public final r41 q(r41 r41Var, Object obj) {
+        switch (this.X) {
+            case 0:
+                return new fr5(this.Y, this.Z, this.d0, r41Var, 0);
+            default:
+                return new fr5(this.Y, this.Z, this.d0, r41Var, 1);
+        }
+    }
+
+    @Override // defpackage.d20
+    public final Object s(Object obj) {
+        int i = this.X;
+        jg7 jg7Var = jg7.a;
+        pq5 pq5Var = this.Z;
+        qn2 qn2Var = this.Y;
+        qa4 qa4Var = this.d0;
+        switch (i) {
+            case 0:
+                x61 x61Var = x61.COROUTINE_SUSPENDED;
+                oi2.Y(obj);
+                if (((Boolean) qa4Var.getValue()).booleanValue()) {
+                    qn2Var.g(pq5Var);
+                }
+                return jg7Var;
+            default:
+                x61 x61Var2 = x61.COROUTINE_SUSPENDED;
+                oi2.Y(obj);
+                if (((Boolean) qa4Var.getValue()).booleanValue()) {
+                    qn2Var.g(pq5Var);
+                }
+                return jg7Var;
+        }
+    }
+}

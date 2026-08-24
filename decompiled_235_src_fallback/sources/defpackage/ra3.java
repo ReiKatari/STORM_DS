@@ -1,0 +1,117 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: ra3  reason: default package */
+/* loaded from: classes.dex */
+public final class ra3 extends defpackage.hw6 implements defpackage.eo2 {
+    public final /* synthetic */ int X;
+    public int Y;
+    public final /* synthetic */ defpackage.wa3 Z;
+
+    public /* synthetic */ ra3(defpackage.wa3 r1, defpackage.r41 r2, int r3) {
+            r0 = this;
+            r0.X = r3
+            r0.Z = r1
+            r1 = 2
+            r0.<init>(r1, r2)
+            return
+    }
+
+    @Override // defpackage.eo2
+    public final java.lang.Object o(java.lang.Object r3, java.lang.Object r4) {
+            r2 = this;
+            int r0 = r2.X
+            jg7 r1 = defpackage.jg7.a
+            ne2 r3 = (defpackage.ne2) r3
+            r41 r4 = (defpackage.r41) r4
+            switch(r0) {
+                case 0: goto L16;
+                default: goto Lb;
+            }
+        Lb:
+            r41 r2 = r2.q(r4, r3)
+            ra3 r2 = (defpackage.ra3) r2
+            java.lang.Object r2 = r2.s(r1)
+            return r2
+        L16:
+            r41 r2 = r2.q(r4, r3)
+            ra3 r2 = (defpackage.ra3) r2
+            java.lang.Object r2 = r2.s(r1)
+            return r2
+    }
+
+    @Override // defpackage.d20
+    public final defpackage.r41 q(defpackage.r41 r2, java.lang.Object r3) {
+            r1 = this;
+            int r3 = r1.X
+            wa3 r1 = r1.Z
+            switch(r3) {
+                case 0: goto Le;
+                default: goto L7;
+            }
+        L7:
+            ra3 r3 = new ra3
+            r0 = 1
+            r3.<init>(r1, r2, r0)
+            return r3
+        Le:
+            ra3 r3 = new ra3
+            r0 = 0
+            r3.<init>(r1, r2, r0)
+            return r3
+    }
+
+    @Override // defpackage.d20
+    public final java.lang.Object s(java.lang.Object r8) {
+            r7 = this;
+            int r0 = r7.X
+            jg7 r1 = defpackage.jg7.a
+            wa3 r2 = r7.Z
+            r3 = 0
+            java.lang.String r4 = "call to 'resume' before 'invoke' with coroutine"
+            r5 = 1
+            switch(r0) {
+                case 0: goto L2d;
+                default: goto Ld;
+            }
+        Ld:
+            x61 r0 = defpackage.x61.COROUTINE_SUSPENDED
+            int r6 = r7.Y
+            if (r6 == 0) goto L1e
+            if (r6 != r5) goto L19
+            defpackage.oi2.Y(r8)
+            goto L2c
+        L19:
+            defpackage.i.m(r4)
+            r1 = r3
+            goto L2c
+        L1e:
+            defpackage.oi2.Y(r8)
+            r7.Y = r5
+            java.lang.reflect.Type r8 = defpackage.wa3.h
+            java.lang.Object r7 = r2.c(r7)
+            if (r7 != r0) goto L2c
+            r1 = r0
+        L2c:
+            return r1
+        L2d:
+            x61 r0 = defpackage.x61.COROUTINE_SUSPENDED
+            int r6 = r7.Y
+            if (r6 == 0) goto L3e
+            if (r6 != r5) goto L39
+            defpackage.oi2.Y(r8)
+            goto L4c
+        L39:
+            defpackage.i.m(r4)
+            r1 = r3
+            goto L4c
+        L3e:
+            defpackage.oi2.Y(r8)
+            r7.Y = r5
+            java.lang.reflect.Type r8 = defpackage.wa3.h
+            java.lang.Object r7 = r2.c(r7)
+            if (r7 != r0) goto L4c
+            r1 = r0
+        L4c:
+            return r1
+    }
+}

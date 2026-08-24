@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:gravity="center_vertical" android:id="@+id/layoutFolderNavigator" android:paddingTop="12dp" android:paddingBottom="12dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp">
+            <ImageButton android:id="@+id/buttonNavigateUp" android:background="?attr/selectableItemBackgroundBorderless" android:padding="8dp" android:visibility="gone" android:layout_width="40dp" android:layout_height="40dp" android:src="@drawable/ic_arrow_up" android:tint="?android:attr/textColorPrimary" android:contentDescription="@string/rom_browser_navigate_up"/>
+            <TextView android:ellipsize="end" android:id="@+id/textCurrentFolder" android:layout_width="0dp" android:layout_height="wrap_content" android:text="@string/rom_browser_virtual_root" android:singleLine="true" android:layout_weight="1" android:layout_marginStart="8dp" style="?android:attr/textAppearanceMedium"/>
+        </LinearLayout>
+        <TextView android:textAppearance="?android:attr/textAppearanceSmall" android:textColor="?android:attr/textColorSecondary" android:id="@+id/textDirectoryCacheStatus" android:paddingBottom="8dp" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp"/>
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout android:id="@+id/swipeRefreshRoms" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/listRoms" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent"/>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </LinearLayout>
+    <TextView android:layout_gravity="center" android:id="@+id/textRomListEmpty" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/no_roms_found" style="?android:attr/textAppearanceMedium"/>
+</FrameLayout>

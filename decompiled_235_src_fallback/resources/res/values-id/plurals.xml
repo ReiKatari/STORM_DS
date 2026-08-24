@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="retroachievements_pending_achievement_unlocks">
+        <item quantity="one">%d tantangan terbuka</item>
+        <item quantity="other">%d tantangan terbuka</item>
+    </plurals>
+    <plurals name="retroachievements_pending_leaderboard_entries">
+        <item quantity="one">%d peserta mencoba masuk peringkat</item>
+        <item quantity="other">%d peserta mencoba masuk peringkat</item>
+    </plurals>
+</resources>

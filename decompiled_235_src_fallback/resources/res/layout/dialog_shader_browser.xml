@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:paddingTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <TextView android:textSize="12sp" android:textColor="@color/textColorSecondary" android:ellipsize="start" android:id="@+id/textShaderBrowserPath" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" android:singleLine="true" android:fontFamily="@font/manrope" android:layout_marginStart="26dp" android:layout_marginEnd="26dp"/>
+    <FrameLayout android:id="@+id/containerShaderBrowserList" android:layout_width="match_parent" android:layout_height="340dp">
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/listShaderBrowser" android:paddingBottom="8dp" android:scrollbars="vertical" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent"/>
+        <TextView android:textSize="14sp" android:textColor="@color/textColorSecondary" android:gravity="center" android:layout_gravity="center" android:id="@+id/textShaderBrowserEmpty" android:padding="24dp" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="@font/manrope"/>
+    </FrameLayout>
+</LinearLayout>

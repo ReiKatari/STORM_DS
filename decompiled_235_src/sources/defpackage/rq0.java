@@ -1,0 +1,162 @@
+package defpackage;
+
+import java.util.LinkedHashMap;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: rq0  reason: default package */
+/* loaded from: classes.dex */
+public final class rq0 {
+    public static final cs1 b;
+    public static final zh2 c;
+    public static final LinkedHashMap d;
+    public static final rq0 e;
+    public static final rq0 f;
+    public static final rq0 g;
+    public static final rq0 h;
+    public static final rq0 i;
+    public static final rq0 j;
+    public static final rq0 k;
+    public static final rq0 l;
+    public static final rq0 m;
+    public static final rq0 n;
+    public static final rq0 o;
+    public static final rq0 p;
+    public static final rq0 q;
+    public static final rq0 r;
+    public static final rq0 s;
+    public static final rq0 t;
+    public final String a;
+
+    static {
+        cs1 cs1Var = new cs1(27);
+        b = cs1Var;
+        c = new zh2(9);
+        d = new LinkedHashMap();
+        cs1.l(cs1Var, "SSL_RSA_WITH_NULL_MD5");
+        cs1.l(cs1Var, "SSL_RSA_WITH_NULL_SHA");
+        cs1.l(cs1Var, "SSL_RSA_EXPORT_WITH_RC4_40_MD5");
+        cs1.l(cs1Var, "SSL_RSA_WITH_RC4_128_MD5");
+        cs1.l(cs1Var, "SSL_RSA_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "SSL_RSA_EXPORT_WITH_DES40_CBC_SHA");
+        cs1.l(cs1Var, "SSL_RSA_WITH_DES_CBC_SHA");
+        e = cs1.l(cs1Var, "SSL_RSA_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DHE_DSS_WITH_DES_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DHE_DSS_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DHE_RSA_WITH_DES_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DH_anon_EXPORT_WITH_RC4_40_MD5");
+        cs1.l(cs1Var, "SSL_DH_anon_WITH_RC4_128_MD5");
+        cs1.l(cs1Var, "SSL_DH_anon_EXPORT_WITH_DES40_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DH_anon_WITH_DES_CBC_SHA");
+        cs1.l(cs1Var, "SSL_DH_anon_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_KRB5_WITH_DES_CBC_SHA");
+        cs1.l(cs1Var, "TLS_KRB5_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_KRB5_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_KRB5_WITH_DES_CBC_MD5");
+        cs1.l(cs1Var, "TLS_KRB5_WITH_3DES_EDE_CBC_MD5");
+        cs1.l(cs1Var, "TLS_KRB5_WITH_RC4_128_MD5");
+        cs1.l(cs1Var, "TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA");
+        cs1.l(cs1Var, "TLS_KRB5_EXPORT_WITH_RC4_40_SHA");
+        cs1.l(cs1Var, "TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5");
+        cs1.l(cs1Var, "TLS_KRB5_EXPORT_WITH_RC4_40_MD5");
+        f = cs1.l(cs1Var, "TLS_RSA_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DH_anon_WITH_AES_128_CBC_SHA");
+        g = cs1.l(cs1Var, "TLS_RSA_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DH_anon_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_RSA_WITH_NULL_SHA256");
+        cs1.l(cs1Var, "TLS_RSA_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_RSA_WITH_AES_256_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_DH_anon_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_DH_anon_WITH_AES_256_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_PSK_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_PSK_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_PSK_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_PSK_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_RSA_WITH_SEED_CBC_SHA");
+        h = cs1.l(cs1Var, "TLS_RSA_WITH_AES_128_GCM_SHA256");
+        i = cs1.l(cs1Var, "TLS_RSA_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256");
+        cs1.l(cs1Var, "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_DH_anon_WITH_AES_128_GCM_SHA256");
+        cs1.l(cs1Var, "TLS_DH_anon_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV");
+        cs1.l(cs1Var, "TLS_FALLBACK_SCSV");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_NULL_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_NULL_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_NULL_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_NULL_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA");
+        j = cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA");
+        k = cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_anon_WITH_NULL_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_anon_WITH_RC4_128_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_anon_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDH_anon_WITH_AES_256_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384");
+        cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384");
+        l = cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256");
+        m = cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256");
+        cs1.l(cs1Var, "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384");
+        n = cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        o = cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256");
+        cs1.l(cs1Var, "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384");
+        cs1.l(cs1Var, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA");
+        cs1.l(cs1Var, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA");
+        p = cs1.l(cs1Var, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
+        q = cs1.l(cs1Var, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
+        cs1.l(cs1Var, "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
+        cs1.l(cs1Var, "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256");
+        r = cs1.l(cs1Var, "TLS_AES_128_GCM_SHA256");
+        s = cs1.l(cs1Var, "TLS_AES_256_GCM_SHA384");
+        t = cs1.l(cs1Var, "TLS_CHACHA20_POLY1305_SHA256");
+        cs1.l(cs1Var, "TLS_AES_128_CCM_SHA256");
+        cs1.l(cs1Var, "TLS_AES_128_CCM_8_SHA256");
+    }
+
+    public rq0(String str) {
+        this.a = str;
+    }
+
+    public final String toString() {
+        return this.a;
+    }
+}

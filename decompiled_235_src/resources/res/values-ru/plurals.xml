@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="mtrl_badge_content_description">
+        <item quantity="one">%d новое уведомление</item>
+        <item quantity="few">%d новых уведомления</item>
+        <item quantity="many">%d новых уведомлений</item>
+        <item quantity="other">%d нового уведомления</item>
+    </plurals>
+    <plurals name="offline_ra_ledger_expires_days">
+        <item quantity="one">%1$d день</item>
+        <item quantity="few">%1$d дня</item>
+        <item quantity="many">%1$d дней</item>
+        <item quantity="other">%1$d дней</item>
+    </plurals>
+    <plurals name="retroachievements_pending_achievement_unlocks">
+        <item quantity="one">%d достижение</item>
+        <item quantity="few">%d достижения</item>
+        <item quantity="many">%d достижений</item>
+        <item quantity="other">%d достижений</item>
+    </plurals>
+    <plurals name="retroachievements_pending_leaderboard_entries">
+        <item quantity="one">%d запись таблицы лидеров</item>
+        <item quantity="few">%d записи таблицы лидеров</item>
+        <item quantity="many">%d записей таблицы лидеров</item>
+        <item quantity="other">%d записей таблицы лидеров</item>
+    </plurals>
+    <plurals name="video_retroarch_shader_browser_passes">
+        <item quantity="one">%1$d проход</item>
+        <item quantity="few">%1$d прохода</item>
+        <item quantity="many">%1$d проходов</item>
+    </plurals>
+</resources>

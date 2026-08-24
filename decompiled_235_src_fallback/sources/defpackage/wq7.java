@@ -1,0 +1,7 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: wq7  reason: default package */
+/* loaded from: classes.dex */
+public interface wq7 {
+    defpackage.p97 a(defpackage.fp r1);
+}
