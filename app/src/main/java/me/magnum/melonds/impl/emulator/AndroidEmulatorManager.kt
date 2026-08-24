@@ -302,7 +302,7 @@ class AndroidEmulatorManager(
     }
 
     private fun isRealDsiWareTitle(rom: Rom): Boolean {
-        if (rom.isInstalledDsiWareShortcut || rom.isDsiWareTitle || rom.installedDsiWareTitleId != null || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME || rom.fileName.endsWith(".dsi", ignoreCase = true)) {
+        if (rom.isInstalledDsiWareShortcut || rom.installedDsiWareTitleId != null || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME || rom.fileName.endsWith(".dsi", ignoreCase = true)) {
             return true
         }
         return runCatching {
@@ -318,7 +318,7 @@ class AndroidEmulatorManager(
                     val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
                     val gc0 = gameCode.getOrNull(0)
                     val unitCode = header[0x012].toInt() and 0xFF
-                    (unitCode and 0x02) != 0 || unitCode == 0x03 || (gc0 != null && (gc0 == '4' || gc0 == 'H' || gc0 == 'K' || gc0 == 'V' || gc0 == 'Z'))
+                    unitCode == 0x03 || (gc0 != null && (gc0 == 'K' || gc0 == 'H' || gc0 == '4'))
                 } else false
             }
         }.getOrNull() ?: false
@@ -683,7 +683,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.2"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.3"
 
         val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
             "_${settingsRepository.getDsiWareBootMode().name}"
