@@ -656,7 +656,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.8.1"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.8.2"
 
         val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
             "_${settingsRepository.getDsiWareBootMode().name}"
