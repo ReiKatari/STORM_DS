@@ -5,12 +5,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.delay
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.ui.emulator.composables.Console3DBootScreen
 
@@ -28,16 +24,13 @@ fun DsBootOverlay(
 ) {
     val intro = remember { Animatable(0f) }
     val exit = remember { Animatable(0f) }
-    var introDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        intro.animateTo(1f, tween(durationMillis = 600, easing = FastOutSlowInEasing))
-        introDone = true
+        intro.animateTo(1f, tween(durationMillis = 200, easing = FastOutSlowInEasing))
     }
-    LaunchedEffect(romReady, introDone) {
-        if (romReady && introDone) {
-            delay(120)
-            exit.animateTo(1f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
+    LaunchedEffect(romReady) {
+        if (romReady) {
+            exit.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
             onFinished()
         }
     }

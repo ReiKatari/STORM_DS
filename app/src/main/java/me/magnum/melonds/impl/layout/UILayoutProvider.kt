@@ -195,7 +195,27 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
         if (bestVariant != null) {
             val sourceVariant = bestVariant.key
             val sourceLayout = bestVariant.value
+            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant)
+
             if (sourceVariant.uiSize == variant.uiSize && sourceVariant.uiInsets == variant.uiInsets) {
+                // Ensure screen components are valid and not corrupted
+                var hasCorruptedScreen = false
+                val sanitizedComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
+                    if (comp.isScreen()) {
+                        val defScreen = defaultLayout.mainScreenLayout.components?.firstOrNull { it.component == comp.component }
+                        if (defScreen != null && (comp.rect.width < defScreen.rect.width * 0.75f || comp.rect.height < defScreen.rect.height * 0.75f)) {
+                            hasCorruptedScreen = true
+                            comp.copy(rect = defScreen.rect)
+                        } else {
+                            comp
+                        }
+                    } else {
+                        comp
+                    }
+                }
+                if (hasCorruptedScreen && sanitizedComponents != null) {
+                    return sourceLayout.copy(mainScreenLayout = sourceLayout.mainScreenLayout.copy(components = sanitizedComponents))
+                }
                 return sourceLayout
             }
             if (sourceVariant.uiSize == variant.uiSize) {
@@ -215,7 +235,6 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             // Proportional scaling so user customizations are never lost on window resizing or backgrounding
             val scaleX = if (sourceVariant.uiSize.x > 0) variant.uiSize.x.toFloat() / sourceVariant.uiSize.x else 1f
             val scaleY = if (sourceVariant.uiSize.y > 0) variant.uiSize.y.toFloat() / sourceVariant.uiSize.y else 1f
-            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant)
             val scaledComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
                 if (comp.isScreen()) {
                     val defaultScreenComp = defaultLayout.mainScreenLayout.components?.firstOrNull { it.component == comp.component }

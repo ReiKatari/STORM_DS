@@ -70,8 +70,6 @@ jobs:
           fi
           chmod +x ./gradlew
           ./gradlew :app:assembleGitHubNightlyRelease
-          git tag -m "Nightly Release" -f -a nightly-release || true
-          git push -f origin refs/tags/nightly-release || true
 
       - name: Report Vulkan SPIR-V Header Changes
         if: always()
