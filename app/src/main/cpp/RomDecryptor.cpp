@@ -64,7 +64,7 @@ static constexpr uint32_t OFFSET_MODCRYPT2_OFF    = 0x228;
 static constexpr uint32_t OFFSET_MODCRYPT2_SIZE   = 0x22C;
 static constexpr uint32_t OFFSET_DSI_ARM9_HASH    = 0x300; // IV for area 1
 static constexpr uint32_t OFFSET_DSI_ARM7_HASH    = 0x314; // IV for area 2
-static constexpr uint32_t OFFSET_DSI_ARM9I_HASH   = 0x328; // KeyY source
+static constexpr uint32_t OFFSET_DSI_ARM9I_HASH   = 0x350; // KeyY source (ARM9i HMAC-SHA1)
 static constexpr uint32_t HEADER_SIZE             = 0x1000;
 
 static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
@@ -118,26 +118,27 @@ EncryptionStatus CheckEncryptionFd(int fd)
         return EncryptionStatus::ERROR_FILE_TOO_SMALL;
     }
 
-    // Check if DSi ROM (UnitCode bit 1)
+    // Check if DSi ROM (UnitCode bit 1 or 0x03)
     uint8_t unitCode = header[OFFSET_UNIT_CODE];
-    if (!(unitCode & 0x02))
+    if (!(unitCode & 0x02) && unitCode != 0x03)
     {
         fclose(f);
         return EncryptionStatus::ERROR_NOT_DSI_ROM;
     }
 
-    // Check Modcrypt flag (bit 1 of DSiCryptoFlags)
+    // Check Modcrypt flag or modcrypt size
     uint8_t cryptoFlags = header[OFFSET_DSI_CRYPTO_FLAGS];
-    if (!(cryptoFlags & (1 << 1)))
-    {
-        fclose(f);
-        return EncryptionStatus::NOT_ENCRYPTED;
-    }
-
     uint32_t mod1Off  = *(uint32_t*)&header[OFFSET_MODCRYPT1_OFF];
     uint32_t mod1Size = *(uint32_t*)&header[OFFSET_MODCRYPT1_SIZE];
     uint32_t mod2Off  = *(uint32_t*)&header[OFFSET_MODCRYPT2_OFF];
     uint32_t mod2Size = *(uint32_t*)&header[OFFSET_MODCRYPT2_SIZE];
+
+    bool hasCrypto = (cryptoFlags & (1 << 1)) || (cryptoFlags & (1 << 0)) || (mod1Size > 0 && mod1Size != 0xFFFFFFFF);
+    if (!hasCrypto)
+    {
+        fclose(f);
+        return EncryptionStatus::NOT_ENCRYPTED;
+    }
 
     bool isEncrypted = false;
     if (mod1Off > 0 && mod1Size > 0)
@@ -229,9 +230,9 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         return DecryptResult::ERROR_READING_FILE;
     }
 
-    // Check if DSi ROM
+    // Check if DSi ROM (UnitCode bit 1 or 0x03)
     uint8_t unitCode = rom[OFFSET_UNIT_CODE];
-    if (!(unitCode & 0x02))
+    if (!(unitCode & 0x02) && unitCode != 0x03)
     {
         fclose(f);
         return DecryptResult::ERROR_NOT_DSI_ROM;
@@ -245,7 +246,8 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 
     // Check if encrypted
     uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
-    if (!(cryptoFlags & (1 << 1)))
+    bool hasCrypto = (cryptoFlags & (1 << 1)) || (cryptoFlags & (1 << 0)) || (mod1Size > 0 && mod1Size != 0xFFFFFFFF);
+    if (!hasCrypto)
     {
         fclose(f);
         return DecryptResult::ALREADY_DECRYPTED;
