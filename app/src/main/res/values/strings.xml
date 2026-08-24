@@ -1449,6 +1449,7 @@
     <string name="video_widescreen_3d_summary">Anamorphic widescreen aspect ratio rendering for 3D games</string>
     <string name="video_60fps_patch_title">60 FPS Unlock Hack</string>
     <string name="video_60fps_patch_summary">Force 60 FPS in supported 30 FPS 3D titles</string>
+    <string name="action_open_single_rom">Open ROM File…</string>
     <string name="video_dual_screen_cast_title">Dual-Screen Cast Mode (TV / HDMI)</string>
     <string name="video_dual_screen_cast_summary">Display touchscreen on device and 4K top screen on TV</string>
     <string name="soft_patch_applied">Applied patch: %s</string>

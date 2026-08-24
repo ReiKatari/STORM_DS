@@ -107,6 +107,7 @@ fun RomBrowserScreen(
     onBootFirmwareDs: () -> Unit,
     onBootFirmwareDsi: () -> Unit,
     onOpenDsiWareManager: () -> Unit,
+    onOpenSingleRom: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onRomVisible: (Rom) -> Unit = {},
     onFocusedRomChanged: (Rom?) -> Unit = {},
@@ -206,6 +207,7 @@ fun RomBrowserScreen(
                     onBootFirmwareDs = onBootFirmwareDs,
                     onBootFirmwareDsi = onBootFirmwareDsi,
                     onOpenDsiWareManager = onOpenDsiWareManager,
+                    onOpenSingleRom = onOpenSingleRom,
                     onRefresh = onRefresh,
                     onOpenSettings = onOpenSettings,
                 )

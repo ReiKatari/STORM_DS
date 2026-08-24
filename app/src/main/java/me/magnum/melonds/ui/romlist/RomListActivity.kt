@@ -62,11 +62,37 @@ class RomListActivity : AppCompatActivity() {
 
     private var downloadProgressDialog: AlertDialog? = null
     private var romBrowserDpadDownGate: (() -> Boolean)? = null
-
     private val externalInfoController by lazy { me.magnum.melonds.ui.common.ExternalInfoDisplayController(this) }
     private val highlightedRom = kotlinx.coroutines.flow.MutableStateFlow<Rom?>(null)
 
     private lateinit var binding: ActivityRomListBinding
+
+    val openSingleRomLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Throwable) {}
+                val rom = viewModel.getRomAtUri(uri)
+                if (rom != null) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        emulatorLauncherValidatorDelegate.validateRom(rom)
+                    }
+                } else {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(this@RomListActivity, getString(R.string.rom_launch_failed), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    fun openSingleRom() {
+        openSingleRomLauncher.launch(arrayOf("*/*"))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
