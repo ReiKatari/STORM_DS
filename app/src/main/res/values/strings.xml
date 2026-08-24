@@ -695,6 +695,15 @@
     <string name="input_lock_rotation">Lock Screen Orientation</string>
     <string name="toast_rotation_locked">Screen orientation locked</string>
     <string name="toast_rotation_unlocked">Screen orientation unlocked (Auto-rotate)</string>
+    <string name="screen_layout">Screen Layout</string>
+    <string name="layout_even_landscape">Even Landscape (Dual Screen)</string>
+    <string name="layout_uneven_landscape">Uneven Landscape (Main + Sub)</string>
+    <string name="layout_even_portrait_locked">Even Portrait (Locked)</string>
+    <string name="layout_proportional_landscape">Proportional Landscape (4:3)</string>
+    <string name="layout_fullscreen_landscape">Fullscreen Landscape</string>
+    <string name="layout_auto_rotate">Auto-Rotate (Sensor)</string>
+    <string name="layout_open_editor">Layout Editor</string>
+    <string name="toast_layout_applied">Layout: %1$s</string>
     <string name="input_group_console">Console Controls</string>
     <string name="input_group_hotkeys">Hotkeys &amp; Shortcuts</string>
 

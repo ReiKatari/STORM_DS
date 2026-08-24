@@ -28,6 +28,7 @@ sealed class EmulatorUiEvent {
     data object ShowPendingSubmissionsDialog : EmulatorUiEvent()
     data object CloseEmulator : EmulatorUiEvent()
     data object ShowDualScreenPresets : EmulatorUiEvent()
+    data object ShowScreenLayoutDialog : EmulatorUiEvent()
     data object ShowRendererDebugMenu : EmulatorUiEvent()
     data object ShowRenderer2DDebugControls : EmulatorUiEvent()
     data class ShowRomSettings(
