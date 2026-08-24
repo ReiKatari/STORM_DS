@@ -567,6 +567,7 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
     if (!localAddr)
     {
         Log(LogLevel::Warn, "trying to compile non executable code? %x\n", blockAddr);
+        return;
     }
 
     auto& map = cpu->Num == 0 ? JitBlocks9 : JitBlocks7;
@@ -642,7 +643,8 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
         instrValues[numInstrs++] = instrs[i].Instr;
 
         u32 translatedAddr = LocaliseCodeAddress(cpu->Num, instrs[i].Addr);
-        assert(translatedAddr >> 27);
+        if (!translatedAddr)
+            break;
         u32 translatedAddrRounded = translatedAddr & ~0x1FF;
         if (i == 0 || translatedAddrRounded != addressRanges[numAddressRanges - 1])
         {
@@ -943,7 +945,12 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
         assert(addressMasks[j] == block->AddressMasks()[j]);
         assert(addressMasks[j] != 0);
 
-        AddressRange* region = CodeMemRegions[addressRanges[j] >> 27];
+        u32 reg = addressRanges[j] >> 27;
+        if (reg >= ARMJIT_Memory::memregions_Count)
+            continue;
+        AddressRange* region = CodeMemRegions[reg];
+        if (!region)
+            continue;
 
         if (!PageContainsCode(&region[(addressRanges[j] & 0x7FFF000 & ~(Memory.PageSize - 1)) / 512], Memory.PageSize))
             Memory.SetCodeProtection(addressRanges[j] >> 27, addressRanges[j] & 0x7FFFFFF, true);
@@ -958,16 +965,25 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
     else
         JitBlocks7[blockAddr] = block;
 
-    u64* entry = &FastBlockLookupRegions[(localAddr >> 27)][(localAddr & 0x7FFFFFF) / 2];
-    *entry = ((u64)blockAddr | cpu->Num) << 32;
-    *entry |= JITCompiler.SubEntryOffset(block->EntryPoint);
+    u32 localRegion = localAddr >> 27;
+    if (localRegion < ARMJIT_Memory::memregions_Count && FastBlockLookupRegions[localRegion])
+    {
+        u64* entry = &FastBlockLookupRegions[localRegion][(localAddr & 0x7FFFFFF) / 2];
+        *entry = ((u64)blockAddr | cpu->Num) << 32;
+        *entry |= JITCompiler.SubEntryOffset(block->EntryPoint);
+    }
 }
 
 void ARMJIT::InvalidateByAddr(u32 localAddr) noexcept
 {
     JIT_DEBUGPRINT("invalidating by addr %x\n", localAddr);
 
-    AddressRange* region = CodeMemRegions[localAddr >> 27];
+    u32 reg = localAddr >> 27;
+    if (reg >= ARMJIT_Memory::memregions_Count)
+        return;
+    AddressRange* region = CodeMemRegions[reg];
+    if (!region)
+        return;
     AddressRange* range = &region[(localAddr & 0x7FFFFFF) / 512];
     u32 mask = 1 << ((localAddr & 0x1FF) / 16);
 
