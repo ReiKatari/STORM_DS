@@ -76,6 +76,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
         runCatching { ButtonThemeManager.init(this) }
         runCatching { AppThemeManager.init(this) }
         runCatching { RomDisplayNameManager.init(this) }
+        runCatching { me.magnum.melonds.impl.StormDeviceSystemInfoReporter.generateAndSaveReport(this) }
         runCatching { createNotificationChannels() }
         runCatching { applyTheme() }
         runCatching { performMigrations() }

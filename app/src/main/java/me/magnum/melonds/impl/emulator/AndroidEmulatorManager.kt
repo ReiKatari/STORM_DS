@@ -21,6 +21,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
+import me.magnum.melonds.impl.StormDeviceSystemInfoReporter
 import me.magnum.melonds.common.PermissionHandler
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
@@ -682,7 +683,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.0"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.1"
 
         val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
             "_${settingsRepository.getDsiWareBootMode().name}"
@@ -742,6 +743,7 @@ class AndroidEmulatorManager(
         // 1. Direct file write in Downloads/STORM DS LOGS (always overwrite)
         var written = false
         try {
+            StormDeviceSystemInfoReporter.generateAndSaveReport(context)
             val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             val logsDir = File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
             val logFile = File(logsDir, logFileName)
@@ -1069,7 +1071,7 @@ class AndroidEmulatorManager(
         val mustUseCustomBios = isDsi || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
         val consoleType = if (isDsi) {
             ConsoleType.DSi
-        } else if (!baseConfiguration.useCustomBios && rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
+        } else if (rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
             ConsoleType.DS
         } else {
             getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)

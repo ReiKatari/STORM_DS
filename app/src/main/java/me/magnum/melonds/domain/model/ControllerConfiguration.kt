@@ -29,6 +29,7 @@ class ControllerConfiguration(
             Input.QUICK_LOAD,
             Input.REWIND,
             Input.TRANSLATE,
+            Input.LOCK_ROTATION,
         )
     }
 

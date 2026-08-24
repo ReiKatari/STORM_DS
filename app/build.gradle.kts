@@ -331,33 +331,36 @@ fun runBuildCommand(command: List<String>, workingDir: File? = null) {
 }
 
 fun resolveAndroidNdkHome(): File {
-    val explicitNdkHome = listOf("ANDROID_NDK_HOME", "ANDROID_NDK_ROOT")
+    val explicitNdkHome = listOf("ANDROID_NDK_HOME", "ANDROID_NDK_ROOT", "ANDROID_NDK_LATEST_HOME", "NDK_HOME")
         .mapNotNull { System.getenv(it)?.takeIf(String::isNotBlank) }
         .firstOrNull()
     if (explicitNdkHome != null) {
         val ndkHome = file(explicitNdkHome)
-        check(ndkHome.isDirectory) { "Android NDK not found at ${ndkHome.absolutePath}" }
-        return ndkHome
+        if (ndkHome.isDirectory) return ndkHome
     }
 
     val localProperties = gradleLocalProperties(rootDir, providers)
     (localProperties["ndk.dir"] as? String)?.takeIf(String::isNotBlank)?.let {
         val ndkHome = file(it)
-        check(ndkHome.isDirectory) { "Android NDK not found at ${ndkHome.absolutePath}" }
-        return ndkHome
+        if (ndkHome.isDirectory) return ndkHome
     }
 
-    val androidHome = System.getenv("ANDROID_HOME")
-        ?: System.getenv("ANDROID_SDK_ROOT")
-        ?: localProperties["sdk.dir"] as? String
-    if (!androidHome.isNullOrBlank()) {
-        val ndkHome = file(androidHome).resolve("ndk")
-            .listFiles()
-            ?.filter(File::isDirectory)
-            ?.sortedBy(File::getName)
-            ?.lastOrNull()
-        if (ndkHome != null) {
-            return ndkHome
+    val sdkDirs = listOfNotNull(
+        System.getenv("ANDROID_HOME"),
+        System.getenv("ANDROID_SDK_ROOT"),
+        localProperties["sdk.dir"] as? String,
+        "/usr/local/lib/android/sdk",
+        "/opt/android-sdk",
+    ).map(::File)
+
+    for (sdkDir in sdkDirs) {
+        val ndkBase = sdkDir.resolve("ndk")
+        if (ndkBase.isDirectory) {
+            val candidate = ndkBase.listFiles()
+                ?.filter(File::isDirectory)
+                ?.sortedBy(File::getName)
+                ?.lastOrNull()
+            if (candidate != null) return candidate
         }
     }
 
