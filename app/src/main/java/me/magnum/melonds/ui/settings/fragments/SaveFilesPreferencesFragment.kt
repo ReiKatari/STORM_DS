@@ -9,6 +9,7 @@ import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.impl.SettingsBackupManager
+import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
@@ -44,7 +45,7 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
         findPreference<androidx.preference.ListPreference>("save_state_location")?.let { pref ->
             helper.bindPreferenceSummaryToValue(pref)
             customDirPref?.isVisible = (pref.value == "custom_dir")
-            pref.setOnPreferenceChangeListener { _, newValue ->
+            pref.addOnPreferenceChangeListener { _, newValue ->
                 customDirPref?.isVisible = (newValue == "custom_dir")
                 true
             }

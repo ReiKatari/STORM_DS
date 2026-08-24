@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -44,6 +45,7 @@ import me.magnum.melonds.domain.model.ConsoleType
 fun Console3DBootScreen(
     consoleType: ConsoleType,
     statusText: String = "Launching System Firmware…",
+    contentAlpha: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
     val isDsi = consoleType == ConsoleType.DSi
@@ -80,6 +82,7 @@ fun Console3DBootScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .alpha(contentAlpha)
             .background(
                 Brush.radialGradient(
                     colors = listOf(
