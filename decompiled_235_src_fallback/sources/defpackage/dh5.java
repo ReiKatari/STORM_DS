@@ -1,0 +1,20 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: dh5  reason: default package */
+/* loaded from: classes.dex */
+public final class dh5 implements java.io.Serializable {
+    public java.lang.Object A;
+
+    public dh5() {
+            r0 = this;
+            r0.<init>()
+            return
+    }
+
+    public final java.lang.String toString() {
+            r0 = this;
+            java.lang.Object r0 = r0.A
+            java.lang.String r0 = java.lang.String.valueOf(r0)
+            return r0
+    }
+}

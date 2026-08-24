@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/layoutRomItem" android:background="?attr/selectableItemBackground" android:paddingTop="8dp" android:paddingBottom="8dp" android:focusable="true" android:nextFocusRight="@+id/buttonRomConfig" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="8dp">
+    <RelativeLayout android:id="@+id/layout_rom_base_content" android:layout_width="0dp" android:layout_height="wrap_content" app:layout_constraintEnd_toStartOf="@+id/buttonRomConfig" app:layout_constraintStart_toStartOf="0" app:layout_constraintTop_toTopOf="0" app:layout_goneMarginEnd="8dp">
+        <include android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_toStartOf="@+id/buttonRomConfig" layout="@layout/item_rom_base"/>
+    </RelativeLayout>
+    <ImageView android:id="@+id/buttonRomConfig" android:padding="8dp" android:nextFocusLeft="@+id/layoutRomItem" android:layout_width="48dp" android:layout_height="48dp" android:contentDescription="@string/rom_settings" app:layout_constraintEnd_toEndOf="0" app:layout_constraintStart_toEndOf="@+id/layout_rom_base_content" app:layout_constraintTop_toTopOf="0" app:srcCompat="@drawable/ic_settings" app:tint="@color/romConfigButtonDefault" style="@style/Button.Ripple"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

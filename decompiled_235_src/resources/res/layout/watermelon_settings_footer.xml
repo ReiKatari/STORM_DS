@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:background="@color/colorBackground" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <View android:background="@color/divider" android:layout_width="match_parent" android:layout_height="1dp"/>
+    <LinearLayout android:gravity="center" android:orientation="horizontal" android:paddingTop="9dp" android:paddingBottom="9dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_gamepad_hint"/>
+        <TextView android:textSize="10sp" android:textColor="@color/textColorSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/pause_hint_navigate" android:fontFamily="monospace" android:layout_marginStart="6dp"/>
+        <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="@color/textColorSecondary" android:gravity="center" android:background="@drawable/bg_hint_button_ring" android:layout_width="18dp" android:layout_height="18dp" android:text="A" android:layout_marginStart="20dp"/>
+        <TextView android:textSize="10sp" android:textColor="@color/textColorSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/pause_hint_accept" android:fontFamily="monospace" android:layout_marginStart="6dp"/>
+        <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="@color/textColorSecondary" android:gravity="center" android:background="@drawable/bg_hint_button_ring" android:layout_width="18dp" android:layout_height="18dp" android:text="B" android:layout_marginStart="20dp"/>
+        <TextView android:textSize="10sp" android:textColor="@color/textColorSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/pause_hint_back" android:fontFamily="monospace" android:layout_marginStart="6dp"/>
+    </LinearLayout>
+</LinearLayout>

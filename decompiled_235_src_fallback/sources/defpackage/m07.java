@@ -1,0 +1,11 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: m07  reason: default package */
+/* loaded from: classes.dex */
+public interface m07 {
+    defpackage.l07 R();
+
+    long i(defpackage.jk3 r1);
+
+    defpackage.of5 l(defpackage.jk3 r1);
+}

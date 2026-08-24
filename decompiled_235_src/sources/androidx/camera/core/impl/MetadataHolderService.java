@@ -1,0 +1,16 @@
+package androidx.camera.core.impl;
+
+import android.app.Service;
+import android.content.Intent;
+import android.os.IBinder;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* loaded from: classes.dex */
+public class MetadataHolderService extends Service {
+    private MetadataHolderService() {
+    }
+
+    @Override // android.app.Service
+    public final IBinder onBind(Intent intent) {
+        throw new UnsupportedOperationException();
+    }
+}

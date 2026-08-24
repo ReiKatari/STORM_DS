@@ -1,0 +1,13 @@
+package defpackage;
+
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbtz;
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbvn;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: f28  reason: default package */
+/* loaded from: classes.dex */
+public final class f28 extends zbtz implements zbvn {
+    public final void a() {
+        zbn();
+        g28.b((g28) this.zba);
+    }
+}

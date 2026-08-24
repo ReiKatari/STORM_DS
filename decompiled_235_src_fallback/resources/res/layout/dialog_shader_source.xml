@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:orientation="vertical" android:paddingTop="12dp" android:paddingBottom="16dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="20dp" android:paddingEnd="20dp">
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/btn_source_scan" android:background="@drawable/bg_watermelon_setting_row" android:padding="14dp" android:focusable="true" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <ImageView android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/ic_search" android:layout_marginEnd="14dp" app:tint="@color/colorPrimary"/>
+        <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+            <TextView android:textSize="15sp" android:textStyle="bold" android:textColor="@color/textColorPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/video_retroarch_shader_source_scan_retroarch" android:fontFamily="@font/space_grotesk"/>
+            <TextView android:textSize="12.5sp" android:textColor="@color/textColorSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="@string/video_retroarch_shader_source_scan_retroarch_description" android:fontFamily="@font/manrope"/>
+        </LinearLayout>
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="8dp"/>
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/btn_source_internal" android:background="@drawable/bg_watermelon_setting_row" android:padding="14dp" android:focusable="true" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <ImageView android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/ic_download" android:layout_marginEnd="14dp" app:tint="@color/colorPrimary"/>
+        <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+            <TextView android:textSize="15sp" android:textStyle="bold" android:textColor="@color/textColorPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/video_retroarch_shader_source_internal" android:fontFamily="@font/space_grotesk"/>
+            <TextView android:textSize="12.5sp" android:textColor="@color/textColorSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="@string/video_retroarch_shader_source_internal_description" android:fontFamily="@font/manrope"/>
+        </LinearLayout>
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="8dp"/>
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/btn_source_folder" android:background="@drawable/bg_watermelon_setting_row" android:padding="14dp" android:focusable="true" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <ImageView android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/ic_folder" android:layout_marginEnd="14dp" app:tint="@color/colorPrimary"/>
+        <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+            <TextView android:textSize="15sp" android:textStyle="bold" android:textColor="@color/textColorPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/video_retroarch_shader_source_folder" android:fontFamily="@font/space_grotesk"/>
+            <TextView android:textSize="12.5sp" android:textColor="@color/textColorSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="@string/video_retroarch_shader_source_folder_description" android:fontFamily="@font/manrope"/>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

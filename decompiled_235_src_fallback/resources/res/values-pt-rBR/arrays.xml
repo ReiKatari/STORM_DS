@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="audio_bitrate_options">
+        <item>Automático</item>
+        <item>10-bit</item>
+        <item>16-bit</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>Nenhuma</item>
+        <item>Linear</item>
+        <item>Cosseno</item>
+        <item>Cúbica</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>Baixa (Lenta)</item>
+        <item>Média</item>
+        <item>Alta (Rápida)</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>Esticar</item>
+        <item>Ajustar ao centro</item>
+        <item>Ajustar em cima</item>
+        <item>Ajustar à esquerda</item>
+        <item>Ajustar em baixo</item>
+        <item>Ajustar à direita</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>Ilimitado</item>
+        <item>1.5x</item>
+        <item>2x</item>
+        <item>3x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>Inglês</item>
+        <item>Francês</item>
+        <item>Alemão</item>
+        <item>Italiano</item>
+        <item>Espanhol</item>
+        <item>Japonês</item>
+        <item>Russo</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>Oculto</item>
+        <item>Superior esquerdo</item>
+        <item>Centro superior</item>
+        <item>Superior direito</item>
+        <item>Inferior esquerdo</item>
+        <item>Centro inferior</item>
+        <item>Inferior direito</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>Padrão</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>Padrão</item>
+        <item>Nenhum</item>
+        <item>Blow (Sopro)</item>
+        <item>Microfone do dispositivo</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>Seguir o sistema</item>
+        <item>Retrato</item>
+        <item>Paisagem</item>
+    </array>
+    <array name="mic_source_options">
+        <item>Nenhum</item>
+        <item>Blow (Sopro)</item>
+        <item>Microfone do dispositivo</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>Nenhum (Pixelado)</item>
+        <item>Linear (Suave)</item>
+    </array>
+    <array name="save_state_locations">
+        <item>Diretório de arquivos de salvamento</item>
+        <item>Diretório da ROM</item>
+        <item>Diretório interno</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>Nenhum</item>
+        <item>Linear</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>Scanlines</item>
+        <item>AI-Upscale (Anime4K)</item>
+        <item>RetroArch (.slangp)</item>
+    </array>
+</resources>

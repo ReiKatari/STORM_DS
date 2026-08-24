@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <SwitchPreference android:title="@string/enable_sound" android:key="sound_enabled" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/audio_interpolation_options" android:title="@string/interpolation" android:key="audio_interpolation" android:summary="%s" android:dependency="sound_enabled" android:defaultValue="none" android:entryValues="@array/audio_interpolation_values" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/audio_bitrate_options" android:title="@string/bitrate" android:key="audio_bitrate" android:summary="%s" android:dependency="sound_enabled" android:defaultValue="auto" android:entryValues="@array/audio_bitrate_values" app:iconSpaceReserved="false"/>
+    <SeekBarPreference android:max="256" android:title="@string/volume" android:key="volume" android:dependency="sound_enabled" android:defaultValue="256" app:iconSpaceReserved="false" app:min="0" app:updatesContinuously="true"/>
+    <ListPreference android:entries="@array/audio_latency_options" android:title="@string/audio_latency" android:key="audio_latency" android:summary="%s" android:dependency="sound_enabled" android:defaultValue="low" android:entryValues="@array/audio_latency_values" app:iconSpaceReserved="false" app:isPreferenceVisible="@bool/settings_audio_latency_enabled"/>
+    <ListPreference android:entries="@array/mic_source_options" android:title="@string/microphone_source" android:key="mic_source" android:summary="%s" android:defaultValue="blow" android:entryValues="@array/mic_source_values" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

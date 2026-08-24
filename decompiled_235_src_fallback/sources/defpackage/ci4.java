@@ -1,0 +1,67 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: ci4  reason: default package */
+/* loaded from: classes.dex */
+public enum ci4 extends java.lang.Enum {
+    private static final /* synthetic */ defpackage.t52 $ENTRIES = null;
+    private static final /* synthetic */ defpackage.ci4[] $VALUES = null;
+    public static final defpackage.ci4 ADD = null;
+    public static final defpackage.ci4 NO_OP = null;
+    public static final defpackage.ci4 REMOVE = null;
+
+    private static final /* synthetic */ defpackage.ci4[] $values() {
+            ci4 r0 = defpackage.ci4.NO_OP
+            ci4 r1 = defpackage.ci4.ADD
+            ci4 r2 = defpackage.ci4.REMOVE
+            ci4[] r0 = new defpackage.ci4[]{r0, r1, r2}
+            return r0
+    }
+
+    static {
+            ci4 r0 = new ci4
+            java.lang.String r1 = "NO_OP"
+            r2 = 0
+            r0.<init>(r1, r2)
+            defpackage.ci4.NO_OP = r0
+            ci4 r0 = new ci4
+            java.lang.String r1 = "ADD"
+            r2 = 1
+            r0.<init>(r1, r2)
+            defpackage.ci4.ADD = r0
+            ci4 r0 = new ci4
+            java.lang.String r1 = "REMOVE"
+            r2 = 2
+            r0.<init>(r1, r2)
+            defpackage.ci4.REMOVE = r0
+            ci4[] r0 = $values()
+            defpackage.ci4.$VALUES = r0
+            u52 r0 = defpackage.nc1.L(r0)
+            defpackage.ci4.$ENTRIES = r0
+            return
+    }
+
+    ci4(java.lang.String r1, int r2) {
+            r0 = this;
+            r0.<init>(r1, r2)
+            return
+    }
+
+    public static defpackage.t52 getEntries() {
+            t52 r0 = defpackage.ci4.$ENTRIES
+            return r0
+    }
+
+    public static defpackage.ci4 valueOf(java.lang.String r1) {
+            java.lang.Class<ci4> r0 = defpackage.ci4.class
+            java.lang.Enum r1 = java.lang.Enum.valueOf(r0, r1)
+            ci4 r1 = (defpackage.ci4) r1
+            return r1
+    }
+
+    public static defpackage.ci4[] values() {
+            ci4[] r0 = defpackage.ci4.$VALUES
+            java.lang.Object r0 = r0.clone()
+            ci4[] r0 = (defpackage.ci4[]) r0
+            return r0
+    }
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="@color/colorBackground" android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:gravity="center" android:layout_gravity="center" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="32dp" android:paddingEnd="32dp">
+        <ImageView android:id="@+id/imageStormEmblem" android:layout_width="72dp" android:layout_height="72dp" android:layout_marginBottom="24dp" android:src="@drawable/ic_watermelon_mark" android:contentDescription="@string/app_name"/>
+        <TextView android:textSize="15sp" android:textColor="?android:attr/textColorSecondary" android:id="@+id/textRomSearchDirectoryInfo" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/no_rom_search_directory_specified" android:fontFamily="@font/manrope" android:textAlignment="center" android:lineHeight="22sp"/>
+        <Button android:textStyle="bold" android:id="@+id/buttonAction" android:layout_width="wrap_content" android:layout_height="48dp" android:layout_marginTop="24dp" android:text="@string/set_rom_directory" android:fontFamily="@font/space_grotesk" android:paddingStart="24dp" android:paddingEnd="24dp" style="@style/Widget.AppCompat.Button.Colored"/>
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="buttonContrasted">#ffffff</color>
+    <color name="colorAccent">#00e5ff</color>
+    <color name="colorBackground">#000000</color>
+    <color name="colorPrimary">#00e5ff</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorSecondary">#7b2cbf</color>
+    <color name="colorSurface">#0d0d10</color>
+    <color name="divider">#252530</color>
+    <color name="navigationBarBackground">#000000</color>
+    <color name="prefSwitchRailColor">#8000e5ff</color>
+    <color name="romConfigButtonDefault">#757585</color>
+    <color name="romConfigButtonEnabled">#00e5ff</color>
+    <color name="splashBackground">#000000</color>
+    <color name="splashToolbar">#000000</color>
+    <color name="statusError">#ff1744</color>
+    <color name="statusOk">#00e676</color>
+    <color name="statusWarn">#ff9100</color>
+    <color name="switchThumbUnselected">#757585</color>
+    <color name="textColorPrimary">#ffffff</color>
+    <color name="textColorSecondary">#ffffff</color>
+    <color name="watermelonGreenDim">#3300e5ff</color>
+    <color name="watermelonSurface2">#16161c</color>
+    <color name="watermelonSurface3">#252530</color>
+</resources>

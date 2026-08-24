@@ -1,0 +1,643 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="app_language_options">
+        <item>�� System Default / По умолчанию</item>
+        <item>���� Русский</item>
+        <item>���� English</item>
+        <item>���� Español</item>
+        <item>���� Français</item>
+        <item>���� Italiano</item>
+        <item>���� Português (Brasil)</item>
+        <item>���� Bahasa Indonesia</item>
+        <item>���� 简体中文</item>
+    </array>
+    <array name="app_language_values">
+        <item>default</item>
+        <item>ru</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>it</item>
+        <item>pt-BR</item>
+        <item>id</item>
+        <item>zh-Hans</item>
+    </array>
+    <array name="audio_bitrate_options">
+        <item>Auto</item>
+        <item>10-bit</item>
+        <item>16-bit</item>
+    </array>
+    <array name="audio_bitrate_values">
+        <item>auto</item>
+        <item>bit10</item>
+        <item>bit16</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>None</item>
+        <item>Linear</item>
+        <item>Cosine</item>
+        <item>Cubic</item>
+    </array>
+    <array name="audio_interpolation_values">
+        <item>none</item>
+        <item>linear</item>
+        <item>cosine</item>
+        <item>cubic</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>Low (Slower)</item>
+        <item>Medium</item>
+        <item>High (Faster)</item>
+    </array>
+    <array name="audio_latency_values">
+        <item>low</item>
+        <item>medium</item>
+        <item>high</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>Stretch</item>
+        <item>Fit center</item>
+        <item>Fit top</item>
+        <item>Fit left</item>
+        <item>Fit bottom</item>
+        <item>Fit right</item>
+    </array>
+    <array name="button_color_theme_options">
+        <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
+        <item>Nintendo DS Classic (Metallic Grey)</item>
+        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo Famicom / NES (Gold &amp; Maroon)</item>
+        <item>Nintendo Game Boy (DMG Retro Grey &amp; Plum)</item>
+        <item>Nintendo Game Boy Advance (Glacier Indigo)</item>
+        <item>Nintendo GameCube (Indigo &amp; Green/Red)</item>
+        <item>Nintendo Super Famicom / SNES (Four Colors)</item>
+        <item>Nintendo Switch Neon (Red &amp; Blue)</item>
+        <item>Nintendo Switch OLED (Matte White)</item>
+        <item>Nintendo Virtual Boy (Laser Red &amp; Void)</item>
+        <item>Nintendo Wii (Crystal White &amp; Blue)</item>
+        <item>Nintendo Wii U (Dark Slate &amp; Cyan)</item>
+        <item>STORM Arcade Retro (Classic Arcade Machine / 4 Colors)</item>
+        <item>STORM Aurora Spectrum (Four Pastel Colors / Light)</item>
+        <item>STORM Cyber Neon (Cyan &amp; Dark)</item>
+        <item>STORM Cyberpunk 2077 (Neon / Multi-Color)</item>
+        <item>STORM Frost Glacier (Ice Gradient / Light)</item>
+        <item>STORM Gothic Crimson (Ruby Red &amp; Carbon)</item>
+        <item>STORM Matrix Emerald (Neon Green)</item>
+        <item>STORM Midnight Amethyst (Deep Purple)</item>
+        <item>STORM Royal Gold (Gold &amp; Obsidian)</item>
+        <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
+        <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
+    </array>
+    <array name="button_color_theme_values">
+        <item>3ds_aqua</item>
+        <item>classic_grey</item>
+        <item>classic_white</item>
+        <item>famicom_retro</item>
+        <item>gameboy_dmg</item>
+        <item>gba_glacier</item>
+        <item>gamecube_indigo</item>
+        <item>snes_super</item>
+        <item>switch_neon</item>
+        <item>switch_oled</item>
+        <item>virtual_boy</item>
+        <item>wii_crystal</item>
+        <item>wii_u_dark</item>
+        <item>arcade_retro</item>
+        <item>aurora_spectrum</item>
+        <item>cyber_cyan</item>
+        <item>cyberpunk_neon</item>
+        <item>frost_glacier</item>
+        <item>crimson_ruby</item>
+        <item>emerald_matrix</item>
+        <item>midnight_purple</item>
+        <item>gold_luxury</item>
+        <item>sakura_blossom</item>
+        <item>solar_fusion</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="console_type_values">
+        <item>ds</item>
+        <item>dsi</item>
+    </array>
+    <array name="dldi_sd_card_image_size_options">
+        <item>Auto</item>
+        <item>256 MB</item>
+        <item>512 MB</item>
+        <item>1 GB</item>
+        <item>2 GB</item>
+        <item>4 GB</item>
+    </array>
+    <array name="dldi_sd_card_image_size_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+    </array>
+    <array name="dsi_camera_source_options">
+        <item>Black screen</item>
+        <item>Physical cameras</item>
+        <item>Static image</item>
+    </array>
+    <array name="dsi_camera_source_values">
+        <item>black_screen</item>
+        <item>physical_cameras</item>
+        <item>static_image</item>
+    </array>
+    <array name="external_display_mode_options">
+        <item>Mirror</item>
+        <item>STORM DS</item>
+    </array>
+    <array name="external_display_mode_values">
+        <item>mirror</item>
+        <item>melon_dual_ds</item>
+    </array>
+    <array name="external_display_screen_options">
+        <item>@string/top_screen</item>
+        <item>@string/bottom_screen</item>
+        <item>@string/custom_layout</item>
+    </array>
+    <array name="external_display_screen_values">
+        <item>top</item>
+        <item>bottom</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>Unlimited</item>
+        <item>1.5x</item>
+        <item>2x</item>
+        <item>3x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_values">
+        <item>-1</item>
+        <item>1.5</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>8</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>English</item>
+        <item>French</item>
+        <item>German</item>
+        <item>Italian</item>
+        <item>Spanish</item>
+        <item>Japanese</item>
+        <item>Russian (Русский)</item>
+    </array>
+    <array name="firmware_settings_language_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>0</item>
+        <item>8</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>Hidden</item>
+        <item>Top left</item>
+        <item>Top center</item>
+        <item>Top right</item>
+        <item>Bottom left</item>
+        <item>Bottom center</item>
+        <item>Bottom right</item>
+    </array>
+    <array name="fps_counter_position_values">
+        <item>hidden</item>
+        <item>top_left</item>
+        <item>top_center</item>
+        <item>top_right</item>
+        <item>bottom_left</item>
+        <item>bottom_center</item>
+        <item>bottom_right</item>
+    </array>
+    <array name="frame_limit_speed_multiplier_options">
+        <item>1.0x</item>
+        <item>0.75x</item>
+        <item>0.5x</item>
+        <item>0.25x</item>
+    </array>
+    <array name="frame_limit_speed_multiplier_values">
+        <item>1</item>
+        <item>0.75</item>
+        <item>0.5</item>
+        <item>0.25</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>Default</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>Default</item>
+        <item>None</item>
+        <item>Blow</item>
+        <item>Device microphone</item>
+    </array>
+    <array name="gba_slot_options">
+        <item>None</item>
+        <item>GBA ROM</item>
+        <item>Rumble Pak</item>
+        <item>Memory expansion</item>
+        <item>Analog Input</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>Follow system</item>
+        <item>Portrait</item>
+        <item>Landscape</item>
+    </array>
+    <array name="mic_source_options">
+        <item>None</item>
+        <item>Blow</item>
+        <item>Device microphone</item>
+    </array>
+    <array name="mic_source_values">
+        <item>none</item>
+        <item>blow</item>
+        <item>device</item>
+    </array>
+    <array name="ra_offline_backend_options">
+        <item>@string/ra_offline_backend_built_in</item>
+        <item>@string/ra_offline_backend_proxy</item>
+    </array>
+    <array name="ra_offline_backend_values">
+        <item>built_in</item>
+        <item>ra_offline_proxy</item>
+    </array>
+    <array name="resolution_hud_position_options">
+        <item>Скрыто</item>
+        <item>Верхний левый угол</item>
+        <item>Верхний правый угол</item>
+        <item>Нижний левый угол</item>
+        <item>Нижний правый угол</item>
+    </array>
+    <array name="resolution_hud_position_values">
+        <item>hidden</item>
+        <item>top_left</item>
+        <item>top_right</item>
+        <item>bottom_left</item>
+        <item>bottom_right</item>
+    </array>
+    <array name="rom_display_name_mode_options">
+        <item>@string/rom_display_name_mode_file_name</item>
+        <item>@string/rom_display_name_mode_internal</item>
+    </array>
+    <array name="rom_display_name_mode_values">
+        <item>file_name</item>
+        <item>internal_name</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>None (Pixelated)</item>
+        <item>Linear (Smooth)</item>
+    </array>
+    <array name="rom_icon_filtering_values">
+        <item>none</item>
+        <item>linear</item>
+    </array>
+    <array name="rom_input_mode_options">
+        <item>@string/use_global_preference</item>
+        <item>Custom</item>
+    </array>
+    <array name="rom_view_mode_options">
+        <item>@string/rom_view_mode_grid</item>
+        <item>@string/rom_view_mode_list</item>
+    </array>
+    <array name="rom_view_mode_values">
+        <item>grid</item>
+        <item>list</item>
+    </array>
+    <array name="save_state_location_values">
+        <item>save_dir</item>
+        <item>rom_dir</item>
+        <item>internal_dir</item>
+    </array>
+    <array name="save_state_locations">
+        <item>Save file directory</item>
+        <item>ROM directory</item>
+        <item>Internal directory</item>
+    </array>
+    <array name="soft_input_behaviour">
+        <item>always_visible</item>
+        <item>hide_system_buttons_when_controller_connected</item>
+        <item>hide_mapped_buttons_when_controller_connected</item>
+        <item>always_invisible</item>
+    </array>
+    <array name="soft_input_behaviour_descriptions">
+        <item>The soft input is always visible, as set in the current input layout.</item>
+        <item>When a controller is connected, console buttons (A B X Y, D-Pad, L, R, Start, and Select) are hidden. Other buttons in the current input layout remain visible.</item>
+        <item>When a controller is connected, all inputs assigned to that controller are hidden. Other inputs present in the current input layout that are not assigned to the connected controllers remain visible.</item>
+        <item>The soft input is always invisible, independently of the buttons found in the current input layout.</item>
+    </array>
+    <array name="soft_input_behaviour_options">
+        <item>Always visible</item>
+        <item>Hide console buttons when a controller is connected</item>
+        <item>Hide assigned input when a controller is connected</item>
+        <item>Always invisible</item>
+    </array>
+    <array name="theme_options">
+        <item>STORM NIGHT (OLED Dark)</item>
+        <item>STORM DAY (Light)</item>
+        <item>STORM MIDNIGHT (Deep Violet)</item>
+        <item>STORM CYBERPUNK (Cyberpunk 2077)</item>
+        <item>STORM GOTHIC (Black &amp; Red)</item>
+        <item>STORM MATRIX (Emerald Cyber Code)</item>
+        <item>STORM SOLAR (Radiant Plasma Gold)</item>
+        <item>STORM SAKURA (Cherry Blossom Light)</item>
+    </array>
+    <array name="theme_values">
+        <item>dark</item>
+        <item>light</item>
+        <item>midnight</item>
+        <item>cyberpunk</item>
+        <item>gothic</item>
+        <item>matrix</item>
+        <item>solar</item>
+        <item>sakura</item>
+    </array>
+    <array name="translator_engine_options">
+        <item>@string/translator_engine_offline</item>
+        <item>@string/translator_engine_yandex</item>
+        <item>@string/translator_engine_google</item>
+        <item>@string/translator_engine_lingva</item>
+        <item>@string/translator_engine_deepl</item>
+        <item>@string/translator_engine_libre</item>
+        <item>@string/translator_engine_mymemory</item>
+        <item>@string/translator_engine_custom_ai</item>
+    </array>
+    <array name="translator_engine_values">
+        <item>offline</item>
+        <item>yandex</item>
+        <item>google</item>
+        <item>lingva</item>
+        <item>deepl</item>
+        <item>libre</item>
+        <item>mymemory</item>
+        <item>custom_ai</item>
+    </array>
+    <array name="translator_local_voice_model_options">
+        <item>�� 24 голоса (Нейро-автораспределение по контексту и персонажам)</item>
+        <item>��️ Дмитрий (Нейро-Баритон)</item>
+        <item>��️ Елена (Нейро-Сопрано)</item>
+        <item>��️ Молодой герой (Звонкий тенор)</item>
+        <item>�� Темный рыцарь / Бэтмен (Хриплый бас)</item>
+        <item>�� Босс / Тиран / Баузер (Тяжелый бас)</item>
+        <item>�� Джокер / Псих / Трикстер (Маниакальный тенор)</item>
+        <item>�� Демон бездны / Дракула (Глубокий бас)</item>
+        <item>�� Мудрый старец / Профессор (Хриплый)</item>
+        <item>�� Мальчик / Спутник / Люк Тритон (Звонкий)</item>
+        <item>�� Девочка / Перл Фей (Нежный детский)</item>
+        <item>�� Принцесса / Королева Зельда (Величественный)</item>
+        <item>�� Торговец / Том Нук (Услужливый бодрый)</item>
+        <item>��️ Стражник / Капитан (Командный суровый)</item>
+        <item>�� Робот / Киборг / Покедекс (Синтетический)</item>
+        <item>�� Рассказчик / Летописец (Бархатный)</item>
+        <item>�� Цундере / Франциска (Капризное сопрано)</item>
+        <item>�� Таинственный шепот / Тень (Мистический)</item>
+        <item>✨ Веселая фея / Нави (Игривый высокий альт)</item>
+        <item>��‍☠️ Капитан пиратов (Грубый рычащий бас)</item>
+        <item>�� Безумный ученый / Вайли (Эксцентричный)</item>
+        <item>�� Джентльмен / Лейтон / Райт (Элегантный)</item>
+        <item>�� Призрак / Фантом (Эфирный эхо-тон)</item>
+        <item>⚔️ Благородный рыцарь / Мета Найт (Твердый баритон)</item>
+        <item>��️ Богиня / Ангел Палютена (Священный кристальный)</item>
+    </array>
+    <array name="translator_local_voice_model_values">
+        <item>auto_multi</item>
+        <item>piper_ru_dmitri_medium</item>
+        <item>piper_ru_elena_medium</item>
+        <item>piper_ru_hero</item>
+        <item>piper_ru_dark_knight</item>
+        <item>piper_ru_boss_grunt</item>
+        <item>piper_ru_joker_manic</item>
+        <item>piper_ru_deep_demon</item>
+        <item>piper_ru_elder</item>
+        <item>piper_ru_young_boy</item>
+        <item>piper_ru_young_girl</item>
+        <item>piper_ru_royal_queen</item>
+        <item>piper_ru_merchant</item>
+        <item>piper_ru_soldier</item>
+        <item>piper_ru_robot</item>
+        <item>piper_ru_narrator</item>
+        <item>piper_ru_tsundere</item>
+        <item>piper_ru_whisper</item>
+        <item>piper_ru_fairy</item>
+        <item>piper_ru_pirate</item>
+        <item>piper_ru_mad_scientist</item>
+        <item>piper_ru_gentleman</item>
+        <item>piper_ru_ghost</item>
+        <item>piper_ru_knight</item>
+        <item>piper_ru_angelic</item>
+    </array>
+    <array name="translator_overlay_style_options">
+        <item>@string/translator_style_smart_match</item>
+        <item>@string/translator_style_semi_transparent</item>
+        <item>@string/translator_style_neon_bubble</item>
+        <item>@string/translator_style_outline_only</item>
+    </array>
+    <array name="translator_overlay_style_values">
+        <item>smart_background_match</item>
+        <item>semi_transparent</item>
+        <item>translucent_bubble</item>
+        <item>outline_only</item>
+    </array>
+    <array name="translator_source_lang_options">
+        <item>@string/lang_auto</item>
+        <item>@string/lang_ja</item>
+        <item>@string/lang_en</item>
+        <item>@string/lang_zh</item>
+        <item>@string/lang_ko</item>
+        <item>@string/lang_de</item>
+        <item>@string/lang_fr</item>
+        <item>@string/lang_es</item>
+        <item>@string/lang_it</item>
+    </array>
+    <array name="translator_source_lang_values">
+        <item>auto</item>
+        <item>ja</item>
+        <item>en</item>
+        <item>zh</item>
+        <item>ko</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>es</item>
+        <item>it</item>
+    </array>
+    <array name="translator_target_lang_options">
+        <item>@string/lang_ru</item>
+        <item>@string/lang_en</item>
+        <item>@string/lang_uk</item>
+        <item>@string/lang_es</item>
+        <item>@string/lang_de</item>
+        <item>@string/lang_fr</item>
+        <item>@string/lang_ja</item>
+        <item>@string/lang_zh</item>
+        <item>@string/lang_it</item>
+        <item>@string/lang_pt</item>
+    </array>
+    <array name="translator_target_lang_values">
+        <item>ru</item>
+        <item>en</item>
+        <item>uk</item>
+        <item>es</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>ja</item>
+        <item>zh</item>
+        <item>it</item>
+        <item>pt</item>
+    </array>
+    <array name="translator_trigger_mode_options">
+        <item>@string/translator_trigger_mode_on_demand</item>
+        <item>@string/translator_trigger_mode_auto</item>
+    </array>
+    <array name="translator_trigger_mode_values">
+        <item>on_demand</item>
+        <item>auto_screen_change</item>
+    </array>
+    <array name="translator_tts_lang_options">
+        <item>@string/lang_auto</item>
+        <item>@string/lang_ru</item>
+        <item>@string/lang_en</item>
+        <item>@string/lang_ja</item>
+        <item>@string/lang_zh</item>
+        <item>@string/lang_de</item>
+        <item>@string/lang_fr</item>
+        <item>@string/lang_es</item>
+    </array>
+    <array name="translator_tts_lang_values">
+        <item>auto</item>
+        <item>ru</item>
+        <item>en</item>
+        <item>ja</item>
+        <item>zh</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>es</item>
+    </array>
+    <array name="translator_tts_voice_engine_options">
+        <item>Живая нейросетевая озвучка (Edge Neural HD 24kHz)</item>
+        <item>Многоголосая озвучка персонажей (М/Ж/Злодеи/Дети) [Оффлайн]</item>
+        <item>Стандартный один голос (Системный)</item>
+    </array>
+    <array name="translator_tts_voice_engine_values">
+        <item>neural_edge</item>
+        <item>local_multi</item>
+        <item>single</item>
+    </array>
+    <array name="update_channel_options">
+        <item>@string/update_channel_stable</item>
+    </array>
+    <array name="update_channel_values">
+        <item>stable</item>
+    </array>
+    <array name="video_ai_upscale_scale_options">
+        <item>2x (512×384)</item>
+        <item>4x (1024×768 - HD)</item>
+        <item>8x (2048×1536 - Ultra HD)</item>
+    </array>
+    <array name="video_ai_upscale_scale_values">
+        <item>2x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </array>
+    <array name="video_console_skin_type_options">
+        <item>Nintendo DS Lite (Matte Black)</item>
+        <item>Nintendo DS Lite (Polar White)</item>
+        <item>Nintendo DS Lite (Crimson Red)</item>
+        <item>Nintendo DSi XL (Midnight Blue)</item>
+        <item>Nintendo 3DS (Aqua Blue)</item>
+        <item>New Nintendo 3DS XL (Cosmo Black)</item>
+    </array>
+    <array name="video_console_skin_type_values">
+        <item>ds_lite_black</item>
+        <item>ds_lite_white</item>
+        <item>crimson_red</item>
+        <item>dsi_xl_blue</item>
+        <item>n3ds_aqua</item>
+        <item>n3ds_black</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>None</item>
+        <item>Linear</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>Scanlines</item>
+        <item>AI-Upscale (Anime4K)</item>
+        <item>RetroArch (.slangp)</item>
+    </array>
+    <array name="video_filtering_values">
+        <item>none</item>
+        <item>linear</item>
+        <item>xbr2</item>
+        <item>hq2x</item>
+        <item>hq4x</item>
+        <item>quilez</item>
+        <item>lcd</item>
+        <item>scanlines</item>
+        <item>ai_upscale</item>
+        <item>retroarch</item>
+    </array>
+    <array name="video_internal_resolution_options">
+        <item>1x native (256x192)</item>
+        <item>2x native (512x384)</item>
+        <item>3x native (768x576)</item>
+        <item>4x native (1024x768)</item>
+        <item>5x native (1280x960)</item>
+        <item>6x native (1536x1152)</item>
+        <item>7x native (1792x1344)</item>
+        <item>8x native (2048x1536)</item>
+    </array>
+    <array name="video_internal_resolution_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+    </array>
+    <array name="video_renderer_options">
+        <item>Software</item>
+        <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
+    </array>
+    <array name="video_renderer_values">
+        <item>software</item>
+        <item>opengl</item>
+        <item>vulkan</item>
+        <item>compute</item>
+    </array>
+    <array name="video_vulkan_driver_mode_options">
+        <item>System</item>
+        <item>Custom</item>
+    </array>
+    <array name="video_vulkan_driver_mode_values">
+        <item>system</item>
+        <item>custom</item>
+    </array>
+    <array name="wfc_server_options">
+        <item>@string/wfc_server_disabled</item>
+        <item>Wiimmfi.de (178.62.43.212)</item>
+        <item>AltWFC (172.104.88.237)</item>
+        <item>Kaeru WFC (178.62.43.212)</item>
+        <item>@string/wfc_server_custom</item>
+    </array>
+    <array name="wfc_server_values">
+        <item>none</item>
+        <item>wiimmfi</item>
+        <item>altwfc</item>
+        <item>kaeru</item>
+        <item>custom</item>
+    </array>
+</resources>

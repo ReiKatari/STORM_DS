@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference android:title="@string/rom_search_directory" android:key="rom_search_dirs" app:iconSpaceReserved="false" app:permissions="read_write" app:persistPermissions="true" app:selection="multi" app:type="radial"/>
+    <ListPreference android:entries="@array/rom_icon_filtering_options" android:title="@string/rom_icon_filtering" android:key="rom_icon_filtering" android:summary="%s" android:defaultValue="none" android:entryValues="@array/rom_icon_filtering_values" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/rom_display_name_mode_options" android:title="@string/rom_display_name_mode" android:key="rom_display_name_mode" android:summary="%s" android:defaultValue="file_name" android:entryValues="@array/rom_display_name_mode_values" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/rom_view_mode_options" android:title="@string/rom_view_mode" android:key="rom_view_mode" android:summary="%s" android:defaultValue="grid" android:entryValues="@array/rom_view_mode_values" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/rom_ra_cover_enabled" android:key="rom_ra_covers_enabled" android:summary="@string/rom_ra_cover_enabled_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <SeekBarPreference android:max="6" android:title="@string/max_rom_cache_size" android:key="rom_cache_max_size" android:defaultValue="3" app:iconSpaceReserved="false" app:min="0" app:updatesContinuously="true"/>
+    <Preference android:title="@string/clear_extracted_rom_cache" android:key="rom_cache_clear" android:summary="@string/cache_size_calculating" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

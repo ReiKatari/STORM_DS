@@ -1,0 +1,81 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: w56  reason: default package */
+/* loaded from: classes.dex */
+public enum w56 extends java.lang.Enum {
+    private static final /* synthetic */ defpackage.t52 $ENTRIES = null;
+    private static final /* synthetic */ defpackage.w56[] $VALUES = null;
+    public static final defpackage.w56 BottomBar = null;
+    public static final defpackage.w56 Fab = null;
+    public static final defpackage.w56 MainContent = null;
+    public static final defpackage.w56 Snackbar = null;
+    public static final defpackage.w56 TopBar = null;
+
+    private static final /* synthetic */ defpackage.w56[] $values() {
+            w56 r0 = defpackage.w56.TopBar
+            w56 r1 = defpackage.w56.MainContent
+            w56 r2 = defpackage.w56.Snackbar
+            w56 r3 = defpackage.w56.Fab
+            w56 r4 = defpackage.w56.BottomBar
+            w56[] r0 = new defpackage.w56[]{r0, r1, r2, r3, r4}
+            return r0
+    }
+
+    static {
+            w56 r0 = new w56
+            java.lang.String r1 = "TopBar"
+            r2 = 0
+            r0.<init>(r1, r2)
+            defpackage.w56.TopBar = r0
+            w56 r0 = new w56
+            java.lang.String r1 = "MainContent"
+            r2 = 1
+            r0.<init>(r1, r2)
+            defpackage.w56.MainContent = r0
+            w56 r0 = new w56
+            java.lang.String r1 = "Snackbar"
+            r2 = 2
+            r0.<init>(r1, r2)
+            defpackage.w56.Snackbar = r0
+            w56 r0 = new w56
+            java.lang.String r1 = "Fab"
+            r2 = 3
+            r0.<init>(r1, r2)
+            defpackage.w56.Fab = r0
+            w56 r0 = new w56
+            java.lang.String r1 = "BottomBar"
+            r2 = 4
+            r0.<init>(r1, r2)
+            defpackage.w56.BottomBar = r0
+            w56[] r0 = $values()
+            defpackage.w56.$VALUES = r0
+            u52 r0 = defpackage.nc1.L(r0)
+            defpackage.w56.$ENTRIES = r0
+            return
+    }
+
+    w56(java.lang.String r1, int r2) {
+            r0 = this;
+            r0.<init>(r1, r2)
+            return
+    }
+
+    public static defpackage.t52 getEntries() {
+            t52 r0 = defpackage.w56.$ENTRIES
+            return r0
+    }
+
+    public static defpackage.w56 valueOf(java.lang.String r1) {
+            java.lang.Class<w56> r0 = defpackage.w56.class
+            java.lang.Enum r1 = java.lang.Enum.valueOf(r0, r1)
+            w56 r1 = (defpackage.w56) r1
+            return r1
+    }
+
+    public static defpackage.w56[] values() {
+            w56[] r0 = defpackage.w56.$VALUES
+            java.lang.Object r0 = r0.clone()
+            w56[] r0 = (defpackage.w56[]) r0
+            return r0
+    }
+}

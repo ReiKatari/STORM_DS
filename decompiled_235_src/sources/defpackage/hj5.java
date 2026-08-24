@@ -1,0 +1,15 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: hj5  reason: default package */
+/* loaded from: classes.dex */
+public final class hj5 {
+    public final ky3 a;
+
+    public hj5(ky3 ky3Var) {
+        this.a = ky3Var;
+    }
+
+    public final String toString() {
+        return "Removed[" + this.a + ']';
+    }
+}

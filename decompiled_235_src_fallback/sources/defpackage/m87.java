@@ -1,0 +1,10 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: m87  reason: default package */
+/* loaded from: classes.dex */
+public abstract class m87 {
+    public static void a(android.view.View r0, java.lang.CharSequence r1) {
+            r0.setTooltipText(r1)
+            return
+    }
+}

@@ -1,0 +1,43 @@
+package defpackage;
+
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbtz;
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf;
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbun;
+import com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbvn;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: d28  reason: default package */
+/* loaded from: classes.dex */
+public final class d28 extends zbuf implements zbvn {
+    private static final d28 zbb;
+    private int zbd;
+    private String zbe = "";
+    private zbun zbf = zbuf.zby();
+    private boolean zbg;
+
+    static {
+        d28 d28Var = new d28();
+        zbb = d28Var;
+        zbuf.zbD(d28.class, d28Var);
+    }
+
+    @Override // com.google.android.gms.internal.mlkit_vision_text_bundled_common.zbuf
+    public final Object zbb(int i, Object obj, Object obj2) {
+        int i2 = i - 1;
+        if (i2 != 0) {
+            if (i2 != 2) {
+                if (i2 != 3) {
+                    if (i2 != 4) {
+                        if (i2 != 5) {
+                            return null;
+                        }
+                        return zbb;
+                    }
+                    return new zbtz(zbb);
+                }
+                return new d28();
+            }
+            return zbuf.zbA(zbb, "\u0001\u0003\u0000\u0001\u0001\u0003\u0003\u0000\u0001\u0000\u0001ဈ\u0000\u0002\u001a\u0003ဇ\u0001", new Object[]{"zbd", "zbe", "zbf", "zbg"});
+        }
+        return (byte) 1;
+    }
+}

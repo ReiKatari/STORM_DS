@@ -1,0 +1,7 @@
+package defpackage;
+/* compiled from: r8-map-id-0dd4387375ec438f6a4c042bfe6cb4a3262713dcd4829883cccf19288831b1df */
+/* renamed from: dt  reason: default package */
+/* loaded from: classes.dex */
+public abstract class dt extends android.app.Service {
+    public static final /* synthetic */ int A = 0;
+}

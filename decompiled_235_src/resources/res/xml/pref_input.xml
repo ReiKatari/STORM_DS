@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedPreference android:title="@string/key_mapping" android:key="input_key_mapping" android:summary="@string/key_mapping_summary" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.InGameLockedPreference android:title="@string/layouts" android:key="input_layouts" android:summary="@string/layouts_summary" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.SoftwareInputBehaviourPreference android:entries="@array/soft_input_behaviour_options" android:title="@string/soft_input_behaviour" android:key="soft_input_behaviour" android:summary="%s" android:defaultValue="hide_system_buttons_when_controller_connected" android:entryValues="@array/soft_input_behaviour" app:fragment="me.magnum.melonds.ui.settings.fragments.SoftInputBehaviourPreferencesFragment" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/button_color_theme_options" android:title="@string/button_color_theme" android:key="button_color_theme" android:summary="%s" android:defaultValue="cyber_cyan" android:entryValues="@array/button_color_theme_values" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/vibrate_on_touch" android:key="input_touch_haptic_feedback_enabled" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <SeekBarPreference android:max="100" android:title="@string/vibration_strength" android:key="input_touch_haptic_feedback_strength" android:dependency="input_touch_haptic_feedback_enabled" android:defaultValue="30" app:iconSpaceReserved="false" app:min="1" app:updatesContinuously="true"/>
+    <SeekBarPreference android:max="100" android:title="@string/soft_input_opacity" android:key="input_opacity" android:defaultValue="50" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/input_gyro_aiming_title" android:key="input_gyro_aiming_enabled" android:summary="@string/input_gyro_aiming_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <SeekBarPreference android:max="200" android:title="@string/input_gyro_sensitivity_title" android:key="input_gyro_sensitivity" android:dependency="input_gyro_aiming_enabled" android:defaultValue="50" app:iconSpaceReserved="false" app:min="10" app:showSeekBarValue="true"/>
+</PreferenceScreen>
