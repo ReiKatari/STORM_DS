@@ -106,7 +106,9 @@ class EmulatorLaunchPreconditionChecker(
         }
 
         if (!isTitleInstalled) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.TitleNotInstalled)
+            // For direct ROM files (.nds / .dsi), we do NOT block launch if NAND import fails.
+            // Direct Slot-1 Cartridge Boot executes the ROM file directly in DSi mode!
+            return RomLaunchPreconditionCheckResult.Success(rom)
         }
 
         return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
