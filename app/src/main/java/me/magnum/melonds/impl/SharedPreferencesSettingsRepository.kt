@@ -1572,7 +1572,11 @@ class SharedPreferencesSettingsRepository(
 
     override fun getSaveFileDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("sram_dir", null)?.firstOrNull()
-        return dirPreference?.toUri()
+        if (dirPreference != null) {
+            return dirPreference.toUri()
+        }
+        val savesDir = File(getEmulatorBaseDirectory(), "saves").apply { mkdirs() }
+        return Uri.fromFile(savesDir)
     }
 
     private fun getEmulatorBaseDirectory(): File {
@@ -1597,12 +1601,23 @@ class SharedPreferencesSettingsRepository(
         return getEnumPreference("save_state_location", SaveStateLocation.INTERNAL_DIR)
     }
 
+    override fun getSaveStateCustomDirectory(): Uri? {
+        val dirPreference = preferences.getStringSet("save_state_custom_dir", null)?.firstOrNull()
+        return dirPreference?.toUri()
+    }
+
     override fun getSaveStateDirectory(rom: Rom): Uri? {
         val saveStateLocation = getSaveStateLocation(rom)
 
         return when (saveStateLocation) {
             SaveStateLocation.SAVE_DIR -> getSaveFileDirectory(rom)
             SaveStateLocation.ROM_DIR -> runCatching { getRomParentDirectory(rom) }.getOrNull() ?: getSaveFileDirectory(rom)
+            SaveStateLocation.CUSTOM_DIR -> {
+                getSaveStateCustomDirectory() ?: run {
+                    val quickSavesDir = File(getEmulatorBaseDirectory(), "quicksaves").apply { mkdirs() }
+                    DocumentFile.fromFile(quickSavesDir).uri
+                }
+            }
             SaveStateLocation.INTERNAL_DIR -> {
                 val quickSavesDir = File(getEmulatorBaseDirectory(), "quicksaves").apply { mkdirs() }
                 DocumentFile.fromFile(quickSavesDir).uri

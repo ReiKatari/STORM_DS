@@ -119,6 +119,7 @@ interface SettingsRepository {
     fun getSaveFileDirectory(): Uri?
     fun getSaveFileDirectory(rom: Rom): Uri
     fun getSaveStateLocation(rom: Rom): SaveStateLocation
+    fun getSaveStateCustomDirectory(): Uri?
     fun getSaveStateDirectory(rom: Rom): Uri?
 
     fun getControllerConfiguration(): ControllerConfiguration
