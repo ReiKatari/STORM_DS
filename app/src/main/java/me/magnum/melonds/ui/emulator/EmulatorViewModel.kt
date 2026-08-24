@@ -2139,6 +2139,7 @@ class EmulatorViewModel @Inject constructor(
                     RomPauseMenuOption.VIEW_ACHIEVEMENTS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowAchievementList)
                     RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> syncPendingRaSubmissionsFromPauseMenu()
                     RomPauseMenuOption.PRESETS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowDualScreenPresets)
+                    RomPauseMenuOption.SCREEN_LAYOUT -> _uiEvent.tryEmit(EmulatorUiEvent.ShowScreenLayoutDialog)
                     RomPauseMenuOption.RENDERER_DEBUG -> _uiEvent.tryEmit(EmulatorUiEvent.ShowRendererDebugMenu)
                     RomPauseMenuOption.RESET -> resetEmulator()
                     RomPauseMenuOption.EXIT -> exitEmulator()
@@ -2147,6 +2148,7 @@ class EmulatorViewModel @Inject constructor(
             is FirmwarePauseMenuOption -> {
                 when (option) {
                     FirmwarePauseMenuOption.SETTINGS -> _uiEvent.tryEmit(EmulatorUiEvent.OpenScreen.SettingsScreen())
+                    FirmwarePauseMenuOption.SCREEN_LAYOUT -> _uiEvent.tryEmit(EmulatorUiEvent.ShowScreenLayoutDialog)
                     FirmwarePauseMenuOption.RESET -> resetEmulator()
                     FirmwarePauseMenuOption.EXIT -> {
                         stopEmulator()
