@@ -538,6 +538,7 @@
     <string name="save_file_use_srm_extension">Use .srm save extension</string>
     <string name="save_file_use_srm_extension_summary">Saves game save files as .srm instead of .sav</string>
     <string name="save_state_location">Save state location</string>
+    <string name="save_state_custom_directory">Quick save files directory</string>
     <string name="auto_save_state_on_exit">Auto save state on exit</string>
     <string name="auto_save_state_on_exit_summary">Automatically saves quick slot when exiting a ROM</string>
     <string name="auto_load_state_on_launch">Auto load state on launch</string>
@@ -1204,6 +1205,7 @@
         <item>Save file directory</item>
         <item>ROM directory</item>
         <item>Internal directory</item>
+        <item>Custom</item>
     </string-array>
 
     <string-array name="layout_orientation_options">
