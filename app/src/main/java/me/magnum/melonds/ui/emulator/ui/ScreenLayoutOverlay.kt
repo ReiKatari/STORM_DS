@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
 import me.magnum.melonds.ui.theme.SpaceGrotesk
+import me.magnum.melonds.ui.theme.watermelon
 
 enum class ScreenLayoutMode {
     EVEN_LANDSCAPE,
@@ -58,28 +59,20 @@ enum class ScreenLayoutMode {
     OPEN_LAYOUT_EDITOR,
 }
 
-private val ScrimColor = Color(0xD808060D)
-private val CardBackground = Color(0xFF13101C)
-private val CardBorder = Color(0xFF2C253D)
-private val ItemSelectedBg = Color(0xFF251F36)
-private val ItemSelectedBorder = Color(0xFF00E5FF)
-private val ItemNormalBg = Color(0xFF181524)
-private val TextPrimary = Color(0xFFF1F5F9)
-private val TextSecondary = Color(0xFF94A3B8)
-private val AccentCyan = Color(0xFF00E5FF)
-
 @Composable
 fun ScreenLayoutOverlay(
     currentLayoutMode: ScreenLayoutMode?,
     onLayoutModeSelected: (ScreenLayoutMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val colors = watermelon
+
     BackHandler(onBack = onDismiss)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ScrimColor)
+            .background(Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -93,8 +86,8 @@ fun ScreenLayoutOverlay(
                 .widthIn(min = 300.dp, max = 400.dp)
                 .fillMaxWidth(0.90f)
                 .clip(RoundedCornerShape(24.dp))
-                .background(CardBackground)
-                .border(1.dp, CardBorder, RoundedCornerShape(24.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.line, RoundedCornerShape(24.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -113,13 +106,13 @@ fun ScreenLayoutOverlay(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(AccentCyan.copy(alpha = 0.15f)),
+                        .background(colors.greenDim),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.ScreenRotation,
                         contentDescription = null,
-                        tint = AccentCyan,
+                        tint = colors.green,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -132,14 +125,14 @@ fun ScreenLayoutOverlay(
                         fontFamily = SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 19.sp,
-                        color = TextPrimary,
+                        color = colors.text,
                     )
                     Text(
                         text = "DraStic Quick Display & Lock",
                         fontFamily = SpaceGrotesk,
                         fontWeight = FontWeight.Normal,
                         fontSize = 12.sp,
-                        color = TextSecondary,
+                        color = colors.text2,
                     )
                 }
             }
@@ -150,7 +143,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_even_landscape),
                 subtitle = "2 экрана рядом (альбомный режим)",
                 isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_LANDSCAPE,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_LANDSCAPE, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.EVEN_LANDSCAPE)
                     onDismiss()
@@ -163,7 +156,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_uneven_landscape),
                 subtitle = "1 основной + 1 вспомогательный экран",
                 isSelected = currentLayoutMode == ScreenLayoutMode.UNEVEN_LANDSCAPE,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.UNEVEN_LANDSCAPE, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.UNEVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.UNEVEN_LANDSCAPE)
                     onDismiss()
@@ -176,7 +169,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_even_portrait_locked),
                 subtitle = "2 экрана вертикально (блокировка поворота)",
                 isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_PORTRAIT_LOCKED,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_PORTRAIT_LOCKED, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_PORTRAIT_LOCKED, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.EVEN_PORTRAIT_LOCKED)
                     onDismiss()
@@ -189,7 +182,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_proportional_landscape),
                 subtitle = "Один центрированный экран 4:3",
                 isSelected = currentLayoutMode == ScreenLayoutMode.PROPORTIONAL_LANDSCAPE,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.PROPORTIONAL_LANDSCAPE, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.PROPORTIONAL_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.PROPORTIONAL_LANDSCAPE)
                     onDismiss()
@@ -202,7 +195,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_fullscreen_landscape),
                 subtitle = "Растянутый экран во весь дисплей",
                 isSelected = currentLayoutMode == ScreenLayoutMode.FULLSCREEN_LANDSCAPE,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.FULLSCREEN_LANDSCAPE, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.FULLSCREEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.FULLSCREEN_LANDSCAPE)
                     onDismiss()
@@ -214,7 +207,7 @@ fun ScreenLayoutOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(CardBorder),
+                    .background(colors.line),
             )
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -222,7 +215,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_auto_rotate),
                 subtitle = "Снять блокировку (поворот по датчику)",
                 isSelected = currentLayoutMode == ScreenLayoutMode.AUTO_ROTATE,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.AUTO_ROTATE, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.AUTO_ROTATE, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.AUTO_ROTATE)
                     onDismiss()
@@ -235,7 +228,7 @@ fun ScreenLayoutOverlay(
                 title = stringResource(R.string.layout_open_editor),
                 subtitle = "Настройка расположения элементов",
                 isSelected = false,
-                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.OPEN_LAYOUT_EDITOR, isSel) },
+                icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.OPEN_LAYOUT_EDITOR, isSel, colors.green, colors.text2) },
                 onClick = {
                     onLayoutModeSelected(ScreenLayoutMode.OPEN_LAYOUT_EDITOR)
                     onDismiss()
@@ -253,18 +246,19 @@ private fun LayoutOptionItem(
     icon: @Composable (Boolean) -> Unit,
     onClick: () -> Unit,
 ) {
+    val colors = watermelon
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused = interactionSource.collectIsFocusedAsState().value
 
     val bg = when {
-        isSelected -> ItemSelectedBg
-        isFocused -> Color(0xFF221D30)
-        else -> ItemNormalBg
+        isSelected -> colors.greenDim
+        isFocused -> colors.surface3
+        else -> colors.surface2
     }
     val border = when {
-        isSelected -> ItemSelectedBorder.copy(alpha = 0.6f)
-        isFocused -> AccentCyan.copy(alpha = 0.3f)
-        else -> Color.Transparent
+        isSelected -> colors.green
+        isFocused -> colors.green.copy(alpha = 0.5f)
+        else -> colors.line
     }
 
     Row(
@@ -292,7 +286,7 @@ private fun LayoutOptionItem(
                 fontFamily = SpaceGrotesk,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 15.sp,
-                color = if (isSelected) TextPrimary else Color(0xFFCBD5E1),
+                color = if (isSelected) colors.text else colors.text.copy(alpha = 0.9f),
             )
             if (subtitle != null) {
                 Text(
@@ -300,7 +294,7 @@ private fun LayoutOptionItem(
                     fontFamily = SpaceGrotesk,
                     fontWeight = FontWeight.Normal,
                     fontSize = 11.5.sp,
-                    color = if (isSelected) AccentCyan.copy(alpha = 0.85f) else TextSecondary,
+                    color = if (isSelected) colors.green else colors.text2,
                 )
             }
         }
@@ -309,7 +303,7 @@ private fun LayoutOptionItem(
             Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = null,
-                tint = AccentCyan,
+                tint = colors.green,
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -317,8 +311,8 @@ private fun LayoutOptionItem(
 }
 
 @Composable
-private fun LayoutModeIcon(mode: ScreenLayoutMode, isSelected: Boolean) {
-    val strokeColor = if (isSelected) AccentCyan else Color(0xFF94A3B8)
+private fun LayoutModeIcon(mode: ScreenLayoutMode, isSelected: Boolean, activeColor: Color, inactiveColor: Color) {
+    val strokeColor = if (isSelected) activeColor else inactiveColor
     val strokeWidth = 2.0f
 
     when (mode) {
@@ -404,7 +398,7 @@ private fun LayoutModeIcon(mode: ScreenLayoutMode, isSelected: Boolean) {
                 Icon(
                     imageVector = Icons.Filled.Lock,
                     contentDescription = null,
-                    tint = AccentCyan,
+                    tint = activeColor,
                     modifier = Modifier.size(14.dp),
                 )
             }
