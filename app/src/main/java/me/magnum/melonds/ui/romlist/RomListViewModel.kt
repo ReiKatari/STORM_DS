@@ -937,6 +937,10 @@ class RomListViewModel @Inject constructor(
         val relativePath: String
     )
 
+    suspend fun getRomAtUri(uri: Uri): Rom? {
+        return romsRepository.getRomAtUri(uri)
+    }
+
     private data class DirectoryNode(
         val root: RootDirectory,
         val docId: String,

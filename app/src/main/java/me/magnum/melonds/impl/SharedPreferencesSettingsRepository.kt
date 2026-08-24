@@ -1555,7 +1555,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun saveNextToRomFile(): Boolean {
-        return preferences.getBoolean("use_rom_dir", true)
+        return preferences.getBoolean("use_rom_dir", false)
     }
 
     override fun useSrmExtensionForSaveFiles(): Boolean {
@@ -1576,40 +1576,25 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun getEmulatorBaseDirectory(): File {
-        return try {
-            val publicStorage = File(android.os.Environment.getExternalStorageDirectory(), "com.stormds.emulator")
-            if (!publicStorage.exists()) {
-                publicStorage.mkdirs()
-            }
-            if (publicStorage.isDirectory) {
-                publicStorage
-            } else {
-                context.getExternalFilesDir(null) ?: File(context.filesDir, "storm_ds")
-            }
-        } catch (_: Throwable) {
-            context.getExternalFilesDir(null) ?: File(context.filesDir, "storm_ds")
-        }
+        return context.getExternalFilesDir(null) ?: File(context.filesDir, "files")
     }
 
     override fun getSaveFileDirectory(rom: Rom): Uri {
         return if (!saveNextToRomFile() && getSaveFileDirectory() != null) {
             getSaveFileDirectory()!!
         } else if (saveNextToRomFile() && rom.parentTreeUri != null) {
-            getRomParentDirectory(rom)
-        } else {
-            val saveFileDirectory = File(getEmulatorBaseDirectory(), "save")
-            if (!saveFileDirectory.isDirectory && !saveFileDirectory.mkdirs()) {
-                val fallback = File(context.getExternalFilesDir(null), "save")
-                fallback.mkdirs()
-                Uri.fromFile(fallback)
-            } else {
-                Uri.fromFile(saveFileDirectory)
+            runCatching { getRomParentDirectory(rom) }.getOrElse {
+                val savesDir = File(getEmulatorBaseDirectory(), "saves").apply { mkdirs() }
+                Uri.fromFile(savesDir)
             }
+        } else {
+            val savesDir = File(getEmulatorBaseDirectory(), "saves").apply { mkdirs() }
+            Uri.fromFile(savesDir)
         }
     }
 
     override fun getSaveStateLocation(rom: Rom): SaveStateLocation {
-        return getEnumPreference("save_state_location", SaveStateLocation.SAVE_DIR)
+        return getEnumPreference("save_state_location", SaveStateLocation.INTERNAL_DIR)
     }
 
     override fun getSaveStateDirectory(rom: Rom): Uri? {
@@ -1617,13 +1602,10 @@ class SharedPreferencesSettingsRepository(
 
         return when (saveStateLocation) {
             SaveStateLocation.SAVE_DIR -> getSaveFileDirectory(rom)
-            SaveStateLocation.ROM_DIR -> getRomParentDirectory(rom)
+            SaveStateLocation.ROM_DIR -> runCatching { getRomParentDirectory(rom) }.getOrNull() ?: getSaveFileDirectory(rom)
             SaveStateLocation.INTERNAL_DIR -> {
-                val saveStateDir = File(getEmulatorBaseDirectory(), "savestates")
-                if (!saveStateDir.isDirectory) {
-                    saveStateDir.mkdirs()
-                }
-                DocumentFile.fromFile(saveStateDir).uri
+                val quickSavesDir = File(getEmulatorBaseDirectory(), "quicksaves").apply { mkdirs() }
+                DocumentFile.fromFile(quickSavesDir).uri
             }
         }
     }

@@ -3,6 +3,7 @@ package me.magnum.melonds.impl.emulator
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import java.io.File
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -15,12 +16,23 @@ class SramProvider(
 
     @Throws(SramLoadException::class)
     fun getSramForRom(rom: Rom): Uri {
-        val rootDirUri = settingsRepository.getSaveFileDirectory(rom)
+        val rootDirUri = try {
+            settingsRepository.getSaveFileDirectory(rom)
+        } catch (_: Throwable) {
+            val fallbackDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "saves").apply { mkdirs() }
+            Uri.fromFile(fallbackDir)
+        }
 
-        val rootDocument = uriHandler.getUriTreeDocument(rootDirUri) ?: throw SramLoadException("Cannot create root document: $rootDirUri")
+        var rootDocument = uriHandler.getUriTreeDocument(rootDirUri)
+        if (rootDocument == null) {
+            // Safe fallback to app-private saves directory
+            val fallbackDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "saves").apply { mkdirs() }
+            rootDocument = uriHandler.getUriTreeDocument(Uri.fromFile(fallbackDir))
+                ?: androidx.documentfile.provider.DocumentFile.fromFile(fallbackDir)
+        }
+
         val romDocument = uriHandler.getUriDocument(rom.uri)
-
-        val romFileName = romDocument?.name ?: throw SramLoadException("Cannot determine SRAM file name: ${romDocument?.uri}")
+        val romFileName = romDocument?.name ?: rom.fileName
         val saveExtension = if (settingsRepository.useSrmExtensionForSaveFiles()) "srm" else "sav"
         val sramFileName = romFileName.replaceAfterLast('.', saveExtension, "$romFileName.$saveExtension")
         Log.i("SramProvider", "resolved save file '$sramFileName' for rom='${rom.name}'")

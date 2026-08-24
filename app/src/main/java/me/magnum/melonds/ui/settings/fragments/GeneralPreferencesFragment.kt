@@ -77,12 +77,21 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        setPreferencesFromResource(R.xml.pref_general, rootKey)
-        addPreferencesFromResource(R.xml.pref_general_updates)
+        runCatching { setPreferencesFromResource(R.xml.pref_general, rootKey) }
+        runCatching { addPreferencesFromResource(R.xml.pref_general_updates) }
 
-        rewindPreference = findPreference("enable_rewind")!!
-        frameLimitSpeedPreference = findPreference("frame_limit_speed_multiplier")!!
-        val sustainedPerformancePreference = findPreference<SwitchPreference>("enable_sustained_performance")!!
+        findPreference<MasterSwitchPreference>("enable_rewind")?.let { pref ->
+            rewindPreference = pref
+            helper.bindPreferenceSummaryToValue(pref)
+        }
+        findPreference<ListPreference>("frame_limit_speed_multiplier")?.let { pref ->
+            frameLimitSpeedPreference = pref
+            helper.bindPreferenceSummaryToValue(pref)
+            pref.sharedPreferences?.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener)
+        }
+        findPreference<SwitchPreference>("enable_sustained_performance")?.let { pref ->
+            pref.isVisible = requireContext().isSustainedPerformanceModeAvailable()
+        }
 
         val themePreference = findPreference<ListPreference>("theme")
         if (themePreference != null) {
@@ -118,12 +127,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             }
         }
 
-        helper.bindPreferenceSummaryToValue(rewindPreference)
-        helper.bindPreferenceSummaryToValue(frameLimitSpeedPreference)
         updateFrameLimitSpeedPreferenceState()
-        sustainedPerformancePreference.isVisible = requireContext().isSustainedPerformanceModeAvailable()
-
-        frameLimitSpeedPreference.sharedPreferences?.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener)
 
         findPreference<Preference>("backup_settings")?.setOnPreferenceClickListener {
             backupLauncher.launch(null)
@@ -137,25 +141,29 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
     override fun onResume() {
         super.onResume()
-        // Set proper value for Rewind preference since the value is not updated when returning from the fragment
-        rewindPreference.onPreferenceChangeListener?.onPreferenceChange(rewindPreference, rewindPreference.sharedPreferences?.getBoolean(rewindPreference.key, false))
+        if (::rewindPreference.isInitialized) {
+            rewindPreference.onPreferenceChangeListener?.onPreferenceChange(rewindPreference, rewindPreference.sharedPreferences?.getBoolean(rewindPreference.key, false))
+        }
         updateFrameLimitSpeedPreferenceState()
     }
 
     override fun onDestroy() {
-        frameLimitSpeedPreference.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(sharedPreferenceChangeListener)
+        if (::frameLimitSpeedPreference.isInitialized) {
+            frameLimitSpeedPreference.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(sharedPreferenceChangeListener)
+        }
         super.onDestroy()
     }
 
     override fun getTitle() = getString(R.string.category_general)
 
     private val sharedPreferenceChangeListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "ra_hardcore_enabled" || key == frameLimitSpeedPreference.key) {
+        if (::frameLimitSpeedPreference.isInitialized && (key == "ra_hardcore_enabled" || key == frameLimitSpeedPreference.key)) {
             updateFrameLimitSpeedPreferenceState()
         }
     }
 
     private fun updateFrameLimitSpeedPreferenceState() {
+        if (!::frameLimitSpeedPreference.isInitialized) return
         val preferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
         val hardcoreEnabled = preferences.getBoolean("ra_hardcore_enabled", false)
         frameLimitSpeedPreference.isVisible = !hardcoreEnabled

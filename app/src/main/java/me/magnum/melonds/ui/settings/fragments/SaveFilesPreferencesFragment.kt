@@ -27,9 +27,13 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_save_files, rootKey)
         findPreference<StoragePickerPreference>("sram_dir")?.let { pref ->
+            helper.bindPreferenceSummaryToValue(pref)
             helper.setupStoragePickerPreference(pref) { uri, persistDirectory ->
                 handleSettingsMirror(uri, persistDirectory)
             }
+        }
+        findPreference<androidx.preference.ListPreference>("save_state_location")?.let { pref ->
+            helper.bindPreferenceSummaryToValue(pref)
         }
     }
 

@@ -39,6 +39,7 @@ class BoxArtRepository @Inject constructor(
     private val mutex = Mutex()
     private val memoryCache = ConcurrentHashMap<String, String>()
     private var indexEntries: List<IndexEntry>? = null
+    private val exactIndexMap = HashMap<String, IndexEntry>()
     private var isMatchesLoaded = false
     private var isDirty = false
 
@@ -47,48 +48,45 @@ class BoxArtRepository @Inject constructor(
     init {
         scope.launch {
             loadMatches()
+            loadIndex()
         }
     }
 
     suspend fun getBoxArtUrl(rom: Rom): String? = withContext(Dispatchers.IO) {
         val key = rom.uri.toString()
 
-        // 1. Instant in-memory check without mutex
+        // 1. Instant in-memory check without lock
         val cached = memoryCache[key]
         if (cached != null) {
             return@withContext if (cached == NO_MATCH) null else cached
         }
 
-        mutex.withLock {
-            val secondCheck = memoryCache[key]
-            if (secondCheck != null) {
-                return@withContext if (secondCheck == NO_MATCH) null else secondCheck
-            }
-
-            if (!isMatchesLoaded) {
-                loadMatches()
-            }
-
+        if (!isMatchesLoaded) {
+            loadMatches()
             val stored = memoryCache[key]
             if (stored != null) {
                 return@withContext if (stored == NO_MATCH) null else stored
             }
-
-            val entries = loadIndex() ?: return@withContext null
-            val candidates = buildList {
-                if (rom.name.isNotBlank()) add(rom.name)
-                val fileBase = rom.fileName.substringBeforeLast('.')
-                if (fileBase.isNotBlank() && fileBase != rom.name) add(fileBase)
-                rom.config.customName?.let { if (it.isNotBlank()) add(it) }
-            }.filter { it.isNotBlank() }
-
-            val match = findBestMatch(candidates, entries)
-            val matchValue = match?.fullUrl ?: NO_MATCH
-            memoryCache[key] = matchValue
-            schedulePersistMatches()
-
-            if (matchValue == NO_MATCH) null else matchValue
         }
+
+        val entries = indexEntries ?: run {
+            // Non-blocking load from disk or schedule background fetch
+            loadIndex() ?: return@withContext null
+        }
+
+        val candidates = buildList {
+            if (rom.name.isNotBlank()) add(rom.name)
+            val fileBase = rom.fileName.substringBeforeLast('.')
+            if (fileBase.isNotBlank() && fileBase != rom.name) add(fileBase)
+            rom.config.customName?.let { if (it.isNotBlank()) add(it) }
+        }.filter { it.isNotBlank() }
+
+        val match = findBestMatch(candidates, entries)
+        val matchValue = match?.fullUrl ?: NO_MATCH
+        memoryCache[key] = matchValue
+        schedulePersistMatches()
+
+        if (matchValue == NO_MATCH) null else matchValue
     }
 
     private fun loadMatches() {
@@ -124,13 +122,22 @@ class BoxArtRepository @Inject constructor(
     private fun loadIndex(): List<IndexEntry>? {
         indexEntries?.let { return it }
 
-        val raw = if (indexFile.isFile && System.currentTimeMillis() - indexFile.lastModified() < INDEX_MAX_AGE_MS) {
+        val raw: String = (if (indexFile.isFile && System.currentTimeMillis() - indexFile.lastModified() < INDEX_MAX_AGE_MS) {
+            runCatching { indexFile.readText() }.getOrNull()
+        } else if (indexFile.isFile) {
+            // Use stale cached file immediately, refresh in background
+            scope.launch {
+                downloadIndex()?.let { content ->
+                    runCatching { indexFile.writeText(content) }
+                }
+            }
             runCatching { indexFile.readText() }.getOrNull()
         } else {
+            // First time - try to download or schedule
             downloadIndex()?.also { content ->
                 runCatching { indexFile.writeText(content) }
-            } ?: runCatching { indexFile.takeIf { it.isFile }?.readText() }.getOrNull()
-        } ?: return null
+            }
+        }) ?: return null
 
         val entries = raw.lineSequence()
             .filter { it.isNotBlank() }
@@ -146,7 +153,9 @@ class BoxArtRepository @Inject constructor(
                 val cleanName = decoded.removeSuffix(".png").substringBefore(" (")
                 val normalized = normalize(cleanName)
                 if (normalized.isNotBlank()) {
-                    IndexEntry(baseUrl + encoded, normalized, normalized.split(' ').filter { it.isNotEmpty() }.toSet())
+                    val entry = IndexEntry(baseUrl + encoded, normalized, normalized.split(' ').filter { it.isNotEmpty() }.toSet())
+                    exactIndexMap[normalized] = entry
+                    entry
                 } else null
             }
             .toList()
@@ -165,8 +174,8 @@ class BoxArtRepository @Inject constructor(
     private fun downloadRepoIndex(baseUrl: String, prefix: String): List<String> {
         return runCatching {
             val connection = URL(baseUrl).openConnection() as HttpURLConnection
-            connection.connectTimeout = 10000
-            connection.readTimeout = 30000
+            connection.connectTimeout = 8000
+            connection.readTimeout = 15000
             connection.setRequestProperty("User-Agent", "melonDS-android-boxart")
             try {
                 val html = connection.inputStream.bufferedReader().readText()
@@ -181,15 +190,16 @@ class BoxArtRepository @Inject constructor(
     }
 
     private fun findBestMatch(candidates: List<String>, entries: List<IndexEntry>): IndexEntry? {
-        // Pass 1: Direct normalized match
+        // Pass 1: Instant O(1) exact map lookup
         for (candidate in candidates) {
             val fullNormalized = normalize(candidate.substringBefore(" (").ifBlank { candidate })
             if (fullNormalized.isBlank()) continue
 
+            exactIndexMap[fullNormalized]?.let { return it }
             entries.firstOrNull { it.normalized == fullNormalized }?.let { return it }
         }
 
-        // Pass 2: Token Jaccard similarity
+        // Pass 2: Token similarity
         var best: IndexEntry? = null
         var bestScore = 0.0
         for (candidate in candidates) {
@@ -204,6 +214,7 @@ class BoxArtRepository @Inject constructor(
                 if (score > bestScore) {
                     bestScore = score
                     best = entry
+                    if (score >= 0.95) return best
                 }
             }
         }
