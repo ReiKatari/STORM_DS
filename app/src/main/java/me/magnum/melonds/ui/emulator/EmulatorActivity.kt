@@ -1752,7 +1752,7 @@ class EmulatorActivity : AppCompatActivity() {
         translatorManager.syncOverlaySettings()
 
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val gyroEnabled = prefs.getBoolean("pref_motion_gyro_enabled", true)
+        val gyroEnabled = prefs.getBoolean("pref_motion_gyro_enabled", false)
         if (gyroEnabled) {
             val modeStr = prefs.getString("pref_motion_gyro_mode", "touch_aim")
             motionSensorManager.gyroMode = when (modeStr) {
@@ -1766,6 +1766,9 @@ class EmulatorActivity : AppCompatActivity() {
             motionSensorManager.invertX = prefs.getBoolean("pref_motion_gyro_invert_x", false)
             motionSensorManager.invertY = prefs.getBoolean("pref_motion_gyro_invert_y", false)
             motionSensorManager.startListening()
+        } else {
+            motionSensorManager.gyroMode = me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
+            motionSensorManager.stopListening()
         }
 
         if (
