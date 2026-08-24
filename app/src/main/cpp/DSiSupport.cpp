@@ -47,7 +47,10 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
         uint32_t titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : melonDS::DSiWareTitleIDHigh;
         memcpy(&titleId[4], &titleIdHigh, 4);
 
-        uint32_t bootType = header.IsDSiWare() ? 0x03 : 0x01;
+        // When booted with a cartridge in Slot-1 (which loadRom does for all ROMs/DSiWare .nds files),
+        // bootType MUST be 0x01 (Cartridge boot) so DSi OS launcher boots the Slot-1 cartridge directly!
+        // (bootType 0x03 is only for titles installed in NAND launched without a cartridge)
+        uint32_t bootType = 0x01;
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Info,
             "DSiSupport::SetupDSiDirectBoot: Setting up Autoload for Cart GameCode=%.4s TitleIdLowBytes=%02X%02X%02X%02X TitleIdHigh=0x%08X bootType=0x%02X (IsDSiWare=%d)\n",
             header.GameCode, titleId[0], titleId[1], titleId[2], titleId[3], titleIdHigh, bootType, header.IsDSiWare() ? 1 : 0);
