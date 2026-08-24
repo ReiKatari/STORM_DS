@@ -185,17 +185,21 @@ class DefaultLayoutProvider(
         val spacing4dp = screenUnitsConverter.dpToPixels(4f).toInt()
 
         val screenComponents = if (singleScreenComponent == null) {
-            var topScreenWidth = (safeWidth * 0.66f).roundToInt()
-            var topScreenHeight = (topScreenWidth / consoleAspectRatio).toInt()
-            if (topScreenHeight > safeHeight) {
-                topScreenWidth = (safeHeight * consoleAspectRatio).toInt()
-                topScreenHeight = safeHeight
+            val targetHeight = safeHeight
+            var screenWidth = (targetHeight * consoleAspectRatio).toInt()
+            var screenHeight = targetHeight
+
+            if (screenWidth * 2 > safeWidth) {
+                screenWidth = safeWidth / 2
+                screenHeight = (screenWidth / consoleAspectRatio).toInt()
             }
 
-            val topScreenView = Rect(safeLeft, safeTop, topScreenWidth, topScreenHeight)
-            val bottomScreenWidth = safeWidth - topScreenWidth
-            val bottomScreenHeight = (bottomScreenWidth / consoleAspectRatio).toInt()
-            val bottomScreenView = Rect(safeLeft + topScreenWidth, safeTop, bottomScreenWidth, bottomScreenHeight)
+            val totalScreensWidth = screenWidth * 2
+            val horizontalMargin = (safeWidth - totalScreensWidth) / 2
+            val verticalMargin = (safeHeight - screenHeight) / 2
+
+            val topScreenView = Rect(safeLeft + horizontalMargin, safeTop + verticalMargin, screenWidth, screenHeight)
+            val bottomScreenView = Rect(safeLeft + horizontalMargin + screenWidth, safeTop + verticalMargin, screenWidth, screenHeight)
 
             arrayOf(
                 PositionedLayoutComponent(topScreenView, LayoutComponent.TOP_SCREEN),
