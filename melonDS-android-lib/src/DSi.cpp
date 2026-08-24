@@ -414,7 +414,8 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
         AES_ctx trialCtx = ctx; // copy — don't modify the real counter
 
-        int zeroCount = 0;
+        int zeroCountOrig = 0;
+        int zeroCountDec = 0;
         u32 totalBytes = 0;
 
         for (u32 b = 0; b < trialBlocks; b++)
@@ -438,6 +439,12 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
                 data[3] = ARM9Read32(binaryaddr + memOff + 12);
             }
 
+            const u8* origBytes = (const u8*)data;
+            for (int i = 0; i < 16; i++)
+            {
+                if (origBytes[i] == 0x00) zeroCountOrig++;
+            }
+
             u8 tmp2[16];
             Bswap128(tmp2, data);
             AES_CTR_xcrypt_buffer(&trialCtx, tmp2, 16);
@@ -445,33 +452,31 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
             // Count zero bytes in decrypted output
             for (int i = 0; i < 16; i++)
             {
-                if (tmp2[i] == 0x00) zeroCount++;
+                if (tmp2[i] == 0x00) zeroCountDec++;
             }
             totalBytes += 16;
         }
 
-        // For 512 bytes of random data: expected zeros ≈ 2 (Poisson λ=2)
-        //   P(zeros >= 6) ≈ 1.7%  — very low false-positive rate
-        // For 512 bytes of ARM/Thumb code: expected zeros ≈ 50-100
-        // Threshold: >= 6 zeros → decrypted output is real code → original was encrypted
-        //            < 6 zeros  → decrypted output is random → original was already decrypted
-        int threshold = (totalBytes >= 256) ? 6 : (totalBytes >= 64 ? 3 : 2);
-        bool isEncrypted = (zeroCount >= threshold);
+        // A region is ALREADY DECRYPTED only if the original data in RAM already has
+        // significant zero bytes (typical for uncompressed ARM/Thumb code) AND trial
+        // decryption turns it into high-entropy pseudo-random noise (lower zero count).
+        // Otherwise, if original has low zeros (typical for AES ciphertext), it is ENCRYPTED.
+        bool isAlreadyDecrypted = (zeroCountOrig >= 12 && zeroCountOrig > zeroCountDec);
 
-        if (!isEncrypted)
+        if (isAlreadyDecrypted)
         {
             Log(LogLevel::Info,
                 "DecryptModcryptArea: data at RAM 0x%08X (ROM off 0x%08X, size 0x%X) appears ALREADY DECRYPTED "
-                "(trial %u bytes: zeroCount=%d, threshold=%d); skipping Modcrypt\n",
-                binaryaddr, offset, size, totalBytes, zeroCount, threshold);
+                "(trial %u bytes: origZeros=%d, decZeros=%d); skipping Modcrypt\n",
+                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec);
             return;
         }
         else
         {
             Log(LogLevel::Info,
                 "DecryptModcryptArea: data at RAM 0x%08X (ROM off 0x%08X, size 0x%X) is ENCRYPTED "
-                "(trial %u bytes: zeroCount=%d, threshold=%d); decrypting Modcrypt\n",
-                binaryaddr, offset, size, totalBytes, zeroCount, threshold);
+                "(trial %u bytes: origZeros=%d, decZeros=%d); decrypting Modcrypt\n",
+                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec);
         }
     }
 
