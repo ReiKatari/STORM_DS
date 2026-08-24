@@ -685,118 +685,29 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.6"
-
-        val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
-            "_${settingsRepository.getDsiWareBootMode().name}"
-        } else if (rom.isDsiEnhanced) {
-            "_DSi_ENHANCED"
-        } else {
-            "_${rom.config.runtimeConsoleType.name}"
-        }
-
-        val baseName = if (rom.fileName.isNotBlank()) {
-            rom.fileName.substringBeforeLast('.')
-        } else {
-            rom.name
-        }
-        val logFileName = "${baseName}${modeSuffix}.log"
-        val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-
         val dsBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DS)
         val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
-        val renderer = settingsRepository.getCurrentVideoRenderer()
+        val renderer = settingsRepository.getCurrentVideoRenderer().name
         val jitEnabled = settingsRepository.isJitEnabled()
         val customBios = settingsRepository.useCustomBios()
+        val dsiMode = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
+            settingsRepository.getDsiWareBootMode().name
+        } else null
 
-        val logText = buildString {
-            appendLine("==================================================")
-            appendLine("STORM DS v$versionName - Game Execution Diagnostic Log")
-            appendLine("Timestamp: $timestamp")
-            appendLine("Device Model: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE}, API ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("--------------------------------------------------")
-            appendLine("GAME INFORMATION:")
-            appendLine("  Game Name: ${rom.name}")
-            appendLine("  File Name: ${rom.fileName}")
-            appendLine("  Game Code / Title ID: $gameCodeOrTitleId")
-            appendLine("  ROM URI: ${rom.uri}")
-            appendLine("  Is DSiWare Title: ${rom.isDsiWareTitle}")
-            appendLine("  Is Installed DSiWare Shortcut: ${rom.isInstalledDsiWareShortcut}")
-            appendLine("  Installed DSiWare TitleId: ${rom.installedDsiWareTitleId?.toString(16) ?: "null"}")
-            appendLine("--------------------------------------------------")
-            appendLine("EMULATION CONFIGURATION:")
-            appendLine("  Console Target: ${rom.config.runtimeConsoleType}")
-            appendLine("  Video Renderer: $renderer")
-            appendLine("  JIT Recompiler: $jitEnabled")
-            appendLine("  Custom BIOS Enabled: $customBios")
-            appendLine("  DS Custom BIOS Status: ${dsBiosResult.status}")
-            appendLine("  DSi Custom BIOS/NAND Status: ${dsiBiosResult.status}")
-            if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
-                appendLine("  DSiWare Boot Mode: ${settingsRepository.getDsiWareBootMode()}")
-            }
-            appendLine("--------------------------------------------------")
-            appendLine("EXECUTION TELEMETRY:")
-            appendLine("  Boot Method: $bootMethod")
-            appendLine("  Status: ${if (success) "SUCCESS" else "FAILED"}")
-            appendLine("  Details: $details")
-            appendLine("==================================================")
-        }
-
-        // 1. Direct file write in Downloads/STORM DS LOGS (always overwrite)
-        var written = false
-        try {
-            StormDeviceSystemInfoReporter.generateAndSaveReport(context)
-            val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val logsDir = File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
-            val logFile = File(logsDir, logFileName)
-            if (logFile.exists()) {
-                logFile.delete()
-            }
-            logFile.writeText(logText, Charsets.UTF_8)
-            written = true
-            Log.i(TAG, "Wrote diagnostic log to: ${logFile.absolutePath}")
-        } catch (e: Throwable) {
-            Log.w(TAG, "Direct write to Downloads failed: ${e.message}")
-        }
-
-        // 2. MediaStore write for Android 10+
-        if (!written && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            try {
-                // Delete previous MediaStore entry if exists to ensure overwrite
-                val relativePath = "${android.os.Environment.DIRECTORY_DOWNLOADS}/STORM DS LOGS/"
-                val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} = ?"
-                val selectionArgs = arrayOf(logFileName, relativePath)
-                context.contentResolver.delete(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, selection, selectionArgs)
-
-                val contentValues = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, logFileName)
-                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
-                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "${android.os.Environment.DIRECTORY_DOWNLOADS}/STORM DS LOGS")
-                }
-                val uri = context.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                if (uri != null) {
-                    context.contentResolver.openOutputStream(uri, "wt")?.use { os ->
-                        os.write(logText.toByteArray(Charsets.UTF_8))
-                    }
-                    written = true
-                    Log.i(TAG, "Wrote diagnostic log via MediaStore to: $uri")
-                }
-            } catch (e: Throwable) {
-                Log.w(TAG, "MediaStore write failed: ${e.message}")
-            }
-        }
-
-        // 3. Fallback to App External Files Dir
-        if (!written) {
-            try {
-                val fallbackDir = File(context.getExternalFilesDir(null), "STORM DS LOGS").apply { mkdirs() }
-                val fallbackFile = File(fallbackDir, logFileName)
-                fallbackFile.writeText(logText, Charsets.UTF_8)
-                Log.i(TAG, "Wrote diagnostic log to fallback: ${fallbackFile.absolutePath}")
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed all log writing attempts", e)
-            }
-        }
+        StormDeviceSystemInfoReporter.saveUnifiedReport(
+            context = context,
+            rom = rom,
+            gameCodeOrTitleId = gameCodeOrTitleId,
+            success = success,
+            details = details,
+            bootMethod = bootMethod,
+            dsBiosStatus = dsBiosResult.status.name,
+            dsiBiosStatus = dsiBiosResult.status.name,
+            videoRenderer = renderer,
+            jitEnabled = jitEnabled,
+            customBiosEnabled = customBios,
+            dsiWareBootMode = dsiMode,
+        )
     }
 
     private fun Long.toDsiWareTitleIdHex(): String {

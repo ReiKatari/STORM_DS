@@ -2168,46 +2168,64 @@ class EmulatorActivity : AppCompatActivity() {
         val hybridView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
         val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
 
-        val surfaceW = binding.surfaceMain.width.coerceAtLeast(binding.viewLayoutControls.width)
-        val surfaceH = binding.surfaceMain.height.coerceAtLeast(binding.viewLayoutControls.height)
-        val isLandscape = surfaceW > surfaceH
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val displayMetrics = resources.displayMetrics
+        val realW = if (isLandscape) maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else minOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+        val realH = if (isLandscape) minOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+
+        val surfaceW = binding.surfaceMain.width.takeIf { it > 0 } ?: realW
+        val surfaceH = binding.surfaceMain.height.takeIf { it > 0 } ?: realH
 
         var rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
         var rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
 
-        // Discard stale rects if they overflow current surface dimensions on rotation
-        if (rawTop != null && surfaceW > 0 && surfaceH > 0) {
+        // Sanity Check: Check orientation mismatch between view rects and actual device orientation
+        if (rawTop != null && rawBottom != null) {
+            val isViewLayoutVertical = rawBottom.y >= rawTop.bottom - 20 && kotlin.math.abs(rawTop.x - rawBottom.x) < 50
+            val isViewLayoutHorizontal = rawBottom.x >= rawTop.right - 20 && kotlin.math.abs(rawTop.y - rawBottom.y) < 50
+
+            if (isLandscape && isViewLayoutVertical) {
+                // View has stale portrait layout while device is in landscape
+                rawTop = null
+                rawBottom = null
+                lastKnownGoodTopRect = null
+                lastKnownGoodBottomRect = null
+            } else if (!isLandscape && isViewLayoutHorizontal) {
+                // View has stale landscape layout while device is in portrait
+                rawTop = null
+                rawBottom = null
+                lastKnownGoodTopRect = null
+                lastKnownGoodBottomRect = null
+            }
+        }
+
+        // Discard stale rects if they overflow surface dimensions
+        if (rawTop != null) {
             if (rawTop.x + rawTop.width > surfaceW + 10 || rawTop.y + rawTop.height > surfaceH + 10) {
                 rawTop = null
                 rawBottom = null
+                lastKnownGoodTopRect = null
+                lastKnownGoodBottomRect = null
             }
         }
 
-        var topRect = rawTop ?: lastKnownGoodTopRect
-        var bottomRect = rawBottom ?: lastKnownGoodBottomRect
-
-        // Fallback default calculation if views are not yet laid out
-        if ((topRect == null || bottomRect == null) && surfaceW > 0 && surfaceH > 0) {
-            val defLayout = if (isLandscape) {
-                val sWidth = surfaceW / 2
-                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
-                val vMargin = (surfaceH - sHeight) / 2
-                Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
-            } else {
-                val sWidth = surfaceW
-                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
-                Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
-            }
-            topRect = topRect ?: defLayout.first
-            bottomRect = bottomRect ?: defLayout.second
+        // Compute authoritative default layout rects for the current orientation
+        val defLayout = if (isLandscape) {
+            val sWidth = surfaceW / 2
+            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+            val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
+            Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
+        } else {
+            val sWidth = surfaceW
+            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+            Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
         }
 
-        if (topRect != null && topRect.width > 0 && topRect.height > 0) {
-            lastKnownGoodTopRect = topRect
-        }
-        if (bottomRect != null && bottomRect.width > 0 && bottomRect.height > 0) {
-            lastKnownGoodBottomRect = bottomRect
-        }
+        val topRect = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
+        val bottomRect = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
+
+        lastKnownGoodTopRect = topRect
+        lastKnownGoodBottomRect = bottomRect
 
         return ScreenPresentationAreas(
             topScreenRect = topRect,
