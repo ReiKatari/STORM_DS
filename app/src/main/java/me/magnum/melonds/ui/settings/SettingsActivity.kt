@@ -94,6 +94,7 @@ class SettingsActivity :
     private lateinit var binding: ActivitySettingsBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        me.magnum.melonds.ui.theme.AppThemeManager.init(this)
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         val isLight = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme == me.magnum.melonds.ui.Theme.LIGHT
         if (isLight) {
