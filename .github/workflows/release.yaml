@@ -95,11 +95,12 @@ jobs:
 
   playstore-release:
     runs-on: ubuntu-latest
+    if: ${{ secrets.MELONDS_PLAYSTORE_ACCOUNT_JSON != '' }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -109,12 +110,25 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28
+          add-to-path: true
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
       - name: Build melonDS Android
         env:
           MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
           MELONDS_KEYSTORE_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PASSWORD }}
           MELONDS_KEY_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PLAYSTORE_PASSWORD }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           echo "$MELONDS_KEYSTORE" | base64 -d > ${{runner.workspace}}/keystore.jks
           echo "MELONDS_KEYSTORE=${{runner.workspace}}/keystore.jks" >> local.properties
@@ -122,7 +136,7 @@ jobs:
           echo "MELONDS_KEY_ALIAS=melonds-playstore" >> local.properties
           echo "MELONDS_KEY_PASSWORD=$MELONDS_KEY_PASSWORD" >> local.properties
           chmod +x ./gradlew
-          ./gradlew :app:regenerateVulkanSpirv :app:assemblePlayStoreProdRelease
+          ./gradlew :app:assemblePlayStoreProdRelease
 
       - name: Report Vulkan SPIR-V Header Changes
         if: always()

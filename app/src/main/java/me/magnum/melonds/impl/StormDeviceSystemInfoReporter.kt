@@ -33,7 +33,7 @@ object StormDeviceSystemInfoReporter {
 
             val versionName = runCatching {
                 context.packageManager.getPackageInfo(context.packageName, 0).versionName
-            }.getOrNull() ?: "2.9.1"
+            }.getOrNull() ?: "2.9.2"
 
             val versionCode = runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -42,7 +42,7 @@ object StormDeviceSystemInfoReporter {
                     @Suppress("DEPRECATION")
                     context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
                 }
-            }.getOrNull() ?: 291L
+            }.getOrNull() ?: 292L
 
             appendLine("================================================================================")
             appendLine("STORM DS v$versionName (Build $versionCode) - Comprehensive Device & System Diagnostic")
