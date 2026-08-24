@@ -36,7 +36,7 @@ class MotionSensorManager(
     }
 
     // Configurable parameters
-    var gyroMode: GyroMode = GyroMode.TOUCH_AIM
+    var gyroMode: GyroMode = GyroMode.OFF
     var gyroSensitivityX: Float = 1.25f
     var gyroSensitivityY: Float = 1.25f
     var invertX: Boolean = false
