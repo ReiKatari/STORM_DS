@@ -36,10 +36,23 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28
+          add-to-path: true
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
       - name: Build melonDS Android
         env:
           MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
           MELONDS_KEYSTORE_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PASSWORD }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           COMMIT=$(git rev-parse --short HEAD)
           git config user.name "github-actions[bot]"
@@ -78,11 +91,11 @@ jobs:
           tag: nightly-release
           name: 'Nightly Build'
           body: 'The currently Nightly Build. Whenever new changes are pushed, you can find the latest build here. You can keep this installation alongside your main one.'
-          artifacts: app/build/outputs/apk/gitHubNightly/release/app-gitHub-nightly-release.apk
+          artifacts: app/build/outputs/apk/gitHubNightly/release/*.apk
           artifactContentType: application/vnd.android.package-archive
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: melonDS-android
-          path: app/build/outputs/apk/gitHubNightly/release/app-gitHub-nightly-release.apk
+          path: app/build/outputs/apk/gitHubNightly/release/*.apk
