@@ -273,11 +273,7 @@ fun WatermelonLibraryHeader(
                     }
                     DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                         DropdownMenuItem(onClick = { overflowOpen = false; onOpenSingleRom() }) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Folder, contentDescription = null, tint = colors.red, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.action_open_single_rom))
-                            }
+                            Text(stringResource(R.string.action_open_single_rom))
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDs() }) {
                             Text(stringResource(R.string.action_boot_firmware_ds))

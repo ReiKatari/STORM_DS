@@ -1152,7 +1152,7 @@ class EmulatorViewModel @Inject constructor(
 
     private fun launchFirmware(consoleType: ConsoleType) {
         viewModelScope.launch {
-            resetEmulatorState(EmulatorState.LoadingFirmware())
+            resetEmulatorState(EmulatorState.LoadingFirmware(consoleType))
             startEmulatorSession(
                 sessionType = EmulatorSession.SessionType.FirmwareSession(consoleType),
                 areRetroAchievementsEnabled = false,

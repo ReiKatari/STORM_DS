@@ -677,6 +677,7 @@
     <item>Папка сохранений</item>
     <item>Папка игры (ROM)</item>
     <item>Внутреннее хранилище</item>
+    <item>Собственное</item>
   </string-array>
   <string-array name="layout_orientation_options">
     <item>Авто (Системная)</item>
@@ -947,6 +948,7 @@
   <string name="save_file_use_srm_extension">Расширение .srm</string>
   <string name="save_file_use_srm_extension_summary">Использовать расширение .srm вместо .sav</string>
   <string name="save_state_location">Расположение быстрыx сохранений</string>
+  <string name="save_state_custom_directory">Папка файлов быстрых сохранений</string>
   <string name="auto_save_state_on_exit">Автосохранение при выходе</string>
   <string name="auto_save_state_on_exit_summary">Автоматически сохранять состояние при закрытии игры</string>
   <string name="auto_load_state_on_launch">Автозагрузка при запуске</string>
