@@ -2173,8 +2173,8 @@ class EmulatorActivity : AppCompatActivity() {
         val realW = if (isLandscape) maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else minOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
         val realH = if (isLandscape) minOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
 
-        val surfaceW = binding.surfaceMain.width.takeIf { it > 0 } ?: realW
-        val surfaceH = binding.surfaceMain.height.takeIf { it > 0 } ?: realH
+        val surfaceW = realW
+        val surfaceH = realH
 
         var rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
         var rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
@@ -2520,12 +2520,16 @@ class EmulatorActivity : AppCompatActivity() {
             return null
         }
 
-        val (surfaceWidth, surfaceHeight) = binding.surfaceMain.getCurrentSurfaceSize()
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val displayMetrics = resources.displayMetrics
+        val realW = if (isLandscape) maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else minOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+        val realH = if (isLandscape) minOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+
         val (resolvedTopScreenRect, resolvedBottomScreenRect) = resolveVulkanScreenRects(
             topScreenRect = topScreenRect,
             bottomScreenRect = bottomScreenRect,
-            surfaceWidth = if (surfaceWidth > 0) surfaceWidth else binding.surfaceMain.width,
-            surfaceHeight = if (surfaceHeight > 0) surfaceHeight else binding.surfaceMain.height,
+            surfaceWidth = realW,
+            surfaceHeight = realH,
             fallbackWhenEmpty = hybridTopScreenRect == null && hybridBottomScreenRect == null,
         )
 
