@@ -646,6 +646,7 @@ private fun getInputName(input: Input): String? {
         Input.QUICK_LOAD -> R.string.input_quick_load
         Input.REWIND -> R.string.rewind
         Input.TRANSLATE -> R.string.input_translate
+        Input.LOCK_ROTATION -> R.string.input_lock_rotation
         else -> return null
     }
 

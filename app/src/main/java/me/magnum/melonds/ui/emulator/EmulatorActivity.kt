@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.emulator
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.Typeface
@@ -351,6 +352,10 @@ class EmulatorActivity : AppCompatActivity() {
 
         override fun onToggleExtraButtons() {
             binding.viewLayoutControls.toggleExtraButtonsVisibility()
+        }
+
+        override fun onLockRotation() {
+            toggleRotationLock()
         }
 
         fun clearFastForwardHold() {
@@ -2017,6 +2022,24 @@ class EmulatorActivity : AppCompatActivity() {
 
         updateRendererScreenAreas()
         scheduleStartupPresentationRefreshes()
+    }
+
+    private var isRotationLocked = false
+
+    private fun toggleRotationLock() {
+        isRotationLocked = !isRotationLocked
+        if (isRotationLocked) {
+            val currentOrientation = resources.configuration.orientation
+            requestedOrientation = if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            }
+            Toast.makeText(this, getString(R.string.toast_rotation_locked), Toast.LENGTH_SHORT).show()
+        } else {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            Toast.makeText(this, getString(R.string.toast_rotation_unlocked), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun updateRendererScreenAreas() {
@@ -4267,12 +4290,11 @@ class EmulatorActivity : AppCompatActivity() {
         lastKnownGoodTopRect = null
         lastKnownGoodBottomRect = null
         updateOrientation(newConfig)
-        // There is an issue in which, after moving the app to a different display, the app reports that it is still running on the previous display. Adding a frame of delay
-        // seems to fix the problem.
-        handler.post {
+        binding.viewLayoutControls.post {
             updateDisplays()
             updateRendererScreenAreas()
             presentation?.updateRendererScreenAreas()
+            scheduleStartupPresentationRefreshes()
         }
     }
 
