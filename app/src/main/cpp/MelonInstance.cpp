@@ -1669,21 +1669,17 @@ bool MelonInstance::loadRom(std::string romPath, std::string sramPath)
 
     // SRAM file loading
     FileHandle* sramFile = Platform::OpenFile(sramPath, FileMode::Read);
-    if (!sramFile)
+    if (sramFile)
     {
-        return false;
+        sramFileLength = (u32) Platform::FileLength(sramFile);
+        if (sramFileLength > 0)
+        {
+            FileRewind(sramFile);
+            sramData = std::make_unique<u8[]>(sramFileLength);
+            FileRead(sramData.get(), sramFileLength, 1, sramFile);
+        }
+        CloseFile(sramFile);
     }
-    else if (!Platform::CheckFileWritable(sramPath))
-    {
-        return false;
-    }
-
-    sramFileLength = (u32) Platform::FileLength(sramFile);
-
-    FileRewind(sramFile);
-    sramData = std::make_unique<u8[]>(sramFileLength);
-    FileRead(sramData.get(), sramFileLength, 1, sramFile);
-    CloseFile(sramFile);
 
     NDSCart::NDSCartArgs cartargs{
         // Don't load the SD card itself yet, because we don't know if

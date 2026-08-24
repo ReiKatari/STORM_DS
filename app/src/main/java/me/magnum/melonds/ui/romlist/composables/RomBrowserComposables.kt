@@ -97,6 +97,7 @@ fun WatermelonLibraryHeader(
     onBootFirmwareDs: () -> Unit,
     onBootFirmwareDsi: () -> Unit,
     onOpenDsiWareManager: () -> Unit,
+    onOpenSingleRom: () -> Unit = {},
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -112,7 +113,7 @@ fun WatermelonLibraryHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(start = 18.dp, end = 6.dp),
+                .padding(start = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (searchOpen) {
@@ -121,16 +122,16 @@ fun WatermelonLibraryHeader(
                         searchOpen = false
                         onSearchQueryChanged(null)
                     },
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(38.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = colors.text2, modifier = Modifier.size(22.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
                 }
                 BasicTextField(
                     value = searchQuery,
                     onValueChange = { onSearchQueryChanged(it) },
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
-                    textStyle = TextStyle(color = colors.text, fontSize = 16.sp),
+                    textStyle = TextStyle(color = colors.text, fontSize = 15.sp),
                     cursorBrush = SolidColor(colors.red),
                     decorationBox = { innerTextField ->
                         Box {
@@ -138,7 +139,7 @@ fun WatermelonLibraryHeader(
                                 Text(
                                     text = stringResource(R.string.hint_search_roms),
                                     color = colors.text3,
-                                    fontSize = 16.sp,
+                                    fontSize = 15.sp,
                                 )
                             }
                             innerTextField()
@@ -146,7 +147,7 @@ fun WatermelonLibraryHeader(
                     },
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = 6.dp)
                         .focusRequester(searchFocusRequester),
                 )
                 LaunchedEffect(Unit) {
@@ -154,34 +155,41 @@ fun WatermelonLibraryHeader(
                 }
                 IconButton(
                     onClick = { onSearchQueryChanged("") },
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(38.dp),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.Close, contentDescription = null, tint = colors.text2, modifier = Modifier.size(18.dp))
                 }
             } else {
-                WatermelonMark(height = 24.dp)
-                Spacer(Modifier.width(9.dp))
-                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    WatermelonMark(height = 22.dp)
+                    Spacer(Modifier.width(7.dp))
                     Text(
                         text = "STORM ",
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
-                        fontSize = 21.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.3).sp,
+                        maxLines = 1,
                     )
                     Text(
                         text = "DS",
                         color = Color(0xFF00E5FF),
                         fontFamily = SpaceGrotesk,
-                        fontSize = 21.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.3).sp,
+                        maxLines = 1,
                     )
                 }
 
+                Spacer(Modifier.weight(1f))
+
                 // Styled DSiWare Boot Mode Quick Switcher
-                Box(modifier = Modifier.padding(end = 4.dp)) {
+                Box(modifier = Modifier.padding(end = 2.dp)) {
                     val (modeIcon, modeLabel, modeColor) = when (dsiWareBootMode) {
                         me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> Triple("🚀", "Auto", Color(0xFF00E5FF))
                         me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> Triple("⚡", "Direct", Color(0xFFFFAB00))
@@ -193,17 +201,17 @@ fun WatermelonLibraryHeader(
                             .background(colors.surface2)
                             .border(1.dp, modeColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                             .clickable { bootModeMenuOpen = true }
-                            .padding(horizontal = 7.dp, vertical = 4.5.dp),
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = modeIcon, fontSize = 11.sp)
-                            Spacer(Modifier.width(4.dp))
+                            Text(text = modeIcon, fontSize = 10.5.sp)
+                            Spacer(Modifier.width(3.dp))
                             Text(
                                 text = modeLabel,
                                 color = modeColor,
                                 fontFamily = WatermelonMono,
-                                fontSize = 10.5.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
@@ -248,22 +256,29 @@ fun WatermelonLibraryHeader(
                     }
                 }
 
-                IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(38.dp)) {
-                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(20.dp))
+                IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(19.dp))
                 }
-                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(38.dp)) {
+                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
                         contentDescription = stringResource(R.string.rom_view_toggle),
                         tint = colors.text2,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(19.dp),
                     )
                 }
                 Box {
-                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.size(38.dp)) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
+                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = null, tint = colors.text2, modifier = Modifier.size(19.dp))
                     }
                     DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                        DropdownMenuItem(onClick = { overflowOpen = false; onOpenSingleRom() }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Folder, contentDescription = null, tint = colors.red, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.action_open_single_rom))
+                            }
+                        }
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDs() }) {
                             Text(stringResource(R.string.action_boot_firmware_ds))
                         }
@@ -278,8 +293,8 @@ fun WatermelonLibraryHeader(
                         }
                     }
                 }
-                IconButton(onClick = onOpenSettings, modifier = Modifier.size(38.dp)) {
-                    Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.settings), tint = colors.text2, modifier = Modifier.size(20.dp))
+                IconButton(onClick = onOpenSettings, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.settings), tint = colors.text2, modifier = Modifier.size(19.dp))
                 }
             }
         }
@@ -472,33 +487,80 @@ fun ContinuePlayingShelf(
     onRomVisible: (Rom) -> Unit = {},
 ) {
     if (roms.isEmpty()) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    var isCollapsed by remember { mutableStateOf(prefs.getBoolean("continue_playing_shelf_collapsed", false)) }
     val colors = watermelon
-    Column(modifier = modifier.padding(top = 16.dp, bottom = 4.dp)) {
-        Text(
-            text = stringResource(R.string.rom_continue_playing),
-            color = colors.text,
-            fontFamily = SpaceGrotesk,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = horizontalPadding, end = horizontalPadding, bottom = 10.dp),
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = horizontalPadding),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(roms, key = { it.uri.toString() }) { rom ->
-                LaunchedEffect(rom.uri) {
-                    onRomVisible(rom)
+
+    Column(modifier = modifier.padding(top = 14.dp, bottom = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable {
+                    val next = !isCollapsed
+                    isCollapsed = next
+                    prefs.edit().putBoolean("continue_playing_shelf_collapsed", next).apply()
                 }
-                ContinuePlayingCard(
-                    rom = rom,
-                    coverUrl = coverByHash[rom.retroAchievementsHash],
-                    boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
-                    boxArtLoading = boxArtByUri[rom.uri.toString()] == null,
-                    onClick = { onRomClicked(rom) },
-                    onLongPress = { onRomLongPressed(rom) },
-                    onFocused = onRomFocused,
+                .padding(start = horizontalPadding, end = horizontalPadding, top = 4.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.rom_continue_playing),
+                    color = colors.text,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colors.surface2)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = roms.size.toString(),
+                        color = colors.text3,
+                        fontSize = 11.sp,
+                        fontFamily = WatermelonMono,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            Text(
+                text = if (isCollapsed) "▼" else "▲",
+                color = colors.text3,
+                fontSize = 11.sp,
+                fontFamily = WatermelonMono,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !isCollapsed,
+            enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+        ) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = horizontalPadding),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(roms, key = { it.uri.toString() }) { rom ->
+                    LaunchedEffect(rom.uri) {
+                        onRomVisible(rom)
+                    }
+                    ContinuePlayingCard(
+                        rom = rom,
+                        coverUrl = coverByHash[rom.retroAchievementsHash],
+                        boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                        boxArtLoading = boxArtByUri[rom.uri.toString()] == null,
+                        onClick = { onRomClicked(rom) },
+                        onLongPress = { onRomLongPressed(rom) },
+                        onFocused = onRomFocused,
+                    )
+                }
             }
         }
     }

@@ -7,7 +7,7 @@
             android:key="use_rom_dir"
             android:title="@string/save_next_rom"
             app:iconSpaceReserved="false"
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:disableDependentsState="true" />
 
     <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference

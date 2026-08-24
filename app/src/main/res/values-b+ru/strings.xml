@@ -1382,4 +1382,5 @@
     <string name="video_dual_screen_cast_title">Режим двух экранов (ТВ / HDMI Cast)</string>
     <string name="video_dual_screen_cast_summary">Сенсорный экран на телефоне, а верхний экран в 4K на телевизоре</string>
     <string name="soft_patch_applied">Применен патч: %s</string>
+    <string name="action_open_single_rom">Запустить отдельный ROM…</string>
 </resources>

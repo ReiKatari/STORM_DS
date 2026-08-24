@@ -40,22 +40,15 @@ std::optional<NDSCart::NDSCartArgs> BuildNdsCartArgs(EmulatorConfiguration confi
 
     // SRAM file loading
     FileHandle* sramFile = Platform::OpenFile(sramPath, FileMode::Read);
-    if (!sramFile)
-    {
-        return std::nullopt;
-    }
-    else if (!Platform::CheckFileWritable(romPath))
-    {
-        return std::nullopt;
-    }
-
     if (sramFile)
     {
         sramFileLength = (u32) Platform::FileLength(sramFile);
-
-        FileRewind(sramFile);
-        sramData = std::make_unique<u8[]>(sramFileLength);
-        FileRead(sramData.get(), sramFileLength, 1, sramFile);
+        if (sramFileLength > 0)
+        {
+            FileRewind(sramFile);
+            sramData = std::make_unique<u8[]>(sramFileLength);
+            FileRead(sramData.get(), sramFileLength, 1, sramFile);
+        }
         CloseFile(sramFile);
     }
 

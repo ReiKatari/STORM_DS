@@ -33,9 +33,8 @@ class PreferenceFragmentHelper(
         private val sBindPreferenceSummaryToValueListener = Preference.OnPreferenceChangeListener { preference, value ->
             when (preference) {
                 is ListPreference -> {
-                    // For list preferences, look up the correct display value in
-                    // the preference's 'entries' list.
-                    val index = (value as? String)
+                    val chosenValue = (value as? String) ?: preference.value
+                    val index = chosenValue
                         ?.let { preference.findIndexOfValue(it) }
                         ?: -1
 
