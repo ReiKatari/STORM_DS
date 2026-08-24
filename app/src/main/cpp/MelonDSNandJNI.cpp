@@ -970,6 +970,11 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
         }
     }
 
+    SHA1_CTX sha;
+    SHA1Init(&sha);
+    SHA1Update(&sha, titleData.data(), titleData.size());
+    SHA1Final(titleMetadata->Contents.ContentSha1Hash, &sha);
+
     melonDS::NDSHeader header {};
     memcpy(&header, titleData.data(), sizeof(header));
     hasDsiWareUserStorageForTitle(nandMount, header, titleData.size(), titleId[1], titleId[0]);
