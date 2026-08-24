@@ -368,6 +368,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 LayoutComponent.BUTTON_HINGE -> drawHingeIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_TRANSLATE -> drawTranslateIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> drawToggleExtraIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_LOCK_ROTATION -> drawLockRotationIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
                     drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.35f, w - padding * 2, style)
@@ -633,5 +634,32 @@ class ModernSingleButtonView @JvmOverloads constructor(
         }
         val rect = RectF(cx - gap * 1.5f, cy - gap * 0.65f, cx + gap * 1.5f, cy + gap * 0.65f)
         canvas.drawRoundRect(rect, 4f, 4f, framePaint)
+    }
+
+    private fun drawLockRotationIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val w = size * 0.55f
+        val h = size * 0.45f
+        val bodyRect = RectF(cx - w / 2f, cy - h / 2f + size * 0.1f, cx + w / 2f, cy + h / 2f + size * 0.1f)
+
+        val bodyPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.8f
+        }
+        canvas.drawRoundRect(bodyRect, 3f, 3f, bodyPaint)
+
+        // Shackle of padlock
+        val shackleRadius = w * 0.28f
+        val shackleRect = RectF(cx - shackleRadius, cy - h / 2f - size * 0.18f, cx + shackleRadius, cy - h / 2f + shackleRadius * 0.8f)
+        val shacklePaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.8f
+        }
+        canvas.drawArc(shackleRect, 180f, 180f, false, shacklePaint)
+
+        // Keyhole dot
+        val dotPaint = Paint(iconPaint).apply {
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(cx, cy + size * 0.1f, size * 0.05f, dotPaint)
     }
 }
