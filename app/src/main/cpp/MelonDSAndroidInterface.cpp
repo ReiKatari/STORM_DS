@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <android/log.h>
 #include <time.h>
+#include <sys/prctl.h>
 #include "JniEnvHandler.h"
 #include "UriFileHandler.h"
 #include "MelonDS.h"
@@ -27,6 +28,34 @@ static struct sigaction old_sa_bus;
 static struct sigaction old_sa_fpe;
 static struct sigaction old_sa_ill;
 
+#include <dlfcn.h>
+#include <unwind.h>
+#include <pthread.h>
+
+struct BacktraceState {
+    void** current;
+    void** end;
+};
+
+static _Unwind_Reason_Code unwindCallback(struct _Unwind_Context* context, void* arg) {
+    BacktraceState* state = static_cast<BacktraceState*>(arg);
+    uintptr_t pc = _Unwind_GetIP(context);
+    if (pc) {
+        if (state->current == state->end) {
+            return _URC_END_OF_STACK;
+        } else {
+            *state->current++ = reinterpret_cast<void*>(pc);
+        }
+    }
+    return _URC_NO_REASON;
+}
+
+static size_t captureBacktrace(void** buffer, size_t max) {
+    BacktraceState state = {buffer, buffer + max};
+    _Unwind_Backtrace(unwindCallback, &state);
+    return state.current - buffer;
+}
+
 static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
 {
     __android_log_print(ANDROID_LOG_FATAL, "STORM_DS_NATIVE", "CRASH DETECTED: signal %d at address %p", sig, info ? info->si_addr : nullptr);
@@ -38,10 +67,26 @@ static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
     }
     if (f) {
         time_t now = time(nullptr);
+        char threadName[64] = {0};
+        prctl(PR_GET_NAME, threadName);
         fprintf(f, "\n================ STORM DS NATIVE CRASH REPORT ================\n");
         fprintf(f, "Time: %ld\n", (long)now);
+        fprintf(f, "Thread: %s (tid=%d)\n", threadName, (int)gettid());
         fprintf(f, "Fatal Signal: %d (%s)\n", sig, strsignal(sig));
         fprintf(f, "Fault Address: %p\n", info ? info->si_addr : nullptr);
+        fprintf(f, "Call Stack:\n");
+        void* buffer[32];
+        size_t count = captureBacktrace(buffer, 32);
+        for (size_t i = 0; i < count; i++) {
+            Dl_info dlinfo;
+            if (dladdr(buffer[i], &dlinfo) && dlinfo.dli_sname) {
+                fprintf(f, "  #%02zu %p (%s + %ld) [%s]\n", i, buffer[i], dlinfo.dli_sname, (long)((char*)buffer[i] - (char*)dlinfo.dli_saddr), dlinfo.dli_fname ? dlinfo.dli_fname : "unknown");
+            } else if (dladdr(buffer[i], &dlinfo) && dlinfo.dli_fname) {
+                fprintf(f, "  #%02zu %p [%s]\n", i, buffer[i], dlinfo.dli_fname);
+            } else {
+                fprintf(f, "  #%02zu %p\n", i, buffer[i]);
+            }
+        }
         fprintf(f, "==============================================================\n");
         fclose(f);
     }
