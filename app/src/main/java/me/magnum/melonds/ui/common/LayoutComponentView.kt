@@ -56,26 +56,21 @@ class LayoutComponentView(val view: View, val aspectRatio: Float, val component:
 
     fun getRect(): Rect {
         val layoutParams = view.layoutParams as? FrameLayout.LayoutParams
-        val measuredWidth = view.width
-        val measuredHeight = view.height
-        val width = if (measuredWidth > 0) measuredWidth else layoutParams?.width?.coerceAtLeast(0) ?: 0
-        val height = if (measuredHeight > 0) measuredHeight else layoutParams?.height?.coerceAtLeast(0) ?: 0
-        val x = if (measuredWidth > 0) {
-            view.x.toInt()
-        } else {
-            layoutParams?.leftMargin ?: view.x.toInt()
-        }
-        val y = if (measuredHeight > 0) {
-            view.y.toInt()
-        } else {
-            layoutParams?.topMargin ?: view.y.toInt()
-        }
+        val lpWidth = layoutParams?.width?.takeIf { it > 0 }
+        val lpHeight = layoutParams?.height?.takeIf { it > 0 }
+        val lpX = layoutParams?.leftMargin
+        val lpY = layoutParams?.topMargin
+
+        val width = lpWidth ?: view.width.coerceAtLeast(0)
+        val height = lpHeight ?: view.height.coerceAtLeast(0)
+        val x = lpX ?: view.x.toInt()
+        val y = lpY ?: view.y.toInt()
 
         return Rect(
-                x,
-                y,
-                width,
-                height,
+            x,
+            y,
+            width,
+            height,
         )
     }
 

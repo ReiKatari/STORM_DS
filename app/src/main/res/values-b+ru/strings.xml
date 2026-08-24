@@ -188,6 +188,9 @@
   <string name="input_quick_save">Быстрое сохранение</string>
   <string name="input_quick_load">Быстрая загрузка</string>
   <string name="input_translate">Перевод экрана</string>
+  <string name="input_lock_rotation">Блокировка поворота экрана</string>
+  <string name="toast_rotation_locked">Поворот экрана заблокирован</string>
+  <string name="toast_rotation_unlocked">Поворот экрана разблокирован (Автоповорот)</string>
   <string name="input_group_console">Управление консолью (DS / DSi)</string>
   <string name="input_group_hotkeys">Горячие клавиши и действия</string>
   <string name="layouts">Макеты экранов</string>
