@@ -17,14 +17,15 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: actions/setup-java@v4
         with:
@@ -39,21 +40,22 @@ jobs:
         env:
           MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
           MELONDS_KEYSTORE_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PASSWORD }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           COMMIT=$(git rev-parse --short HEAD)
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           sed -i -e 's/\(versionName = "\)\(.*\)\("\)/\1\2 ('"$COMMIT"')\3/g' buildSrc/src/main/kotlin/AppConfig.kt
-          echo "$MELONDS_KEYSTORE" | base64 -d > ${{runner.workspace}}/keystore.jks
-          echo "MELONDS_KEYSTORE=${{runner.workspace}}/keystore.jks" >> local.properties
-          echo "MELONDS_KEYSTORE_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
-          echo "MELONDS_KEY_ALIAS=melonds" >> local.properties
-          echo "MELONDS_KEY_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
+          if [ -n "$MELONDS_KEYSTORE" ]; then
+            echo "$MELONDS_KEYSTORE" | base64 -d > ${{runner.workspace}}/keystore.jks
+            echo "MELONDS_KEYSTORE=${{runner.workspace}}/keystore.jks" >> local.properties
+            echo "MELONDS_KEYSTORE_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
+            echo "MELONDS_KEY_ALIAS=melonds" >> local.properties
+            echo "MELONDS_KEY_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
+          fi
           chmod +x ./gradlew
-          ./gradlew :app:regenerateVulkanSpirv :app:assembleGitHubNightlyRelease
-          git tag -m "Nightly Release" -f -a nightly-release
-          git push -f origin refs/tags/nightly-release
+          ./gradlew :app:assembleGitHubNightlyRelease
+          git tag -m "Nightly Release" -f -a nightly-release || true
+          git push -f origin refs/tags/nightly-release || true
 
       - name: Report Vulkan SPIR-V Header Changes
         if: always()
