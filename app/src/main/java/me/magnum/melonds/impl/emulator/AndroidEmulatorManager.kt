@@ -623,7 +623,7 @@ class AndroidEmulatorManager(
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
 
-        val targetRomUri = if (executableFile.exists() && executableFile.length() > 0L) {
+        val targetRomUri = if (rom.isInstalledDsiWareShortcut && executableFile.exists() && executableFile.length() > 0L) {
             Uri.fromFile(executableFile)
         } else {
             rom.uri
@@ -685,7 +685,7 @@ class AndroidEmulatorManager(
         details: String,
         bootMethod: String = "loadRom",
     ) {
-        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.4"
+        val versionName = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.9.5"
 
         val modeSuffix = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) {
             "_${settingsRepository.getDsiWareBootMode().name}"

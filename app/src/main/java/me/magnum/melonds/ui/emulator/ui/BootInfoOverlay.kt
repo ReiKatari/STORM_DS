@@ -7,13 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import kotlinx.coroutines.delay
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.common.ExternalBootInfo
 
@@ -26,15 +22,10 @@ fun BootInfoOverlay(
     onFinished: () -> Unit,
 ) {
     val exit = remember { Animatable(0f) }
-    var minTimeElapsed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        delay(650)
-        minTimeElapsed = true
-    }
-    LaunchedEffect(romReady, minTimeElapsed) {
-        if (romReady && minTimeElapsed) {
-            exit.animateTo(1f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
+    LaunchedEffect(romReady) {
+        if (romReady) {
+            exit.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
             onFinished()
         }
     }
