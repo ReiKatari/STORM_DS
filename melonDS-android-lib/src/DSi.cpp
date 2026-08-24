@@ -831,8 +831,8 @@ void DSi::SetupDirectBoot()
             ARM7Write32(header.DSiARM7iRAMAddress+i, tmp);
         }
 
-        // decrypt any modcrypt areas only if Modcrypt encryption flag is set
-        if (header.DSiCryptoFlags & (1<<1))
+        // decrypt any modcrypt areas if Modcrypt settings are present
+        if ((header.DSiCryptoFlags & (1<<1)) || (header.DSiCryptoFlags & (1<<0)) || (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Size != 0xFFFFFFFF))
         {
             DecryptModcryptArea(header.DSiModcrypt1Offset,
                                 header.DSiModcrypt1Size,
