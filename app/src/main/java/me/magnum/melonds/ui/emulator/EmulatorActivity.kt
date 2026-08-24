@@ -2221,8 +2221,30 @@ class EmulatorActivity : AppCompatActivity() {
             Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
         }
 
-        val topRect = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
-        val bottomRect = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
+        var topRect = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
+        var bottomRect = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
+
+        // Auto-correct squeezed or misplaced secondary screen if not in hybrid mode
+        if (topRect != null && bottomRect != null && hybridTopRect == null && hybridBottomRect == null) {
+            if (!isLandscape) {
+                // In Portrait: bottom screen MUST be full width (matching surface) and placed below top screen
+                if (bottomRect.width < (surfaceW * 0.85f).toInt() || bottomRect.y < topRect.bottom - 20) {
+                    val sWidth = surfaceW
+                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                    topRect = Rect(0, 0, sWidth, sHeight)
+                    bottomRect = Rect(0, sHeight, sWidth, sHeight)
+                }
+            } else {
+                // In Landscape: screens MUST be side-by-side matching half width
+                if (bottomRect.width < (surfaceW * 0.35f).toInt() || bottomRect.x < topRect.right - 20) {
+                    val sWidth = surfaceW / 2
+                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+                    val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
+                    topRect = Rect(0, vMargin, sWidth, sHeight)
+                    bottomRect = Rect(sWidth, vMargin, sWidth, sHeight)
+                }
+            }
+        }
 
         lastKnownGoodTopRect = topRect
         lastKnownGoodBottomRect = bottomRect
