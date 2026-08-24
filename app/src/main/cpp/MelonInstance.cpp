@@ -2841,7 +2841,8 @@ std::string MelonInstance::getDetailedEmulationDiagnostic()
            << " Size=0x" << header.ARM9Size << " Entry=0x" << header.ARM9EntryAddress << "\n";
         ss << "Header ARM7: ROMOff=0x" << header.ARM7ROMOffset << " RAMAddr=0x" << header.ARM7RAMAddress
            << " Size=0x" << header.ARM7Size << " Entry=0x" << header.ARM7EntryAddress << "\n";
-        ss << "DSiCryptoFlags=0x" << (int)header.DSiCryptoFlags << " AppFlags=0x" << (int)header.AppFlags << "\n";
+        ss << "DSiCryptoFlags=0x" << (int)header.DSiCryptoFlags << " AppFlags=0x" << (int)header.AppFlags
+           << " PubSav=0x" << header.DSiPublicSavSize << " PrivSav=0x" << header.DSiPrivateSavSize << "\n";
         if (header.DSiCryptoFlags & 1) {
             ss << "DSiARM9i: ROMOff=0x" << header.DSiARM9iROMOffset << " RAMAddr=0x" << header.DSiARM9iRAMAddress << " Size=0x" << header.DSiARM9iSize << "\n";
             ss << "DSiARM7i: ROMOff=0x" << header.DSiARM7iROMOffset << " RAMAddr=0x" << header.DSiARM7iRAMAddress << " Size=0x" << header.DSiARM7iSize << "\n";
@@ -2851,20 +2852,56 @@ std::string MelonInstance::getDetailedEmulationDiagnostic()
     }
 
     if (nds) {
-        ss << "ConsoleMode: " << (nds->ConsoleType == 1 ? "DSi" : "DS") << "\n";
-        ss << "ARM9 CPU: PC=0x" << std::hex << nds->ARM9.R[15]
+        ss << "ConsoleMode: " << (nds->ConsoleType == 1 ? "DSi" : "DS")
+           << " | Total Frames Executed: " << std::dec << nds->NumFrames
+           << " (Lag: " << nds->NumLagFrames << ")\n" << std::hex;
+        ss << "Interrupts: IME9=" << nds->IME[0] << " IE9=0x" << nds->IE[0] << " IF9=0x" << nds->IF[0]
+           << " | IME7=" << nds->IME[1] << " IE7=0x" << nds->IE[1] << " IF7=0x" << nds->IF[1]
+           << " | CPUStop=0x" << nds->CPUStop << "\n";
+
+        ss << "ARM9 CPU: PC=0x" << nds->ARM9.R[15]
            << " CPSR=0x" << nds->ARM9.CPSR
            << " Halted=" << (int)nds->ARM9.Halted
            << " CurInstr=0x" << nds->ARM9.CurInstr
            << " SP=0x" << nds->ARM9.R[13]
            << " LR=0x" << nds->ARM9.R[14] << "\n";
+        ss << "ARM9 Regs: R0=0x" << nds->ARM9.R[0] << " R1=0x" << nds->ARM9.R[1] << " R2=0x" << nds->ARM9.R[2] << " R3=0x" << nds->ARM9.R[3]
+           << " R4=0x" << nds->ARM9.R[4] << " R11=0x" << nds->ARM9.R[11] << " R12=0x" << nds->ARM9.R[12] << "\n";
+
         ss << "ARM7 CPU: PC=0x" << nds->ARM7.R[15]
            << " CPSR=0x" << nds->ARM7.CPSR
            << " Halted=" << (int)nds->ARM7.Halted
            << " CurInstr=0x" << nds->ARM7.CurInstr
            << " SP=0x" << nds->ARM7.R[13]
            << " LR=0x" << nds->ARM7.R[14] << "\n";
+        ss << "ARM7 Regs: R0=0x" << nds->ARM7.R[0] << " R1=0x" << nds->ARM7.R[1] << " R2=0x" << nds->ARM7.R[2] << " R3=0x" << nds->ARM7.R[3]
+           << " R4=0x" << nds->ARM7.R[4] << " R11=0x" << nds->ARM7.R[11] << " R12=0x" << nds->ARM7.R[12] << "\n";
+
+        u32 arm9pc = nds->ARM9.R[15] & ~3;
+        u32 arm7pc = nds->ARM7.R[15] & ~3;
+        ss << "ARM9 Code @ PC: [0x" << nds->ARM9Read32(arm9pc) << ", 0x" << nds->ARM9Read32(arm9pc + 4)
+           << ", 0x" << nds->ARM9Read32(arm9pc + 8) << ", 0x" << nds->ARM9Read32(arm9pc + 12) << "]\n";
+        ss << "ARM7 Code @ PC: [0x" << nds->ARM7Read32(arm7pc) << ", 0x" << nds->ARM7Read32(arm7pc + 4)
+           << ", 0x" << nds->ARM7Read32(arm7pc + 8) << ", 0x" << nds->ARM7Read32(arm7pc + 12) << "]\n";
+
+        ss << "RAM @ 0x02004800 (ARM9 Entry): [0x" << nds->ARM9Read32(0x02004800) << ", 0x" << nds->ARM9Read32(0x02004804)
+           << ", 0x" << nds->ARM9Read32(0x02004808) << ", 0x" << nds->ARM9Read32(0x0200480C) << "]\n";
+        ss << "RAM @ 0x02400000 (ARM9i Modcrypt1): [0x" << nds->ARM9Read32(0x02400000) << ", 0x" << nds->ARM9Read32(0x02400004)
+           << ", 0x" << nds->ARM9Read32(0x02400008) << ", 0x" << nds->ARM9Read32(0x0240000C) << "]\n";
+        ss << "RAM @ 0x02E80000 (ARM7i Modcrypt2): [0x" << nds->ARM7Read32(0x02E80000) << ", 0x" << nds->ARM7Read32(0x02E80004)
+           << ", 0x" << nds->ARM7Read32(0x02E80008) << ", 0x" << nds->ARM7Read32(0x02E8000C) << "]\n";
+
         ss << "GPU DispStat: Top=0x" << nds->GPU.DispStat[0] << " Bot=0x" << nds->GPU.DispStat[1] << "\n";
+
+        if (nds->ConsoleType == 1) {
+            auto* dsi = static_cast<DSi*>(nds);
+            ss << "DSi Hardware: SCFG_BIOS=0x" << dsi->SCFG_BIOS
+               << " SCFG_EXT0=0x" << dsi->SCFG_EXT[0] << " SCFG_EXT1=0x" << dsi->SCFG_EXT[1]
+               << " SCFG_CLK7=0x" << dsi->SCFG_Clock7 << " SCFG_MC=0x" << dsi->SCFG_MC << "\n";
+            ss << "DSi MBK9: [" << dsi->MBK[0][0] << ", " << dsi->MBK[0][1] << ", " << dsi->MBK[0][2]
+               << ", " << dsi->MBK[0][3] << ", " << dsi->MBK[0][4] << ", " << dsi->MBK[0][5]
+               << ", " << dsi->MBK[0][6] << ", " << dsi->MBK[0][7] << ", " << dsi->MBK[0][8] << "]\n";
+        }
     }
 
     return ss.str();
