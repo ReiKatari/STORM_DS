@@ -796,7 +796,7 @@ class EmulatorViewModel @Inject constructor(
             startObservingAchievementEvents()
             startObservingLayoutForRom()
             if (isRetroAchievementsEnabledForLaunch) {
-                startRetroAchievementsSession(rom, launchDecision).await()
+                startRetroAchievementsSession(rom, launchDecision)
             } else {
                 activeRuntimeBridgeConfig = null
                 activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
