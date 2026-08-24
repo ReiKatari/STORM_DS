@@ -1328,8 +1328,8 @@ class EmulatorActivity : AppCompatActivity() {
         if (!bootRomReady.value) {
             binding.viewLayoutControls.isInvisible = true
             binding.textFps.isGone = true
-            binding.textLoading.isVisible = true
-            binding.progressLoading.isVisible = true
+            binding.textLoading.isVisible = !showBootAnimation.value
+            binding.progressLoading.isVisible = !showBootAnimation.value
             binding.textLoadingDetail.isGone = true
             binding.textLoading.setText(R.string.info_loading)
             if (bootStatus.value == null) {
@@ -1339,7 +1339,7 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun renderLoadingState(progress: VulkanCompileProgress?, raLoadStage: RetroAchievementsLoadStage? = null) {
-        if (bootRomReady.value || viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware) {
+        if (bootRomReady.value || showBootAnimation.value || viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware) {
             binding.textLoading.isGone = true
             binding.progressLoading.isGone = true
             binding.textLoadingDetail.isGone = true
