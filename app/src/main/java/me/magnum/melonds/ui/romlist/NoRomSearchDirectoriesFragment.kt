@@ -95,6 +95,7 @@ class NoRomSearchDirectoriesFragment : Fragment() {
                         isPickerDisabled = isPickerDisabled,
                         pickerNotFound = pickerNotFound,
                         onOpenSettings = { (activity as? RomListActivity)?.openSettings() },
+                        onOpenSingleRom = { (activity as? RomListActivity)?.openSingleRom() },
                         onActionClick = {
                             if (isPickerDisabled && disabledFilePicker != null) {
                                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -131,6 +132,7 @@ private fun NoDirectoriesScreen(
     isPickerDisabled: Boolean,
     pickerNotFound: Boolean,
     onOpenSettings: () -> Unit,
+    onOpenSingleRom: () -> Unit = {},
     onActionClick: () -> Unit,
 ) {
     val colors = watermelon
@@ -216,7 +218,7 @@ private fun NoDirectoriesScreen(
                             backgroundColor = Color(0xFF00E5FF),
                             contentColor = Color.Black,
                         ),
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                     ) {
                         Icon(
                             Icons.Filled.FolderOpen,
@@ -234,6 +236,27 @@ private fun NoDirectoriesScreen(
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.5.sp,
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    androidx.compose.material.OutlinedButton(
+                        onClick = onOpenSingleRom,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            backgroundColor = Color.Transparent,
+                            contentColor = colors.text,
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.line),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.action_open_single_rom),
+                            fontFamily = SpaceGrotesk,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = colors.text,
                         )
                     }
                 }
