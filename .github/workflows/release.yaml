@@ -25,10 +25,23 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28
+          add-to-path: true
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
       - name: Build melonDS Android
         env:
           MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
           MELONDS_KEYSTORE_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PASSWORD }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           if [ -n "$MELONDS_KEYSTORE" ]; then
             echo "$MELONDS_KEYSTORE" | base64 -d > ${{runner.workspace}}/keystore.jks
@@ -65,7 +78,7 @@ jobs:
           tag: ${{ steps.release_params.outputs.TAG }}
           name: ${{ steps.release_params.outputs.VERSION }}
           bodyFile: ./.github/changelog/gitHub.md
-          artifacts: app/build/outputs/apk/gitHubProd/release/app-gitHub-prod-release.apk
+          artifacts: app/build/outputs/apk/gitHubProd/release/*.apk
           artifactContentType: application/vnd.android.package-archive
 
       - name: Upload APK, Mapping and Debug Symbols
@@ -73,7 +86,7 @@ jobs:
         with:
           name: github-release
           path: |
-            app/build/outputs/apk/gitHubProd/release/app-gitHub-prod-release.apk
+            app/build/outputs/apk/gitHubProd/release/*.apk
             app/build/outputs/mapping/gitHubProdRelease/mapping.txt
             app/build/outputs/native-debug-symbols/gitHubProdRelease/native-debug-symbols.zip
 
