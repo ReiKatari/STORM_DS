@@ -117,35 +117,35 @@ fun ConsolePresetsOverlay(
                 val presetSelected = dualScreenPreset != DualScreenPreset.OFF
 
                 // Informative Card
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.06f))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
-                        .padding(14.dp),
-                ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Info, null, tint = me.magnum.melonds.ui.theme.WatermelonColors.gold, modifier = Modifier.size(17.dp))
-                            Spacer(Modifier.width(7.dp))
-                            Text(
-                                text = stringResource(R.string.dual_screen_info_title),
-                                color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
-                                fontFamily = SpaceGrotesk,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Info, null, tint = me.magnum.melonds.ui.theme.WatermelonColors.gold, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
                         Text(
-                            text = stringResource(R.string.dual_screen_info_desc),
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
+                            text = stringResource(R.string.dual_screen_info_title),
+                            color = me.magnum.melonds.ui.theme.WatermelonColors.gold,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.dual_screen_info_desc),
+                        color = colors.text2,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                    )
                 }
+            }
                 Spacer(Modifier.height(8.dp))
 
                 if (!presetSelected) {
@@ -282,10 +282,11 @@ private fun ConsoleScaffold(
     onBack: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val colors = watermelon
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PresetsScrim)
+            .background(Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
             .focusProperties { canFocus = false }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
             .onPreviewKeyEvent { event ->
@@ -301,37 +302,56 @@ private fun ConsoleScaffold(
                 .focusProperties { canFocus = false }
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .background(colors.surface)
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                Box(
-                    modifier = Modifier.size(38.dp).clip(CircleShape).focusProperties { canFocus = false }.clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, CircleShape)
+                            .clickable(onClick = onBack),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                            tint = colors.text,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = title,
+                        color = colors.text,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontFamily = SpaceGrotesk,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.09f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
             Column(
-                verticalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .weight(1f)
                     .widthIn(max = 720.dp)
                     .align(Alignment.CenterHorizontally)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
                 content()
             }
@@ -348,9 +368,10 @@ private fun ConsoleScaffold(
 
 @Composable
 private fun ConsoleSectionLabel(text: String) {
+    val colors = watermelon
     Text(
         text = text.uppercase(),
-        color = Color.White.copy(alpha = 0.45f),
+        color = colors.text3,
         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
         fontSize = 10.sp,
         fontWeight = FontWeight.SemiBold,
@@ -374,6 +395,18 @@ private fun ConsoleRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val shape = RoundedCornerShape(12.dp)
+
+    val bg = when {
+        isFocused -> colors.surface3
+        selected -> colors.greenDim
+        else -> colors.surface2
+    }
+    val border = when {
+        isFocused -> colors.green
+        selected -> colors.green.copy(alpha = 0.7f)
+        else -> colors.line
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -381,8 +414,8 @@ private fun ConsoleRow(
             .heightIn(min = 46.dp)
             .clip(shape)
             .alpha(if (enabled) 1f else 0.4f)
-            .background(if (isFocused) Color.White.copy(alpha = 0.16f) else if (selected) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.045f))
-            .let { if (isFocused) it.border(2.dp, colors.red, shape) else if (selected) it.border(1.dp, Color.White.copy(alpha = 0.22f), shape) else it }
+            .background(bg)
+            .border(1.dp, border, shape)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
             .clickable(interactionSource = interactionSource, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -391,7 +424,7 @@ private fun ConsoleRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) colors.red else Color.White.copy(alpha = 0.8f),
+                tint = if (selected) colors.green else colors.text2,
                 modifier = Modifier.size(22.dp),
             )
             Spacer(Modifier.width(12.dp))
@@ -399,7 +432,8 @@ private fun ConsoleRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
-                color = Color.White,
+                color = colors.text,
+                fontFamily = SpaceGrotesk,
                 fontSize = 13.5.sp,
                 lineHeight = 17.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
@@ -410,7 +444,7 @@ private fun ConsoleRow(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = colors.text2,
                     fontSize = 11.sp,
                     lineHeight = 14.sp,
                 )
