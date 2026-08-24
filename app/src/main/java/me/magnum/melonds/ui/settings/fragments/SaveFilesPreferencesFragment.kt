@@ -32,8 +32,22 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
                 handleSettingsMirror(uri, persistDirectory)
             }
         }
+
+        val customDirPref = findPreference<StoragePickerPreference>("save_state_custom_dir")
+        if (customDirPref != null) {
+            helper.bindPreferenceSummaryToValue(customDirPref)
+            helper.setupStoragePickerPreference(customDirPref) { _, persistDirectory ->
+                persistDirectory()
+            }
+        }
+
         findPreference<androidx.preference.ListPreference>("save_state_location")?.let { pref ->
             helper.bindPreferenceSummaryToValue(pref)
+            customDirPref?.isVisible = (pref.value == "custom_dir")
+            pref.setOnPreferenceChangeListener { _, newValue ->
+                customDirPref?.isVisible = (newValue == "custom_dir")
+                true
+            }
         }
     }
 

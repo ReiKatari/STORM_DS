@@ -13,6 +13,7 @@ sealed class EmulatorState {
     ) : EmulatorState()
     data class ValidatingFirmware(val consoleType: ConsoleType) : EmulatorState()
     data class LoadingFirmware(
+        val consoleType: ConsoleType = ConsoleType.DS,
         val vulkanCompileProgress: VulkanCompileProgress? = null,
     ) : EmulatorState()
     data class RunningRom(val rom: Rom) : EmulatorState()

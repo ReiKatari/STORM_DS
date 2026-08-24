@@ -1206,7 +1206,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.ValidatingFirmware -> {
                             bootIsDsi.value = it.consoleType == me.magnum.melonds.domain.model.ConsoleType.DSi
                             bootRomTitle.value = if (it.consoleType == me.magnum.melonds.domain.model.ConsoleType.DSi) "Nintendo DSi" else "Nintendo DS"
-                            showLoadingState()
+                            showFirmware3DBoot(it.consoleType, getString(R.string.info_loading))
                             emulatorLaunchValidatorDelegate.validateFirmware(it.consoleType)
                         }
                         is EmulatorState.ValidatingRom -> {
@@ -1216,15 +1216,13 @@ class EmulatorActivity : AppCompatActivity() {
                             showLoadingState()
                             emulatorLaunchValidatorDelegate.validateRom(it.rom)
                         }
-                        is EmulatorState.LoadingFirmware,
+                        is EmulatorState.LoadingFirmware -> {
+                            showFirmware3DBoot(it.consoleType, getString(R.string.info_loading))
+                            renderLoadingState(it.vulkanCompileProgress)
+                        }
                         is EmulatorState.LoadingRom -> {
                             showLoadingState()
-                            val compileProgress = when (it) {
-                                is EmulatorState.LoadingRom -> it.vulkanCompileProgress
-                                is EmulatorState.LoadingFirmware -> it.vulkanCompileProgress
-                            }
-                            val raLoadStage = (it as? EmulatorState.LoadingRom)?.retroAchievementsLoadStage
-                            renderLoadingState(compileProgress, raLoadStage)
+                            renderLoadingState(it.vulkanCompileProgress, it.retroAchievementsLoadStage)
                         }
                         is EmulatorState.RunningRom,
                         is EmulatorState.RunningFirmware -> {
@@ -1246,6 +1244,10 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
+                            val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this@EmulatorActivity).getBoolean("video_console_skin_enabled", false)
+                            if (!consoleSkinEnabled) {
+                                binding.layoutConsoleSkin.visibility = View.GONE
+                            }
                             binding.surfaceMain.visibility = View.VISIBLE
                             binding.viewLayoutControls.visibility = View.VISIBLE
                             backPressedCallback.isEnabled = true
@@ -1316,6 +1318,23 @@ class EmulatorActivity : AppCompatActivity() {
                     presentation = null
                     viewModel.onAppMovedToBackground()
                 }
+            }
+        }
+    }
+
+    private fun showFirmware3DBoot(consoleType: me.magnum.melonds.domain.model.ConsoleType, status: String) {
+        if (!bootRomReady.value) {
+            binding.viewLayoutControls.isInvisible = true
+            binding.textFps.isGone = true
+            binding.textLoading.isGone = true
+            binding.progressLoading.isGone = true
+            binding.textLoadingDetail.isGone = true
+            binding.layoutConsoleSkin.visibility = View.VISIBLE
+            binding.layoutConsoleSkin.setContent {
+                me.magnum.melonds.ui.emulator.composables.Console3DBootScreen(
+                    consoleType = consoleType,
+                    statusText = status
+                )
             }
         }
     }

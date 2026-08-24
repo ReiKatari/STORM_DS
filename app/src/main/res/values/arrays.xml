@@ -269,6 +269,7 @@
         <item>save_dir</item>
         <item>rom_dir</item>
         <item>internal_dir</item>
+        <item>custom_dir</item>
     </string-array>
 
     <string-array name="wfc_server_options">
