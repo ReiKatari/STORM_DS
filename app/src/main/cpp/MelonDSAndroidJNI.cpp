@@ -1302,6 +1302,12 @@ Java_me_magnum_melonds_MelonEmulator_stopAndGetBootDiagnostic(JNIEnv* env, jobje
     return env->NewStringUTF(diag.c_str());
 }
 
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_getDetailedEmulationDiagnostic(JNIEnv* env, jobject thiz) {
+    std::string diag = MelonDSAndroid::getDetailedEmulationDiagnostic();
+    return env->NewStringUTF(diag.c_str());
+}
+
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, jboolean startPaused)
 {
