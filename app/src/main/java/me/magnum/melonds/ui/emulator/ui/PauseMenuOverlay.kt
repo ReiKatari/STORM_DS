@@ -28,6 +28,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Code
@@ -100,12 +101,14 @@ private fun optionIcon(option: PauseMenuOption): ImageVector {
             RomPauseMenuOption.VIEW_ACHIEVEMENTS -> Icons.Filled.EmojiEvents
             RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> Icons.Filled.CloudSync
             RomPauseMenuOption.PRESETS -> Icons.Filled.Monitor
+            RomPauseMenuOption.SCREEN_LAYOUT -> Icons.Filled.AspectRatio
             RomPauseMenuOption.RENDERER_DEBUG -> Icons.Filled.BugReport
             RomPauseMenuOption.RESET -> Icons.Filled.RestartAlt
             RomPauseMenuOption.EXIT -> Icons.AutoMirrored.Filled.Logout
         }
         is FirmwarePauseMenuOption -> when (option) {
             FirmwarePauseMenuOption.SETTINGS -> Icons.Filled.Settings
+            FirmwarePauseMenuOption.SCREEN_LAYOUT -> Icons.Filled.AspectRatio
             FirmwarePauseMenuOption.RESET -> Icons.Filled.RestartAlt
             FirmwarePauseMenuOption.EXIT -> Icons.AutoMirrored.Filled.Logout
         }

@@ -469,6 +469,8 @@ class EmulatorActivity : AppCompatActivity() {
     private val showAchievementList = mutableStateOf(false)
     private val showPendingSubmissionsDialog = mutableStateOf(false)
     private val showDualScreenPresets = mutableStateOf(false)
+    private val showScreenLayoutDialog = mutableStateOf(false)
+    private var currentScreenLayoutMode: me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode? = null
     private val pauseMenuState = mutableStateOf<me.magnum.melonds.ui.emulator.model.PauseMenu?>(null)
 
     private val showBootAnimation = mutableStateOf(true)
@@ -766,6 +768,19 @@ class EmulatorActivity : AppCompatActivity() {
                             onBack = {
                                 activeOverlays.removeActiveOverlay(EmulatorOverlay.PRESETS_DIALOG)
                                 showDualScreenPresets.value = false
+                                reopenPauseMenu()
+                            },
+                        )
+                    }
+                    showScreenLayoutDialog.value -> {
+                        me.magnum.melonds.ui.emulator.ui.ScreenLayoutOverlay(
+                            currentLayoutMode = currentScreenLayoutMode,
+                            onLayoutModeSelected = { mode ->
+                                applyScreenLayoutMode(mode)
+                            },
+                            onDismiss = {
+                                activeOverlays.removeActiveOverlay(EmulatorOverlay.SCREEN_LAYOUT_DIALOG)
+                                showScreenLayoutDialog.value = false
                                 reopenPauseMenu()
                             },
                         )
@@ -1147,6 +1162,11 @@ class EmulatorActivity : AppCompatActivity() {
                         EmulatorUiEvent.ShowDualScreenPresets -> {
                             activeOverlays.addActiveOverlay(EmulatorOverlay.PRESETS_DIALOG)
                             showDualScreenPresets.value = true
+                            requestOverlayHostFocus()
+                        }
+                        EmulatorUiEvent.ShowScreenLayoutDialog -> {
+                            activeOverlays.addActiveOverlay(EmulatorOverlay.SCREEN_LAYOUT_DIALOG)
+                            showScreenLayoutDialog.value = true
                             requestOverlayHostFocus()
                         }
                         EmulatorUiEvent.ShowRendererDebugMenu -> showRendererDebugMenu()
@@ -2039,6 +2059,52 @@ class EmulatorActivity : AppCompatActivity() {
         } else {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             Toast.makeText(this, getString(R.string.toast_rotation_unlocked), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun applyScreenLayoutMode(mode: me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode) {
+        currentScreenLayoutMode = mode
+        when (mode) {
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_LANDSCAPE -> {
+                isRotationLocked = true
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_even_landscape)), Toast.LENGTH_SHORT).show()
+                scheduleStartupPresentationRefreshes()
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.UNEVEN_LANDSCAPE -> {
+                isRotationLocked = true
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_uneven_landscape)), Toast.LENGTH_SHORT).show()
+                scheduleStartupPresentationRefreshes()
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_PORTRAIT_LOCKED -> {
+                isRotationLocked = true
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_even_portrait_locked)), Toast.LENGTH_SHORT).show()
+                scheduleStartupPresentationRefreshes()
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.PROPORTIONAL_LANDSCAPE -> {
+                isRotationLocked = true
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_proportional_landscape)), Toast.LENGTH_SHORT).show()
+                scheduleStartupPresentationRefreshes()
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.FULLSCREEN_LANDSCAPE -> {
+                isRotationLocked = true
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_fullscreen_landscape)), Toast.LENGTH_SHORT).show()
+                scheduleStartupPresentationRefreshes()
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.AUTO_ROTATE -> {
+                isRotationLocked = false
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_auto_rotate)), Toast.LENGTH_SHORT).show()
+                scheduleStartupPresentationRefreshes()
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.OPEN_LAYOUT_EDITOR -> {
+                val intent = Intent(this, me.magnum.melonds.ui.layouteditor.LayoutEditorActivity::class.java)
+                startActivity(intent)
+            }
         }
     }
 

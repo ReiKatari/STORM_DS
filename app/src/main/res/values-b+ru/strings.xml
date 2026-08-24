@@ -191,6 +191,15 @@
   <string name="input_lock_rotation">Блокировка поворота экрана</string>
   <string name="toast_rotation_locked">Поворот экрана заблокирован</string>
   <string name="toast_rotation_unlocked">Поворот экрана разблокирован (Автоповорот)</string>
+  <string name="screen_layout">Экранная раскладка</string>
+  <string name="layout_even_landscape">Ровная альбомная</string>
+  <string name="layout_uneven_landscape">Неровная альбомная</string>
+  <string name="layout_even_portrait_locked">Ровная портретная</string>
+  <string name="layout_proportional_landscape">Пропорциональная альбомная</string>
+  <string name="layout_fullscreen_landscape">Полноэкранная альбомная</string>
+  <string name="layout_auto_rotate">Автоматический поворот (По датчику)</string>
+  <string name="layout_open_editor">Редактор раскладок</string>
+  <string name="toast_layout_applied">Раскладка: %1$s</string>
   <string name="input_group_console">Управление консолью (DS / DSi)</string>
   <string name="input_group_hotkeys">Горячие клавиши и действия</string>
   <string name="layouts">Макеты экранов</string>
