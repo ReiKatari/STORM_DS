@@ -2826,6 +2826,50 @@ void MelonInstance::setSlot2AnalogInput(float x, float y)
     slot2AnalogY.store(std::clamp(y, -1.0f, 1.0f), std::memory_order_relaxed);
 }
 
+std::string MelonInstance::getDetailedEmulationDiagnostic()
+{
+    std::ostringstream ss;
+    if (!nds || !nds->GetNDSCart()) {
+        ss << "Cartridge: NOT LOADED\n";
+    } else {
+        const auto& header = nds->GetNDSCart()->GetHeader();
+        char gamecode[5] = { (char)header.GameCode[0], (char)header.GameCode[1], (char)header.GameCode[2], (char)header.GameCode[3], 0 };
+        ss << "Cart GameCode: " << gamecode
+           << " UnitCode: 0x" << std::hex << (int)header.UnitCode
+           << " CartID: 0x" << nds->GetNDSCart()->ID() << "\n";
+        ss << "Header ARM9: ROMOff=0x" << header.ARM9ROMOffset << " RAMAddr=0x" << header.ARM9RAMAddress
+           << " Size=0x" << header.ARM9Size << " Entry=0x" << header.ARM9EntryAddress << "\n";
+        ss << "Header ARM7: ROMOff=0x" << header.ARM7ROMOffset << " RAMAddr=0x" << header.ARM7RAMAddress
+           << " Size=0x" << header.ARM7Size << " Entry=0x" << header.ARM7EntryAddress << "\n";
+        ss << "DSiCryptoFlags=0x" << (int)header.DSiCryptoFlags << " AppFlags=0x" << (int)header.AppFlags << "\n";
+        if (header.DSiCryptoFlags & 1) {
+            ss << "DSiARM9i: ROMOff=0x" << header.DSiARM9iROMOffset << " RAMAddr=0x" << header.DSiARM9iRAMAddress << " Size=0x" << header.DSiARM9iSize << "\n";
+            ss << "DSiARM7i: ROMOff=0x" << header.DSiARM7iROMOffset << " RAMAddr=0x" << header.DSiARM7iRAMAddress << " Size=0x" << header.DSiARM7iSize << "\n";
+            ss << "Modcrypt1: Off=0x" << header.DSiModcrypt1Offset << " Size=0x" << header.DSiModcrypt1Size << "\n";
+            ss << "Modcrypt2: Off=0x" << header.DSiModcrypt2Offset << " Size=0x" << header.DSiModcrypt2Size << "\n";
+        }
+    }
+
+    if (nds) {
+        ss << "ConsoleMode: " << (nds->ConsoleType == 1 ? "DSi" : "DS") << "\n";
+        ss << "ARM9 CPU: PC=0x" << std::hex << nds->ARM9.R[15]
+           << " CPSR=0x" << nds->ARM9.CPSR
+           << " Halted=" << (int)nds->ARM9.Halted
+           << " CurInstr=0x" << nds->ARM9.CurInstr
+           << " SP=0x" << nds->ARM9.R[13]
+           << " LR=0x" << nds->ARM9.R[14] << "\n";
+        ss << "ARM7 CPU: PC=0x" << nds->ARM7.R[15]
+           << " CPSR=0x" << nds->ARM7.CPSR
+           << " Halted=" << (int)nds->ARM7.Halted
+           << " CurInstr=0x" << nds->ARM7.CurInstr
+           << " SP=0x" << nds->ARM7.R[13]
+           << " LR=0x" << nds->ARM7.R[14] << "\n";
+        ss << "GPU DispStat: Top=0x" << nds->GPU.DispStat[0] << " Bot=0x" << nds->GPU.DispStat[1] << "\n";
+    }
+
+    return ss.str();
+}
+
 int MelonInstance::readAudioOutput(s16* buffer, int length)
 {
     return nds->SPU.ReadOutput(buffer, length);
