@@ -577,6 +577,17 @@ class AndroidEmulatorManager(
             executableFile.delete()
             val exportResult = dsiNandManager.exportTitleExecutable(titleId, executableFile.absolutePath)
             if (!exportResult || !executableFile.exists() || executableFile.length() == 0L) {
+                Log.i(TAG, "loadDsiWare: copying direct ROM file as executable fallback for title=$titleIdHex")
+                runCatching {
+                    context.contentResolver.openInputStream(rom.uri)?.use { input ->
+                        executableFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+            }
+
+            if (!executableFile.exists() || executableFile.length() == 0L) {
                 Log.w(TAG, "loadDsiWare: failed to export executable title=$titleIdHex")
                 writeGameExecutionLog(rom, titleIdHex, false, "Failed to export executable from NAND", "loadDsiWare")
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)

@@ -175,24 +175,11 @@ class DSiWareManagerViewModel @Inject constructor(
         val currentRoms = activeRoms ?: emptyList()
         val enhancedNames = currentRoms.filter { it.isDsiEnhanced }.map { it.name.lowercase().trim() }.toSet()
         val enhancedFileNames = currentRoms.filter { it.isDsiEnhanced }.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-        val activeUris = currentRoms.filter { !it.isDsiEnhanced }.map { it.uri.toString() }.toSet()
-        val activeFileNames = currentRoms.filter { !it.isDsiEnhanced }.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-        val activeNames = currentRoms.filter { !it.isDsiEnhanced }.map { it.name.lowercase().trim() }.toSet()
 
         return titles.filter { title ->
             val titleName = title.name.lowercase().trim()
             val isEnhanced = titleName in enhancedNames || titleName in enhancedFileNames
-            if (isEnhanced) return@filter false
-
-            val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
-            val isAuto = dsiWareTitlesMetadataStore.isAutoImported(titleIdHex)
-            val storedSourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
-            val storedOrigFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
-
-            !isAuto ||
-                (storedSourceUri != null && storedSourceUri in activeUris) ||
-                (storedOrigFile != null && (storedOrigFile in activeFileNames || storedOrigFile in activeNames)) ||
-                (titleName in activeFileNames || titleName in activeNames)
+            !isEnhanced
         }
     }
 
