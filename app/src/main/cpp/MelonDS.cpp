@@ -1557,6 +1557,15 @@ namespace MelonDSAndroid
         cleanupOpenGlContext();
     }
 
+    std::string getDetailedEmulationDiagnostic()
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (currentInstance) {
+            return currentInstance->getDetailedEmulationDiagnostic();
+        }
+        return "Emulation instance is not running";
+    }
+
     void cleanup()
     {
         cleanupAudio();

@@ -365,6 +365,7 @@ class AndroidEmulatorManager(
                 }
                 Log.w(TAG, "loadRom: rom='${rom.name}' gbaSlotType=${gbaSlotType.name}")
 
+                MelonEmulator.startBootDiagnosticCapture()
                 var loadResult = MelonEmulator.loadRom(
                     romUri = romUri,
                     sramUri = sram,
@@ -400,30 +401,44 @@ class AndroidEmulatorManager(
                         }
                         MelonEmulator.setupCheats(cheats.toTypedArray())
                         MelonEmulator.startEmulation(startPaused = true)
-                        writeGameExecutionLog(rom, rom.fileName, true, "Fallback boot successful in standard DS FreeBIOS mode", "loadRom (DS Fallback)")
+                        delay(300)
+                        val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+                        val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
+                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                        writeGameExecutionLog(rom, rom.fileName, true, "Fallback boot successful in standard DS FreeBIOS mode\n$fullDiag", "loadRom (DS Fallback)")
                         return@withContext RomLaunchResult.LaunchSuccessful(retryResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
                     }
                 }
 
                 if (loadResult.isTerminal || !isActive) {
+                    val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+                    val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
+                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
                     dldiFolderSyncManager.syncBackIfNeeded()
-                    writeGameExecutionLog(rom, rom.fileName, false, "loadRom returned terminal error: $loadResult", "loadRom")
+                    writeGameExecutionLog(rom, rom.fileName, false, "loadRom returned terminal error: $loadResult\n$fullDiag", "loadRom")
                     RomLaunchResult.LaunchFailed(loadResult)
                 } else {
                     messageQueue.start()
                     if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                        val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+                        val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
+                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
                         cameraManager.stopCurrentCameraSource()
                         MelonEmulator.stopEmulation()
                         messageQueue.stop()
                         dldiFolderSyncManager.syncBackIfNeeded()
-                        writeGameExecutionLog(rom, rom.fileName, false, "Vulkan pipeline precompilation failed", "loadRom")
+                        writeGameExecutionLog(rom, rom.fileName, false, "Vulkan pipeline precompilation failed\n$fullDiag", "loadRom")
                         return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                     }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
                     MelonEmulator.startEmulation(startPaused = true)
-                    writeGameExecutionLog(rom, rom.fileName, true, "ROM launch successful in ${emulatorConfiguration.consoleType} mode", "loadRom")
+                    delay(300)
+                    val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+                    val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
+                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                    writeGameExecutionLog(rom, rom.fileName, true, "ROM launch successful in ${emulatorConfiguration.consoleType} mode\n$fullDiag", "loadRom")
 
                     RomLaunchResult.LaunchSuccessful(loadResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
                 }

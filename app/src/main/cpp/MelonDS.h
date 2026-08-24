@@ -250,6 +250,7 @@ namespace MelonDSAndroid {
     extern bool loadRewindState(melonDS::RewindSaveState rewindSaveState);
     extern RewindWindow getRewindWindow();
     extern bool takeScreenshot();
+    extern std::string getDetailedEmulationDiagnostic();
     extern void stop();
     extern void cleanup();
 }

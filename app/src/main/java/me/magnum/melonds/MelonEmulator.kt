@@ -203,5 +203,7 @@ object MelonEmulator {
 
     external fun setMicrophoneEnabled(enabled: Boolean)
 
+    external fun getDetailedEmulationDiagnostic(): String
+
     external fun updateEmulatorConfiguration(emulatorConfiguration: EmulatorConfiguration)
 }

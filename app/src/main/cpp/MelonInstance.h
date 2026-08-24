@@ -211,6 +211,7 @@ public:
     int32_t discardPendingRetroAchievementsSubmissions(
         const std::vector<uint64_t>& expectedSubmissionIds);
     void setRetroAchievementsSubmissionTransportSuspended(bool suspended);
+    std::string getDetailedEmulationDiagnostic();
 
 private:
     struct PreparedVulkanDebugSnapshot
