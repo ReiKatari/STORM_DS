@@ -1891,13 +1891,11 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
 
-    if (nds->ConsoleType == 1 && currentConfiguration->showBootScreen && currentConfiguration->dsiWareAutoloadTitleId != 0)
+    if (cart != nullptr || nds->GetNDSCart() != nullptr)
     {
-        auto dsi = (DSi*) nds;
-        if (cart != nullptr)
-            DSiSupport::SetupDSiDirectBoot(dsi);
-        else
-            DSiSupport::SetupDSiWareDirectBoot(dsi, currentConfiguration->dsiWareAutoloadTitleId, 0x00030004);
+        // Direct cart ROM boot (100% RetroArch core parity: NDS, DSi, DSiWare across ALL modes)
+        std::string romName;
+        nds->SetupDirectBoot(romName);
     }
     else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
     {
@@ -1920,15 +1918,16 @@ void MelonInstance::reset()
     setBatteryLevels();
     setDateTime();
 
-    // If there is a cart inserted, check if direct boot is required
-    if (nds->GetNDSCart())
+    auto cart = nds->NDSCartSlot.GetCart();
+    if (cart != nullptr || nds->GetNDSCart() != nullptr)
     {
-        if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot() || (nds->GetNDSCart() && nds->GetNDSCart()->GetHeader().IsDSiWare()))
-        {
-            // This seems to be unused, but it's required
-            std::string romName;
-            nds->SetupDirectBoot(romName);
-        }
+        std::string romName;
+        nds->SetupDirectBoot(romName);
+    }
+    else if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+    {
+        std::string romName;
+        nds->SetupDirectBoot(romName);
     }
 
     rewindManager.Reset();

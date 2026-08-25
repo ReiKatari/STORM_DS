@@ -131,6 +131,10 @@ class InternalLayoutsRepository(
                 val deletableLayouts = loadLayouts().map { Deletable(it, false) }
                 layouts.value = buildList {
                     add(Deletable(buildDefaultLayout(), false))
+                    add(Deletable(buildUnevenLandscapeLayout(), false))
+                    add(Deletable(buildEvenPortraitLayout(), false))
+                    add(Deletable(buildProportionalLandscapeLayout(), false))
+                    add(Deletable(buildFullscreenLandscapeLayout(), false))
                     addAll(deletableLayouts)
                 }
                 areLayoutsLoaded = true
@@ -180,9 +184,57 @@ class InternalLayoutsRepository(
     private fun buildDefaultLayout(): LayoutConfiguration {
         return LayoutConfiguration(
             id = LayoutConfiguration.DEFAULT_ID,
-            name = context.getString(R.string.default_layout_name),
+            name = context.getString(R.string.layout_even_landscape),
             type = LayoutConfiguration.LayoutType.DEFAULT,
             orientation = LayoutConfiguration.LayoutOrientation.FOLLOW_SYSTEM,
+            useCustomOpacity = false,
+            opacity = 50,
+            layoutVariants = emptyMap(),
+        )
+    }
+
+    private fun buildUnevenLandscapeLayout(): LayoutConfiguration {
+        return LayoutConfiguration(
+            id = LayoutConfiguration.UNEVEN_LANDSCAPE_ID,
+            name = context.getString(R.string.layout_uneven_landscape),
+            type = LayoutConfiguration.LayoutType.DEFAULT,
+            orientation = LayoutConfiguration.LayoutOrientation.LANDSCAPE,
+            useCustomOpacity = false,
+            opacity = 50,
+            layoutVariants = emptyMap(),
+        )
+    }
+
+    private fun buildEvenPortraitLayout(): LayoutConfiguration {
+        return LayoutConfiguration(
+            id = LayoutConfiguration.EVEN_PORTRAIT_ID,
+            name = context.getString(R.string.layout_even_portrait_locked),
+            type = LayoutConfiguration.LayoutType.DEFAULT,
+            orientation = LayoutConfiguration.LayoutOrientation.PORTRAIT,
+            useCustomOpacity = false,
+            opacity = 50,
+            layoutVariants = emptyMap(),
+        )
+    }
+
+    private fun buildProportionalLandscapeLayout(): LayoutConfiguration {
+        return LayoutConfiguration(
+            id = LayoutConfiguration.PROPORTIONAL_LANDSCAPE_ID,
+            name = context.getString(R.string.layout_proportional_landscape),
+            type = LayoutConfiguration.LayoutType.DEFAULT,
+            orientation = LayoutConfiguration.LayoutOrientation.LANDSCAPE,
+            useCustomOpacity = false,
+            opacity = 50,
+            layoutVariants = emptyMap(),
+        )
+    }
+
+    private fun buildFullscreenLandscapeLayout(): LayoutConfiguration {
+        return LayoutConfiguration(
+            id = LayoutConfiguration.FULLSCREEN_LANDSCAPE_ID,
+            name = context.getString(R.string.layout_fullscreen_landscape),
+            type = LayoutConfiguration.LayoutType.DEFAULT,
+            orientation = LayoutConfiguration.LayoutOrientation.LANDSCAPE,
             useCustomOpacity = false,
             opacity = 50,
             layoutVariants = emptyMap(),

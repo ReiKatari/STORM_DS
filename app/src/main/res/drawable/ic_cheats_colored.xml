@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp"
+    android:height="44dp"
+    android:viewportWidth="44"
+    android:viewportHeight="44">
+    <!-- Rounded squircle badge background -->
+    <path
+        android:fillColor="#0D9488"
+        android:pathData="M12,2h20c5.52,0 10,4.48 10,10v20c0,5.52 -4.48,10 -10,10H12C6.48,42 2,37.52 2,32V12C2,6.48 6.48,2 12,2z" />
+    <!-- Soft inner border -->
+    <path
+        android:strokeColor="#5EEAD4"
+        android:strokeWidth="1.2"
+        android:pathData="M12,3.5h20c4.7,0 8.5,3.8 8.5,8.5v20c0,4.7 -3.8,8.5 -8.5,8.5H12c-4.7,0 -8.5,-3.8 -8.5,-8.5V12C3.5,7.3 7.3,3.5 12,3.5z" />
+    <!-- Magic Wand & Sparks icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11.3,30.3l13.4,-13.4 2.4,2.4 -13.4,13.4zM26.8,14.8l1.4,-1.4c0.8,-0.8 2,-0.8 2.8,0l1.4,1.4c0.8,0.8 0.8,2 0,2.8l-1.4,1.4 -4.2,-4.2z" />
+    <path
+        android:fillColor="#CCFBF1"
+        android:pathData="M16,11l1,2 2,1 -2,1 -1,2 -1,-2 -2,-1 2,-1zM31,23l0.7,1.3 1.3,0.7 -1.3,0.7 -0.7,1.3 -0.7,-1.3 -1.3,-0.7 1.3,-0.7z" />
+</vector>

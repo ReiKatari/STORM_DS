@@ -90,7 +90,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             return populateLayoutIfRequired(bestLayoutVariant, variant)
         }
 
-        return defaultLayoutProvider.buildDefaultLayout(variant)
+        return defaultLayoutProvider.buildDefaultLayout(variant, layoutConfiguration.id)
     }
 
     /**
@@ -102,7 +102,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
         val requiresDefaultLayout = mainScreenRequiresDefaultLayout || secondaryScreenRequiresDefaultLayout
 
         return if (requiresDefaultLayout) {
-            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant)
+            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, _currentLayoutConfiguration.value?.id)
             val mainScreenLayout = if (mainScreenRequiresDefaultLayout) {
                 layout.mainScreenLayout.copy(components = defaultLayout.mainScreenLayout.components)
             } else {

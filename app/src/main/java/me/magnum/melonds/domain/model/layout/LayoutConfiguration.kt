@@ -14,6 +14,11 @@ data class LayoutConfiguration(
 
     companion object {
         val DEFAULT_ID = UUID(0, 0)
+        val EVEN_LANDSCAPE_ID = UUID(0, 1)
+        val UNEVEN_LANDSCAPE_ID = UUID(0, 2)
+        val EVEN_PORTRAIT_ID = UUID(0, 3)
+        val PROPORTIONAL_LANDSCAPE_ID = UUID(0, 4)
+        val FULLSCREEN_LANDSCAPE_ID = UUID(0, 5)
 
         fun newCustom(): LayoutConfiguration {
             return LayoutConfiguration(
