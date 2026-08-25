@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.Lock
@@ -72,7 +73,7 @@ fun ScreenLayoutOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
+            .background(Color.Black.copy(alpha = 0.88f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -83,8 +84,9 @@ fun ScreenLayoutOverlay(
     ) {
         Column(
             modifier = Modifier
-                .widthIn(min = 300.dp, max = 400.dp)
-                .fillMaxWidth(0.90f)
+                .widthIn(min = 320.dp, max = 420.dp)
+                .fillMaxWidth(0.92f)
+                .padding(top = 26.dp, bottom = 16.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(colors.surface)
                 .border(1.dp, colors.line, RoundedCornerShape(24.dp))
@@ -93,13 +95,14 @@ fun ScreenLayoutOverlay(
                     indication = null,
                     onClick = { /* consume click inside card */ },
                 )
-                .padding(vertical = 22.dp, horizontal = 18.dp)
+                .padding(vertical = 20.dp, horizontal = 18.dp)
                 .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -124,24 +127,24 @@ fun ScreenLayoutOverlay(
                         text = stringResource(R.string.screen_layout),
                         fontFamily = SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 19.sp,
+                        fontSize = 18.sp,
                         color = colors.text,
                     )
                     Text(
-                        text = "DraStic Quick Display & Lock",
+                        text = "Быстрая смена раскладки",
                         fontFamily = SpaceGrotesk,
                         fontWeight = FontWeight.Normal,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         color = colors.text2,
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             LayoutOptionItem(
                 title = stringResource(R.string.layout_even_landscape),
-                subtitle = "2 экрана рядом (альбомный режим)",
+                subtitle = "2 экрана в альбомном режиме",
                 isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_LANDSCAPE,
                 icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
@@ -154,7 +157,7 @@ fun ScreenLayoutOverlay(
 
             LayoutOptionItem(
                 title = stringResource(R.string.layout_uneven_landscape),
-                subtitle = "1 основной + 1 вспомогательный экран",
+                subtitle = "2 экрана (один большой, второй маленький)",
                 isSelected = currentLayoutMode == ScreenLayoutMode.UNEVEN_LANDSCAPE,
                 icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.UNEVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
@@ -167,7 +170,7 @@ fun ScreenLayoutOverlay(
 
             LayoutOptionItem(
                 title = stringResource(R.string.layout_even_portrait_locked),
-                subtitle = "2 экрана вертикально (блокировка поворота)",
+                subtitle = "2 экрана в портретном режиме",
                 isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_PORTRAIT_LOCKED,
                 icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_PORTRAIT_LOCKED, isSel, colors.green, colors.text2) },
                 onClick = {
@@ -180,7 +183,7 @@ fun ScreenLayoutOverlay(
 
             LayoutOptionItem(
                 title = stringResource(R.string.layout_proportional_landscape),
-                subtitle = "Один центрированный экран 4:3",
+                subtitle = "Один большой экран 4:3 по центру",
                 isSelected = currentLayoutMode == ScreenLayoutMode.PROPORTIONAL_LANDSCAPE,
                 icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.PROPORTIONAL_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
@@ -193,7 +196,7 @@ fun ScreenLayoutOverlay(
 
             LayoutOptionItem(
                 title = stringResource(R.string.layout_fullscreen_landscape),
-                subtitle = "Растянутый экран во весь дисплей",
+                subtitle = "Один большой экран во весь дисплей",
                 isSelected = currentLayoutMode == ScreenLayoutMode.FULLSCREEN_LANDSCAPE,
                 icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.FULLSCREEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                 onClick = {
@@ -202,14 +205,14 @@ fun ScreenLayoutOverlay(
                 },
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
                     .background(colors.line),
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             LayoutOptionItem(
                 title = stringResource(R.string.layout_auto_rotate),
@@ -234,6 +237,26 @@ fun ScreenLayoutOverlay(
                     onDismiss()
                 },
             )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Unified Bottom Center Back Arrow
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, CircleShape)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    tint = colors.text,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

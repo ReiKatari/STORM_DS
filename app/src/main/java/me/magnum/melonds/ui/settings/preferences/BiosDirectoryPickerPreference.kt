@@ -36,6 +36,7 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
     private var currentValidationResult: ConfigurationDirResult? = null
 
     private var imageViewStatus: ImageView? = null
+    private var buttonResetDefault: ImageView? = null
 
     override fun onDirectoryPicked(uri: Uri?) {
         super.onDirectoryPicked(uri)
@@ -49,6 +50,7 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
     override fun onDependencyChanged(dependency: Preference, disableDependent: Boolean) {
         super.onDependencyChanged(dependency, disableDependent)
         imageViewStatus?.isGone = disableDependent
+        buttonResetDefault?.isGone = disableDependent
     }
 
     fun setBiosDirectoryValidator(validator: BiosDirectoryValidator) {
@@ -58,10 +60,12 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
     private fun validateDirectory(uri: Uri?) {
         if (!isEnabled) {
             imageViewStatus?.isGone = true
+            buttonResetDefault?.isGone = true
             return
         }
 
         imageViewStatus?.isGone = false
+        buttonResetDefault?.isGone = false
 
         currentValidationResult = biosDirectoryValidator?.getBiosDirectoryValidationResult(consoleType!!, uri)
         updateStatusView()
@@ -86,14 +90,28 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
 
-        imageViewStatus = holder.findViewById(R.id.imageViewStatus) as ImageView
+        imageViewStatus = holder.findViewById(R.id.imageViewStatus) as? ImageView
+        buttonResetDefault = holder.findViewById(R.id.buttonResetDefault) as? ImageView
+
+        buttonResetDefault?.setOnClickListener {
+            val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+            val defaultDir = java.io.File(context.filesDir, subFolder).apply { mkdirs() }
+            val defaultUri = Uri.fromFile(defaultDir)
+            onDirectoryPicked(defaultUri)
+            summary = defaultDir.absolutePath
+            validateDirectory(defaultUri)
+            android.widget.Toast.makeText(context, "${context.getString(R.string.reset_to_default)}: ${defaultDir.absolutePath}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+
         updateStatusView()
     }
 
     private fun updateStatusView() {
         val statusView = imageViewStatus ?: return
+        val resetView = buttonResetDefault
 
         statusView.isGone = !isEnabled
+        resetView?.isGone = !isEnabled
 
         if (!isEnabled) {
             return
@@ -102,15 +120,15 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
         currentValidationResult?.let { dirResult ->
             when (dirResult.status) {
                 ConfigurationDirResult.Status.VALID -> {
-                    (statusView.parent as View).visibility = View.GONE
+                    statusView.visibility = View.GONE
                 }
                 ConfigurationDirResult.Status.INVALID -> {
-                    (statusView.parent as View).visibility = View.VISIBLE
+                    statusView.visibility = View.VISIBLE
                     statusView.setImageResource(R.drawable.ic_status_warn)
                     ImageViewCompat.setImageTintList(statusView, ColorStateList.valueOf(ContextCompat.getColor(context, R.color.statusWarn)))
                 }
                 ConfigurationDirResult.Status.UNSET -> {
-                    (statusView.parent as View).visibility = View.VISIBLE
+                    statusView.visibility = View.VISIBLE
                     statusView.setImageResource(R.drawable.ic_status_error)
                     ImageViewCompat.setImageTintList(statusView, ColorStateList.valueOf(ContextCompat.getColor(context, R.color.statusError)))
                 }

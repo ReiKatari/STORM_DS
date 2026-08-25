@@ -129,169 +129,187 @@ fun ConsoleSubmenuOverlayDetailed(
                     false
                 }
             },
+        contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .widthIn(max = 760.dp)
+                .fillMaxWidth()
                 .systemBarsPadding()
                 .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) { },
+                ) { /* consume clicks inside panel */ },
+            verticalArrangement = Arrangement.Bottom,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            // Main Panel Card (Header + Items List)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF131217))
+                    .border(1.dp, colors.line, RoundedCornerShape(20.dp)),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.08f))
-                        .focusProperties { canFocus = false }
-                        .clickable(onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Icon(
-                    imageVector = Icons.Filled.Tune,
-                    contentDescription = null,
-                    tint = colors.red,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontFamily = SpaceGrotesk,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.10f)))
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .widthIn(max = 640.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                items.forEachIndexed { index, item ->
-                    val interactionSource = remember { MutableInteractionSource() }
-                    val isFocused by interactionSource.collectIsFocusedAsState()
-                    val shape = RoundedCornerShape(14.dp)
+                    // Header Bar
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(shape)
-                            .background(if (isFocused) Color(0xFF2A1C22) else Color(0xFF141318))
-                            .border(
-                                width = if (isFocused) 2.dp else 1.dp,
-                                color = if (isFocused) colors.red else Color.White.copy(alpha = 0.08f),
-                                shape = shape,
-                            )
-                            .let { if (index == 0) it.focusRequester(firstFocusRequester) else it }
-                            .clickable(interactionSource = interactionSource, indication = null) { onEntrySelected(index) }
-                            .padding(horizontal = 14.dp, vertical = 11.dp),
+                            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
                     ) {
-                        if (item.icon != null) {
-                            Box(
+                        Icon(
+                            imageVector = Icons.Filled.Tune,
+                            contentDescription = null,
+                            tint = colors.red,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = title,
+                            color = colors.text,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(colors.line)
+                    )
+
+                    // Options List
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        items.forEachIndexed { index, item ->
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isFocused by interactionSource.collectIsFocusedAsState()
+                            val shape = RoundedCornerShape(12.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isFocused) colors.red.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f)),
-                                contentAlignment = Alignment.Center,
+                                    .fillMaxWidth()
+                                    .clip(shape)
+                                    .background(if (isFocused) Color(0xFF2A1C22) else colors.surface)
+                                    .border(
+                                        width = if (isFocused) 1.5.dp else 1.dp,
+                                        color = if (isFocused) colors.red else colors.line,
+                                        shape = shape,
+                                    )
+                                    .let { if (index == 0) it.focusRequester(firstFocusRequester) else it }
+                                    .clickable(interactionSource = interactionSource, indication = null) { onEntrySelected(index) }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
                             ) {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = null,
-                                    tint = if (isFocused) colors.red else Color.White.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                            Spacer(Modifier.width(13.dp))
-                        }
+                                if (item.icon != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isFocused) colors.red.copy(alpha = 0.22f) else colors.surface2),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = item.icon,
+                                            contentDescription = null,
+                                            tint = if (isFocused) colors.red else colors.text,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = item.title,
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                lineHeight = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-
-                            if (item.value != null) {
-                                Spacer(Modifier.height(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0x22F59E0B))
-                                        .border(0.5.dp, Color(0x66F59E0B), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 7.dp, vertical = 2.5.dp),
-                                ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = item.value,
-                                        color = Color(0xFFFBBF24),
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        lineHeight = 14.sp,
+                                        text = item.title,
+                                        color = colors.text,
+                                        fontSize = 13.5.sp,
+                                        lineHeight = 17.sp,
+                                        fontWeight = FontWeight.Bold,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                }
-                            }
 
-                            if (item.description != null) {
-                                Spacer(Modifier.height(3.dp))
-                                Text(
-                                    text = item.description,
-                                    color = Color.White.copy(alpha = 0.50f),
-                                    fontSize = 11.sp,
-                                    lineHeight = 14.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                                    if (item.value != null) {
+                                        Spacer(Modifier.height(3.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color(0x22F59E0B))
+                                                .border(0.5.dp, Color(0x66F59E0B), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        ) {
+                                            Text(
+                                                text = item.value,
+                                                color = Color(0xFFFBBF24),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                lineHeight = 13.sp,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+
+                                    if (item.description != null) {
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = item.description,
+                                            color = colors.text2,
+                                            fontSize = 11.sp,
+                                            lineHeight = 14.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.width(10.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = colors.text3,
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         }
-
-                        Spacer(Modifier.width(10.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.40f),
-                            modifier = Modifier.size(20.dp),
-                        )
                     }
                 }
             }
 
-            GamepadHintsFooter(
-                hints = listOf(
-                    GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
-                    GamepadHint("A", stringResource(R.string.pause_hint_accept)),
-                    GamepadHint("B", stringResource(R.string.pause_hint_back)),
-                ),
-            )
+            // Unified Bottom Center Back Arrow
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 12.dp, top = 2.dp)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, CircleShape)
+                    .clickable(onClick = onDismiss)
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    tint = colors.text,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
 
         me.magnum.melonds.ui.common.RequestInitialFocus(firstFocusRequester)

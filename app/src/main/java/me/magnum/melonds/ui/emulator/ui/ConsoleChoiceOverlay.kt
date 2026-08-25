@@ -99,34 +99,19 @@ fun ConsoleChoiceOverlay(
                     indication = null,
                 ) { },
         ) {
+            // Header (lowered down for safe display)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 12.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .focusProperties { canFocus = false }
-                        .clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.pause_hint_back),
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
                 Text(
                     text = title,
                     color = Color.White,
                     fontFamily = SpaceGrotesk,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -140,7 +125,7 @@ fun ConsoleChoiceOverlay(
                     .widthIn(max = 640.dp)
                     .align(Alignment.CenterHorizontally)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
             ) {
                 options.forEachIndexed { index, label ->
                     val interactionSource = remember { MutableInteractionSource() }
@@ -181,13 +166,25 @@ fun ConsoleChoiceOverlay(
                 }
             }
 
-            GamepadHintsFooter(
-                hints = listOf(
-                    GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
-                    GamepadHint("A", stringResource(R.string.pause_hint_accept)),
-                    GamepadHint("B", stringResource(R.string.pause_hint_back)),
-                ),
-            )
+            // Unified Bottom Center Back Arrow
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 14.dp, top = 4.dp)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, CircleShape)
+                    .clickable(onClick = onBack)
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    tint = colors.text,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
 
         me.magnum.melonds.ui.common.RequestInitialFocus(focusRequester)

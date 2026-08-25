@@ -26,6 +26,12 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             findPreference<Preference>("about_version")?.summary = "v$vName (Build $vCode)"
         }
 
+        findPreference<Preference>("about_fork_info")?.setOnPreferenceClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SapphireRhodonite/WatermelonDS"))
+            startActivity(intent)
+            true
+        }
+
         findPreference<Preference>("about_github")?.setOnPreferenceClickListener {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ReiKatari/STORM_DS"))
             startActivity(intent)
@@ -52,6 +58,12 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         findPreference<Preference>("credits_melonds_ds")?.setOnPreferenceClickListener {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/JesseTG/melonds-ds"))
+            startActivity(intent)
+            true
+        }
+
+        findPreference<Preference>("credits_drastic")?.setOnPreferenceClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://drastic-ds.com/"))
             startActivity(intent)
             true
         }

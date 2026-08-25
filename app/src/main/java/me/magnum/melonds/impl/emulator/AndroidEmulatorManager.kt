@@ -327,11 +327,11 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                val isDsiWare = isRealDsiWareTitle(rom) || rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME
-                if (isDsiWare) {
+                val isInstalledShortcut = rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME
+                if (isInstalledShortcut) {
                     val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
-                        Log.i(TAG, "loadRom: Launching DSiWare '${rom.name}' via DSi NAND title environment")
+                        Log.i(TAG, "loadRom: Launching installed DSiWare shortcut '${rom.name}' via DSi NAND title environment")
                         return@withContext loadDsiWare(rom, cheats)
                     } else {
                         Log.w(TAG, "DSi custom BIOS/Firmware/NAND not valid (${dsiBiosResult.status}), falling back to standard loader")
@@ -545,18 +545,22 @@ class AndroidEmulatorManager(
         var hasPublicSave = false
         var hasPrivateSave = false
         var primaryFileType: DSiWareTitleFileType? = null
-        try {
-            val installedTitles = dsiNandManager.listTitles()
-            val installedTitle = installedTitles.firstOrNull { it.titleId == titleId }
-            if (installedTitle == null && !rom.isInstalledDsiWareShortcut && rom.uri.scheme != Rom.INSTALLED_DSIWARE_URI_SCHEME) {
-                Log.i(TAG, "loadDsiWare: title $titleIdHex not in NAND; importing to NAND for session")
-                val importResult = dsiNandManager.importTitle(rom.uri)
-                if (importResult == ImportDSiWareTitleResult.SUCCESS) {
-                    isTemp = true
-                }
-            }
+        val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
 
-            dsiNandManager.repairTitleSaves(titleId)
+        try {
+            val isDirectRomFile = !rom.isInstalledDsiWareShortcut && rom.uri.scheme != Rom.INSTALLED_DSIWARE_URI_SCHEME
+            if (!isDirectRomFile || dsiWareBootMode != me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT) {
+                val installedTitles = dsiNandManager.listTitles()
+                val installedTitle = installedTitles.firstOrNull { it.titleId == titleId }
+                if (installedTitle == null && isDirectRomFile) {
+                    Log.i(TAG, "loadDsiWare: title $titleIdHex not in NAND; importing to NAND for session")
+                    val importResult = dsiNandManager.importTitle(rom.uri)
+                    if (importResult == ImportDSiWareTitleResult.SUCCESS) {
+                        isTemp = true
+                    }
+                }
+                dsiNandManager.repairTitleSaves(titleId)
+            }
 
             // If user has existing .sav in their save folder, sync it into NAND before launching
             try {
@@ -573,10 +577,12 @@ class AndroidEmulatorManager(
                 Log.w(TAG, "loadDsiWare: error importing user public save into NAND", e)
             }
 
-            // Export executable from NAND for direct boot
+            // Export executable from NAND for direct boot or copy direct ROM
             executableFile.delete()
-            val exportResult = dsiNandManager.exportTitleExecutable(titleId, executableFile.absolutePath)
-            if (!exportResult || !executableFile.exists() || executableFile.length() == 0L) {
+            if (!isDirectRomFile) {
+                dsiNandManager.exportTitleExecutable(titleId, executableFile.absolutePath)
+            }
+            if (!executableFile.exists() || executableFile.length() == 0L) {
                 Log.i(TAG, "loadDsiWare: copying direct ROM file as executable fallback for title=$titleIdHex")
                 runCatching {
                     context.contentResolver.openInputStream(rom.uri)?.use { input ->
@@ -588,8 +594,8 @@ class AndroidEmulatorManager(
             }
 
             if (!executableFile.exists() || executableFile.length() == 0L) {
-                Log.w(TAG, "loadDsiWare: failed to export executable title=$titleIdHex")
-                writeGameExecutionLog(rom, titleIdHex, false, "Failed to export executable from NAND", "loadDsiWare")
+                Log.w(TAG, "loadDsiWare: failed to prepare executable title=$titleIdHex")
+                writeGameExecutionLog(rom, titleIdHex, false, "Failed to prepare executable for title", "loadDsiWare")
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
 
@@ -614,7 +620,6 @@ class AndroidEmulatorManager(
             dsiNandManager.closeNand()
         }
 
-        val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
         val (showBootScreen, autoloadTitleId) = when (dsiWareBootMode) {
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> true to 0L
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> true to titleId
@@ -991,19 +996,21 @@ class AndroidEmulatorManager(
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isDsi = rom.isInstalledDsiWareShortcut || isRealDsiWareTitle(rom)
-        val mustUseCustomBios = isDsi || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
-        val consoleType = if (isDsi) {
+        val isDsiTitle = rom.isInstalledDsiWareShortcut || isRealDsiWareTitle(rom) || rom.isDsiWareTitle || rom.isDsiEnhanced
+        val dsiStatus = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
+        val canRunDsi = isDsiTitle && dsiStatus.status == ConfigurationDirResult.Status.VALID
+        val consoleType = if (canRunDsi || rom.config.runtimeConsoleType == RuntimeConsoleType.DSi) {
             ConsoleType.DSi
         } else if (rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
-            ConsoleType.DS
+            baseConfiguration.consoleType
         } else {
             getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
         }
+        val mustUseCustomBios = (consoleType == ConsoleType.DSi) || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
-            showBootScreen = if (isDsi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
+            showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
             frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,
