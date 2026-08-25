@@ -153,6 +153,11 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         } else if (view is android.widget.SeekBar) {
             view.thumbTintList = android.content.res.ColorStateList.valueOf(accent)
             view.progressTintList = android.content.res.ColorStateList.valueOf(accent)
+        } else if (view is android.widget.ImageView) {
+            val id = view.id
+            if (id == android.R.id.icon || id == me.magnum.melonds.R.id.buttonResetDefault || view.tag == "tint_accent") {
+                androidx.core.widget.ImageViewCompat.setImageTintList(view, android.content.res.ColorStateList.valueOf(accent))
+            }
         }
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {

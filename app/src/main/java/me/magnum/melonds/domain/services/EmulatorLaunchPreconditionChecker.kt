@@ -73,45 +73,8 @@ class EmulatorLaunchPreconditionChecker(
             return checkInstalledDsiWareShortcutPreconditions(rom)
         }
 
-        val romInfo = romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)?.getRomInfo(rom)
-
-        if (romInfo == null) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.RomParseError)
-        }
-
-        val openNandResult = dsiNandManager.openNand()
-        if (openNandResult.isFailure()) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.NandError)
-        }
-
-        // The DSi title ID is equal to the game code, but parsed as a Long in big-endian
-        val dsiTitleIdByteData = romInfo.gameCode.encodeToByteArray()
-        val dsiTitleId = ByteBuffer.wrap(dsiTitleIdByteData).order(ByteOrder.BIG_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
-
-        val isTitleInstalled = try {
-            val list = dsiNandManager.listTitles()
-            val found = list.any { (it.titleId and 0xFFFFFFFFL) == dsiTitleId }
-            if (!found) {
-                val importResult = dsiNandManager.importTitle(rom.uri)
-                if (importResult == me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult.SUCCESS) {
-                    dsiNandManager.listTitles().any { (it.titleId and 0xFFFFFFFFL) == dsiTitleId }
-                } else {
-                    false
-                }
-            } else {
-                true
-            }
-        } finally {
-            dsiNandManager.closeNand()
-        }
-
-        if (!isTitleInstalled) {
-            // For direct ROM files (.nds / .dsi), we do NOT block launch if NAND import fails.
-            // Direct Slot-1 Cartridge Boot executes the ROM file directly in DSi mode!
-            return RomLaunchPreconditionCheckResult.Success(rom)
-        }
-
-        return RomLaunchPreconditionCheckResult.Success(rom.copy(installedDsiWareTitleId = dsiTitleId))
+        // Standard ROM files boot directly from cart slot in DSi mode without modifying NAND
+        return RomLaunchPreconditionCheckResult.Success(rom)
     }
 
     private suspend fun checkInstalledDsiWareShortcutPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {

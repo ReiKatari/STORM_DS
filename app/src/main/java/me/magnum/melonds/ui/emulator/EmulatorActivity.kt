@@ -1850,6 +1850,7 @@ class EmulatorActivity : AppCompatActivity() {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.horizontalBias = 0.44f
                     newParams.topMargin = topMarginVal
                 }
                 FpsCounterPosition.TOP_RIGHT -> {
@@ -1868,6 +1869,7 @@ class EmulatorActivity : AppCompatActivity() {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                    newParams.horizontalBias = 0.44f
                     newParams.bottomMargin = bottomMarginVal
                 }
                 FpsCounterPosition.BOTTOM_RIGHT -> {
@@ -1933,7 +1935,8 @@ class EmulatorActivity : AppCompatActivity() {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_CENTER) (topMarginVal + 28 * density).toInt() else topMarginVal
+                newParams.horizontalBias = 0.56f
+                newParams.topMargin = topMarginVal
             }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
@@ -1951,7 +1954,8 @@ class EmulatorActivity : AppCompatActivity() {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_CENTER) (bottomMarginVal + 28 * density).toInt() else bottomMarginVal
+                newParams.horizontalBias = 0.56f
+                newParams.bottomMargin = bottomMarginVal
             }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
@@ -2072,43 +2076,41 @@ class EmulatorActivity : AppCompatActivity() {
                 isRotationLocked = true
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_even_landscape)), Toast.LENGTH_SHORT).show()
-                scheduleStartupPresentationRefreshes()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.UNEVEN_LANDSCAPE -> {
                 isRotationLocked = true
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_uneven_landscape)), Toast.LENGTH_SHORT).show()
-                scheduleStartupPresentationRefreshes()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_PORTRAIT_LOCKED -> {
                 isRotationLocked = true
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_even_portrait_locked)), Toast.LENGTH_SHORT).show()
-                scheduleStartupPresentationRefreshes()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.PROPORTIONAL_LANDSCAPE -> {
                 isRotationLocked = true
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_proportional_landscape)), Toast.LENGTH_SHORT).show()
-                scheduleStartupPresentationRefreshes()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.FULLSCREEN_LANDSCAPE -> {
                 isRotationLocked = true
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_fullscreen_landscape)), Toast.LENGTH_SHORT).show()
-                scheduleStartupPresentationRefreshes()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.AUTO_ROTATE -> {
                 isRotationLocked = false
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_auto_rotate)), Toast.LENGTH_SHORT).show()
-                scheduleStartupPresentationRefreshes()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.OPEN_LAYOUT_EDITOR -> {
                 val intent = Intent(this, me.magnum.melonds.ui.layouteditor.LayoutEditorActivity::class.java)
                 startActivity(intent)
+                return
             }
         }
+
+        updateRendererScreenAreas()
+        scheduleStartupPresentationRefreshes()
     }
 
     private fun updateRendererScreenAreas() {
@@ -2117,6 +2119,19 @@ class EmulatorActivity : AppCompatActivity() {
         }
         val areas = resolveMainScreenPresentationAreas()
         consoleSkinAreasState.value = areas
+        if (currentScreenLayoutMode == null) {
+            areas.topScreenRect?.let { binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, it) }
+            areas.bottomScreenRect?.let { binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, it) }
+        }
+        if (areas.hybridTopScreenRect != null && areas.hybridBottomScreenRect != null) {
+            val hRect = Rect(
+                areas.hybridTopScreenRect.x,
+                areas.hybridTopScreenRect.y,
+                areas.hybridTopScreenRect.width,
+                areas.hybridTopScreenRect.height + areas.hybridBottomScreenRect.height
+            )
+            binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, hRect)
+        }
         updateOpenGlRetroArchFilterConfiguration(currentRuntimeRendererConfiguration)
         mainScreenRenderer.updateScreenAreas(
             areas.topScreenRect,
@@ -2158,13 +2173,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun resolveMainScreenPresentationAreas(): ScreenPresentationAreas {
-        val (topScreen, bottomScreen) = if (binding.viewLayoutControls.areScreensSwapped()) {
-            LayoutComponent.BOTTOM_SCREEN to LayoutComponent.TOP_SCREEN
-        } else {
-            LayoutComponent.TOP_SCREEN to LayoutComponent.BOTTOM_SCREEN
-        }
-        val topView = binding.viewLayoutControls.getLayoutComponentView(topScreen)
-        val bottomView = binding.viewLayoutControls.getLayoutComponentView(bottomScreen)
+        val areScreensSwapped = binding.viewLayoutControls.areScreensSwapped()
+        val topView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.TOP_SCREEN)
+        val bottomView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.BOTTOM_SCREEN)
         val hybridView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
         val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
 
@@ -2176,73 +2187,176 @@ class EmulatorActivity : AppCompatActivity() {
         val surfaceW = realW
         val surfaceH = realH
 
-        var rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
-        var rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+        var topRect: Rect? = null
+        var bottomRect: Rect? = null
+        var topAlpha = topView?.baseAlpha ?: 1f
+        var bottomAlpha = bottomView?.baseAlpha ?: 1f
 
-        // Sanity Check: Check orientation mismatch between view rects and actual device orientation
-        if (rawTop != null && rawBottom != null) {
-            val isViewLayoutVertical = rawBottom.y >= rawTop.bottom - 20 && kotlin.math.abs(rawTop.x - rawBottom.x) < 50
-            val isViewLayoutHorizontal = rawBottom.x >= rawTop.right - 20 && kotlin.math.abs(rawTop.y - rawBottom.y) < 50
-
-            if (isLandscape && isViewLayoutVertical) {
-                // View has stale portrait layout while device is in landscape
-                rawTop = null
-                rawBottom = null
-                lastKnownGoodTopRect = null
-                lastKnownGoodBottomRect = null
-            } else if (!isLandscape && isViewLayoutHorizontal) {
-                // View has stale landscape layout while device is in portrait
-                rawTop = null
-                rawBottom = null
-                lastKnownGoodTopRect = null
-                lastKnownGoodBottomRect = null
+        when (currentScreenLayoutMode) {
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_LANDSCAPE -> {
+                // 1. Ровная альбомная: 2 экрана в альбомном режиме одинакового размера (Side-by-Side)
+                val sWidth = surfaceW / 2
+                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+                val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
+                val first = Rect(0, vMargin, sWidth, sHeight)
+                val second = Rect(sWidth, vMargin, sWidth, sHeight)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, first)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, second)
+                topRect = if (areScreensSwapped) second else first
+                bottomRect = if (areScreensSwapped) first else second
             }
-        }
-
-        // Discard stale rects if they overflow surface dimensions
-        if (rawTop != null) {
-            if (rawTop.x + rawTop.width > surfaceW + 10 || rawTop.y + rawTop.height > surfaceH + 10) {
-                rawTop = null
-                rawBottom = null
-                lastKnownGoodTopRect = null
-                lastKnownGoodBottomRect = null
-            }
-        }
-
-        // Compute authoritative default layout rects for the current orientation
-        val defLayout = if (isLandscape) {
-            val sWidth = surfaceW / 2
-            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
-            val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
-            Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
-        } else {
-            val sWidth = surfaceW
-            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
-            Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
-        }
-
-        var topRect = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
-        var bottomRect = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
-
-        // Auto-correct squeezed or misplaced secondary screen if not in hybrid mode
-        if (topRect != null && bottomRect != null && hybridTopRect == null && hybridBottomRect == null) {
-            if (!isLandscape) {
-                // In Portrait: bottom screen MUST be full width (matching surface) and placed below top screen
-                if (bottomRect.width < (surfaceW * 0.85f).toInt() || bottomRect.y < topRect.bottom - 20) {
-                    val sWidth = surfaceW
-                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
-                    topRect = Rect(0, 0, sWidth, sHeight)
-                    bottomRect = Rect(0, sHeight, sWidth, sHeight)
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.UNEVEN_LANDSCAPE -> {
+                // 2. Неровная альбомная: 2 экрана в альбомном режиме, где один большой (~70-75%), а второй маленький сбоку (прижат к верху)
+                var mainW = (surfaceH * me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                var mainH = surfaceH
+                if (mainW > (surfaceW * 0.72f).toInt()) {
+                    mainW = (surfaceW * 0.70f).toInt()
+                    mainH = (mainW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
                 }
-            } else {
-                // In Landscape: screens MUST be side-by-side matching half width
-                if (bottomRect.width < (surfaceW * 0.35f).toInt() || bottomRect.x < topRect.right - 20) {
+                val mainVMargin = ((surfaceH - mainH) / 2).coerceAtLeast(0)
+                val mainRect = Rect(0, mainVMargin, mainW, mainH)
+
+                val subW = ((surfaceW - mainW) - 12).coerceAtLeast(100)
+                val subH = (subW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+                val subX = surfaceW - subW
+                val subY = 8 // прижат к верхнему краю
+                val subRect = Rect(subX, subY, subW, subH)
+
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, mainRect)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, subRect)
+
+                topRect = if (areScreensSwapped) subRect else mainRect
+                bottomRect = if (areScreensSwapped) mainRect else subRect
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_PORTRAIT_LOCKED -> {
+                // 3. Ровная портретная: 2 экрана в портретном режиме друг под другом (100% ширины)
+                val sWidth = surfaceW
+                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                val first = Rect(0, 0, sWidth, sHeight)
+                val second = Rect(0, sHeight, sWidth, sHeight)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, first)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, second)
+                topRect = if (areScreensSwapped) second else first
+                bottomRect = if (areScreensSwapped) first else second
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.PROPORTIONAL_LANDSCAPE -> {
+                // 4. Пропорциональная альбомная: один большой экран по центру (4:3), второй скрыт
+                var sWidth = (surfaceH * me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                var sHeight = surfaceH
+                if (sWidth > surfaceW) {
+                    sWidth = surfaceW
+                    sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                }
+                val x = (surfaceW - sWidth) / 2
+                val y = (surfaceH - sHeight) / 2
+                val visibleRect = Rect(x, y, sWidth, sHeight)
+                val hiddenRect = Rect(0, 0, 0, 0)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, visibleRect)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, hiddenRect)
+                if (areScreensSwapped) {
+                    topRect = hiddenRect
+                    bottomRect = visibleRect
+                    topAlpha = 0f
+                    bottomAlpha = 1f
+                } else {
+                    topRect = visibleRect
+                    bottomRect = hiddenRect
+                    topAlpha = 1f
+                    bottomAlpha = 0f
+                }
+            }
+            me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.FULLSCREEN_LANDSCAPE -> {
+                // 5. Полноэкранная альбомная: один большой экран, растянутый на весь дисплей, второй скрыт
+                val visibleRect = Rect(0, 0, surfaceW, surfaceH)
+                val hiddenRect = Rect(0, 0, 0, 0)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, visibleRect)
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, hiddenRect)
+                if (areScreensSwapped) {
+                    topRect = hiddenRect
+                    bottomRect = visibleRect
+                    topAlpha = 0f
+                    bottomAlpha = 1f
+                } else {
+                    topRect = visibleRect
+                    bottomRect = hiddenRect
+                    topAlpha = 1f
+                    bottomAlpha = 0f
+                }
+            }
+            else -> {
+                // AUTO_ROTATE / Пользовательский макет из редактора
+                var rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                var rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+
+                // Sanity Check: Check orientation mismatch between view rects and actual device orientation
+                if (rawTop != null && rawBottom != null) {
+                    val isViewLayoutVertical = rawBottom.y >= rawTop.bottom - 20 && kotlin.math.abs(rawTop.x - rawBottom.x) < 50
+                    val isViewLayoutHorizontal = rawBottom.x >= rawTop.right - 20 && kotlin.math.abs(rawTop.y - rawBottom.y) < 50
+
+                    if (isLandscape && isViewLayoutVertical) {
+                        rawTop = null
+                        rawBottom = null
+                        lastKnownGoodTopRect = null
+                        lastKnownGoodBottomRect = null
+                    } else if (!isLandscape && isViewLayoutHorizontal) {
+                        rawTop = null
+                        rawBottom = null
+                        lastKnownGoodTopRect = null
+                        lastKnownGoodBottomRect = null
+                    }
+                }
+
+                // Discard stale rects if they overflow surface dimensions
+                if (rawTop != null) {
+                    if (rawTop.x + rawTop.width > surfaceW + 10 || rawTop.y + rawTop.height > surfaceH + 10) {
+                        rawTop = null
+                        rawBottom = null
+                        lastKnownGoodTopRect = null
+                        lastKnownGoodBottomRect = null
+                    }
+                }
+
+                // Compute authoritative default layout rects for the current orientation
+                val defLayout = if (isLandscape) {
                     val sWidth = surfaceW / 2
                     val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
                     val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
-                    topRect = Rect(0, vMargin, sWidth, sHeight)
-                    bottomRect = Rect(sWidth, vMargin, sWidth, sHeight)
+                    Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
+                } else {
+                    val sWidth = surfaceW
+                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                    Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
                 }
+
+                var rTop = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
+                var rBottom = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
+
+                // Auto-correct squeezed or misplaced secondary screen if not in hybrid mode
+                if (rTop != null && rBottom != null && hybridTopRect == null && hybridBottomRect == null) {
+                    if (!isLandscape) {
+                        // In Portrait: bottom screen MUST be full width (matching surface) and placed below top screen
+                        if (rBottom.width < (surfaceW * 0.85f).toInt() || rBottom.y < rTop.bottom - 20) {
+                            val sWidth = surfaceW
+                            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                            rTop = Rect(0, 0, sWidth, sHeight)
+                            rBottom = Rect(0, sHeight, sWidth, sHeight)
+                        }
+                    } else {
+                        // In Landscape: screens MUST be side-by-side matching half width
+                        if (rBottom.width < (surfaceW * 0.35f).toInt() || rBottom.x < rTop.right - 20) {
+                            val sWidth = surfaceW / 2
+                            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+                            val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
+                            rTop = Rect(0, vMargin, sWidth, sHeight)
+                            rBottom = Rect(sWidth, vMargin, sWidth, sHeight)
+                        }
+                    }
+                }
+
+                topRect = rTop
+                bottomRect = rBottom
+                topAlpha = topView?.baseAlpha ?: 1f
+                bottomAlpha = bottomView?.baseAlpha ?: 1f
             }
         }
 
@@ -2252,8 +2366,8 @@ class EmulatorActivity : AppCompatActivity() {
         return ScreenPresentationAreas(
             topScreenRect = topRect,
             bottomScreenRect = bottomRect,
-            topAlpha = topView?.baseAlpha ?: 1f,
-            bottomAlpha = bottomView?.baseAlpha ?: 1f,
+            topAlpha = topAlpha,
+            bottomAlpha = bottomAlpha,
             topOnTop = topView?.onTop ?: false,
             bottomOnTop = bottomView?.onTop ?: false,
             hybridTopScreenRect = hybridTopRect,

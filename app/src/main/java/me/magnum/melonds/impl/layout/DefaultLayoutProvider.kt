@@ -11,6 +11,7 @@ import me.magnum.melonds.domain.model.SCREEN_WIDTH
 import me.magnum.melonds.domain.model.consoleAspectRatio
 import me.magnum.melonds.domain.model.layout.Insets
 import me.magnum.melonds.domain.model.layout.LayoutComponent
+import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.model.layout.LayoutDisplay
 import me.magnum.melonds.domain.model.layout.PositionedLayoutComponent
 import me.magnum.melonds.domain.model.layout.ScreenFold
@@ -27,7 +28,7 @@ class DefaultLayoutProvider(
     private val screenUnitsConverter: ScreenUnitsConverter,
 ) {
 
-    fun buildDefaultLayout(variant: UILayoutVariant): UILayout {
+    fun buildDefaultLayout(variant: UILayoutVariant, layoutId: java.util.UUID? = null): UILayout {
         val width = variant.uiSize.x
         val height = variant.uiSize.y
         val orientation = variant.orientation
@@ -35,6 +36,16 @@ class DefaultLayoutProvider(
         val mainDisplay = variant.displays.mainScreenDisplay
         val secondaryDisplay = variant.displays.secondaryScreenDisplay
         val mainDisplayInsets = variant.uiInsets
+
+        if (layoutId == LayoutConfiguration.UNEVEN_LANDSCAPE_ID) {
+            return UILayout(buildUnevenLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
+        } else if (layoutId == LayoutConfiguration.PROPORTIONAL_LANDSCAPE_ID) {
+            return UILayout(buildProportionalLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
+        } else if (layoutId == LayoutConfiguration.FULLSCREEN_LANDSCAPE_ID) {
+            return UILayout(buildFullscreenLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
+        } else if (layoutId == LayoutConfiguration.EVEN_PORTRAIT_ID) {
+            return UILayout(buildDefaultPortraitLayout(width, height, mainDisplayInsets), ScreenLayout())
+        }
 
         val (mainScreenLayout, secondaryScreenLayout) = if (secondaryDisplay != null) {
             val secondaryDisplayInsets = getDisplaySafeInsets(secondaryDisplay)
@@ -231,6 +242,7 @@ class DefaultLayoutProvider(
                 PositionedLayoutComponent(Rect(width / 2 - smallButtonsSize - (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
                 PositionedLayoutComponent(Rect(width / 2 + (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
                 PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize + (spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize * 2 + (spacing4dp * 2.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_SWAP_SCREENS),
             )
         )
     }
@@ -405,5 +417,144 @@ class DefaultLayoutProvider(
             val displayCutout = windowManager.defaultDisplay.cutout ?: return Insets.Zero
             Insets(displayCutout.safeInsetLeft, displayCutout.safeInsetTop, displayCutout.safeInsetRight, displayCutout.safeInsetBottom)
         }
+    }
+
+    fun buildUnevenLandscapeLayout(width: Int, height: Int, insets: Insets): ScreenLayout {
+        val safeLeft = insets.left
+        val safeTop = insets.top
+        val safeRight = insets.right
+        val safeBottom = insets.bottom
+        val safeWidth = width - safeLeft - safeRight
+        val safeHeight = height - safeTop - safeBottom
+
+        val largeButtonsSize = screenUnitsConverter.dpToPixels(140f).toInt()
+        val lrWidth = screenUnitsConverter.dpToPixels(56f).toInt()
+        val lrHeight = screenUnitsConverter.dpToPixels(44f).toInt()
+        val selectStartWidth = screenUnitsConverter.dpToPixels(54f).toInt()
+        val selectStartHeight = screenUnitsConverter.dpToPixels(32f).toInt()
+        val smallButtonsSize = screenUnitsConverter.dpToPixels(40f).toInt()
+        val spacing4dp = screenUnitsConverter.dpToPixels(4f).toInt()
+
+        var mainW = (safeHeight * consoleAspectRatio).toInt()
+        var mainH = safeHeight
+        if (mainW > (safeWidth * 0.72f).toInt()) {
+            mainW = (safeWidth * 0.70f).toInt()
+            mainH = (mainW / consoleAspectRatio).toInt()
+        }
+        val mainVMargin = ((safeHeight - mainH) / 2).coerceAtLeast(0)
+        val mainRect = Rect(safeLeft, safeTop + mainVMargin, mainW, mainH)
+
+        val subW = ((safeWidth - mainW) - 16).coerceAtLeast(100)
+        val subH = (subW / consoleAspectRatio).toInt().coerceAtMost(safeHeight)
+        val subX = safeLeft + safeWidth - subW
+        val subY = safeTop
+        val subRect = Rect(subX, subY, subW, subH)
+
+        val dpadView = Rect(safeLeft, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+        val buttonsView = Rect(width - safeRight - largeButtonsSize, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+
+        return ScreenLayout(
+            listOf(
+                PositionedLayoutComponent(mainRect, LayoutComponent.TOP_SCREEN),
+                PositionedLayoutComponent(subRect, LayoutComponent.BOTTOM_SCREEN),
+                PositionedLayoutComponent(dpadView, LayoutComponent.DPAD),
+                PositionedLayoutComponent(buttonsView, LayoutComponent.BUTTONS),
+                PositionedLayoutComponent(Rect(safeLeft, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
+                PositionedLayoutComponent(Rect(width - safeRight - lrWidth, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
+                PositionedLayoutComponent(Rect((width - spacing4dp) / 2 - selectStartWidth, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
+                PositionedLayoutComponent(Rect((width + spacing4dp) / 2, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
+                PositionedLayoutComponent(Rect(width / 2 - (smallButtonsSize * 2.0 + spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
+                PositionedLayoutComponent(Rect(width / 2 - smallButtonsSize - (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
+                PositionedLayoutComponent(Rect(width / 2 + (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize + (spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize * 2 + (spacing4dp * 2.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_SWAP_SCREENS),
+            )
+        )
+    }
+
+    fun buildProportionalLandscapeLayout(width: Int, height: Int, insets: Insets): ScreenLayout {
+        val safeLeft = insets.left
+        val safeTop = insets.top
+        val safeRight = insets.right
+        val safeBottom = insets.bottom
+        val safeWidth = width - safeLeft - safeRight
+        val safeHeight = height - safeTop - safeBottom
+
+        val largeButtonsSize = screenUnitsConverter.dpToPixels(140f).toInt()
+        val lrWidth = screenUnitsConverter.dpToPixels(56f).toInt()
+        val lrHeight = screenUnitsConverter.dpToPixels(44f).toInt()
+        val selectStartWidth = screenUnitsConverter.dpToPixels(54f).toInt()
+        val selectStartHeight = screenUnitsConverter.dpToPixels(32f).toInt()
+        val smallButtonsSize = screenUnitsConverter.dpToPixels(40f).toInt()
+        val spacing4dp = screenUnitsConverter.dpToPixels(4f).toInt()
+
+        var sWidth = (safeHeight * consoleAspectRatio).toInt()
+        var sHeight = safeHeight
+        if (sWidth > safeWidth) {
+            sWidth = safeWidth
+            sHeight = (sWidth / consoleAspectRatio).toInt()
+        }
+        val x = safeLeft + (safeWidth - sWidth) / 2
+        val y = safeTop + (safeHeight - sHeight) / 2
+        val screenRect = Rect(x, y, sWidth, sHeight)
+
+        val dpadView = Rect(safeLeft, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+        val buttonsView = Rect(width - safeRight - largeButtonsSize, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+
+        return ScreenLayout(
+            listOf(
+                PositionedLayoutComponent(screenRect, LayoutComponent.TOP_SCREEN),
+                PositionedLayoutComponent(Rect(0, 0, 0, 0), LayoutComponent.BOTTOM_SCREEN),
+                PositionedLayoutComponent(dpadView, LayoutComponent.DPAD),
+                PositionedLayoutComponent(buttonsView, LayoutComponent.BUTTONS),
+                PositionedLayoutComponent(Rect(safeLeft, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
+                PositionedLayoutComponent(Rect(width - safeRight - lrWidth, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
+                PositionedLayoutComponent(Rect((width - spacing4dp) / 2 - selectStartWidth, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
+                PositionedLayoutComponent(Rect((width + spacing4dp) / 2, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
+                PositionedLayoutComponent(Rect(width / 2 - (smallButtonsSize * 2.0 + spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
+                PositionedLayoutComponent(Rect(width / 2 - smallButtonsSize - (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
+                PositionedLayoutComponent(Rect(width / 2 + (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize + (spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize * 2 + (spacing4dp * 2.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_SWAP_SCREENS),
+            )
+        )
+    }
+
+    fun buildFullscreenLandscapeLayout(width: Int, height: Int, insets: Insets): ScreenLayout {
+        val safeLeft = insets.left
+        val safeTop = insets.top
+        val safeRight = insets.right
+        val safeBottom = insets.bottom
+
+        val largeButtonsSize = screenUnitsConverter.dpToPixels(140f).toInt()
+        val lrWidth = screenUnitsConverter.dpToPixels(56f).toInt()
+        val lrHeight = screenUnitsConverter.dpToPixels(44f).toInt()
+        val selectStartWidth = screenUnitsConverter.dpToPixels(54f).toInt()
+        val selectStartHeight = screenUnitsConverter.dpToPixels(32f).toInt()
+        val smallButtonsSize = screenUnitsConverter.dpToPixels(40f).toInt()
+        val spacing4dp = screenUnitsConverter.dpToPixels(4f).toInt()
+
+        val screenRect = Rect(0, 0, width, height)
+
+        val dpadView = Rect(safeLeft, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+        val buttonsView = Rect(width - safeRight - largeButtonsSize, height - safeBottom - largeButtonsSize, largeButtonsSize, largeButtonsSize)
+
+        return ScreenLayout(
+            listOf(
+                PositionedLayoutComponent(screenRect, LayoutComponent.TOP_SCREEN),
+                PositionedLayoutComponent(Rect(0, 0, 0, 0), LayoutComponent.BOTTOM_SCREEN),
+                PositionedLayoutComponent(dpadView, LayoutComponent.DPAD),
+                PositionedLayoutComponent(buttonsView, LayoutComponent.BUTTONS),
+                PositionedLayoutComponent(Rect(safeLeft, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_L),
+                PositionedLayoutComponent(Rect(width - safeRight - lrWidth, safeTop, lrWidth, lrHeight), LayoutComponent.BUTTON_R),
+                PositionedLayoutComponent(Rect((width - spacing4dp) / 2 - selectStartWidth, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_SELECT),
+                PositionedLayoutComponent(Rect((width + spacing4dp) / 2, height - safeBottom - selectStartHeight, selectStartWidth, selectStartHeight), LayoutComponent.BUTTON_START),
+                PositionedLayoutComponent(Rect(width / 2 - (smallButtonsSize * 2.0 + spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_HINGE),
+                PositionedLayoutComponent(Rect(width / 2 - smallButtonsSize - (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT),
+                PositionedLayoutComponent(Rect(width / 2 + (spacing4dp / 2.0).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_MICROPHONE_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize + (spacing4dp * 1.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE),
+                PositionedLayoutComponent(Rect(width / 2 + smallButtonsSize * 2 + (spacing4dp * 2.5).toInt(), safeTop, smallButtonsSize, smallButtonsSize), LayoutComponent.BUTTON_SWAP_SCREENS),
+            )
+        )
     }
 }

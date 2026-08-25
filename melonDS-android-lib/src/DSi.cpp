@@ -416,6 +416,8 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
         int zeroCountOrig = 0;
         int zeroCountDec = 0;
+        int armCondOrig = 0;
+        int armCondDec = 0;
         u32 totalBytes = 0;
 
         for (u32 b = 0; b < trialBlocks; b++)
@@ -444,39 +446,46 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
             {
                 if (origBytes[i] == 0x00) zeroCountOrig++;
             }
+            for (int w = 0; w < 4; w++)
+            {
+                if ((data[w] & 0xF0000000) == 0xE0000000) armCondOrig++;
+            }
 
             u8 tmp2[16];
             Bswap128(tmp2, data);
             AES_CTR_xcrypt_buffer(&trialCtx, tmp2, 16);
 
-            // Count zero bytes in decrypted output
+            // Count zero bytes and ARM conditions in decrypted output
             for (int i = 0; i < 16; i++)
             {
                 if (tmp2[i] == 0x00) zeroCountDec++;
             }
+            for (int w = 0; w < 4; w++)
+            {
+                u32 wordDec = *(u32*)&tmp2[w * 4];
+                if ((wordDec & 0xF0000000) == 0xE0000000) armCondDec++;
+            }
             totalBytes += 16;
         }
 
-        // A region is ALREADY DECRYPTED only if the original data in RAM already has
-        // significant zero bytes (typical for uncompressed ARM/Thumb code) AND trial
-        // decryption turns it into high-entropy pseudo-random noise (lower zero count).
-        // Otherwise, if original has low zeros (typical for AES ciphertext), it is ENCRYPTED.
-        bool isAlreadyDecrypted = (zeroCountOrig >= 12 && zeroCountOrig > zeroCountDec);
+        bool isAlreadyDecrypted = (zeroCountOrig >= 10 && zeroCountOrig > zeroCountDec) ||
+                                  (armCondOrig >= 6 && armCondOrig >= armCondDec) ||
+                                  (zeroCountOrig > zeroCountDec && zeroCountDec <= 1);
 
         if (isAlreadyDecrypted)
         {
             Log(LogLevel::Info,
                 "DecryptModcryptArea: data at RAM 0x%08X (ROM off 0x%08X, size 0x%X) appears ALREADY DECRYPTED "
-                "(trial %u bytes: origZeros=%d, decZeros=%d); skipping Modcrypt\n",
-                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec);
+                "(trial %u bytes: origZeros=%d, decZeros=%d, origARM=%d, decARM=%d); skipping Modcrypt\n",
+                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec, armCondOrig, armCondDec);
             return;
         }
         else
         {
             Log(LogLevel::Info,
                 "DecryptModcryptArea: data at RAM 0x%08X (ROM off 0x%08X, size 0x%X) is ENCRYPTED "
-                "(trial %u bytes: origZeros=%d, decZeros=%d); decrypting Modcrypt\n",
-                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec);
+                "(trial %u bytes: origZeros=%d, decZeros=%d, origARM=%d, decARM=%d); decrypting Modcrypt\n",
+                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec, armCondOrig, armCondDec);
         }
     }
 
@@ -531,7 +540,7 @@ void DSi::SetupDirectBoot()
     // TODO properly setup SCFG_EXT
 
     // TODO: add controls for forcing DS or DSi mode?
-    if (!(header.UnitCode & 0x02))
+    if (!(header.UnitCode & 0x02) && !header.IsDSiWare())
         dsmode = true;
 
     Log(LogLevel::Info,
@@ -815,24 +824,29 @@ void DSi::SetupDirectBoot()
         ARM7Write32(header.ARM7RAMAddress+i, tmp);
     }
 
-    if ((!dsmode) && (header.DSiCryptoFlags & (1<<0)))
+    if (!dsmode)
     {
         // load DSi-specific regions
-
-        for (u32 i = 0; i < header.DSiARM9iSize; i+=4)
+        if (header.DSiARM9iSize > 0 && header.DSiARM9iROMOffset > 0)
         {
-            u32 tmp = *(u32*)&cartrom[header.DSiARM9iROMOffset+i];
-            ARM9Write32(header.DSiARM9iRAMAddress+i, tmp);
+            for (u32 i = 0; i < header.DSiARM9iSize; i+=4)
+            {
+                u32 tmp = *(u32*)&cartrom[header.DSiARM9iROMOffset+i];
+                ARM9Write32(header.DSiARM9iRAMAddress+i, tmp);
+            }
         }
 
-        for (u32 i = 0; i < header.DSiARM7iSize; i+=4)
+        if (header.DSiARM7iSize > 0 && header.DSiARM7iROMOffset > 0)
         {
-            u32 tmp = *(u32*)&cartrom[header.DSiARM7iROMOffset+i];
-            ARM7Write32(header.DSiARM7iRAMAddress+i, tmp);
+            for (u32 i = 0; i < header.DSiARM7iSize; i+=4)
+            {
+                u32 tmp = *(u32*)&cartrom[header.DSiARM7iROMOffset+i];
+                ARM7Write32(header.DSiARM7iRAMAddress+i, tmp);
+            }
         }
 
         // decrypt any modcrypt areas if Modcrypt settings are present
-        if ((header.DSiCryptoFlags & (1<<1)) || (header.DSiCryptoFlags & (1<<0)) || (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Size != 0xFFFFFFFF))
+        if (header.DSiCryptoFlags != 0 || (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Size != 0xFFFFFFFF))
         {
             DecryptModcryptArea(header.DSiModcrypt1Offset,
                                 header.DSiModcrypt1Size,
@@ -875,6 +889,51 @@ void DSi::SetupDirectBoot()
     ARM9.CP15Write(0x911, 0x00000020);
 
     UpdateVRAMTimings();
+
+    if (!dsmode)
+    {
+        SCFG_Clock9 = 0x0187;
+        SCFG_Clock7 = 0x0187;
+        SCFG_EXT[0] = 0x8307F100;
+        SCFG_EXT[1] = 0x93FFFB06;
+        Set_SCFG_Clock9(SCFG_Clock9);
+        ApplyNewRAMSize(3);
+
+        memcpy(&ARM9.ITCM[0x4400], &ARM9iBIOS[0x87F4], 0x400);
+        memcpy(&ARM9.ITCM[0x4800], &ARM9iBIOS[0x9920], 0x80);
+        memcpy(&ARM9.ITCM[0x4894], &ARM9iBIOS[0x99A0], 0x1048);
+        memcpy(&ARM9.ITCM[0x58DC], &ARM9iBIOS[0xA9E8], 0x1048);
+
+        u8 ARM7Init[0x3C00];
+        memset(ARM7Init, 0, 0x3C00);
+        memcpy(&ARM7Init[0x0000], &ARM7iBIOS[0x8188], 0x200);
+        memcpy(&ARM7Init[0x0200], &ARM7iBIOS[0xB5D8], 0x40);
+        memcpy(&ARM7Init[0x0254], &ARM7iBIOS[0xC6D0], 0x1048);
+        memcpy(&ARM7Init[0x129C], &ARM7iBIOS[0xD718], 0x1048);
+
+        for (u32 i = 0; i < 0x3C00; i+=4)
+            ARM7Write32(0x03FFC400+i, *(u32*)&ARM7Init[i]);
+
+        ARM9.R[13] = 0x03002F7C;
+        ARM7.R[13] = 0x0380FF00;
+    }
+
+    ARM9.R[12] = header.ARM9EntryAddress;
+    ARM9.R[14] = header.ARM9EntryAddress;
+    ARM9.R[15] = header.ARM9EntryAddress + 4;
+    ARM9.CPSR = 0x0000001F;
+    ARM9.JumpTo(header.ARM9EntryAddress);
+
+    ARM7.R[12] = header.ARM7EntryAddress;
+    ARM7.R[14] = header.ARM7EntryAddress;
+    ARM7.R[15] = header.ARM7EntryAddress + 4;
+    ARM7.CPSR = 0x0000001F;
+    ARM7.JumpTo(header.ARM7EntryAddress);
+
+    Log(LogLevel::Info,
+        "DSi::SetupDirectBoot: Initialized CPU EntryPoints: ARM9.PC=0x%08X (R12/R14=0x%08X), ARM7.PC=0x%08X (R12/R14=0x%08X)\n",
+        header.ARM9EntryAddress, header.ARM9EntryAddress,
+        header.ARM7EntryAddress, header.ARM7EntryAddress);
 }
 
 void DSi::SoftReset()

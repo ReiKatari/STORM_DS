@@ -1,15 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
         xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+    <ImageView
+            android:id="@+id/buttonResetDefault"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="7dp"
+            android:layout_marginEnd="6dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_restore_default"
+            android:contentDescription="@string/reset_to_default"
+            android:tooltipText="@string/reset_to_default"
+            android:background="@drawable/bg_btn_reset_ripple"
+            app:tint="@color/textColorSecondary"
+            android:focusable="true"
+            android:clickable="true" />
 
     <ImageView
             android:id="@+id/imageViewStatus"
             android:layout_width="32dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="6dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_status_ok"
             android:background="?attr/selectableItemBackgroundBorderless"

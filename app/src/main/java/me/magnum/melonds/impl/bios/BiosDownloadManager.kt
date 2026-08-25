@@ -40,7 +40,12 @@ class BiosDownloadManager @Inject constructor(
     suspend fun downloadAndSetupDsBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
-        val targetDir = File(context.filesDir, "bios/ds").apply { mkdirs() }
+        val targetDir = File(context.filesDir, "bios/ds").apply {
+            if (exists()) {
+                listFiles()?.forEach { it.deleteRecursively() }
+            }
+            mkdirs()
+        }
         val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
@@ -82,7 +87,12 @@ class BiosDownloadManager @Inject constructor(
     suspend fun downloadAndSetupDsiBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
-        val targetDir = File(context.filesDir, "bios/dsi").apply { mkdirs() }
+        val targetDir = File(context.filesDir, "bios/dsi").apply {
+            if (exists()) {
+                listFiles()?.forEach { it.deleteRecursively() }
+            }
+            mkdirs()
+        }
         val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null

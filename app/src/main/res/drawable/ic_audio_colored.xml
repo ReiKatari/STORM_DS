@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp"
+    android:height="44dp"
+    android:viewportWidth="44"
+    android:viewportHeight="44">
+    <!-- Rounded squircle badge background -->
+    <path
+        android:fillColor="#E11D48"
+        android:pathData="M12,2h20c5.52,0 10,4.48 10,10v20c0,5.52 -4.48,10 -10,10H12C6.48,42 2,37.52 2,32V12C2,6.48 6.48,2 12,2z" />
+    <!-- Soft inner border -->
+    <path
+        android:strokeColor="#FDA4AF"
+        android:strokeWidth="1.2"
+        android:pathData="M12,3.5h20c4.7,0 8.5,3.8 8.5,8.5v20c0,4.7 -3.8,8.5 -8.5,8.5H12c-4.7,0 -8.5,-3.8 -8.5,-8.5V12C3.5,7.3 7.3,3.5 12,3.5z" />
+    <!-- Headphones Arc & Cups -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M22,10c-6.63,0 -12,5.37 -12,12v7c0,1.66 1.34,3 3,3h3c1.1,0 2,-0.9 2,-2v-6c0,-1.1 -0.9,-2 -2,-2h-4v-2c0,-5.51 4.49,-10 10,-10s10,4.49 10,10v2h-4c-1.1,0 -2,0.9 -2,2v6c0,1.1 0.9,2 2,2h3c1.66,0 3,-1.34 3,-3v-7c0,-6.63 -5.37,-12 -12,-12z" />
+    <!-- Ear cushions -->
+    <path
+        android:fillColor="#E11D48"
+        android:pathData="M12,24h3v6h-3zM29,24h3v6h-3z" />
+</vector>

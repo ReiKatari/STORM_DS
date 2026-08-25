@@ -38,6 +38,7 @@ import androidx.compose.material.Icon
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.PlayArrow
@@ -152,12 +153,12 @@ fun RewindOverlay(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Header Bar
+            // Header Bar (lowered down for safe display)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 10.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 12.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -184,22 +185,6 @@ fun RewindOverlay(
                             fontSize = 11.sp,
                         )
                     }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.10f))
-                        .clickable(onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.cancel),
-                        tint = colors.text,
-                        modifier = Modifier.size(18.dp),
-                    )
                 }
             }
 
@@ -334,41 +319,21 @@ fun RewindOverlay(
                     }
                 }
 
-                // Action Bar
-                Row(
+                // Action Button
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, colors.line),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            backgroundColor = colors.surface,
-                            contentColor = colors.text,
-                        ),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cancel),
-                            fontFamily = SpaceGrotesk,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                        )
-                    }
-
                     Button(
                         onClick = {
                             selectedState?.let { onStateSelected(it) }
                         },
                         modifier = Modifier
-                            .weight(1.5f)
+                            .fillMaxWidth()
                             .height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
                             backgroundColor = accentColor,
                             contentColor = Color.Black,
@@ -384,20 +349,32 @@ fun RewindOverlay(
                             text = "Вернуться сюда",
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = 13.5.sp,
                         )
                     }
                 }
             }
 
-            GamepadHintsFooter(
-                hints = listOf(
-                    GamepadHint(null, "◄► Кадры"),
-                    GamepadHint("L1/R1", "Прыжок"),
-                    GamepadHint("A", "Перемотать"),
-                    GamepadHint("B", stringResource(R.string.cancel)),
-                ),
-            )
+            Spacer(Modifier.height(4.dp))
+
+            // Unified Bottom Center Back Arrow
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 12.dp, top = 4.dp)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, CircleShape)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    tint = colors.text,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 
