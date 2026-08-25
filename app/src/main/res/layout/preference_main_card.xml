@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:paddingStart="16dp"
@@ -12,43 +13,36 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="92dp"
+        android:minHeight="84dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:duplicateParentState="true"
         android:background="@drawable/bg_watermelon_card_focus"
-        android:paddingStart="15dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="14dp"
-        android:paddingBottom="14dp">
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp">
 
-        <FrameLayout
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="@drawable/bg_watermelon_icon_tile">
-
-            <ImageView
-                android:id="@android:id/icon"
-                android:layout_width="21dp"
-                android:layout_height="21dp"
-                android:layout_gravity="center"
-                app:tint="@color/melonMain"
-                xmlns:app="http://schemas.android.com/apk/res-auto" />
-        </FrameLayout>
+        <ImageView
+            android:id="@android:id/icon"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="center_vertical"
+            android:scaleType="fitCenter" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:layout_marginStart="13dp"
+            android:layout_marginStart="14dp"
             android:layout_marginEnd="8dp">
 
             <TextView
                 android:id="@android:id/title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="14.5sp"
+                android:textSize="15sp"
                 android:textFontWeight="600"
                 android:fontFamily="@font/manrope"
                 android:textColor="@color/textColorPrimary"
@@ -59,7 +53,7 @@
                 android:id="@android:id/summary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="11.5sp"
+                android:textSize="12sp"
                 android:fontFamily="@font/manrope"
                 android:textColor="@color/textColorSecondary"
                 android:maxLines="2"
@@ -71,7 +65,6 @@
             android:layout_width="18dp"
             android:layout_height="18dp"
             android:src="@drawable/ic_chevron_right_watermelon"
-            app:tint="@color/textColorSecondary"
-            xmlns:app="http://schemas.android.com/apk/res-auto" />
+            app:tint="@color/textColorSecondary" />
     </LinearLayout>
 </FrameLayout>

@@ -173,13 +173,24 @@ class DSiWareManagerViewModel @Inject constructor(
 
     private fun filterActiveTitles(titles: List<DSiWareTitle>, activeRoms: List<me.magnum.melonds.domain.model.rom.Rom>? = null): List<DSiWareTitle> {
         val currentRoms = activeRoms ?: emptyList()
+        val activeUris = currentRoms.map { it.uri.toString() }.toSet()
+        val activeNames = currentRoms.map { it.name.lowercase().trim() }.toSet()
+        val activeFileNames = currentRoms.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
         val enhancedNames = currentRoms.filter { it.isDsiEnhanced }.map { it.name.lowercase().trim() }.toSet()
         val enhancedFileNames = currentRoms.filter { it.isDsiEnhanced }.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
 
         return titles.filter { title ->
+            val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+            val sourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
+            val origFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
             val titleName = title.name.lowercase().trim()
             val isEnhanced = titleName in enhancedNames || titleName in enhancedFileNames
-            !isEnhanced
+
+            val existsInFolders = (sourceUri != null && sourceUri in activeUris) ||
+                (origFile != null && (origFile in activeFileNames || origFile in activeNames)) ||
+                (titleName in activeFileNames || titleName in activeNames)
+
+            !isEnhanced && existsInFolders
         }
     }
 

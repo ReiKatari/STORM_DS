@@ -18,6 +18,12 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
+                android:key="about_fork_info"
+                android:title="@string/about_fork_info_title"
+                android:summary="@string/about_fork_info_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="about_github"
                 android:title="@string/about_github_title"
                 android:summary="@string/about_github_summary"
@@ -48,6 +54,12 @@
                 android:key="credits_melonds_ds"
                 android:title="@string/about_credits_melonds_ds_title"
                 android:summary="@string/about_credits_melonds_ds_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_drastic"
+                android:title="@string/about_credits_drastic_title"
+                android:summary="@string/about_credits_drastic_summary"
                 app:iconSpaceReserved="false" />
 
         <Preference

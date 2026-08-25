@@ -84,6 +84,25 @@ open class LayoutView(context: Context, attrs: AttributeSet?) : FrameLayout(cont
         return viewLayoutComponent
     }
 
+    fun updateComponentRect(layoutComponent: LayoutComponent, rect: me.magnum.melonds.domain.model.Rect?) {
+        val componentView = views[layoutComponent] ?: return
+        val v = componentView.view
+        val lp = v.layoutParams as? LayoutParams ?: LayoutParams(0, 0)
+        if (rect != null && rect.width > 0 && rect.height > 0) {
+            lp.width = rect.width
+            lp.height = rect.height
+            lp.leftMargin = rect.x
+            lp.topMargin = rect.y
+            v.layoutParams = lp
+            v.visibility = android.view.View.VISIBLE
+        } else {
+            lp.width = 0
+            lp.height = 0
+            v.layoutParams = lp
+            v.visibility = android.view.View.GONE
+        }
+    }
+
     protected open fun onLayoutComponentViewAdded(layoutComponentView: LayoutComponentView) {
     }
 }

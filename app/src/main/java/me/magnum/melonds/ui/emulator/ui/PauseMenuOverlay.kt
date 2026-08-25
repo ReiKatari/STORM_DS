@@ -248,26 +248,6 @@ fun PauseMenuOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    // Back Arrow Button
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(colors.surface2)
-                            .border(1.dp, colors.line, CircleShape)
-                            .clickable(onClick = onResume),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                            tint = colors.text,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
                     // Game Icon
                     Box(
                         modifier = Modifier
@@ -358,13 +338,25 @@ fun PauseMenuOverlay(
                 }
             }
 
-            GamepadHintsFooter(
-                hints = listOf(
-                    GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
-                    GamepadHint("A", stringResource(R.string.pause_hint_accept)),
-                    GamepadHint("B", stringResource(R.string.pause_hint_resume)),
-                ),
-            )
+            // Unified Bottom Center Back Arrow
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 12.dp, top = 2.dp)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, CircleShape)
+                    .clickable(onClick = onResume)
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    tint = colors.text,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
 
         val currentConfirm = confirmingOption

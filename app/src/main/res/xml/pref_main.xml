@@ -6,7 +6,6 @@
             android:title="@string/category_general"
             android:summary="@string/category_general_summary"
             app:icon="@drawable/ic_settings"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.GeneralPreferencesFragment" />
 
     <Preference
@@ -14,7 +13,6 @@
             android:title="@string/category_roms"
             android:summary="@string/category_roms_summary"
             app:icon="@drawable/ic_folder"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.RomsPreferencesFragment" />
 
     <Preference
@@ -22,7 +20,6 @@
             android:title="@string/category_save_files"
             android:summary="@string/category_save_files_summary"
             app:icon="@drawable/ic_file"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.SaveFilesPreferencesFragment" />
 
     <Preference
@@ -30,7 +27,6 @@
             android:title="@string/category_system"
             android:summary="@string/category_system_summary"
             app:icon="@drawable/ic_firmware"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.SystemPreferencesFragment" />
 
     <Preference
@@ -38,7 +34,6 @@
             android:title="@string/category_video"
             android:summary="@string/category_video_summary"
             app:icon="@drawable/ic_video"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.VideoPreferencesFragment" />
 
     <Preference
@@ -46,7 +41,6 @@
             android:title="@string/category_audio"
             android:summary="@string/category_audio_summary"
             app:icon="@drawable/ic_audio"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.AudioPreferencesFragment" />
 
     <Preference
@@ -54,7 +48,6 @@
             android:title="@string/input"
             android:summary="@string/input_summary"
             app:icon="@drawable/ic_input"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.InputPreferencesFragment" />
 
     <Preference
@@ -62,7 +55,6 @@
             android:title="@string/retroachievements"
             android:summary="@string/retroachievements_summary"
             app:icon="@drawable/ic_trophy"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.RetroAchievementsPreferencesFragment" />
 
     <Preference
@@ -70,7 +62,6 @@
             android:title="@string/cheats"
             android:summary="@string/cheats_summary"
             app:icon="@drawable/ic_cheat"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.CheatsPreferencesFragment" />
 
     <Preference
@@ -78,7 +69,6 @@
             android:title="@string/category_translator"
             android:summary="@string/category_translator_summary"
             app:icon="@drawable/ic_translate"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.TranslatorPreferencesFragment" />
 
     <Preference
@@ -86,6 +76,5 @@
             android:title="@string/about_app_title"
             android:summary="@string/about_app_summary"
             app:icon="@drawable/ic_info"
-            android:layout="@layout/preference_main_card"
             android:fragment="me.magnum.melonds.ui.settings.fragments.AboutPreferencesFragment" />
 </PreferenceScreen>

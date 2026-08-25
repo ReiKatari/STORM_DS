@@ -90,38 +90,23 @@ fun SaveStatesOverlay(
                 }
             },
     ) {
-        // --- Header ---
+        // --- Header (lowered down for safe display) ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 12.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.cancel),
-                    tint = colors.text,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(if (isSaving) R.string.save_state else R.string.load_state),
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
-                        fontSize = 16.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(10.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -132,7 +117,7 @@ fun SaveStatesOverlay(
                             text = if (isSaving) "СОХРАНЕНИЕ" else "ЗАГРУЗКА",
                             color = if (isSaving) colors.red else colors.text2,
                             fontFamily = WatermelonMono,
-                            fontSize = 8.5.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -142,7 +127,7 @@ fun SaveStatesOverlay(
                         text = gameTitle,
                         color = colors.text3,
                         fontFamily = WatermelonMono,
-                        fontSize = 10.sp,
+                        fontSize = 10.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -161,7 +146,7 @@ fun SaveStatesOverlay(
                 .widthIn(max = 840.dp)
                 .align(Alignment.CenterHorizontally)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 14.dp, bottom = 20.dp),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 16.dp),
         ) {
             items(slots, key = { it.slot }) { slot ->
                 SaveStateSlotCard(
@@ -177,16 +162,25 @@ fun SaveStatesOverlay(
             }
         }
 
-        // --- Gamepad Footer ---
-        GamepadHintsFooter(
-            hints = listOf(
-                GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
-                GamepadHint("A", stringResource(if (isSaving) R.string.save_state else R.string.load_state)),
-                GamepadHint("X", "Переименовать"),
-                GamepadHint("Y", "Дублировать"),
-                GamepadHint("B", stringResource(R.string.cancel)),
-            ),
-        )
+        // Unified Bottom Center Back Arrow
+        Box(
+            modifier = Modifier
+                .padding(bottom = 14.dp, top = 4.dp)
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(colors.surface2)
+                .border(1.dp, colors.line, CircleShape)
+                .clickable(onClick = onDismiss)
+                .align(Alignment.CenterHorizontally),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+                tint = colors.text,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 
     // --- Rename Dialog ---
