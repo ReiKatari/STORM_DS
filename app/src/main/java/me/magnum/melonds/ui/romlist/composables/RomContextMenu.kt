@@ -1,11 +1,13 @@
 package me.magnum.melonds.ui.romlist.composables
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,6 +19,8 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.FilterQuality
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -60,16 +64,6 @@ fun RomContextMenu(
     val colors = watermelon
     val context = LocalContext.current
 
-    val isEncrypted = remember(rom) {
-        if (rom.isInstalledDsiWareShortcut) {
-            false
-        } else if (rom.isDsiWareTitle) {
-            MelonRomDecryptor.checkEncryption(context, rom.uri) == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED
-        } else {
-            false
-        }
-    }
-
     Dialog(onDismissRequest = onDismiss) {
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material.LocalElevationOverlay provides null) {
         Surface(
@@ -86,14 +80,16 @@ fun RomContextMenu(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .clip(RoundedCornerShape(9.dp)),
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(9.dp)),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        WatermelonRomArt(
-                            rom = rom,
-                            boxArtUrl = null,
-                            raCoverUrl = null,
-                            initialsFontSize = 15.sp,
-                            modifier = Modifier.size(38.dp),
+                        AsyncImage(
+                            model = romIconRequest(context, rom),
+                            contentDescription = null,
+                            filterQuality = FilterQuality.None,
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
                     Spacer(Modifier.width(11.dp))
@@ -129,28 +125,6 @@ fun RomContextMenu(
                         onDismiss()
                     },
                 )
-                if (rom.isDsiWareTitle) {
-                    if (isEncrypted) {
-                        ContextItem(
-                            icon = Icons.Filled.Lock,
-                            iconTint = colors.red,
-                            label = stringResource(R.string.rom_status_encrypted),
-                            enabled = true,
-                            onClick = {
-                                onDecryptRom(rom)
-                                onDismiss()
-                            },
-                        )
-                    } else {
-                        ContextItem(
-                            icon = Icons.Filled.LockOpen,
-                            iconTint = colors.green,
-                            label = stringResource(R.string.rom_status_decrypted),
-                            enabled = false,
-                            onClick = {},
-                        )
-                    }
-                }
                 ContextItem(
                     icon = if (rom.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
                     iconTint = if (rom.isFavorite) WatermelonColors.favoriteStar else colors.text2,

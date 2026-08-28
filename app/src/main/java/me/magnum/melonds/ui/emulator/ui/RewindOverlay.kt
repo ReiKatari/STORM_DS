@@ -20,13 +20,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -87,6 +90,7 @@ fun RewindOverlay(
     window: RewindWindow,
     onStateSelected: (RewindSaveState) -> Unit,
     onDismiss: () -> Unit,
+    onResumeGame: (() -> Unit)? = null,
 ) {
     val colors = watermelon
     val context = LocalContext.current
@@ -99,6 +103,7 @@ fun RewindOverlay(
     val scope = rememberCoroutineScope()
 
     BackHandler { onDismiss() }
+    RequestInitialFocus(firstFocusRequester)
 
     Box(
         modifier = Modifier
@@ -148,47 +153,105 @@ fun RewindOverlay(
                     false
                 }
             },
+        contentAlignment = Alignment.Center,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .widthIn(max = 680.dp)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Header Bar (lowered down for safe display)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            // Main Panel Card
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 12.dp),
+                    .weight(1f, fill = false)
+                    .fillMaxHeight(0.86f)
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.line, RoundedCornerShape(20.dp)),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FastRewind,
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.rewind),
-                            color = colors.text,
-                            fontFamily = SpaceGrotesk,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Header Bar
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.FastRewind,
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(22.dp),
                         )
-                        Text(
-                            text = "Выберите момент времени для возврата",
-                            color = colors.text3,
-                            fontSize = 11.sp,
-                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.rewind),
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            Text(
+                                text = "Выберите момент времени для возврата",
+                                color = colors.text3,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                            )
+                        }
+                        if (onResumeGame != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .clickable(onClick = onResumeGame)
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = stringResource(R.string.pause_resume),
+                                        tint = colors.green,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "В игру",
+                                        color = colors.green,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onDismiss),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.close),
+                                tint = colors.text3,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
-                }
-            }
 
-            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
 
             if (states.isEmpty()) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -354,31 +417,15 @@ fun RewindOverlay(
                     }
                 }
             }
-
-            Spacer(Modifier.height(4.dp))
-
-            // Unified Bottom Center Back Arrow
-            Box(
-                modifier = Modifier
-                    .padding(bottom = 12.dp, top = 4.dp)
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface2)
-                    .border(1.dp, colors.line, CircleShape)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = colors.text,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
         }
     }
 
-    RequestInitialFocus(firstFocusRequester)
+            // Unified Bottom Center Back Arrow
+            me.magnum.melonds.ui.common.UnifiedBackButton(
+                onClick = onDismiss,
+            )
+        }
+    }
 }
 
 @Composable

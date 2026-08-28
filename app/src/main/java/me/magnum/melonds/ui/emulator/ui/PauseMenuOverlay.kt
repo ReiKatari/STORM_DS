@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import me.magnum.melonds.ui.common.UnifiedBackButton
+import me.magnum.melonds.ui.common.bouncingClickable
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -99,9 +102,15 @@ import me.magnum.melonds.ui.emulator.PauseMenuOption
 import me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption
 import me.magnum.melonds.ui.emulator.model.PauseMenu
 import me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption
-import me.magnum.melonds.ui.theme.SpaceGrotesk
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import me.magnum.melonds.ui.theme.Manrope
 import me.magnum.melonds.ui.theme.WatermelonColors
-import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import kotlin.time.Duration
 
@@ -113,6 +122,7 @@ private fun optionIcon(option: PauseMenuOption): ImageVector {
         RomPauseMenuOption.CHEATS -> Icons.Filled.Tune
         RomPauseMenuOption.VIEW_ACHIEVEMENTS -> Icons.Filled.EmojiEvents
         RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> Icons.Filled.Refresh
+        RomPauseMenuOption.CALIBRATE_GYRO -> Icons.Filled.TouchApp
         RomPauseMenuOption.PRESETS -> Icons.Filled.Gamepad
         RomPauseMenuOption.SCREEN_LAYOUT, FirmwarePauseMenuOption.SCREEN_LAYOUT -> Icons.Filled.ScreenRotation
         RomPauseMenuOption.ROM_SETTINGS -> Icons.Filled.Tune
@@ -188,53 +198,16 @@ fun PauseMenuOverlay(
             modifier = Modifier
                 .widthIn(max = 760.dp)
                 .fillMaxWidth()
-                .systemBarsPadding()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
                 .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                 ) { /* consume clicks inside panel */ },
-            verticalArrangement = Arrangement.Bottom,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Options Grid (Lowered down to sit directly above the bottom bar)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(if (isLandscape) 3 else 1),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 8.dp),
-            ) {
-                item(key = "resume") {
-                    PauseOptionRow(
-                        label = stringResource(R.string.pause_resume),
-                        icon = Icons.Filled.PlayArrow,
-                        highlighted = true,
-                        destructive = false,
-                        focusRequester = resumeFocusRequester,
-                        onClick = onResume,
-                    )
-                }
-                items(pauseMenu.options, key = { it.toString() }) { option ->
-                    PauseOptionRow(
-                        label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
-                        icon = optionIcon(option),
-                        highlighted = false,
-                        destructive = isDestructive(option),
-                        onClick = {
-                            if (needsConfirmation(option)) {
-                                confirmingOption = option
-                            } else {
-                                onOptionSelected(option)
-                            }
-                        },
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            // Bottom Information Bar: Back Arrow, Game Icon, Title, Paused, Time, Achievements
+            // Top Information Bar: Game Icon, Title, Paused, Time, Achievements (at top edge)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -281,7 +254,7 @@ fun PauseMenuOverlay(
                         Text(
                             text = rom?.let { it.config.customName ?: it.name } ?: stringResource(R.string.pause),
                             color = colors.text,
-                            fontFamily = SpaceGrotesk,
+                            fontFamily = Manrope,
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -297,7 +270,7 @@ fun PauseMenuOverlay(
                                 Text(
                                     text = stringResource(R.string.pause_paused_label),
                                     color = colors.red,
-                                    fontFamily = WatermelonMono,
+                                    fontFamily = Manrope,
                                     fontSize = 8.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 0.6.sp,
@@ -308,7 +281,7 @@ fun PauseMenuOverlay(
                                 Text(
                                     text = hours,
                                     color = colors.text2,
-                                    fontFamily = WatermelonMono,
+                                    fontFamily = Manrope,
                                     fontSize = 9.sp,
                                     modifier = Modifier.padding(start = 8.dp),
                                 )
@@ -316,47 +289,71 @@ fun PauseMenuOverlay(
                         }
                     }
 
-                    // Achievements Summary (if any)
-                    if (achievementsSummary != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = achievementsSummary,
-                                color = WatermelonColors.gold,
-                                fontFamily = WatermelonMono,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
+                    // Resume to game pill in the banner
+                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.surface2)
+                            .border(1.5.dp, colors.green.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
+                            .bouncingClickable(onClick = onResume)
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(R.string.pause_resume),
+                                tint = colors.green,
+                                modifier = Modifier.size(16.dp),
                             )
+                            Spacer(Modifier.width(4.dp))
                             Text(
-                                text = stringResource(R.string.achievements).uppercase(),
-                                color = colors.text3,
-                                fontFamily = WatermelonMono,
-                                fontSize = 7.5.sp,
+                                text = "В игру",
+                                color = colors.green,
+                                fontFamily = Manrope,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
                             )
                         }
                     }
                 }
             }
 
-            // Unified Bottom Center Back Arrow
-            Box(
+            Spacer(Modifier.height(4.dp))
+
+            // Options Grid
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(if (isLandscape) 3 else 1),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
-                    .padding(bottom = 12.dp, top = 2.dp)
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface2)
-                    .border(1.dp, colors.line, CircleShape)
-                    .clickable(onClick = onResume)
-                    .align(Alignment.CenterHorizontally),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 6.dp),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = colors.text,
-                    modifier = Modifier.size(20.dp),
-                )
+                items(pauseMenu.options, key = { it.toString() }) { option ->
+                    PauseOptionRow(
+                        label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
+                        icon = optionIcon(option),
+                        highlighted = false,
+                        destructive = isDestructive(option),
+                        focusRequester = if (option == pauseMenu.options.firstOrNull()) resumeFocusRequester else null,
+                        onClick = {
+                            if (needsConfirmation(option)) {
+                                confirmingOption = option
+                            } else {
+                                onOptionSelected(option)
+                            }
+                        },
+                    )
+                }
             }
+
+            // Unified Bottom Center Back Arrow
+            UnifiedBackButton(
+                onClick = onResume,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
 
         val currentConfirm = confirmingOption
@@ -410,12 +407,12 @@ private fun PauseOptionRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(46.dp)
             .clip(shape)
             .background(bg)
             .border(1.dp, border, shape)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .bouncingClickable(onClick = onClick)
             .padding(horizontal = 14.dp),
     ) {
         if (highlighted) {
@@ -438,9 +435,9 @@ private fun PauseOptionRow(
         Text(
             text = label,
             color = contentColor,
-            fontFamily = SpaceGrotesk,
-            fontSize = 13.5.sp,
-            fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Medium,
+            fontFamily = Manrope,
+            fontSize = 14.sp,
+            fontWeight = if (highlighted || isFocused) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -495,7 +492,7 @@ private fun PauseConfirmationModal(
             Text(
                 text = title,
                 color = colors.text,
-                fontFamily = SpaceGrotesk,
+                fontFamily = Manrope,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 10.dp),
@@ -503,6 +500,7 @@ private fun PauseConfirmationModal(
             Text(
                 text = message,
                 color = colors.text3,
+                fontFamily = Manrope,
                 fontSize = 12.5.sp,
                 lineHeight = 18.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -543,19 +541,20 @@ private fun ConfirmButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val shape = RoundedCornerShape(12.dp)
+
     Box(
         modifier = modifier
             .height(42.dp)
             .clip(shape)
             .background(background)
             .let { if (isFocused) it.border(2.dp, colors.green, shape) else it }
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+            .bouncingClickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = textColor,
-            fontFamily = SpaceGrotesk,
+            fontFamily = Manrope,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
         )

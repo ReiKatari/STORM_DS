@@ -10,7 +10,7 @@
             android:defaultValue="false"
             android:disableDependentsState="true" />
 
-    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+    <me.magnum.melonds.ui.settings.preferences.SavesDirectoryPickerPreference
             android:key="sram_dir"
             android:title="@string/save_file_directory"
             app:iconSpaceReserved="false"
@@ -34,7 +34,7 @@
             android:entryValues="@array/save_state_location_values"
             android:defaultValue="internal_dir" />
 
-    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+    <me.magnum.melonds.ui.settings.preferences.SavesDirectoryPickerPreference
             android:key="save_state_custom_dir"
             android:title="@string/save_state_custom_directory"
             app:iconSpaceReserved="false"

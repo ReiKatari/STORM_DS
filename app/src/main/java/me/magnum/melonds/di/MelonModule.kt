@@ -225,7 +225,12 @@ object MelonModule {
     @Provides
     @Singleton
     fun provideTouchVibrator(@ApplicationContext context: Context, settingsRepository: SettingsRepository): TouchVibrator {
-        val vibrator = context.getSystemService<Vibrator>()!!
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+            vibratorManager?.defaultVibrator ?: (context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
+        } else {
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
         val delegate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Api26VibratorDelegate(vibrator)
         } else {

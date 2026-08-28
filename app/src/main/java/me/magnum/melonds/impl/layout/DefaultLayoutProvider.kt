@@ -403,6 +403,11 @@ class DefaultLayoutProvider(
             return Insets.Zero
         }
 
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        if (prefs.getBoolean("system_ignore_display_cutout_in_layouts", false)) {
+            return Insets.Zero
+        }
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return Insets.Zero
         }

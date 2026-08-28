@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -1632,6 +1633,11 @@ class EmulatorViewModel @Inject constructor(
         updateRunningRomConfig { it.copy(layoutId = layoutId) }
     }
 
+    fun getActiveLayoutId(): java.util.UUID {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom
+        return runningRom?.config?.layoutId ?: settingsRepository.getSelectedLayoutId()
+    }
+
     fun onRunningRomMicSourceSelected(micSource: RuntimeMicSource) {
         updateRunningRomConfig { it.copy(runtimeMicSource = micSource) }
     }
@@ -2138,6 +2144,7 @@ class EmulatorViewModel @Inject constructor(
                     }
                     RomPauseMenuOption.VIEW_ACHIEVEMENTS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowAchievementList)
                     RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> syncPendingRaSubmissionsFromPauseMenu()
+                    RomPauseMenuOption.CALIBRATE_GYRO -> Unit
                     RomPauseMenuOption.PRESETS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowDualScreenPresets)
                     RomPauseMenuOption.SCREEN_LAYOUT -> _uiEvent.tryEmit(EmulatorUiEvent.ShowScreenLayoutDialog)
                     RomPauseMenuOption.RENDERER_DEBUG -> _uiEvent.tryEmit(EmulatorUiEvent.ShowRendererDebugMenu)
@@ -6380,16 +6387,26 @@ class EmulatorViewModel @Inject constructor(
         )
     }
 
-    private suspend fun buildInGameRomSettingsMenuState(rom: Rom): InGameRomSettingsMenuState {
+    private suspend fun buildInGameRomSettingsMenuState(rom: Rom): InGameRomSettingsMenuState = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val inputModeOptions = context.resources.getStringArray(R.array.rom_input_mode_options)
         val filteringOptions = context.resources.getStringArray(R.array.video_filtering_options)
         val micOptions = context.resources.getStringArray(R.array.game_runtime_mic_source_options)
         val effectiveConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
         val effectiveVideoFiltering = effectiveConfiguration.rendererConfiguration.videoFiltering
-        val globalRetroArchPresetPath = settingsRepository.observeRetroArchShaderPresetPath().firstOrNull()
-        val globalRetroArchParameters = settingsRepository.observeRetroArchShaderParametersText().firstOrNull()
-        val globalLayoutName = layoutsRepository.getLayout(settingsRepository.getSelectedLayoutId())?.name
-            ?: context.getString(R.string.not_set)
+
+        val globalLayoutDeferred = async {
+            val id = settingsRepository.getSelectedLayoutId()
+            layoutsRepository.getLayout(id)?.name ?: context.getString(R.string.not_set)
+        }
+        val shaderPresetDeferred = async { settingsRepository.observeRetroArchShaderPresetPath().firstOrNull() }
+        val shaderParamsDeferred = async { settingsRepository.observeRetroArchShaderParametersText().firstOrNull() }
+        val shaderRootValidDeferred = async { settingsRepository.observeRetroArchShaderRootValid().firstOrNull() == true }
+
+        val globalLayoutName = globalLayoutDeferred.await()
+        val globalRetroArchPresetPath = shaderPresetDeferred.await()
+        val globalRetroArchParameters = shaderParamsDeferred.await()
+        val hasValidRetroArchShaderRoot = shaderRootValidDeferred.await()
+
         val globalRetroArchPresetPathLabel = globalRetroArchPresetPath ?: context.getString(R.string.not_set)
         val globalRetroArchParametersLabel = globalRetroArchParameters ?: context.getString(R.string.not_set)
         val useGlobalWithValue = { value: String ->
@@ -6397,7 +6414,6 @@ class EmulatorViewModel @Inject constructor(
         }
         val effectiveMicSource = RuntimeMicSource.entries.firstOrNull { it.micSource == effectiveConfiguration.micSource }
             ?: RuntimeMicSource.DEFAULT
-        val hasValidRetroArchShaderRoot = settingsRepository.observeRetroArchShaderRootValid().firstOrNull() == true
         val showRetroArchSettings = effectiveConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN &&
             effectiveVideoFiltering == VideoFiltering.RETROARCH &&
             hasValidRetroArchShaderRoot
@@ -6409,7 +6425,7 @@ class EmulatorViewModel @Inject constructor(
             DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> context.getString(R.string.dual_screen_preset_internal_bottom_external_top)
         }
 
-        return InGameRomSettingsMenuState(
+        InGameRomSettingsMenuState(
             controllerMappingValue = if (rom.config.inputMode == me.magnum.melonds.domain.model.rom.config.RomInputMode.GLOBAL) {
                 useGlobalWithValue(context.getString(R.string.global_controller_mapping))
             } else {

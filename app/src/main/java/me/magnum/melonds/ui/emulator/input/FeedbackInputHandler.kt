@@ -13,11 +13,14 @@ abstract class FeedbackInputHandler(inputListener: IInputListener, private val e
 
     protected fun performHapticFeedback(view: View, type: HapticFeedbackType) {
         if (enableHapticFeedback) {
+            if (type == HapticFeedbackType.KEY_PRESS) {
+                touchVibrator.performTouchHapticFeedback()
+            }
             val feedbackType = when (type) {
-                HapticFeedbackType.KEY_PRESS -> HapticFeedbackConstants.LONG_PRESS
+                HapticFeedbackType.KEY_PRESS -> HapticFeedbackConstants.KEYBOARD_TAP
                 HapticFeedbackType.KEY_RELEASE -> HapticFeedbackConstants.CLOCK_TICK
             }
-            view.performHapticFeedback(feedbackType)
+            view.performHapticFeedback(feedbackType, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
         }
     }
 }

@@ -203,7 +203,7 @@ struct NDSHeader
     /// @return \c true if this header represents a title
     /// that is DSi-exclusive (including DSiWare)
     /// or DSi-enhanced (including cartridges).
-    [[nodiscard]] bool IsDSi() const { return (UnitCode & 0x02) != 0; }
+    [[nodiscard]] bool IsDSi() const { return (UnitCode & 0x02) != 0 || (UnitCode == 0x03) || IsDSiWare() || IsDSiEnhanced(); }
     [[nodiscard]] u32 GameCodeAsU32() const {
         return (u32)GameCode[3] << 24 |
                (u32)GameCode[2] << 16 |
@@ -218,18 +218,30 @@ struct NDSHeader
     /// @return \c true if this header represents a DSiWare title.
     [[nodiscard]] bool IsDSiWare() const {
         return (UnitCode & 0x02) != 0 ||
-               DSiTitleIDHigh == DSiWareTitleIDHigh ||
-               DSiTitleIDHigh == 0x00030005 ||
-               DSiTitleIDHigh == 0x00030015 ||
-               DSiTitleIDHigh == 0x04000300 ||
-               DSiARM9iROMOffset != 0 ||
-               (GameCode[0] == 'K' || GameCode[0] == 'H' || GameCode[0] == 'V' || GameCode[0] == 'Z' ||
-                GameCode[0] == '4' || GameCode[0] == 'B' || GameCode[0] == 'N' || GameCode[0] == 'P' ||
-                GameCode[0] == 'T' || GameCode[0] == 'C' || GameCode[0] == 'W' || GameCode[0] == 'Q');
+               (UnitCode == 0x03) ||
+               (GameCode[0] == 'K') ||
+               (GameCode[0] == 'H') ||
+               (GameCode[0] == '4') ||
+               (GameCode[0] == 'D');
+    }
+
+    /// @return \c true if this header represents a DSi-Enhanced title.
+    [[nodiscard]] bool IsDSiEnhanced() const {
+        return (UnitCode == 0x02) ||
+               (GameCode[0] == 'V') ||
+               (GameCode[0] == 'T') ||
+               (GameCode[0] == 'I');
     }
 };
 
-static_assert(sizeof(NDSHeader) == 4096, "NDSHeader is not 4096 bytes!");
+static_assert(offsetof(NDSHeader, DSiARM9iROMOffset) == 0x1C0, "NDSHeader DSiARM9i offset mismatch");
+static_assert(offsetof(NDSHeader, DSiARM7iROMOffset) == 0x1D0, "NDSHeader DSiARM7i offset mismatch");
+static_assert(offsetof(NDSHeader, DSiModcrypt1Offset) == 0x220, "NDSHeader Modcrypt1 offset mismatch");
+static_assert(offsetof(NDSHeader, DSiARM9Hash) == 0x300, "NDSHeader DSiARM9Hash offset mismatch");
+static_assert(offsetof(NDSHeader, DSiARM7Hash) == 0x314, "NDSHeader DSiARM7Hash offset mismatch");
+static_assert(offsetof(NDSHeader, DSiARM9iHash) == 0x350, "NDSHeader DSiARM9iHash offset mismatch");
+static_assert(offsetof(NDSHeader, DSiARM7iHash) == 0x364, "NDSHeader DSiARM7iHash offset mismatch");
+static_assert(sizeof(NDSHeader) == 0x1000, "NDSHeader total size must be 0x1000 bytes");
 
 struct NDSBanner
 {

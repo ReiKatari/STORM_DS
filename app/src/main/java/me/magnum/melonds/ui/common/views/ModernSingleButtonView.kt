@@ -369,6 +369,7 @@ class ModernSingleButtonView @JvmOverloads constructor(
                 LayoutComponent.BUTTON_TRANSLATE -> drawTranslateIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> drawToggleExtraIcon(canvas, cx, cy, iconSize)
                 LayoutComponent.BUTTON_LOCK_ROTATION -> drawLockRotationIcon(canvas, cx, cy, iconSize)
+                LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> drawStickIcon(canvas, cx, cy, iconSize)
                 else -> {
                     val label = getLabel().ifBlank { "BTN" }
                     drawTextLabel(canvas, cx, cy, label, min(w, h) * 0.35f, w - padding * 2, style)
@@ -661,5 +662,25 @@ class ModernSingleButtonView @JvmOverloads constructor(
             style = Paint.Style.FILL
         }
         canvas.drawCircle(cx, cy + size * 0.1f, size * 0.05f, dotPaint)
+    }
+
+    private fun drawStickIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {
+        val r = size * 0.44f
+        val ringPaint = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.4f
+        }
+        val capPaint = Paint(iconPaint).apply {
+            style = Paint.Style.FILL
+        }
+        val capStroke = Paint(iconPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.0f
+        }
+
+        canvas.drawCircle(cx, cy, r, ringPaint)
+        canvas.drawCircle(cx, cy, r * 0.52f, capPaint)
+        canvas.drawCircle(cx, cy, r * 0.52f, capStroke)
+        canvas.drawCircle(cx, cy, r * 0.22f, ringPaint)
     }
 }

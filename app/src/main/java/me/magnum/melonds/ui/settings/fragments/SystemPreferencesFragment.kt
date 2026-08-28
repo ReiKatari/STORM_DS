@@ -121,8 +121,8 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_system, rootKey)
         val jitPreference = findPreference<SwitchPreference>("enable_jit")!!
+        val stormCompilerPreference = findPreference<SwitchPreference>("enable_storm_compiler")!!
         val mirrorPreference = findPreference<SwitchPreference>("save_internal_config_as_file")!!
-        val dldiDirectoryPreference = findPreference<StoragePickerPreference>("system_dldi_sd_card_dir")!!
 
         val appLanguagePreference = findPreference<ListPreference>("app_language")
         appLanguagePreference?.setOnPreferenceChangeListener { _, newValue ->
@@ -138,12 +138,72 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             jitPreference.isChecked = false
             jitPreference.isVisible = false
+            stormCompilerPreference.isChecked = false
+            stormCompilerPreference.isVisible = false
+        } else {
+            // Ensure only one compiler is enabled on launch (default: STORM-Compiler)
+            if (stormCompilerPreference.isChecked && jitPreference.isChecked) {
+                jitPreference.isChecked = false
+                preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_jit", false)?.apply()
+            } else if (!stormCompilerPreference.isChecked && !jitPreference.isChecked) {
+                stormCompilerPreference.isChecked = true
+                preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_storm_compiler", true)?.apply()
+            }
+
+            jitPreference.setOnPreferenceChangeListener { _, newValue ->
+                if (newValue == true) {
+                    stormCompilerPreference.isChecked = false
+                }
+                true
+            }
+            stormCompilerPreference.setOnPreferenceChangeListener { _, newValue ->
+                if (newValue == true) {
+                    jitPreference.isChecked = false
+                }
+                true
+            }
         }
 
-        helper.setupStoragePickerPreference(dldiDirectoryPreference)
-        helper.bindPreferenceSummaryToValue(findPreference("system_dldi_sd_card_image_size"))
+        val dldiEnabledPreference = findPreference<SwitchPreference>("system_dldi_sd_card_enabled")
+        val dldiDirPreference = findPreference<StoragePickerPreference>("system_dldi_sd_card_dir")
+        val dldiSizePreference = findPreference<ListPreference>("system_dldi_sd_card_image_size")
+        val dldiManagerPreference = findPreference<Preference>("pref_open_dldi_file_manager")
 
-        findPreference<Preference>("pref_open_dldi_file_manager")?.setOnPreferenceClickListener {
+        val dsiSdEnabledPreference = findPreference<SwitchPreference>("system_dsi_sd_card_enabled")
+        val dsiSdDirPreference = findPreference<StoragePickerPreference>("system_dsi_sd_card_dir")
+        val dsiSdSizePreference = findPreference<ListPreference>("system_dsi_sd_card_image_size")
+
+        fun updateDldiVisibility(enabled: Boolean) {
+            dldiDirPreference?.isVisible = enabled
+            dldiSizePreference?.isVisible = enabled
+            dldiManagerPreference?.isVisible = enabled
+        }
+
+        fun updateDsiSdVisibility(enabled: Boolean) {
+            dsiSdDirPreference?.isVisible = enabled
+            dsiSdSizePreference?.isVisible = enabled
+        }
+
+        updateDldiVisibility(dldiEnabledPreference?.isChecked ?: false)
+        updateDsiSdVisibility(dsiSdEnabledPreference?.isChecked ?: false)
+
+        dldiEnabledPreference?.setOnPreferenceChangeListener { _, newValue ->
+            updateDldiVisibility(newValue as Boolean)
+            true
+        }
+
+        dsiSdEnabledPreference?.setOnPreferenceChangeListener { _, newValue ->
+            updateDsiSdVisibility(newValue as Boolean)
+            true
+        }
+
+        dldiDirPreference?.let { helper.setupStoragePickerPreference(it) }
+        dsiSdDirPreference?.let { helper.setupStoragePickerPreference(it) }
+
+        dldiSizePreference?.let { helper.bindPreferenceSummaryToValue(it) }
+        dsiSdSizePreference?.let { helper.bindPreferenceSummaryToValue(it) }
+
+        dldiManagerPreference?.setOnPreferenceClickListener {
             startActivity(android.content.Intent(requireContext(), me.magnum.melonds.ui.dldi.DldiFileManagerActivity::class.java))
             true
         }

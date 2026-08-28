@@ -30,6 +30,7 @@
 #include "VulkanContext.h"
 #include "net/Net_Slirp.h"
 #include "Platform.h"
+#include "RomDecryptor.h"
 #include "SDCardArgsBuilder.h"
 
 using namespace std;
@@ -1690,6 +1691,9 @@ bool MelonInstance::loadRom(std::string romPath, std::string sramPath)
         .SRAMLength = sramFileLength,
     };
 
+    // In-memory transparent Modcrypt decryption for DSi / DSiWare ROMs
+    MelonDSAndroid::RomDecryptor::DecryptRomBuffer(romData.get(), (size_t) romFileLength);
+
     auto cart = NDSCart::ParseROM(std::move(romData), romFileLength, this, std::move(cartargs));
     if (!cart)
     {
@@ -1792,6 +1796,7 @@ bool MelonInstance::bootFirmware()
     if (nds->NeedsDirectBoot())
         return false;
 
+    nds->Reset();
     return true;
 }
 
@@ -1891,7 +1896,14 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
 
-    if (cart != nullptr || nds->GetNDSCart() != nullptr)
+    if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
+    {
+        auto dsi = (DSi*) nds;
+        uint32_t titleIdLow = currentConfiguration->dsiWareAutoloadTitleId;
+        uint32_t titleIdHigh = melonDS::DSiWareTitleIDHigh;
+        DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
+    }
+    else if (cart != nullptr || nds->GetNDSCart() != nullptr)
     {
         // Direct cart ROM boot (100% RetroArch core parity: NDS, DSi, DSiWare across ALL modes)
         std::string romName;
@@ -1919,7 +1931,14 @@ void MelonInstance::reset()
     setDateTime();
 
     auto cart = nds->NDSCartSlot.GetCart();
-    if (cart != nullptr || nds->GetNDSCart() != nullptr)
+    if (nds->ConsoleType == 1 && currentConfiguration->dsiWareAutoloadTitleId != 0)
+    {
+        auto dsi = (DSi*) nds;
+        uint32_t titleIdLow = currentConfiguration->dsiWareAutoloadTitleId;
+        uint32_t titleIdHigh = melonDS::DSiWareTitleIDHigh;
+        DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
+    }
+    else if (cart != nullptr || nds->GetNDSCart() != nullptr)
     {
         std::string romName;
         nds->SetupDirectBoot(romName);
@@ -1941,7 +1960,6 @@ void MelonInstance::reset()
     if (currentRenderer == Renderer::Vulkan)
         requestVulkanPresentationResync();
     vulkanRuntimeFailureHandled = false;
-    vulkanPrepareFailureCount = 0;
     vulkanMissingRegularCaptureSourceFailureCount = 0;
 }
 
@@ -3306,13 +3324,15 @@ void MelonInstance::requestVulkanPresentationResync()
 
 void MelonInstance::requestVulkanFastForwardPresentationTransition()
 {
-    if (currentRenderer != Renderer::Vulkan)
+    if (!nds || currentRenderer != Renderer::Vulkan)
         return;
 
     frameQueue.requestFastForwardPresentationTransition();
-    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
-    renderer3D.requestPostFastForwardDrain();
-    renderer3D.InvalidatePresentationState(false);
+    if (auto* renderer3D = dynamic_cast<VulkanRenderer3D*>(&nds->GPU.GetRenderer3D()))
+    {
+        renderer3D->requestPostFastForwardDrain();
+        renderer3D->InvalidatePresentationState(false);
+    }
 }
 
 std::vector<u32> MelonInstance::captureCurrentFrameForDebug()

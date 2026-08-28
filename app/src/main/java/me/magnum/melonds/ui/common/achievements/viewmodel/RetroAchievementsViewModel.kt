@@ -71,16 +71,59 @@ abstract class RetroAchievementsViewModel (
                     val runtimeSubsetOrder = withContext(Dispatchers.Default) {
                         runCatching { getRuntimeSubsetOrder(rom) }.getOrElse { emptyMap() }
                     }
+
+                    // 1. Instant Cached UI Render (Zero Waiting)
+                    val cachedData = withContext(Dispatchers.IO) {
+                        runCatching { retroAchievementsRepository.getCachedUserGameData(rom.retroAchievementsHash, forHardcoreMode).getOrNull() }.getOrNull()
+                    }
+                    if (cachedData != null && cachedData.sets.isNotEmpty()) {
+                        val cachedSets = cachedData.sets.map { set ->
+                            val cleanAchievements = set.achievements.filterNot {
+                                it.achievement.title.startsWith("Warning:", ignoreCase = true) || it.achievement.title.contains("Unknown Emulator", ignoreCase = true)
+                            }
+                            AchievementSetUiModel(
+                                setId = set.id.id,
+                                setTitle = set.title,
+                                setType = set.type,
+                                setIcon = set.iconUrl,
+                                setSummary = buildAchievementsSummary(forHardcoreMode, cleanAchievements),
+                                buckets = buildAchievementBuckets(cleanAchievements, runtimeBucketByAchievementId),
+                                leaderboards = set.leaderboards,
+                            )
+                        }
+                        val orderedCachedSets = if (runtimeSubsetOrder.isNotEmpty()) {
+                            cachedSets.sortedWith(
+                                compareBy<AchievementSetUiModel> { runtimeSubsetOrder[it.setId] ?: Int.MAX_VALUE }
+                                    .thenBy { it.setId }
+                            )
+                        } else {
+                            cachedSets
+                        }
+                        val pendingLedgerAchievementIds = withContext(Dispatchers.IO) {
+                            runCatching { getPendingLedgerAchievementIds(rom) }.getOrElse { emptySet() }
+                        }
+                        _uiState.value = RomRetroAchievementsUiState.Ready(
+                            sets = orderedCachedSets,
+                            pendingLedgerAchievementIds = pendingLedgerAchievementIds,
+                        )
+                    } else if (_uiState.value !is RomRetroAchievementsUiState.Ready) {
+                        _uiState.value = RomRetroAchievementsUiState.Loading
+                    }
+
+                    // 2. Silent background sync / update
                     getUserGameData(rom, forHardcoreMode).fold(
                         onSuccess = { userGameData ->
                             val sets = userGameData?.sets.orEmpty().map { set ->
+                                val cleanAchievements = set.achievements.filterNot {
+                                    it.achievement.title.startsWith("Warning:", ignoreCase = true) || it.achievement.title.contains("Unknown Emulator", ignoreCase = true)
+                                }
                                 AchievementSetUiModel(
                                     setId = set.id.id,
                                     setTitle = set.title,
                                     setType = set.type,
                                     setIcon = set.iconUrl,
-                                    setSummary = buildAchievementsSummary(forHardcoreMode, set.achievements),
-                                    buckets = buildAchievementBuckets(set.achievements, runtimeBucketByAchievementId),
+                                    setSummary = buildAchievementsSummary(forHardcoreMode, cleanAchievements),
+                                    buckets = buildAchievementBuckets(cleanAchievements, runtimeBucketByAchievementId),
                                     leaderboards = set.leaderboards,
                                 )
                             }
@@ -103,10 +146,10 @@ abstract class RetroAchievementsViewModel (
                         onFailure = {
                             ensureActive()
                             if (it is UserTokenExpiredException) {
-                                val userAuth = retroAchievementsRepository.getUserAuthentication()
-                                val existingUsername = (userAuth as? RAUserAuth.AuthenticationExpired)?.username
+                                val currentAuth = retroAchievementsRepository.getUserAuthentication()
+                                val existingUsername = (currentAuth as? RAUserAuth.AuthenticationExpired)?.username
                                 _uiState.value = RomRetroAchievementsUiState.LoggedOut(existingUsername)
-                            } else {
+                            } else if (_uiState.value !is RomRetroAchievementsUiState.Ready) {
                                 _uiState.value = RomRetroAchievementsUiState.AchievementLoadError
                             }
                         },
@@ -131,7 +174,9 @@ abstract class RetroAchievementsViewModel (
     }
 
     fun retryLoadAchievements() {
-        _uiState.value = RomRetroAchievementsUiState.Loading
+        if (_uiState.value !is RomRetroAchievementsUiState.Ready) {
+            _uiState.value = RomRetroAchievementsUiState.Loading
+        }
         loadAchievements()
     }
 

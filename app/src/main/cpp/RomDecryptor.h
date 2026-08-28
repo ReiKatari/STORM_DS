@@ -35,6 +35,9 @@ typedef void (*ProgressCallback)(uint32_t current, uint32_t total);
 DecryptResult DecryptRomFile(const char* romPath, ProgressCallback progressCallback);
 DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback);
 
+// Decrypt a ROM buffer in-place in RAM
+bool DecryptRomBuffer(uint8_t* romData, size_t romLength);
+
 } // namespace RomDecryptor
 } // namespace MelonDSAndroid
 

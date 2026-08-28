@@ -37,6 +37,98 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
     companion object {
         const val NOTIFICATION_CHANNEL_ID_BACKGROUND_TASKS = "channel_cheat_importing"
         private const val NOTIFICATION_ID_HARDCORE_OFFLINE_LOSS = 2002
+        private var isMigrating = false
+        private var lastMigrationTime = 0L
+
+        fun migrateStorageToRoot(context: Context, force: Boolean = false) {
+            val now = System.currentTimeMillis()
+            if (!force && (isMigrating || (now - lastMigrationTime < 30_000L))) return
+            isMigrating = true
+
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                try {
+                    val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+                    if (!rootBase.exists()) rootBase.mkdirs()
+                    val dsDir = File(rootBase, "bios/ds").apply { mkdirs() }
+                    val dsiDir = File(rootBase, "bios/dsi").apply { mkdirs() }
+                    val biosDir = File(rootBase, "bios").apply { mkdirs() }
+                    val savesDir = File(rootBase, "saves").apply { mkdirs() }
+                    val quicksavesDir = File(rootBase, "quicksaves").apply { mkdirs() }
+                    val texturesDir = File(rootBase, "textures").apply { mkdirs() }
+                    val logsDir = File(rootBase, "logs").apply { mkdirs() }
+                    val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+                    val screenshotsDir = File(rootBase, "screenshots").apply { mkdirs() }
+                    val dldiDir = File(rootBase, "dldi").apply { mkdirs() }
+
+                    // Clean up old /Download/STORM DS LOGS folder
+                    val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    val oldLogsDir = File(downloadDir, "STORM DS LOGS")
+                    if (oldLogsDir.exists()) {
+                        oldLogsDir.deleteRecursively()
+                    }
+
+                    val copyDir = { src: File, dst: File ->
+                        if (src.exists() && src.isDirectory) {
+                            src.listFiles()?.forEach { file ->
+                                val target = File(dst, file.name)
+                                if (!target.exists() || target.length() == 0L || target.lastModified() < file.lastModified()) {
+                                    runCatching { file.copyTo(target, overwrite = true) }
+                                }
+                            }
+                        }
+                    }
+
+                    // Internal app files to root storage
+                    copyDir(File(context.filesDir, "bios/ds"), dsDir)
+                    copyDir(File(context.filesDir, "bios/dsi"), dsiDir)
+                    copyDir(File(context.filesDir, "bios"), biosDir)
+                    copyDir(File(context.filesDir, "saves"), savesDir)
+                    copyDir(File(context.filesDir, "quicksaves"), quicksavesDir)
+                    copyDir(File(context.filesDir, "cheats"), cheatsDir)
+                    copyDir(File(context.filesDir, "textures"), texturesDir)
+                    copyDir(File(context.filesDir, "dldi"), dldiDir)
+
+                    // External app files to root storage
+                    context.getExternalFilesDir(null)?.let { extFiles ->
+                        copyDir(File(extFiles, "bios/ds"), dsDir)
+                        copyDir(File(extFiles, "bios/dsi"), dsiDir)
+                        copyDir(File(extFiles, "bios"), biosDir)
+                        copyDir(File(extFiles, "saves"), savesDir)
+                        copyDir(File(extFiles, "quicksaves"), quicksavesDir)
+                        copyDir(File(extFiles, "cheats"), cheatsDir)
+                        copyDir(File(extFiles, "textures"), texturesDir)
+                        copyDir(File(extFiles, "dldi"), dldiDir)
+                    }
+
+                    // Root storage back to internal app files (backup/sync)
+                    copyDir(dsDir, File(context.filesDir, "bios/ds").apply { mkdirs() })
+                    copyDir(dsiDir, File(context.filesDir, "bios/dsi").apply { mkdirs() })
+                    copyDir(biosDir, File(context.filesDir, "bios").apply { mkdirs() })
+                    copyDir(savesDir, File(context.filesDir, "saves").apply { mkdirs() })
+                    copyDir(quicksavesDir, File(context.filesDir, "quicksaves").apply { mkdirs() })
+                    copyDir(cheatsDir, File(context.filesDir, "cheats").apply { mkdirs() })
+                    copyDir(texturesDir, File(context.filesDir, "textures").apply { mkdirs() })
+                    copyDir(logsDir, File(context.filesDir, "logs").apply { mkdirs() })
+                    copyDir(dldiDir, File(context.filesDir, "dldi").apply { mkdirs() })
+
+                    // Ensure preferences point to root paths
+                    val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                    val currentDs = prefs.getStringSet("bios_dir", null)?.firstOrNull()
+                    if (currentDs == null || currentDs.contains("data/user/0") || currentDs.contains("files/bios")) {
+                        prefs.edit().putStringSet("bios_dir", setOf(android.net.Uri.fromFile(dsDir).toString())).apply()
+                    }
+                    val currentDsi = prefs.getStringSet("dsi_bios_dir", null)?.firstOrNull()
+                    if (currentDsi == null || currentDsi.contains("data/user/0") || currentDsi.contains("files/bios")) {
+                        prefs.edit().putStringSet("dsi_bios_dir", setOf(android.net.Uri.fromFile(dsiDir).toString())).apply()
+                    }
+                    lastMigrationTime = System.currentTimeMillis()
+                } catch (e: Throwable) {
+                    Log.w("MelonDSApplication", "Failed to complete root storage migration", e)
+                } finally {
+                    isMigrating = false
+                }
+            }
+        }
     }
 
     override fun newImageLoader(): coil.ImageLoader {
@@ -71,6 +163,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
 
     override fun onCreate() {
         super.onCreate()
+        runCatching { System.setProperty("http.agent", "melonDS/0.9.5") }
         installCrashHandler()
         runCatching { giveLibrashaderACacheDirectory() }
         runCatching { ButtonThemeManager.init(this) }
@@ -80,6 +173,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
         runCatching { createNotificationChannels() }
         runCatching { applyTheme() }
         runCatching { performMigrations() }
+        runCatching { migrateStorageToRoot(this) }
         runCatching { File(cacheDir, "installed_dsiware").deleteRecursively() }
         runCatching { settingsBackupManager.initializeMirror() }
         runCatching { appLogFileRecorder.start() }
@@ -107,11 +201,14 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     appendLine("========================================================")
                 }
 
-                // Write to public Downloads directory in STORM DS LOGS folder
+                // Write crash report into /storage/emulated/0/STORM DS/logs/!STORM_INFO.txt
                 runCatching {
-                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    val logsDir = File(downloadsDir, "STORM DS LOGS").apply { mkdirs() }
-                    File(logsDir, "STORM_DS_CRASH.txt").writeText(report)
+                    val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
+                    val crashFile = File(rootBase, "!STORM_INFO.txt")
+                    crashFile.appendText("\n\n$report")
+
+                    val internalLogs = File(filesDir, "logs").apply { mkdirs() }
+                    File(internalLogs, "!STORM_INFO.txt").appendText("\n\n$report")
                 }
             }
             previousHandler?.uncaughtException(thread, throwable)

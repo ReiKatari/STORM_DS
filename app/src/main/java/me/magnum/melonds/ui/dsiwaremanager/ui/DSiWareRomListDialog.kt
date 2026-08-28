@@ -3,19 +3,13 @@ package me.magnum.melonds.ui.dsiwaremanager.ui
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
@@ -25,6 +19,7 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
@@ -34,10 +29,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,6 +50,7 @@ import me.magnum.melonds.ui.common.component.dialog.DialogButton
 import me.magnum.melonds.ui.dsiwaremanager.DSiWareRomListViewModel
 import me.magnum.melonds.ui.dsiwaremanager.model.DSiWareMangerRomListUiState
 import me.magnum.melonds.ui.romlist.RomIcon
+import me.magnum.melonds.ui.theme.LocalWatermelonColors
 import me.magnum.melonds.ui.theme.MelonTheme
 
 @Composable
@@ -103,35 +102,62 @@ private fun FullScreenDialog(
     onRomSelected: (Rom) -> Unit,
     retrieveRomIcon: suspend (Rom) -> RomIcon
 ) {
+    val colors = LocalWatermelonColors.current
     FullScreen(onDismiss = onDismiss) {
         Scaffold(
             topBar = {
-                // Add spacing for status bar to have a different color
-                Box(Modifier.background(MaterialTheme.colors.primaryVariant).statusBarsPadding()) {
-                    TopAppBar(
-                        modifier = Modifier.fillMaxWidth(),
-                        title = {
-                            Text(
-                                text = stringResource(id = R.string.select_dsiware_title),
-                                color = MaterialTheme.colors.onPrimary,
+                Column(
+                    modifier = Modifier
+                        .background(colors.surface)
+                        .statusBarsPadding()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.select_dsiware_title),
+                            color = colors.text,
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface2),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(id = R.string.close),
+                                tint = colors.text,
+                                modifier = Modifier.size(18.dp),
                             )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(id = R.string.close),
-                                    tint = MaterialTheme.colors.onPrimary,
-                                )
-                            }
-                        },
-                        backgroundColor = MaterialTheme.colors.background,
-                    contentColor = MaterialTheme.colors.onBackground,
-                        windowInsets = WindowInsets.safeDrawing.exclude(WindowInsets(bottom = Int.MAX_VALUE)),
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+                }
+            },
+            bottomBar = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.surface)
+                        .navigationBarsPadding()
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    me.magnum.melonds.ui.common.UnifiedBackButton(
+                        onClick = onDismiss,
                     )
                 }
             },
-            backgroundColor = MaterialTheme.colors.surface,
+            backgroundColor = colors.bg,
             contentWindowInsets = WindowInsets.safeDrawing,
         ) { padding ->
             when (romsUiState) {

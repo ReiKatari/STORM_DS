@@ -12,6 +12,7 @@ enum class VideoFiltering {
     QUILEZ,
     LCD,
     SCANLINES,
+    SCALE2X,
     AI_UPSCALE,
     RETROARCH;
 

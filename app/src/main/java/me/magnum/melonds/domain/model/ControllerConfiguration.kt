@@ -30,6 +30,8 @@ class ControllerConfiguration(
             Input.REWIND,
             Input.TRANSLATE,
             Input.LOCK_ROTATION,
+            Input.TOGGLE_EXTRA_BUTTONS,
+            Input.TOGGLE_ANALOG_STICK,
         )
     }
 

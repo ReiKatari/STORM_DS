@@ -148,17 +148,23 @@ class ModernButtonsView @JvmOverloads constructor(
         val size = min(w, h)
         val cx = w / 2f
         val cy = h / 2f
-        val buttonRadius = size * 0.175f * buttonInnerScale
-        val offset = size * 0.285f * buttonSpread
+
+        val maxExtent = (0.285f * buttonSpread + 0.175f * buttonInnerScale) * 1.08f
+        val autoScale = if (maxExtent > 0.46f) (0.46f / maxExtent) else 1.0f
+        val effectiveSize = size * autoScale
+
+        val buttonRadius = effectiveSize * 0.175f * buttonInnerScale
+        val offset = effectiveSize * 0.285f * buttonSpread
 
         val style = ButtonThemeManager.currentStyle
 
         // Draw connecting diamond backing plate
+        val plateRadius = offset + buttonRadius * 0.7f
         val platePath = Path().apply {
-            moveTo(cx, cy - offset - buttonRadius * 0.7f)
-            lineTo(cx + offset + buttonRadius * 0.7f, cy)
-            lineTo(cx, cy + offset + buttonRadius * 0.7f)
-            lineTo(cx - offset - buttonRadius * 0.7f, cy)
+            moveTo(cx, cy - plateRadius)
+            lineTo(cx + plateRadius, cy)
+            lineTo(cx, cy + plateRadius)
+            lineTo(cx - plateRadius, cy)
             close()
         }
 

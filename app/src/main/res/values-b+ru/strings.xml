@@ -87,6 +87,25 @@
   <string name="video_internal_resolution_summary">Масштабирование разрешения 3D графики</string>
   <string name="video_filtering">Фильтрация текстур</string>
   <string name="video_filtering_summary">Сглаживание и шейдеры фильтрации</string>
+  <string name="pref_cat_appearance">Внешний вид и темы</string>
+  <string name="pref_cat_emulation_speed">Скорость эмуляции и производительность</string>
+  <string name="pref_cat_backup_restore">Резервное копирование</string>
+  <string name="pref_cat_renderer_3d">Рендерер и 3D-графика</string>
+  <string name="pref_cat_enhancements">Улучшения графики и масштабирование</string>
+  <string name="pref_cat_retroarch_shaders">Шейдеры RetroArch (Slang)</string>
+  <string name="pref_cat_display_layout">Дисплей, скины и оверлеи</string>
+  <string name="pref_cat_audio_output">Вывод звука и качество</string>
+  <string name="pref_cat_microphone">Микрофон и запись</string>
+  <string name="pref_cat_input_layouts">Макеты и поведение</string>
+  <string name="pref_cat_touch_controls">Наэкранные кнопки и виброотклик</string>
+  <string name="pref_cat_gamepads_sensors">Датчики движения и макросы</string>
+  <string name="pref_cat_system_misc">Система и логи</string>
+  <string name="pref_cat_core_compiler">Процессор и компиляторы</string>
+  <string name="pref_cat_bios_firmware">BIOS и прошивки</string>
+  <string name="pref_cat_sd_cards">Виртуальные SD-карты</string>
+  <string name="pref_cat_network_wfc">Сетевая игра Nintendo WFC</string>
+  <string name="pref_cat_layout_management">Управление макетами и экраном</string>
+
   <string name="video_fps_counter">Счетчик FPS</string>
   <string name="video_fps_counter_summary">Отображение кадров в секунду на экране</string>
   <string name="fast_forward_speed">Скорость быстрой перемотки</string>
@@ -181,9 +200,9 @@
   <string name="input_fast_forward">Ускорение (Переключатель)</string>
   <string name="input_hold_fast_forward">Ускорение (Удержание)</string>
   <string name="input_microphone">Микрофон</string>
-  <string name="input_toggle_soft_input">Переключить кнопки</string>
+  <string name="input_toggle_soft_input">Скрыть / показать управление</string>
   <string name="input_reset">Сброс</string>
-  <string name="input_dpad">Крестовина (D-Pad)</string>
+  <string name="input_dpad">Крестовина (D-Pad) / Левый стик</string>
   <string name="input_abxy_buttons">Кнопки ABXY</string>
   <string name="input_swap_screens">Поменять экраны местами</string>
   <string name="input_quick_save">Быстрое сохранение</string>
@@ -200,6 +219,10 @@
   <string name="layout_fullscreen_landscape">Полноэкранная альбомная</string>
   <string name="layout_auto_rotate">Автоматический поворот (По датчику)</string>
   <string name="layout_open_editor">Редактор раскладок</string>
+  <string name="layout_open_editor_summary">Редактирование текущей активной раскладки (расположение, масштаб экранов и кнопок)</string>
+  <string name="input_toggle_analog_stick">Сменить D-Pad / Стик</string>
+  <string name="pref_touch_dpad_stick_mode_title">Аналоговый стик вместо крестовины</string>
+  <string name="pref_touch_dpad_stick_mode_summary">Отображать сенсорный стик (джойстик) вместо классической крестовины D-Pad</string>
   <string name="toast_layout_applied">Раскладка: %1$s</string>
   <string name="input_group_console">Управление консолью (DS / DSi)</string>
   <string name="input_group_hotkeys">Горячие клавиши и действия</string>
@@ -583,6 +606,7 @@
     <item>Quilez</item>
     <item>LCD</item>
     <item>Scanlines</item>
+    <item>Scale2x</item>
     <item>AI-Upscale (Anime4K)</item>
     <item>RetroArch (.slangp)</item>
   </string-array>
@@ -832,10 +856,10 @@
   <string name="block_bios_download_title">Блокировать скачивание проверенных файлов</string>
   <string name="block_bios_download_summary">Скрывает кнопки автоматической загрузки проверенных дампов BIOS и прошивки</string>
   <string name="auto_download_ds_bios_title">Скачать проверенные файлы BIOS DS</string>
-  <string name="auto_download_ds_bios_summary">Автоматическая загрузка и настройка bios7.bin, bios9.bin, firmware.bin</string>
+  <string name="auto_download_ds_bios_summary">Автоматическая загрузка и настройка ds_bios7.bin, ds_bios9.bin, ds_sd_card.bin, ds_firmware.bin</string>
   <string name="bios_directory">Папка с BIOS DS</string>
   <string name="auto_download_dsi_bios_title">Скачать проверенные файлы BIOS DSi</string>
-  <string name="auto_download_dsi_bios_summary">Автоматическая загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin</string>
+  <string name="auto_download_dsi_bios_summary">Автоматическая загрузка и настройка dsi_bios7.bin, dsi_bios9.bin, dsi_sd_card.bin, dsi_firmware.bin, nand.bin</string>
   <string name="dsi_bios_directory">Папка с BIOS DSi</string>
   <string name="show_boot_screen">Показывать заставку Nintendo DS</string>
   <string name="dsiware_boot_mode_title">Режим запуска DSiWare</string>
@@ -849,19 +873,25 @@
   <string name="generate_new_mac_address_description">Обновить MAC-адрес сетевого адаптера</string>
   <string name="enable_jit">Включить JIT-компилятор</string>
   <string name="enable_jit_summary">Динамическая рекомпиляция CPU для максимальной скорости</string>
+  <string name="enable_storm_compiler">Включить STORM-компилятор</string>
+  <string name="enable_storm_compiler_summary">Оптимизированный LLVM/Clang векторизованный ARM64 движок со скоростным пайплайном памяти</string>
   <string name="jit_not_supported">JIT не поддерживается на данном устройстве</string>
   <string name="save_internal_config_as_file">Сохранять настройки в файл</string>
   <string name="save_internal_config_as_file_summary">Экспорт конфигурации эмулятора</string>
   <string name="system_app_log_file_enabled">Запись логов приложения</string>
   <string name="system_app_log_file_enabled_summary">Сохранять отладочный лог в файл</string>
-  <string name="system_dldi_sd_card_enabled">Включить SD-карту DLDI</string>
-  <string name="system_dldi_sd_card_enabled_summary">Эмуляция виртуальной SD-карты для homebrew</string>
-  <string name="system_dldi_sd_card_dir">Папка SD-карты</string>
-  <string name="system_dldi_sd_card_image_size">Размер образа SD-карты</string>
+  <string name="system_dldi_sd_card_enabled">Включить SD-карту DLDI (DS)</string>
+  <string name="system_dldi_sd_card_enabled_summary">Эмуляция виртуальной SD-карты флешкартриджа Slot-1 (sd_card.bin)</string>
+  <string name="system_dldi_sd_card_dir">Папка SD-карты DLDI (DS)</string>
+  <string name="system_dldi_sd_card_image_size">Размер образа SD-карты DLDI</string>
+  <string name="system_dsi_sd_card_enabled">Включить встроенную SD-карту DSi</string>
+  <string name="system_dsi_sd_card_enabled_summary">Эмуляция слота SD-карты консоли Nintendo DSi (sd_card.bin)</string>
+  <string name="system_dsi_sd_card_dir">Папка SD-карты DSi</string>
+  <string name="system_dsi_sd_card_image_size">Размер образа SD-карты DSi</string>
   <string name="system_disable_touch_gestures_on_touch_screen_area">Отключить жесты над сенсорным экраном</string>
   <string name="system_disable_touch_gestures_on_touch_screen_area_summary">Предотвращает случайное выявление системных жестов Android</string>
-  <string name="system_ignore_display_cutout_in_layouts">Игнорировать вырез экрана (Челку)</string>
-  <string name="system_ignore_display_cutout_in_layouts_summary">Растягивать макет на всю область дисплея</string>
+  <string name="system_ignore_display_cutout_in_layouts">Игнорировать вырез экрана</string>
+  <string name="system_ignore_display_cutout_in_layouts_summary">Позволяет растягивать макет и использовать всю площадь дисплея, включая вырезы и отверстия камеры любого расположения (по центру, слева, справа, в углах)</string>
   <string name="backup_settings">Резервное копирование настроек</string>
   <string name="restore_settings">Восстановить настройки</string>
   <string name="settings_backup_success">Резервная копия настроек создана</string>
@@ -1032,7 +1062,8 @@
   <string name="action_layout_export">Экспорт в файл</string>
   <string name="action_layout_import">Импорт макета</string>
   <string name="layout_export_success">Макет успешно экспортирован</string>
-  <string name="layout_import_success">Макет успешно импортирован</string>
+  <string name="layout_import_success">Профиль раскладки успешно импортирован</string>
+  <string name="layout_already_imported">Этот профиль раскладки уже импортирован</string>
   <string name="layout_operation_failed">Не удалось выполнить операцию с макетом</string>
   <string name="action_boot_firmware_ds">Запустить прошивку Nintendo DS</string>
   <string name="action_boot_firmware_dsi">Запустить прошивку Nintendo DSi</string>
@@ -1336,6 +1367,28 @@
     <string name="input_gyro_aiming_title">Прицеливание гироскопом</string>
     <string name="input_gyro_aiming_summary">Управление прицелом в 3D-шутерах (Metroid, Dementium, Moon) наклоном смартфона</string>
     <string name="input_gyro_sensitivity_title">Чувствительность гироскопа</string>
+    <string name="pref_cat_dsp_effects">DSP-эффекты и лимитер звука</string>
+    <string name="audio_soft_limiter_title">Мягкий лимитер пиков (Soft Limiter)</string>
+    <string name="audio_soft_limiter_summary">Сглаживает звуковые перегрузки, полностью устраняя хрипы, щелчки и треск при ускорении (Fast Forward) и просадках FPS</string>
+    <string name="audio_bass_boost_title">Усиление басов (Bass Boost)</string>
+    <string name="audio_bass_boost_summary">Глубокое и плотное звучание низких частот в играх</string>
+    <string name="audio_bass_boost_strength_title">Сила усиления баса</string>
+    <string name="audio_spatial_audio_title">Пространственное 3D-аудио (Stereo Width)</string>
+    <string name="audio_spatial_audio_summary">Расширяет стереопанораму Nintendo DS для объемного погружения в наушниках</string>
+    <string name="audio_reverb_title">Акустическая реверберация (Reverb)</string>
+    <string name="audio_reverb_summary">Создает эффект естественного пространства и объема саундтрека</string>
+
+    <string name="input_gyro_sensitivity_x_title">Чувствительность по горизонтали (X)</string>
+    <string name="input_gyro_sensitivity_y_title">Чувствительность по вертикали (Y)</string>
+    <string name="input_gyro_invert_x_title">Инвертировать ось X (влево/вправо)</string>
+    <string name="input_gyro_invert_x_summary">Инвертировать поворот прицела по горизонтали</string>
+    <string name="input_gyro_invert_y_title">Инвертировать ось Y (вверх/вниз)</string>
+    <string name="input_gyro_invert_y_summary">Инвертировать наклон прицела по вертикали</string>
+    <string name="input_gyro_deadzone_x_title">Мертвая зона оси X</string>
+    <string name="input_gyro_deadzone_x_summary">Игнорировать микро-дрожание рук по горизонтали</string>
+    <string name="input_gyro_deadzone_y_title">Мертвая зона оси Y</string>
+    <string name="input_gyro_deadzone_y_summary">Игнорировать микро-дрожание рук по вертикали</string>
+    <string name="input_gyro_recenter_quick_action">Быстрая калибровка «Центр»</string>
     <string name="translator_tts_neural_title">Нейросетевая облачная озвучка (Высокое качество)</string>
     <string name="translator_tts_neural_summary">Естественные живые голоса с выразительными эмоциями через нейросеть</string>
     <string name="video_console_skin_title">3D-скин корпуса консоли</string>
@@ -1358,11 +1411,18 @@
     <!-- STORM Theme Studio & Colors -->
     <string name="theme_accent_color_title">Акцентный цвет темы</string>
     <string name="theme_accent_color_summary">Выбор неонового акцента для темы STORM NIGHT</string>
-    <string name="accent_electric_cyan">Электрический Циан (Cyan)</string>
-    <string name="accent_amber_gold">Янтарное Золото (Amber Gold)</string>
-    <string name="accent_cyber_red">Кибер-Неон Красный (Cyber Red)</string>
-    <string name="accent_emerald_jade">Изумрудный Нефрит (Jade)</string>
-    <string name="accent_royal_violet">Королевский Фиолетовый (Violet)</string>
+    <string name="accent_electric_cyan">💎 Электрический циан</string>
+    <string name="accent_matrix_emerald">🌿 Матричный изумруд</string>
+    <string name="accent_amber_gold">⚡ Киберпанк золото</string>
+    <string name="accent_cyber_red">🔥 Кибер красный</string>
+    <string name="accent_neon_magenta">🔮 Неоновая маджента</string>
+    <string name="accent_royal_violet">💜 Королевский фиолетовый</string>
+    <string name="accent_deep_sapphire">🌊 Глубокий сапфир</string>
+    <string name="accent_solar_orange">🍊 Солнечный оранж</string>
+    <string name="accent_mint_frost">❄️ Мятный иней</string>
+    <string name="accent_toxic_lime">🧪 Токсичный лайм</string>
+    <string name="accent_hot_pink">🌸 Яркий розовый</string>
+    <string name="accent_oled_white">⚪ Белый монохром</string>
 
     <!-- Card Styles -->
     <string name="rom_card_style_title">Стиль карточек игр</string>

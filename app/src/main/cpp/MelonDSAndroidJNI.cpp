@@ -93,7 +93,9 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 5: return MelonDSAndroid::VulkanFilterMode::Quilez;
         case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
         case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
-        case 8: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
+        case 9:
+        case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }
@@ -2452,6 +2454,12 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
     }
 
     updatePerformanceHintTarget();
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setRewindActive(JNIEnv* env, jobject thiz, jboolean active)
+{
+    MelonDSAndroid::setRewindActive(active);
 }
 
 JNIEXPORT void JNICALL

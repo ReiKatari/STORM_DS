@@ -68,7 +68,10 @@ class DSiWareManagerViewModel @Inject constructor(
                     if (justImported != null) {
                         dsiWareTitlesMetadataStore.setAutoImported(justImported.titleId, false)
                     }
-                    _state.value = DSiWareManagerUiState.Ready(titles)
+                    val activeRomsList = romsRepository.getRoms().firstOrNull() ?: emptyList()
+                    val initialEnhanced = activeRomsList.filter { it.isDsiEnhanced }
+                    val filteredTitles = filterActiveTitles(titles, activeRomsList)
+                    _state.value = DSiWareManagerUiState.Ready(filteredTitles, initialEnhanced)
                 } else {
                     _importTitleError.tryEmit(result)
                 }
@@ -82,7 +85,10 @@ class DSiWareManagerViewModel @Inject constructor(
             withContext(Dispatchers.Default) {
                 dsiNandManager.deleteTitle(title)
                 val titles = dsiNandManager.listTitles()
-                _state.value = DSiWareManagerUiState.Ready(titles)
+                val activeRomsList = romsRepository.getRoms().firstOrNull() ?: emptyList()
+                val initialEnhanced = activeRomsList.filter { it.isDsiEnhanced }
+                val filteredTitles = filterActiveTitles(titles, activeRomsList)
+                _state.value = DSiWareManagerUiState.Ready(filteredTitles, initialEnhanced)
             }
         }
     }
@@ -92,7 +98,10 @@ class DSiWareManagerViewModel @Inject constructor(
             withContext(Dispatchers.Default) {
                 dsiWareTitlesMetadataStore.setCustomName(title.titleId, newName)
                 val titles = dsiNandManager.listTitles()
-                _state.value = DSiWareManagerUiState.Ready(titles)
+                val activeRomsList = romsRepository.getRoms().firstOrNull() ?: emptyList()
+                val initialEnhanced = activeRomsList.filter { it.isDsiEnhanced }
+                val filteredTitles = filterActiveTitles(titles, activeRomsList)
+                _state.value = DSiWareManagerUiState.Ready(filteredTitles, initialEnhanced)
             }
         }
     }
@@ -129,18 +138,26 @@ class DSiWareManagerViewModel @Inject constructor(
         }
     }
 
+    private val titleIconCache = java.util.concurrent.ConcurrentHashMap<Long, RomIcon>()
+    private val romIconCache = java.util.concurrent.ConcurrentHashMap<Uri, RomIcon>()
+    private val importedRomUriCache = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     fun getTitleIcon(title: DSiWareTitle): RomIcon {
-        val bitmap = createBitmap(32, 32).apply {
-            copyPixelsFromBuffer(ByteBuffer.wrap(title.icon))
+        return titleIconCache.getOrPut(title.titleId) {
+            val bitmap = createBitmap(32, 32).apply {
+                copyPixelsFromBuffer(ByteBuffer.wrap(title.icon))
+            }
+            val iconFiltering = settingsRepository.getRomIconFiltering()
+            RomIcon(bitmap, iconFiltering)
         }
-        val iconFiltering = settingsRepository.getRomIconFiltering()
-        return RomIcon(bitmap, iconFiltering)
     }
 
     suspend fun getRomIcon(rom: me.magnum.melonds.domain.model.rom.Rom): RomIcon {
-        val bitmap = romIconProvider.getRomIcon(rom)
-        val iconFiltering = settingsRepository.getRomIconFiltering()
-        return RomIcon(bitmap, iconFiltering)
+        return romIconCache.getOrPut(rom.uri) {
+            val bitmap = romIconProvider.getRomIcon(rom)
+            val iconFiltering = settingsRepository.getRomIconFiltering()
+            RomIcon(bitmap, iconFiltering)
+        }
     }
 
     fun renameEnhancedRomFile(rom: me.magnum.melonds.domain.model.rom.Rom, newBaseName: String) {
@@ -172,84 +189,46 @@ class DSiWareManagerViewModel @Inject constructor(
     }
 
     private fun filterActiveTitles(titles: List<DSiWareTitle>, activeRoms: List<me.magnum.melonds.domain.model.rom.Rom>? = null): List<DSiWareTitle> {
-        val currentRoms = activeRoms ?: emptyList()
-        val activeUris = currentRoms.map { it.uri.toString() }.toSet()
-        val activeNames = currentRoms.map { it.name.lowercase().trim() }.toSet()
-        val activeFileNames = currentRoms.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-        val enhancedNames = currentRoms.filter { it.isDsiEnhanced }.map { it.name.lowercase().trim() }.toSet()
-        val enhancedFileNames = currentRoms.filter { it.isDsiEnhanced }.map { it.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-
-        return titles.filter { title ->
-            val titleIdHex = (title.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
-            val sourceUri = dsiWareTitlesMetadataStore.getSourceUri(titleIdHex)
-            val origFile = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)?.lowercase()?.trim()
-            val titleName = title.name.lowercase().trim()
-            val isEnhanced = titleName in enhancedNames || titleName in enhancedFileNames
-
-            val existsInFolders = (sourceUri != null && sourceUri in activeUris) ||
-                (origFile != null && (origFile in activeFileNames || origFile in activeNames)) ||
-                (titleName in activeFileNames || titleName in activeNames)
-
-            !isEnhanced && existsInFolders
-        }
+        return titles
     }
 
     private fun loadDSiWareData() {
-        val dsiConfiguration = configurationDirectoryVerifier.checkDsiConfigurationDirectory()
-        if (dsiConfiguration.status != ConfigurationDirResult.Status.VALID) {
-            _state.value = DSiWareManagerUiState.DSiSetupInvalid(dsiConfiguration.status)
-        } else {
-            viewModelScope.launch {
-                withContext(Dispatchers.IO) {
-                    val openNandResult = dsiNandManager.openNand()
-                    if (openNandResult.isSuccess()) {
-                        val activeRomsList = romsRepository.getRoms().first()
-                        val initialTitles = filterActiveTitles(dsiNandManager.listTitles(), activeRomsList)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val openNandResult = dsiNandManager.openNand()
+                if (openNandResult.isSuccess()) {
+                    romsRepository.getRoms().collectLatest { activeRomsList ->
                         val initialEnhanced = activeRomsList.filter { it.isDsiEnhanced }
-                        withContext(Dispatchers.Main) {
-                            _state.value = DSiWareManagerUiState.Ready(initialTitles, initialEnhanced)
+
+                        val dsiRoms = activeRomsList.filter {
+                            (it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true) &&
+                                !it.isInstalledDsiWareShortcut && !it.isDsiEnhanced
                         }
 
-                        runCatching {
-                            romsRepository.getRoms().collectLatest { activeRoms ->
-                                val dsiRoms = activeRoms.filter {
-                                    (it.isDsiWareTitle || it.fileName.endsWith(".dsi", ignoreCase = true) || it.uri.path?.endsWith(".dsi", ignoreCase = true) == true) &&
-                                        !it.isInstalledDsiWareShortcut && !it.isDsiEnhanced
-                                }
-                                for (rom in dsiRoms) {
-                                    val cleanName = rom.name.lowercase().trim()
-                                    val cleanFileName = rom.fileName.substringBeforeLast('.').lowercase().trim()
-                                    val exactFileName = rom.fileName.substringBeforeLast('.')
+                        var nandUpdated = false
+                        for (rom in dsiRoms) {
+                            val uriStr = rom.uri.toString()
+                            if (importedRomUriCache.contains(uriStr)) continue
 
-                                    val res = dsiNandManager.importTitle(rom.uri)
-                                    if (res == ImportDSiWareTitleResult.SUCCESS || res == ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED) {
-                                        val updatedTitles = dsiNandManager.listTitles()
-                                        val matchingTitle = updatedTitles.find {
-                                            it.name.equals(cleanName, true) ||
-                                            it.name.equals(cleanFileName, true) ||
-                                            cleanName.contains(it.name.lowercase()) ||
-                                            it.name.lowercase().contains(cleanName)
-                                        } ?: updatedTitles.maxByOrNull { it.titleId }
-
-                                        if (matchingTitle != null) {
-                                            dsiWareTitlesMetadataStore.setAutoImported(matchingTitle.titleId, true)
-                                            dsiWareTitlesMetadataStore.setParentFolderUri(matchingTitle.titleId, rom.parentTreeUri?.toString())
-                                            dsiWareTitlesMetadataStore.setSourceUri(matchingTitle.titleId, rom.uri.toString())
-                                            dsiWareTitlesMetadataStore.setOriginalFileName(matchingTitle.titleId, exactFileName)
-                                        }
-                                    }
-                                }
-                                val finalTitles = filterActiveTitles(dsiNandManager.listTitles(), activeRoms)
-                                val finalEnhanced = activeRoms.filter { it.isDsiEnhanced }
-                                withContext(Dispatchers.Main) {
-                                    _state.value = DSiWareManagerUiState.Ready(finalTitles, finalEnhanced)
-                                }
+                            val res = dsiNandManager.importTitle(rom.uri)
+                            if (res == ImportDSiWareTitleResult.SUCCESS) {
+                                importedRomUriCache.add(uriStr)
+                                nandUpdated = true
+                            } else if (res == ImportDSiWareTitleResult.TITLE_ALREADY_IMPORTED) {
+                                importedRomUriCache.add(uriStr)
                             }
                         }
-                    } else {
+
+                        val finalTitles = dsiNandManager.listTitles()
+                        val filteredTitles = filterActiveTitles(finalTitles, activeRomsList)
                         withContext(Dispatchers.Main) {
-                            _state.value = DSiWareManagerUiState.Error
+                            _state.value = DSiWareManagerUiState.Ready(filteredTitles, initialEnhanced)
                         }
+                    }
+                } else {
+                    val dsiConfiguration = configurationDirectoryVerifier.checkDsiConfigurationDirectory()
+                    withContext(Dispatchers.Main) {
+                        _state.value = DSiWareManagerUiState.DSiSetupInvalid(dsiConfiguration.status)
                     }
                 }
             }

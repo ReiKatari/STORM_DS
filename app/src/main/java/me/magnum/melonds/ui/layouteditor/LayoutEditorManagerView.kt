@@ -105,6 +105,9 @@ class LayoutEditorManagerView(
 
     private var showLayoutPropertiesDialog by mutableStateOf(initialEditorState?.isPropertiesDialogShown ?: false)
     private var showBackgroundPropertiesDialog by mutableStateOf(initialEditorState?.isBackgroundPropertiesDialogShown ?: false)
+    private var showMenuDialog by mutableStateOf(false)
+    private var showComponentsVisibilityDialog by mutableStateOf(false)
+    private var instantiatedComponentsState by mutableStateOf(setOf<LayoutComponent>())
     private var shownEditablePropertyDialog by mutableStateOf<LayoutComponentEditableProperty?>(null)
     private var shownPositionDialog by mutableStateOf<LayoutComponentPositionEditorState?>(null)
     private var pendingEditTargetComponent: LayoutComponent? = null
@@ -213,6 +216,35 @@ class LayoutEditorManagerView(
                         title = stringResource(R.string.layout_name),
                         dialogState = nameInputDialogState,
                     )
+
+                    if (showMenuDialog) {
+                        me.magnum.melonds.ui.layouteditor.ui.LayoutEditorMenuDialog(
+                            onDismiss = { showMenuDialog = false },
+                            onOptionSelected = { option ->
+                                showMenuDialog = false
+                                onMenuOptionSelected(option)
+                            }
+                        )
+                    }
+
+                    if (showComponentsVisibilityDialog) {
+                        me.magnum.melonds.ui.layouteditor.ui.LayoutComponentsVisibilityDialog(
+                            instantiatedComponents = instantiatedComponentsState,
+                            onToggleComponent = { component, enable ->
+                                if (enable) {
+                                    binding.viewLayoutEditor.addLayoutComponent(component)
+                                } else {
+                                    binding.viewLayoutEditor.removeLayoutComponent(component)
+                                }
+                                instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
+                                listener?.onStoreLayoutChanges()
+                            },
+                            onDismiss = {
+                                showComponentsVisibilityDialog = false
+                                listener?.onStoreLayoutChanges()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -220,7 +252,9 @@ class LayoutEditorManagerView(
         addView(composeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
-            val cutoutInsets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            val ignoreCutout = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean("system_ignore_display_cutout_in_layouts", false)
+            val cutoutInsets = if (ignoreCutout) androidx.core.graphics.Insets.NONE else windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
             val systemBarInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val topPadding = maxOf(cutoutInsets.top, systemBarInsets.top)
             val bottomPadding = maxOf(cutoutInsets.bottom, systemBarInsets.bottom)
@@ -721,55 +755,32 @@ class LayoutEditorManagerView(
     }
 
     private fun isEditDialogShown(): Boolean {
-        return shownEditablePropertyDialog != null || shownPositionDialog != null
+        return shownEditablePropertyDialog != null || shownPositionDialog != null || showMenuDialog || showComponentsVisibilityDialog
     }
 
     private fun openButtonsMenu() {
         hideBottomControls()
-        val allComponents = LayoutComponent.entries.toList()
-        val instantiatedComponents = binding.viewLayoutEditor.getInstantiatedComponents()
-        val checkedItems = BooleanArray(allComponents.size) { i ->
-            instantiatedComponents.contains(allComponents[i])
-        }
-
-        val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
-        AlertDialog.Builder(themedContext)
-            .setTitle(R.string.components_visibility_title)
-            .setMultiChoiceItems(
-                allComponents.map { resources.getString(getLayoutComponentName(it)) }.toTypedArray(),
-                checkedItems
-            ) { _, which, isChecked ->
-                val component = allComponents[which]
-                if (isChecked) {
-                    binding.viewLayoutEditor.addLayoutComponent(component)
-                } else {
-                    binding.viewLayoutEditor.removeLayoutComponent(component)
-                }
-                listener?.onStoreLayoutChanges()
-            }
-            .setPositiveButton(R.string.ok, null)
-            .showInCurrentWindow()
+        instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
+        showComponentsVisibilityDialog = true
     }
 
     private fun openMenu() {
         listener?.onStoreLayoutChanges()
-        val values = getMenuOptions()
-        val options = Array(values.size) { i -> resources.getString(values[i].stringRes) }
-
-        val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
-        AlertDialog.Builder(themedContext)
-            .setTitle(R.string.menu)
-            .setItems(options) { _, which -> onMenuOptionSelected(values[which]) }
-            .setNegativeButton(R.string.cancel, null)
-            .showInCurrentWindow()
+        showMenuDialog = true
     }
 
     private fun onMenuOptionSelected(option: MenuOption) {
         when (option) {
             MenuOption.PROPERTIES -> openPropertiesDialog()
             MenuOption.BACKGROUNDS -> openBackgroundsConfigDialog()
-            MenuOption.REVERT -> viewModel.revertLayoutChanges()
-            MenuOption.RESET -> viewModel.resetLayout()
+            MenuOption.REVERT -> {
+                binding.viewLayoutEditor.resetModifiedState()
+                viewModel.revertLayoutChanges()
+            }
+            MenuOption.RESET -> {
+                binding.viewLayoutEditor.resetModifiedState()
+                viewModel.resetLayout()
+            }
             MenuOption.SAVE_AS_NEW -> showLayoutNameInputDialog(
                 initialName = viewModel.getCurrentLayoutName()?.ifBlank { resources.getString(R.string.custom_layout_default_name) }
                     ?: resources.getString(R.string.custom_layout_default_name),

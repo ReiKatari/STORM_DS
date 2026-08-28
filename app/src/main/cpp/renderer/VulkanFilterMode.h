@@ -16,7 +16,8 @@ enum class VulkanFilterMode : melonDS::u32
     Quilez = 5,
     Lcd = 6,
     Scanlines = 7,
-    RetroArch = 8,
+    Scale2x = 8,
+    RetroArch = 9,
 };
 
 inline bool IsVulkanPostProcessFilter(VulkanFilterMode filter)
@@ -27,6 +28,7 @@ inline bool IsVulkanPostProcessFilter(VulkanFilterMode filter)
         || filter == VulkanFilterMode::Quilez
         || filter == VulkanFilterMode::Lcd
         || filter == VulkanFilterMode::Scanlines
+        || filter == VulkanFilterMode::Scale2x
         || filter == VulkanFilterMode::RetroArch;
 }
 

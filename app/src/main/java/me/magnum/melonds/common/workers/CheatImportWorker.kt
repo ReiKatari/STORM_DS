@@ -64,17 +64,63 @@ class CheatImportWorker @AssistedInject constructor(
                 }
             }
 
-            val databaseExtension = databaseDocument.name?.substringAfterLast('.')
+            val databaseExtension = databaseDocument.name?.substringAfterLast('.')?.lowercase()
             val parser = when (databaseExtension) {
-                "xml" -> XmlCheatDatabaseParser()
+                "xml", "zip" -> XmlCheatDatabaseParser()
                 else -> {
                     return Result.failure()
                 }
             }
 
-            return parseXmlDocument(uri, parser, totalFileSize)
+            if (databaseExtension == "zip") {
+                return parseZipDocument(uri, parser)
+            } else {
+                return parseXmlDocument(uri, parser, totalFileSize)
+            }
         } catch (e: Exception) {
             return Result.failure()
+        }
+    }
+
+    private suspend fun parseZipDocument(uri: Uri, parser: CheatDatabaseParser) = suspendCoroutine { continuation ->
+        try {
+            applicationContext.contentResolver.openInputStream(uri)?.use { rawIn ->
+                val zipIn = java.util.zip.ZipInputStream(rawIn.buffered())
+                var entry = zipIn.nextEntry
+                while (entry != null && !entry.name.endsWith(".xml", ignoreCase = true)) {
+                    zipIn.closeEntry()
+                    entry = zipIn.nextEntry
+                }
+                if (entry != null) {
+                    val progressTrackerStream = ProgressTrackerInputStream(zipIn)
+                    parser.parseCheatDatabase(progressTrackerStream, object : CheatDatabaseParserListener {
+                        override fun onDatabaseParseStart(databaseName: String): CheatDatabase = runBlocking {
+                            cheatsRepository.deleteCheatDatabaseIfExists(databaseName)
+                            cheatsRepository.addCheatDatabase(databaseName)
+                        }
+
+                        override fun onGameParseStart(gameName: String) {
+                            setForegroundAsync(createForegroundInfo(gameName, 50, true))
+                            setProgressAsync(workDataOf(
+                                KEY_PROGRESS_RELATIVE to 0.5f,
+                                KEY_PROGRESS_ITEM to gameName
+                            ))
+                        }
+
+                        override fun onGameParsed(game: Game): Unit = runBlocking {
+                            cheatsRepository.addGameCheats(game)
+                        }
+
+                        override fun onParseComplete() {
+                            continuation.resume(Result.success())
+                        }
+                    })
+                } else {
+                    continuation.resume(Result.failure())
+                }
+            } ?: continuation.resume(Result.failure())
+        } catch (e: Throwable) {
+            continuation.resume(Result.failure())
         }
     }
 

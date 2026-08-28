@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -217,8 +218,10 @@ class LayoutEditorActivity : AppCompatActivity() {
                     } else {
                         handler.removeCallbacksAndMessages(null)
                         handler.post {
-                            layoutEditorManager.layoutEditorView.instantiateLayout(it.layout)
-                            externalLayoutEditorPresentation?.instantiateLayout(it.layout)
+                            if (!layoutEditorManager.layoutEditorView.isModifiedByUser()) {
+                                layoutEditorManager.layoutEditorView.instantiateLayout(it.layout)
+                                externalLayoutEditorPresentation?.instantiateLayout(it.layout)
+                            }
                             setLayoutOrientation(it.orientation)
                         }
                     }
@@ -360,10 +363,7 @@ class LayoutEditorActivity : AppCompatActivity() {
     }
 
     private fun setupFullscreen() {
-        window.insetsControllerCompat?.let {
-            it.hide(WindowInsetsCompat.Type.navigationBars())
-            it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        window.applyImmersiveFullscreen()
     }
 
     private fun saveLayoutAndExit() {

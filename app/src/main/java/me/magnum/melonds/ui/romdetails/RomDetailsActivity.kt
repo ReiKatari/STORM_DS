@@ -18,6 +18,7 @@ import androidx.compose.runtime.produceState
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -106,12 +107,21 @@ class RomDetailsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        window.applyImmersiveFullscreen()
         runCatching { romRetroAchievementsViewModel.refreshOfflineAchievementsStatus() }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            window.applyImmersiveFullscreen()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         super.onCreate(savedInstanceState)
+        window.applyImmersiveFullscreen()
         val isLight = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme == me.magnum.melonds.ui.Theme.LIGHT
         if (isLight) {
             enableEdgeToEdge(statusBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))

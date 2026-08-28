@@ -27,5 +27,6 @@ fun getLayoutComponentName(layoutComponent: LayoutComponent): Int {
         LayoutComponent.BUTTON_TRANSLATE -> R.string.button_translate
         LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> R.string.input_toggle_extra_buttons
         LayoutComponent.BUTTON_LOCK_ROTATION -> R.string.input_lock_rotation
+        LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> R.string.input_toggle_analog_stick
     }
 }

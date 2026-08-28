@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,7 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.foundation.border
-import me.magnum.melonds.ui.theme.SpaceGrotesk
+import me.magnum.melonds.ui.theme.Manrope
 import me.magnum.melonds.ui.theme.WatermelonColors
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -99,89 +100,100 @@ fun DualScreenPresetsDialog(
     var internalVerticalAlignmentState by remember(internalVerticalAlignmentOverride) { mutableStateOf(internalVerticalAlignmentOverride) }
     var externalVerticalAlignmentState by remember(externalVerticalAlignmentOverride) { mutableStateOf(externalVerticalAlignmentOverride) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    val colors = me.magnum.melonds.ui.theme.watermelon
+
+    androidx.activity.compose.BackHandler { onDismiss() }
+
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+            ) { onDismiss() },
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        (LocalView.current.parent as DialogWindowProvider).window.setDimAmount(0.88f)
-        androidx.compose.foundation.layout.Box(
+        androidx.compose.foundation.layout.Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xE008070A))
+                .widthIn(max = 760.dp)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null,
-                ) { onDismiss() },
-            contentAlignment = Alignment.TopCenter,
+                ) { /* consume click */ },
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .systemBarsPadding()
-                .widthIn(max = 640.dp)
-                .fillMaxWidth(),
-        ) {
-        androidx.compose.foundation.layout.Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp),
-        ) {
+            // Main Panel Card
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.line, RoundedCornerShape(20.dp)),
             ) {
-                androidx.compose.material.Icon(
-                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp),
-                )
+                androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                    ) {
+                        androidx.compose.material.Icon(
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_view_grid),
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(R.string.dual_screen_presets),
+                            color = colors.text,
+                            fontFamily = Manrope,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        DualScreenPresetsContent(
+                            dualScreenPreset = dualScreenPreset,
+                            onDualScreenPresetSelected = onDualScreenPresetSelected,
+                            keepAspectRatio = keepAspectRatio,
+                            onKeepAspectRatioChanged = onKeepAspectRatioChanged,
+                            isDualScreenIntegerScaleEnabled = isDualScreenIntegerScaleEnabled,
+                            onDualScreenIntegerScaleChanged = onDualScreenIntegerScaleChanged,
+                            internalFillHeight = internalFillHeightState,
+                            internalFillWidth = internalFillWidthState,
+                            externalFillHeight = externalFillHeightState,
+                            externalFillWidth = externalFillWidthState,
+                            onFillAreaOptionsClick = { enabled ->
+                                fillAreaDialogEnabled = enabled
+                                showFillAreaDialog = true
+                            },
+                            internalVerticalAlignmentOverride = internalVerticalAlignmentState,
+                            externalVerticalAlignmentOverride = externalVerticalAlignmentState,
+                            onVerticalAlignmentOptionsClick = {
+                                showVerticalAlignmentDialog = true
+                            },
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = stringResource(R.string.dual_screen_presets),
-                color = Color.White,
-                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+
+            // Unified Bottom Center Back Arrow
+            me.magnum.melonds.ui.common.UnifiedBackButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
-        }
-        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.09f)))
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                ) { },
-        ) {
-        DualScreenPresetsContent(
-            dualScreenPreset = dualScreenPreset,
-            onDualScreenPresetSelected = onDualScreenPresetSelected,
-            keepAspectRatio = keepAspectRatio,
-            onKeepAspectRatioChanged = onKeepAspectRatioChanged,
-            isDualScreenIntegerScaleEnabled = isDualScreenIntegerScaleEnabled,
-            onDualScreenIntegerScaleChanged = onDualScreenIntegerScaleChanged,
-            internalFillHeight = internalFillHeightState,
-            internalFillWidth = internalFillWidthState,
-            externalFillHeight = externalFillHeightState,
-            externalFillWidth = externalFillWidthState,
-            onFillAreaOptionsClick = { enabled ->
-                fillAreaDialogEnabled = enabled
-                showFillAreaDialog = true
-            },
-            internalVerticalAlignmentOverride = internalVerticalAlignmentState,
-            externalVerticalAlignmentOverride = externalVerticalAlignmentState,
-            onVerticalAlignmentOptionsClick = {
-                showVerticalAlignmentDialog = true
-            },
-        )
-        }
-        }
         }
     }
 
@@ -278,7 +290,7 @@ private fun DualScreenPresetsContent(
                         Text(
                             text = stringResource(R.string.dual_screen_info_title),
                             color = WatermelonColors.gold,
-                            fontFamily = SpaceGrotesk,
+                            fontFamily = Manrope,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -307,7 +319,7 @@ private fun DualScreenPresetsContent(
             Text(
                 text = stringResource(R.string.dual_screen_presets).uppercase(),
                 color = Color.White.copy(alpha = 0.5f),
-                fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                fontFamily = Manrope,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.8.sp,

@@ -34,40 +34,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-    <TextView
-            android:id="@+id/textFps"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:alpha="0.80"
-            android:background="@drawable/bg_resolution_hud"
-            android:textColor="#10B981"
-            android:fontFamily="monospace"
-            android:textSize="11sp"
-            android:elevation="100dp"
-            android:visibility="gone"
-            tools:text="FPS: 60"/>
-
-    <TextView
-            android:id="@+id/textResolution"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:alpha="0.80"
-            android:background="@drawable/bg_resolution_hud"
-            android:textColor="#38BDF8"
-            android:fontFamily="monospace"
-            android:textSize="11sp"
-            android:elevation="100dp"
-            android:visibility="gone"
-            tools:text="OpenGL | 512x768 (2x)"/>
-
     <!-- Classic 1.2.0 Loading Progress and Text -->
     <ProgressBar
             android:id="@+id/progressLoading"
@@ -127,6 +93,54 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layout_hud_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:elevation="900dp"
+            android:clickable="false"
+            android:focusable="false"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+                android:id="@+id/textFps"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:alpha="0.85"
+                android:background="@drawable/bg_resolution_hud"
+                android:textColor="#10B981"
+                android:fontFamily="monospace"
+                android:textSize="11sp"
+                android:elevation="999dp"
+                android:visibility="gone"
+                tools:text="FPS: 60"/>
+
+        <TextView
+                android:id="@+id/textResolution"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:alpha="0.85"
+                android:background="@drawable/bg_resolution_hud"
+                android:textColor="#38BDF8"
+                android:fontFamily="monospace"
+                android:textSize="11sp"
+                android:elevation="999dp"
+                android:visibility="gone"
+                tools:text="OpenGL | 512x768 (2x)"/>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.compose.ui.platform.ComposeView
             android:id="@+id/layout_pause_menu"

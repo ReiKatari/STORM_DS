@@ -1,6 +1,8 @@
 #include <jni.h>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <sstream>
 #include "MelonDSAndroidConfiguration.h"
 #include "renderer/Renderer.h"
 
@@ -31,6 +33,51 @@ char* duplicateJavaString(JNIEnv* env, jstring javaString)
 
     char* copy = duplicateCString(value);
     env->ReleaseStringUTFChars(javaString, value);
+    return copy;
+}
+
+static char* duplicateAndDecodeJavaUriString(JNIEnv* env, jobject uriObj, jmethodID uriToStringMethod)
+{
+    if (uriObj == nullptr)
+        return nullptr;
+
+    jstring uriString = (jstring) env->CallObjectMethod(uriObj, uriToStringMethod);
+    if (uriString == nullptr)
+        return nullptr;
+
+    const char* rawChars = env->GetStringUTFChars(uriString, nullptr);
+    if (rawChars == nullptr)
+        return nullptr;
+
+    std::string path = rawChars;
+    env->ReleaseStringUTFChars(uriString, rawChars);
+
+    if (path.rfind("file://", 0) == 0)
+    {
+        path = path.substr(7);
+    }
+    std::string decoded;
+    decoded.reserve(path.length());
+    for (size_t i = 0; i < path.length(); ++i)
+    {
+        if (path[i] == '%' && i + 2 < path.length())
+        {
+            int val = 0;
+            std::istringstream is(path.substr(i + 1, 2));
+            if (is >> std::hex >> val)
+            {
+                decoded += static_cast<char>(val);
+                i += 2;
+                continue;
+            }
+        }
+        decoded += path[i];
+    }
+    char* copy = static_cast<char*>(std::malloc(decoded.length() + 1));
+    if (copy != nullptr)
+    {
+        std::memcpy(copy, decoded.c_str(), decoded.length() + 1);
+    }
     return copy;
 }
 
@@ -169,7 +216,9 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 5: return MelonDSAndroid::VulkanFilterMode::Quilez;
         case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
         case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
-        case 8: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
+        case 9:
+        case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }
@@ -225,20 +274,13 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jint micSource = env->GetIntField(micSourceEnum, env->GetFieldID(micSourceEnumClass, "sourceValue", "I"));
     jobject videoRendererEnum = env->GetObjectField(rendererConfigurationObject, env->GetFieldID(renderConfigurationClass, "renderer", "Lme/magnum/melonds/domain/model/VideoRenderer;"));
     MelonDSAndroid::Renderer videoRenderer = static_cast<MelonDSAndroid::Renderer>(env->GetIntField(videoRendererEnum, env->GetFieldID(videoRendererEnumClass, "renderer", "I")));
-    jstring dsBios7String = dsBios7Uri ? (jstring) env->CallObjectMethod(dsBios7Uri, uriToStringMethod) : nullptr;
-    jstring dsBios9String = dsBios9Uri ? (jstring) env->CallObjectMethod(dsBios9Uri, uriToStringMethod) : nullptr;
-    jstring dsFirmwareString = dsFirmwareUri ? (jstring) env->CallObjectMethod(dsFirmwareUri, uriToStringMethod) : nullptr;
-    jstring dsiBios7String = dsiBios7Uri ? (jstring) env->CallObjectMethod(dsiBios7Uri, uriToStringMethod) : nullptr;
-    jstring dsiBios9String = dsiBios9Uri ? (jstring) env->CallObjectMethod(dsiBios9Uri, uriToStringMethod) : nullptr;
-    jstring dsiFirmwareString = dsiFirmwareUri ? (jstring) env->CallObjectMethod(dsiFirmwareUri, uriToStringMethod) : nullptr;
-    jstring dsiNandString = dsiNandUri ? (jstring) env->CallObjectMethod(dsiNandUri, uriToStringMethod) : nullptr;
-    char* dsBios7Path = duplicateJavaString(env, dsBios7String);
-    char* dsBios9Path = duplicateJavaString(env, dsBios9String);
-    char* dsFirmwarePath = duplicateJavaString(env, dsFirmwareString);
-    char* dsiBios7Path = duplicateJavaString(env, dsiBios7String);
-    char* dsiBios9Path = duplicateJavaString(env, dsiBios9String);
-    char* dsiFirmwarePath = duplicateJavaString(env, dsiFirmwareString);
-    char* dsiNandPath = duplicateJavaString(env, dsiNandString);
+    char* dsBios7Path = duplicateAndDecodeJavaUriString(env, dsBios7Uri, uriToStringMethod);
+    char* dsBios9Path = duplicateAndDecodeJavaUriString(env, dsBios9Uri, uriToStringMethod);
+    char* dsFirmwarePath = duplicateAndDecodeJavaUriString(env, dsFirmwareUri, uriToStringMethod);
+    char* dsiBios7Path = duplicateAndDecodeJavaUriString(env, dsiBios7Uri, uriToStringMethod);
+    char* dsiBios9Path = duplicateAndDecodeJavaUriString(env, dsiBios9Uri, uriToStringMethod);
+    char* dsiFirmwarePath = duplicateAndDecodeJavaUriString(env, dsiFirmwareUri, uriToStringMethod);
+    char* dsiNandPath = duplicateAndDecodeJavaUriString(env, dsiNandUri, uriToStringMethod);
     char* internalDir = duplicateJavaString(env, internalFilesDir);
 
     MelonDSAndroid::EmulatorConfiguration finalEmulatorConfiguration;
@@ -255,6 +297,18 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.frameLimitSpeedMultiplier = frameLimitSpeed;
     finalEmulatorConfiguration.showBootScreen = showBootScreen;
     finalEmulatorConfiguration.useJit = useJit;
+    jfieldID audioSoftLimiterEnabledField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioSoftLimiterEnabled", "Z");
+    jfieldID audioBassBoostEnabledField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioBassBoostEnabled", "Z");
+    jfieldID audioBassBoostStrengthField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioBassBoostStrength", "I");
+    jfieldID audioSpatialAudioEnabledField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioSpatialAudioEnabled", "Z");
+    jfieldID audioReverbEnabledField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioReverbEnabled", "Z");
+
+    bool softLimiterEnabled = audioSoftLimiterEnabledField != nullptr ? (bool) env->GetBooleanField(emulatorConfiguration, audioSoftLimiterEnabledField) : true;
+    bool bassBoostEnabled = audioBassBoostEnabledField != nullptr ? (bool) env->GetBooleanField(emulatorConfiguration, audioBassBoostEnabledField) : false;
+    int bassBoostStrength = audioBassBoostStrengthField != nullptr ? env->GetIntField(emulatorConfiguration, audioBassBoostStrengthField) : 5;
+    bool spatialAudioEnabled = audioSpatialAudioEnabledField != nullptr ? (bool) env->GetBooleanField(emulatorConfiguration, audioSpatialAudioEnabledField) : false;
+    bool reverbEnabled = audioReverbEnabledField != nullptr ? (bool) env->GetBooleanField(emulatorConfiguration, audioReverbEnabledField) : false;
+
     finalEmulatorConfiguration.hgEngineFixEnabled = hgEngineFixEnabled;
     finalEmulatorConfiguration.consoleType = consoleType;
     finalEmulatorConfiguration.audioSettings = MelonDSAndroid::AudioSettings {
@@ -263,7 +317,12 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
         .audioInterpolation = audioInterpolation,
         .audioBitrate = audioBitrate,
         .audioLatency = audioLatency,
-        .micSource = micSource
+        .micSource = micSource,
+        .softLimiterEnabled = softLimiterEnabled,
+        .bassBoostEnabled = bassBoostEnabled,
+        .bassBoostStrength = bassBoostStrength,
+        .spatialAudioEnabled = spatialAudioEnabled,
+        .reverbEnabled = reverbEnabled
     };
     finalEmulatorConfiguration.firmwareConfiguration = buildFirmwareConfiguration(env, firmwareConfigurationObject);
     finalEmulatorConfiguration.rewindEnabled = enableRewind ? 1 : 0;

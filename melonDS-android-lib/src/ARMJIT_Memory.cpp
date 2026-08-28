@@ -1163,6 +1163,12 @@ bool ARMJIT_Memory::GetMirrorLocation(int region, u32 num, u32 addr, u32& memory
         {
             auto* dsi = dynamic_cast<DSi*>(&NDS);
             assert(dsi != nullptr);
+            if (addr >= 0x01FF8000 && addr < 0x02000000)
+            {
+                mirrorStart = 0x01FF8000;
+                mirrorSize = 0x8000;
+                return true;
+            }
             mirrorStart = addr & ~0xFFFF;
             mirrorSize = dsi->SCFG_BIOS & (1<<0) ? 0x8000 : 0x10000;
             return true;
@@ -1268,6 +1274,10 @@ int ARMJIT_Memory::ClassifyAddress9(u32 addr) const noexcept
                 if ((addr >= 0xFFFF8000) && (dsi.SCFG_BIOS & (1<<0)))
                     return memregion_Other;
 
+                return memregion_BIOS9DSi;
+            }
+            if ((addr >= 0x01FF8000 && addr < 0x02000000) && !(dsi.SCFG_BIOS & (1<<1)))
+            {
                 return memregion_BIOS9DSi;
             }
         }

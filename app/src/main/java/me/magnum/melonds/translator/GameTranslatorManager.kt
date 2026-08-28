@@ -607,6 +607,7 @@ class GameTranslatorManager(
             TranslatorEngineType.OFFLINE -> OfflineSmartDictionaryEngine()
             TranslatorEngineType.YANDEX -> YandexTranslateEngine(okHttpClient)
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)
+            TranslatorEngineType.MICROSOFT -> MicrosoftEdgeTranslateEngine(okHttpClient)
             TranslatorEngineType.LINGVA -> LingvaTranslateEngine(okHttpClient)
             TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient) {
                 preferences.getString(PREF_TRANSLATOR_DEEPL_KEY, "").orEmpty()

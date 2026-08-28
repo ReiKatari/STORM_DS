@@ -74,6 +74,7 @@ const uint kFilterHq4x = 4u;
 const uint kFilterQuilez = 5u;
 const uint kFilterLcd = 6u;
 const uint kFilterScanlines = 7u;
+const uint kFilterScale2x = 8u;
 const uint kPackedScreenWidth = 256u;
 const uint kPackedScreenHeight = 192u;
 
@@ -2222,6 +2223,34 @@ vec3 filterHq4x(vec2 uv, bool topScreen)
     return clamp((w1 * (i1 + i3) + w2 * (i2 + i4) + w3 * (s1 + s3) + w4 * (s2 + s4) + c) / (2.0 * (w1 + w2 + w3 + w4) + 1.0), 0.0, 1.0);
 }
 
+vec3 filterScale2x(vec2 uv, bool topScreen)
+{
+    vec2 texSize = vec2(float(kPackedScreenWidth), float(kPackedScreenHeight));
+    vec2 pixelCoord = uv * texSize;
+    vec2 fp = fract(pixelCoord);
+    vec2 centerUv = (floor(pixelCoord) + 0.5) / texSize;
+    vec2 dx = vec2(1.0 / texSize.x, 0.0);
+    vec2 dy = vec2(0.0, 1.0 / texSize.y);
+
+    vec3 E = sampleCompositeRgb(centerUv, topScreen);
+    vec3 B = sampleCompositeRgb(centerUv - dy, topScreen);
+    vec3 D = sampleCompositeRgb(centerUv - dx, topScreen);
+    vec3 F = sampleCompositeRgb(centerUv + dx, topScreen);
+    vec3 H = sampleCompositeRgb(centerUv + dy, topScreen);
+
+    bool db = dot(abs(D - B), vec3(1.0)) < 0.05;
+    bool bh = dot(abs(B - H), vec3(1.0)) >= 0.05;
+    bool df = dot(abs(D - F), vec3(1.0)) >= 0.05;
+    bool bf = dot(abs(B - F), vec3(1.0)) < 0.05;
+    bool dh = dot(abs(D - H), vec3(1.0)) < 0.05;
+    bool hf = dot(abs(H - F), vec3(1.0)) < 0.05;
+
+    if (fp.x < 0.5 && fp.y < 0.5) return (db && bh && df) ? D : E;
+    if (fp.x >= 0.5 && fp.y < 0.5) return (bf && bh && df) ? F : E;
+    if (fp.x < 0.5 && fp.y >= 0.5) return (dh && bh && df) ? D : E;
+    return (hf && bh && df) ? F : E;
+}
+
 vec3 applyCompositePostFilter(vec2 uv, bool topScreen)
 {
     if (pushConstants.filtering == kFilterQuilez)
@@ -2236,6 +2265,8 @@ vec3 applyCompositePostFilter(vec2 uv, bool topScreen)
         return filterLcd(uv, topScreen);
     if (pushConstants.filtering == kFilterScanlines)
         return filterScanlines(uv, topScreen);
+    if (pushConstants.filtering == kFilterScale2x)
+        return filterScale2x(uv, topScreen);
     return sampleCompositeRgb(uv, topScreen);
 }
 

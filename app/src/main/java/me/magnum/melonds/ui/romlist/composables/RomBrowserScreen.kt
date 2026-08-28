@@ -101,12 +101,9 @@ fun RomBrowserScreen(
     onNavigateUp: () -> Unit,
     onRefresh: () -> Unit,
     onSearchQueryChanged: (String?) -> Unit,
-    dsiWareBootMode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode = me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD,
-    onDsiWareBootModeChanged: (me.magnum.melonds.domain.model.dsinand.DSiWareBootMode) -> Unit = {},
     onToggleViewMode: () -> Unit,
     onBootFirmwareDs: () -> Unit,
     onBootFirmwareDsi: () -> Unit,
-    onOpenDsiWareManager: () -> Unit,
     onOpenSingleRom: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onRomVisible: (Rom) -> Unit = {},
@@ -172,27 +169,6 @@ fun RomBrowserScreen(
         }
     }
 
-    LaunchedEffect(state.viewMode, firstRomEntryIndexInLastGridRow, state.entries.size, focusedEntryIndex) {
-        if (state.entries.isNotEmpty() && focusedEntryIndex >= 0) {
-            snapshotFlow {
-                when (state.viewMode) {
-                    RomViewMode.GRID -> focusedEntryIndex >= firstRomEntryIndexInLastGridRow
-                    RomViewMode.LIST -> focusedEntryIndex == state.entries.lastIndex
-                }
-            }
-                .distinctUntilChanged()
-                .filter { atBottom -> atBottom }
-                .collect {
-                    runCatching {
-                        when (state.viewMode) {
-                            RomViewMode.GRID -> gridState.scroll(MutatePriority.PreventUserInput) {}
-                            RomViewMode.LIST -> listState.scroll(MutatePriority.PreventUserInput) {}
-                        }
-                    }
-                }
-        }
-    }
-
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -200,13 +176,10 @@ fun RomBrowserScreen(
                     isSearchActive = state.isSearchActive,
                     searchQuery = searchQuery,
                     viewMode = state.viewMode,
-                    dsiWareBootMode = dsiWareBootMode,
-                    onDsiWareBootModeChanged = onDsiWareBootModeChanged,
                     onSearchQueryChanged = onSearchQueryChanged,
                     onToggleViewMode = onToggleViewMode,
                     onBootFirmwareDs = onBootFirmwareDs,
                     onBootFirmwareDsi = onBootFirmwareDsi,
-                    onOpenDsiWareManager = onOpenDsiWareManager,
                     onOpenSingleRom = onOpenSingleRom,
                     onRefresh = onRefresh,
                     onOpenSettings = onOpenSettings,
@@ -500,77 +473,76 @@ fun RomBrowserScreen(
                             backgroundColor = colors.surface,
                             contentColor = colors.red,
                         )
-                    }
-                }
-            }
 
-            // Alphabet Index Bar: anchored as an overlay on the right edge of the screen
-            if (showAlphabetBar) {
-                val leadingItems = when (state.viewMode) {
-                    RomViewMode.GRID -> gridLeadingItems
-                    RomViewMode.LIST -> listLeadingItems
-                }
-                val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
-                    derivedStateOf {
-                        val firstVisItem = when (state.viewMode) {
-                            RomViewMode.GRID -> gridState.firstVisibleItemIndex
-                            RomViewMode.LIST -> listState.firstVisibleItemIndex
-                        }
-                        when (state.viewMode) {
-                            RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
-                            RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
+                        // Alphabet Index Bar: anchored inside the games list area
+                        if (showAlphabetBar) {
+                            val leadingItems = when (state.viewMode) {
+                                RomViewMode.GRID -> gridLeadingItems
+                                RomViewMode.LIST -> listLeadingItems
+                            }
+                            val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
+                                derivedStateOf {
+                                    val firstVisItem = when (state.viewMode) {
+                                        RomViewMode.GRID -> gridState.firstVisibleItemIndex
+                                        RomViewMode.LIST -> listState.firstVisibleItemIndex
+                                    }
+                                    when (state.viewMode) {
+                                        RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
+                                        RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
+                                    }
+                                }
+                            }
+                            val activeLetter by remember(state.alphabetIndex, state.viewMode) {
+                                derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
+                            }
+                            val isInFolderSection by remember(folderCount, state.viewMode) {
+                                derivedStateOf { hasFolders && activeFirstVis < folderCount }
+                            }
+                            AlphabetIndexBar(
+                                alphabetIndex = state.alphabetIndex,
+                                activeLetter = activeLetter,
+                                hasFolders = hasFolders,
+                                isInFolderSection = isInFolderSection,
+                                onFoldersClicked = {
+                                    coroutineScope.launch {
+                                        when (state.viewMode) {
+                                            RomViewMode.GRID -> gridState.scrollToItem(0)
+                                            RomViewMode.LIST -> listState.scrollToItem(0)
+                                        }
+                                        requestFirstVisibleRomFocus(
+                                            state = state,
+                                            gridState = gridState,
+                                            listState = listState,
+                                            itemFocusRequesters = itemFocusRequesters,
+                                        )
+                                    }
+                                },
+                                onLetterTouched = { idx, letter ->
+                                    coroutineScope.launch {
+                                        val targetItemIndex = when (state.viewMode) {
+                                            RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
+                                            RomViewMode.LIST -> leadingItems + idx
+                                        }
+                                        when (state.viewMode) {
+                                            RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex)
+                                            RomViewMode.LIST -> listState.scrollToItem(targetItemIndex)
+                                        }
+                                        requestRomFocusAtIndex(
+                                            state = state,
+                                            targetIndex = idx,
+                                            gridState = gridState,
+                                            listState = listState,
+                                            itemFocusRequesters = itemFocusRequesters,
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(top = 8.dp, bottom = 12.dp, end = 2.dp),
+                            )
                         }
                     }
                 }
-                val activeLetter by remember(state.alphabetIndex, state.viewMode) {
-                    derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
-                }
-                val isInFolderSection by remember(folderCount, state.viewMode) {
-                    derivedStateOf { hasFolders && activeFirstVis < folderCount }
-                }
-                val alphabetTopPadding = if (state.continuePlaying.isNotEmpty() && state.filter == RomFilter.ALL && !state.isSearchActive) 210.dp else 115.dp
-                AlphabetIndexBar(
-                    alphabetIndex = state.alphabetIndex,
-                    activeLetter = activeLetter,
-                    hasFolders = hasFolders,
-                    isInFolderSection = isInFolderSection,
-                    onFoldersClicked = {
-                        coroutineScope.launch {
-                            when (state.viewMode) {
-                                RomViewMode.GRID -> gridState.scrollToItem(0)
-                                RomViewMode.LIST -> listState.scrollToItem(0)
-                            }
-                            requestFirstVisibleRomFocus(
-                                state = state,
-                                gridState = gridState,
-                                listState = listState,
-                                itemFocusRequesters = itemFocusRequesters,
-                            )
-                        }
-                    },
-                    onLetterTouched = { idx, letter ->
-                        coroutineScope.launch {
-                            val targetItemIndex = when (state.viewMode) {
-                                RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
-                                RomViewMode.LIST -> leadingItems + idx
-                            }
-                            when (state.viewMode) {
-                                RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex)
-                                RomViewMode.LIST -> listState.scrollToItem(targetItemIndex)
-                            }
-                            requestRomFocusAtIndex(
-                                state = state,
-                                targetIndex = idx,
-                                gridState = gridState,
-                                listState = listState,
-                                itemFocusRequesters = itemFocusRequesters,
-                            )
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(top = alphabetTopPadding, bottom = 24.dp, end = 2.dp),
-                )
             }
         }
     }
@@ -820,14 +792,7 @@ private fun rememberTrailingLetterScrollPadding(
     visibleItemHeightPx: Int,
     minimumPadding: Dp,
 ): Dp {
-    val density = LocalDensity.current
-    if (visibleItemHeightPx <= 0) {
-        return minimumPadding
-    }
-
-    val itemHeight = with(density) { visibleItemHeightPx.toDp() }
-    val letterScrollPadding = (viewportHeight - itemHeight).coerceAtLeast(0.dp)
-    return maxOf(minimumPadding, letterScrollPadding)
+    return minimumPadding
 }
 
 private suspend fun requestFirstVisibleRomFocus(

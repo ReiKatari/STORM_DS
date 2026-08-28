@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.collectAsState
@@ -89,6 +90,7 @@ class SettingsActivity :
 
         const val CUSTOM_FIRMWARE_ENTRY_POINT = "custom_firmware_entry_point"
         const val TRANSLATOR_ENTRY_POINT = "translator"
+        const val KEY_RETURN_DIRECT_TO_GAME = "return_direct_to_game"
     }
 
     private lateinit var binding: ActivitySettingsBinding
@@ -106,7 +108,23 @@ class SettingsActivity :
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+
+        val updateBackButtonStyle = { _: String? ->
+            val color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
+            val dynamicShape = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(getColor(R.color.watermelonSurface2))
+                setStroke((1.5f * resources.displayMetrics.density).toInt(), color)
+            }
+            binding.settingsFooter.btnSettingsBack.background = dynamicShape
+        }
+        updateBackButtonStyle(null)
+        me.magnum.melonds.ui.theme.AppThemeManager.addAccentChangeListener(updateBackButtonStyle)
+
+        binding.settingsFooter.btnSettingsBack.setOnClickListener {
+            onBackPressedDispatcher.onBackPressed()
+        }
 
         var defaultContentInsetStartWithNavigation = -1
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
@@ -153,6 +171,23 @@ class SettingsActivity :
             }
         }
         updateTitle()
+        applyImmersiveMode()
+    }
+
+    private fun applyImmersiveMode() {
+        window.applyImmersiveFullscreen()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyImmersiveMode()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveMode()
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -168,8 +203,83 @@ class SettingsActivity :
 
     private fun updateTitle() {
         val fragment = supportFragmentManager.fragments.lastOrNull()
-        if (fragment is PreferenceFragmentTitleProvider) {
-            supportActionBar?.title = fragment.getTitle()
+        val title = if (fragment is PreferenceFragmentTitleProvider) {
+            fragment.getTitle()
+        } else {
+            getString(R.string.settings)
+        }
+        supportActionBar?.title = ""
+
+        val (iconRes, subtitle) = getMetadataForFragment(fragment, title)
+        binding.textSettingsTitle.text = title
+        binding.textSettingsSubtitle.text = subtitle
+        binding.imgSettingsIcon.setImageResource(iconRes)
+
+        val isInGame = intent.getBooleanExtra(KEY_IN_GAME, false)
+        binding.btnReturnToGame.visibility = if (isInGame) View.VISIBLE else View.GONE
+        binding.btnReturnToGame.setOnClickListener {
+            val returnIntent = android.content.Intent().apply {
+                putExtra(KEY_RETURN_DIRECT_TO_GAME, true)
+            }
+            setResult(RESULT_OK, returnIntent)
+            finish()
+        }
+    }
+
+    private fun getMetadataForFragment(fragment: androidx.fragment.app.Fragment?, title: String): Pair<Int, String> {
+        val lower = title.lowercase()
+        return when (fragment) {
+            is me.magnum.melonds.ui.settings.fragments.GeneralPreferencesFragment ->
+                R.drawable.ic_settings to "Интерфейс, темы, язык и режим работы"
+            is me.magnum.melonds.ui.settings.fragments.RomsPreferencesFragment ->
+                R.drawable.ic_folder to "Папки, сканирование и список игр"
+            is me.magnum.melonds.ui.settings.fragments.VideoPreferencesFragment ->
+                R.drawable.ic_video to "Графика, рендеринг 3D и шейдеры"
+            is me.magnum.melonds.ui.settings.fragments.AudioPreferencesFragment ->
+                R.drawable.ic_audio to "Звуковые эффекты, громкость и микрофон"
+            is me.magnum.melonds.ui.settings.fragments.InputPreferencesFragment,
+            is me.magnum.melonds.ui.settings.fragments.SoftInputBehaviourPreferencesFragment ->
+                R.drawable.ic_input to "Геймпады, маппинг клавиш и сенсорные кнопки"
+            is me.magnum.melonds.ui.settings.fragments.RetroAchievementsPreferencesFragment ->
+                R.drawable.ic_trophy to "Достижения, учетная запись и хардкор"
+            is me.magnum.melonds.ui.settings.fragments.RewindPreferencesFragment ->
+                R.drawable.ic_clock to "Параметры и интервалы перемотки времени"
+            is me.magnum.melonds.ui.settings.fragments.TranslatorPreferencesFragment ->
+                R.drawable.ic_translate to "Перевод текста и оверлей перевода"
+            is me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment,
+            is me.magnum.melonds.ui.settings.fragments.FirmwarePreferencesFragment,
+            is me.magnum.melonds.ui.settings.fragments.SystemPreferencesFragment ->
+                R.drawable.ic_firmware to "BIOS, NAND, прошивка и системные настройки"
+            is me.magnum.melonds.ui.settings.fragments.SaveFilesPreferencesFragment ->
+                R.drawable.ic_file to "Файлы сохранений и резервные копии"
+            is me.magnum.melonds.ui.settings.fragments.CheatsPreferencesFragment ->
+                R.drawable.ic_cheat to "Глобальные чит-коды и базы данных"
+            is me.magnum.melonds.ui.settings.fragments.AboutPreferencesFragment ->
+                R.drawable.ic_info to "О проекте STORM DS и разработчиках"
+            is me.magnum.melonds.ui.settings.fragments.MainPreferencesFragment ->
+                R.drawable.ic_settings to "Параметры и конфигурация эмулятора"
+            else -> when {
+                lower.contains("видео") || lower.contains("video") || lower.contains("график") ->
+                    R.drawable.ic_video to "Графика, рендеринг 3D и шейдеры"
+                lower.contains("звук") || lower.contains("audio") || lower.contains("микрофон") ->
+                    R.drawable.ic_audio to "Звуковые эффекты, громкость и микрофон"
+                lower.contains("управлен") || lower.contains("input") || lower.contains("клавиш") || lower.contains("расклад") ->
+                    R.drawable.ic_input to "Геймпады, маппинг клавиш и сенсорные кнопки"
+                lower.contains("папк") || lower.contains("rom") || lower.contains("игр") ->
+                    R.drawable.ic_folder to "Папки, сканирование и список игр"
+                lower.contains("достижен") || lower.contains("achievement") ->
+                    R.drawable.ic_trophy to "Достижения, учетная запись и хардкор"
+                lower.contains("перемотк") || lower.contains("rewind") ->
+                    R.drawable.ic_clock to "Параметры и интервалы перемотки времени"
+                lower.contains("перевод") || lower.contains("translat") ->
+                    R.drawable.ic_translate to "Перевод текста и оверлей перевода"
+                lower.contains("bios") || lower.contains("firmware") || lower.contains("nand") || lower.contains("систем") ->
+                    R.drawable.ic_firmware to "BIOS, NAND, прошивка и системные настройки"
+                lower.contains("чит") || lower.contains("cheat") ->
+                    R.drawable.ic_cheat to "Глобальные чит-коды и базы данных"
+                else ->
+                    R.drawable.ic_settings to "Параметры и настройки"
+            }
         }
     }
 

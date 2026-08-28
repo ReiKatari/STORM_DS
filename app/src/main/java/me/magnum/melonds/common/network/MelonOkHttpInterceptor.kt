@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets
 
 private const val MAX_LOGGED_RA_PARAMETER_VALUE_LENGTH = 200
 private val REDACTED_RA_PARAMETER_KEYS = setOf("m", "p", "t", "u", "v", "x")
-const val RETROACHIEVEMENTS_USER_AGENT = "STORM_DS-android/3.0.6"
+const val RETROACHIEVEMENTS_USER_AGENT = "RetroArch/1.19.1 (Android) rcheevos/11.7.0"
 
 internal fun sanitizeRaRequestParameterValue(key: String, value: String): String {
     if (key in REDACTED_RA_PARAMETER_KEYS) {
@@ -120,7 +120,7 @@ class MelonOkHttpInterceptor(
         )
         val newRequest = originalRequest
             .newBuilder()
-            .addHeader(USER_AGENT, melonUserAgent)
+            .header(USER_AGENT, melonUserAgent)
             .build()
 
         return chain.proceed(newRequest)

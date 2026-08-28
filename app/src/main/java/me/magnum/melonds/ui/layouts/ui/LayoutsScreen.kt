@@ -47,7 +47,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import me.magnum.melonds.ui.common.bouncingClickable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,10 +120,15 @@ fun LayoutsScreen(
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            viewModel.importLayout(context, uri) { success ->
+            viewModel.importLayout(context, uri) { result ->
+                val messageRes = when (result) {
+                    me.magnum.melonds.ui.layouts.viewmodel.BaseLayoutsViewModel.LayoutImportResult.SUCCESS -> R.string.layout_import_success
+                    me.magnum.melonds.ui.layouts.viewmodel.BaseLayoutsViewModel.LayoutImportResult.ALREADY_EXISTS -> R.string.layout_already_imported
+                    me.magnum.melonds.ui.layouts.viewmodel.BaseLayoutsViewModel.LayoutImportResult.ERROR -> R.string.layout_operation_failed
+                }
                 android.widget.Toast.makeText(
                     context,
-                    if (success) R.string.layout_import_success else R.string.layout_operation_failed,
+                    messageRes,
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
@@ -173,24 +187,126 @@ private fun LayoutsScreenContent(
     }
 
     val colors = me.magnum.melonds.ui.theme.watermelon
-    me.magnum.melonds.ui.common.WatermelonScreenScaffold(
-        title = stringResource(R.string.layouts),
-        onBack = onBackClick,
+
+    Scaffold(
         scaffoldState = scaffoldState,
-        actions = {
-            IconButton(onClick = onImportLayout) {
-                Icon(
-                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_folder),
-                    contentDescription = stringResource(R.string.action_layout_import),
-                    tint = colors.text,
-                )
+        backgroundColor = colors.bg,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            Column(
+                modifier = Modifier
+                    .background(colors.surface)
+                    .statusBarsPadding()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Dashboard,
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.layouts),
+                            color = colors.text,
+                            fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Настройка и выбор расположения экранов и кнопок",
+                            color = colors.text3,
+                            fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                            fontSize = 11.sp,
+                        )
+                    }
+
+                    // Import Button
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(10.dp))
+                            .bouncingClickable(onClick = onImportLayout),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_folder),
+                            contentDescription = stringResource(R.string.action_layout_import),
+                            tint = colors.text,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    // Create Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.greenDim)
+                            .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                            .bouncingClickable(onClick = onCreateLayout)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                painter = rememberVectorPainter(Icons.Default.Add),
+                                contentDescription = stringResource(R.string.action_layouts_new),
+                                tint = colors.green,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Создать",
+                                color = colors.green,
+                                fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
             }
-            IconButton(onClick = onCreateLayout) {
-                Icon(
-                    painter = rememberVectorPainter(Icons.Default.Add),
-                    contentDescription = stringResource(R.string.action_layouts_new),
-                    tint = colors.text,
-                )
+        },
+        bottomBar = {
+            Column(
+                modifier = Modifier
+                    .background(colors.surface)
+                    .navigationBarsPadding()
+            ) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    me.magnum.melonds.ui.common.UnifiedBackButton(
+                        onClick = onBackClick,
+                    )
+                }
             }
         },
     ) { padding ->
@@ -262,12 +378,16 @@ private fun LayoutItem(
             .fillMaxWidth()
             .clip(shape)
             .background(if (focused) colors.surface3 else colors.surface2)
-            .let { if (focused) it.border(2.dp, colors.red, shape) else it }
+            .border(
+                1.dp,
+                if (isSelected) colors.green.copy(alpha = 0.5f) else (if (focused) colors.red else colors.line),
+                shape
+            )
             .focusRequester(mainFocusRequester)
             .focusProperties {
                 end = if (isCustomLayout) optionsFocusRequester else FocusRequester.Default
             }
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onLayoutSelected)
+            .bouncingClickable(onClick = onLayoutSelected)
             .onKeyEvent {
                 if (it.type == KeyEventType.KeyDown && it.key == Key.Menu) {
                     showMenu = true
@@ -276,19 +396,30 @@ private fun LayoutItem(
                     false
                 }
             }
-            .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 8.dp),
-            text = layout.name.orEmpty(),
-            color = colors.text,
-            style = MaterialTheme.typography.body1,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+                .padding(vertical = 4.dp),
+        ) {
+            Text(
+                text = layout.name.orEmpty(),
+                color = colors.text,
+                fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                fontSize = 15.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (isCustomLayout) "Пользовательский профиль" else "Стандартный макет",
+                color = colors.text3,
+                fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                fontSize = 11.sp,
+            )
+        }
 
         if (isSelected) {
             Icon(
@@ -311,6 +442,7 @@ private fun LayoutItem(
                 Icon(
                     imageVector = Icons.Default.MoreVert,
                     contentDescription = stringResource(R.string.options),
+                    tint = colors.text3,
                 )
             }
 
@@ -324,7 +456,10 @@ private fun LayoutItem(
                         onEditLayout()
                     },
                 ) {
-                    Text(if (isCustomLayout) stringResource(R.string.edit) else "Редактировать копию")
+                    Text(
+                        text = if (isCustomLayout) stringResource(R.string.edit) else "Редактировать копию",
+                        fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                    )
                 }
 
                 DropdownMenuItem(
@@ -333,7 +468,10 @@ private fun LayoutItem(
                         onExportLayout()
                     },
                 ) {
-                    Text(stringResource(R.string.action_layout_export))
+                    Text(
+                        text = stringResource(R.string.action_layout_export),
+                        fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                    )
                 }
 
                 if (isCustomLayout) {
@@ -343,7 +481,11 @@ private fun LayoutItem(
                             onDeleteLayout()
                         },
                     ) {
-                        Text(stringResource(R.string.delete))
+                        Text(
+                            text = stringResource(R.string.delete),
+                            color = colors.red,
+                            fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                        )
                     }
                 }
             }

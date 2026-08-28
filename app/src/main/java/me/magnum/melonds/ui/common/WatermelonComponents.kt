@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +40,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 
@@ -195,3 +207,69 @@ fun GamepadHintsFooter(
         }
     }
 }
+
+@Composable
+fun UnifiedBackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 44.dp,
+    iconSize: androidx.compose.ui.unit.Dp = 20.dp,
+) {
+    val colors = watermelon
+    val accentColor = Color(me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor())
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(colors.surface2)
+            .border(1.5.dp, accentColor, CircleShape)
+            .bouncingClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = androidx.compose.ui.res.stringResource(me.magnum.melonds.R.string.back),
+            tint = colors.text,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
+fun Modifier.bouncingClickable(
+    enabled: Boolean = true,
+    hapticType: HapticFeedbackType = HapticFeedbackType.TextHandleMove,
+    onClick: () -> Unit,
+): Modifier = composed {
+    val haptic = LocalHapticFeedback.current
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.93f else 1f,
+        animationSpec = spring(
+            stiffness = Spring.StiffnessMedium,
+            dampingRatio = Spring.DampingRatioMediumBouncy
+        ),
+        label = "bouncing_scale"
+    )
+
+    this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .pointerInput(enabled) {
+            if (!enabled) return@pointerInput
+            detectTapGestures(
+                onPress = {
+                    isPressed = true
+                    haptic.performHapticFeedback(hapticType)
+                    val released = tryAwaitRelease()
+                    isPressed = false
+                    if (released) {
+                        onClick()
+                    }
+                }
+            )
+        }
+}
+

@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -12,6 +15,11 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroupAdapter
 import androidx.preference.TwoStatePreference
 import androidx.recyclerview.widget.RecyclerView
+import me.magnum.melonds.ui.settings.dialogs.SettingsChoiceDialogContent
+import me.magnum.melonds.ui.settings.dialogs.SettingsEditTextDialogContent
+import me.magnum.melonds.ui.settings.dialogs.SettingsMultiChoiceDialogContent
+import me.magnum.melonds.ui.settings.dialogs.SettingsSeekBarDialogContent
+import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
 
 abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
 
@@ -166,19 +174,148 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         }
     }
 
-    private fun restoreFocusToPreference(recyclerView: RecyclerView, key: String, attempt: Int = 0) {
-        val adapter = recyclerView.adapter as? PreferenceGroupAdapter ?: return
-        val position = adapter.getPreferenceAdapterPosition(key)
-        if (position == RecyclerView.NO_POSITION) {
-            return
+    override fun onDisplayPreferenceDialog(preference: Preference) {
+        when (preference) {
+            is androidx.preference.ListPreference -> {
+                showStyledListPreferenceDialog(preference)
+            }
+            is androidx.preference.EditTextPreference -> {
+                showStyledEditTextPreferenceDialog(preference)
+            }
+            is androidx.preference.MultiSelectListPreference -> {
+                showStyledMultiSelectListPreferenceDialog(preference)
+            }
+            is androidx.preference.SeekBarPreference -> {
+                showStyledSeekBarPreferenceDialog(preference)
+            }
+            else -> {
+                super.onDisplayPreferenceDialog(preference)
+            }
         }
+    }
 
-        val holder = recyclerView.findViewHolderForAdapterPosition(position)
-        if (holder != null) {
-            holder.itemView.requestFocus()
-        } else if (attempt < 6) {
-            recyclerView.scrollToPosition(position)
-            recyclerView.post { restoreFocusToPreference(recyclerView, key, attempt + 1) }
+    protected open fun showStyledListPreferenceDialog(preference: androidx.preference.ListPreference) {
+        val context = context ?: return
+        val entries = preference.entries ?: return
+        val entryValues = preference.entryValues ?: return
+        val currentValue = preference.value
+        val icon = resolvePreferenceIcon(preference.key)
+
+        showSettingsComposeDialog(context) { dismiss ->
+            SettingsChoiceDialogContent(
+                title = preference.title?.toString() ?: "",
+                subtitle = preference.summary?.toString()?.takeIf { it != "%s" },
+                icon = icon,
+                options = entries.toList(),
+                values = entryValues.toList(),
+                selectedValue = currentValue,
+                onSelect = { newValue ->
+                    preference.value = newValue
+                    preference.callChangeListener(newValue)
+                },
+                onDismiss = dismiss,
+            )
+        }
+    }
+
+    protected open fun showStyledEditTextPreferenceDialog(preference: androidx.preference.EditTextPreference) {
+        val context = context ?: return
+        val icon = resolvePreferenceIcon(preference.key)
+
+        showSettingsComposeDialog(context) { dismiss ->
+            SettingsEditTextDialogContent(
+                title = preference.title?.toString() ?: "",
+                subtitle = preference.summary?.toString()?.takeIf { it != "%s" },
+                icon = icon,
+                currentText = preference.text ?: "",
+                onConfirm = { newValue ->
+                    preference.text = newValue
+                    preference.callChangeListener(newValue)
+                },
+                onDismiss = dismiss,
+            )
+        }
+    }
+
+    protected open fun showStyledMultiSelectListPreferenceDialog(preference: androidx.preference.MultiSelectListPreference) {
+        val context = context ?: return
+        val entries = preference.entries ?: return
+        val entryValues = preference.entryValues ?: return
+        val currentValues = preference.values ?: emptySet()
+        val icon = resolvePreferenceIcon(preference.key)
+
+        showSettingsComposeDialog(context) { dismiss ->
+            SettingsMultiChoiceDialogContent(
+                title = preference.title?.toString() ?: "",
+                subtitle = preference.summary?.toString()?.takeIf { it != "%s" },
+                icon = icon,
+                options = entries.toList(),
+                values = entryValues.toList(),
+                selectedValues = currentValues,
+                onConfirm = { newValues ->
+                    preference.values = newValues
+                    preference.callChangeListener(newValues)
+                },
+                onDismiss = dismiss,
+            )
+        }
+    }
+
+    protected open fun showStyledSeekBarPreferenceDialog(preference: androidx.preference.SeekBarPreference) {
+        val context = context ?: return
+        val icon = resolvePreferenceIcon(preference.key)
+
+        showSettingsComposeDialog(context) { dismiss ->
+            SettingsSeekBarDialogContent(
+                title = preference.title?.toString() ?: "",
+                subtitle = preference.summary?.toString()?.takeIf { it != "%s" },
+                icon = icon,
+                currentValue = preference.value,
+                minValue = preference.min,
+                maxValue = preference.max,
+                onConfirm = { newValue ->
+                    preference.value = newValue
+                    preference.callChangeListener(newValue)
+                },
+                onDismiss = dismiss,
+            )
+        }
+    }
+
+    private fun resolvePreferenceIcon(key: String?): ImageVector {
+        if (key == null) return Icons.Filled.Tune
+        val k = key.lowercase()
+        return when {
+            k.contains("theme") || k.contains("color") || k.contains("accent") -> Icons.Filled.Palette
+            k.contains("card") || k.contains("style") -> Icons.Filled.Dashboard
+            k.contains("speed") || k.contains("rewind") || k.contains("fast") -> Icons.Filled.FastForward
+            k.contains("update") -> Icons.Filled.CloudSync
+            k.contains("dir") || k.contains("search") || k.contains("folder") -> Icons.Filled.Folder
+            k.contains("icon") || k.contains("filter") -> Icons.Filled.Filter
+            k.contains("title") || k.contains("name") -> Icons.Filled.TextFields
+            k.contains("view") || k.contains("mode") || k.contains("display") -> Icons.Filled.GridView
+            k.contains("save") || k.contains("state") -> Icons.Filled.Save
+            k.contains("dsiware") || k.contains("dsi") -> Icons.Filled.SportsEsports
+            k.contains("lang") -> Icons.Filled.Language
+            k.contains("cpu") || k.contains("arm") || k.contains("overclock") || k.contains("jit") -> Icons.Filled.Memory
+            k.contains("sd") || k.contains("dldi") || k.contains("nand") -> Icons.Filled.SdCard
+            k.contains("wfc") || k.contains("dns") || k.contains("server") || k.contains("wifi") -> Icons.Filled.Wifi
+            k.contains("audio") || k.contains("sound") || k.contains("volume") || k.contains("mic") -> Icons.Filled.VolumeUp
+            k.contains("video") || k.contains("renderer") || k.contains("shader") || k.contains("fps") -> Icons.Filled.Tv
+            k.contains("haptic") || k.contains("vibrat") || k.contains("touch") -> Icons.Filled.TouchApp
+            else -> Icons.Filled.Tune
+        }
+    }
+
+    private fun restoreFocusToPreference(recyclerView: RecyclerView, key: String) {
+        val adapter = recyclerView.adapter as? PreferenceGroupAdapter ?: return
+        for (i in 0 until adapter.itemCount) {
+            val item = adapter.getItem(i)
+            if (item?.key == key) {
+                val viewHolder = recyclerView.findViewHolderForAdapterPosition(i)
+                viewHolder?.itemView?.requestFocus()
+                break
+            }
         }
     }
 }

@@ -58,12 +58,13 @@ static size_t captureBacktrace(void** buffer, size_t max) {
 
 static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
 {
-    __android_log_print(ANDROID_LOG_FATAL, "STORM_DS_NATIVE", "CRASH DETECTED: signal %d at address %p", sig, info ? info->si_addr : nullptr);
-    mkdir("/sdcard/Download/STORM DS LOGS", 0777);
-    mkdir("/storage/emulated/0/Download/STORM DS LOGS", 0777);
-    FILE* f = fopen("/sdcard/Download/STORM DS LOGS/STORM_DS_CRASH.txt", "a");
+    mkdir("/sdcard/STORM DS", 0777);
+    mkdir("/sdcard/STORM DS/logs", 0777);
+    mkdir("/storage/emulated/0/STORM DS", 0777);
+    mkdir("/storage/emulated/0/STORM DS/logs", 0777);
+    FILE* f = fopen("/storage/emulated/0/STORM DS/logs/!STORM_INFO.txt", "a");
     if (!f) {
-        f = fopen("/storage/emulated/0/Download/STORM DS LOGS/STORM_DS_CRASH.txt", "a");
+        f = fopen("/sdcard/STORM DS/logs/!STORM_INFO.txt", "a");
     }
     if (f) {
         time_t now = time(nullptr);

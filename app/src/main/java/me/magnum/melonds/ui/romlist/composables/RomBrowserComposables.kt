@@ -42,6 +42,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -58,6 +60,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -96,7 +101,6 @@ fun WatermelonLibraryHeader(
     onToggleViewMode: () -> Unit,
     onBootFirmwareDs: () -> Unit,
     onBootFirmwareDsi: () -> Unit,
-    onOpenDsiWareManager: () -> Unit,
     onOpenSingleRom: () -> Unit = {},
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -161,100 +165,29 @@ fun WatermelonLibraryHeader(
                 }
             } else {
                 Row(
-                    modifier = Modifier.weight(1f, fill = false),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp),
                 ) {
                     WatermelonMark(height = 22.dp)
                     Spacer(Modifier.width(7.dp))
                     Text(
-                        text = "STORM ",
-                        color = colors.text,
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(color = colors.text, fontWeight = FontWeight.Bold)) {
+                                append("STORM ")
+                            }
+                            withStyle(SpanStyle(color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)) {
+                                append("DS")
+                            }
+                        },
                         fontFamily = SpaceGrotesk,
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
                         letterSpacing = (-0.3).sp,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = "DS",
-                        color = Color(0xFF00E5FF),
-                        fontFamily = SpaceGrotesk,
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.3).sp,
+                        softWrap = false,
                         maxLines = 1,
                     )
                 }
 
                 Spacer(Modifier.weight(1f))
-
-                // Styled DSiWare Boot Mode Quick Switcher
-                Box(modifier = Modifier.padding(end = 2.dp)) {
-                    val (modeIcon, modeLabel, modeColor) = when (dsiWareBootMode) {
-                        me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> Triple("🚀", "Auto", Color(0xFF00E5FF))
-                        me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT -> Triple("⚡", "Direct", Color(0xFFFFAB00))
-                        me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> Triple("🎮", "NAND", Color(0xFFE040FB))
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(colors.surface2)
-                            .border(1.dp, modeColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                            .clickable { bootModeMenuOpen = true }
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = modeIcon, fontSize = 10.5.sp)
-                            Spacer(Modifier.width(3.dp))
-                            Text(
-                                text = modeLabel,
-                                color = modeColor,
-                                fontFamily = WatermelonMono,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = bootModeMenuOpen,
-                        onDismissRequest = { bootModeMenuOpen = false },
-                    ) {
-                        DropdownMenuItem(
-                            onClick = {
-                                bootModeMenuOpen = false
-                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT)
-                            }
-                        ) {
-                            Column {
-                                Text("⚡ Direct Boot (Прямой старт)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-                                Text("Быстрый старт игры напрямую в память RAM", color = colors.text3, fontSize = 11.sp)
-                            }
-                        }
-                        DropdownMenuItem(
-                            onClick = {
-                                bootModeMenuOpen = false
-                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD)
-                            }
-                        ) {
-                            Column {
-                                Text("🚀 Autoload (Запуск через прошивку)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-                                Text("Запуск через DSi Firmware warmboot (как в RetroArch)", color = colors.text3, fontSize = 11.sp)
-                            }
-                        }
-                        DropdownMenuItem(
-                            onClick = {
-                                bootModeMenuOpen = false
-                                onDsiWareBootModeChanged(me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU)
-                            }
-                        ) {
-                            Column {
-                                Text("🎮 NAND Launcher (Меню DSi)", color = colors.text, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-                                Text("Полный запуск в официальное меню DSi", color = colors.text3, fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
 
                 IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(19.dp))
@@ -280,9 +213,6 @@ fun WatermelonLibraryHeader(
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDsi() }) {
                             Text(stringResource(R.string.action_boot_firmware_dsi))
-                        }
-                        DropdownMenuItem(onClick = { overflowOpen = false; onOpenDsiWareManager() }) {
-                            Text(stringResource(R.string.dsiware_manager))
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onRefresh() }) {
                             Text(stringResource(R.string.action_refresh_rom_list))
@@ -526,13 +456,22 @@ fun ContinuePlayingShelf(
                     )
                 }
             }
-            Text(
-                text = if (isCollapsed) "▼" else "▲",
-                color = colors.text3,
-                fontSize = 11.sp,
-                fontFamily = WatermelonMono,
-                fontWeight = FontWeight.Bold,
-            )
+            Box(
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                    contentDescription = if (isCollapsed) "Развернуть" else "Свернуть",
+                    tint = colors.text2,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = !isCollapsed,

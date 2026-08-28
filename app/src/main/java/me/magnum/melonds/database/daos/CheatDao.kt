@@ -28,6 +28,9 @@ interface CheatDao {
     suspend fun getEnabledRomCheats(gameCode: String, gameChecksum: String?): List<CheatEntity>
 
     @Query("SELECT * FROM cheat WHERE cheat_folder_id = :folderId")
+    suspend fun getFolderCheatsList(folderId: Long): List<CheatEntity>
+
+    @Query("SELECT * FROM cheat WHERE cheat_folder_id = :folderId")
     fun getFolderCheats(folderId: Long): Flow<List<CheatEntity>>
 
     @Update(entity = CheatEntity::class)

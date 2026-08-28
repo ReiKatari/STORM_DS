@@ -3,224 +3,244 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
-            android:key="video_renderer"
-            android:title="@string/renderer"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/video_renderer_options"
-            android:entryValues="@array/video_renderer_values"
-            android:defaultValue="opengl"/>
+    <PreferenceCategory
+            android:title="@string/pref_cat_renderer_3d"
+            app:iconSpaceReserved="false">
 
-    <me.magnum.melonds.ui.settings.preferences.InGameLockedSwitchPreference
-            android:key="video_vulkan_fastpath_enabled"
-            android:title="@string/video_vulkan_fastpath_enabled"
-            android:summary="@string/video_vulkan_fastpath_enabled_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
-            android:key="video_internal_resolution"
-            android:title="@string/internal_resolution"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/video_internal_resolution_options"
-            android:entryValues="@array/video_internal_resolution_values"
-            android:defaultValue="2"/>
-
-    <SwitchPreference
-            android:key="enable_threaded_rendering"
-            android:title="@string/threaded_rendering"
-            android:summary="@string/threaded_rendering_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="true" />
-
-    <SwitchPreference
-            android:key="video_widescreen_3d"
-            android:title="@string/video_widescreen_3d_title"
-            android:summary="@string/video_widescreen_3d_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <SwitchPreference
-            android:key="video_60fps_patch"
-            android:title="@string/video_60fps_patch_title"
-            android:summary="@string/video_60fps_patch_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <SwitchPreference
-            android:key="video_dual_screen_cast_enabled"
-            android:title="@string/video_dual_screen_cast_title"
-            android:summary="@string/video_dual_screen_cast_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <SwitchPreference
-            android:key="video_ai_upscale_enabled"
-            android:title="@string/video_ai_upscale_title"
-            android:summary="@string/video_ai_upscale_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <ListPreference
-            android:key="video_ai_upscale_scale"
-            android:title="@string/video_ai_upscale_scale_title"
-            android:summary="%s"
-            android:dependency="video_ai_upscale_enabled"
-            app:iconSpaceReserved="false"
-            android:entries="@array/video_ai_upscale_scale_options"
-            android:entryValues="@array/video_ai_upscale_scale_values"
-            android:defaultValue="4x" />
-
-    <SwitchPreference
-            android:key="video_hd_textures_enabled"
-            android:title="@string/video_hd_textures_title"
-            android:summary="@string/video_hd_textures_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="true" />
-
-    <SwitchPreference
-            android:key="video_oled_battery_saver"
-            android:title="@string/video_oled_battery_saver_title"
-            android:summary="@string/video_oled_battery_saver_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <SwitchPreference
-            android:key="video_console_skin_enabled"
-            android:title="@string/video_console_skin_title"
-            android:summary="@string/video_console_skin_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <ListPreference
-            android:key="video_console_skin_type"
-            android:title="@string/video_console_skin_type_title"
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true"
-            android:entries="@array/video_console_skin_type_options"
-            android:entryValues="@array/video_console_skin_type_values"
-            android:defaultValue="ds_lite_black"
-            android:dependency="video_console_skin_enabled" />
-
-    <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
-            android:key="video_filtering"
-            android:title="@string/filter"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/video_filtering_options"
-            android:entryValues="@array/video_filtering_values"
-            android:defaultValue="quilez"/>
-
-    <Preference
-            android:key="video_retroarch_shader_source"
-            android:title="@string/video_retroarch_shader_source_title"
-            app:iconSpaceReserved="false"
-            android:persistent="false" />
-
-    <ListPreference
-            android:key="video_retroarch_shader_preset"
-            android:title="@string/video_retroarch_shader_preset_title"
-            android:summary="@string/video_retroarch_shader_preset_summary"
-            app:iconSpaceReserved="false" />
-
-    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
-            android:key="video_retroarch_shader_root"
-            android:title="@string/video_retroarch_shader_root_title"
-            android:summary="@string/video_retroarch_shader_root_summary"
-            app:iconSpaceReserved="false"
-            app:type="directory"
-            app:permissions="read"
-            app:persistPermissions="true" />
-
-    <PreferenceScreen
-            android:key="video_retroarch_shader_settings"
-            android:title="@string/video_retroarch_shader_settings_title"
-            android:summary="@string/video_retroarch_shader_settings_summary"
-            app:iconSpaceReserved="false"
-            android:persistent="false"
-            android:layout="@layout/watermelon_preference">
-
-        <Preference
-                android:key="video_retroarch_shader_report"
-                android:title="@string/shader_compatibility_report_title"
-                android:summary="@string/shader_compatibility_report_summary"
+        <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
+                android:key="video_renderer"
+                android:title="@string/renderer"
+                android:summary="%s"
                 app:iconSpaceReserved="false"
-                android:persistent="false" />
+                android:entries="@array/video_renderer_options"
+                android:entryValues="@array/video_renderer_values"
+                android:defaultValue="opengl"/>
 
-        <Preference
-                android:key="video_retroarch_shader_manage"
-                android:title="@string/video_retroarch_shader_install_title"
-                android:summary="@string/video_retroarch_shader_install_summary"
-                app:iconSpaceReserved="false"
-                android:persistent="false" />
-
-        <EditTextPreference
-                android:key="video_retroarch_shader_parameters"
-                android:title="@string/video_retroarch_shader_parameters_title"
-                android:summary="@string/video_retroarch_shader_parameters_summary"
-                app:iconSpaceReserved="false" />
-
-        <SwitchPreference
-                android:key="video_retroarch_shader_clear_history"
-                android:title="@string/video_retroarch_shader_clear_history_title"
-                android:summary="@string/video_retroarch_shader_clear_history_summary"
+        <me.magnum.melonds.ui.settings.preferences.InGameLockedSwitchPreference
+                android:key="video_vulkan_fastpath_enabled"
+                android:title="@string/video_vulkan_fastpath_enabled"
+                android:summary="@string/video_vulkan_fastpath_enabled_summary"
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
-    </PreferenceScreen>
+        <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
+                android:key="video_internal_resolution"
+                android:title="@string/internal_resolution"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_internal_resolution_options"
+                android:entryValues="@array/video_internal_resolution_values"
+                android:defaultValue="2"/>
 
-    <Preference
-            android:key="dual_screen_presets"
-            android:title="@string/dual_screen_presets_settings_title"
-            app:iconSpaceReserved="false" />
+        <SwitchPreference
+                android:key="enable_threaded_rendering"
+                android:title="@string/threaded_rendering"
+                android:summary="@string/threaded_rendering_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="true" />
 
-    <ListPreference
-            android:key="external_display_mode"
-            android:title="@string/external_display_mode"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/external_display_mode_options"
-            android:entryValues="@array/external_display_mode_values"
-            android:defaultValue="melon_dual_ds" />
+        <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
+                android:key="video_filtering"
+                android:title="@string/filter"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_filtering_options"
+                android:entryValues="@array/video_filtering_values"
+                android:defaultValue="quilez"/>
+    </PreferenceCategory>
 
-    <ListPreference
-            android:key="fps_counter_position"
-            android:title="@string/fps_counter_position"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/fps_counter_position_options"
-            android:entryValues="@array/fps_counter_position_values"
-            android:defaultValue="hidden" />
+    <PreferenceCategory
+            android:title="@string/pref_cat_retroarch_shaders"
+            app:iconSpaceReserved="false">
 
-    <ListPreference
-            android:key="resolution_hud_position"
-            android:title="Отображение текущего разрешения"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/fps_counter_position_options"
-            android:entryValues="@array/fps_counter_position_values"
-            android:defaultValue="hidden" />
+        <Preference
+                android:key="video_retroarch_shader_source"
+                android:title="@string/video_retroarch_shader_source_title"
+                app:iconSpaceReserved="false"
+                android:persistent="false" />
 
-    <ListPreference
-            android:key="dsi_camera_source"
-            android:title="@string/dsi_camera_source"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/dsi_camera_source_options"
-            android:entryValues="@array/dsi_camera_source_values"
-            android:defaultValue="physical_cameras" />
+        <ListPreference
+                android:key="video_retroarch_shader_preset"
+                android:title="@string/video_retroarch_shader_preset_title"
+                android:summary="@string/video_retroarch_shader_preset_summary"
+                app:iconSpaceReserved="false" />
 
-    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
-            android:key="dsi_camera_static_image"
-            android:title="@string/dsi_camera_image"
-            android:dependency="dsi_camera_source"
-            app:iconSpaceReserved="false"
-            app:type="file"
-            app:permissions="read"
-            app:persistPermissions="true"
-            app:mimeType="image/jpeg|image/png" />
+        <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+                android:key="video_retroarch_shader_root"
+                android:title="@string/video_retroarch_shader_root_title"
+                android:summary="@string/video_retroarch_shader_root_summary"
+                app:iconSpaceReserved="false"
+                app:type="directory"
+                app:permissions="read"
+                app:persistPermissions="true" />
+
+        <PreferenceScreen
+                android:key="video_retroarch_shader_settings"
+                android:title="@string/video_retroarch_shader_settings_title"
+                android:summary="@string/video_retroarch_shader_settings_summary"
+                app:iconSpaceReserved="false"
+                android:persistent="false"
+                android:layout="@layout/watermelon_preference">
+
+            <Preference
+                    android:key="video_retroarch_shader_report"
+                    android:title="@string/shader_compatibility_report_title"
+                    android:summary="@string/shader_compatibility_report_summary"
+                    app:iconSpaceReserved="false"
+                    android:persistent="false" />
+
+            <Preference
+                    android:key="video_retroarch_shader_manage"
+                    android:title="@string/video_retroarch_shader_install_title"
+                    android:summary="@string/video_retroarch_shader_install_summary"
+                    app:iconSpaceReserved="false"
+                    android:persistent="false" />
+
+            <EditTextPreference
+                    android:key="video_retroarch_shader_parameters"
+                    android:title="@string/video_retroarch_shader_parameters_title"
+                    android:summary="@string/video_retroarch_shader_parameters_summary"
+                    app:iconSpaceReserved="false" />
+
+            <SwitchPreference
+                    android:key="video_retroarch_shader_clear_history"
+                    android:title="@string/video_retroarch_shader_clear_history_title"
+                    android:summary="@string/video_retroarch_shader_clear_history_summary"
+                    app:iconSpaceReserved="false"
+                    android:defaultValue="false" />
+
+        </PreferenceScreen>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/pref_cat_enhancements"
+            app:iconSpaceReserved="false">
+
+        <SwitchPreference
+                android:key="video_widescreen_3d"
+                android:title="@string/video_widescreen_3d_title"
+                android:summary="@string/video_widescreen_3d_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SwitchPreference
+                android:key="video_60fps_patch"
+                android:title="@string/video_60fps_patch_title"
+                android:summary="@string/video_60fps_patch_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SwitchPreference
+                android:key="video_ai_upscale_enabled"
+                android:title="@string/video_ai_upscale_title"
+                android:summary="@string/video_ai_upscale_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <ListPreference
+                android:key="video_ai_upscale_scale"
+                android:title="@string/video_ai_upscale_scale_title"
+                android:summary="%s"
+                android:dependency="video_ai_upscale_enabled"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_ai_upscale_scale_options"
+                android:entryValues="@array/video_ai_upscale_scale_values"
+                android:defaultValue="4x" />
+
+        <SwitchPreference
+                android:key="video_hd_textures_enabled"
+                android:title="@string/video_hd_textures_title"
+                android:summary="@string/video_hd_textures_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SwitchPreference
+                android:key="video_oled_battery_saver"
+                android:title="@string/video_oled_battery_saver_title"
+                android:summary="@string/video_oled_battery_saver_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/pref_cat_display_layout"
+            app:iconSpaceReserved="false">
+
+        <SwitchPreference
+                android:key="video_console_skin_enabled"
+                android:title="@string/video_console_skin_title"
+                android:summary="@string/video_console_skin_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <ListPreference
+                android:key="video_console_skin_type"
+                android:title="@string/video_console_skin_type_title"
+                app:iconSpaceReserved="false"
+                app:useSimpleSummaryProvider="true"
+                android:entries="@array/video_console_skin_type_options"
+                android:entryValues="@array/video_console_skin_type_values"
+                android:defaultValue="ds_lite_black"
+                android:dependency="video_console_skin_enabled" />
+
+        <ListPreference
+                android:key="fps_counter_position"
+                android:title="@string/fps_counter_position"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/fps_counter_position_options"
+                android:entryValues="@array/fps_counter_position_values"
+                android:defaultValue="hidden" />
+
+        <ListPreference
+                android:key="resolution_hud_position"
+                android:title="Отображение текущего разрешения"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/fps_counter_position_options"
+                android:entryValues="@array/fps_counter_position_values"
+                android:defaultValue="hidden" />
+
+        <SwitchPreference
+                android:key="video_dual_screen_cast_enabled"
+                android:title="@string/video_dual_screen_cast_title"
+                android:summary="@string/video_dual_screen_cast_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <Preference
+                android:key="dual_screen_presets"
+                android:title="@string/dual_screen_presets_settings_title"
+                app:iconSpaceReserved="false" />
+
+        <ListPreference
+                android:key="external_display_mode"
+                android:title="@string/external_display_mode"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/external_display_mode_options"
+                android:entryValues="@array/external_display_mode_values"
+                android:defaultValue="melon_dual_ds" />
+
+        <ListPreference
+                android:key="dsi_camera_source"
+                android:title="@string/dsi_camera_source"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/dsi_camera_source_options"
+                android:entryValues="@array/dsi_camera_source_values"
+                android:defaultValue="physical_cameras" />
+
+        <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+                android:key="dsi_camera_static_image"
+                android:title="@string/dsi_camera_image"
+                android:dependency="dsi_camera_source"
+                app:iconSpaceReserved="false"
+                app:type="file"
+                app:permissions="read"
+                app:persistPermissions="true"
+                app:mimeType="image/jpeg|image/png" />
+    </PreferenceCategory>
 
     <PreferenceCategory
             android:key="video_vulkan_driver_category"

@@ -67,12 +67,26 @@ class DldiFolderSyncManager(
             )
         }
 
+        runCatching {
+            rootDirectory.mkdirs()
+            mirrorDirectory.mkdirs()
+            baseConfiguration.imagePath?.let { File(it).parentFile?.mkdirs() }
+        }
+
         val sourceUri = settingsRepository.getDldiSdCardDirectory()
         val sourceRoot = sourceUri?.let { DocumentFile.fromTreeUri(context, it) }
         if (sourceUri == null || sourceRoot == null || !sourceRoot.exists() || !sourceRoot.isDirectory || !sourceRoot.canRead()) {
-            Log.w(TAG, "DLDI SD card is enabled but the selected folder is not readable")
+            Log.i(TAG, "DLDI SD card running in direct image mode (no custom folder selected)")
             activeDirectoryUri = null
-            return null
+            val imgPath = baseConfiguration.imagePath?.takeIf { it.isNotBlank() } ?: imageFile.absolutePath
+            File(imgPath).parentFile?.mkdirs()
+            return baseConfiguration.copy(
+                enabled = true,
+                imagePath = imgPath,
+                imageSize = settingsRepository.getDldiSdCardImageSize(),
+                folderSync = false,
+                folderPath = mirrorDirectory.absolutePath,
+            )
         }
 
         if (!rootDirectory.isDirectory && !rootDirectory.mkdirs()) {

@@ -473,29 +473,22 @@ private fun AchievementsHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
         ) {
-            Text(
-                text = stringResource(R.string.achievements),
-                color = colors.text,
-                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.weight(1f))
             ConsoleChipRow(
                 options = availableTypeFilters.sortedBy { it.displayOrder },
                 selected = typeFilter,
                 onSelected = onTypeFilterChanged,
                 label = { getTypeFilterLabelText(it) },
-                modifier = Modifier.widthIn(max = 360.dp),
+                modifier = Modifier.fillMaxWidth(),
             )
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
 
         // Dual Mode Metric Breakdown Cards (Softcore vs Hardcore)
         Row(

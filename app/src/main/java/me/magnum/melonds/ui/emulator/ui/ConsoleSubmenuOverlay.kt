@@ -11,14 +11,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import me.magnum.melonds.ui.common.bouncingClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Filter
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
@@ -77,6 +81,7 @@ fun ConsoleSubmenuOverlay(
     entries: List<String>,
     onEntrySelected: (Int) -> Unit,
     onDismiss: () -> Unit,
+    onResumeGame: (() -> Unit)? = null,
 ) {
     val items = remember(entries) {
         entries.map { entry ->
@@ -97,6 +102,7 @@ fun ConsoleSubmenuOverlay(
         items = items,
         onEntrySelected = onEntrySelected,
         onDismiss = onDismiss,
+        onResumeGame = onResumeGame,
     )
 }
 
@@ -106,6 +112,7 @@ fun ConsoleSubmenuOverlayDetailed(
     items: List<ConsoleSubmenuEntry>,
     onEntrySelected: (Int) -> Unit,
     onDismiss: () -> Unit,
+    onResumeGame: (() -> Unit)? = null,
 ) {
     val colors = watermelon
     val firstFocusRequester = remember { FocusRequester() }
@@ -115,7 +122,7 @@ fun ConsoleSubmenuOverlayDetailed(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(SubmenuScrim)
+            .background(Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
             .focusProperties { canFocus = false }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -135,26 +142,30 @@ fun ConsoleSubmenuOverlayDetailed(
             modifier = Modifier
                 .widthIn(max = 760.dp)
                 .fillMaxWidth()
-                .systemBarsPadding()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
                 .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                 ) { /* consume clicks inside panel */ },
-            verticalArrangement = Arrangement.Bottom,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Main Panel Card (Header + Items List)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .fillMaxHeight(0.85f)
                     .padding(horizontal = 14.dp, vertical = 6.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF131217))
+                    .background(colors.surface)
                     .border(1.dp, colors.line, RoundedCornerShape(20.dp)),
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
+                    val (headerIcon, headerSubtitle) = getHeaderMetadata(title)
                     // Header Bar
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -163,22 +174,59 @@ fun ConsoleSubmenuOverlayDetailed(
                             .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Tune,
+                            imageVector = headerIcon,
                             contentDescription = null,
-                            tint = colors.red,
+                            tint = colors.green,
                             modifier = Modifier.size(22.dp),
                         )
                         Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = title,
-                            color = colors.text,
-                            fontFamily = SpaceGrotesk,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = headerSubtitle,
+                                color = colors.text3,
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (onResumeGame != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .clickable(onClick = onResumeGame)
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = stringResource(R.string.pause_resume),
+                                        tint = colors.green,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "В игру",
+                                        color = colors.green,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Box(
@@ -205,14 +253,14 @@ fun ConsoleSubmenuOverlayDetailed(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(shape)
-                                    .background(if (isFocused) Color(0xFF2A1C22) else colors.surface)
+                                    .background(if (isFocused) colors.surface2.copy(alpha = 0.8f) else colors.surface2)
                                     .border(
                                         width = if (isFocused) 1.5.dp else 1.dp,
-                                        color = if (isFocused) colors.red else colors.line,
+                                        color = if (isFocused) colors.green else colors.line,
                                         shape = shape,
                                     )
                                     .let { if (index == 0) it.focusRequester(firstFocusRequester) else it }
-                                    .clickable(interactionSource = interactionSource, indication = null) { onEntrySelected(index) }
+                                    .bouncingClickable { onEntrySelected(index) }
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
                             ) {
                                 if (item.icon != null) {
@@ -220,13 +268,13 @@ fun ConsoleSubmenuOverlayDetailed(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isFocused) colors.red.copy(alpha = 0.22f) else colors.surface2),
+                                            .background(if (isFocused) colors.green.copy(alpha = 0.22f) else colors.surface),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
                                             imageVector = item.icon,
                                             contentDescription = null,
-                                            tint = if (isFocused) colors.red else colors.text,
+                                            tint = if (isFocused) colors.green else colors.text,
                                             modifier = Modifier.size(18.dp),
                                         )
                                     }
@@ -292,27 +340,31 @@ fun ConsoleSubmenuOverlayDetailed(
             }
 
             // Unified Bottom Center Back Arrow
-            Box(
-                modifier = Modifier
-                    .padding(bottom = 12.dp, top = 2.dp)
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface2)
-                    .border(1.dp, colors.line, CircleShape)
-                    .clickable(onClick = onDismiss)
-                    .align(Alignment.CenterHorizontally),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = colors.text,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            me.magnum.melonds.ui.common.UnifiedBackButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
 
         me.magnum.melonds.ui.common.RequestInitialFocus(firstFocusRequester)
+    }
+}
+
+private fun getHeaderMetadata(title: String): Pair<ImageVector, String> {
+    val lower = title.lowercase()
+    return when {
+        lower.contains("настройки игры") || lower.contains("rom settings") || lower.contains("game settings") ->
+            Icons.Filled.Tune to "Параметры и оверлеи для текущей игры"
+        lower.contains("видео") || lower.contains("video") || lower.contains("фильтр") ->
+            Icons.Filled.AutoAwesome to "Шейдеры, фильтры и видеочип"
+        lower.contains("звук") || lower.contains("audio") || lower.contains("микрофон") ->
+            Icons.Filled.Mic to "Аудиопотоки и параметры микрофона"
+        lower.contains("управлен") || lower.contains("input") || lower.contains("клавиш") ->
+            Icons.Filled.SportsEsports to "Геймпады, маппинг и сенсор"
+        lower.contains("экран") || lower.contains("расклад") || lower.contains("preset") || lower.contains("пресет") ->
+            Icons.Filled.Tv to "Ориентация, пресеты и вывод экранов"
+        else ->
+            Icons.Filled.Tune to "Параметры и настройки"
     }
 }
 

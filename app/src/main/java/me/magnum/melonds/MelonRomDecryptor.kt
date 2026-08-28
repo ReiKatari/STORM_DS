@@ -126,16 +126,23 @@ object MelonRomDecryptor {
 
             val tempResult = decryptRom(cacheFile.absolutePath, progressCallback)
             if (tempResult == DecryptResult.SUCCESS || tempResult == DecryptResult.ALREADY_DECRYPTED) {
-                context.contentResolver.openOutputStream(uri, "wt")?.use { outStream ->
-                    FileInputStream(cacheFile).use { inStream ->
-                        inStream.copyTo(outStream)
+                val outStream = runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()
+                    ?: runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()
+                    ?: runCatching { context.contentResolver.openOutputStream(uri, "w") }.getOrNull()
+                    ?: runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
+
+                if (outStream != null) {
+                    outStream.use { out ->
+                        FileInputStream(cacheFile).use { inStream ->
+                            inStream.copyTo(out)
+                        }
                     }
-                } ?: run {
                     cacheFile.delete()
-                    return DecryptResult.ERROR_WRITING_FILE
+                    DecryptResult.SUCCESS
+                } else {
+                    cacheFile.delete()
+                    DecryptResult.ERROR_WRITING_FILE
                 }
-                cacheFile.delete()
-                DecryptResult.SUCCESS
             } else {
                 cacheFile.delete()
                 tempResult

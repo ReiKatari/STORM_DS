@@ -60,6 +60,12 @@ namespace MelonDSAndroid
         }
 
         outputCallback = std::make_shared<OboeCallback>(volume, resetAudioOutputStream);
+        outputCallback->softLimiterEnabled = currentAudioSettings.softLimiterEnabled;
+        outputCallback->bassBoostEnabled = currentAudioSettings.bassBoostEnabled;
+        outputCallback->bassBoostStrength = currentAudioSettings.bassBoostStrength;
+        outputCallback->spatialAudioEnabled = currentAudioSettings.spatialAudioEnabled;
+        outputCallback->reverbEnabled = currentAudioSettings.reverbEnabled;
+
         stabilizedOutputCallback = std::make_shared<oboe::StabilizedCallback>(outputCallback.get());
 
         outputCallback->activeInstance = activeInstance;
@@ -272,6 +278,14 @@ namespace MelonDSAndroid
 
     void updateAudioSettings(AudioSettings audioSettings)
     {
+        if (outputCallback) {
+            outputCallback->softLimiterEnabled = audioSettings.softLimiterEnabled;
+            outputCallback->bassBoostEnabled = audioSettings.bassBoostEnabled;
+            outputCallback->bassBoostStrength = audioSettings.bassBoostStrength;
+            outputCallback->spatialAudioEnabled = audioSettings.spatialAudioEnabled;
+            outputCallback->reverbEnabled = audioSettings.reverbEnabled;
+        }
+
         if (audioSettings.soundEnabled && currentAudioSettings.volume > 0) {
             if (!audioStream) {
                 setupAudioOutputStream(audioSettings.audioLatency, audioSettings.volume);
@@ -283,6 +297,8 @@ namespace MelonDSAndroid
         } else if (audioStream) {
             cleanupAudioOutputStream();
         }
+
+        currentAudioSettings = audioSettings;
 
         int oldMicSource = actualMicSource;
         actualMicSource = audioSettings.micSource;

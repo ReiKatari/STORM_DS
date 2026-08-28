@@ -44,6 +44,7 @@ namespace MelonDSAndroid
     namespace
     {
         bool fastForwardActive = false;
+        bool rewindActive = false;
         std::atomic_bool rendererDebugToolsEnabled = false;
         std::atomic_bool rendererDebugBgObjEnabled = false;
         std::atomic_bool rendererDebugLatchTraceEnabled = false;
@@ -1373,6 +1374,16 @@ namespace MelonDSAndroid
     bool isFastForwardActive()
     {
         return fastForwardActive;
+    }
+
+    void setRewindActive(bool enabled)
+    {
+        rewindActive = enabled;
+    }
+
+    bool isRewindActive()
+    {
+        return rewindActive;
     }
 
     void pause()

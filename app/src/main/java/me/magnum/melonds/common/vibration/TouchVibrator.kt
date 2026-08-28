@@ -5,7 +5,7 @@ import me.magnum.melonds.domain.repositories.SettingsRepository
 class TouchVibrator(private val delegate: VibratorDelegate, private val settingsRepository: SettingsRepository) {
 
     companion object {
-        private const val VIBRATION_DURATION = 100
+        private const val VIBRATION_DURATION_MS = 25
     }
 
     fun supportsVibration() = delegate.supportsVibration()
@@ -21,16 +21,16 @@ class TouchVibrator(private val delegate: VibratorDelegate, private val settings
     /**
      * Vibrates the device to provide touch feedback.
      *
-     * @param vibrationStrength The strength of the vibration (between 1 and 255)
+     * @param vibrationStrength The strength of the vibration (between 1 and 100)
      */
     fun performTouchHapticFeedback(vibrationStrength: Int) {
+        val mappedStrength = vibrationStrength.coerceIn(1, 100)
+        val amplitude = (mappedStrength * 255) / 100
         val duration = if (delegate.supportsVibrationAmplitude()) {
-            VIBRATION_DURATION
+            VIBRATION_DURATION_MS
         } else {
-            // If variable amplitude is not supported, adjust the duration to create a similar effect
-            val adjustedAmplitude = (vibrationStrength / 100f) * 2f
-            (VIBRATION_DURATION * adjustedAmplitude).toInt()
+            10 + (mappedStrength * 50) / 100
         }
-        delegate.vibrate(duration, vibrationStrength.coerceIn(1, 255))
+        delegate.vibrate(duration, amplitude.coerceIn(1, 255))
     }
 }

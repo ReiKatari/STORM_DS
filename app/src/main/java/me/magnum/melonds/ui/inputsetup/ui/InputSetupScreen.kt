@@ -647,6 +647,8 @@ private fun getInputName(input: Input): String? {
         Input.REWIND -> R.string.rewind
         Input.TRANSLATE -> R.string.input_translate
         Input.LOCK_ROTATION -> R.string.input_lock_rotation
+        Input.TOGGLE_EXTRA_BUTTONS -> R.string.input_toggle_extra_buttons
+        Input.TOGGLE_ANALOG_STICK -> R.string.input_toggle_analog_stick
         else -> return null
     }
 

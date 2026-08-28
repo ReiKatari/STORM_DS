@@ -155,9 +155,9 @@ class ModernDpadView @JvmOverloads constructor(
         val size = min(w, h)
         val cx = w / 2f
         val cy = h / 2f
-        val armWidth = size * 0.32f
-        val armLength = size * 0.46f
-        val cornerRadius = size * 0.06f
+        val armWidth = size * 0.29f
+        val armLength = size * 0.43f
+        val cornerRadius = size * 0.05f
 
         val style = ButtonThemeManager.currentStyle
         when (style) {
@@ -273,6 +273,48 @@ class ModernDpadView @JvmOverloads constructor(
                 wellPaint.color = Color.parseColor("#330F1117")
                 wellStrokePaint.color = Color.parseColor("#33FFFFFF")
             }
+        }
+
+        val isStickMode = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            .getBoolean("pref_touch_dpad_stick_mode", false)
+
+        if (isStickMode) {
+            // Draw outer circular track
+            canvas.drawCircle(cx, cy, armLength * 1.05f, wellPaint)
+            canvas.drawCircle(cx, cy, armLength * 1.05f, wellStrokePaint)
+
+            // Draw directional tick marks on ring
+            val tickLen = armLength * 0.12f
+            canvas.drawLine(cx, cy - armLength * 1.05f, cx, cy - armLength * 1.05f + tickLen, wellStrokePaint)
+            canvas.drawLine(cx, cy + armLength * 1.05f, cx, cy + armLength * 1.05f - tickLen, wellStrokePaint)
+            canvas.drawLine(cx - armLength * 1.05f, cy, cx - armLength * 1.05f + tickLen, cy, wellStrokePaint)
+            canvas.drawLine(cx + armLength * 1.05f, cy, cx + armLength * 1.05f - tickLen, cy, wellStrokePaint)
+
+            val offsetX = ((directionGlows[Input.RIGHT] ?: 0f) - (directionGlows[Input.LEFT] ?: 0f)) * (armLength * 0.38f)
+            val offsetY = ((directionGlows[Input.DOWN] ?: 0f) - (directionGlows[Input.UP] ?: 0f)) * (armLength * 0.38f)
+            val stickCx = cx + offsetX
+            val stickCy = cy + offsetY
+            val stickRadius = armLength * 0.58f
+
+            // Shadow
+            canvas.drawCircle(stickCx + 2.5f, stickCy + 4.5f, stickRadius, shadowPaint)
+
+            // Active glow
+            val hasGlow = dpadInputs.any { (directionGlows[it] ?: 0f) > 0f }
+            if (hasGlow) {
+                activeGlowPaint.color = Color.parseColor("#6600E5FF")
+                canvas.drawCircle(stickCx, stickCy, stickRadius * 1.15f, activeGlowPaint)
+            }
+
+            // Cap body & bevel
+            canvas.drawCircle(stickCx, stickCy, stickRadius, bodyPaint)
+            canvas.drawCircle(stickCx, stickCy, stickRadius, bevelLightPaint)
+
+            // Concave thumb dish
+            canvas.drawCircle(stickCx, stickCy, stickRadius * 0.68f, centerDishPaint)
+            canvas.drawCircle(stickCx, stickCy, stickRadius * 0.68f, centerDishRimPaint)
+            canvas.drawCircle(stickCx, stickCy, stickRadius * 0.25f, bevelLightPaint)
+            return
         }
 
         // Draw circular well depression in background
@@ -399,5 +441,23 @@ class ModernDpadView @JvmOverloads constructor(
         canvas.drawPath(path, arrowPaint)
 
         canvas.restore()
+    }
+
+    private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "pref_touch_dpad_stick_mode" || key == "button_color_theme") {
+            postInvalidate()
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            .registerOnSharedPreferenceChangeListener(prefListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            .unregisterOnSharedPreferenceChangeListener(prefListener)
     }
 }

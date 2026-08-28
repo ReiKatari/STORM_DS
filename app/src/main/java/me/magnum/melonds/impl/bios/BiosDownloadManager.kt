@@ -21,7 +21,7 @@ class BiosDownloadManager @Inject constructor(
 ) {
     companion object {
         val DS_BIOS_MIRRORS = listOf(
-            "https://github.com/ReiKatari/STORM_DS_TOOLS/releases/download/0.0.1/Nintendo_DS.zip",
+            "https://github.com/ReiKatari/STORM_DS_TOOLS/releases/download/0.0.3/Nintendo_DS.zip",
             "https://raw.githubusercontent.com/archeader/melonDS-android/main/bios/ds_bios.zip",
             "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/ds_bios.zip",
             "https://github.com/melonds-emu/melonDS/releases/download/bios/nds_bios.zip",
@@ -29,7 +29,7 @@ class BiosDownloadManager @Inject constructor(
         )
 
         val DSI_BIOS_MIRRORS = listOf(
-            "https://github.com/ReiKatari/STORM_DS_TOOLS/releases/download/0.0.1/Nintendo_DSi.zip",
+            "https://github.com/ReiKatari/STORM_DS_TOOLS/releases/download/0.0.3/Nintendo_DSi.zip",
             "https://raw.githubusercontent.com/archeader/melonDS-android/main/bios/dsi_bios.zip",
             "https://cdn.jsdelivr.net/gh/archeader/melonDS-android@main/bios/dsi_bios.zip",
             "https://github.com/melonds-emu/melonDS/releases/download/bios/dsi_bios.zip",
@@ -40,6 +40,12 @@ class BiosDownloadManager @Inject constructor(
     suspend fun downloadAndSetupDsBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
+        val rootDsDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/ds").apply {
+            if (exists()) {
+                listFiles()?.forEach { it.deleteRecursively() }
+            }
+            mkdirs()
+        }
         val targetDir = File(context.filesDir, "bios/ds").apply {
             if (exists()) {
                 listFiles()?.forEach { it.deleteRecursively() }
@@ -53,15 +59,19 @@ class BiosDownloadManager @Inject constructor(
         for (mirrorUrl in DS_BIOS_MIRRORS) {
             try {
                 downloadFile(mirrorUrl, tempZip, onProgress)
-                extractAndNormalizeBiosFiles(tempZip, targetDir, isDsi = false)
-                if (hasValidDsFiles(targetDir)) {
+                extractZipDirectly(tempZip, rootDsDir)
+                // Also copy to app internal targetDir
+                rootDsDir.listFiles()?.forEach { file ->
+                    runCatching { file.copyTo(File(targetDir, file.name), overwrite = true) }
+                }
+                if (hasValidDsFiles(rootDsDir) || hasValidDsFiles(targetDir)) {
                     downloadSuccess = true
                     break
                 }
             } catch (e: Throwable) {
                 lastException = e
             } finally {
-                tempZip.delete()
+                runCatching { tempZip.delete() }
             }
         }
 
@@ -69,16 +79,20 @@ class BiosDownloadManager @Inject constructor(
             // Fallback to assets only if network download failed
             val extractedFromAssets = copyDsBiosFromAssets(targetDir)
             if (extractedFromAssets && hasValidDsFiles(targetDir)) {
+                targetDir.listFiles()?.forEach { file ->
+                    runCatching { file.copyTo(File(rootDsDir, file.name), overwrite = true) }
+                }
                 downloadSuccess = true
             }
         }
 
-        if (downloadSuccess && hasValidDsFiles(targetDir)) {
+        val finalDir = if (hasValidDsFiles(rootDsDir)) rootDsDir else targetDir
+        if (downloadSuccess && hasValidDsFiles(finalDir)) {
             onProgress(100)
-            val dirUri = Uri.fromFile(targetDir)
+            val dirUri = Uri.fromFile(finalDir)
             settingsRepository.setDsBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
-            Result.success(targetDir)
+            Result.success(finalDir)
         } else {
             Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS."))
         }
@@ -87,6 +101,12 @@ class BiosDownloadManager @Inject constructor(
     suspend fun downloadAndSetupDsiBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
+        val rootDsiDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/dsi").apply {
+            if (exists()) {
+                listFiles()?.forEach { it.deleteRecursively() }
+            }
+            mkdirs()
+        }
         val targetDir = File(context.filesDir, "bios/dsi").apply {
             if (exists()) {
                 listFiles()?.forEach { it.deleteRecursively() }
@@ -100,15 +120,19 @@ class BiosDownloadManager @Inject constructor(
         for (mirrorUrl in DSI_BIOS_MIRRORS) {
             try {
                 downloadFile(mirrorUrl, tempZip, onProgress)
-                extractAndNormalizeBiosFiles(tempZip, targetDir, isDsi = true)
-                if (hasValidDsiFiles(targetDir)) {
+                extractZipDirectly(tempZip, rootDsiDir)
+                // Also copy to app internal targetDir
+                rootDsiDir.listFiles()?.forEach { file ->
+                    runCatching { file.copyTo(File(targetDir, file.name), overwrite = true) }
+                }
+                if (hasValidDsiFiles(rootDsiDir) || hasValidDsiFiles(targetDir)) {
                     downloadSuccess = true
                     break
                 }
             } catch (e: Throwable) {
                 lastException = e
             } finally {
-                tempZip.delete()
+                runCatching { tempZip.delete() }
             }
         }
 
@@ -122,16 +146,20 @@ class BiosDownloadManager @Inject constructor(
                 }
             }
             if (hasValidDsiFiles(targetDir)) {
+                targetDir.listFiles()?.forEach { file ->
+                    runCatching { file.copyTo(File(rootDsiDir, file.name), overwrite = true) }
+                }
                 downloadSuccess = true
             }
         }
 
-        if (downloadSuccess && hasValidDsiFiles(targetDir)) {
+        val finalDir = if (hasValidDsiFiles(rootDsiDir)) rootDsiDir else targetDir
+        if (downloadSuccess && hasValidDsiFiles(finalDir)) {
             onProgress(100)
-            val dirUri = Uri.fromFile(targetDir)
+            val dirUri = Uri.fromFile(finalDir)
             settingsRepository.setDsiBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
-            Result.success(targetDir)
+            Result.success(finalDir)
         } else {
             Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi и образ NAND."))
         }
@@ -256,16 +284,16 @@ class BiosDownloadManager @Inject constructor(
     }
 
     private fun hasValidDsFiles(dir: File): Boolean {
-        val b7 = File(dir, "bios7.bin")
-        val b9 = File(dir, "bios9.bin")
-        val fw = File(dir, "firmware.bin")
+        val b7 = if (File(dir, "ds_bios7.bin").exists()) File(dir, "ds_bios7.bin") else File(dir, "bios7.bin")
+        val b9 = if (File(dir, "ds_bios9.bin").exists()) File(dir, "ds_bios9.bin") else File(dir, "bios9.bin")
+        val fw = if (File(dir, "ds_firmware.bin").exists()) File(dir, "ds_firmware.bin") else File(dir, "firmware.bin")
         return b7.exists() && b7.length() >= 0x4000L && b9.exists() && b9.length() >= 0x1000L && fw.exists() && fw.length() >= 0x20000L
     }
 
     private fun hasValidDsiFiles(dir: File): Boolean {
-        val b7 = File(dir, "bios7.bin")
-        val b9 = File(dir, "bios9.bin")
-        val fw = File(dir, "firmware.bin")
+        val b7 = if (File(dir, "dsi_bios7.bin").exists()) File(dir, "dsi_bios7.bin") else File(dir, "bios7.bin")
+        val b9 = if (File(dir, "dsi_bios9.bin").exists()) File(dir, "dsi_bios9.bin") else File(dir, "bios9.bin")
+        val fw = if (File(dir, "dsi_firmware.bin").exists()) File(dir, "dsi_firmware.bin") else File(dir, "firmware.bin")
         val nand = File(dir, "nand.bin")
         if (!b7.exists() || b7.length() < 0x10000L || !b9.exists() || b9.length() < 0x10000L || !fw.exists() || fw.length() < 0x20000L) {
             return false
@@ -360,23 +388,19 @@ class BiosDownloadManager @Inject constructor(
         throw java.io.IOException("Too many redirects ($redirects)")
     }
 
-    private fun extractAndNormalizeBiosFiles(zipFile: File, outputDir: File, isDsi: Boolean) {
+    private fun extractZipDirectly(zipFile: File, outputDir: File) {
+        outputDir.mkdirs()
         zipFile.inputStream().use { fileInput ->
             ZipInputStream(fileInput.buffered()).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
-                    val entryName = entry.name.substringAfterLast('/').lowercase()
-
-                    val targetFileName = when {
-                        entryName.contains("bios7") || entryName.contains("arm7") -> "bios7.bin"
-                        entryName.contains("bios9") || entryName.contains("arm9") -> "bios9.bin"
-                        entryName.contains("firmware") || entryName.contains("bios.bin") -> "firmware.bin"
-                        isDsi && (entryName.contains("nand") || entryName.endsWith(".nand")) -> "nand.bin"
-                        else -> null
+                    if (entry.isDirectory) {
+                        zip.closeEntry()
+                        continue
                     }
-
-                    if (targetFileName != null) {
-                        val outFile = File(outputDir, targetFileName)
+                    val fileName = entry.name.substringAfterLast('/')
+                    if (fileName.isNotBlank()) {
+                        val outFile = File(outputDir, fileName)
                         outFile.outputStream().use { out ->
                             zip.copyTo(out)
                         }

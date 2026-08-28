@@ -21,6 +21,11 @@ import androidx.appcompat.widget.SearchView
 import androidx.core.content.getSystemService
 import androidx.compose.runtime.collectAsState
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import android.os.Build
+import android.view.View
+import android.view.WindowManager
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
@@ -108,6 +113,7 @@ class RomListActivity : AppCompatActivity() {
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
         supportActionBar?.hide()
+        applyImmersiveMode()
 
         emulatorLauncherValidatorDelegate = EmulatorLaunchValidatorDelegate(this, object : EmulatorLaunchValidatorDelegate.Callback {
             override fun onRomValidated(rom: Rom) {
@@ -311,11 +317,6 @@ class RomListActivity : AppCompatActivity() {
                 launchFirmware(ConsoleType.DSi)
                 return true
             }
-            R.id.action_dsiware_manager -> {
-                val intent = Intent(this, DSiWareManagerActivity::class.java)
-                startActivity(intent)
-                return true
-            }
             R.id.action_rom_list_refresh -> {
                 viewModel.refreshRoms()
                 return true
@@ -331,11 +332,6 @@ class RomListActivity : AppCompatActivity() {
 
     internal fun bootFirmware(consoleType: ConsoleType) {
         launchFirmware(consoleType)
-    }
-
-    internal fun openDsiWareManager() {
-        val intent = Intent(this, DSiWareManagerActivity::class.java)
-        startActivity(intent)
     }
 
     internal fun openSettings() {
@@ -506,5 +502,56 @@ class RomListActivity : AppCompatActivity() {
             .setNegativeButton(R.string.ok, null)
             .setCancelable(true)
             .show()
+    }
+
+    private fun applyImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+        }
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyImmersiveMode()
+        checkAndRequestStoragePermission()
+        me.magnum.melonds.MelonDSApplication.migrateStorageToRoot(this)
+    }
+
+    private fun checkAndRequestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                }
+                runCatching { startActivity(intent) }
+            }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveMode()
+        }
     }
 }

@@ -67,7 +67,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
         autoDownloadDsPreference?.setOnPreferenceClickListener {
             val progressDialog = android.app.ProgressDialog(requireContext()).apply {
                 setTitle(getString(R.string.auto_download_ds_bios_title))
-                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin...")
+                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, sd_card.bin...")
                 setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
                 max = 100
                 setCancelable(false)
@@ -84,13 +84,12 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 if (result.isSuccess) {
                     val targetDir = result.getOrThrow()
                     val targetUri = Uri.fromFile(targetDir)
-                    val useCustomBiosPref = findPreference<androidx.preference.SwitchPreference>("use_custom_bios")
-                    useCustomBiosPref?.isChecked = true
+                    preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
                     dsBiosDirPreference.onDirectoryPicked(targetUri)
                     dsBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
                         .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
+                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin, sd_card.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
@@ -107,7 +106,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
         autoDownloadDsiPreference?.setOnPreferenceClickListener {
             val progressDialog = android.app.ProgressDialog(requireContext()).apply {
                 setTitle(getString(R.string.auto_download_dsi_bios_title))
-                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin...")
+                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin, sd_card.bin...")
                 setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
                 max = 100
                 setCancelable(false)
@@ -124,13 +123,12 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 if (result.isSuccess) {
                     val targetDir = result.getOrThrow()
                     val targetUri = Uri.fromFile(targetDir)
-                    val useCustomBiosPref = findPreference<androidx.preference.SwitchPreference>("use_custom_bios")
-                    useCustomBiosPref?.isChecked = true
+                    preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
                     dsiBiosDirPreference.onDirectoryPicked(targetUri)
                     dsiBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
                         .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
+                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin, sd_card.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
@@ -143,8 +141,6 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             }
             true
         }
-
-        hideDependentsWhenInactive("use_custom_bios", "show_bios")
     }
 
     override fun getTitle() = getString(R.string.custom_bios_firmware)

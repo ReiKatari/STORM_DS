@@ -1,75 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/colorBackground">
+    android:gravity="center_horizontal"
+    android:background="@android:color/transparent">
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/divider" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:paddingTop="9dp"
-        android:paddingBottom="9dp">
+    <FrameLayout
+        android:id="@+id/btn_settings_back"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_circle_back_button"
+        android:clickable="true"
+        android:focusable="true">
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:src="@drawable/ic_gamepad_hint" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/pause_hint_navigate"
-            android:fontFamily="monospace"
-            android:textSize="10sp"
-            android:textColor="@color/textColorSecondary" />
-
-        <TextView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:layout_marginStart="20dp"
-            android:background="@drawable/bg_hint_button_ring"
-            android:gravity="center"
-            android:text="A"
-            android:textStyle="bold"
-            android:textSize="9sp"
-            android:textColor="@color/textColorSecondary" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/pause_hint_accept"
-            android:fontFamily="monospace"
-            android:textSize="10sp"
-            android:textColor="@color/textColorSecondary" />
-
-        <TextView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:layout_marginStart="20dp"
-            android:background="@drawable/bg_hint_button_ring"
-            android:gravity="center"
-            android:text="B"
-            android:textStyle="bold"
-            android:textSize="9sp"
-            android:textColor="@color/textColorSecondary" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/pause_hint_back"
-            android:fontFamily="monospace"
-            android:textSize="10sp"
-            android:textColor="@color/textColorSecondary" />
-    </LinearLayout>
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_back"
+            app:tint="?android:attr/textColorPrimary" />
+    </FrameLayout>
 </LinearLayout>

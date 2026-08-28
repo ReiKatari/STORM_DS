@@ -15,6 +15,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import me.magnum.melonds.extensions.parcelable
 import me.magnum.melonds.parcelables.RomInfoParcelable
 import me.magnum.melonds.ui.cheats.ui.CheatsScreen
@@ -54,6 +55,23 @@ class CheatsActivity : AppCompatActivity() {
                     finish()
                 }
             }
+        }
+        applyImmersiveMode()
+    }
+
+    private fun applyImmersiveMode() {
+        window.applyImmersiveFullscreen()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyImmersiveMode()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveMode()
         }
     }
 }

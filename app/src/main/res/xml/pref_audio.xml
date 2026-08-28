@@ -3,59 +3,116 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <SwitchPreference
-            android:key="sound_enabled"
-            android:title="@string/enable_sound"
-            app:iconSpaceReserved="false"
-            android:defaultValue="true" />
+    <PreferenceCategory
+            android:title="@string/pref_cat_audio_output"
+            app:iconSpaceReserved="false">
 
-    <ListPreference
-            android:key="audio_interpolation"
-            android:title="@string/interpolation"
-            android:dependency="sound_enabled"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/audio_interpolation_options"
-            android:entryValues="@array/audio_interpolation_values"
-            android:defaultValue="none" />
+        <SwitchPreference
+                android:key="sound_enabled"
+                android:title="@string/enable_sound"
+                app:iconSpaceReserved="false"
+                android:defaultValue="true" />
 
-    <ListPreference
-            android:key="audio_bitrate"
-            android:title="@string/bitrate"
-            android:dependency="sound_enabled"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/audio_bitrate_options"
-            android:entryValues="@array/audio_bitrate_values"
-            android:defaultValue="auto" />
+        <SeekBarPreference
+                android:key="volume"
+                android:title="@string/volume"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false"
+                app:updatesContinuously="true"
+                android:defaultValue="256"
+                app:min="0"
+                android:max="256" />
 
-    <SeekBarPreference
-            android:key="volume"
-            android:title="@string/volume"
-            android:dependency="sound_enabled"
-            app:iconSpaceReserved="false"
-            app:updatesContinuously="true"
-            android:defaultValue="256"
-            app:min="0"
-            android:max="256" />
+        <ListPreference
+                android:key="audio_interpolation"
+                android:title="@string/interpolation"
+                android:dependency="sound_enabled"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/audio_interpolation_options"
+                android:entryValues="@array/audio_interpolation_values"
+                android:defaultValue="none" />
 
-    <ListPreference
-            android:key="audio_latency"
-            android:title="@string/audio_latency"
-            android:dependency="sound_enabled"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            app:isPreferenceVisible="@bool/settings_audio_latency_enabled"
-            android:entries="@array/audio_latency_options"
-            android:entryValues="@array/audio_latency_values"
-            android:defaultValue="low" />
+        <ListPreference
+                android:key="audio_bitrate"
+                android:title="@string/bitrate"
+                android:dependency="sound_enabled"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/audio_bitrate_options"
+                android:entryValues="@array/audio_bitrate_values"
+                android:defaultValue="auto" />
 
-    <ListPreference
-            android:key="mic_source"
-            android:title="@string/microphone_source"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/mic_source_options"
-            android:entryValues="@array/mic_source_values"
-            android:defaultValue="blow" />
+        <ListPreference
+                android:key="audio_latency"
+                android:title="@string/audio_latency"
+                android:dependency="sound_enabled"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                app:isPreferenceVisible="@bool/settings_audio_latency_enabled"
+                android:entries="@array/audio_latency_options"
+                android:entryValues="@array/audio_latency_values"
+                android:defaultValue="low" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/pref_cat_dsp_effects"
+            app:iconSpaceReserved="false">
+
+        <SwitchPreference
+                android:key="audio_soft_limiter_enabled"
+                android:title="@string/audio_soft_limiter_title"
+                android:summary="@string/audio_soft_limiter_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="true" />
+
+        <SwitchPreference
+                android:key="audio_bass_boost_enabled"
+                android:title="@string/audio_bass_boost_title"
+                android:summary="@string/audio_bass_boost_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SeekBarPreference
+                android:key="audio_bass_boost_strength"
+                android:title="@string/audio_bass_boost_strength_title"
+                android:dependency="audio_bass_boost_enabled"
+                app:iconSpaceReserved="false"
+                app:showSeekBarValue="true"
+                android:defaultValue="5"
+                app:min="1"
+                android:max="10" />
+
+        <SwitchPreference
+                android:key="audio_spatial_audio_enabled"
+                android:title="@string/audio_spatial_audio_title"
+                android:summary="@string/audio_spatial_audio_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SwitchPreference
+                android:key="audio_reverb_enabled"
+                android:title="@string/audio_reverb_title"
+                android:summary="@string/audio_reverb_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/pref_cat_microphone"
+            app:iconSpaceReserved="false">
+
+        <ListPreference
+                android:key="mic_source"
+                android:title="@string/microphone_source"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/mic_source_options"
+                android:entryValues="@array/mic_source_values"
+                android:defaultValue="blow" />
+    </PreferenceCategory>
 </PreferenceScreen>

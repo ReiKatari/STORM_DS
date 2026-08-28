@@ -4,18 +4,10 @@
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <SwitchPreference
-            android:key="use_custom_bios"
-            android:title="@string/use_custom_bios"
-            android:summary="@string/custom_bios_firmware_description"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
-
-    <SwitchPreference
             android:key="show_bios"
             android:title="@string/show_boot_screen"
             app:iconSpaceReserved="false"
-            android:defaultValue="false"
-            android:dependency="use_custom_bios" />
+            android:defaultValue="false" />
 
     <SwitchPreference
             android:key="block_bios_download"
@@ -48,14 +40,6 @@
             app:iconSpaceReserved="false"
             app:consoleType="dsi" />
 
-    <ListPreference
-            android:key="dsiware_boot_mode"
-            android:title="@string/dsiware_boot_mode_title"
-            android:summary="%s"
-            android:entries="@array/dsiware_boot_mode_entries"
-            android:entryValues="@array/dsiware_boot_mode_values"
-            android:defaultValue="direct"
-            app:iconSpaceReserved="false" />
 
     <SwitchPreference
             android:key="custom_randomize_mac_address"

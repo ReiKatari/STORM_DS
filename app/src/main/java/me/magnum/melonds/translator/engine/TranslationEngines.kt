@@ -119,6 +119,69 @@ class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngi
     }
 }
 
+class MicrosoftEdgeTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
+    private var cachedToken: String? = null
+    private var tokenExpiry: Long = 0
+
+    private suspend fun getAuthToken(): String? = withContext(Dispatchers.IO) {
+        if (cachedToken != null && System.currentTimeMillis() < tokenExpiry) {
+            return@withContext cachedToken
+        }
+        try {
+            val request = Request.Builder()
+                .url("https://edge.microsoft.com/translate/auth")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val token = response.body?.string()?.trim()
+                    if (!token.isNullOrBlank()) {
+                        cachedToken = token
+                        tokenExpiry = System.currentTimeMillis() + 500_000L
+                        return@withContext token
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+        null
+    }
+
+    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
+        if (text.isBlank()) return@withContext text
+
+        val token = getAuthToken()
+        val fromParam = if (sourceLang == "auto" || sourceLang.isBlank()) "" else "&from=$sourceLang"
+        val url = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0$fromParam&to=$targetLang"
+
+        val bodyArray = JSONArray().put(JSONObject().put("Text", text))
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("Content-Type", "application/json; charset=UTF-8")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0")
+            .post(bodyArray.toString().toRequestBody("application/json; charset=UTF-8".toMediaType()))
+
+        if (!token.isNullOrBlank()) {
+            requestBuilder.header("Authorization", "Bearer $token")
+        }
+
+        try {
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string() ?: return@withContext text
+                    val jsonArray = JSONArray(responseBody)
+                    val firstObj = jsonArray.optJSONObject(0)
+                    val translations = firstObj?.optJSONArray("translations")
+                    val translatedText = translations?.optJSONObject(0)?.optString("text")
+                    if (!translatedText.isNullOrBlank()) {
+                        return@withContext translatedText
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+        text
+    }
+}
+
 class DeepLEngine(
     private val client: OkHttpClient,
     private val apiKeyProvider: () -> String
