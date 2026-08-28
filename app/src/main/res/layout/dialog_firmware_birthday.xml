@@ -1,98 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-        xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:app="http://schemas.android.com/apk/res-auto"
-        xmlns:tools="http://schemas.android.com/tools"
-        android:layout_width="wrap_content"
-        android:layout_height="match_parent"
-        android:paddingTop="16dp"
-        android:paddingStart="?attr/dialogPreferredPadding"
-        android:paddingEnd="?attr/dialogPreferredPadding">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:paddingStart="24dp"
+    android:paddingTop="20dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="20dp">
 
-    <Button
-            android:id="@+id/buttonBirthdayDayIncrease"
-            android:layout_width="50sp"
-            android:layout_height="wrap_content"
-            android:text="@string/symbol_increase"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:layout_marginEnd="16dp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/buttonBirthdayMonthIncrease"
-            app:layout_constraintHorizontal_chainStyle="packed"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+    <!-- Day Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="12dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_watermelon_input_field"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="12dp">
 
-    <TextView
-            android:id="@+id/textBirthdayDay"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:gravity="center_horizontal"
-            app:layout_constraintEnd_toEndOf="@+id/buttonBirthdayDayIncrease"
-            app:layout_constraintStart_toStartOf="@+id/buttonBirthdayDayIncrease"
-            app:layout_constraintTop_toBottomOf="@+id/buttonBirthdayDayIncrease"
-            tools:text="31" />
-
-    <Button
-            android:id="@+id/buttonBirthdayDayDecrease"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:text="@string/symbol_decrease"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="@+id/textBirthdayDay"
-            app:layout_constraintStart_toStartOf="@+id/textBirthdayDay"
-            app:layout_constraintTop_toBottomOf="@+id/textBirthdayDay" />
-
-    <TextView
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:fontFamily="@font/space_grotesk"
             android:text="@string/day"
-            app:layout_constraintEnd_toEndOf="@id/buttonBirthdayDayDecrease"
-            app:layout_constraintStart_toStartOf="@+id/buttonBirthdayDayDecrease"
-            app:layout_constraintTop_toBottomOf="@+id/buttonBirthdayDayDecrease" />
+            android:textColor="@color/textColorSecondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
 
-    <Button
-            android:id="@+id/buttonBirthdayMonthIncrease"
-            android:layout_width="50sp"
-            android:layout_height="wrap_content"
-            android:text="@string/symbol_increase"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/buttonBirthdayDayIncrease"
-            app:layout_constraintTop_toTopOf="parent" />
+        <Button
+            android:id="@+id/buttonBirthdayDayIncrease"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="48dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_watermelon_editor_chip"
+            android:fontFamily="@font/space_grotesk"
+            android:text="+"
+            android:textColor="@color/melonMain"
+            android:textSize="18sp"
+            android:textStyle="bold" />
 
-    <TextView
-            android:id="@+id/textBirthdayMonth"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:gravity="center_horizontal"
-            app:layout_constraintEnd_toEndOf="@+id/buttonBirthdayMonthIncrease"
-            app:layout_constraintStart_toStartOf="@+id/buttonBirthdayMonthIncrease"
-            app:layout_constraintTop_toBottomOf="@+id/buttonBirthdayMonthIncrease"
-            tools:text="12" />
-
-    <Button
-            android:id="@+id/buttonBirthdayMonthDecrease"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:text="@string/symbol_decrease"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="@+id/textBirthdayMonth"
-            app:layout_constraintStart_toStartOf="@+id/textBirthdayMonth"
-            app:layout_constraintTop_toBottomOf="@+id/textBirthdayMonth" />
-
-    <TextView
+        <TextView
+            android:id="@+id/textBirthdayDay"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="6dp"
+            android:fontFamily="@font/space_grotesk"
+            android:textColor="@color/textColorPrimary"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            tools:text="15" />
+
+        <Button
+            android:id="@+id/buttonBirthdayDayDecrease"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="48dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_watermelon_editor_chip"
+            android:fontFamily="@font/space_grotesk"
+            android:text="-"
+            android:textColor="@color/melonMain"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Month Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_watermelon_input_field"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/space_grotesk"
             android:text="@string/month"
-            app:layout_constraintEnd_toEndOf="@id/buttonBirthdayMonthDecrease"
-            app:layout_constraintStart_toStartOf="@+id/buttonBirthdayMonthDecrease"
-            app:layout_constraintTop_toBottomOf="@+id/buttonBirthdayMonthDecrease" />
-</androidx.constraintlayout.widget.ConstraintLayout>
+            android:textColor="@color/textColorSecondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/buttonBirthdayMonthIncrease"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="48dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_watermelon_editor_chip"
+            android:fontFamily="@font/space_grotesk"
+            android:text="+"
+            android:textColor="@color/melonMain"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/textBirthdayMonth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="6dp"
+            android:fontFamily="@font/space_grotesk"
+            android:textColor="@color/textColorPrimary"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            tools:text="08" />
+
+        <Button
+            android:id="@+id/buttonBirthdayMonthDecrease"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="48dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_watermelon_editor_chip"
+            android:fontFamily="@font/space_grotesk"
+            android:text="-"
+            android:textColor="@color/melonMain"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

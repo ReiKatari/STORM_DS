@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -29,6 +31,8 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +69,7 @@ fun ConsoleChoiceOverlay(
     selectedIndex: Int,
     onOptionSelected: (Int) -> Unit,
     onBack: () -> Unit,
+    onResumeGame: (() -> Unit)? = null,
 ) {
     val colors = watermelon
     val focusRequester = remember { FocusRequester() }
@@ -74,7 +79,7 @@ fun ConsoleChoiceOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ChoiceScrim)
+            .background(Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
             .focusProperties { canFocus = false }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -88,103 +93,162 @@ fun ConsoleChoiceOverlay(
                     false
                 }
             },
+        contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding()
+                .widthIn(max = 760.dp)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
                 .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                 ) { },
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Header (lowered down for safe display)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            // Main Panel Card
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 12.dp),
+                    .weight(1f, fill = false)
+                    .fillMaxHeight(0.85f)
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.line, RoundedCornerShape(20.dp)),
             ) {
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontFamily = SpaceGrotesk,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.09f)))
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(5.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .widthIn(max = 640.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-            ) {
-                options.forEachIndexed { index, label ->
-                    val interactionSource = remember { MutableInteractionSource() }
-                    val isFocused by interactionSource.collectIsFocusedAsState()
-                    val isSelected = index == selectedIndex
-                    val shape = RoundedCornerShape(10.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // Header Bar
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 42.dp)
-                            .clip(shape)
-                            .background(if (isFocused) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.045f))
-                            .let { if (isFocused) it.border(2.dp, colors.red, shape) else it }
-                            .let { if (index == selectedIndex.coerceAtLeast(0)) it.focusRequester(focusRequester) else it }
-                            .clickable(interactionSource = interactionSource, indication = null) { onOptionSelected(index) }
+                            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "Выберите вариант",
+                                color = colors.text3,
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (onResumeGame != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .clickable(onClick = onResumeGame)
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = stringResource(R.string.pause_resume),
+                                        tint = colors.green,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "В игру",
+                                        color = colors.green,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(colors.line)
+                    )
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                     ) {
-                        Text(
-                            text = label,
-                            color = Color.White,
-                            fontSize = 13.5.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = colors.green,
-                                modifier = Modifier.size(20.dp),
-                            )
+                        options.forEachIndexed { index, label ->
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isFocused by interactionSource.collectIsFocusedAsState()
+                            val isSelected = index == selectedIndex
+                            val shape = RoundedCornerShape(12.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 44.dp)
+                                    .clip(shape)
+                                    .background(if (isFocused) colors.surface3 else if (isSelected) colors.greenDim else colors.surface2)
+                                    .border(
+                                        width = if (isFocused) 1.5.dp else 1.dp,
+                                        color = if (isFocused) colors.green else if (isSelected) colors.green.copy(alpha = 0.7f) else colors.line,
+                                        shape = shape,
+                                    )
+                                    .let { if (index == selectedIndex.coerceAtLeast(0)) it.focusRequester(focusRequester) else it }
+                                    .clickable(interactionSource = interactionSource, indication = null) { onOptionSelected(index) }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = colors.text,
+                                    fontSize = 13.5.sp,
+                                    lineHeight = 17.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = colors.green,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
             // Unified Bottom Center Back Arrow
-            Box(
-                modifier = Modifier
-                    .padding(bottom = 14.dp, top = 4.dp)
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface2)
-                    .border(1.dp, colors.line, CircleShape)
-                    .clickable(onClick = onBack)
-                    .align(Alignment.CenterHorizontally),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = colors.text,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            me.magnum.melonds.ui.common.UnifiedBackButton(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
 
         me.magnum.melonds.ui.common.RequestInitialFocus(focusRequester)

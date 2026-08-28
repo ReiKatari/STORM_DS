@@ -242,6 +242,8 @@ namespace MelonDSAndroid {
     extern void dumpCurrentRendererDebugSnapshot();
     extern void setFastForwardActive(bool enabled);
     extern bool isFastForwardActive();
+    extern void setRewindActive(bool enabled);
+    extern bool isRewindActive();
     extern void pause();
     extern void resume();
     extern void reset();

@@ -11,6 +11,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.ui.theme.AppThemeManager
 import me.magnum.melonds.ui.theme.MelonTheme
 
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
+
 @AndroidEntryPoint
 class VulkanDriverManagerActivity : AppCompatActivity() {
 
@@ -20,6 +22,7 @@ class VulkanDriverManagerActivity : AppCompatActivity() {
         setTheme(AppThemeManager.currentTheme.getThemeResId())
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
+        window.applyImmersiveFullscreen()
 
         setContent {
             MelonTheme {
@@ -28,6 +31,18 @@ class VulkanDriverManagerActivity : AppCompatActivity() {
                     onBackClick = { finish() }
                 )
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        window.applyImmersiveFullscreen()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            window.applyImmersiveFullscreen()
         }
     }
 }

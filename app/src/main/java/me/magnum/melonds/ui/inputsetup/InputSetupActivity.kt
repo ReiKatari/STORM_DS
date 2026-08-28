@@ -26,6 +26,8 @@ import me.magnum.melonds.ui.inputsetup.ui.InputSetupScreen
 import me.magnum.melonds.ui.theme.MelonTheme
 import kotlin.math.absoluteValue
 
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
+
 @AndroidEntryPoint
 class InputSetupActivity : AppCompatActivity() {
 
@@ -59,10 +61,23 @@ class InputSetupActivity : AppCompatActivity() {
             || isFromSource(InputDevice.SOURCE_GAMEPAD)
     }
 
+    override fun onResume() {
+        super.onResume()
+        window.applyImmersiveFullscreen()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            window.applyImmersiveFullscreen()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
+        window.applyImmersiveFullscreen()
 
         setContent {
             MelonTheme {

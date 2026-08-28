@@ -7,6 +7,7 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -107,49 +108,56 @@ private fun BackgroundItemBase(
 ) {
     var isOptionsPopupVisible by remember { mutableStateOf(false) }
 
+    val cardShape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+    val accentColor = me.magnum.melonds.ui.theme.LocalWatermelonColors.current.green
+
     Card(
-        modifier = if (isSelected) {
-            Modifier.border(
-                width = 3.dp,
-                color = me.magnum.melonds.ui.theme.watermelon.red,
-                shape = MaterialTheme.shapes.medium,
-            )
-        } else {
-            Modifier
-        },
-        elevation = 4.dp,
+        modifier = Modifier
+            .border(
+                width = if (isSelected) 2.5.dp else 1.dp,
+                color = if (isSelected) accentColor else Color(0x25FFFFFF),
+                shape = cardShape,
+            ),
+        shape = cardShape,
+        backgroundColor = if (isSelected) Color(0xFF1A2234) else Color(0xFF161820),
+        elevation = if (isSelected) 6.dp else 2.dp,
         onClick = onClick,
     ) {
         Column(
-            modifier = Modifier.padding(4.dp).width(IntrinsicSize.Min),
+            modifier = Modifier.padding(6.dp).width(IntrinsicSize.Min),
         ) {
             if (LocalInspectionMode.current) {
-                Box(Modifier.fillMaxWidth().aspectRatio(1.0f).padding(start = 4.dp, top = 4.dp, end = 4.dp).background(Color.Gray))
+                Box(Modifier.fillMaxWidth().aspectRatio(1.0f).padding(4.dp).background(Color.Gray, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)))
             } else {
+                val imageModifier = Modifier
+                    .padding(4.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(1.0f)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .background(Color(0xFF0D0E13))
+
                 if (sharedTransitionScope != null && animatedContentScope != null) {
                     with(sharedTransitionScope) {
                         Image(
-                            modifier = Modifier
-                                .padding(start = 4.dp, top = 4.dp, end = 4.dp)
+                            modifier = imageModifier
                                 .sharedElement(
                                     sharedContentState = sharedTransitionScope.rememberSharedContentState(backgroundId.orEmpty()),
                                     animatedVisibilityScope = animatedContentScope,
-                                )
-                                .fillMaxWidth().aspectRatio(1.0f),
+                                ),
                             painter = backgroundImage,
                             contentDescription = null,
                         )
                     }
                 } else {
                     Image(
-                        modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 4.dp).fillMaxWidth().aspectRatio(1.0f),
+                        modifier = imageModifier,
                         painter = backgroundImage,
                         contentDescription = null,
                     )
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -157,6 +165,9 @@ private fun BackgroundItemBase(
                     text = backgroundName,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.subtitle2,
+                    color = if (isSelected) accentColor else Color.White,
+                    fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
                 )
                 if (showOptions) {
                     IconButton(
@@ -165,11 +176,13 @@ private fun BackgroundItemBase(
                         Icon(
                             painter = rememberVectorPainter(Icons.Filled.MoreVert),
                             contentDescription = stringResource(R.string.options),
+                            tint = if (isSelected) accentColor else Color(0xFFB0B0B0),
                         )
 
                         DropdownMenu(
                             expanded = isOptionsPopupVisible,
                             onDismissRequest = { isOptionsPopupVisible = false },
+                            modifier = Modifier.background(Color(0xFF1E212B)),
                         ) {
                             DropdownMenuItem(
                                 onClick = {
@@ -177,7 +190,7 @@ private fun BackgroundItemBase(
                                     onPreviewClick()
                                 },
                             ) {
-                                Text(stringResource(R.string.preview))
+                                Text(stringResource(R.string.preview), color = Color.White)
                             }
                             DropdownMenuItem(
                                 onClick = {
@@ -185,7 +198,7 @@ private fun BackgroundItemBase(
                                     onDeleteClick()
                                 },
                             ) {
-                                Text(stringResource(R.string.delete))
+                                Text(stringResource(R.string.delete), color = Color(0xFFFF5252))
                             }
                         }
                     }

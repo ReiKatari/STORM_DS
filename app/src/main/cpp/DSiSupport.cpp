@@ -39,19 +39,19 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
     {
         auto header = cart->GetHeader();
         uint8_t titleId[8];
-
-        // Byte 0-3: 4-character Title ID Low / GameCode ('K', 'C', 'M', 'E')
         memcpy(&titleId[0], header.GameCode, 4);
-
-        // Byte 4-7: Title ID High (0x00030004 -> 04 00 03 00 in LE)
         uint32_t titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : melonDS::DSiWareTitleIDHigh;
-        memcpy(&titleId[4], &titleIdHigh, 4);
+        titleId[4] = (uint8_t)(titleIdHigh & 0xFF);
+        titleId[5] = (uint8_t)((titleIdHigh >> 8) & 0xFF);
+        titleId[6] = (uint8_t)((titleIdHigh >> 16) & 0xFF);
+        titleId[7] = (uint8_t)((titleIdHigh >> 24) & 0xFF);
 
-        // Slot-1 Cartridge titles (DS, DSi-Enhanced, and DSiWare cart ROMs) in Slot-1 -> bootType 0x01
         uint32_t bootType = 0x01;
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Info,
-            "DSiSupport::SetupDSiDirectBoot: Setting up Autoload for Cart GameCode=%.4s TitleIdLowBytes=%02X%02X%02X%02X TitleIdHigh=0x%08X bootType=0x%02X (IsDSiWare=%d)\n",
-            header.GameCode, titleId[0], titleId[1], titleId[2], titleId[3], titleIdHigh, bootType, header.IsDSiWare() ? 1 : 0);
+            "DSiSupport::SetupDSiDirectBoot: Setting up Autoload for Cart GameCode=%.4s (%02X %02X %02X %02X %02X %02X %02X %02X) bootType=0x%02X (IsDSiWare=%d)\n",
+            header.GameCode,
+            titleId[0], titleId[1], titleId[2], titleId[3], titleId[4], titleId[5], titleId[6], titleId[7],
+            bootType, header.IsDSiWare() ? 1 : 0);
         setupAutoLoadRaw(dsi, titleId, bootType);
     }
 }
@@ -59,13 +59,21 @@ void MelonDSAndroid::DSiSupport::SetupDSiDirectBoot(melonDS::DSi* dsi)
 void MelonDSAndroid::DSiSupport::SetupDSiWareDirectBoot(melonDS::DSi* dsi, uint32_t titleIdLow, uint32_t titleIdHigh)
 {
     uint8_t titleId[8];
-    // Convert 32-bit hex titleIdLow (e.g. 0x4B434D45) to big-endian ASCII bytes ('K', 'C', 'M', 'E')
     titleId[0] = (uint8_t)((titleIdLow >> 24) & 0xFF);
     titleId[1] = (uint8_t)((titleIdLow >> 16) & 0xFF);
     titleId[2] = (uint8_t)((titleIdLow >> 8) & 0xFF);
     titleId[3] = (uint8_t)(titleIdLow & 0xFF);
 
-    memcpy(&titleId[4], &titleIdHigh, 4);
+    titleId[4] = (uint8_t)(titleIdHigh & 0xFF);
+    titleId[5] = (uint8_t)((titleIdHigh >> 8) & 0xFF);
+    titleId[6] = (uint8_t)((titleIdHigh >> 16) & 0xFF);
+    titleId[7] = (uint8_t)((titleIdHigh >> 24) & 0xFF);
+
+    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info,
+        "DSiSupport::SetupDSiWareDirectBoot: Setting up Autoload for TitleID Low=0x%08X High=0x%08X (Bytes: %02X %02X %02X %02X %02X %02X %02X %02X)\n",
+        titleIdLow, titleIdHigh,
+        titleId[0], titleId[1], titleId[2], titleId[3], titleId[4], titleId[5], titleId[6], titleId[7]);
 
     setupAutoLoadRaw(dsi, titleId, 0x03);
 }
+

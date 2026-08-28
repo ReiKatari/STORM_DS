@@ -19,6 +19,10 @@ import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.preference.SwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -303,6 +307,25 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         dsiCameraSourcePreference.setOnPreferenceChangeListener { _, newValue ->
             updateDsiCameraImagePreference(dsiCameraImagePreference, newValue as String)
+            true
+        }
+
+        val dualScreenCastSwitch = findPreference<SwitchPreference>("video_dual_screen_cast_enabled")
+        val isDualActive = settingsRepository.getDualScreenPreset() != DualScreenPreset.OFF || settingsRepository.isDualScreenCastEnabled()
+        dualScreenCastSwitch?.isChecked = isDualActive
+
+        dualScreenCastSwitch?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            settingsRepository.setDualScreenCastEnabled(enabled)
+            if (enabled) {
+                if (settingsRepository.getDualScreenPreset() == DualScreenPreset.OFF) {
+                    settingsRepository.setDualScreenPreset(DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM)
+                }
+                showDualScreenPresetsDialog()
+            } else {
+                settingsRepository.setDualScreenPreset(DualScreenPreset.OFF)
+            }
+            updateDualScreenPresetSummary()
             true
         }
 
@@ -1769,127 +1792,89 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun showDualScreenPresetsDialog() {
-        val currentPreset = settingsRepository.getDualScreenPreset()
-        val keepAspectRatioInitial = settingsRepository.isExternalDisplayKeepAspectRationEnabled()
-        val integerScaleInitial = settingsRepository.isDualScreenIntegerScaleEnabled()
-        val internalFillInitial = settingsRepository.isDualScreenInternalFillHeightEnabled()
-        val internalFillWidthInitial = settingsRepository.isDualScreenInternalFillWidthEnabled()
-        val externalFillInitial = settingsRepository.isDualScreenExternalFillHeightEnabled()
-        val externalFillWidthInitial = settingsRepository.isDualScreenExternalFillWidthEnabled()
-        val internalAlignmentInitial = settingsRepository.getDualScreenInternalVerticalAlignmentOverride()
-        val externalAlignmentInitial = settingsRepository.getDualScreenExternalVerticalAlignmentOverride()
-
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_dual_screen_presets, null)
-        val radioGroup = dialogView.findViewById<RadioGroup>(R.id.radioGroupPresets)
-        val keepAspectSwitch = dialogView.findViewById<SwitchCompat>(R.id.switchKeepAspectRatio)
-        val integerScaleSwitch = dialogView.findViewById<SwitchCompat>(R.id.switchIntegerScale)
-        val fillAreaButton = dialogView.findViewById<Button>(R.id.buttonFillAreaOptions)
-        val verticalAlignmentButton = dialogView.findViewById<Button>(R.id.buttonVerticalAlignmentOptions)
-        val verticalAlignmentSummary = dialogView.findViewById<TextView>(R.id.textVerticalAlignmentSummary)
-        val presetsDisabledHint = dialogView.findViewById<TextView>(R.id.textPresetsDisabledHint)
-
-        val presetToButtonId = mapOf(
-            DualScreenPreset.OFF to R.id.radioPresetOff,
-            DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM to R.id.radioPresetInternalTopExternalBottom,
-            DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP to R.id.radioPresetInternalBottomExternalTop,
+        val dialog = androidx.appcompat.app.AppCompatDialog(requireContext(), R.style.WatermelonAlertDialog)
+        dialog.supportRequestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
         )
-        var selectedPreset = currentPreset
-        var keepAspectRatio = keepAspectRatioInitial
-        var integerScale = integerScaleInitial && currentPreset != DualScreenPreset.OFF
-        var internalFill = internalFillInitial
-        var internalFillWidth = internalFillWidthInitial
-        var externalFill = externalFillInitial
-        var externalFillWidth = externalFillWidthInitial
-        var internalAlignmentOverride = internalAlignmentInitial
-        var externalAlignmentOverride = externalAlignmentInitial
 
-        radioGroup.check(presetToButtonId[currentPreset] ?: R.id.radioPresetOff)
-        keepAspectSwitch.isChecked = keepAspectRatio
-        integerScaleSwitch.isChecked = integerScale
+        val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setContent {
+                me.magnum.melonds.ui.theme.MelonTheme {
+                    var currentPreset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.getDualScreenPreset()) }
+                    var keepAspectRatio by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.isExternalDisplayKeepAspectRationEnabled()) }
+                    var integerScale by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.isDualScreenIntegerScaleEnabled()) }
+                    var internalFillHeight by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.isDualScreenInternalFillHeightEnabled()) }
+                    var internalFillWidth by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.isDualScreenInternalFillWidthEnabled()) }
+                    var externalFillHeight by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.isDualScreenExternalFillHeightEnabled()) }
+                    var externalFillWidth by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.isDualScreenExternalFillWidthEnabled()) }
+                    var internalAlignment by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.getDualScreenInternalVerticalAlignmentOverride()) }
+                    var externalAlignment by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.getDualScreenExternalVerticalAlignmentOverride()) }
 
-        fun updateDualScreenButtonsState() {
-            val presetSelected = selectedPreset != DualScreenPreset.OFF
-            presetsDisabledHint.isVisible = !presetSelected
-            keepAspectSwitch.isEnabled = presetSelected
-            integerScaleSwitch.isEnabled = presetSelected
-
-            val enabled = presetSelected && (integerScale || keepAspectRatio)
-            fillAreaButton.isEnabled = enabled
-            verticalAlignmentButton.isEnabled = enabled
-        }
-        fun updateVerticalAlignmentSummary() {
-            verticalAlignmentSummary.text = getVerticalAlignmentSummary(selectedPreset, internalAlignmentOverride, externalAlignmentOverride)
-            verticalAlignmentSummary.isVisible = true
-        }
-        updateVerticalAlignmentSummary()
-        updateDualScreenButtonsState()
-
-        radioGroup.setOnCheckedChangeListener { _, checkedId ->
-            val matching = presetToButtonId.entries.firstOrNull { it.value == checkedId }?.key ?: return@setOnCheckedChangeListener
-            selectedPreset = matching
-            if (selectedPreset == DualScreenPreset.OFF) {
-                integerScaleSwitch.isChecked = false
-                integerScale = false
-            }
-            updateDualScreenButtonsState()
-            updateVerticalAlignmentSummary()
-        }
-
-        keepAspectSwitch.setOnCheckedChangeListener { _, isChecked ->
-            keepAspectRatio = isChecked
-            updateDualScreenButtonsState()
-        }
-
-        integerScaleSwitch.setOnCheckedChangeListener { _, isChecked ->
-            integerScale = isChecked
-            updateDualScreenButtonsState()
-        }
-
-        fillAreaButton.setOnClickListener {
-            val fillOptionsEnabled = selectedPreset != DualScreenPreset.OFF && (integerScale || keepAspectRatio)
-            showFillAreaOptionsDialog(
-                fillOptionsEnabled = fillOptionsEnabled,
-                initialInternalFillHeight = internalFill,
-                initialInternalFillWidth = internalFillWidth,
-                initialExternalFillHeight = externalFill,
-                initialExternalFillWidth = externalFillWidth,
-            ) { newInternalFill, newInternalFillWidth, newExternalFill, newExternalFillWidth ->
-                internalFill = newInternalFill
-                internalFillWidth = newInternalFillWidth
-                externalFill = newExternalFill
-                externalFillWidth = newExternalFillWidth
-            }
-        }
-
-        verticalAlignmentButton.setOnClickListener {
-            showVerticalAlignmentOptionsDialog(
-                preset = selectedPreset,
-                initialInternalAlignment = internalAlignmentOverride,
-                initialExternalAlignment = externalAlignmentOverride,
-            ) { newInternalAlignment, newExternalAlignment ->
-                internalAlignmentOverride = newInternalAlignment
-                externalAlignmentOverride = newExternalAlignment
-                updateVerticalAlignmentSummary()
+                    me.magnum.melonds.ui.emulator.ui.DualScreenPresetsDialog(
+                        dualScreenPreset = currentPreset,
+                        onDualScreenPresetSelected = { preset ->
+                            settingsRepository.setDualScreenPreset(preset)
+                            settingsRepository.setDualScreenCastEnabled(preset != DualScreenPreset.OFF)
+                            findPreference<SwitchPreference>("video_dual_screen_cast_enabled")?.isChecked = (preset != DualScreenPreset.OFF)
+                            currentPreset = preset
+                            updateDualScreenPresetSummary()
+                        },
+                        keepAspectRatio = keepAspectRatio,
+                        onKeepAspectRatioChanged = {
+                            settingsRepository.setExternalDisplayKeepAspectRatioEnabled(it)
+                            keepAspectRatio = it
+                            updateDualScreenPresetSummary()
+                        },
+                        isDualScreenIntegerScaleEnabled = integerScale,
+                        onDualScreenIntegerScaleChanged = {
+                            settingsRepository.setDualScreenIntegerScaleEnabled(it)
+                            integerScale = it
+                            updateDualScreenPresetSummary()
+                        },
+                        internalFillHeight = internalFillHeight,
+                        onInternalFillHeightChanged = {
+                            settingsRepository.setDualScreenInternalFillHeightEnabled(it)
+                            internalFillHeight = it
+                        },
+                        internalFillWidth = internalFillWidth,
+                        onInternalFillWidthChanged = {
+                            settingsRepository.setDualScreenInternalFillWidthEnabled(it)
+                            internalFillWidth = it
+                        },
+                        externalFillHeight = externalFillHeight,
+                        onExternalFillHeightChanged = {
+                            settingsRepository.setDualScreenExternalFillHeightEnabled(it)
+                            externalFillHeight = it
+                        },
+                        externalFillWidth = externalFillWidth,
+                        onExternalFillWidthChanged = {
+                            settingsRepository.setDualScreenExternalFillWidthEnabled(it)
+                            externalFillWidth = it
+                        },
+                        internalVerticalAlignmentOverride = internalAlignment,
+                        onInternalVerticalAlignmentOverrideChanged = {
+                            settingsRepository.setDualScreenInternalVerticalAlignmentOverride(it)
+                            internalAlignment = it
+                        },
+                        externalVerticalAlignmentOverride = externalAlignment,
+                        onExternalVerticalAlignmentOverrideChanged = {
+                            settingsRepository.setDualScreenExternalVerticalAlignmentOverride(it)
+                            externalAlignment = it
+                        },
+                        onDismiss = {
+                            dialog.dismiss()
+                            updateDualScreenPresetSummary()
+                        }
+                    )
+                }
             }
         }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.dual_screen_presets_settings_title)
-            .setView(dialogView)
-            .setPositiveButton(R.string.ok) { _, _ ->
-                settingsRepository.setDualScreenPreset(selectedPreset)
-                settingsRepository.setExternalDisplayKeepAspectRatioEnabled(keepAspectRatio)
-                settingsRepository.setDualScreenIntegerScaleEnabled(integerScale && selectedPreset != DualScreenPreset.OFF)
-                settingsRepository.setDualScreenInternalFillHeightEnabled(internalFill)
-                settingsRepository.setDualScreenInternalFillWidthEnabled(internalFillWidth)
-                settingsRepository.setDualScreenExternalFillHeightEnabled(externalFill)
-                settingsRepository.setDualScreenExternalFillWidthEnabled(externalFillWidth)
-                settingsRepository.setDualScreenInternalVerticalAlignmentOverride(internalAlignmentOverride)
-                settingsRepository.setDualScreenExternalVerticalAlignmentOverride(externalAlignmentOverride)
-                updateDualScreenPresetSummary()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        dialog.setContentView(composeView)
+        dialog.show()
     }
 
     private fun showFillAreaOptionsDialog(

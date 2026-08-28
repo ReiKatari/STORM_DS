@@ -175,6 +175,10 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         return modifiedByUser
     }
 
+    fun resetModifiedState() {
+        modifiedByUser = false
+    }
+
     fun buildCurrentLayout(): List<PositionedLayoutComponent> {
         return views.values.map {
             PositionedLayoutComponent(it.getRect(), it.component, it.baseAlpha, it.onTop)

@@ -16,18 +16,34 @@ class Api26VibratorDelegate(private val vibrator: Vibrator) : VibratorDelegate {
     }
 
     override fun vibrate(duration: Int, amplitude: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val effect = if (duration <= 35) {
-                VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
-            } else if (duration <= 70) {
-                VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
-            } else {
-                VibrationEffect.createOneShot(duration.toLong(), amplitude.coerceIn(1, 255))
-            }
-            vibrator.vibrate(effect)
+        val durationMs = duration.toLong().coerceIn(5L, 150L)
+        val amp = amplitude.coerceIn(1, 255)
+
+        val effect = if (vibrator.hasAmplitudeControl()) {
+            VibrationEffect.createOneShot(durationMs, amp)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
         } else {
-            val effect = VibrationEffect.createOneShot(duration.toLong(), amplitude.coerceIn(1, 255))
-            vibrator.vibrate(effect)
+            VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val attributes = android.os.VibrationAttributes.Builder()
+                    .setUsage(android.os.VibrationAttributes.USAGE_TOUCH)
+                    .build()
+                vibrator.vibrate(effect, attributes)
+            } else {
+                val attributes = android.media.AudioAttributes.Builder()
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .build()
+                vibrator.vibrate(effect, attributes)
+            }
+        } catch (_: Exception) {
+            try {
+                vibrator.vibrate(effect)
+            } catch (_: Exception) {}
         }
     }
 

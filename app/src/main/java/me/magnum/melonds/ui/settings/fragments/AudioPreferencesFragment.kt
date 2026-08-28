@@ -49,7 +49,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
 
-        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency")
+        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency", "audio_soft_limiter_enabled", "audio_bass_boost_enabled", "audio_bass_boost_strength", "audio_spatial_audio_enabled", "audio_reverb_enabled")
     }
 
     private fun updateVolumePreferenceSummary(volumePreference: SeekBarPreference, volume: Int) {

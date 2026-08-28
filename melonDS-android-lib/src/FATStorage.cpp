@@ -92,7 +92,7 @@ FATStorage& FATStorage::operator=(FATStorage&& other) noexcept
 
 FATStorage::~FATStorage()
 {
-    if (!ReadOnly) Save();
+    if (File && !ReadOnly) Save();
 
     if (File) CloseFile(File);
     File = nullptr;
@@ -1133,8 +1133,8 @@ bool FATStorage::Load(const std::string& filename, u64 size, const std::optional
 
 bool FATStorage::Save()
 {
-    if (!SourceDir)
-    { // If we're not syncing the SD card image to a host directory...
+    if (!File || !SourceDir)
+    { // If we're not syncing the SD card image to a host directory or file is invalid...
         return true; // Not an error.
     }
 

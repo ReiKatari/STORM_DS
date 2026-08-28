@@ -151,6 +151,17 @@ fun RomCheatsUi(
     }
 
     LaunchedEffect(rom) {
+        // Auto-check for cheat files in /storage/emulated/0/STORM DS/cheats/
+        withContext(Dispatchers.IO) {
+            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+            val usrCheat = File(cheatsDir, "usrcheat.dat")
+            if (usrCheat.exists() && usrCheat.length() > 0) {
+                runCatching {
+                    cheatsRepository.importCheats(Uri.fromFile(usrCheat))
+                }
+            }
+        }
         refreshCheats()
     }
 
@@ -158,8 +169,19 @@ fun RomCheatsUi(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 cheatsRepository.importCheats(uri)
+                // Also copy imported file to STORM DS/cheats/usrcheat.dat for persistence
+                runCatching {
+                    val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+                    val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val target = File(cheatsDir, "usrcheat.dat")
+                        FileOutputStream(target).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Импорт чит-базы запущен...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Импорт чит-базы в STORM DS/cheats/ успешно выполнен!", Toast.LENGTH_SHORT).show()
                 }
                 refreshCheats()
             }
@@ -173,22 +195,27 @@ fun RomCheatsUi(
             val effectiveCode = romInfo?.gameCode?.takeIf { it.isNotBlank() } ?: extractDsiCode(rom)
             val effectiveTitle = romInfo?.gameTitle?.takeIf { it.isNotBlank() } ?: romDisplayName(rom)
 
-            // 1. First ensure embedded/online cheats are populated in database
+            // 1. First ensure embedded/offline cheats are populated in database
             val populated = EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle)
 
-            // 2. Try online mirror download of CHT / cheat file
+            // 2. Try online mirror download of full usrcheat.dat
             var downloaded = false
             val candidateUrls = listOf(
-                "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/Nintendo%20-%20Nintendo%20DS/Pokemon%20-%20HeartGold%20Version%20(USA).cht",
-                "https://raw.githubusercontent.com/ahezard/nds-rom-info/master/usrcheat.dat"
+                "https://raw.githubusercontent.com/ahezard/nds-rom-info/master/usrcheat.dat",
+                "https://raw.githubusercontent.com/DeadlyFoez/Usercheat-Database/master/usrcheat.dat",
+                "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/Nintendo%20-%20Nintendo%20DS/Pokemon%20-%20HeartGold%20Version%20(USA).cht"
             )
 
             val client = OkHttpClient.Builder()
                 .followRedirects(true)
                 .followSslRedirects(true)
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .connectTimeout(12, TimeUnit.SECONDS)
+                .readTimeout(35, TimeUnit.SECONDS)
                 .build()
+
+            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+            val targetCheatFile = File(cheatsDir, "usrcheat.dat")
 
             for (url in candidateUrls) {
                 try {
@@ -199,23 +226,33 @@ fun RomCheatsUi(
 
                     val response = client.newCall(request).execute()
                     if (response.isSuccessful && response.body != null) {
-                        val file = File(context.cacheDir, "usrcheat_downloaded.dat")
-                        FileOutputStream(file).use { fos ->
-                            fos.write(response.body!!.bytes())
+                        val bytes = response.body!!.bytes()
+                        if (bytes.isNotEmpty()) {
+                            FileOutputStream(targetCheatFile).use { fos ->
+                                fos.write(bytes)
+                            }
+                            // Also save to internal app storage
+                            val internalCheat = File(context.filesDir, "cheats/usrcheat.dat").apply { parentFile?.mkdirs() }
+                            FileOutputStream(internalCheat).use { fos ->
+                                fos.write(bytes)
+                            }
+
+                            cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
+                            downloaded = true
+                            break
                         }
-                        cheatsRepository.importCheats(Uri.fromFile(file))
-                        downloaded = true
-                        break
                     }
                 } catch (_: Throwable) {}
             }
 
             withContext(Dispatchers.Main) {
                 isDownloadingDb = false
-                if (populated || downloaded) {
-                    Toast.makeText(context, "База читов Action Replay успешно синхронизирована!", Toast.LENGTH_LONG).show()
+                if (downloaded) {
+                    Toast.makeText(context, "База читов (usrcheat.dat) сохранена в STORM DS/cheats/ и подключена!", Toast.LENGTH_LONG).show()
+                } else if (populated) {
+                    Toast.makeText(context, "Чит-коды Action Replay успешно подключены!", Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(context, "Чит-коды подключены из встроенной базы Action Replay.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "База читов проверена и синхронизирована.", Toast.LENGTH_SHORT).show()
                 }
                 refreshCheats()
             }

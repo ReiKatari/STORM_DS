@@ -268,6 +268,7 @@ class EmulatorActivity : AppCompatActivity() {
     private var shaderDiagnosticsRunnable: Runnable? = null
     @Inject lateinit var shaderCompatibilityLog: ShaderCompatibilityLog
     @Inject lateinit var shaderCompileTimeStore: ShaderCompileTimeStore
+    @Inject lateinit var cheatsRepository: me.magnum.melonds.domain.repositories.CheatsRepository
     private var currentMainScreenBackground = me.magnum.melonds.domain.model.RuntimeBackground.None
     private var currentPresentationBackend = PresentationBackend.OPEN_GL
     private var startupPresentationRefreshRunnable: Runnable? = null
@@ -358,6 +359,16 @@ class EmulatorActivity : AppCompatActivity() {
             toggleRotationLock()
         }
 
+        override fun onToggleAnalogStick() {
+            val prefs = PreferenceManager.getDefaultSharedPreferences(this@EmulatorActivity)
+            val current = prefs.getBoolean("pref_touch_dpad_stick_mode", false)
+            val next = !current
+            prefs.edit().putBoolean("pref_touch_dpad_stick_mode", next).apply()
+            val msg = if (next) "Режим стика: Включен 🕹️" else "Режим крестовины: Включен ➕"
+            Toast.makeText(this@EmulatorActivity, msg, Toast.LENGTH_SHORT).show()
+            binding.viewLayoutControls.invalidate()
+        }
+
         fun clearFastForwardHold() {
             if (!fastForwardHoldPressed) {
                 return
@@ -393,8 +404,17 @@ class EmulatorActivity : AppCompatActivity() {
         val logoutRequested =
             result.resultCode == RESULT_OK &&
                 result.data?.getBooleanExtra(SettingsActivity.KEY_RA_LOGOUT_REQUESTED, false) == true
+        val returnDirectToGame =
+            result.resultCode == RESULT_OK &&
+                result.data?.getBooleanExtra(SettingsActivity.KEY_RETURN_DIRECT_TO_GAME, false) == true
         if (logoutRequested) {
             viewModel.onRetroAchievementsLogoutRequested()
+        } else if (returnDirectToGame) {
+            pauseMenuState.value = null
+            activeOverlays.clear()
+            consoleOverlayStack.clear()
+            viewModel.onSettingsChanged(resumeWhenFinished = true)
+            resumeGameDirectly()
         } else {
             val pauseMenuStillOpen = pauseMenuState.value != null || activeOverlays.hasActiveOverlays()
             viewModel.onSettingsChanged(resumeWhenFinished = !pauseMenuStillOpen)
@@ -470,6 +490,7 @@ class EmulatorActivity : AppCompatActivity() {
     private val showPendingSubmissionsDialog = mutableStateOf(false)
     private val showDualScreenPresets = mutableStateOf(false)
     private val showScreenLayoutDialog = mutableStateOf(false)
+    private val cheatsOverlayRomInfo = mutableStateOf<me.magnum.melonds.domain.model.RomInfo?>(null)
     private var currentScreenLayoutMode: me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode? = null
     private val pauseMenuState = mutableStateOf<me.magnum.melonds.ui.emulator.model.PauseMenu?>(null)
 
@@ -489,6 +510,7 @@ class EmulatorActivity : AppCompatActivity() {
         val onSlotPicked: (SaveStateSlot) -> Unit,
     )
     private val saveStatesOverlayState = mutableStateOf<SaveStatesOverlayData?>(null)
+    private val isLidClosedState = mutableStateOf(false)
     private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
 
     private sealed interface ConsoleOverlayNode {
@@ -586,7 +608,16 @@ class EmulatorActivity : AppCompatActivity() {
         currentPresentationBackend = viewModel.getConfiguredVideoRenderer().toPresentationBackend()
         frameRenderCoordinator = createFrameRenderCoordinator(currentPresentationBackend)
         choreographerFrameRenderer = ChoreographerFrameRendererFactory.createFrameRenderer(frameRenderCoordinator)
-        melonTouchHandler = MelonTouchHandler()
+        melonTouchHandler = MelonTouchHandler(
+            onLidStateChanged = { isClosed ->
+                isLidClosedState.value = isClosed
+            },
+            onStartPressed = {
+                if (viewModel.canResumeEmulatorFromLifecycle()) {
+                    viewModel.resumeEmulator()
+                }
+            }
+        )
         mainScreenRenderer = DSRenderer(this)
         binding.surfaceMain.apply {
             setRenderer(mainScreenRenderer)
@@ -675,22 +706,7 @@ class EmulatorActivity : AppCompatActivity() {
 
                 AchievementUpdatesUi(viewModel)
 
-                if (showAchievementList.value) {
-                    AchievementListDialog(
-                        viewModel = achievementsViewModel,
-                        onDismiss = {
-                            activeOverlays.removeActiveOverlay(EmulatorOverlay.ACHIEVEMENTS_DIALOG)
-                            showAchievementList.value = false
-                            presentation?.setInfoOverlayContent(null)
-                            reopenPauseMenu()
-                        },
-                        onAchievementFocused = { model ->
-                            presentation?.setInfoOverlayContent {
-                                me.magnum.melonds.ui.common.ExternalAchievementInfo(model)
-                            }
-                        },
-                    )
-                }
+
 
                 if (showPendingSubmissionsDialog.value) {
                     PendingSubmissionsDialog(
@@ -718,6 +734,7 @@ class EmulatorActivity : AppCompatActivity() {
                     overlayFocusManager = focusManager
                 }
 
+                val achievementsViewModel = viewModels<EmulatorRetroAchievementsViewModel>().value
                 val saveStatesData = saveStatesOverlayState.value
                 val topConsoleNode = consoleOverlayStack.lastOrNull()
                 val pauseMenu = pauseMenuState.value
@@ -730,6 +747,7 @@ class EmulatorActivity : AppCompatActivity() {
                             window = rewindWindow,
                             onStateSelected = { state -> onRewindStateSelected(state) },
                             onDismiss = { closeRewindWindow() },
+                            onResumeGame = { resumeGameDirectly() },
                         )
                     }
                     showDualScreenPresets.value -> {
@@ -773,6 +791,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 showDualScreenPresets.value = false
                                 reopenPauseMenu()
                             },
+                            onResumeGame = { resumeGameDirectly() },
                         )
                     }
                     showScreenLayoutDialog.value -> {
@@ -786,6 +805,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 showScreenLayoutDialog.value = false
                                 reopenPauseMenu()
                             },
+                            onResumeGame = { resumeGameDirectly() },
                         )
                     }
                     topConsoleNode != null -> {
@@ -795,6 +815,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 entries = node.entries.map { it.first },
                                 onEntrySelected = { index -> node.entries[index].second.invoke() },
                                 onDismiss = { popConsoleOverlay() },
+                                onResumeGame = { resumeGameDirectly() },
                             )
                             is ConsoleOverlayNode.Choice -> me.magnum.melonds.ui.emulator.ui.ConsoleChoiceOverlay(
                                 title = node.title,
@@ -805,6 +826,7 @@ class EmulatorActivity : AppCompatActivity() {
                                     popConsoleOverlay()
                                 },
                                 onBack = { popConsoleOverlay() },
+                                onResumeGame = { resumeGameDirectly() },
                             )
                         }
                     }
@@ -838,6 +860,39 @@ class EmulatorActivity : AppCompatActivity() {
                                 dismissSaveStatesOverlay()
                                 reopenPauseMenu()
                             },
+                            onResumeGame = { resumeGameDirectly() },
+                        )
+                    }
+                    showAchievementList.value -> {
+                        AchievementListDialog(
+                            viewModel = achievementsViewModel,
+                            onDismiss = {
+                                activeOverlays.removeActiveOverlay(EmulatorOverlay.ACHIEVEMENTS_DIALOG)
+                                showAchievementList.value = false
+                                presentation?.setInfoOverlayContent(null)
+                                reopenPauseMenu()
+                            },
+                            onAchievementFocused = { model ->
+                                presentation?.setInfoOverlayContent {
+                                    me.magnum.melonds.ui.common.ExternalAchievementInfo(model)
+                                }
+                            },
+                            onResumeGame = { resumeGameDirectly() },
+                        )
+                    }
+                    cheatsOverlayRomInfo.value != null -> {
+                        val romInfo = cheatsOverlayRomInfo.value!!
+                        me.magnum.melonds.ui.emulator.ui.CheatsOverlay(
+                            romInfo = romInfo,
+                            cheatsRepository = cheatsRepository,
+                            onCheatsUpdated = {
+                                viewModel.onCheatsChanged()
+                            },
+                            onDismiss = {
+                                cheatsOverlayRomInfo.value = null
+                                reopenPauseMenu()
+                            },
+                            onResumeGame = { resumeGameDirectly() },
                         )
                     }
                     pauseMenu != null -> {
@@ -848,16 +903,29 @@ class EmulatorActivity : AppCompatActivity() {
                             rom = currentRom,
                             achievementsSummary = null,
                             onOptionSelected = { option ->
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.CALIBRATE_GYRO) {
+                                    motionSensorManager.calibrateCenter()
+                                    android.widget.Toast.makeText(this@EmulatorActivity, R.string.input_gyro_recenter_quick_action, android.widget.Toast.LENGTH_SHORT).show()
+                                    dismissPauseMenu()
+                                    viewModel.resumeEmulator()
+                                    return@PauseMenuOverlay
+                                }
                                 val isTerminal = option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.RESET ||
                                     option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.EXIT ||
                                     option == me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption.RESET ||
                                     option == me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption.EXIT
-                                val isViewOverlay = option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.REWIND
+                                val isViewOverlay = option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.REWIND ||
+                                    option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.CHEATS ||
+                                    option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.VIEW_ACHIEVEMENTS ||
+                                    option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.PRESETS ||
+                                    option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.SCREEN_LAYOUT
                                 if (isTerminal) {
                                     dismissPauseMenu()
                                 } else if (isViewOverlay) {
                                     pauseMenuState.value = null
-                                    rewindOpenedFromPauseMenu = true
+                                    if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.REWIND) {
+                                        rewindOpenedFromPauseMenu = true
+                                    }
                                 }
                                 viewModel.onPauseMenuOptionSelected(option)
                             },
@@ -890,6 +958,14 @@ class EmulatorActivity : AppCompatActivity() {
                             onFinished = { showBootAnimation.value = false },
                         )
                     }
+                }
+
+                if (isLidClosedState.value) {
+                    me.magnum.melonds.ui.emulator.ui.ConsoleLidClosedOverlay(
+                        onOpenLid = {
+                            melonTouchHandler.handleHingePress()
+                        },
+                    )
                 }
                 }
             }
@@ -962,10 +1038,8 @@ class EmulatorActivity : AppCompatActivity() {
                 viewModel.currentFps.collectLatest {
                     if (it == null) {
                         binding.textFps.text = null
-                        binding.textResolution.isGone = true
                     } else {
                         binding.textFps.text = getString(R.string.info_fps, it)
-                        setupResolutionHud()
                     }
                 }
             }
@@ -1121,9 +1195,7 @@ class EmulatorActivity : AppCompatActivity() {
                             closeEmulatorActivity()
                         }
                         is EmulatorUiEvent.OpenScreen.CheatsScreen -> {
-                            val intent = Intent(this@EmulatorActivity, CheatsActivity::class.java)
-                            intent.putExtra(CheatsActivity.KEY_ROM_INFO, RomInfoParcelable.fromRomInfo(it.romInfo))
-                            cheatsLauncher.launch(intent)
+                            cheatsOverlayRomInfo.value = it.romInfo
                         }
                         is EmulatorUiEvent.OpenScreen.SettingsScreen -> {
                             val settingsIntent = Intent(this@EmulatorActivity, SettingsActivity::class.java).apply {
@@ -1780,19 +1852,24 @@ class EmulatorActivity : AppCompatActivity() {
         translatorManager.syncOverlaySettings()
 
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        val gyroEnabled = prefs.getBoolean("pref_motion_gyro_enabled", false)
+        val gyroEnabled = prefs.getBoolean("input_gyro_aiming_enabled", false) || prefs.getBoolean("pref_motion_gyro_enabled", false)
         if (gyroEnabled) {
             val modeStr = prefs.getString("pref_motion_gyro_mode", "touch_aim")
             motionSensorManager.gyroMode = when (modeStr) {
-                "touch_aim" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.TOUCH_AIM
                 "dpad_steer" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.DPAD_STEER
                 "slot2_analog" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.SLOT2_ANALOG
-                else -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
+                else -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.TOUCH_AIM
             }
-            motionSensorManager.gyroSensitivityX = prefs.getInt("pref_motion_gyro_sensitivity_x", 125) / 100f
-            motionSensorManager.gyroSensitivityY = prefs.getInt("pref_motion_gyro_sensitivity_y", 125) / 100f
-            motionSensorManager.invertX = prefs.getBoolean("pref_motion_gyro_invert_x", false)
-            motionSensorManager.invertY = prefs.getBoolean("pref_motion_gyro_invert_y", false)
+            val sensX = prefs.getInt("input_gyro_sensitivity_x", prefs.getInt("pref_motion_gyro_sensitivity_x", 125))
+            val sensY = prefs.getInt("input_gyro_sensitivity_y", prefs.getInt("pref_motion_gyro_sensitivity_y", 125))
+            motionSensorManager.gyroSensitivityX = sensX / 100f
+            motionSensorManager.gyroSensitivityY = sensY / 100f
+            motionSensorManager.invertX = prefs.getBoolean("input_gyro_invert_x", prefs.getBoolean("pref_motion_gyro_invert_x", false))
+            motionSensorManager.invertY = prefs.getBoolean("input_gyro_invert_y", prefs.getBoolean("pref_motion_gyro_invert_y", false))
+            val deadX = prefs.getInt("input_gyro_deadzone_x", 15)
+            val deadY = prefs.getInt("input_gyro_deadzone_y", 15)
+            motionSensorManager.deadzoneX = deadX / 1000f
+            motionSensorManager.deadzoneY = deadY / 1000f
             motionSensorManager.startListening()
         } else {
             motionSensorManager.gyroMode = me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
@@ -1814,10 +1891,28 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun setupFullscreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+        }
         window.insetsControllerCompat?.let {
-            it.hide(WindowInsetsCompat.Type.navigationBars())
+            it.hide(WindowInsetsCompat.Type.systemBars())
             it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+        )
     }
 
     private fun setupSustainedPerformanceMode() {
@@ -1835,9 +1930,9 @@ class EmulatorActivity : AppCompatActivity() {
                 ConstraintLayout.LayoutParams.WRAP_CONTENT
             )
             val density = resources.displayMetrics.density
-            val topMarginVal = if (isSkin) (28 * density).toInt() else (8 * density).toInt()
-            val bottomMarginVal = (12 * density).toInt()
-            val sideMarginVal = (12 * density).toInt()
+            val topMarginVal = if (isSkin) (6 * density).toInt() else (6 * density).toInt()
+            val bottomMarginVal = (6 * density).toInt()
+            val sideMarginVal = (18 * density).toInt()
 
             when (position) {
                 FpsCounterPosition.TOP_LEFT -> {
@@ -1850,7 +1945,7 @@ class EmulatorActivity : AppCompatActivity() {
                     newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.horizontalBias = 0.44f
+                    newParams.horizontalBias = 0.36f
                     newParams.topMargin = topMarginVal
                 }
                 FpsCounterPosition.TOP_RIGHT -> {
@@ -1869,7 +1964,7 @@ class EmulatorActivity : AppCompatActivity() {
                     newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                     newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.horizontalBias = 0.44f
+                    newParams.horizontalBias = 0.36f
                     newParams.bottomMargin = bottomMarginVal
                 }
                 FpsCounterPosition.BOTTOM_RIGHT -> {
@@ -1913,9 +2008,9 @@ class EmulatorActivity : AppCompatActivity() {
 
         val isSkin = prefs.getBoolean("video_console_skin_enabled", false)
         val density = resources.displayMetrics.density
-        val topMarginVal = if (isSkin) (28 * density).toInt() else (8 * density).toInt()
-        val bottomMarginVal = (12 * density).toInt()
-        val sideMarginVal = (12 * density).toInt()
+        val topMarginVal = if (isSkin) (6 * density).toInt() else (6 * density).toInt()
+        val bottomMarginVal = (6 * density).toInt()
+        val sideMarginVal = (18 * density).toInt()
 
         val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
         val fpsPos = viewModel.getFpsCounterPosition()
@@ -1928,39 +2023,39 @@ class EmulatorActivity : AppCompatActivity() {
             "top_left" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (topMarginVal + 28 * density).toInt() else topMarginVal
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (topMarginVal + 26 * density).toInt() else topMarginVal
                 newParams.leftMargin = sideMarginVal
             }
             "top_center" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.horizontalBias = 0.56f
+                newParams.horizontalBias = 0.64f
                 newParams.topMargin = topMarginVal
             }
             "top_right" -> {
                 newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_RIGHT) (topMarginVal + 28 * density).toInt() else topMarginVal
+                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_RIGHT) (topMarginVal + 26 * density).toInt() else topMarginVal
                 newParams.rightMargin = sideMarginVal
             }
             "bottom_left" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (bottomMarginVal + 28 * density).toInt() else bottomMarginVal
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (bottomMarginVal + 26 * density).toInt() else bottomMarginVal
                 newParams.leftMargin = sideMarginVal
             }
             "bottom_center" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.horizontalBias = 0.56f
+                newParams.horizontalBias = 0.64f
                 newParams.bottomMargin = bottomMarginVal
             }
             "bottom_right" -> {
                 newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (bottomMarginVal + 28 * density).toInt() else bottomMarginVal
+                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (bottomMarginVal + 26 * density).toInt() else bottomMarginVal
                 newParams.rightMargin = sideMarginVal
             }
             else -> {
@@ -2103,7 +2198,10 @@ class EmulatorActivity : AppCompatActivity() {
                 Toast.makeText(this, getString(R.string.toast_layout_applied, getString(R.string.layout_auto_rotate)), Toast.LENGTH_SHORT).show()
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.OPEN_LAYOUT_EDITOR -> {
-                val intent = Intent(this, me.magnum.melonds.ui.layouteditor.LayoutEditorActivity::class.java)
+                val activeLayoutId = viewModel.getActiveLayoutId()
+                val intent = Intent(this, me.magnum.melonds.ui.layouteditor.LayoutEditorActivity::class.java).apply {
+                    putExtra(me.magnum.melonds.ui.layouteditor.LayoutEditorActivity.KEY_LAYOUT_ID, activeLayoutId.toString())
+                }
                 startActivity(intent)
                 return
             }
@@ -2206,27 +2304,46 @@ class EmulatorActivity : AppCompatActivity() {
                 bottomRect = if (areScreensSwapped) first else second
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.UNEVEN_LANDSCAPE -> {
-                // 2. Неровная альбомная: 2 экрана в альбомном режиме, где один большой (~70-75%), а второй маленький сбоку (прижат к верху)
-                var mainW = (surfaceH * me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
-                var mainH = surfaceH
-                if (mainW > (surfaceW * 0.72f).toInt()) {
-                    mainW = (surfaceW * 0.70f).toInt()
-                    mainH = (mainW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                // 2. Неровная альбомная: 2 экрана (один большой, второй маленький)
+                if (isLandscape) {
+                    var mainW = (surfaceH * me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                    var mainH = surfaceH
+                    if (mainW > (surfaceW * 0.72f).toInt()) {
+                        mainW = (surfaceW * 0.70f).toInt()
+                        mainH = (mainW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                    }
+                    val mainVMargin = ((surfaceH - mainH) / 2).coerceAtLeast(0)
+                    val mainRect = Rect(0, mainVMargin, mainW, mainH)
+
+                    val subW = ((surfaceW - mainW) - 12).coerceAtLeast(100)
+                    val subH = (subW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+                    val subX = surfaceW - subW
+                    val subY = 8 // прижат к верхнему краю
+                    val subRect = Rect(subX, subY, subW, subH)
+
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, mainRect)
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, subRect)
+
+                    topRect = if (areScreensSwapped) subRect else mainRect
+                    bottomRect = if (areScreensSwapped) mainRect else subRect
+                } else {
+                    // Portrait adaptation for uneven mode: Main screen on top, Sub screen below
+                    val mainW = surfaceW
+                    val mainH = (mainW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost((surfaceH * 0.50f).toInt())
+                    val mainRect = Rect(0, 0, mainW, mainH)
+
+                    val subW = (surfaceW * 0.45f).toInt()
+                    val subH = (subW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                    val subX = surfaceW - subW - 12
+                    val subY = mainH + 12
+                    val subRect = Rect(subX, subY, subW, subH)
+
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, mainRect)
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, subRect)
+
+                    topRect = if (areScreensSwapped) subRect else mainRect
+                    bottomRect = if (areScreensSwapped) mainRect else subRect
                 }
-                val mainVMargin = ((surfaceH - mainH) / 2).coerceAtLeast(0)
-                val mainRect = Rect(0, mainVMargin, mainW, mainH)
-
-                val subW = ((surfaceW - mainW) - 12).coerceAtLeast(100)
-                val subH = (subW / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
-                val subX = surfaceW - subW
-                val subY = 8 // прижат к верхнему краю
-                val subRect = Rect(subX, subY, subW, subH)
-
-                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, mainRect)
-                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, subRect)
-
-                topRect = if (areScreensSwapped) subRect else mainRect
-                bottomRect = if (areScreensSwapped) mainRect else subRect
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_PORTRAIT_LOCKED -> {
                 // 3. Ровная портретная: 2 экрана в портретном режиме друг под другом (100% ширины)
@@ -2284,39 +2401,11 @@ class EmulatorActivity : AppCompatActivity() {
                 }
             }
             else -> {
-                // AUTO_ROTATE / Пользовательский макет из редактора
-                var rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
-                var rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                // AUTO_ROTATE / Пользовательский профиль раскладки из редактора
+                val rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
 
-                // Sanity Check: Check orientation mismatch between view rects and actual device orientation
-                if (rawTop != null && rawBottom != null) {
-                    val isViewLayoutVertical = rawBottom.y >= rawTop.bottom - 20 && kotlin.math.abs(rawTop.x - rawBottom.x) < 50
-                    val isViewLayoutHorizontal = rawBottom.x >= rawTop.right - 20 && kotlin.math.abs(rawTop.y - rawBottom.y) < 50
-
-                    if (isLandscape && isViewLayoutVertical) {
-                        rawTop = null
-                        rawBottom = null
-                        lastKnownGoodTopRect = null
-                        lastKnownGoodBottomRect = null
-                    } else if (!isLandscape && isViewLayoutHorizontal) {
-                        rawTop = null
-                        rawBottom = null
-                        lastKnownGoodTopRect = null
-                        lastKnownGoodBottomRect = null
-                    }
-                }
-
-                // Discard stale rects if they overflow surface dimensions
-                if (rawTop != null) {
-                    if (rawTop.x + rawTop.width > surfaceW + 10 || rawTop.y + rawTop.height > surfaceH + 10) {
-                        rawTop = null
-                        rawBottom = null
-                        lastKnownGoodTopRect = null
-                        lastKnownGoodBottomRect = null
-                    }
-                }
-
-                // Compute authoritative default layout rects for the current orientation
+                // Compute authoritative default layout rects for the current orientation if no views exist
                 val defLayout = if (isLandscape) {
                     val sWidth = surfaceW / 2
                     val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
@@ -2328,30 +2417,8 @@ class EmulatorActivity : AppCompatActivity() {
                     Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
                 }
 
-                var rTop = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
-                var rBottom = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
-
-                // Auto-correct squeezed or misplaced secondary screen if not in hybrid mode
-                if (rTop != null && rBottom != null && hybridTopRect == null && hybridBottomRect == null) {
-                    if (!isLandscape) {
-                        // In Portrait: bottom screen MUST be full width (matching surface) and placed below top screen
-                        if (rBottom.width < (surfaceW * 0.85f).toInt() || rBottom.y < rTop.bottom - 20) {
-                            val sWidth = surfaceW
-                            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
-                            rTop = Rect(0, 0, sWidth, sHeight)
-                            rBottom = Rect(0, sHeight, sWidth, sHeight)
-                        }
-                    } else {
-                        // In Landscape: screens MUST be side-by-side matching half width
-                        if (rBottom.width < (surfaceW * 0.35f).toInt() || rBottom.x < rTop.right - 20) {
-                            val sWidth = surfaceW / 2
-                            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
-                            val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
-                            rTop = Rect(0, vMargin, sWidth, sHeight)
-                            rBottom = Rect(sWidth, vMargin, sWidth, sHeight)
-                        }
-                    }
-                }
+                val rTop = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
+                val rBottom = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
 
                 topRect = rTop
                 bottomRect = rBottom
@@ -2770,6 +2837,20 @@ class EmulatorActivity : AppCompatActivity() {
         requestOverlayHostFocus()
         activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
         pauseMenuState.value = pauseMenu
+    }
+
+    private fun resumeGameDirectly() {
+        consoleOverlayStack.clear()
+        saveStatesOverlayState.value = null
+        rewindOverlayState.value = null
+        showDualScreenPresets.value = false
+        showScreenLayoutDialog.value = false
+        showAchievementList.value = false
+        cheatsOverlayRomInfo.value = null
+        presentation?.setInfoOverlayContent(null)
+        activeOverlays.clear()
+        dismissPauseMenu()
+        viewModel.resumeEmulator()
     }
 
     private fun dismissPauseMenu() {
@@ -4479,6 +4560,7 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun showRewindWindow(rewindWindow: RewindWindow) {
+        MelonEmulator.setRewindActive(true)
         activeOverlays.addActiveOverlay(EmulatorOverlay.REWIND_WINDOW)
         rewindOverlayState.value = rewindWindow
         requestOverlayHostFocus()
@@ -4489,10 +4571,12 @@ class EmulatorActivity : AppCompatActivity() {
         rewindOverlayState.value = null
         rewindOpenedFromPauseMenu = false
         viewModel.rewindToState(state)
+        MelonEmulator.setRewindActive(false)
         viewModel.resumeEmulator()
     }
 
     private fun closeRewindWindow() {
+        MelonEmulator.setRewindActive(false)
         activeOverlays.removeActiveOverlay(EmulatorOverlay.REWIND_WINDOW)
         rewindOverlayState.value = null
         if (rewindOpenedFromPauseMenu) {

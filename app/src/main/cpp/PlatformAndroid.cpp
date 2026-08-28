@@ -27,6 +27,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include "pcap/pcap.h"
 #include "Platform.h"
 #include "MelonDS.h"
@@ -84,9 +85,14 @@ namespace Platform
             // If we're not allowed to create a new file...
             return 'r'; // Open in "r+" mode (IsExtended will add the "+")
 
-        if ((mode & FileMode::Preserve) && fileExists)
-            // If we're not allowed to overwrite a file that already exists...
-            return 'r'; // Open in "r+" mode (IsExtended will add the "+")
+        if (mode & FileMode::Preserve)
+        {
+            // If we're not allowed to overwrite/truncate a file that already exists...
+            if (fileExists)
+                return 'r'; // Open in "r+" mode (IsExtended will add the "+")
+            else
+                return 'w'; // File doesn't exist yet, open in "w+" mode to create it!
+        }
 
         return 'w';
     }
@@ -112,21 +118,54 @@ namespace Platform
         return modeString;
     }
 
-    FileHandle* OpenFile(const std::string& path, FileMode mode)
+    static std::string NormalizeAndDecodePath(const std::string& rawPath)
+    {
+        if (rawPath.empty())
+            return rawPath;
+
+        std::string path = rawPath;
+        if (path.rfind("file://", 0) == 0)
+        {
+            path = path.substr(7);
+        }
+
+        std::string decoded;
+        decoded.reserve(path.length());
+        for (size_t i = 0; i < path.length(); ++i)
+        {
+            if (path[i] == '%' && i + 2 < path.length())
+            {
+                int val = 0;
+                std::istringstream is(path.substr(i + 1, 2));
+                if (is >> std::hex >> val)
+                {
+                    decoded += static_cast<char>(val);
+                    i += 2;
+                    continue;
+                }
+            }
+            decoded += path[i];
+        }
+        return decoded;
+    }
+
+    FileHandle* OpenFile(const std::string& rawPath, FileMode mode)
     {
         if ((mode & (FileMode::ReadWrite | FileMode::Append)) == FileMode::None)
         { // If we aren't reading or writing, then we can't open the file
-            Log(LogLevel::Error, "Attempted to open \"%s\" in neither read nor write mode (FileMode 0x%x)\n", path.c_str(), mode);
+            Log(LogLevel::Error, "Attempted to open \"%s\" in neither read nor write mode (FileMode 0x%x)\n", rawPath.c_str(), mode);
             return nullptr;
         }
 
-        if (path.empty())
+        if (rawPath.empty())
         {
             return nullptr;
         }
 
+        std::string path = NormalizeAndDecodePath(rawPath);
+
         // If it's a standard absolute file path, open it a simple file. If not, delegate to the file handler
-        if (path[0] == '/')
+        if (!path.empty() && path[0] == '/')
         {
             bool fileExists = access(path.c_str(), F_OK) == 0;
             std::string modeString = GetModeString(mode, fileExists);
@@ -139,11 +178,22 @@ namespace Platform
                     return nullptr;
             }
             else
+            {
+                if (!fileExists)
+                {
+                    std::filesystem::path p(path);
+                    if (p.has_parent_path())
+                    {
+                        std::error_code ec;
+                        std::filesystem::create_directories(p.parent_path(), ec);
+                    }
+                }
                 return reinterpret_cast<FileHandle*>(fopen(path.c_str(), modeString.c_str()));
+            }
         }
         else
         {
-            return reinterpret_cast<FileHandle*>(MelonDSAndroid::fileHandler->open(path.c_str(), mode));
+            return reinterpret_cast<FileHandle*>(MelonDSAndroid::fileHandler->open(rawPath.c_str(), mode));
         }
     }
 
@@ -263,7 +313,9 @@ namespace Platform
 
     u64 FileRead(void* data, u64 size, u64 count, FileHandle* file)
     {
-        return fread(data, size, count, reinterpret_cast<FILE *>(file));
+        FILE* f = reinterpret_cast<FILE *>(file);
+        if (!f || size == 0 || count == 0) return 0;
+        return fread(data, size, count, f);
     }
 
     bool FileFlush(FileHandle* file)
@@ -291,6 +343,15 @@ namespace Platform
     u64 FileLength(FileHandle* file)
     {
         FILE* stdfile = reinterpret_cast<FILE *>(file);
+        int fd = fileno(stdfile);
+        if (fd >= 0)
+        {
+            struct stat st;
+            if (fstat(fd, &st) == 0 && st.st_size > 0)
+            {
+                return static_cast<u64>(st.st_size);
+            }
+        }
         long pos = ftell(stdfile);
         fseek(stdfile, 0, SEEK_END);
         long len = ftell(stdfile);

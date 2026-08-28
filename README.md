@@ -6,7 +6,7 @@
   <b>Высокопроизводительный форк WatermelonDS / melonDS для Android с Vulkan 3D, поддержкой шейдеров RetroArch, внешними экранами и RetroAchievements.</b>
 </p>
 
-[![Release](https://img.shields.io/badge/Release-v3.0.6-00D2FF.svg?style=for-the-badge)](https://github.com/ReiKatari/STORM_DS/releases)
+[![Release](https://img.shields.io/badge/Release-v3.1.2-00D2FF.svg?style=for-the-badge)](https://github.com/ReiKatari/STORM_DS/releases)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-0EA5E9.svg?style=for-the-badge)](https://github.com/ReiKatari/STORM_DS)
 [![License](https://img.shields.io/badge/License-GPL--3.0-10B981.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Fork](https://img.shields.io/badge/Fork%20of-WatermelonDS%20%7C%20melonDS-FF6B6B.svg?style=for-the-badge)](https://github.com/SapphireRhodonite/WatermelonDS)
@@ -89,7 +89,7 @@ STORM DS выражает глубокую признательность авт
 
 Релизные сборки APK доступны в разделе [Releases](https://github.com/ReiKatari/STORM_DS/releases):
 
-* **`STORM_DS_3.0.6.apk`** — Главная релизная версия с поддержкой Adrenotools, Vulkan 3D и автоматическими обновлениями.
+* **`STORM_DS_3.1.2.apk`** — Главная релизная версия с поддержкой Adrenotools, Vulkan 3D и автоматическими обновлениями.
 
 ---
 
@@ -107,10 +107,9 @@ STORM DS поддерживает запуск из популярных Android
 ## 🛠️ Сборка из исходного кода / Building
 
 ### Требования
-1. **JDK 21**
-2. **Android SDK & NDK** (`28.0.13004108`+)
-3. **CMake** (3.22.1+)
-4. **Rust Toolchain** (`rustup` / `cargo`) для сборки `librashader` под архитектуры Android ABI (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
+* JDK 17 или новее
+* Android SDK (API 35) + NDK (28.0.13004108)
+* CMake 3.22.1+
 
 ### Команды сборки
 ```bash
@@ -122,7 +121,7 @@ cd STORM_DS
 ./gradlew assembleGitHubProdRelease
 
 # Готовый APK будет расположен по пути:
-# app/build/outputs/apk/gitHubProd/release/STORM_DS_3.0.6.apk
+# app/build/outputs/apk/gitHubProd/release/STORM_DS_3.1.2.apk
 ```
 
 ---

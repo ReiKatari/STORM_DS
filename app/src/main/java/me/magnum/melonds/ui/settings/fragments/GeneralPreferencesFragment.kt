@@ -31,7 +31,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
-    private lateinit var rewindPreference: MasterSwitchPreference
+    private var rewindPreference: Preference? = null
     private lateinit var frameLimitSpeedPreference: ListPreference
 
     private val backupLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -80,9 +80,15 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         runCatching { setPreferencesFromResource(R.xml.pref_general, rootKey) }
         runCatching { addPreferencesFromResource(R.xml.pref_general_updates) }
 
-        findPreference<MasterSwitchPreference>("enable_rewind")?.let { pref ->
+        findPreference<Preference>("enable_rewind")?.let { pref ->
             rewindPreference = pref
-            helper.bindPreferenceSummaryToValue(pref)
+            pref.setOnPreferenceClickListener {
+                me.magnum.melonds.ui.settings.dialogs.showSettingsRewindDialog(requireContext()) {
+                    updateRewindSummary()
+                }
+                true
+            }
+            updateRewindSummary()
         }
         findPreference<ListPreference>("frame_limit_speed_multiplier")?.let { pref ->
             frameLimitSpeedPreference = pref
@@ -105,6 +111,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
         val accentPreference = findPreference<ListPreference>("theme_accent_color")
         if (accentPreference != null) {
+            if (accentPreference.value.isNullOrEmpty()) {
+                accentPreference.value = "electric_cyan"
+            }
             helper.bindPreferenceSummaryToValue(accentPreference)
             accentPreference.setOnPreferenceChangeListener { _, newValue ->
                 val newAccent = newValue as String
@@ -141,10 +150,21 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
     override fun onResume() {
         super.onResume()
-        if (::rewindPreference.isInitialized) {
-            rewindPreference.onPreferenceChangeListener?.onPreferenceChange(rewindPreference, rewindPreference.sharedPreferences?.getBoolean(rewindPreference.key, false))
-        }
+        updateRewindSummary()
         updateFrameLimitSpeedPreferenceState()
+    }
+
+    private fun updateRewindSummary() {
+        val pref = rewindPreference ?: return
+        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val isEnabled = sp.getBoolean("enable_rewind", false)
+        val period = sp.getInt("rewind_period", 10)
+        val window = sp.getInt("rewind_window", 6) * 10
+        pref.summary = if (isEnabled) {
+            "Включено (Интервал: ${period}с, Буфер: ${window}с)"
+        } else {
+            "Отключено"
+        }
     }
 
     override fun onDestroy() {

@@ -1,6 +1,7 @@
 #include <optional>
 #include "CartLoader.h"
 #include "Platform.h"
+#include "RomDecryptor.h"
 #include "SDCardArgsBuilder.h"
 
 using namespace melonDS;
@@ -60,6 +61,9 @@ std::optional<NDSCart::NDSCartArgs> BuildNdsCartArgs(EmulatorConfiguration confi
         .SRAM = std::move(sramData),
         .SRAMLength = sramFileLength,
     };
+
+    // In-memory transparent Modcrypt decryption for DSi / DSiWare ROMs
+    MelonDSAndroid::RomDecryptor::DecryptRomBuffer(romData.get(), (size_t) romFileLength);
 
     // nullptr as user-data is not OK!
     auto cart = NDSCart::ParseROM(std::move(romData), romFileLength, nullptr, std::move(cartargs));

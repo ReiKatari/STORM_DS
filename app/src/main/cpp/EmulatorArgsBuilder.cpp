@@ -23,15 +23,9 @@ bool hasConfiguredPath(const char* path) noexcept
 
 std::unique_ptr<ARM9BIOSImage> loadARM9BIOS(const EmulatorConfiguration& configuration) noexcept
 {
-    if (configuration.userInternalFirmwareAndBios)
+    if (configuration.userInternalFirmwareAndBios || !hasConfiguredPath(configuration.dsBios9Path))
     {
         return std::make_unique<ARM9BIOSImage>(bios_arm9_bin);
-    }
-
-    if (!hasConfiguredPath(configuration.dsBios9Path))
-    {
-        Log(Warn, "ARM9 BIOS path is not configured\n");
-        return nullptr;
     }
 
     std::string path = configuration.dsBios9Path;
@@ -46,21 +40,15 @@ std::unique_ptr<ARM9BIOSImage> loadARM9BIOS(const EmulatorConfiguration& configu
         return bios;
     }
 
-    Log(Warn, "ARM9 BIOS not found\n");
-    return nullptr;
+    Log(Warn, "ARM9 BIOS not found, falling back to FreeBIOS\n");
+    return std::make_unique<ARM9BIOSImage>(bios_arm9_bin);
 }
 
 std::unique_ptr<ARM7BIOSImage> loadARM7BIOS(const EmulatorConfiguration& configuration) noexcept
 {
-    if (configuration.userInternalFirmwareAndBios)
+    if (configuration.userInternalFirmwareAndBios || !hasConfiguredPath(configuration.dsBios7Path))
     {
         return std::make_unique<ARM7BIOSImage>(bios_arm7_bin);
-    }
-
-    if (!hasConfiguredPath(configuration.dsBios7Path))
-    {
-        Log(Warn, "ARM7 BIOS path is not configured\n");
-        return nullptr;
     }
 
     std::string path = configuration.dsBios7Path;
@@ -74,8 +62,8 @@ std::unique_ptr<ARM7BIOSImage> loadARM7BIOS(const EmulatorConfiguration& configu
         return bios;
     }
 
-    Log(Warn, "ARM7 BIOS not found\n");
-    return nullptr;
+    Log(Warn, "ARM7 BIOS not found, falling back to FreeBIOS\n");
+    return std::make_unique<ARM7BIOSImage>(bios_arm7_bin);
 }
 
 bool parseMacAddress(std::string mac, void* data)
@@ -110,11 +98,25 @@ bool parseMacAddress(std::string mac, void* data)
 void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& firmware, bool isInternalFirmware, int instanceId) noexcept
 {
     auto firmwareConfig = configuration.firmwareConfiguration;
+    auto &currentData = firmware.GetEffectiveUserData();
+
+    if (firmwareConfig.language == 8)
+    {
+        currentData.Settings &= ~Firmware::Language::Reserved;
+        currentData.Settings |= Firmware::Language::English;
+    }
+    else
+    {
+        auto language = static_cast<Firmware::Language>(firmwareConfig.language);
+        if (language != Firmware::Language::Reserved)
+        {
+            currentData.Settings &= ~Firmware::Language::Reserved;
+            currentData.Settings |= language;
+        }
+    }
 
     if (isInternalFirmware)
     {
-        auto &currentData = firmware.GetEffectiveUserData();
-
         // setting up username
         std::u16string username = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(firmwareConfig.username);
         if (!username.empty())
@@ -122,21 +124,6 @@ void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& fir
             size_t usernameLength = std::min((int) username.length(), 10);
             currentData.NameLength = usernameLength;
             memcpy(currentData.Nickname, username.data(), usernameLength * sizeof(char16_t));
-        }
-
-        if (firmwareConfig.language == 8)
-        {
-            currentData.Settings &= ~Firmware::Language::Reserved;
-            currentData.Settings |= Firmware::Language::English;
-        }
-        else
-        {
-            auto language = static_cast<Firmware::Language>(firmwareConfig.language);
-            if (language != Firmware::Language::Reserved)
-            { // If the frontend specifies a language (rather than using the existing value)...
-                currentData.Settings &= ~Firmware::Language::Reserved; // ..clear the existing language...
-                currentData.Settings |= language; // ...and set the new one.
-            }
         }
 
         // setting up color
@@ -270,19 +257,30 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM9BIOS(const EmulatorConfiguration& confi
     if (FileHandle* f = OpenFile(path, Read))
     {
         std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
-        FileRead(bios->data(), bios->size(), 1, f);
+        memset(bios->data(), 0, bios->size());
+        u64 fsize = FileLength(f);
+
+        if (fsize == 0x8000)
+        {
+            // 32KB dump: native DSi ARM9i code and AES KeyX live at 0x8000..0xFFFF
+            FileRead(bios->data() + 0x8000, 1, 0x8000, f);
+            memcpy(bios->data(), bios_arm9_bin.data(), std::min((size_t)0x1000, bios_arm9_bin.size()));
+        }
+        else if (fsize >= 0x10000)
+        {
+            FileRead(bios->data(), 1, 0x10000, f);
+        }
+        else
+        {
+            FileRead(bios->data(), 1, fsize, f);
+            if (fsize <= 0x8000)
+            {
+                memcpy(bios->data() + 0x8000, bios->data(), fsize);
+            }
+        }
         CloseFile(f);
 
-        if (!configuration.showBootScreen && configuration.dsiWareAutoloadTitleId == 0)
-        {
-            // herp
-            *(u32*)bios->data() = 0xEAFFFFFE; // overwrites the reset vector
-
-            // TODO!!!!
-            // hax the upper 32K out of the goddamn DSi
-            // done that :)  -pcy
-        }
-        Log(Info, "ARM9i BIOS loaded from %s\n", path.c_str());
+        Log(Info, "ARM9i BIOS loaded from %s (size %llu)\n", path.c_str(), fsize);
         return bios;
     }
 
@@ -303,19 +301,30 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM7BIOS(const EmulatorConfiguration& confi
     if (FileHandle* f = OpenFile(path, Read))
     {
         std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
-        FileRead(bios->data(), bios->size(), 1, f);
+        memset(bios->data(), 0, bios->size());
+        u64 fsize = FileLength(f);
+
+        if (fsize == 0x8000)
+        {
+            // 32KB dump: place at 0x8000..0xFFFF
+            FileRead(bios->data() + 0x8000, 1, 0x8000, f);
+            memcpy(bios->data(), bios_arm7_bin.data(), std::min((size_t)0x4000, bios_arm7_bin.size()));
+        }
+        else if (fsize >= 0x10000)
+        {
+            FileRead(bios->data(), 1, 0x10000, f);
+        }
+        else
+        {
+            FileRead(bios->data(), 1, fsize, f);
+            if (fsize <= 0x8000)
+            {
+                memcpy(bios->data() + 0x8000, bios->data(), fsize);
+            }
+        }
         CloseFile(f);
 
-        if (!configuration.showBootScreen && configuration.dsiWareAutoloadTitleId == 0)
-        {
-            // herp
-            *(u32*)bios->data() = 0xEAFFFFFE; // overwrites the reset vector
-
-            // TODO!!!!
-            // hax the upper 32K out of the goddamn DSi
-            // done that :)  -pcy
-        }
-        Log(Info, "ARM7i BIOS loaded from %s\n", path.c_str());
+        Log(Info, "ARM7i BIOS loaded from %s (size %llu)\n", path.c_str(), fsize);
         return bios;
     }
 
@@ -325,27 +334,26 @@ std::unique_ptr<DSiBIOSImage> loadDSiARM7BIOS(const EmulatorConfiguration& confi
 
 std::optional<Firmware> loadFirmware(const EmulatorConfiguration& configuration, int type, int instanceId) noexcept
 {
-    if (configuration.userInternalFirmwareAndBios)
-    { // If we're using built-in firmware...
-        if (type == 1)
-        {
-            // TODO: support generating a firmware for DSi mode
-        }
-        else
-        {
-            return generateFirmware(std::move(configuration), type, instanceId);
-        }
+    if (configuration.userInternalFirmwareAndBios && type == 0)
+    {
+        return generateFirmware(std::move(configuration), type, instanceId);
     }
 
     const char* configuredFirmwarePath = type == 1 ? configuration.dsiFirmwarePath : configuration.dsFirmwarePath;
     if (!hasConfiguredPath(configuredFirmwarePath))
     {
-        Log(Error, "%s firmware path is not configured\n", type == 1 ? "DSi" : "DS");
-        return std::nullopt;
+        if (type == 1 && hasConfiguredPath(configuration.dsFirmwarePath))
+        {
+            configuredFirmwarePath = configuration.dsFirmwarePath;
+        }
+        else
+        {
+            Log(Info, "%s firmware path is not configured, generating built-in firmware\n", type == 1 ? "DSi" : "DS");
+            return generateFirmware(std::move(configuration), type, instanceId);
+        }
     }
 
     std::string firmwarePath = configuredFirmwarePath;
-
     std::string fwpath_inst = firmwarePath; // TODO: Add support for one firmware file per instance
 
     Log(Debug, "Loading firmware from file %s\n", fwpath_inst.c_str());
@@ -357,8 +365,15 @@ std::optional<Firmware> loadFirmware(const EmulatorConfiguration& configuration,
         file = OpenFile(firmwarePath, Read);
         if (!file)
         {
-            Log(Error, "Couldn't open firmware file!\n");
-            return std::nullopt;
+            if (type == 1 && hasConfiguredPath(configuration.dsFirmwarePath))
+            {
+                file = OpenFile(configuration.dsFirmwarePath, Read);
+            }
+            if (!file)
+            {
+                Log(Warn, "Couldn't open firmware file, generating built-in firmware\n");
+                return generateFirmware(std::move(configuration), type, instanceId);
+            }
         }
     }
 
@@ -367,8 +382,8 @@ std::optional<Firmware> loadFirmware(const EmulatorConfiguration& configuration,
 
     if (!firmware.Buffer())
     {
-        Log(Error, "Couldn't read firmware file!\n");
-        return std::nullopt;
+        Log(Warn, "Couldn't read firmware file, generating built-in firmware\n");
+        return generateFirmware(std::move(configuration), type, instanceId);
     }
 
     customizeFirmware(std::move(configuration), firmware, false, instanceId);
@@ -413,63 +428,13 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
             Log(Warn, "Could not read DSi NAND user data, continuing with defaults\n");
         }
 
-        // override user settings, if needed
-        if (false)
+        // override user language setting
         {
             auto firmcfg = configuration.firmwareConfiguration;
-
-            // we store relevant strings as UTF-8, so we need to convert them to UTF-16
-            //auto converter = wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{};
-
-            // setting up username
-            auto username = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(firmcfg.username);
-            size_t usernameLength = std::min((int) username.length(), 10);
-            memset(&settings.Nickname, 0, sizeof(settings.Nickname));
-            memcpy(&settings.Nickname, username.data(), usernameLength * sizeof(char16_t));
-
-            // setting language
             if (firmcfg.language == 8)
                 settings.Language = Firmware::Language::English;
             else
                 settings.Language = static_cast<Firmware::Language>(firmcfg.language);
-
-            // setting up color
-            settings.FavoriteColor = firmcfg.favouriteColour;
-
-            // setting up birthday
-            settings.BirthdayMonth = firmcfg.birthdayMonth;
-            settings.BirthdayDay = firmcfg.birthdayDay;
-
-            // setup message
-            auto message = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(firmcfg.message);;
-            size_t messageLength = std::min((int) message.length(), 26);
-            memset(&settings.Message, 0, sizeof(settings.Message));
-            memcpy(&settings.Message, message.data(), messageLength * sizeof(char16_t));
-
-            // TODO: make other items configurable?
-        }
-
-        // fix touchscreen coords
-        settings.TouchCalibrationADC1 = {0, 0};
-        settings.TouchCalibrationPixel1 = {0, 0};
-        settings.TouchCalibrationADC2 = {255 << 4, 191 << 4};
-        settings.TouchCalibrationPixel2 = {255, 191};
-
-        if (configuration.dsiWareAutoloadTitleId != 0)
-        {
-            u32 titleIdLow = (u32)(configuration.dsiWareAutoloadTitleId & 0xFFFFFFFF);
-            u32 titleIdHigh = 0x00030004;
-            memcpy(&settings.SystemMenuMostRecentTitleID[0], &titleIdLow, sizeof(titleIdLow));
-            memcpy(&settings.SystemMenuMostRecentTitleID[4], &titleIdHigh, sizeof(titleIdHigh));
-        }
-
-        settings.EULAVersion = 0x01;
-
-        settings.UpdateHash();
-
-        if (!mount.ApplyUserData(settings))
-        {
-            Log(LogLevel::Warn, "Could not write patched DSi NAND user data, proceeding with unmodified NAND\n");
         }
     }
 

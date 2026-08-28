@@ -52,6 +52,7 @@ interface SettingsRepository {
     fun getDldiSdCardImageSize(): Int
     fun showBootScreen(): Boolean
     fun isJitEnabled(): Boolean
+    fun isStormCompilerEnabled(): Boolean
     fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode
     fun setDsiWareBootMode(mode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode)
 
@@ -181,6 +182,7 @@ interface SettingsRepository {
     fun is3dWidescreenEnabled(): Boolean
     fun is60FpsPatchEnabled(): Boolean
     fun isDualScreenCastEnabled(): Boolean
+    fun setDualScreenCastEnabled(enabled: Boolean)
     fun isTurboMacrosEnabled(): Boolean
     fun isGyroMicEnabled(): Boolean
 }

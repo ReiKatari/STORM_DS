@@ -96,7 +96,6 @@ class RomListFragment : Fragment() {
                         .collectAsState(initial = RomScanningStatus.NOT_SCANNING)
                     val confirmedAchievementHashes by romListViewModel.confirmedAchievementHashes.collectAsState()
                     val isRaAuthenticated by romListViewModel.isRaAuthenticated.collectAsState()
-                    val dsiWareBootMode by romListViewModel.dsiWareBootMode.collectAsState()
                     val raCoverByHash by romListViewModel.raCoverByHash.collectAsState()
                     val boxArtByUri by romListViewModel.boxArtByUri.collectAsState()
                     var contextRomUri by remember { mutableStateOf<String?>(null) }
@@ -129,8 +128,6 @@ class RomListFragment : Fragment() {
                         scanningStatus = scanningStatus,
                         confirmedAchievementHashes = confirmedAchievementHashes,
                         isRaAuthenticated = isRaAuthenticated,
-                        dsiWareBootMode = dsiWareBootMode,
-                        onDsiWareBootModeChanged = { mode -> romListViewModel.setDsiWareBootMode(mode) },
                         onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
                         onRomClick = { rom ->
                             romListViewModel.setRomLastPlayedNow(rom)
@@ -149,7 +146,6 @@ class RomListFragment : Fragment() {
                         onToggleViewMode = { romListViewModel.toggleViewMode() },
                         onBootFirmwareDs = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DS) },
                         onBootFirmwareDsi = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DSi) },
-                        onOpenDsiWareManager = { (activity as? RomListActivity)?.openDsiWareManager() },
                         onOpenSingleRom = { (activity as? RomListActivity)?.openSingleRom() },
                         onOpenSettings = { (activity as? RomListActivity)?.openSettings() },
                         onRomVisible = { rom -> romListViewModel.requestBoxArt(rom) },

@@ -10,6 +10,7 @@ import me.magnum.melonds.database.entities.CheatFolderEntity
 import me.magnum.melonds.database.entities.GameEntity
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 data class RawCheat(
@@ -102,10 +103,49 @@ object EmbeddedActionReplayCheats {
                         database.cheatDao().insertCheats(cheatEntities)
                     }
                 }
+                exportCheatsToFile(gameCode, targetGameName, categories)
                 Log.i(TAG, "Successfully populated ${categories.sumOf { it.cheats.size }} authentic cheats for $gameCode / $gameChecksum ($gameTitle)")
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed inserting cheats for $gameCode: ${e.message}")
+        }
+    }
+
+    private fun exportCheatsToFile(gameCode: String, gameTitle: String, categories: List<RawCheatCategory>) {
+        try {
+            val baseDirs = listOf(
+                File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/cheats"),
+                File(android.os.Environment.getExternalStorageDirectory(), "RetroArch/system/cheats")
+            )
+            val cleanTitle = gameTitle.replace("[^a-zA-Z0-9._ -]".toRegex(), "").trim()
+            val contentBuilder = java.lang.StringBuilder()
+            contentBuilder.append("## STORM DS CHEAT FILE\n")
+            contentBuilder.append("## Title: ").append(gameTitle).append("\n")
+            contentBuilder.append("## GameCode: ").append(gameCode).append("\n\n")
+
+            for (cat in categories) {
+                contentBuilder.append("### Folder: ").append(cat.folderName).append("\n\n")
+                for (cheat in cat.cheats) {
+                    contentBuilder.append("[").append(cheat.name).append("]\n")
+                    if (cheat.description.isNotBlank()) {
+                        contentBuilder.append("# ").append(cheat.description).append("\n")
+                    }
+                    contentBuilder.append(cheat.code).append("\n\n")
+                }
+            }
+
+            val text = contentBuilder.toString()
+            for (dir in baseDirs) {
+                if (!dir.exists()) dir.mkdirs()
+                if (dir.exists()) {
+                    File(dir, "${gameCode.uppercase()}.cht").writeText(text)
+                    if (cleanTitle.isNotBlank()) {
+                        File(dir, "$cleanTitle [${gameCode.uppercase()}].cht").writeText(text)
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "exportCheatsToFile failed for $gameCode: ${e.message}")
         }
     }
 

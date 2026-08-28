@@ -279,7 +279,7 @@ class AndroidRetroAchievementsRepository(
     }
 
     override suspend fun getRuntimeUserAchievements(achievements: List<RAUserAchievement>): List<RARuntimeUserAchievement> = withContext(Dispatchers.Default) {
-        val runtimeAchievements = MelonEmulator.getRuntimeAchievements()
+        val runtimeAchievements = runCatching { MelonEmulator.getRuntimeAchievements() }.getOrElse { emptyArray() }
         achievements.map { userAchievement ->
             val runtimeAchievement = runtimeAchievements.firstOrNull { it.id == userAchievement.achievement.id }
             RARuntimeUserAchievement(
@@ -689,32 +689,29 @@ class AndroidRetroAchievementsRepository(
     }
 
     private suspend fun getGameIdFromGameHash(gameHash: String, forceRefreshHashLibrary: Boolean = false): Result<RAGameId?> {
-        return if (forceRefreshHashLibrary || mustRefreshHashLibrary()) {
-            raApi.getGameHashList()
-                .onSuccess { gameHashes ->
-                    val gameHashEntities = gameHashes.map {
-                        RAGameHashEntity(it.key, it.value.id)
-                    }
-                    retroAchievementsDao.updateGameHashLibrary(gameHashEntities)
-                    sharedPreferences.edit {
-                        putLong(RA_HASH_LIBRARY_LAST_UPDATED, Clock.System.now().toEpochMilliseconds())
-                    }
+        val cachedGameId = retroAchievementsDao.getGameHashEntity(gameHash)?.let { RAGameId(it.gameId) }
+        if (!forceRefreshHashLibrary && cachedGameId != null && !mustRefreshHashLibrary()) {
+            return Result.success(cachedGameId)
+        }
+
+        return raApi.getGameHashList()
+            .onSuccess { gameHashes ->
+                val gameHashEntities = gameHashes.map {
+                    RAGameHashEntity(it.key, it.value.id)
                 }
-                .map {
-                    it[gameHash]
+                retroAchievementsDao.updateGameHashLibrary(gameHashEntities)
+                sharedPreferences.edit {
+                    putLong(RA_HASH_LIBRARY_LAST_UPDATED, Clock.System.now().toEpochMilliseconds())
                 }
-                .suspendRecoverCatching {
-                    retroAchievementsDao.getGameHashEntity(gameHash)?.let {
-                        RAGameId(it.gameId)
-                    }
-                }
-        } else {
-            suspendRunCatching {
-                retroAchievementsDao.getGameHashEntity(gameHash)?.let {
+            }
+            .map {
+                it[gameHash]
+            }
+            .suspendRecoverCatching {
+                cachedGameId ?: retroAchievementsDao.getGameHashEntity(gameHash)?.let {
                     RAGameId(it.gameId)
                 }
             }
-        }
     }
 
     private suspend fun fetchGameData(
@@ -723,7 +720,11 @@ class AndroidRetroAchievementsRepository(
         gameSetMetadata: CurrentGameSetMetadata,
         forceRefresh: Boolean,
     ): Result<RAGame?> {
-        return if (forceRefresh || mustRefreshAchievementSet(gameSetMetadata.currentMetadata)) {
+        val cachedGame = suspendRunCatching {
+            retroAchievementsDao.getGameWithSets(gameId.id)?.mapToModel()
+        }.getOrNull()
+
+        return if (forceRefresh || mustRefreshAchievementSet(gameSetMetadata.currentMetadata) || cachedGame == null) {
             raApi.getGameAchievementSets(gameHash).suspendMapCatching { game ->
                 val sets = game.sets.map {
                     it.mapToEntity()
@@ -741,18 +742,10 @@ class AndroidRetroAchievementsRepository(
                 retroAchievementsDao.updateGameSetMetadata(newMetadata)
                 game
             }.suspendRecoverCatching { exception ->
-                if (gameSetMetadata.isGameAchievementDataKnown()) {
-                    // Load DB data because we know that it was previously loaded
-                    retroAchievementsDao.getGameWithSets(gameId.id)?.mapToModel()
-                } else {
-                    // Try to load whatever is cached locally anyway (may be present even if metadata was lost).
-                    retroAchievementsDao.getGameWithSets(gameId.id)?.mapToModel() ?: throw exception
-                }
+                cachedGame ?: throw exception
             }
         } else {
-            suspendRunCatching {
-                retroAchievementsDao.getGameWithSets(gameId.id)?.mapToModel()
-            }
+            Result.success(cachedGame)
         }
     }
 
@@ -762,6 +755,10 @@ class AndroidRetroAchievementsRepository(
         gameSetMetadata: CurrentGameSetMetadata,
         forceRefresh: Boolean,
     ): Result<List<Long>> {
+        val cachedUnlocks = suspendRunCatching {
+            retroAchievementsDao.getGameUserUnlockedAchievements(gameId.id, forHardcoreMode).map { it.achievementId }
+        }.getOrDefault(emptyList())
+
         return if (forceRefresh || mustRefreshUserData(gameSetMetadata.currentMetadata, forHardcoreMode)) {
             raApi.getUserUnlockedAchievements(gameId, forHardcoreMode).onSuccess { userUnlocks ->
                 val userAchievementEntities = userUnlocks.map {
@@ -776,25 +773,11 @@ class AndroidRetroAchievementsRepository(
                 val newMetadata = gameSetMetadata.withNewUserAchievementsUpdate(forHardcoreMode)
                 retroAchievementsDao.updateGameUserUnlockedAchievements(gameId.id, userAchievementEntities)
                 retroAchievementsDao.updateGameSetMetadata(newMetadata)
-            }.suspendRecoverCatching { exception ->
-                if (gameSetMetadata.isUserAchievementDataKnown(forHardcoreMode)) {
-                    // Load DB data because we know that it was previously loaded
-                    retroAchievementsDao.getGameUserUnlockedAchievements(gameId.id, forHardcoreMode).map {
-                        it.achievementId
-                    }
-                } else {
-                    // Try to load whatever is cached locally anyway (may be present even if metadata was lost).
-                    retroAchievementsDao.getGameUserUnlockedAchievements(gameId.id, forHardcoreMode).map {
-                        it.achievementId
-                    }
-                }
+            }.suspendRecoverCatching {
+                cachedUnlocks
             }
         } else {
-            suspendRunCatching {
-                retroAchievementsDao.getGameUserUnlockedAchievements(gameId.id, forHardcoreMode).map {
-                    it.achievementId
-                }
-            }
+            Result.success(cachedUnlocks)
         }
     }
 

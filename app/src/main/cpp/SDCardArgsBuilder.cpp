@@ -19,9 +19,23 @@ std::optional<FATStorageArgs> getSDCardArgs(SdCardSettings settings) noexcept
     if (!settings.enabled)
         return std::nullopt;
 
+    if (!settings.imagePath || settings.imagePath[0] == '\0')
+        return std::nullopt;
+
+    FILE* f = fopen(settings.imagePath, "rb");
+    if (f)
+    {
+        fclose(f);
+    }
+    u64 targetSize = (settings.imageSize >= 0 && settings.imageSize < 6) ? imgSizes[settings.imageSize] : 0;
+    if (!f && targetSize == 0 && !settings.folderSync)
+    {
+        targetSize = MB(512); // Default 512MB for newly created image
+    }
+
     return FATStorageArgs {
         .Filename = settings.imagePath,
-        .Size = imgSizes[settings.imageSize],
+        .Size = targetSize,
         .ReadOnly = settings.readOnly,
         .SourceDir = settings.folderSync ? std::make_optional(settings.folderPath) : std::nullopt
     };

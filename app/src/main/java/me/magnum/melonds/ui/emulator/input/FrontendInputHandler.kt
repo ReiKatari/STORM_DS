@@ -19,6 +19,7 @@ abstract class FrontendInputHandler : IInputListener {
             Input.TRANSLATE -> onTranslate()
             Input.TOGGLE_EXTRA_BUTTONS -> onToggleExtraButtons()
             Input.LOCK_ROTATION -> onLockRotation()
+            Input.TOGGLE_ANALOG_STICK -> onToggleAnalogStick()
             else -> {}
         }
     }
@@ -47,4 +48,5 @@ abstract class FrontendInputHandler : IInputListener {
     abstract fun onTranslate()
     abstract fun onToggleExtraButtons()
     abstract fun onLockRotation()
+    abstract fun onToggleAnalogStick()
 }

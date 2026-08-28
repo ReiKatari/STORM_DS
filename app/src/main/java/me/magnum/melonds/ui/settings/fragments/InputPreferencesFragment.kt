@@ -22,7 +22,7 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     @Inject lateinit var vibrator: TouchVibrator
 
-    private lateinit var softInputBehaviourPreference: SoftwareInputBehaviourPreference
+    private lateinit var softInputBehaviourPreference: androidx.preference.ListPreference
 
     override fun getTitle() = getString(R.string.input)
 
@@ -62,7 +62,8 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     override fun onResume() {
         super.onResume()
-        // Set proper value for soft input behaviour preference since the value is not updated when returning from the fragment
-        softInputBehaviourPreference.value = softInputBehaviourPreference.sharedPreferences?.getString(softInputBehaviourPreference.key, "hide_system_buttons_when_controller_connected")
+        if (::softInputBehaviourPreference.isInitialized) {
+            softInputBehaviourPreference.value = softInputBehaviourPreference.sharedPreferences?.getString(softInputBehaviourPreference.key, "hide_system_buttons_when_controller_connected")
+        }
     }
 }

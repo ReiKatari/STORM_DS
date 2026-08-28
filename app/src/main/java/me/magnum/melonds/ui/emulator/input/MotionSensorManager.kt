@@ -41,6 +41,8 @@ class MotionSensorManager(
     var gyroSensitivityY: Float = 1.25f
     var invertX: Boolean = false
     var invertY: Boolean = false
+    var deadzoneX: Float = 0.015f
+    var deadzoneY: Float = 0.015f
     var deadzone: Float = 0.015f
     var accelerationPower: Float = 1.4f
     var gyroAimButtonRequired: Boolean = false
@@ -104,6 +106,17 @@ class MotionSensorManager(
         virtualTouchY = 96f
     }
 
+    fun calibrateCenter() {
+        recenterTouchCursor()
+        filteredGyroX = 0f
+        filteredGyroY = 0f
+        filteredGyroZ = 0f
+        if (isTouchingScreen) {
+            MelonEmulator.onScreenRelease()
+            isTouchingScreen = false
+        }
+    }
+
     private fun resetDirectionalTilt() {
         if (lastLeft) { onDirectionalTilt?.invoke(Input.LEFT, false); lastLeft = false }
         if (lastRight) { onDirectionalTilt?.invoke(Input.RIGHT, false); lastRight = false }
@@ -157,10 +170,12 @@ class MotionSensorManager(
         var rawY = gy - gyroBiasY
         var rawZ = gz - gyroBiasZ
 
-        // 2. Deadzone
-        if (abs(rawX) < deadzone) rawX = 0f
-        if (abs(rawY) < deadzone) rawY = 0f
-        if (abs(rawZ) < deadzone) rawZ = 0f
+        // 2. Separate X/Y Deadzones
+        val effDeadzoneX = if (deadzoneX > 0f) deadzoneX else deadzone
+        val effDeadzoneY = if (deadzoneY > 0f) deadzoneY else deadzone
+        if (abs(rawX) < effDeadzoneX) rawX = 0f
+        if (abs(rawY) < effDeadzoneY) rawY = 0f
+        if (abs(rawZ) < effDeadzoneX) rawZ = 0f
 
         // 3. Exponential Moving Average (EMA) filtering
         filteredGyroX = alphaEMA * rawX + (1f - alphaEMA) * filteredGyroX

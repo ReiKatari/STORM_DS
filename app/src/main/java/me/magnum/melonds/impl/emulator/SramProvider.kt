@@ -19,14 +19,16 @@ class SramProvider(
         val rootDirUri = try {
             settingsRepository.getSaveFileDirectory(rom)
         } catch (_: Throwable) {
-            val fallbackDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "saves").apply { mkdirs() }
+            val stormDsRoot = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            val fallbackDir = File(if (stormDsRoot.exists() || stormDsRoot.mkdirs()) stormDsRoot else (context.getExternalFilesDir(null) ?: context.filesDir), "saves").apply { mkdirs() }
             Uri.fromFile(fallbackDir)
         }
 
         var rootDocument = uriHandler.getUriTreeDocument(rootDirUri)
         if (rootDocument == null) {
-            // Safe fallback to app-private saves directory
-            val fallbackDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "saves").apply { mkdirs() }
+            // Safe fallback to STORM DS saves directory
+            val stormDsRoot = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            val fallbackDir = File(if (stormDsRoot.exists() || stormDsRoot.mkdirs()) stormDsRoot else (context.getExternalFilesDir(null) ?: context.filesDir), "saves").apply { mkdirs() }
             rootDocument = uriHandler.getUriTreeDocument(Uri.fromFile(fallbackDir))
                 ?: androidx.documentfile.provider.DocumentFile.fromFile(fallbackDir)
         }

@@ -5,6 +5,27 @@ import android.net.Uri
 import androidx.activity.result.ActivityResultCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Icon
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.preference.ListPreference
@@ -15,12 +36,16 @@ import com.smp.masterswitchpreference.MasterSwitchPreference
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
-import me.magnum.melonds.ui.settings.preferences.FirmwareBirthdayPreference
-import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
 import me.magnum.melonds.common.contracts.DirectoryPickerContract
 import me.magnum.melonds.common.contracts.FilePickerContract
 import me.magnum.melonds.extensions.addOnPreferenceChangeListener
+import me.magnum.melonds.ui.settings.dialogs.SettingsDialogScaffold
+import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
+import me.magnum.melonds.ui.settings.preferences.FirmwareBirthdayPreference
 import me.magnum.melonds.ui.settings.preferences.MacAddressPreference
+import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
+import me.magnum.melonds.ui.theme.LocalWatermelonColors
+import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.utils.FileUtils
 
 class PreferenceFragmentHelper(
@@ -38,7 +63,6 @@ class PreferenceFragmentHelper(
                         ?.let { preference.findIndexOfValue(it) }
                         ?: -1
 
-                    // Set the summary to reflect the new value.
                     val summary = if (index >= 0)
                         preference.entries[index]
                     else
@@ -49,8 +73,12 @@ class PreferenceFragmentHelper(
                     if (value == null || value !is Set<*> || value.isEmpty())
                         preference.summary = preference.getContext().getString(R.string.not_set)
                     else {
-                        val uris = value.mapNotNull { FileUtils.getAbsolutePathFromSAFUri(preference.context, (it as String).toUri()) }
-                        preference.summary = uris.joinToString("\n")
+                        val uris = value.mapNotNull {
+                            val uri = (it as String).toUri()
+                            val rawPath = FileUtils.getAbsolutePathFromSAFUri(preference.context, uri) ?: uri.path ?: it
+                            android.net.Uri.decode(rawPath)
+                        }
+                        preference.summary = uris.joinToString("\n").ifBlank { preference.context.getString(R.string.not_set) }
                     }
                 }
                 is FirmwareBirthdayPreference -> {
@@ -66,8 +94,6 @@ class PreferenceFragmentHelper(
                     preference.summary = addressString ?: preference.context.getString(R.string.not_set)
                 }
                 else -> {
-                    // For all other preferences, set the summary to the value's
-                    // simple string representation.
                     preference.summary = value?.toString() ?: preference.context.getString(R.string.not_set)
                 }
             }
@@ -79,11 +105,8 @@ class PreferenceFragmentHelper(
         if (preference == null)
             return
 
-        // Set the listener to watch for value changes.
         preference.addOnPreferenceChangeListener(sBindPreferenceSummaryToValueListener)
 
-        // Trigger the listener immediately with the preference's current value. Special handling
-        // for directory pickers and master switches since they can't be converted to string
         val initialValue: Any? = when (preference) {
             is StoragePickerPreference -> PreferenceManager.getDefaultSharedPreferences(preference.context).getStringSet(preference.key, null)
             is MasterSwitchPreference -> PreferenceManager.getDefaultSharedPreferences(preference.context).getBoolean(preference.key, false)
@@ -113,7 +136,6 @@ class PreferenceFragmentHelper(
                 return@ActivityResultCallback
             }
 
-            // Validate directory access before update preference
             if (directoryAccessValidator.getDirectoryAccessForPermission(it, storagePreference.permissions) == DirectoryAccessValidator.DirectoryAccessResult.OK) {
                 val persistDirectory = { storagePreference.onDirectoryPicked(it) }
                 if (onDirectoryPicked != null) {
@@ -179,33 +201,138 @@ class PreferenceFragmentHelper(
         directories: Set<String>,
         filePickerLauncher: ActivityResultLauncher<Uri?>
     ) {
+        val context = fragment.requireContext()
         val directoryList = directories.toList()
         val displayNames = directoryList.map { getDirectoryDisplayName(storagePreference.context, it) }
 
-        AlertDialog.Builder(fragment.requireContext())
-            .setTitle(R.string.manage_rom_directories)
-            .setItems(displayNames.toTypedArray()) { _, index ->
-                val uriString = directoryList[index]
-                promptRemoveDirectory(storagePreference, uriString)
+        showSettingsComposeDialog(context) { dismiss ->
+            val colors = LocalWatermelonColors.current
+            SettingsDialogScaffold(
+                title = stringResource(R.string.manage_rom_directories),
+                subtitle = null,
+                icon = Icons.Filled.Folder,
+                onDismiss = dismiss,
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    displayNames.forEachIndexed { index, name ->
+                        val uriString = directoryList[index]
+                        val shape = RoundedCornerShape(12.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 46.dp)
+                                .clip(shape)
+                                .background(colors.surface2)
+                                .border(1.dp, colors.line, shape)
+                                .clickable {
+                                    dismiss()
+                                    promptRemoveDirectory(storagePreference, uriString)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Folder,
+                                contentDescription = null,
+                                tint = colors.green,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = name,
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.DeleteOutline,
+                                contentDescription = stringResource(R.string.action_remove),
+                                tint = colors.red,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.green)
+                            .clickable {
+                                dismiss()
+                                val initialUri = directoryList.firstOrNull()?.toUri()
+                                filePickerLauncher.launch(initialUri)
+                            }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.add_directory),
+                            color = colors.bg,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
-            .setPositiveButton(R.string.add_directory) { _, _ ->
-                val initialUri = directoryList.firstOrNull()?.toUri()
-                filePickerLauncher.launch(initialUri)
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        }
     }
 
     private fun promptRemoveDirectory(storagePreference: StoragePickerPreference, uriString: String) {
+        val context = fragment.requireContext()
         val directoryName = getDirectoryDisplayName(storagePreference.context, uriString)
-        AlertDialog.Builder(fragment.requireContext())
-            .setTitle(R.string.remove_rom_directory_title)
-            .setMessage(fragment.getString(R.string.remove_rom_directory_message, directoryName))
-            .setPositiveButton(R.string.action_remove) { _, _ ->
-                removeDirectoryFromPreference(storagePreference, uriString)
+
+        showSettingsComposeDialog(context) { dismiss ->
+            val colors = LocalWatermelonColors.current
+            SettingsDialogScaffold(
+                title = stringResource(R.string.remove_rom_directory_title),
+                subtitle = stringResource(R.string.remove_rom_directory_message, directoryName),
+                icon = Icons.Filled.DeleteOutline,
+                onDismiss = dismiss,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.red)
+                            .clickable {
+                                removeDirectoryFromPreference(storagePreference, uriString)
+                                dismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.action_remove),
+                            color = colors.bg,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        }
     }
 
     private fun removeDirectoryFromPreference(storagePreference: StoragePickerPreference, uriString: String) {

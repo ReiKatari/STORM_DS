@@ -4,6 +4,7 @@ enum class TranslatorEngineType(val preferenceValue: String, val displayName: St
     OFFLINE("offline", "Автономный оффлайн-переводчик (Без интернета)"),
     YANDEX("yandex", "Яндекс Переводчик (Бесплатно / Идеальный русский)"),
     GOOGLE("google", "Google Translate (Бесплатно / Высокая скорость)"),
+    MICROSOFT("microsoft", "Microsoft Edge / Bing Neural (Бесплатно / Без лимитов)"),
     LINGVA("lingva", "Lingva Neural (Бесплатно / Без ограничений)"),
     DEEPL("deepl", "DeepL Neural API"),
     LIBRE("libre", "LibreTranslate (Open-Source)"),

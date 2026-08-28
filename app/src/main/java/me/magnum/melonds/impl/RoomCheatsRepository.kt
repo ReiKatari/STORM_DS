@@ -204,20 +204,28 @@ class RoomCheatsRepository(
         val insertedGame = database.gameDao().findGame(game.gameCode, game.gameChecksum)!!
         val gameId = insertedGame.id!!
 
-        val categoryEntities = game.cheats.map { category ->
-            CheatFolderEntity(
-                null,
-                gameId,
-                category.name
-            )
-        }
-        val categoryIds = database.cheatFolderDao().insertCheatFolders(categoryEntities)
+        val existingFolders = database.cheatFolderDao().getFoldersForGame(gameId)
+        val existingFolderMap = existingFolders.associateBy { it.name }.toMutableMap()
 
-        val cheatEntities = game.cheats.zip(categoryIds).flatMap { pair ->
-            pair.first.cheats.map {
+        for (category in game.cheats) {
+            val folderId = existingFolderMap[category.name]?.id ?: run {
+                val newFolder = CheatFolderEntity(null, gameId, category.name)
+                val newId = database.cheatFolderDao().insertCheatFolder(newFolder)
+                val createdEntity = newFolder.copy(id = newId)
+                existingFolderMap[category.name] = createdEntity
+                newId
+            }
+
+            val existingCheats = database.cheatDao().getFolderCheatsList(folderId)
+            val existingCheatKeys = existingCheats.map { (it.name.trim().lowercase()) to (it.code.trim().replace(" ", "").lowercase()) }.toSet()
+
+            val newCheats = category.cheats.filter {
+                val key = (it.name.trim().lowercase()) to (it.code.trim().replace(" ", "").lowercase())
+                key !in existingCheatKeys
+            }.map {
                 CheatEntity(
                     id = null,
-                    cheatFolderId = pair.second,
+                    cheatFolderId = folderId,
                     cheatDatabaseId = it.cheatDatabaseId,
                     name = it.name,
                     description = it.description,
@@ -225,8 +233,10 @@ class RoomCheatsRepository(
                     enabled = false
                 )
             }
+            if (newCheats.isNotEmpty()) {
+                database.cheatDao().insertCheats(newCheats)
+            }
         }
-        database.cheatDao().insertCheats(cheatEntities)
 
         settingsBackupManager.requestMirrorWrite()
         return Game(

@@ -47,8 +47,8 @@ class AppLogFileRecorder @Inject constructor(
     }
 
     private suspend fun recordLogcat() {
-        val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-        val logsDir = java.io.File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
+        val rootBase = android.os.Environment.getExternalStorageDirectory()
+        val logsDir = java.io.File(rootBase, "STORM DS/logs").apply { mkdirs() }
         val logFile = java.io.File(logsDir, LOG_FILE_NAME)
 
         try {

@@ -28,4 +28,11 @@
             <enum name="dsi" value="1"/>
         </attr>
     </declare-styleable>
+
+    <declare-styleable name="SdCardDirectoryPickerPreference">
+        <attr name="sdConsoleType" format="enum">
+            <enum name="ds" value="0"/>
+            <enum name="dsi" value="1"/>
+        </attr>
+    </declare-styleable>
 </resources>

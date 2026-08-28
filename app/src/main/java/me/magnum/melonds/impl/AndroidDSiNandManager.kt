@@ -44,6 +44,42 @@ class AndroidDSiNandManager(
     private val nandUsageCount = AtomicInteger(0)
     private val isNandOpen = AtomicBoolean(false)
 
+    private fun backupNandFileIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration) {
+        val nandUri = config.dsiNandUri ?: return
+        try {
+            val backupFile = File(context.filesDir, "nand_golden_backup.bin")
+            if (!backupFile.exists() || backupFile.length() < 512 * 1024) {
+                context.contentResolver.openInputStream(nandUri)?.use { input ->
+                    backupFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                Log.i(TAG, "backupNandFileIfNeeded: created golden backup at ${backupFile.absolutePath}")
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "backupNandFileIfNeeded: error backing up NAND", e)
+        }
+    }
+
+    private fun restoreNandFileFromBackupIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration): Boolean {
+        val nandUri = config.dsiNandUri ?: return false
+        try {
+            val backupFile = File(context.filesDir, "nand_golden_backup.bin")
+            if (backupFile.exists() && backupFile.length() >= 512 * 1024) {
+                context.contentResolver.openOutputStream(nandUri, "wt")?.use { output ->
+                    backupFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                Log.w(TAG, "restoreNandFileFromBackupIfNeeded: restored NAND from ${backupFile.absolutePath}")
+                return true
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "restoreNandFileFromBackupIfNeeded: error restoring NAND", e)
+        }
+        return false
+    }
+
     override suspend fun openNand(): OpenDSiNandResult {
         return nandControlLock.withLock {
             if (isNandOpen.get()) {
@@ -55,8 +91,14 @@ class AndroidDSiNandManager(
                 return OpenDSiNandResult.INVALID_DSI_SETUP
             }
 
-            val result = MelonDSiNand.openNand(settingsRepository.getEmulatorConfiguration())
-            val mapped = mapOpenNandReturnCodeToResult(result)
+            val config = settingsRepository.getEmulatorConfiguration()
+            backupNandFileIfNeeded(config)
+            var result = MelonDSiNand.openNand(config)
+            var mapped = mapOpenNandReturnCodeToResult(result)
+            if (mapped.isFailure() && restoreNandFileFromBackupIfNeeded(config)) {
+                result = MelonDSiNand.openNand(config)
+                mapped = mapOpenNandReturnCodeToResult(result)
+            }
             if (!mapped.isFailure()) {
                 isNandOpen.set(true)
                 nandUsageCount.set(1)
@@ -122,20 +164,12 @@ class AndroidDSiNandManager(
                         val unitCode = header[0x012].toInt() and 0xFF
                         val romVersion = (header[0x01E].toInt() and 0xFF).toUShort()
 
-                        val rawTitleId = if (readBytes >= 0x234) {
-                            ((header[0x230].toInt() and 0xFF) or
-                                ((header[0x231].toInt() and 0xFF) shl 8) or
-                                ((header[0x232].toInt() and 0xFF) shl 16) or
-                                ((header[0x233].toInt() and 0xFF) shl 24)).toUInt()
-                        } else 0.toUInt()
+                        val rawTitleId = (((gameCode.getOrNull(0)?.code ?: 0) shl 24) or
+                            ((gameCode.getOrNull(1)?.code ?: 0) shl 16) or
+                            ((gameCode.getOrNull(2)?.code ?: 0) shl 8) or
+                            (gameCode.getOrNull(3)?.code ?: 0)).toUInt()
 
-                        val rawCategoryId = if (readBytes >= 0x238) {
-                            ((header[0x234].toInt() and 0xFF) or
-                                ((header[0x235].toInt() and 0xFF) shl 8) or
-                                ((header[0x236].toInt() and 0xFF) shl 16) or
-                                ((header[0x237].toInt() and 0xFF) shl 24)).toUInt()
-                        } else 0.toUInt()
-
+                        val rawCategoryId = DSIWARE_CATEGORY
                         val rawPublicSav = if (readBytes >= 0x23C) {
                             ((header[0x238].toInt() and 0xFF) or
                                 ((header[0x239].toInt() and 0xFF) shl 8) or
@@ -150,14 +184,8 @@ class AndroidDSiNandManager(
                                 ((header[0x23F].toInt() and 0xFF) shl 24)).toUInt()
                         } else 0.toUInt()
 
-                        titleId = if (rawTitleId != 0u) rawTitleId else {
-                            ((gameCode.getOrNull(0)?.code ?: 0) or
-                             ((gameCode.getOrNull(1)?.code ?: 0) shl 8) or
-                             ((gameCode.getOrNull(2)?.code ?: 0) shl 16) or
-                             ((gameCode.getOrNull(3)?.code ?: 0) shl 24)).toUInt()
-                        }
-
-                        categoryId = if (rawCategoryId != 0u) rawCategoryId else DSIWARE_CATEGORY
+                        titleId = rawTitleId
+                        categoryId = rawCategoryId
                         publicSavSize = rawPublicSav
                         privateSavSize = rawPrivateSav
                         titleVersion = romVersion

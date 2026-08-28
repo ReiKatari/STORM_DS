@@ -35,5 +35,10 @@ data class EmulatorConfiguration(
         val dsiWareAutoloadTitleId: Long = 0L,
         val arm9OverclockMultiplier: Int = 1,
         val enable3dWidescreen: Boolean = false,
-        val enable60FpsPatch: Boolean = false
+        val enable60FpsPatch: Boolean = false,
+        val audioSoftLimiterEnabled: Boolean = true,
+        val audioBassBoostEnabled: Boolean = false,
+        val audioBassBoostStrength: Int = 5,
+        val audioSpatialAudioEnabled: Boolean = false,
+        val audioReverbEnabled: Boolean = false
 )

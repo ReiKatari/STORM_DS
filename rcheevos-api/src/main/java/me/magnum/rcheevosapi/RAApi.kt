@@ -91,7 +91,7 @@ class RAApi(
         private const val REQUEST_LEADERBOARD_INFO = "lbinfo"
         private const val REQUEST_PING = "ping"
 
-        private const val RCHEEVOS_VERSION = "12.3.0"
+        private const val RCHEEVOS_VERSION = "11.6.0"
         private const val MAX_AWARD_OFFSET_SECONDS = 14L * 24L * 60L * 60L
     }
 

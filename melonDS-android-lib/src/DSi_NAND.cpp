@@ -112,7 +112,11 @@ NANDImage::NANDImage(Platform::FileHandle* nandfile, const u8* es_keyY) noexcept
 
 NANDImage::~NANDImage()
 {
-    if (CurFile) CloseFile(CurFile);
+    if (CurFile)
+    {
+        Platform::FileFlush(CurFile);
+        CloseFile(CurFile);
+    }
     CurFile = nullptr;
 }
 
@@ -133,7 +137,10 @@ NANDImage& NANDImage::operator=(NANDImage&& other) noexcept
     if (this != &other)
     {
         if (CurFile)
+        {
+            Platform::FileFlush(CurFile);
             CloseFile(CurFile);
+        }
 
         CurFile = other.CurFile;
         eMMC_CID = other.eMMC_CID;
@@ -181,6 +188,8 @@ NANDMount::~NANDMount() noexcept
 {
     f_unmount("0:");
     ff_disk_close();
+    if (Image && Image->GetFile())
+        Platform::FileFlush(Image->GetFile());
 }
 
 
@@ -1154,6 +1163,7 @@ bool NANDMount::InitTitleFileStructure(const NDSHeader& header, const DSi_TMD::T
     u32 nwrite;
 
     // ticket
+    f_mkdir("0:/ticket");
     snprintf(fname, sizeof(fname), "0:/ticket/%08x", titleid0);
     f_mkdir(fname);
 
@@ -1164,7 +1174,7 @@ bool NANDMount::InitTitleFileStructure(const NDSHeader& header, const DSi_TMD::T
     if (readonly) f_chmod(fname, AM_RDO, AM_RDO);
 
     // folder
-
+    f_mkdir("0:/title");
     snprintf(fname, sizeof(fname), "0:/title/%08x", titleid0);
     f_mkdir(fname);
     snprintf(fname, sizeof(fname), "0:/title/%08x/%08x", titleid0, titleid1);

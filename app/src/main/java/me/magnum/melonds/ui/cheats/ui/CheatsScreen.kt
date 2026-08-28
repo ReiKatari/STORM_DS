@@ -4,7 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
@@ -135,23 +137,15 @@ fun CheatsScreen(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 10.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .clickable { navigateBack() },
-                        contentAlignment = androidx.compose.ui.Alignment.Center,
-                    ) {
-                        Icon(
-                            painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                            contentDescription = null,
-                            tint = colors.text,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_cheat),
+                        contentDescription = null,
+                        tint = colors.green,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(10.dp))
                     Text(
                         text = appBarTitle ?: stringResource(R.string.cheats),
                         color = colors.text,
@@ -167,13 +161,15 @@ fun CheatsScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(colors.surface2)
+                                .border(1.dp, colors.line, androidx.compose.foundation.shape.CircleShape)
                                 .clickable { viewModel.openEnabledCheats() },
                             contentAlignment = androidx.compose.ui.Alignment.Center,
                         ) {
                             Icon(
                                 painter = rememberVectorPainter(Icons.Outlined.CheckBox),
                                 contentDescription = stringResource(R.string.enabled_cheats),
-                                tint = colors.text2,
+                                tint = colors.text,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
@@ -183,16 +179,19 @@ fun CheatsScreen(
             }
         },
         bottomBar = {
-            me.magnum.melonds.ui.common.GamepadHintsFooter(
+            val colors = me.magnum.melonds.ui.theme.watermelon
+            Box(
                 modifier = Modifier
-                    .background(me.magnum.melonds.ui.theme.watermelon.bg)
-                    .navigationBarsPadding(),
-                hints = listOf(
-                    me.magnum.melonds.ui.common.GamepadHint(null, stringResource(R.string.pause_hint_navigate)),
-                    me.magnum.melonds.ui.common.GamepadHint("A", stringResource(R.string.pause_hint_accept)),
-                    me.magnum.melonds.ui.common.GamepadHint("B", stringResource(R.string.pause_hint_back)),
-                ),
-            )
+                    .fillMaxWidth()
+                    .background(colors.bg)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp, top = 4.dp),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) {
+                me.magnum.melonds.ui.common.UnifiedBackButton(
+                    onClick = { navigateBack() },
+                )
+            }
         },
         backgroundColor = me.magnum.melonds.ui.theme.watermelon.bg,
         contentWindowInsets = WindowInsets.safeDrawing,

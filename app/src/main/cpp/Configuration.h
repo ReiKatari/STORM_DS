@@ -71,6 +71,11 @@ struct AudioSettings
     int audioBitrate;
     int audioLatency;
     int micSource;
+    bool softLimiterEnabled = true;
+    bool bassBoostEnabled = false;
+    int bassBoostStrength = 5;
+    bool spatialAudioEnabled = false;
+    bool reverbEnabled = false;
 };
 
 struct SdCardSettings

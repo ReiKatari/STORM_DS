@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -107,6 +108,12 @@ import me.magnum.melonds.ui.theme.watermelon
 private const val FAB_ITEM_FROM_FILE = 1
 private const val FAB_ITEM_FROM_ROM_LIST = 2
 
+enum class DSiManagerFilter {
+    ALL,
+    DSIWARE,
+    DSI_ENHANCED
+}
+
 @Composable
 fun DSiWareManagerScreen(
     viewModel: DSiWareManagerViewModel,
@@ -117,6 +124,8 @@ fun DSiWareManagerScreen(
     val context = LocalContext.current
     val showingRomList = rememberSaveable(null) { mutableStateOf(false) }
     val renameDialogState = rememberTextInputDialogState()
+    var currentFilter by rememberSaveable { mutableStateOf(DSiManagerFilter.ALL) }
+    val colors = me.magnum.melonds.ui.theme.LocalWatermelonColors.current
 
     val importTitleFilePickLauncher = rememberDSiWareTitleImportFilePicker(
         onFilePicked = viewModel::importDSiWareTitleFile,
@@ -134,25 +143,185 @@ fun DSiWareManagerScreen(
     val currentState = state
     var showImportMenu by remember { mutableStateOf(false) }
     var enhancedRomToDelete by remember { mutableStateOf<Rom?>(null) }
-    WatermelonScreenScaffold(
-        title = stringResource(R.string.dsiware_manager),
-        onBack = onBackClick,
-        actions = {
-            if (currentState is DSiWareManagerUiState.Ready) {
-                Box(
+
+    Scaffold(
+        backgroundColor = colors.bg,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            Column(
+                modifier = Modifier
+                    .background(colors.surface)
+                    .statusBarsPadding()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .clickable { showImportMenu = true },
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
-                    Icon(
-                        painter = rememberVectorPainter(Icons.Default.Add),
-                        contentDescription = stringResource(R.string.import_dsiware_title),
-                        tint = watermelon.text,
-                        modifier = Modifier.size(24.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_firmware),
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.dsiware_manager),
+                            color = colors.text,
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Управление играми DSiWare и DSi Enhanced",
+                            color = colors.text3,
+                            fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    if (currentState is DSiWareManagerUiState.Ready) {
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.greenDim)
+                                .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                .clickable { showImportMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    painter = rememberVectorPainter(Icons.Default.Add),
+                                    contentDescription = stringResource(R.string.import_dsiware_title),
+                                    tint = colors.green,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Импорт",
+                                    color = colors.green,
+                                    fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
                 }
+
+                if (currentState is DSiWareManagerUiState.Ready) {
+                    val readyState = currentState as DSiWareManagerUiState.Ready
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // All Filter
+                        val isAllSelected = currentFilter == DSiManagerFilter.ALL
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isAllSelected) colors.surface2 else colors.surface)
+                                .border(
+                                    width = if (isAllSelected) 1.5.dp else 1.dp,
+                                    color = if (isAllSelected) colors.green else colors.line,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .clickable { currentFilter = DSiManagerFilter.ALL },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Все (${readyState.titles.size + readyState.dsiEnhancedRoms.size})",
+                                color = if (isAllSelected) colors.green else colors.text2,
+                                fontSize = 12.sp,
+                                fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            )
+                        }
+
+                        // DSiWare Filter
+                        val isDsiWareSelected = currentFilter == DSiManagerFilter.DSIWARE
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isDsiWareSelected) colors.surface2 else colors.surface)
+                                .border(
+                                    width = if (isDsiWareSelected) 1.5.dp else 1.dp,
+                                    color = if (isDsiWareSelected) colors.green else colors.line,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .clickable { currentFilter = DSiManagerFilter.DSIWARE },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "DSiWare (${readyState.titles.size})",
+                                color = if (isDsiWareSelected) colors.green else colors.text2,
+                                fontSize = 12.sp,
+                                fontWeight = if (isDsiWareSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            )
+                        }
+
+                        // DSi E. Filter
+                        val isEnhancedSelected = currentFilter == DSiManagerFilter.DSI_ENHANCED
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isEnhancedSelected) colors.surface2 else colors.surface)
+                                .border(
+                                    width = if (isEnhancedSelected) 1.5.dp else 1.dp,
+                                    color = if (isEnhancedSelected) colors.green else colors.line,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .clickable { currentFilter = DSiManagerFilter.DSI_ENHANCED },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "DSi E. (${readyState.dsiEnhancedRoms.size})",
+                                color = if (isEnhancedSelected) colors.green else colors.text2,
+                                fontSize = 12.sp,
+                                fontWeight = if (isEnhancedSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            )
+                        }
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+            }
+        },
+        bottomBar = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surface)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp, top = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                me.magnum.melonds.ui.common.UnifiedBackButton(
+                    onClick = onBackClick,
+                )
             }
         },
     ) { padding ->
@@ -171,6 +340,7 @@ fun DSiWareManagerScreen(
                     contentPadding = padding,
                     titles = currentState.titles,
                     dsiEnhancedRoms = currentState.dsiEnhancedRoms,
+                    filter = currentFilter,
                     onRenameTitle = { title ->
                         renameDialogState.show(
                             initialText = title.name,
@@ -363,6 +533,7 @@ private fun Ready(
     contentPadding: PaddingValues,
     titles: List<DSiWareTitle>,
     dsiEnhancedRoms: List<me.magnum.melonds.domain.model.rom.Rom>,
+    filter: DSiManagerFilter = DSiManagerFilter.ALL,
     onRenameTitle: (DSiWareTitle) -> Unit,
     onDeleteTitle: (DSiWareTitle) -> Unit,
     onImportTitleFile: (DSiWareTitle, DSiWareTitleFileType) -> Unit,
@@ -373,23 +544,30 @@ private fun Ready(
     retrieveRomIcon: suspend (me.magnum.melonds.domain.model.rom.Rom) -> RomIcon,
 ) {
     val colors = watermelon
+    val filteredTitles = if (filter == DSiManagerFilter.DSI_ENHANCED) emptyList() else titles
+    val filteredEnhancedRoms = if (filter == DSiManagerFilter.DSIWARE) emptyList() else dsiEnhancedRoms
+
     Box(modifier = modifier) {
-        if (titles.isEmpty() && dsiEnhancedRoms.isEmpty()) {
+        if (filteredTitles.isEmpty() && filteredEnhancedRoms.isEmpty()) {
             Text(
                 modifier = Modifier
                     .padding(contentPadding)
                     .consumeWindowInsets(contentPadding)
                     .align(Alignment.Center)
                     .padding(24.dp),
-                text = stringResource(R.string.no_dsiware_titles_installed),
+                text = when (filter) {
+                    DSiManagerFilter.DSIWARE -> "Нет установленных DSiWare игр в NAND"
+                    DSiManagerFilter.DSI_ENHANCED -> "Нет картриджей с DSi-улучшениями"
+                    DSiManagerFilter.ALL -> stringResource(R.string.no_dsiware_titles_installed)
+                },
                 color = colors.text3,
             )
         } else {
             DSiWareTitleList(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding,
-                titles = titles,
-                dsiEnhancedRoms = dsiEnhancedRoms,
+                titles = filteredTitles,
+                dsiEnhancedRoms = filteredEnhancedRoms,
                 onRenameTitle = onRenameTitle,
                 onDeleteTitle = onDeleteTitle,
                 onImportTitleFile = onImportTitleFile,
@@ -440,7 +618,7 @@ private fun DSiWareTitleList(
             start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
             top = contentPadding.calculateTopPadding(),
             end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
-            bottom = contentPadding.calculateBottomPadding() + 16.dp + 56.dp + 16.dp,
+            bottom = contentPadding.calculateBottomPadding() + 16.dp,
         ),
     ) {
         if (titles.isNotEmpty()) {

@@ -28,6 +28,12 @@ object WindowManagerCompat {
             point
         }
 
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        val ignoreCutout = prefs.getBoolean("system_ignore_display_cutout_in_layouts", false)
+        if (ignoreCutout) {
+            cutout = null
+        }
+
         var screenWidth: Int
         var screenHeight: Int
         if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {

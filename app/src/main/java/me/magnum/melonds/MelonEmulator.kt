@@ -175,6 +175,8 @@ object MelonEmulator {
 
     external fun loadRewindState(rewindSaveState: RewindSaveState): Boolean
 
+    external fun setRewindActive(active: Boolean)
+
     external fun getRewindWindow(): RewindWindow
 
 	external fun onScreenTouch(x: Int, y: Int)

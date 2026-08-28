@@ -18,13 +18,7 @@
                 app:layout_constraintTop_toBottomOf="parent"
                 android:visibility="invisible" />
 
-        <Constraint android:id="@+id/textFps">
-            <PropertySet
-                    app:applyMotionScene="false"
-                    app:visibilityMode="ignore" />
-        </Constraint>
-
-        <Constraint android:id="@+id/textResolution">
+        <Constraint android:id="@+id/layout_hud_container">
             <PropertySet
                     app:applyMotionScene="false"
                     app:visibilityMode="ignore" />

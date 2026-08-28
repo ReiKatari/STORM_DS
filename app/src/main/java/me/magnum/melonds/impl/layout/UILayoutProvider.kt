@@ -101,7 +101,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
         val secondaryScreenRequiresDefaultLayout = layout.secondaryScreenLayout.components.isNullOrEmpty() && variant.displays.secondaryScreenDisplay != null
         val requiresDefaultLayout = mainScreenRequiresDefaultLayout || secondaryScreenRequiresDefaultLayout
 
-        return if (requiresDefaultLayout) {
+        val baseLayout = if (requiresDefaultLayout) {
             val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, _currentLayoutConfiguration.value?.id)
             val mainScreenLayout = if (mainScreenRequiresDefaultLayout) {
                 layout.mainScreenLayout.copy(components = defaultLayout.mainScreenLayout.components)
@@ -117,6 +117,19 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
         } else {
             layout
         }
+
+        // Ensure buttons are populated if a layout profile contains screens but no touch controls
+        val mainComponents = baseLayout.mainScreenLayout.components
+        val hasScreens = mainComponents?.any { it.isScreen() } == true
+        val hasButtons = mainComponents?.any { !it.isScreen() } == true
+        if (hasScreens && !hasButtons) {
+            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, _currentLayoutConfiguration.value?.id)
+            val defaultButtons = defaultLayout.mainScreenLayout.components?.filter { !it.isScreen() } ?: emptyList()
+            val mergedComponents = (mainComponents ?: emptyList()) + defaultButtons
+            return UILayout(baseLayout.mainScreenLayout.copy(components = mergedComponents), baseLayout.secondaryScreenLayout)
+        }
+
+        return baseLayout
     }
 
     /**

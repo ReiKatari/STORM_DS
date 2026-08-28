@@ -32,6 +32,7 @@ import me.magnum.melonds.domain.model.SortingOrder
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.RomDirectoryScanStatus
 import me.magnum.melonds.domain.model.rom.config.RomConfig
+import me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.domain.repositories.RomsRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -238,57 +239,13 @@ class RomListViewModel @Inject constructor(
         // or typing in the search bar doesn't re-sort the entire 15k+ ROM library each keystroke.
         val sortedRomsFlow = combine(
             romsWithParents,
-            installedDsiWareShortcuts,
             _sortingMode,
             _sortingOrder,
-        ) { roms, shortcuts, mode, order ->
+        ) { roms, mode, order ->
             withContext(Dispatchers.Default) {
-                // Collect RA hashes and Title IDs from scanned ROMs to link with installed DSiWare shortcuts
-                val raHashMapByName = roms.filter { it.rom.retroAchievementsHash.isNotEmpty() }
-                    .associate { it.rom.name.lowercase().trim() to it.rom.retroAchievementsHash }
-                val raHashMapByHex = roms.filter { it.rom.retroAchievementsHash.isNotEmpty() }
-                    .associate { it.rom.fileName.substringBeforeLast('.').lowercase().trim() to it.rom.retroAchievementsHash }
-
-                val existingRomNames = roms.map { it.rom.name.lowercase().trim() }.toSet()
-                val existingFileBases = roms.map { it.rom.fileName.substringBeforeLast('.').lowercase().trim() }.toSet()
-                val existingTitleIds = roms.mapNotNull { it.rom.installedDsiWareTitleId }.toSet()
-
-                val uniqueShortcuts = shortcuts.filter { shortcut ->
-                    val rom = shortcut.rom
-                    val titleId = rom.installedDsiWareTitleId
-                    val titleHex = titleId?.toString(16)?.padStart(8, '0')?.lowercase() ?: ""
-                    val isAuto = dsiWareTitlesMetadataStore.isAutoImported(titleHex)
-                    val name = rom.name.lowercase().trim()
-                    val fileBase = rom.fileName.substringBeforeLast('.').lowercase().trim()
-
-                    !isAuto &&
-                        titleId !in existingTitleIds &&
-                        name !in existingRomNames &&
-                        fileBase !in existingFileBases
-                }.map { shortcut ->
-                    val rom = shortcut.rom
-                    val titleHex = rom.installedDsiWareTitleId?.toString(16)?.padStart(8, '0')?.lowercase() ?: ""
-                    val matchedHash = rom.retroAchievementsHash.takeIf { it.isNotEmpty() }
-                        ?: raHashMapByHex[titleHex]
-                        ?: raHashMapByName[rom.name.lowercase().trim()]
-                        ?: ""
-                    if (matchedHash.isNotEmpty() && matchedHash != rom.retroAchievementsHash) {
-                        val updatedRom = rom.copy(retroAchievementsHash = matchedHash)
-                        shortcut.copy(
-                            rom = updatedRom,
-                            searchKey = normalizeForSearch(me.magnum.melonds.ui.romlist.composables.romDisplayName(updatedRom)) +
-                                "\u0000" + normalizeForSearch(updatedRom.name) +
-                                "\u0000" + normalizeForSearch(updatedRom.fileName) +
-                                "\u0000" + normalizeForSearch(updatedRom.developerName)
-                        )
-                    } else {
-                        shortcut
-                    }
-                }
-
-                sortRoms(roms + uniqueShortcuts, mode, order) to mode
+                sortRoms(roms, mode, order) to mode
             }
-        }.distinctUntilChanged()
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList<RomWithParent>() to _sortingMode.value)
 
         @OptIn(FlowPreview::class)
         val debouncedQuery = _searchQuery

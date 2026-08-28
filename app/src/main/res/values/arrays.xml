@@ -172,6 +172,7 @@
         <item>quilez</item>
         <item>lcd</item>
         <item>scanlines</item>
+        <item>scale2x</item>
         <item>ai_upscale</item>
         <item>retroarch</item>
     </string-array>
@@ -461,17 +462,31 @@
 
     <string-array name="theme_accent_color_options">
         <item>@string/accent_electric_cyan</item>
+        <item>@string/accent_matrix_emerald</item>
         <item>@string/accent_amber_gold</item>
         <item>@string/accent_cyber_red</item>
-        <item>@string/accent_emerald_jade</item>
+        <item>@string/accent_neon_magenta</item>
         <item>@string/accent_royal_violet</item>
+        <item>@string/accent_deep_sapphire</item>
+        <item>@string/accent_solar_orange</item>
+        <item>@string/accent_mint_frost</item>
+        <item>@string/accent_toxic_lime</item>
+        <item>@string/accent_hot_pink</item>
+        <item>@string/accent_oled_white</item>
     </string-array>
     <string-array name="theme_accent_color_values">
         <item>electric_cyan</item>
+        <item>matrix_emerald</item>
         <item>amber_gold</item>
         <item>cyber_red</item>
-        <item>emerald_jade</item>
+        <item>neon_magenta</item>
         <item>royal_violet</item>
+        <item>deep_sapphire</item>
+        <item>solar_orange</item>
+        <item>mint_frost</item>
+        <item>toxic_lime</item>
+        <item>hot_pink</item>
+        <item>oled_white</item>
     </string-array>
 
     <string-array name="rom_card_style_options">

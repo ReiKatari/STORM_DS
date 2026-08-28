@@ -29,17 +29,6 @@
 #define TITLE_IMPORT_DSI_MEMORY_FULL 7
 
 const u32 DSI_NAND_FILE_CATEGORY = 0x00030004;
-const u32 DSI_SYSTEM_MENU_CATEGORY = 0x00030017;
-const size_t DSI_LAUNCHER_SLOT_COUNT = 39;
-const size_t DSI_TITLE_ID_SIZE = 8;
-const size_t WRAP_ENTRIES_OFFSET = 0x40;
-const size_t WRAP_ENTRIES_SIZE = DSI_LAUNCHER_SLOT_COUNT * DSI_TITLE_ID_SIZE;
-const size_t MENUSAVE_ENTRIES_OFFSET = 0x10;
-const size_t MENUSAVE_FILE_SIZE = 0x154;
-const u32 MENUSAVE_SPECIAL_CATEGORY = 0x00000000;
-const u32 MENUSAVE_SPECIAL_TITLE_ID = 0x414c5845;
-const u32 MENUSAVE_REPLACED_SYSTEM_CATEGORY = 0x00030005;
-const u32 MENUSAVE_REPLACED_SYSTEM_TITLE_ID = 0x484e4a45;
 const u64 DSI_USER_STORAGE_BLOCK_SIZE = 128ULL * 1024ULL;
 const u64 DSI_USER_STORAGE_BLOCK_COUNT = 1024ULL;
 const u64 DSI_USER_STORAGE_BYTES = DSI_USER_STORAGE_BLOCK_SIZE * DSI_USER_STORAGE_BLOCK_COUNT;
@@ -108,48 +97,12 @@ static bool hasDsiWareUserStorageForTitle(
     return allowed;
 }
 
-enum class LauncherMetadataResult
-{
-    Ok,
-    Full,
-    Failed,
-};
-
-enum class LauncherEntryMutation
-{
-    Unchanged,
-    Changed,
-    Full,
-};
-
-struct LauncherTitle
-{
-    u32 category;
-    u32 titleId;
-
-    bool operator==(const LauncherTitle& other) const
-    {
-        return category == other.category && titleId == other.titleId;
-    }
-};
-
-static u16 readLe16(const u8* data)
-{
-    return static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
-}
-
 static u32 readLe32(const u8* data)
 {
     return static_cast<u32>(data[0]) |
         (static_cast<u32>(data[1]) << 8) |
         (static_cast<u32>(data[2]) << 16) |
         (static_cast<u32>(data[3]) << 24);
-}
-
-static void writeLe16(u8* data, u16 value)
-{
-    data[0] = value & 0xFF;
-    data[1] = (value >> 8) & 0xFF;
 }
 
 static void writeLe32(u8* data, u32 value)
@@ -160,657 +113,152 @@ static void writeLe32(u8* data, u32 value)
     data[3] = (value >> 24) & 0xFF;
 }
 
-static bool isEmptyLauncherEntry(const u8* entry)
-{
-    for (size_t i = 0; i < DSI_TITLE_ID_SIZE; i++)
-    {
-        if (entry[i] != 0)
-            return false;
-    }
-    return true;
-}
-
-static bool launcherEntryMatches(const u8* entry, u32 category, u32 titleId)
-{
-    return readLe32(entry) == titleId && readLe32(entry + 4) == category;
-}
-
-static LauncherTitle readLauncherTitle(const u8* entry)
-{
-    return LauncherTitle {
-        readLe32(entry + 4),
-        readLe32(entry),
-    };
-}
-
-static void writeLauncherTitle(u8* entry, const LauncherTitle& title)
-{
-    writeLe32(entry, title.titleId);
-    writeLe32(entry + 4, title.category);
-}
-
-static int countLauncherEntries(const u8* entries)
-{
-    int count = 0;
-    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
-    {
-        if (!isEmptyLauncherEntry(entries + slot * DSI_TITLE_ID_SIZE))
-            count++;
-    }
-    return count;
-}
-
-static std::vector<LauncherTitle> readLauncherEntries(const u8* entries)
-{
-    std::vector<LauncherTitle> titles;
-    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
-    {
-        const u8* entry = entries + slot * DSI_TITLE_ID_SIZE;
-        if (!isEmptyLauncherEntry(entry))
-            titles.push_back(readLauncherTitle(entry));
-    }
-    return titles;
-}
-
-static bool containsLauncherTitle(const std::vector<LauncherTitle>& titles, const LauncherTitle& title)
-{
-    return std::find(titles.begin(), titles.end(), title) != titles.end();
-}
-
-static void appendUniqueLauncherTitle(std::vector<LauncherTitle>& titles, const LauncherTitle& title)
-{
-    if (!containsLauncherTitle(titles, title))
-        titles.push_back(title);
-}
-
-static void writeLauncherEntries(u8* entries, const std::vector<LauncherTitle>& titles)
-{
-    memset(entries, 0, DSI_LAUNCHER_SLOT_COUNT * DSI_TITLE_ID_SIZE);
-    const size_t count = std::min(titles.size(), DSI_LAUNCHER_SLOT_COUNT);
-    for (size_t slot = 0; slot < count; slot++)
-        writeLauncherTitle(entries + slot * DSI_TITLE_ID_SIZE, titles[slot]);
-}
-
-static LauncherEntryMutation addLauncherEntry(u8* entries, u32 category, u32 titleId, int& slotOut)
-{
-    slotOut = -1;
-    int emptySlot = -1;
-
-    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
-    {
-        u8* entry = entries + slot * DSI_TITLE_ID_SIZE;
-        if (launcherEntryMatches(entry, category, titleId))
-        {
-            slotOut = static_cast<int>(slot);
-            return LauncherEntryMutation::Unchanged;
-        }
-        if (emptySlot < 0 && isEmptyLauncherEntry(entry))
-            emptySlot = static_cast<int>(slot);
-    }
-
-    if (emptySlot < 0)
-        return LauncherEntryMutation::Full;
-
-    u8* entry = entries + emptySlot * DSI_TITLE_ID_SIZE;
-    writeLe32(entry, titleId);
-    writeLe32(entry + 4, category);
-    slotOut = emptySlot;
-    return LauncherEntryMutation::Changed;
-}
-
-static LauncherEntryMutation removeLauncherEntry(u8* entries, u32 category, u32 titleId, int& slotOut)
-{
-    bool changed = false;
-    slotOut = -1;
-
-    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
-    {
-        u8* entry = entries + slot * DSI_TITLE_ID_SIZE;
-        if (!launcherEntryMatches(entry, category, titleId))
-            continue;
-
-        if (slotOut < 0)
-            slotOut = static_cast<int>(slot);
-
-        for (size_t next = slot; next + 1 < DSI_LAUNCHER_SLOT_COUNT; next++)
-        {
-            memcpy(entries + next * DSI_TITLE_ID_SIZE, entries + (next + 1) * DSI_TITLE_ID_SIZE, DSI_TITLE_ID_SIZE);
-        }
-        memset(entries + (DSI_LAUNCHER_SLOT_COUNT - 1) * DSI_TITLE_ID_SIZE, 0, DSI_TITLE_ID_SIZE);
-        changed = true;
-        slot--;
-    }
-
-    return changed ? LauncherEntryMutation::Changed : LauncherEntryMutation::Unchanged;
-}
-
-static LauncherEntryMutation normalizeMenusaveSpecialEntry(u8* entries, int& slotOut)
-{
-    slotOut = -1;
-
-    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
-    {
-        u8* entry = entries + slot * DSI_TITLE_ID_SIZE;
-        if (launcherEntryMatches(entry, MENUSAVE_SPECIAL_CATEGORY, MENUSAVE_SPECIAL_TITLE_ID))
-        {
-            slotOut = static_cast<int>(slot);
-            return LauncherEntryMutation::Unchanged;
-        }
-    }
-
-    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
-    {
-        u8* entry = entries + slot * DSI_TITLE_ID_SIZE;
-        if (!launcherEntryMatches(entry, MENUSAVE_REPLACED_SYSTEM_CATEGORY, MENUSAVE_REPLACED_SYSTEM_TITLE_ID))
-            continue;
-
-        writeLe32(entry, MENUSAVE_SPECIAL_TITLE_ID);
-        writeLe32(entry + 4, MENUSAVE_SPECIAL_CATEGORY);
-        slotOut = static_cast<int>(slot);
-        return LauncherEntryMutation::Changed;
-    }
-
-    return addLauncherEntry(entries, MENUSAVE_SPECIAL_CATEGORY, MENUSAVE_SPECIAL_TITLE_ID, slotOut);
-}
+const size_t DSI_TITLE_ID_SIZE = 8;
+const size_t DSI_LAUNCHER_SLOT_COUNT = 40;
+const size_t DSI_WRAP_HEADER_SIZE = 0x40; // 64 bytes
+const size_t DSI_WRAP_ENTRIES_SIZE = DSI_LAUNCHER_SLOT_COUNT * DSI_TITLE_ID_SIZE; // 320 bytes (0x140)
+const size_t DSI_WRAP_TOTAL_SIZE = DSI_WRAP_HEADER_SIZE + DSI_WRAP_ENTRIES_SIZE; // 384 bytes (0x180)
 
 static void refreshWrapHashes(std::vector<u8>& wrap)
 {
+    if (wrap.size() < DSI_WRAP_TOTAL_SIZE)
+        wrap.resize(DSI_WRAP_TOTAL_SIZE, 0);
+
     SHA1_CTX sha;
+
+    // Hash 2: SHA-1 of entries (0x40..0x17F, size 0x140 = 320 bytes) -> written to 0x14..0x27
     SHA1Init(&sha);
-    SHA1Update(&sha, wrap.data() + WRAP_ENTRIES_OFFSET, WRAP_ENTRIES_SIZE);
+    SHA1Update(&sha, wrap.data() + 0x40, 0x140);
     SHA1Final(wrap.data() + 0x14, &sha);
 
+    // Magic RWPA (0x41505752 in LE: 'R'=0x52, 'W'=0x57, 'P'=0x50, 'A'=0x41)
+    wrap[0x28] = 'R';
+    wrap[0x29] = 'W';
+    wrap[0x2A] = 'P';
+    wrap[0x2B] = 'A';
+
+    // Size 320 (0x00000140 LE)
+    wrap[0x2C] = 0x40;
+    wrap[0x2D] = 0x01;
+    wrap[0x2E] = 0x00;
+    wrap[0x2F] = 0x00;
+
+    // Hash 1: SHA-1 of header (0x14..0x3F, size 0x2C = 44 bytes) -> written to 0x00..0x13
     SHA1Init(&sha);
     SHA1Update(&sha, wrap.data() + 0x14, 0x2C);
     SHA1Final(wrap.data(), &sha);
 }
 
-static LauncherMetadataResult updateWrapBin(u32 category, u32 titleId, bool add, int& usedEntriesOut)
+static void updateWrapAndTwlCfg(u32 category, u32 titleId, bool add)
 {
-    usedEntriesOut = -1;
+    if (!nand || !nandMount)
+        return;
 
-    std::vector<u8> wrap;
-    if (!nandMount->ExportFile("0:/shared2/launcher/wrap.bin", wrap))
+    const char* wrapPath = "0:/shared2/launcher/wrap.bin";
+    std::vector<u8> wrap(DSI_WRAP_TOTAL_SIZE, 0);
+
+    FF_FIL file;
+    if (f_open(&file, wrapPath, FA_READ) == FR_OK)
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to read launcher wrap.bin\n");
-        return LauncherMetadataResult::Failed;
+        u32 bytesRead = 0;
+        f_read(&file, wrap.data(), DSI_WRAP_TOTAL_SIZE, &bytesRead);
+        f_close(&file);
     }
 
-    if (wrap.size() < WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE ||
-        memcmp(wrap.data() + 0x28, "APWR", 4) != 0 ||
-        readLe32(wrap.data() + 0x2C) < WRAP_ENTRIES_SIZE)
+    if (wrap.size() < DSI_WRAP_TOTAL_SIZE)
+        wrap.resize(DSI_WRAP_TOTAL_SIZE, 0);
+
+    bool modified = false;
+    int existingSlot = -1;
+    int firstEmptySlot = -1;
+
+    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: invalid launcher wrap.bin size=%zu\n", wrap.size());
-        return LauncherMetadataResult::Failed;
+        u8* entry = wrap.data() + 0x40 + slot * DSI_TITLE_ID_SIZE;
+        u32 eTitle = (static_cast<u32>(entry[0]) << 24) |
+                     (static_cast<u32>(entry[1]) << 16) |
+                     (static_cast<u32>(entry[2]) << 8)  |
+                     static_cast<u32>(entry[3]);
+        u32 eCat   = (static_cast<u32>(entry[4]) << 24) |
+                     (static_cast<u32>(entry[5]) << 16) |
+                     (static_cast<u32>(entry[6]) << 8)  |
+                     static_cast<u32>(entry[7]);
+
+        if (eTitle == titleId && eCat == category)
+        {
+            existingSlot = static_cast<int>(slot);
+            break;
+        }
+        if (firstEmptySlot == -1 && eTitle == 0 && eCat == 0)
+        {
+            firstEmptySlot = static_cast<int>(slot);
+        }
     }
 
-    u8* entries = wrap.data() + WRAP_ENTRIES_OFFSET;
-    int before = countLauncherEntries(entries);
-    int slot = -1;
-    LauncherEntryMutation mutation = add ?
-        addLauncherEntry(entries, category, titleId, slot) :
-        removeLauncherEntry(entries, category, titleId, slot);
-
-    if (mutation == LauncherEntryMutation::Full)
+    if (add)
     {
-        usedEntriesOut = before;
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "DSiWareImport: launcher wrap.bin full entries=%d max=%zu category=%08x title=%08x\n",
-            before,
-            DSI_LAUNCHER_SLOT_COUNT,
-            category,
-            titleId
-        );
-        return LauncherMetadataResult::Full;
+        int targetSlot = (existingSlot != -1) ? existingSlot : firstEmptySlot;
+        if (targetSlot != -1)
+        {
+            u8* entry = wrap.data() + 0x40 + targetSlot * DSI_TITLE_ID_SIZE;
+            entry[0] = static_cast<u8>((titleId >> 24) & 0xFF);
+            entry[1] = static_cast<u8>((titleId >> 16) & 0xFF);
+            entry[2] = static_cast<u8>((titleId >> 8) & 0xFF);
+            entry[3] = static_cast<u8>(titleId & 0xFF);
+            entry[4] = static_cast<u8>((category >> 24) & 0xFF);
+            entry[5] = static_cast<u8>((category >> 16) & 0xFF);
+            entry[6] = static_cast<u8>((category >> 8) & 0xFF);
+            entry[7] = static_cast<u8>(category & 0xFF);
+            // Mark unwrapped bit
+            wrap[0x30 + (targetSlot / 8)] |= (1 << (targetSlot % 8));
+            modified = true;
+        }
+    }
+    else
+    {
+        if (existingSlot != -1)
+        {
+            u8* entry = wrap.data() + 0x40 + existingSlot * DSI_TITLE_ID_SIZE;
+            memset(entry, 0, DSI_TITLE_ID_SIZE);
+            // Clear unwrapped bit
+            wrap[0x30 + (existingSlot / 8)] &= ~(1 << (existingSlot % 8));
+            modified = true;
+        }
     }
 
-    int after = countLauncherEntries(entries);
-    usedEntriesOut = after;
-
-    if (mutation == LauncherEntryMutation::Changed)
+    if (modified)
     {
         refreshWrapHashes(wrap);
-        if (!nandMount->ImportFile("0:/shared2/launcher/wrap.bin", wrap.data(), wrap.size()))
+
+        f_mkdir("0:/shared2");
+        f_mkdir("0:/shared2/launcher");
+
+        if (f_open(&file, wrapPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
         {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to write launcher wrap.bin\n");
-            return LauncherMetadataResult::Failed;
-        }
-    }
-
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "DSiWareImport: launcher wrap action=%s category=%08x title=%08x entries=%d->%d slot=%d changed=%d\n",
-        add ? "add" : "remove",
-        category,
-        titleId,
-        before,
-        after,
-        slot,
-        mutation == LauncherEntryMutation::Changed
-    );
-
-    return LauncherMetadataResult::Ok;
-}
-
-static bool readWrapLauncherEntries(std::vector<LauncherTitle>& entriesOut)
-{
-    entriesOut.clear();
-
-    std::vector<u8> wrap;
-    if (!nandMount->ExportFile("0:/shared2/launcher/wrap.bin", wrap))
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to read launcher wrap.bin for menusave sync\n");
-        return false;
-    }
-
-    if (wrap.size() < WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE ||
-        memcmp(wrap.data() + 0x28, "APWR", 4) != 0 ||
-        readLe32(wrap.data() + 0x2C) < WRAP_ENTRIES_SIZE)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: invalid launcher wrap.bin while syncing menusave size=%zu\n", wrap.size());
-        return false;
-    }
-
-    entriesOut = readLauncherEntries(wrap.data() + WRAP_ENTRIES_OFFSET);
-    return true;
-}
-
-static std::vector<LauncherTitle> buildMenusaveLauncherEntries(
-    const std::vector<LauncherTitle>& currentEntries,
-    const std::vector<LauncherTitle>& wrapEntries
-)
-{
-    std::vector<LauncherTitle> systemEntries;
-    std::vector<LauncherTitle> wrapDsiWareEntries;
-
-    for (const LauncherTitle& title : wrapEntries)
-    {
-        if (title.category == DSI_NAND_FILE_CATEGORY)
-            appendUniqueLauncherTitle(wrapDsiWareEntries, title);
-        else
-            appendUniqueLauncherTitle(systemEntries, title);
-    }
-
-    const LauncherTitle specialEntry {
-        MENUSAVE_SPECIAL_CATEGORY,
-        MENUSAVE_SPECIAL_TITLE_ID,
-    };
-
-    std::vector<LauncherTitle> result;
-    if (systemEntries.size() >= 7)
-    {
-        appendUniqueLauncherTitle(result, systemEntries[0]);
-        appendUniqueLauncherTitle(result, specialEntry);
-        appendUniqueLauncherTitle(result, systemEntries[4]);
-        appendUniqueLauncherTitle(result, systemEntries[6]);
-    }
-    else
-    {
-        if (!systemEntries.empty())
-            appendUniqueLauncherTitle(result, systemEntries[0]);
-        appendUniqueLauncherTitle(result, specialEntry);
-    }
-
-    std::vector<LauncherTitle> dsiWareEntries;
-    for (const LauncherTitle& title : currentEntries)
-    {
-        if (title.category == DSI_NAND_FILE_CATEGORY && containsLauncherTitle(wrapDsiWareEntries, title))
-            appendUniqueLauncherTitle(dsiWareEntries, title);
-    }
-    for (const LauncherTitle& title : wrapDsiWareEntries)
-        appendUniqueLauncherTitle(dsiWareEntries, title);
-    for (const LauncherTitle& title : dsiWareEntries)
-        appendUniqueLauncherTitle(result, title);
-
-    if (systemEntries.size() >= 7)
-    {
-        appendUniqueLauncherTitle(result, systemEntries[1]);
-        appendUniqueLauncherTitle(result, systemEntries[2]);
-        appendUniqueLauncherTitle(result, systemEntries[3]);
-    }
-    else
-    {
-        for (const LauncherTitle& title : systemEntries)
-        {
-            if (title.category == MENUSAVE_REPLACED_SYSTEM_CATEGORY &&
-                title.titleId == MENUSAVE_REPLACED_SYSTEM_TITLE_ID)
-            {
-                continue;
-            }
-            appendUniqueLauncherTitle(result, title);
-        }
-    }
-
-    return result;
-}
-
-static bool readFat12Entry(const std::vector<u8>& fat, u16 cluster, u16& nextCluster)
-{
-    size_t offset = cluster + (cluster / 2);
-    if (offset + 1 >= fat.size())
-        return false;
-
-    u16 value = static_cast<u16>(fat[offset]) | (static_cast<u16>(fat[offset + 1]) << 8);
-    if (cluster & 1)
-        value >>= 4;
-
-    nextCluster = value & 0x0FFF;
-    return true;
-}
-
-static bool findMenusaveDat(
-    const std::vector<u8>& privateSav,
-    std::vector<size_t>& clusterOffsets,
-    std::vector<u8>& menusave
-)
-{
-    if (privateSav.size() < 0x24)
-        return false;
-
-    const u16 bytesPerSector = readLe16(privateSav.data() + 0x0B);
-    const u8 sectorsPerCluster = privateSav[0x0D];
-    const u16 reservedSectors = readLe16(privateSav.data() + 0x0E);
-    const u8 fatCount = privateSav[0x10];
-    const u16 rootEntryCount = readLe16(privateSav.data() + 0x11);
-    const u16 fatSectors = readLe16(privateSav.data() + 0x16);
-
-    if (bytesPerSector == 0 || sectorsPerCluster == 0 || fatCount == 0 || rootEntryCount == 0 || fatSectors == 0)
-        return false;
-
-    const size_t fatOffset = static_cast<size_t>(reservedSectors) * bytesPerSector;
-    const size_t fatSize = static_cast<size_t>(fatSectors) * bytesPerSector;
-    const size_t rootOffset = (static_cast<size_t>(reservedSectors) + static_cast<size_t>(fatCount) * fatSectors) * bytesPerSector;
-    const size_t rootSize = ((static_cast<size_t>(rootEntryCount) * 32 + bytesPerSector - 1) / bytesPerSector) * bytesPerSector;
-    const size_t dataOffset = rootOffset + rootSize;
-    const size_t clusterSize = static_cast<size_t>(sectorsPerCluster) * bytesPerSector;
-
-    if (fatOffset + fatSize > privateSav.size() || rootOffset + rootSize > privateSav.size() || dataOffset > privateSav.size())
-        return false;
-
-    std::vector<u8> fat(privateSav.begin() + fatOffset, privateSav.begin() + fatOffset + fatSize);
-
-    const u8 menusaveName[11] = {'M','E','N','U','S','A','V','E','D','A','T'};
-    for (size_t entryOffset = rootOffset; entryOffset + 32 <= rootOffset + rootSize; entryOffset += 32)
-    {
-        const u8* entry = privateSav.data() + entryOffset;
-        if (entry[0] == 0x00)
-            break;
-        if (entry[0] == 0xE5)
-            continue;
-        if (memcmp(entry, menusaveName, sizeof(menusaveName)) != 0)
-            continue;
-
-        u16 cluster = readLe16(entry + 26);
-        const u32 fileSize = readLe32(entry + 28);
-        if (cluster < 2 || fileSize < MENUSAVE_FILE_SIZE)
-            return false;
-
-        menusave.clear();
-        clusterOffsets.clear();
-        while (cluster >= 2 && cluster < 0x0FF8 && menusave.size() < fileSize)
-        {
-            const size_t clusterOffset = dataOffset + static_cast<size_t>(cluster - 2) * clusterSize;
-            if (clusterOffset + clusterSize > privateSav.size())
-                return false;
-
-            clusterOffsets.push_back(clusterOffset);
-            const size_t copySize = std::min(clusterSize, static_cast<size_t>(fileSize) - menusave.size());
-            menusave.insert(menusave.end(), privateSav.begin() + clusterOffset, privateSav.begin() + clusterOffset + copySize);
-
-            u16 nextCluster = 0;
-            if (!readFat12Entry(fat, cluster, nextCluster))
-                return false;
-            cluster = nextCluster;
+            u32 bytesWritten = 0;
+            f_write(&file, wrap.data(), wrap.size(), &bytesWritten);
+            f_close(&file);
         }
 
-        return menusave.size() >= MENUSAVE_FILE_SIZE;
-    }
-
-    return false;
-}
-
-static LauncherMetadataResult updateMenusaveData(
-    std::vector<u8>& privateSav,
-    const std::vector<LauncherTitle>& wrapEntries,
-    u32 category,
-    u32 titleId,
-    bool add,
-    bool& foundOut,
-    bool& changedOut
-)
-{
-    foundOut = false;
-    changedOut = false;
-
-    std::vector<size_t> clusterOffsets;
-    std::vector<u8> menusave;
-    if (!findMenusaveDat(privateSav, clusterOffsets, menusave))
-        return LauncherMetadataResult::Ok;
-
-    foundOut = true;
-    if (menusave.size() < MENUSAVE_FILE_SIZE || memcmp(menusave.data(), "TSSV", 4) != 0)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: invalid System Menu menusave.dat\n");
-        return LauncherMetadataResult::Failed;
-    }
-
-    u8* entries = menusave.data() + MENUSAVE_ENTRIES_OFFSET;
-    std::vector<LauncherTitle> currentEntries = readLauncherEntries(entries);
-    std::vector<LauncherTitle> rebuiltEntries = buildMenusaveLauncherEntries(currentEntries, wrapEntries);
-    int before = static_cast<int>(currentEntries.size());
-
-    if (rebuiltEntries.size() > DSI_LAUNCHER_SLOT_COUNT)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "DSiWareImport: System Menu menusave.dat full after rebuild entries=%zu max=%zu category=%08x title=%08x\n",
-            rebuiltEntries.size(),
-            DSI_LAUNCHER_SLOT_COUNT,
-            category,
-            titleId
-        );
-        return LauncherMetadataResult::Full;
-    }
-
-    int slot = -1;
-    for (size_t i = 0; i < rebuiltEntries.size(); i++)
-    {
-        if (rebuiltEntries[i].category == category && rebuiltEntries[i].titleId == titleId)
+        // Count used slots
+        u8 usedCount = 0;
+        for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
         {
-            slot = static_cast<int>(i);
-            break;
-        }
-    }
-
-    changedOut = currentEntries != rebuiltEntries;
-    int after = static_cast<int>(rebuiltEntries.size());
-    if (!changedOut)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Info,
-            "DSiWareImport: menusave rebuild action=%s category=%08x title=%08x entries=%d->%d slot=%d changed=0\n",
-            add ? "add" : "remove",
-            category,
-            titleId,
-            before,
-            after,
-            slot
-        );
-        return LauncherMetadataResult::Ok;
-    }
-
-    writeLauncherEntries(entries, rebuiltEntries);
-
-    menusave[0x08] = 0;
-    menusave[0x09] = 0;
-    const u16 crc = melonDS::CRC16(menusave.data(), MENUSAVE_FILE_SIZE, 0x5356);
-    writeLe16(menusave.data() + 0x08, crc);
-
-    size_t menusaveOffset = 0;
-    for (size_t clusterOffset : clusterOffsets)
-    {
-        const size_t copySize = std::min(privateSav.size() - clusterOffset, menusave.size() - menusaveOffset);
-        memcpy(privateSav.data() + clusterOffset, menusave.data() + menusaveOffset, copySize);
-        menusaveOffset += copySize;
-        if (menusaveOffset >= menusave.size())
-            break;
-    }
-
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "DSiWareImport: menusave rebuild action=%s category=%08x title=%08x entries=%d->%d slot=%d changed=1 crc=%04x\n",
-        add ? "add" : "remove",
-        category,
-        titleId,
-        before,
-        after,
-        slot,
-        crc
-    );
-
-    return LauncherMetadataResult::Ok;
-}
-
-static LauncherMetadataResult updateSystemMenuSave(
-    const std::vector<LauncherTitle>& wrapEntries,
-    u32 category,
-    u32 titleId,
-    bool add
-)
-{
-    std::vector<u32> systemMenus;
-    nandMount->ListTitles(DSI_SYSTEM_MENU_CATEGORY, systemMenus);
-
-    for (u32 systemMenuId : systemMenus)
-    {
-        char path[128];
-        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/private.sav", DSI_SYSTEM_MENU_CATEGORY, systemMenuId);
-
-        std::vector<u8> privateSav;
-        if (!nandMount->ExportFile(path, privateSav))
-            continue;
-
-        bool found = false;
-        bool changed = false;
-        LauncherMetadataResult result = updateMenusaveData(privateSav, wrapEntries, category, titleId, add, found, changed);
-        if (!found)
-            continue;
-        if (result != LauncherMetadataResult::Ok)
-            return result;
-
-        if (changed && !nandMount->ImportFile(path, privateSav.data(), privateSav.size()))
-        {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to write System Menu private.sav path=%s\n", path);
-            return LauncherMetadataResult::Failed;
+            u8* entry = wrap.data() + 0x40 + slot * DSI_TITLE_ID_SIZE;
+            if (readLe32(entry) != 0 || readLe32(entry + 4) != 0)
+                usedCount++;
         }
 
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Info,
-            "DSiWareImport: System Menu private.sav updated title=%08x changed=%d path=%s\n",
-            systemMenuId,
-            changed,
-            path
-        );
-        return LauncherMetadataResult::Ok;
-    }
-
-    melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: System Menu menusave.dat not found; continuing with wrap.bin only\n");
-    return LauncherMetadataResult::Ok;
-}
-
-static LauncherMetadataResult updateSystemMenuSlotCounts(int usedEntries)
-{
-    melonDS::DSi_NAND::DSiFirmwareSystemSettings settings {};
-    if (!nandMount->ReadUserData(settings))
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to read TWLCFG slot counters\n");
-        return LauncherMetadataResult::Failed;
-    }
-
-    const u8 clampedUsed = static_cast<u8>(std::min<int>(std::max<int>(usedEntries, 0), DSI_LAUNCHER_SLOT_COUNT));
-    const u8 freeSlots = static_cast<u8>(DSI_LAUNCHER_SLOT_COUNT - clampedUsed);
-    const u8 oldUsed = settings.SystemMenuUsedTitleSlots;
-    const u8 oldFree = settings.SystemMenuFreeTitleSlots;
-
-    settings.SystemMenuUsedTitleSlots = clampedUsed;
-    settings.SystemMenuFreeTitleSlots = freeSlots;
-    settings.UpdateHash();
-
-    if (!nandMount->ApplyUserData(settings))
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to write TWLCFG slot counters\n");
-        return LauncherMetadataResult::Failed;
-    }
-
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "DSiWareImport: TWLCFG launcher slots used=%u->%u free=%u->%u\n",
-        oldUsed,
-        settings.SystemMenuUsedTitleSlots,
-        oldFree,
-        settings.SystemMenuFreeTitleSlots
-    );
-
-    return LauncherMetadataResult::Ok;
-}
-
-static LauncherMetadataResult updateDsiLauncherMetadata(u32 category, u32 titleId, bool add)
-{
-    int usedEntries = -1;
-    LauncherMetadataResult result = updateWrapBin(category, titleId, add, usedEntries);
-    if (result != LauncherMetadataResult::Ok)
-        return result;
-
-    std::vector<LauncherTitle> wrapEntries;
-    if (!readWrapLauncherEntries(wrapEntries))
-        return LauncherMetadataResult::Failed;
-
-    result = updateSystemMenuSave(wrapEntries, category, titleId, add);
-    if (result != LauncherMetadataResult::Ok)
-        return result;
-
-    if (usedEntries >= 0)
-        return updateSystemMenuSlotCounts(usedEntries);
-
-    return LauncherMetadataResult::Ok;
-}
-
-static LauncherMetadataResult syncInstalledDsiWareLauncherMetadata(u32 skipTitleId)
-{
-    std::vector<u32> installedTitles;
-    nandMount->ListTitles(DSI_NAND_FILE_CATEGORY, installedTitles);
-
-    int checked = 0;
-    for (u32 installedTitle : installedTitles)
-    {
-        if (installedTitle == skipTitleId)
-            continue;
-
-        checked++;
-        LauncherMetadataResult result = updateDsiLauncherMetadata(DSI_NAND_FILE_CATEGORY, installedTitle, true);
-        if (result != LauncherMetadataResult::Ok)
+        melonDS::DSi_NAND::DSiFirmwareSystemSettings settings {};
+        if (nandMount->ReadUserData(settings))
         {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "DSiWareImport: launcher metadata sync stopped result=%d checked=%d category=%08x title=%08x\n",
-                static_cast<int>(result),
-                checked,
-                DSI_NAND_FILE_CATEGORY,
-                installedTitle
-            );
-            return result;
+            u8 clampedUsed = std::min<u8>(usedCount, 39);
+            settings.SystemMenuUsedTitleSlots = clampedUsed;
+            settings.SystemMenuFreeTitleSlots = (clampedUsed >= 39) ? 0 : static_cast<u8>(39 - clampedUsed);
+            settings.UpdateHash();
+            nandMount->ApplyUserData(settings);
         }
     }
-
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "DSiWareImport: launcher metadata sync complete checked=%d skipped=%08x\n",
-        checked,
-        skipTitleId
-    );
-
-    return LauncherMetadataResult::Ok;
 }
 
 extern "C"
@@ -909,15 +357,12 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
         return TITLE_IMPORT_ERROR_OPENING_FILE;
     }
 
-    memcpy(titleId, titleData.data() + 0x230, sizeof(titleId));
+    const u8* rawGameCode = titleData.data() + 0x0C;
+    titleId[0] = (static_cast<u32>(rawGameCode[0]) << 24) |
+                 (static_cast<u32>(rawGameCode[1]) << 16) |
+                 (static_cast<u32>(rawGameCode[2]) << 8)  |
+                 static_cast<u32>(rawGameCode[3]);
     titleId[1] = DSI_NAND_FILE_CATEGORY;
-    memcpy(titleData.data() + 0x234, &titleId[1], sizeof(u32));
-
-    if (titleId[0] == 0)
-    {
-        memcpy(&titleId[0], titleData.data() + 0x0C, sizeof(u32));
-        memcpy(titleData.data() + 0x230, &titleId[0], sizeof(u32));
-    }
 
     if (nandMount->TitleExists(titleId[1], titleId[0]))
     {
@@ -995,32 +440,11 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
             titleData.size()
         );
         nandMount->DeleteTitle(titleId[1], titleId[0]);
+        updateWrapAndTwlCfg(titleId[1], titleId[0], false);
         return TITLE_IMPORT_INSATLL_FAILED;
     }
 
-    LauncherMetadataResult launcherResult = updateDsiLauncherMetadata(titleId[1], titleId[0], true);
-    if (launcherResult != LauncherMetadataResult::Ok)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "DSiWareImport: launcher metadata update warning category=%08x title=%08x result=%d (continuing as title is imported into NAND)\n",
-            titleId[1],
-            titleId[0],
-            static_cast<int>(launcherResult)
-        );
-    }
-
-    LauncherMetadataResult syncResult = syncInstalledDsiWareLauncherMetadata(titleId[0]);
-    if (syncResult != LauncherMetadataResult::Ok)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "DSiWareImport: imported title but metadata sync for existing titles is incomplete category=%08x title=%08x result=%d\n",
-            titleId[1],
-            titleId[0],
-            static_cast<int>(syncResult)
-        );
-    }
+    updateWrapAndTwlCfg(titleId[1], titleId[0], true);
 
     melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWareImport: successfully imported title category=%08x title=%08x bytes=%zu\n", titleId[1], titleId[0], titleData.size());
     return TITLE_IMPORT_OK;
@@ -1029,11 +453,10 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonDSiNand_deleteTitle(JNIEnv* env, jobject thiz, jint titleId)
 {
-    if (nand)
+    if (nand && nandMount)
     {
         nandMount->DeleteTitle(DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        updateDsiLauncherMetadata(DSI_NAND_FILE_CATEGORY, (u32) titleId, false);
-        syncInstalledDsiWareLauncherMetadata((u32) titleId);
+        updateWrapAndTwlCfg(DSI_NAND_FILE_CATEGORY, (u32) titleId, false);
     }
 }
 

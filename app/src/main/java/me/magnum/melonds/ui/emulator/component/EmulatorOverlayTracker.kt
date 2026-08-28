@@ -26,4 +26,11 @@ class EmulatorOverlayTracker(
     fun hasActiveOverlays(): Boolean {
         return activeOverlays.isNotEmpty()
     }
+
+    fun clear() {
+        if (activeOverlays.isNotEmpty()) {
+            activeOverlays.clear()
+            onOverlaysCleared()
+        }
+    }
 }

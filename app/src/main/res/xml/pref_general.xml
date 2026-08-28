@@ -3,83 +3,88 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <ListPreference
-            android:key="theme"
-            android:title="@string/theme"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/theme_options"
-            android:entryValues="@array/theme_values"
-            android:defaultValue="dark" />
+    <PreferenceCategory
+            android:title="@string/pref_cat_appearance"
+            app:iconSpaceReserved="false">
 
-    <ListPreference
-            android:key="theme_accent_color"
-            android:title="@string/theme_accent_color_title"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/theme_accent_color_options"
-            android:entryValues="@array/theme_accent_color_values"
-            android:defaultValue="electric_cyan" />
+        <ListPreference
+                android:key="theme"
+                android:title="@string/theme"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/theme_options"
+                android:entryValues="@array/theme_values"
+                android:defaultValue="dark" />
 
-    <ListPreference
-            android:key="rom_card_style"
-            android:title="@string/rom_card_style_title"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/rom_card_style_options"
-            android:entryValues="@array/rom_card_style_values"
-            android:defaultValue="glassmorphism" />
+        <ListPreference
+                android:key="theme_accent_color"
+                android:title="@string/theme_accent_color_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/theme_accent_color_options"
+                android:entryValues="@array/theme_accent_color_values"
+                android:defaultValue="electric_cyan" />
 
-    <ListPreference
-            android:key="fast_forward_speed_multiplier"
-            android:title="@string/fast_forward_max_speed"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/fast_forward_speed_multiplier_options"
-            android:entryValues="@array/fast_forward_speed_multiplier_values"
-            android:defaultValue="-1" />
+        <ListPreference
+                android:key="rom_card_style"
+                android:title="@string/rom_card_style_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/rom_card_style_options"
+                android:entryValues="@array/rom_card_style_values"
+                android:defaultValue="glassmorphism" />
+    </PreferenceCategory>
 
-    <ListPreference
-            android:key="frame_limit_speed_multiplier"
-            android:title="@string/frame_limit_speed"
-            android:summary="%s"
-            app:iconSpaceReserved="false"
-            android:entries="@array/frame_limit_speed_multiplier_options"
-            android:entryValues="@array/frame_limit_speed_multiplier_values"
-            android:defaultValue="1" />
+    <PreferenceCategory
+            android:title="@string/pref_cat_emulation_speed"
+            app:iconSpaceReserved="false">
 
-    <com.smp.masterswitchpreference.MasterSwitchPreference
-            android:key="enable_rewind"
-            android:title="@string/rewind"
-            app:iconSpaceReserved="false"
-            android:fragment="me.magnum.melonds.ui.settings.fragments.RewindPreferencesFragment"
-            android:defaultValue="false"
-            app:ms_switchOnText="@string/on"
-            app:ms_switchOffText="@string/off"
-            app:ms_switchThumbColor="?android:colorAccent"
-            app:ms_switchTrackColor="@color/prefSwitchRailColor"
-            app:ms_switchTextColor="@color/textColorPrimary"
-            app:ms_switchOnBackgroundColor="@android:color/transparent"
-            app:ms_switchOffBackgroundColor="@android:color/transparent"
-            app:ms_switchOffExplanationText="@string/rewind_description"
-            app:ms_includedPrefScreen="xml/pref_rewind" />
+        <ListPreference
+                android:key="fast_forward_speed_multiplier"
+                android:title="@string/fast_forward_max_speed"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/fast_forward_speed_multiplier_options"
+                android:entryValues="@array/fast_forward_speed_multiplier_values"
+                android:defaultValue="-1" />
 
-    <SwitchPreference
-            android:key="enable_sustained_performance"
-            android:title="@string/sustained_performance_mode"
-            android:summary="@string/sustained_performance_mode_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+        <ListPreference
+                android:key="frame_limit_speed_multiplier"
+                android:title="@string/frame_limit_speed"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/frame_limit_speed_multiplier_options"
+                android:entryValues="@array/frame_limit_speed_multiplier_values"
+                android:defaultValue="1" />
 
-    <Preference
-            android:key="backup_settings"
-            android:title="@string/backup_settings"
-            app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
-            app:iconSpaceReserved="false" />
+        <Preference
+                android:key="enable_rewind"
+                android:title="@string/rewind"
+                android:summary="%s"
+                app:iconSpaceReserved="false" />
 
-    <Preference
-            android:key="restore_settings"
-            android:title="@string/restore_settings"
-            app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
-            app:iconSpaceReserved="false" />
+        <SwitchPreference
+                android:key="enable_sustained_performance"
+                android:title="@string/sustained_performance_mode"
+                android:summary="@string/sustained_performance_mode_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/pref_cat_backup_restore"
+            app:iconSpaceReserved="false">
+
+        <Preference
+                android:key="backup_settings"
+                android:title="@string/backup_settings"
+                app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="restore_settings"
+                android:title="@string/restore_settings"
+                app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
+                app:iconSpaceReserved="false" />
+    </PreferenceCategory>
 </PreferenceScreen>

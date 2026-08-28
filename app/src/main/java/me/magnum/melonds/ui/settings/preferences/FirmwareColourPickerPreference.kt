@@ -2,15 +2,33 @@ package me.magnum.melonds.ui.settings.preferences
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import androidx.appcompat.app.AlertDialog
-import androidx.core.view.children
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
 import me.magnum.melonds.R
-import me.magnum.melonds.databinding.DialogFirmwareColourPickerBinding
+import me.magnum.melonds.ui.settings.dialogs.SettingsDialogScaffold
+import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
+import me.magnum.melonds.ui.theme.LocalWatermelonColors
 
 class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : Preference(context, attrs) {
     companion object {
@@ -50,25 +68,60 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
 
     override fun onClick() {
         super.onClick()
+        val currentColour = getPersistedInt(0)
 
-        val binding = DialogFirmwareColourPickerBinding.inflate(LayoutInflater.from(context))
+        showSettingsComposeDialog(context) { dismiss ->
+            var selected by remember { mutableIntStateOf(currentColour) }
 
-        val alertDialog = AlertDialog.Builder(context)
-                .setTitle(title)
-                .setView(binding.root)
-                .setNegativeButton(R.string.cancel) { dialog, _ ->
-                    dialog.dismiss()
+            SettingsDialogScaffold(
+                title = title?.toString() ?: stringResource(R.string.firmware_favourite_colour),
+                subtitle = "Цвет профиля Nintendo DS",
+                icon = Icons.Filled.Palette,
+                onDismiss = dismiss,
+            ) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(6),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    itemsIndexed(extendedColorList) { index, colorInt ->
+                        val color = Color((0xFF000000 or colorInt.toLong()).toInt())
+                        val isSelected = index == selected
+
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(color)
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) Color.White else Color.Black.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    selected = index
+                                    updateSelectedColour(index)
+                                    if (callChangeListener(index)) {
+                                        persistInt(index)
+                                    }
+                                    dismiss()
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = if (colorInt == 0xFFFFFF) Color.Black else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
                 }
-                .show()
-
-        binding.layoutGridColours.children.flatMap { (it as ViewGroup).children }.forEach {
-            it.setOnClickListener { view ->
-                val selectedColour = (view.tag as String).toInt()
-                updateSelectedColour(selectedColour)
-                if (callChangeListener(selectedColour)) {
-                    persistInt(selectedColour)
-                }
-                alertDialog.dismiss()
             }
         }
     }
@@ -83,7 +136,6 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
 
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
-
         viewSelectedColour = holder.findViewById(R.id.viewSelectedColour)
         updateSelectedColour(getPersistedInt(0))
     }

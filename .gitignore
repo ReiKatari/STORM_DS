@@ -24,3 +24,15 @@ rcheevos-api/bin/
 /jadx/
 jadx.zip
 *.apk
+/Files/
+/Tools/**/*.nds
+/Tools/**/*.dsi
+/Tools/**/*.zip
+/Tools/**/*.7z
+/Tools/**/*.exe
+/Tools/**/*.dll
+/Tools/**/*.pyd
+/Tools/**/ninfs-2.0/
+/Tools/**/_nds/
+/Tools/**/title/
+/Tools/**/roms/

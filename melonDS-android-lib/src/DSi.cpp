@@ -320,16 +320,16 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     u8 key[16];
     u8 tmp[16];
 
-    if ((offset == 0) || (size == 0))
+    if ((offset == 0) || (size == 0) || !NDSCartSlot.GetCart())
         return;
 
     const NDSHeader& header = NDSCartSlot.GetCart()->GetHeader();
+    const u8* cartrom = NDSCartSlot.GetCart()->GetROM();
 
     if ((header.DSiCryptoFlags & (1<<4)) ||
         (header.AppFlags & (1<<7)))
     {
         // dev key
-        const u8* cartrom = NDSCartSlot.GetCart()->GetROM();
         memcpy(key, &cartrom[0], 16);
     }
     else
@@ -347,7 +347,10 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         keyX[14] = header.GameCode[1];
         keyX[15] = header.GameCode[0];
 
-        memcpy(keyY, header.DSiARM9iHash, 16);
+        if (offset == header.DSiModcrypt2Offset && *(u32*)&header.DSiARM7iHash[0] != 0)
+            memcpy(keyY, header.DSiARM7iHash, 16);
+        else
+            memcpy(keyY, header.DSiARM9iHash, 16);
 
         DSi_AES::DeriveNormalKey(keyX, keyY, tmp);
     }
@@ -357,174 +360,106 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     AES_init_ctx_iv(&ctx, key, tmp);
 
     // find a matching binary area
+    u32 binaryaddr = 0;
+    u32 binarysize = 0;
 
-    u32 binaryaddr, binarysize;
-    u32 roundedsize = (size + 0xF) & ~0xF;
-
-    // CHECKME: GBAtek says the modcrypt area should be the same size, or bigger,
-    // than the binary area being considered
-    // but I have seen modcrypt areas smaller than the ARM9i binary
-#define BINARY_GOOD(name) \
-    ((offset >= header.name##ROMOffset) && \
-     (offset+roundedsize) <= (header.name##ROMOffset + ((header.name##Size + 0xF) & ~0xF)))
-
-    bool isARM7 = false;
-
-    if (BINARY_GOOD(ARM9))
-    {
-        binaryaddr = header.ARM9RAMAddress + (offset - header.ARM9ROMOffset);
-        binarysize = header.ARM9Size;
-    }
-    else if (BINARY_GOOD(ARM7))
-    {
-        binaryaddr = header.ARM7RAMAddress + (offset - header.ARM7ROMOffset);
-        binarysize = header.ARM7Size;
-        isARM7 = true;
-    }
-    else if (BINARY_GOOD(DSiARM9i))
+    if (header.DSiARM9iSize > 0 && offset >= header.DSiARM9iROMOffset && offset < header.DSiARM9iROMOffset + header.DSiARM9iSize)
     {
         binaryaddr = header.DSiARM9iRAMAddress + (offset - header.DSiARM9iROMOffset);
-        binarysize = header.DSiARM9iSize;
+        binarysize = header.DSiARM9iSize - (offset - header.DSiARM9iROMOffset);
     }
-    else if (BINARY_GOOD(DSiARM7i))
+    else if (header.ARM9Size > 0 && offset >= header.ARM9ROMOffset && offset < header.ARM9ROMOffset + header.ARM9Size)
+    {
+        binaryaddr = header.ARM9RAMAddress + (offset - header.ARM9ROMOffset);
+        binarysize = header.ARM9Size - (offset - header.ARM9ROMOffset);
+    }
+    else if (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize)
     {
         binaryaddr = header.DSiARM7iRAMAddress + (offset - header.DSiARM7iROMOffset);
-        binarysize = header.DSiARM7iSize;
-        isARM7 = true;
+        binarysize = header.DSiARM7iSize - (offset - header.DSiARM7iROMOffset);
     }
-    else
-        return;
-
-#undef BINARY_GOOD
-
-    // Detect pre-decrypted ROMs (common in scene dumps).
-    // Strategy: trial-decrypt the first N bytes and count zero bytes in the result.
-    //
-    // - If original is ENCRYPTED: trial decrypt → real ARM/Thumb code → 10-20% zeros
-    //   (immediate values, padding, register fields, etc.)
-    // - If original is PRE-DECRYPTED: trial decrypt → pseudo-random → ~0.4% zeros
-    //
-    // This is far more reliable than checking ARM condition codes, because:
-    // - Works for both ARM and Thumb code
-    // - Works even when Modcrypt area starts in data sections
-    // - Statistical approach over 512 bytes is very robust
+    else if (header.ARM7Size > 0 && offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size)
     {
-        const u32 trialSize = (size < 512) ? ((size < 64) ? size : 64) : 512;
-        const u32 trialBlocks = (trialSize + 15) / 16;
-
-        AES_ctx trialCtx = ctx; // copy — don't modify the real counter
-
-        int zeroCountOrig = 0;
-        int zeroCountDec = 0;
-        int armCondOrig = 0;
-        int armCondDec = 0;
-        u32 totalBytes = 0;
-
-        for (u32 b = 0; b < trialBlocks; b++)
-        {
-            u32 memOff = b * 16;
-            if (memOff + 16 > size) break;
-
-            u32 data[4];
-            if (isARM7)
-            {
-                data[0] = ARM7Read32(binaryaddr + memOff);
-                data[1] = ARM7Read32(binaryaddr + memOff + 4);
-                data[2] = ARM7Read32(binaryaddr + memOff + 8);
-                data[3] = ARM7Read32(binaryaddr + memOff + 12);
-            }
-            else
-            {
-                data[0] = ARM9Read32(binaryaddr + memOff);
-                data[1] = ARM9Read32(binaryaddr + memOff + 4);
-                data[2] = ARM9Read32(binaryaddr + memOff + 8);
-                data[3] = ARM9Read32(binaryaddr + memOff + 12);
-            }
-
-            const u8* origBytes = (const u8*)data;
-            for (int i = 0; i < 16; i++)
-            {
-                if (origBytes[i] == 0x00) zeroCountOrig++;
-            }
-            for (int w = 0; w < 4; w++)
-            {
-                if ((data[w] & 0xF0000000) == 0xE0000000) armCondOrig++;
-            }
-
-            u8 tmp2[16];
-            Bswap128(tmp2, data);
-            AES_CTR_xcrypt_buffer(&trialCtx, tmp2, 16);
-
-            // Count zero bytes and ARM conditions in decrypted output
-            for (int i = 0; i < 16; i++)
-            {
-                if (tmp2[i] == 0x00) zeroCountDec++;
-            }
-            for (int w = 0; w < 4; w++)
-            {
-                u32 wordDec = *(u32*)&tmp2[w * 4];
-                if ((wordDec & 0xF0000000) == 0xE0000000) armCondDec++;
-            }
-            totalBytes += 16;
-        }
-
-        bool isAlreadyDecrypted = (zeroCountOrig >= 10 && zeroCountOrig > zeroCountDec) ||
-                                  (armCondOrig >= 6 && armCondOrig >= armCondDec) ||
-                                  (zeroCountOrig > zeroCountDec && zeroCountDec <= 1);
-
-        if (isAlreadyDecrypted)
-        {
-            Log(LogLevel::Info,
-                "DecryptModcryptArea: data at RAM 0x%08X (ROM off 0x%08X, size 0x%X) appears ALREADY DECRYPTED "
-                "(trial %u bytes: origZeros=%d, decZeros=%d, origARM=%d, decARM=%d); skipping Modcrypt\n",
-                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec, armCondOrig, armCondDec);
-            return;
-        }
-        else
-        {
-            Log(LogLevel::Info,
-                "DecryptModcryptArea: data at RAM 0x%08X (ROM off 0x%08X, size 0x%X) is ENCRYPTED "
-                "(trial %u bytes: origZeros=%d, decZeros=%d, origARM=%d, decARM=%d); decrypting Modcrypt\n",
-                binaryaddr, offset, size, totalBytes, zeroCountOrig, zeroCountDec, armCondOrig, armCondDec);
-        }
+        binaryaddr = header.ARM7RAMAddress + (offset - header.ARM7ROMOffset);
+        binarysize = header.ARM7Size - (offset - header.ARM7ROMOffset);
     }
 
-    for (u32 i = 0; i < size; i+=16)
+    if (binaryaddr == 0 || binarysize == 0)
+    {
+        Log(LogLevel::Warn, "DSi::DecryptModcryptArea: No matching binary area for offset=0x%08X size=0x%08X\n", offset, size);
+        return;
+    }
+
+    u32 decryptSize = std::min(size, binarysize);
+    u32 targetRAMOffset = binaryaddr & NDS::MainRAMMask;
+
+    bool isArm7Area = (offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size) ||
+                      (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize);
+
+    if ((header.DSiCryptoFlags & 0x03) == 0)
+    {
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: DSiCryptoFlags indicates already decrypted (0x%02X), skipping\n", header.DSiCryptoFlags);
+        return;
+    }
+
+    // Plaintext check: if words look like ARM / Thumb opcode / zero patterns
+    size_t checkWords = std::min<size_t>(decryptSize / 4, 32);
+    size_t armCount = 0;
+    size_t thumbCount = 0;
+    for (size_t i = 0; i < checkWords; i++)
+    {
+        u32 w = isArm7Area ? ARM7Read32(binaryaddr + i * 4) : ARM9Read32(binaryaddr + i * 4);
+        if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
+            armCount++;
+        u16 hw0 = (u16)w;
+        u16 hw1 = (u16)(w >> 16);
+        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
+            thumbCount++;
+        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
+            thumbCount++;
+    }
+    if (checkWords >= 8 && (armCount >= (checkWords * 3) / 10 || thumbCount >= (checkWords * 2 * 3) / 10))
+    {
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (arm=%zu, thumb=%zu / %zu), skipping\n",
+            binaryaddr, armCount, thumbCount, checkWords);
+        return;
+    }
+
+    for (u32 i = 0; i < decryptSize; i += 16)
     {
         u32 data[4];
-
-        if (isARM7)
+        if (isArm7Area)
         {
-            data[0] = ARM7Read32(binaryaddr+i);
-            data[1] = ARM7Read32(binaryaddr+i+4);
-            data[2] = ARM7Read32(binaryaddr+i+8);
-            data[3] = ARM7Read32(binaryaddr+i+12);
+            data[0] = ARM7Read32(binaryaddr + i);
+            data[1] = ARM7Read32(binaryaddr + i + 4);
+            data[2] = ARM7Read32(binaryaddr + i + 8);
+            data[3] = ARM7Read32(binaryaddr + i + 12);
         }
         else
         {
-            data[0] = ARM9Read32(binaryaddr+i);
-            data[1] = ARM9Read32(binaryaddr+i+4);
-            data[2] = ARM9Read32(binaryaddr+i+8);
-            data[3] = ARM9Read32(binaryaddr+i+12);
+            data[0] = ARM9Read32(binaryaddr + i);
+            data[1] = ARM9Read32(binaryaddr + i + 4);
+            data[2] = ARM9Read32(binaryaddr + i + 8);
+            data[3] = ARM9Read32(binaryaddr + i + 12);
         }
 
         Bswap128(tmp, data);
         AES_CTR_xcrypt_buffer(&ctx, tmp, sizeof(tmp));
         Bswap128(data, tmp);
 
-        if (isARM7)
+        if (isArm7Area)
         {
-            ARM7Write32(binaryaddr+i,    data[0]);
-            ARM7Write32(binaryaddr+i+4,  data[1]);
-            ARM7Write32(binaryaddr+i+8,  data[2]);
-            ARM7Write32(binaryaddr+i+12, data[3]);
+            ARM7Write32(binaryaddr + i, data[0]);
+            ARM7Write32(binaryaddr + i + 4, data[1]);
+            ARM7Write32(binaryaddr + i + 8, data[2]);
+            ARM7Write32(binaryaddr + i + 12, data[3]);
         }
         else
         {
-            ARM9Write32(binaryaddr+i,    data[0]);
-            ARM9Write32(binaryaddr+i+4,  data[1]);
-            ARM9Write32(binaryaddr+i+8,  data[2]);
-            ARM9Write32(binaryaddr+i+12, data[3]);
+            ARM9Write32(binaryaddr + i, data[0]);
+            ARM9Write32(binaryaddr + i + 4, data[1]);
+            ARM9Write32(binaryaddr + i + 8, data[2]);
+            ARM9Write32(binaryaddr + i + 12, data[3]);
         }
     }
 }
@@ -537,11 +472,24 @@ void DSi::SetupDirectBoot()
     u32 cartid = NDSCartSlot.GetCart()->ID();
     DSi_TSC* tsc = (DSi_TSC*)SPI.GetTSC();
 
+    u32 cartLength = NDSCartSlot.GetCart()->GetROMLength();
+
     // TODO properly setup SCFG_EXT
 
     // TODO: add controls for forcing DS or DSi mode?
     if (!(header.UnitCode & 0x02) && !header.IsDSiWare())
         dsmode = true;
+
+    if (!dsmode && !header.IsDSiWare() && header.IsDSiEnhanced())
+    {
+        if (header.DSiARM9iSize == 0 || header.DSiARM9iROMOffset == 0 ||
+            (header.DSiARM9iROMOffset + header.DSiARM9iSize > cartLength) ||
+            header.DSiModcrypt1Offset == 0xFFFFFFFF)
+        {
+            Log(LogLevel::Warn, "DSi::SetupDirectBoot: DSi-Enhanced ROM is running in DS mode.\n");
+            dsmode = true;
+        }
+    }
 
     Log(LogLevel::Info,
         "DSi::SetupDirectBoot: dsmode=%d UnitCode=0x%02X GameCode=%.4s "
@@ -563,7 +511,8 @@ void DSi::SetupDirectBoot()
 
     if (dsmode)
     {
-        SCFG_BIOS = 0x0303;
+        // DS-mode hardware configuration
+        SCFG_BIOS = 0x0000;
 
         // no NWRAM Mapping
         for (int i = 0; i < 4; i++)
@@ -705,65 +654,6 @@ void DSi::SetupDirectBoot()
 
                 for (u32 i = 0; i < 0x18; i+=4)
                     ARM9Write32(0x02FFFD68+i, *(u32*)&hwinfoS.Bytes[0x88+i]);
-
-                if (header.IsDSiWare() || header.DSiTitleIDHigh == DSiWareTitleIDHigh)
-                {
-                    u32 titleid0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : DSiWareTitleIDHigh;
-                    u32 titleid1 = header.DSiTitleIDLow ? header.DSiTitleIDLow : *(const u32*)&header.GameCode;
-                    u32 titleid1_swap = __builtin_bswap32(titleid1);
-
-                    u32 titleIdsToSetup[2] = { titleid1, titleid1_swap };
-                    u32 numIds = (titleid1 == titleid1_swap) ? 1 : 2;
-
-                    for (u32 idIdx = 0; idIdx < numIds; ++idIdx)
-                    {
-                        u32 currId1 = titleIdsToSetup[idIdx];
-                        char dirpath[128];
-
-                        // ticket
-                        snprintf(dirpath, sizeof(dirpath), "0:/ticket/%08x", titleid0);
-                        f_mkdir(dirpath);
-                        snprintf(dirpath, sizeof(dirpath), "0:/ticket/%08x/%08x.tik", titleid0, currId1);
-                        nand.CreateTicket(dirpath, titleid0, currId1, header.ROMVersion);
-
-                        // title folders
-                        snprintf(dirpath, sizeof(dirpath), "0:/title/%08x", titleid0);
-                        f_mkdir(dirpath);
-                        snprintf(dirpath, sizeof(dirpath), "0:/title/%08x/%08x", titleid0, currId1);
-                        f_mkdir(dirpath);
-                        snprintf(dirpath, sizeof(dirpath), "0:/title/%08x/%08x/content", titleid0, currId1);
-                        f_mkdir(dirpath);
-                        snprintf(dirpath, sizeof(dirpath), "0:/title/%08x/%08x/data", titleid0, currId1);
-                        f_mkdir(dirpath);
-
-                        u32 pubSavSize = header.DSiPublicSavSize ? header.DSiPublicSavSize : 0x10000;
-                        snprintf(dirpath, sizeof(dirpath), "0:/title/%08x/%08x/data/public.sav", titleid0, currId1);
-                        nand.CreateSaveFile(dirpath, pubSavSize);
-
-                        if (header.DSiPrivateSavSize != 0)
-                        {
-                            snprintf(dirpath, sizeof(dirpath), "0:/title/%08x/%08x/data/private.sav", titleid0, currId1);
-                            nand.CreateSaveFile(dirpath, header.DSiPrivateSavSize);
-                        }
-                        if (header.AppFlags & 0x04)
-                        {
-                            snprintf(dirpath, sizeof(dirpath), "0:/title/%08x/%08x/data/banner.sav", titleid0, currId1);
-                            FF_FILINFO binfo;
-                            if (f_stat(dirpath, &binfo) != FR_OK || binfo.fsize != 0x4000)
-                            {
-                                FF_FIL bfile;
-                                if (f_open(&bfile, dirpath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
-                                {
-                                    u8 bannersav[0x4000];
-                                    memset(bannersav, 0, sizeof(bannersav));
-                                    u32 bw;
-                                    f_write(&bfile, bannersav, sizeof(bannersav), &bw);
-                                    f_close(&bfile);
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -787,74 +677,39 @@ void DSi::SetupDirectBoot()
             ARM9Write32(0x020005EC, 0x00020000);
         }
 
-        // TODO: the shit at 02FFD7B0..02FFDC00
-        // and some other extra shit?
+        // Populate DSi Boot tables at 0x02FFD7B0..0x02FFD9F0 and 0x02FFE000..0x02FFE240
+        for (u32 i = 0; i < 0x240; i += 4)
+        {
+            u32 tmp = (i + 4 <= cartLength) ? *(u32*)&cartrom[i] : 0;
+            ARM9Write32(0x02FFD7B0 + i, tmp);
+            ARM9Write32(0x02FFE000 + i, tmp);
+        }
+
+        // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror
+        ARM9Write32(0x027FF800, cartid);
+        ARM9Write32(0x027FF804, cartid);
+        ARM9Write16(0x027FF808, header.HeaderCRC16);
+        ARM9Write16(0x027FF80A, header.SecureAreaCRC16);
+        ARM9Write16(0x027FF850, 0x5835);
+
+        ARM9Write32(0x027FFC00, cartid);
+        ARM9Write32(0x027FFC04, cartid);
+        ARM9Write16(0x027FFC08, header.HeaderCRC16);
+        ARM9Write16(0x027FFC0A, header.SecureAreaCRC16);
+        ARM9Write16(0x027FFC10, 0x5835);
+        ARM9Write16(0x027FFC30, 0xFFFF);
+        ARM9Write16(0x027FFC40, 0x0001);
 
         ARM9Write32(0x02FFFC00, cartid);
+        ARM9Write32(0x02FFFC04, cartid);
+        ARM9Write16(0x02FFFC08, header.HeaderCRC16);
+        ARM9Write16(0x02FFFC0A, header.SecureAreaCRC16);
+        ARM9Write16(0x02FFFC10, 0x5835);
+        ARM9Write16(0x02FFFC30, 0xFFFF);
         ARM9Write16(0x02FFFC40, 0x0001); // boot indicator
 
         ARM9Write8(0x02FFFDFA, I2C.GetBPTWL()->GetBootFlag() | 0x80);
         ARM9Write8(0x02FFFDFB, 0x01);
-    }
-
-    u32 arm9start = 0;
-
-    // load the ARM9 secure area
-    if (header.ARM9ROMOffset >= 0x4000 && header.ARM9ROMOffset < 0x8000)
-    {
-        u8 securearea[0x800];
-        NDSCartSlot.DecryptSecureArea(securearea);
-
-        for (u32 i = 0; i < 0x800; i+=4)
-        {
-            ARM9Write32(header.ARM9RAMAddress+i, *(u32*)&securearea[i]);
-            arm9start += 4;
-        }
-    }
-
-    for (u32 i = arm9start; i < header.ARM9Size; i+=4)
-    {
-        u32 tmp = *(u32*)&cartrom[header.ARM9ROMOffset+i];
-        ARM9Write32(header.ARM9RAMAddress+i, tmp);
-    }
-
-    for (u32 i = 0; i < header.ARM7Size; i+=4)
-    {
-        u32 tmp = *(u32*)&cartrom[header.ARM7ROMOffset+i];
-        ARM7Write32(header.ARM7RAMAddress+i, tmp);
-    }
-
-    if (!dsmode)
-    {
-        // load DSi-specific regions
-        if (header.DSiARM9iSize > 0 && header.DSiARM9iROMOffset > 0)
-        {
-            for (u32 i = 0; i < header.DSiARM9iSize; i+=4)
-            {
-                u32 tmp = *(u32*)&cartrom[header.DSiARM9iROMOffset+i];
-                ARM9Write32(header.DSiARM9iRAMAddress+i, tmp);
-            }
-        }
-
-        if (header.DSiARM7iSize > 0 && header.DSiARM7iROMOffset > 0)
-        {
-            for (u32 i = 0; i < header.DSiARM7iSize; i+=4)
-            {
-                u32 tmp = *(u32*)&cartrom[header.DSiARM7iROMOffset+i];
-                ARM7Write32(header.DSiARM7iRAMAddress+i, tmp);
-            }
-        }
-
-        // decrypt any modcrypt areas if Modcrypt settings are present
-        if (header.DSiCryptoFlags != 0 || (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Size != 0xFFFFFFFF))
-        {
-            DecryptModcryptArea(header.DSiModcrypt1Offset,
-                                header.DSiModcrypt1Size,
-                                header.DSiARM9Hash);
-            DecryptModcryptArea(header.DSiModcrypt2Offset,
-                                header.DSiModcrypt2Size,
-                                header.DSiARM7Hash);
-        }
     }
 
     ARM7BIOSProt = 0x20;
@@ -863,30 +718,60 @@ void DSi::SetupDirectBoot()
 
     I2S.WriteSndExCnt(0x8008, 0xFFFF);
 
-    ARM9.CP15Write(0x100, 0x00056078);
-    ARM9.CP15Write(0x200, 0x0000004A);
-    ARM9.CP15Write(0x201, 0x0000004A);
-    ARM9.CP15Write(0x300, 0x0000000A);
-    ARM9.CP15Write(0x502, 0x15111011);
-    ARM9.CP15Write(0x503, 0x05101011);
-    ARM9.CP15Write(0x600, 0x04000033);
-    ARM9.CP15Write(0x601, 0x04000033);
-    ARM9.CP15Write(0x610, 0x02000031);
-    ARM9.CP15Write(0x611, 0x02000031);
-    ARM9.CP15Write(0x620, 0x00000000);
-    ARM9.CP15Write(0x621, 0x00000000);
-    ARM9.CP15Write(0x630, 0x08000033);
-    ARM9.CP15Write(0x631, 0x08000033);
-    ARM9.CP15Write(0x640, 0x0E00001B);
-    ARM9.CP15Write(0x641, 0x0E00001B);
-    ARM9.CP15Write(0x650, 0x00000000);
-    ARM9.CP15Write(0x651, 0x00000000);
-    ARM9.CP15Write(0x660, 0xFFFF001D);
-    ARM9.CP15Write(0x661, 0xFFFF001D);
-    ARM9.CP15Write(0x670, 0x02FFC01B);
-    ARM9.CP15Write(0x671, 0x02FFC01B);
-    ARM9.CP15Write(0x910, 0x0E00000A);
-    ARM9.CP15Write(0x911, 0x00000020);
+    if (dsmode)
+    {
+        ARM9.CP15Write(0x100, 0x00012078);
+        ARM9.CP15Write(0x200, 0x00000042);
+        ARM9.CP15Write(0x201, 0x00000042);
+        ARM9.CP15Write(0x300, 0x00000002);
+        ARM9.CP15Write(0x502, 0x15111011);
+        ARM9.CP15Write(0x503, 0x05100011);
+        ARM9.CP15Write(0x600, 0x04000033);
+        ARM9.CP15Write(0x601, 0x04000033);
+        ARM9.CP15Write(0x610, 0x0200002B);
+        ARM9.CP15Write(0x611, 0x0200002B);
+        ARM9.CP15Write(0x620, 0x00000000);
+        ARM9.CP15Write(0x621, 0x00000000);
+        ARM9.CP15Write(0x630, 0x08000035);
+        ARM9.CP15Write(0x631, 0x08000035);
+        ARM9.CP15Write(0x640, 0x0300001B);
+        ARM9.CP15Write(0x641, 0x0300001B);
+        ARM9.CP15Write(0x650, 0x00000000);
+        ARM9.CP15Write(0x651, 0x00000000);
+        ARM9.CP15Write(0x660, 0xFFFF001D);
+        ARM9.CP15Write(0x661, 0xFFFF001D);
+        ARM9.CP15Write(0x670, 0x027FF017);
+        ARM9.CP15Write(0x671, 0x027FF017);
+        ARM9.CP15Write(0x910, 0x0300000A);
+        ARM9.CP15Write(0x911, 0x00000020);
+    }
+    else
+    {
+        ARM9.CP15Write(0x100, 0x00056078);
+        ARM9.CP15Write(0x200, 0x0000004A);
+        ARM9.CP15Write(0x201, 0x0000004A);
+        ARM9.CP15Write(0x300, 0x0000000A);
+        ARM9.CP15Write(0x502, 0x15111011);
+        ARM9.CP15Write(0x503, 0x05101011);
+        ARM9.CP15Write(0x600, 0x04000033);
+        ARM9.CP15Write(0x601, 0x04000033);
+        ARM9.CP15Write(0x610, 0x02000031);
+        ARM9.CP15Write(0x611, 0x02000031);
+        ARM9.CP15Write(0x620, 0x00000000);
+        ARM9.CP15Write(0x621, 0x00000000);
+        ARM9.CP15Write(0x630, 0x08000033);
+        ARM9.CP15Write(0x631, 0x08000033);
+        ARM9.CP15Write(0x640, 0x0E00001B);
+        ARM9.CP15Write(0x641, 0x0E00001B);
+        ARM9.CP15Write(0x650, 0x00000000);
+        ARM9.CP15Write(0x651, 0x00000000);
+        ARM9.CP15Write(0x660, 0xFFFF001D);
+        ARM9.CP15Write(0x661, 0xFFFF001D);
+        ARM9.CP15Write(0x670, 0x02FFC01B);
+        ARM9.CP15Write(0x671, 0x02FFC01B);
+        ARM9.CP15Write(0x910, 0x0E00000A);
+        ARM9.CP15Write(0x911, 0x00000020);
+    }
 
     UpdateVRAMTimings();
 
@@ -913,10 +798,96 @@ void DSi::SetupDirectBoot()
 
         for (u32 i = 0; i < 0x3C00; i+=4)
             ARM7Write32(0x03FFC400+i, *(u32*)&ARM7Init[i]);
-
-        ARM9.R[13] = 0x03002F7C;
-        ARM7.R[13] = 0x0380FF00;
     }
+
+    u32 arm9start = 0;
+
+    // load the ARM9 secure area
+    if (header.ARM9ROMOffset >= 0x4000 && header.ARM9ROMOffset < 0x8000)
+    {
+        u8 securearea[0x800];
+        NDSCartSlot.DecryptSecureArea(securearea);
+
+        for (u32 i = 0; i < 0x800; i+=4)
+        {
+            ARM9Write32(header.ARM9RAMAddress + i, *(u32*)&securearea[i]);
+            arm9start += 4;
+        }
+    }
+
+    for (u32 i = arm9start; i < header.ARM9Size; i+=4)
+    {
+        u32 tmp = (header.ARM9ROMOffset + i + 4 <= cartLength) ? *(u32*)&cartrom[header.ARM9ROMOffset+i] : 0;
+        ARM9Write32(header.ARM9RAMAddress + i, tmp);
+    }
+
+    for (u32 i = 0; i < header.ARM7Size; i+=4)
+    {
+        u32 tmp = (header.ARM7ROMOffset + i + 4 <= cartLength) ? *(u32*)&cartrom[header.ARM7ROMOffset+i] : 0;
+        ARM7Write32(header.ARM7RAMAddress + i, tmp);
+    }
+
+    if (!dsmode)
+    {
+        // load DSi-specific regions directly into physical MainRAM
+        if (header.DSiARM9iSize > 0 && header.DSiARM9iROMOffset > 0 &&
+            (header.DSiARM9iROMOffset + header.DSiARM9iSize <= cartLength))
+        {
+            for (u32 i = 0; i < header.DSiARM9iSize; i+=4)
+            {
+                u32 tmp = *(u32*)&cartrom[header.DSiARM9iROMOffset+i];
+                ARM9Write32(header.DSiARM9iRAMAddress + i, tmp);
+            }
+        }
+
+        if (header.DSiARM7iSize > 0 && header.DSiARM7iROMOffset > 0 &&
+            (header.DSiARM7iROMOffset + header.DSiARM7iSize <= cartLength))
+        {
+            for (u32 i = 0; i < header.DSiARM7iSize; i+=4)
+            {
+                u32 tmp = *(u32*)&cartrom[header.DSiARM7iROMOffset+i];
+                ARM7Write32(header.DSiARM7iRAMAddress + i, tmp);
+            }
+        }
+
+        // Decrypt modcrypt areas if still encrypted
+        if (header.DSiCryptoFlags & 0x01)
+        {
+            if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0)
+            {
+                DecryptModcryptArea(header.DSiModcrypt1Offset,
+                                    header.DSiModcrypt1Size,
+                                    header.DSiARM9Hash);
+            }
+        }
+        if (header.DSiCryptoFlags & 0x02)
+        {
+            if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0)
+            {
+                DecryptModcryptArea(header.DSiModcrypt2Offset,
+                                    header.DSiModcrypt2Size,
+                                    header.DSiARM7Hash);
+            }
+        }
+        header.DSiCryptoFlags &= ~0x03;
+    }
+
+    if (dsmode)
+    {
+        ARM9.R[13] = 0x03002F7C;
+        ARM9.R_IRQ[0] = 0x03003F80;
+        ARM9.R_SVC[0] = 0x03003FC0;
+    }
+    else
+    {
+        ARM9.R[13] = 0x0E002F7C;
+        ARM9.R_IRQ[0] = 0x0E003F80;
+        ARM9.R_SVC[0] = 0x0E003FC0;
+    }
+
+    ARM7.R[13] = 0x0380FF00;
+    ARM7.R_IRQ[0] = 0x0380FF80;
+    ARM7.R_SVC[0] = 0x0380FFC0;
 
     ARM9.R[12] = header.ARM9EntryAddress;
     ARM9.R[14] = header.ARM9EntryAddress;
@@ -970,21 +941,25 @@ void DSi::SoftReset()
     SDIO.Reset();
 
     AES.Reset();
+    I2C.Reset();
+    SPI.Reset();
+    NDSCartSlot.Reset();
 
     if (FullBIOSBoot)
     {
         SCFG_BIOS = 0x0000;
+        SCFG_EXT[0] = 0x00000000;
+        SCFG_EXT[1] = 0x00000000;
     }
     else
     {
         SCFG_BIOS = 0x0101;
+        SCFG_EXT[0] = 0x8307F100;
+        SCFG_EXT[1] = 0x93FFFB06;
     }
-    SCFG_Clock9 = 0x0187; // CHECKME
+    SCFG_Clock9 = 0x0187;
     SCFG_Clock7 = 0x0187;
-    SCFG_EXT[0] = 0x8307F100;
-    SCFG_EXT[1] = 0x93FFFB06;
-    SCFG_MC = 0x0010;//0x0011;
-    // TODO: is this actually reset?
+    SCFG_MC = 0x0010;
     SCFG_RST = 0;
     DSP.SetRstLine(false);
 
@@ -1613,6 +1588,10 @@ u8 DSi::ARM9Read8(u32 addr)
 
         return *(u8*)&ARM9iBIOS[addr & 0xFFFF];
     }
+    if ((addr >= 0x01FF8000 && addr < 0x02000000) && (!(SCFG_BIOS & (1<<1))))
+    {
+        return *(u8*)&ARM9iBIOS[addr & 0xFFFF];
+    }
 
     switch (addr & 0xFF000000)
     {
@@ -1664,6 +1643,10 @@ u16 DSi::ARM9Read16(u32 addr)
 
         return *(u16*)&ARM9iBIOS[addr & 0xFFFF];
     }
+    if ((addr >= 0x01FF8000 && addr < 0x02000000) && (!(SCFG_BIOS & (1<<1))))
+    {
+        return *(u16*)&ARM9iBIOS[addr & 0xFFFF];
+    }
 
     switch (addr & 0xFF000000)
     {
@@ -1712,6 +1695,10 @@ u32 DSi::ARM9Read32(u32 addr)
     {
         if ((addr >= 0xFFFF8000) && (SCFG_BIOS & (1<<0)))
             return 0xFFFFFFFF;
+        return *(u32*)&ARM9iBIOS[addr & 0xFFFF];
+    }
+    if ((addr >= 0x01FF8000 && addr < 0x02000000) && (!(SCFG_BIOS & (1<<1))))
+    {
         return *(u32*)&ARM9iBIOS[addr & 0xFFFF];
     }
 
@@ -2055,6 +2042,18 @@ bool DSi::ARM9GetMemRegion(u32 addr, bool write, MemRegion* region)
             region->Mask = 0xFFFF;
         }
         return true;
+    }
+
+    if ((addr >= 0x01FF8000 && addr < 0x02000000) && !write)
+    {
+        if (!(SCFG_BIOS & (1<<1)))
+        {
+            region->Mem = &ARM9iBIOS[0x8000];
+            region->Mask = 0x7FFF;
+            return true;
+        }
+        region->Mem = NULL;
+        return false;
     }
 
     region->Mem = NULL;

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.repositories.LayoutsRepository
@@ -53,20 +54,41 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
         }
     }
 
-    fun importLayout(context: android.content.Context, uri: android.net.Uri, onComplete: ((Boolean) -> Unit)? = null) {
+    enum class LayoutImportResult {
+        SUCCESS,
+        ALREADY_EXISTS,
+        ERROR
+    }
+
+    fun importLayout(context: android.content.Context, uri: android.net.Uri, onComplete: ((LayoutImportResult) -> Unit)? = null) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val json = context.contentResolver.openInputStream(uri)?.use { input ->
                     input.bufferedReader(Charsets.UTF_8).readText()
                 } ?: run {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onComplete?.invoke(false)
+                        onComplete?.invoke(LayoutImportResult.ERROR)
                     }
                     return@launch
                 }
 
                 val dto = com.google.gson.Gson().fromJson(json, me.magnum.melonds.impl.dtos.layout.LayoutConfigurationDto::class.java)
                 val model = dto.toModel()
+
+                val currentLayouts = layoutsRepository.getLayouts().firstOrNull() ?: emptyList()
+                val existingMatch = currentLayouts.firstOrNull { existing ->
+                    existing.type == LayoutConfiguration.LayoutType.CUSTOM &&
+                    existing.layoutVariants == model.layoutVariants
+                }
+
+                if (existingMatch != null) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        setSelectedLayoutId(existingMatch.id)
+                        onComplete?.invoke(LayoutImportResult.ALREADY_EXISTS)
+                    }
+                    return@launch
+                }
+
                 val importedLayout = model.copy(
                     id = UUID.randomUUID(),
                     name = model.name?.let { if (it.endsWith(")")) it else "$it (Imported)" } ?: "Imported Layout",
@@ -75,12 +97,12 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
                 layoutsRepository.saveLayout(importedLayout)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     setSelectedLayoutId(importedLayout.id)
-                    onComplete?.invoke(true)
+                    onComplete?.invoke(LayoutImportResult.SUCCESS)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onComplete?.invoke(false)
+                    onComplete?.invoke(LayoutImportResult.ERROR)
                 }
             }
         }

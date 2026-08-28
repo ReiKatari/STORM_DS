@@ -119,6 +119,7 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
             getLayoutComponentView(LayoutComponent.BUTTON_TRANSLATE)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.TRANSLATE, enableHapticFeedback, touchVibrator))
             getLayoutComponentView(LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.TOGGLE_EXTRA_BUTTONS, enableHapticFeedback, touchVibrator))
             getLayoutComponentView(LayoutComponent.BUTTON_LOCK_ROTATION)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.LOCK_ROTATION, enableHapticFeedback, touchVibrator))
+            getLayoutComponentView(LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.TOGGLE_ANALOG_STICK, enableHapticFeedback, touchVibrator))
         }
 
         getLayoutComponentViews().forEach {

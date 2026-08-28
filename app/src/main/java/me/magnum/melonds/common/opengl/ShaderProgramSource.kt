@@ -159,6 +159,44 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
                     "}"
         )
 
+        val Scale2xShader = ShaderProgramSource(
+            TextureFiltering.NEAREST,
+            DEFAULT_VERT_SHADER,
+            "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
+                "precision highp float;\n" +
+                "#else\n" +
+                "precision mediump float;\n" +
+                "#endif\n" +
+                "uniform sampler2D tex;\n" +
+                "varying vec2 uv;\n" +
+                "varying float alpha;\n" +
+                "const vec2 texSize = vec2($TEXTURE_WIDTH.0, $TEXTURE_HEIGHT.0);\n" +
+                "void main() {\n" +
+                "    vec2 pixelCoord = uv * texSize;\n" +
+                "    vec2 fp = fract(pixelCoord);\n" +
+                "    vec2 centerUv = (floor(pixelCoord) + 0.5) / texSize;\n" +
+                "    vec2 dx = vec2(1.0 / texSize.x, 0.0);\n" +
+                "    vec2 dy = vec2(0.0, 1.0 / texSize.y);\n" +
+                "    vec3 E = texture2D(tex, centerUv).bgr;\n" +
+                "    vec3 B = texture2D(tex, centerUv - dy).bgr;\n" +
+                "    vec3 D = texture2D(tex, centerUv - dx).bgr;\n" +
+                "    vec3 F = texture2D(tex, centerUv + dx).bgr;\n" +
+                "    vec3 H = texture2D(tex, centerUv + dy).bgr;\n" +
+                "    bool db = dot(abs(D - B), vec3(1.0)) < 0.05;\n" +
+                "    bool bh = dot(abs(B - H), vec3(1.0)) >= 0.05;\n" +
+                "    bool df = dot(abs(D - F), vec3(1.0)) >= 0.05;\n" +
+                "    bool bf = dot(abs(B - F), vec3(1.0)) < 0.05;\n" +
+                "    bool dh = dot(abs(D - H), vec3(1.0)) < 0.05;\n" +
+                "    bool hf = dot(abs(H - F), vec3(1.0)) < 0.05;\n" +
+                "    vec3 color = E;\n" +
+                "    if (fp.x < 0.5 && fp.y < 0.5) { color = (db && bh && df) ? D : E; }\n" +
+                "    else if (fp.x >= 0.5 && fp.y < 0.5) { color = (bf && bh && df) ? F : E; }\n" +
+                "    else if (fp.x < 0.5 && fp.y >= 0.5) { color = (dh && bh && df) ? D : E; }\n" +
+                "    else { color = (hf && bh && df) ? F : E; }\n" +
+                "    gl_FragColor = vec4(color, alpha);\n" +
+                "}\n"
+        )
+
         // Hyllian's 2xBR Shader
         //
         // Copyright (C) 2011 Hyllian/Jararaca - sergiogdb@gmail.com

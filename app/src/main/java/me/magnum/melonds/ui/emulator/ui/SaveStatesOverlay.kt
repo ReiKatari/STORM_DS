@@ -64,9 +64,10 @@ fun SaveStatesOverlay(
     gameTitle: String?,
     onSlotPicked: (SaveStateSlot) -> Unit,
     onSlotDeleted: (SaveStateSlot) -> Unit,
-    onSlotRenamed: (SaveStateSlot, String?) -> Unit = { _, _ -> },
-    onSlotDuplicated: (SaveStateSlot, Int) -> Unit = { _, _ -> },
+    onSlotRenamed: (SaveStateSlot, String?) -> Unit,
+    onSlotDuplicated: (SaveStateSlot, Int) -> Unit,
     onDismiss: () -> Unit,
+    onResumeGame: (() -> Unit)? = null,
 ) {
     val colors = watermelon
     val firstFocusRequester = remember { FocusRequester() }
@@ -76,78 +77,129 @@ fun SaveStatesOverlay(
 
     BackHandler { onDismiss() }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.bg)
-            .systemBarsPadding()
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.ButtonB) {
-                    onDismiss()
-                    true
-                } else {
-                    false
-                }
-            },
+            .background(Color.Black.copy(alpha = if (colors.isDark) 0.82f else 0.65f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        // --- Header (lowered down for safe display) ---
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 12.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(if (isSaving) R.string.save_state else R.string.load_state),
-                        color = colors.text,
-                        fontFamily = SpaceGrotesk,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSaving) colors.red.copy(alpha = 0.2f) else colors.surface2)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = if (isSaving) "СОХРАНЕНИЕ" else "ЗАГРУЗКА",
-                            color = if (isSaving) colors.red else colors.text2,
-                            fontFamily = WatermelonMono,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-                if (gameTitle != null) {
-                    Text(
-                        text = gameTitle,
-                        color = colors.text3,
-                        fontFamily = WatermelonMono,
-                        fontSize = 10.5.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
-
-        // --- Grid of Slots ---
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier
-                .weight(1f)
                 .widthIn(max = 840.dp)
-                .align(Alignment.CenterHorizontally)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 14.dp, bottom = 16.dp),
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { /* consume click */ },
+                )
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.ButtonB) {
+                        onDismiss()
+                        true
+                    } else {
+                        false
+                    }
+                },
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Main Panel Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .fillMaxHeight(0.85f)
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.line, RoundedCornerShape(20.dp)),
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Header Bar
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (isSaving) Icons.Filled.Save else Icons.Filled.FolderOpen,
+                            contentDescription = null,
+                            tint = if (isSaving) colors.red else colors.green,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(if (isSaving) R.string.save_state else R.string.load_state),
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (gameTitle != null) {
+                                Text(
+                                    text = gameTitle,
+                                    color = colors.text3,
+                                    fontFamily = WatermelonMono,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        if (onResumeGame != null) {
+                            Spacer(Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.2.dp, colors.green.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                    .clickable(onClick = onResumeGame)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = stringResource(R.string.pause_resume),
+                                        tint = colors.green,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "В игру",
+                                        color = colors.green,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+
+                    // Grid of Slots
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 160.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(max = 840.dp)
+                            .align(Alignment.CenterHorizontally)
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(top = 14.dp, bottom = 16.dp),
+                    ) {
             items(slots, key = { it.slot }) { slot ->
                 SaveStateSlotCard(
                     slot = slot,
@@ -161,54 +213,42 @@ fun SaveStatesOverlay(
                 )
             }
         }
+    }
+}
 
-        // Unified Bottom Center Back Arrow
-        Box(
-            modifier = Modifier
-                .padding(bottom = 14.dp, top = 4.dp)
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(colors.surface2)
-                .border(1.dp, colors.line, CircleShape)
-                .clickable(onClick = onDismiss)
-                .align(Alignment.CenterHorizontally),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = colors.text,
-                modifier = Modifier.size(20.dp)
+// Unified Bottom Center Back Arrow
+me.magnum.melonds.ui.common.UnifiedBackButton(
+    onClick = onDismiss,
+)
+}
+
+        // --- Rename Dialog ---
+        slotToRename?.let { slot ->
+            RenameSaveStateDialog(
+                slot = slot,
+                onDismiss = { slotToRename = null },
+                onConfirm = { newName ->
+                    onSlotRenamed(slot, newName)
+                    slotToRename = null
+                }
             )
         }
-    }
 
-    // --- Rename Dialog ---
-    slotToRename?.let { slot ->
-        RenameSaveStateDialog(
-            slot = slot,
-            onDismiss = { slotToRename = null },
-            onConfirm = { newName ->
-                onSlotRenamed(slot, newName)
-                slotToRename = null
-            }
-        )
-    }
+        // --- Duplicate Dialog ---
+        slotToDuplicate?.let { sourceSlot ->
+            DuplicateSaveStateDialog(
+                sourceSlot = sourceSlot,
+                slots = slots,
+                onDismiss = { slotToDuplicate = null },
+                onConfirm = { targetSlotNum ->
+                    onSlotDuplicated(sourceSlot, targetSlotNum)
+                    slotToDuplicate = null
+                }
+            )
+        }
 
-    // --- Duplicate Dialog ---
-    slotToDuplicate?.let { sourceSlot ->
-        DuplicateSaveStateDialog(
-            sourceSlot = sourceSlot,
-            slots = slots,
-            onDismiss = { slotToDuplicate = null },
-            onConfirm = { targetSlotNum ->
-                onSlotDuplicated(sourceSlot, targetSlotNum)
-                slotToDuplicate = null
-            }
-        )
+        me.magnum.melonds.ui.common.RequestInitialFocus(firstFocusRequester)
     }
-
-    me.magnum.melonds.ui.common.RequestInitialFocus(firstFocusRequester)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

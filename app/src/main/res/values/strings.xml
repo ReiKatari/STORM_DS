@@ -101,6 +101,25 @@
     <string name="settings_category_system">System</string>
     <string name="settings_category_retroachievements">RetroAchievements</string>
 
+    <string name="pref_cat_appearance">Appearance &amp; Themes</string>
+    <string name="pref_cat_emulation_speed">Emulation Speed &amp; Performance</string>
+    <string name="pref_cat_backup_restore">Backup &amp; Restore</string>
+    <string name="pref_cat_renderer_3d">Renderer &amp; 3D Graphics</string>
+    <string name="pref_cat_enhancements">Enhancements &amp; Upscaling</string>
+    <string name="pref_cat_retroarch_shaders">RetroArch Shaders</string>
+    <string name="pref_cat_display_layout">Display, Skins &amp; HUD</string>
+    <string name="pref_cat_audio_output">Audio Output &amp; Quality</string>
+    <string name="pref_cat_microphone">Microphone &amp; Recording</string>
+    <string name="pref_cat_input_layouts">Layouts &amp; Behavior</string>
+    <string name="pref_cat_touch_controls">On-Screen Controls &amp; Haptics</string>
+    <string name="pref_cat_gamepads_sensors">Motion Sensors &amp; Macros</string>
+    <string name="pref_cat_system_misc">System &amp; Logs</string>
+    <string name="pref_cat_core_compiler">CPU &amp; Compilers</string>
+    <string name="pref_cat_bios_firmware">BIOS &amp; Firmware</string>
+    <string name="pref_cat_sd_cards">Virtual SD Cards</string>
+    <string name="pref_cat_network_wfc">Nintendo WFC Network</string>
+    <string name="pref_cat_layout_management">Layouts &amp; Screen Area</string>
+
     <string name="pref_theme">Theme</string>
     <string name="pref_theme_summary">Choose user interface theme</string>
 
@@ -241,6 +260,7 @@
     <string name="action_layout_import">Import layout</string>
     <string name="layout_export_success">Layout exported successfully</string>
     <string name="layout_import_success">Layout imported successfully</string>
+    <string name="layout_already_imported">This layout profile is already imported</string>
     <string name="layout_operation_failed">Layout operation failed</string>
 
     <string name="ds_bios_dir_not_set">DS BIOS directory not set</string>
@@ -400,10 +420,10 @@
     <string name="block_bios_download_title">Block downloading BIOS files</string>
     <string name="block_bios_download_summary">Hides the automatic download buttons for verified BIOS and firmware files</string>
     <string name="auto_download_ds_bios_title">Download Official DS BIOS Files</string>
-    <string name="auto_download_ds_bios_summary">Auto-download and configure bios7.bin, bios9.bin, and firmware.bin</string>
+    <string name="auto_download_ds_bios_summary">Auto-download and configure ds_bios7.bin, ds_bios9.bin, ds_sd_card.bin, ds_firmware.bin</string>
     <string name="bios_directory">DS BIOS directory</string>
     <string name="auto_download_dsi_bios_title">Download Official DSi BIOS Files</string>
-    <string name="auto_download_dsi_bios_summary">Auto-download and configure bios7.bin, bios9.bin, firmware.bin, and nand.bin</string>
+    <string name="auto_download_dsi_bios_summary">Auto-download and configure dsi_bios7.bin, dsi_bios9.bin, dsi_sd_card.bin, dsi_firmware.bin, nand.bin</string>
     <string name="dsi_bios_directory">DSi BIOS directory</string>
     <string name="show_boot_screen">Show boot screen</string>
     <string name="dsiware_boot_mode_title">DSiWare Boot Mode</string>
@@ -417,15 +437,21 @@
     <string name="generate_new_mac_address_description">Generating a new MAC address will make games think they are running on a different system.</string>
     <string name="enable_jit">Enable JIT</string>
     <string name="enable_jit_summary">Improves performance but may cause freezes or crashes.</string>
+    <string name="enable_storm_compiler">Enable STORM Compiler</string>
+    <string name="enable_storm_compiler_summary">Optimized LLVM/Clang vectorized ARM64 engine with fast memory decoding pipeline.</string>
     <string name="jit_not_supported">JIT is only supported in 64 bit devices.</string>
     <string name="save_internal_config_as_file">Save internal config as a file</string>
     <string name="save_internal_config_as_file_summary">Keeps STORM DS.opts synchronized in the save-file directory, or in a ROM directory when no save-file directory is configured.</string>
     <string name="system_app_log_file_enabled">Write app log to ROM folder</string>
     <string name="system_app_log_file_enabled_summary">Creates melonDualLog.log in the first ROM folder and records app, native, and core logcat lines for debugging. Enable only while reproducing an issue.</string>
-    <string name="system_dldi_sd_card_enabled">Enable DLDI / Homebrew SD</string>
-    <string name="system_dldi_sd_card_enabled_summary">Mounts a virtual SD card for DLDI homebrew. Needed by apps like ZXDS.</string>
-    <string name="system_dldi_sd_card_dir">DLDI SD folder</string>
-    <string name="system_dldi_sd_card_image_size">DLDI SD image size</string>
+    <string name="system_dldi_sd_card_enabled">Enable DLDI SD card (DS)</string>
+    <string name="system_dldi_sd_card_enabled_summary">Emulate virtual Slot-1 flashcard SD card (sd_card.bin)</string>
+    <string name="system_dldi_sd_card_dir">DLDI SD card folder (DS)</string>
+    <string name="system_dldi_sd_card_image_size">DLDI SD card image size</string>
+    <string name="system_dsi_sd_card_enabled">Enable internal DSi SD card</string>
+    <string name="system_dsi_sd_card_enabled_summary">Emulate Nintendo DSi internal SD card slot (sd_card.bin)</string>
+    <string name="system_dsi_sd_card_dir">DSi SD card folder</string>
+    <string name="system_dsi_sd_card_image_size">DSi SD card image size</string>
     <string name="system_disable_touch_gestures_on_touch_screen_area">Disable touch gestures on touch screen area</string>
     <string name="system_disable_touch_gestures_on_touch_screen_area_summary">Prevents Android system gestures from triggering over the DS touch screen while playing. Leave off if you use the back gesture to open the in-game menu.</string>
     <string name="system_ignore_display_cutout_in_layouts">Ignore display cutout in layouts</string>
@@ -1098,6 +1124,7 @@
         <item>Quilez</item>
         <item>LCD</item>
         <item>Scanlines</item>
+        <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
     </string-array>
@@ -1382,6 +1409,7 @@
     <string name="lang_pt">Portuguese (Português)</string>
     <string name="label_button_spread">Button spacing</string>
     <string name="input_toggle_extra_buttons">Toggle extra buttons</string>
+    <string name="input_toggle_analog_stick">Toggle analog stick / D-Pad</string>
     <string name="toggle_visibility">Hide / Show</string>
     <string name="components_visibility_title">Manage Components</string>
     <string name="back">Back</string>
@@ -1405,6 +1433,28 @@
     <string name="input_gyro_aiming_title">Gyro Aiming</string>
     <string name="input_gyro_aiming_summary">Control aiming in 3D shooters (Metroid, Dementium, Moon) by tilting device</string>
     <string name="input_gyro_sensitivity_title">Gyro Sensitivity</string>
+    <string name="pref_cat_dsp_effects">DSP Sound Effects &amp; Limiter</string>
+    <string name="audio_soft_limiter_title">Soft-Clipping Peak Limiter</string>
+    <string name="audio_soft_limiter_summary">Smoothly limits dynamic audio peaks, eliminating clicks, pops, and crackles during frame drops and fast forward</string>
+    <string name="audio_bass_boost_title">Dynamic Bass Boost</string>
+    <string name="audio_bass_boost_summary">Enhance low-end frequencies for punchy retro sound</string>
+    <string name="audio_bass_boost_strength_title">Bass Boost Strength</string>
+    <string name="audio_spatial_audio_title">3D Spatial Stereo Expansion</string>
+    <string name="audio_spatial_audio_summary">Expands stereo soundstage for an immersive headphone gaming experience</string>
+    <string name="audio_reverb_title">Acoustic Room Reverb</string>
+    <string name="audio_reverb_summary">Adds natural spatial ambiance to in-game music and sound effects</string>
+
+    <string name="input_gyro_sensitivity_x_title">Horizontal Sensitivity (X)</string>
+    <string name="input_gyro_sensitivity_y_title">Vertical Sensitivity (Y)</string>
+    <string name="input_gyro_invert_x_title">Invert Horizontal Axis (X)</string>
+    <string name="input_gyro_invert_x_summary">Reverse left/right gyro tilt direction</string>
+    <string name="input_gyro_invert_y_title">Invert Vertical Axis (Y)</string>
+    <string name="input_gyro_invert_y_summary">Reverse up/down gyro tilt direction</string>
+    <string name="input_gyro_deadzone_x_title">Horizontal Deadzone (X)</string>
+    <string name="input_gyro_deadzone_x_summary">Suppress micro-tremors along the horizontal axis</string>
+    <string name="input_gyro_deadzone_y_title">Vertical Deadzone (Y)</string>
+    <string name="input_gyro_deadzone_y_summary">Suppress micro-tremors along the vertical axis</string>
+    <string name="input_gyro_recenter_quick_action">Quick Calibrate / Center</string>
     <string name="translator_tts_neural_title">Neural Cloud TTS (High Quality)</string>
     <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
     <string name="video_console_skin_title">3D Animated Console Skin</string>
@@ -1428,11 +1478,18 @@
     <!-- STORM Theme Studio & Colors -->
     <string name="theme_accent_color_title">Accent Color</string>
     <string name="theme_accent_color_summary">Select accent neon color for STORM NIGHT theme</string>
-    <string name="accent_electric_cyan">Electric Cyan</string>
-    <string name="accent_amber_gold">Amber Gold</string>
-    <string name="accent_cyber_red">Cyber Neon Red</string>
-    <string name="accent_emerald_jade">Emerald Jade</string>
-    <string name="accent_royal_violet">Royal Violet</string>
+    <string name="accent_electric_cyan">💎 Electric Cyan</string>
+    <string name="accent_matrix_emerald">🌿 Matrix Emerald</string>
+    <string name="accent_amber_gold">⚡ Cyber Gold</string>
+    <string name="accent_cyber_red">🔥 Cyber Red</string>
+    <string name="accent_neon_magenta">🔮 Neon Magenta</string>
+    <string name="accent_royal_violet">💜 Royal Violet</string>
+    <string name="accent_deep_sapphire">🌊 Deep Sapphire</string>
+    <string name="accent_solar_orange">🍊 Solar Orange</string>
+    <string name="accent_mint_frost">❄️ Mint Frost</string>
+    <string name="accent_toxic_lime">🧪 Toxic Lime</string>
+    <string name="accent_hot_pink">🌸 Hot Pink</string>
+    <string name="accent_oled_white">⚪ OLED Pure White</string>
 
     <!-- Card Styles -->
     <string name="rom_card_style_title">Library Card Style</string>
@@ -1472,4 +1529,7 @@
     <string name="video_dual_screen_cast_title">Dual-Screen Cast Mode (TV / HDMI)</string>
     <string name="video_dual_screen_cast_summary">Display touchscreen on device and 4K top screen on TV</string>
     <string name="soft_patch_applied">Applied patch: %s</string>
+    <string name="layout_open_editor_summary">Edit currently active layout profile (position, scale of screens and controls)</string>
+    <string name="pref_touch_dpad_stick_mode_title">Analog Stick instead of D-Pad</string>
+    <string name="pref_touch_dpad_stick_mode_summary">Display a virtual analog thumbstick instead of the classic directional pad</string>
 </resources>

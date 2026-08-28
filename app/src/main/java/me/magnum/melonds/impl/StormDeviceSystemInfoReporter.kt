@@ -46,7 +46,7 @@ object StormDeviceSystemInfoReporter {
 
         val versionName = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "3.0.6"
+        }.getOrNull() ?: "3.1.2"
 
         val versionCode = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -212,22 +212,124 @@ object StormDeviceSystemInfoReporter {
             appendLine("================================================================================")
         }
 
-        // Clean up any other old log files in Downloads/STORM DS LOGS/ so ONLY !STORM_INFO.txt remains
+        // Save system report to /storage/emulated/0/STORM DS/logs/!STORM_INFO.txt
         runCatching {
-            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val logsDir = File(downloadDir, "STORM DS LOGS").apply { mkdirs() }
-            logsDir.listFiles()?.forEach { file ->
-                if (file.isFile && file.name != INFO_FILE_NAME) {
-                    file.delete()
+            val rootLogsDir = File(Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
+            val infoFile = File(rootLogsDir, INFO_FILE_NAME)
+            infoFile.writeText(report, Charsets.UTF_8)
+
+            // Also copy to internal app logs for reliability
+            val internalLogsDir = File(context.filesDir, "logs").apply { mkdirs() }
+            File(internalLogsDir, INFO_FILE_NAME).writeText(report, Charsets.UTF_8)
+
+            if (rom == null) {
+                // Application startup: clean up stale game logs from previous sessions
+                rootLogsDir.listFiles()?.forEach { file ->
+                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
+                        file.delete()
+                    }
+                }
+                internalLogsDir.listFiles()?.forEach { file ->
+                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
+                        file.delete()
+                    }
+                }
+            } else {
+                // Clean up old legacy suffix files (*_DIRECT.txt, *_AUTO.txt, *_NAND.txt)
+                rootLogsDir.listFiles()?.forEach { file ->
+                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
+                        val base = file.name.substringBeforeLast(".txt")
+                        if (base.endsWith("_DIRECT") || base.endsWith("_AUTO") || base.endsWith("_NAND")) {
+                            file.delete()
+                        }
+                    }
+                }
+                internalLogsDir.listFiles()?.forEach { file ->
+                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
+                        val base = file.name.substringBeforeLast(".txt")
+                        if (base.endsWith("_DIRECT") || base.endsWith("_AUTO") || base.endsWith("_NAND")) {
+                            file.delete()
+                        }
+                    }
                 }
             }
-            val infoFile = File(logsDir, INFO_FILE_NAME)
-            infoFile.writeText(report, Charsets.UTF_8)
-            Log.i(TAG, "Successfully wrote unified diagnostic report to ${infoFile.absolutePath}")
+
+            // Clean up old /Download/STORM DS LOGS folder
+            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val oldLogsDir = File(downloadDir, "STORM DS LOGS")
+            if (oldLogsDir.exists()) {
+                oldLogsDir.deleteRecursively()
+            }
+            Log.i(TAG, "Successfully wrote unified system diagnostic report to ${infoFile.absolutePath}")
         }.onFailure {
-            Log.w(TAG, "Failed to write unified report to public Downloads", it)
+            Log.w(TAG, "Failed to write system report to STORM DS/logs", it)
         }
 
         return report
+    }
+
+    fun saveGameLog(
+        context: Context,
+        rom: Rom,
+        mode: String, // "DIRECT", "AUTO", "NAND"
+        success: Boolean,
+        details: String?,
+        bootMethod: String = "loadRom",
+        dsBiosStatus: String = "UNKNOWN",
+        dsiBiosStatus: String = "UNKNOWN",
+        videoRenderer: String = "VULKAN",
+        jitEnabled: Boolean = true,
+        customBiosEnabled: Boolean = true,
+    ) {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
+        val nowStr = dateFormat.format(Date())
+
+        val rawFileName = rom.fileName.substringBeforeLast('.')
+        val cleanFileName = rawFileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+        val logFileName = "${cleanFileName}.txt"
+
+        val gameReport = buildString {
+            appendLine("================================================================================")
+            appendLine("                      STORM DS GAME EXECUTION LOG")
+            appendLine("================================================================================")
+            appendLine("Timestamp: $nowStr")
+            appendLine("Game Title: ${rom.name}")
+            appendLine("File Name: ${rom.fileName}")
+            appendLine("Launch Mode: ${mode.uppercase(Locale.US)}")
+            appendLine("Boot Method: $bootMethod")
+            appendLine("Execution Status: ${if (success) "SUCCESSFUL / RUNNING" else "FAILED / ERROR"}")
+            appendLine("Console Type: ${if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) "Nintendo DSi" else "Nintendo DS"}")
+            appendLine("Video Renderer: $videoRenderer")
+            appendLine("JIT Recompiler: ${if (jitEnabled) "ENABLED (ARM64)" else "DISABLED (Interpreter)"}")
+            appendLine("Custom BIOS: ${if (customBiosEnabled) "ENABLED" else "DISABLED (FreeBIOS)"}")
+            appendLine("DS BIOS Status: $dsBiosStatus")
+            appendLine("DSi BIOS Status: $dsiBiosStatus")
+            appendLine("--------------------------------------------------------------------------------")
+            appendLine("DIAGNOSTICS & EXECUTION DETAILS:")
+            appendLine(details ?: "No additional diagnostic output available.")
+            appendLine("================================================================================")
+        }
+
+        runCatching {
+            val rootLogsDir = File(Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
+            // Delete any obsolete suffixed variants for this specific game
+            File(rootLogsDir, "${cleanFileName}_DIRECT.txt").delete()
+            File(rootLogsDir, "${cleanFileName}_AUTO.txt").delete()
+            File(rootLogsDir, "${cleanFileName}_NAND.txt").delete()
+
+            val gameLogFile = File(rootLogsDir, logFileName)
+            gameLogFile.writeText(gameReport, Charsets.UTF_8)
+
+            val internalLogsDir = File(context.filesDir, "logs").apply { mkdirs() }
+            File(internalLogsDir, "${cleanFileName}_DIRECT.txt").delete()
+            File(internalLogsDir, "${cleanFileName}_AUTO.txt").delete()
+            File(internalLogsDir, "${cleanFileName}_NAND.txt").delete()
+
+            File(internalLogsDir, logFileName).writeText(gameReport, Charsets.UTF_8)
+
+            Log.i(TAG, "Successfully saved single game log to ${gameLogFile.absolutePath}")
+        }.onFailure {
+            Log.w(TAG, "Failed to save game log for ${rom.name}", it)
+        }
     }
 }

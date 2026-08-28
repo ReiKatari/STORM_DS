@@ -54,7 +54,8 @@ android {
         }
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -Wno-write-strings")
+                cppFlags("-std=c++17 -Wno-write-strings -O3 -fomit-frame-pointer -ffast-math -funroll-loops -flto=thin -fvisibility-inlines-hidden")
+                arguments("-DENABLE_LTO_RELEASE=ON", "-DENABLE_LTO=ON")
             }
         }
         vectorDrawables.useSupportLibrary = true

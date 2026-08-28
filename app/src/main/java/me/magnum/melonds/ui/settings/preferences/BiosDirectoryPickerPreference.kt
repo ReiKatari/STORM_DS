@@ -83,8 +83,21 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
 
     override fun onAttached() {
         super.onAttached()
-        // Perform initial validation
-        validateDirectory(getPersistedStringSet(emptySet()).firstOrNull()?.toUri())
+        val persisted = getPersistedStringSet(emptySet()).firstOrNull()
+        val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+        val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
+        val defaultDir = java.io.File(baseDir, subFolder).apply { mkdirs() }
+        val defaultUri = Uri.fromFile(defaultDir)
+        if (persisted == null || persisted.contains("data/user/0") || persisted.contains("files/bios")) {
+            persistStringSet(setOf(defaultUri.toString()))
+            summary = defaultDir.absolutePath
+            validateDirectory(defaultUri)
+        } else {
+            val uri = persisted.toUri()
+            val rawPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(context, uri) ?: uri.path ?: persisted
+            summary = Uri.decode(rawPath)
+            validateDirectory(uri)
+        }
     }
 
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
@@ -95,7 +108,8 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
 
         buttonResetDefault?.setOnClickListener {
             val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
-            val defaultDir = java.io.File(context.filesDir, subFolder).apply { mkdirs() }
+            val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
+            val defaultDir = java.io.File(baseDir, subFolder).apply { mkdirs() }
             val defaultUri = Uri.fromFile(defaultDir)
             onDirectoryPicked(defaultUri)
             summary = defaultDir.absolutePath

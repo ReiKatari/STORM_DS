@@ -2,29 +2,39 @@ package me.magnum.melonds.ui.settings.preferences
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.LayoutInflater
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.preference.Preference
 import me.magnum.melonds.R
-import me.magnum.melonds.databinding.DialogFirmwareBirthdayBinding
+import me.magnum.melonds.ui.settings.dialogs.SettingsDialogScaffold
+import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
+import me.magnum.melonds.ui.theme.LocalWatermelonColors
+import me.magnum.melonds.ui.theme.SpaceGrotesk
 import java.text.NumberFormat
 
 class FirmwareBirthdayPreference(context: Context, attrs: AttributeSet?) : Preference(context, attrs) {
     companion object {
         private val daysInMonth = mapOf(
-                1 to 31,
-                2 to 29,
-                3 to 31,
-                4 to 30,
-                5 to 31,
-                6 to 30,
-                7 to 31,
-                8 to 31,
-                9 to 30,
-                10 to 31,
-                11 to 30,
-                12 to 31
+            1 to 31, 2 to 29, 3 to 31, 4 to 30, 5 to 31, 6 to 30,
+            7 to 31, 8 to 31, 9 to 30, 10 to 31, 11 to 30, 12 to 31
         )
 
         private val numberFormat = NumberFormat.getNumberInstance().apply {
@@ -34,94 +44,168 @@ class FirmwareBirthdayPreference(context: Context, attrs: AttributeSet?) : Prefe
 
     override fun onClick() {
         super.onClick()
-        val binding = DialogFirmwareBirthdayBinding.inflate(LayoutInflater.from(context))
-
-        AlertDialog.Builder(context)
-                .setTitle(title)
-                .setView(binding.root)
-                .setPositiveButton(R.string.ok) { dialog, _ ->
-                    val day = binding.textBirthdayDay.text.toString().toInt()
-                    val month = binding.textBirthdayMonth.text.toString().toInt()
-                    val birthday = "${numberFormat.format(day)}/${numberFormat.format(month)}"
-                    if (callChangeListener(birthday)) {
-                        persistString(birthday)
-                    }
-                    dialog.dismiss()
-                }
-                .setNegativeButton(R.string.cancel) { dialog, _ ->
-                    dialog.dismiss()
-                }
-                .show()
-
         val currentBirthday = getPersistedString("01/01")
         val parts = currentBirthday.split("/")
-        if (parts.size != 2) {
-            setNumberFormatted(binding.textBirthdayDay, 1)
-            setNumberFormatted(binding.textBirthdayMonth, 1)
-        } else {
-            setNumberFormatted(binding.textBirthdayDay, parts[0].toIntOrNull() ?: 1)
-            setNumberFormatted(binding.textBirthdayMonth, parts[1].toIntOrNull() ?: 1)
-        }
+        val initDay = parts.getOrNull(0)?.toIntOrNull() ?: 1
+        val initMonth = parts.getOrNull(1)?.toIntOrNull() ?: 1
 
-        binding.buttonBirthdayDayIncrease.setOnClickListener {
-            val day = binding.textBirthdayDay.text.toString().toIntOrNull() ?: 0
-            val month = binding.textBirthdayMonth.text.toString().toIntOrNull() ?: 1
-            val newDay = coerceDayForMonth(day + 1, month, true)
-            setNumberFormatted(binding.textBirthdayDay, newDay)
-        }
-        binding.buttonBirthdayDayDecrease.setOnClickListener {
-            val day = binding.textBirthdayDay.text.toString().toIntOrNull() ?: 2
-            val month = binding.textBirthdayMonth.text.toString().toIntOrNull() ?: 1
-            val newDay = coerceDayForMonth(day - 1, month, true)
-            setNumberFormatted(binding.textBirthdayDay, newDay)
-        }
-        binding.buttonBirthdayMonthIncrease.setOnClickListener {
-            val day = binding.textBirthdayDay.text.toString().toIntOrNull() ?: 1
-            val month = binding.textBirthdayMonth.text.toString().toIntOrNull() ?: 0
-            val newMonth = coerceMonth(month + 1)
-            val newDay = coerceDayForMonth(day, newMonth, false)
+        showSettingsComposeDialog(context) { dismiss ->
+            val colors = LocalWatermelonColors.current
+            var day by remember { mutableIntStateOf(initDay) }
+            var month by remember { mutableIntStateOf(initMonth) }
 
-            setNumberFormatted(binding.textBirthdayMonth, newMonth)
-            if (newDay != day) {
-                setNumberFormatted(binding.textBirthdayDay, newDay)
+            SettingsDialogScaffold(
+                title = title?.toString() ?: stringResource(R.string.firmware_birthday),
+                subtitle = "Формат: День / Месяц",
+                icon = Icons.Filled.Cake,
+                onDismiss = dismiss,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Day Picker
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "День",
+                                color = colors.text3,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 12.sp,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        val maxDay = daysInMonth[month] ?: 31
+                                        day = if (day >= maxDay) 1 else day + 1
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, tint = colors.green, modifier = Modifier.size(18.dp))
+                            }
+                            Text(
+                                text = numberFormat.format(day),
+                                color = colors.green,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        val maxDay = daysInMonth[month] ?: 31
+                                        day = if (day <= 1) maxDay else day - 1
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.Remove, contentDescription = null, tint = colors.text, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Text(
+                            text = "/",
+                            color = colors.text3,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+
+                        // Month Picker
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Месяц",
+                                color = colors.text3,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 12.sp,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        month = if (month >= 12) 1 else month + 1
+                                        val maxDay = daysInMonth[month] ?: 31
+                                        if (day > maxDay) day = maxDay
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, tint = colors.green, modifier = Modifier.size(18.dp))
+                            }
+                            Text(
+                                text = numberFormat.format(month),
+                                color = colors.green,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        month = if (month <= 1) 12 else month - 1
+                                        val maxDay = daysInMonth[month] ?: 31
+                                        if (day > maxDay) day = maxDay
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.Remove, contentDescription = null, tint = colors.text, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.green)
+                            .clickable {
+                                val bday = "${numberFormat.format(day)}/${numberFormat.format(month)}"
+                                if (callChangeListener(bday)) {
+                                    persistString(bday)
+                                }
+                                dismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ok),
+                            color = colors.bg,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
         }
-        binding.buttonBirthdayMonthDecrease.setOnClickListener {
-            val day = binding.textBirthdayDay.text.toString().toIntOrNull() ?: 1
-            val month = binding.textBirthdayMonth.text.toString().toIntOrNull() ?: 2
-            val newMonth = coerceMonth(month - 1)
-            val newDay = coerceDayForMonth(day, newMonth, false)
-
-            setNumberFormatted(binding.textBirthdayMonth, newMonth)
-            if (newDay != day) {
-                setNumberFormatted(binding.textBirthdayDay, newDay)
-            }
-        }
-    }
-
-    private fun coerceDayForMonth(day: Int, month: Int, loop: Boolean): Int {
-        val daysInMonth = daysInMonth[month] ?: 1
-        return if (loop) {
-            when {
-                day > daysInMonth -> 1
-                day < 1 -> daysInMonth
-                else -> day
-            }
-        } else {
-            day.coerceIn(1, daysInMonth)
-        }
-    }
-
-    private fun coerceMonth(month: Int): Int {
-        return when {
-            month < 1 -> 12
-            month > 12 -> 1
-            else -> month
-        }
-    }
-
-    private fun setNumberFormatted(view: TextView, value: Int) {
-        val formattedValue = numberFormat.format(value)
-        view.text = formattedValue.toString()
     }
 }

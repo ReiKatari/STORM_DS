@@ -152,17 +152,66 @@ class SharedPreferencesSettingsRepository(
             .getOrNull()
     }
 
-    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, fileName: String, fallbackDir: File): Uri? {
+    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, vararg names: String): Uri? {
+        // 1. Direct file URI / custom directory
         if (dirUri != null && (dirUri.scheme == "file" || dirUri.scheme == null)) {
             val path = dirUri.path ?: dirUri.toString().removePrefix("file://")
-            val f = File(path, fileName)
-            if (f.exists()) return Uri.fromFile(f)
+            val dir = File(path)
+            if (dir.exists() && dir.isDirectory) {
+                for (name in names) {
+                    val f = File(dir, name)
+                    if (f.exists() && f.length() > 0) return Uri.fromFile(f)
+                }
+                val matched = dir.listFiles()?.firstOrNull { f ->
+                    names.any { name -> f.name.equals(name, ignoreCase = true) }
+                }
+                if (matched != null && matched.exists() && matched.length() > 0) return Uri.fromFile(matched)
+            }
         }
-        val fromTree = getFileUri(treeDoc, fileName)
-        if (fromTree != null) return fromTree
 
-        val fallbackFile = File(fallbackDir, fileName)
-        if (fallbackFile.exists()) return Uri.fromFile(fallbackFile)
+        // 2. Tree document file
+        if (treeDoc != null && treeDoc.isDirectory) {
+            for (name in names) {
+                val fromTree = getFileUri(treeDoc, name)
+                if (fromTree != null) return fromTree
+            }
+            val matchedDoc = treeDoc.listFiles().firstOrNull { f ->
+                val fName = f.name ?: ""
+                names.any { name -> fName.equals(name, ignoreCase = true) }
+            }
+            if (matchedDoc != null && matchedDoc.exists()) return matchedDoc.uri
+        }
+
+        // 3. Known fallback directories
+        val extStorage = android.os.Environment.getExternalStorageDirectory()
+        val candidateDirs = listOf(
+            File(extStorage, "STORM DS/bios/dsi"),
+            File(extStorage, "STORM DS/bios/ds"),
+            File(extStorage, "STORM DS/bios"),
+            File(extStorage, "STORM DS/system"),
+            File(extStorage, "RetroArch/system"),
+            File(context.getExternalFilesDir(null), "bios/dsi"),
+            File(context.getExternalFilesDir(null), "bios/ds"),
+            File(context.getExternalFilesDir(null), "bios"),
+            File(context.filesDir, "bios/dsi"),
+            File(context.filesDir, "bios/ds"),
+            File(context.filesDir, "bios"),
+            context.filesDir,
+        )
+
+        for (dir in candidateDirs) {
+            if (dir.exists() && dir.isDirectory) {
+                for (name in names) {
+                    val f = File(dir, name)
+                    if (f.exists() && f.length() > 0) return Uri.fromFile(f)
+                }
+                val matched = dir.listFiles()?.firstOrNull { f ->
+                    names.any { name -> f.name.equals(name, ignoreCase = true) }
+                }
+                if (matched != null && matched.exists() && matched.length() > 0) return Uri.fromFile(matched)
+            }
+        }
+
         return null
     }
 
@@ -355,17 +404,48 @@ class SharedPreferencesSettingsRepository(
         val dsDirDocument = getTreeDocument(dsBiosDirUri, "bios_dir")
         val dsiDirDocument = getTreeDocument(dsiBiosDirUri, "dsi_bios_dir")
 
+        val stormDsBase = getEmulatorBaseDirectory()
+        val stormDsDsDir = File(stormDsBase, "bios/ds").apply { mkdirs() }
+        val stormDsDsiDir = File(stormDsBase, "bios/dsi").apply { mkdirs() }
+        val stormDsBiosDir = File(stormDsBase, "bios").apply { mkdirs() }
+
         val internalDsDir = File(context.filesDir, "bios/ds")
         val internalDsiDir = File(context.filesDir, "bios/dsi")
 
-        val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", internalDsDir)
-        val dsBios9 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios9.bin", internalDsDir)
-        val dsFirmware = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "firmware.bin", internalDsDir)
+        val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin")
+            ?: resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7.bin", "ds_bios7.bin", "arm7.bin")
 
-        val dsiBios7 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7.bin", internalDsiDir)
-        val dsiBios9 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios9.bin", internalDsiDir)
-        val dsiFirmware = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "firmware.bin", internalDsiDir)
-        val dsiNand = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "nand.bin", internalDsiDir)
+        val dsBios9 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios9.bin", "ds_bios9.bin", "arm9.bin", "bios9_ds.bin")
+            ?: resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios9.bin", "ds_bios9.bin", "arm9.bin")
+
+        val dsFirmware = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "firmware.bin", "ds_firmware.bin", "firmware_ds.bin")
+            ?: resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "firmware.bin", "ds_firmware.bin")
+
+        val dsiBios7 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7i.bin", "dsi_bios7.bin", "bios7.bin", "arm7i.bin", "dsi_arm7.bin")
+            ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7i.bin", "dsi_bios7.bin", "bios7.bin", "arm7i.bin")
+
+        val dsiBios9 = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios9i.bin", "dsi_bios9.bin", "bios9.bin", "arm9i.bin", "dsi_arm9.bin")
+            ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios9i.bin", "dsi_bios9.bin", "bios9.bin", "arm9i.bin")
+
+        val dsiFirmware = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin", "dsi_bios.bin")
+            ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin")
+
+        val dsiNand = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
+            ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
+
+        val sdCardImage = if (consoleType == ConsoleType.DSi) {
+            val rootDsiSd = File(stormDsBase, "bios/dsi/sd_card.bin")
+            val internalDsiSd = File(context.filesDir, "bios/dsi/sd_card.bin")
+            if (rootDsiSd.exists()) rootDsiSd.absolutePath
+            else if (internalDsiSd.exists()) internalDsiSd.absolutePath
+            else File(context.filesDir, "dldi/dsi_sd.img").absolutePath
+        } else {
+            val rootDsSd = File(stormDsBase, "bios/ds/sd_card.bin")
+            val internalDsSd = File(context.filesDir, "bios/ds/sd_card.bin")
+            if (rootDsSd.exists()) rootDsSd.absolutePath
+            else if (internalDsSd.exists()) internalDsSd.absolutePath
+            else File(context.filesDir, "dldi/dldi_sd.img").absolutePath
+        }
 
         return EmulatorConfiguration(
             useCustomBios(),
@@ -396,7 +476,7 @@ class SharedPreferencesSettingsRepository(
             renderConfigurationFlow.first(),
             DldiSdCardConfiguration(
                 enabled = isDldiSdCardEnabled(),
-                imagePath = File(context.filesDir, "dldi/dldi_sd.img").absolutePath,
+                imagePath = sdCardImage,
                 imageSize = getDldiSdCardImageSize(),
                 folderSync = isDldiSdCardEnabled() && getDldiSdCardDirectory() != null,
                 folderPath = File(context.filesDir, "dldi/sync").absolutePath,
@@ -405,6 +485,11 @@ class SharedPreferencesSettingsRepository(
             arm9OverclockMultiplier = getArm9Overclock(),
             enable3dWidescreen = is3dWidescreenEnabled(),
             enable60FpsPatch = is60FpsPatchEnabled(),
+            audioSoftLimiterEnabled = preferences.getBoolean("audio_soft_limiter_enabled", true),
+            audioBassBoostEnabled = preferences.getBoolean("audio_bass_boost_enabled", false),
+            audioBassBoostStrength = preferences.getInt("audio_bass_boost_strength", 5),
+            audioSpatialAudioEnabled = preferences.getBoolean("audio_spatial_audio_enabled", false),
+            audioReverbEnabled = preferences.getBoolean("audio_reverb_enabled", false),
         )
     }
 
@@ -556,10 +641,29 @@ class SharedPreferencesSettingsRepository(
             randomize
         }
 
+        val appLanguage = preferences.getString("app_language", "default") ?: "default"
+        val effectiveAppLang = if (appLanguage == "default") {
+            java.util.Locale.getDefault().language.lowercase()
+        } else {
+            appLanguage.lowercase()
+        }
+
+        val userConfiguredLang = preferences.getString("firmware_settings_language", null)?.toIntOrNull()
+        val effectiveLanguage = userConfiguredLang ?: when {
+            effectiveAppLang.startsWith("ru") -> 1 // Default English slot for Russian translated ROMs
+            effectiveAppLang.startsWith("ja") -> 0
+            effectiveAppLang.startsWith("fr") -> 2
+            effectiveAppLang.startsWith("de") -> 3
+            effectiveAppLang.startsWith("it") -> 4
+            effectiveAppLang.startsWith("es") -> 5
+            effectiveAppLang.startsWith("zh") -> 6
+            else -> 1
+        }
+
         return FirmwareConfiguration(
                 preferences.getString("firmware_settings_nickname", "Player")!!,
                 preferences.getString("firmware_settings_message", "Hello!")!!,
-                preferences.getString("firmware_settings_language", "1")!!.toIntOrNull() ?: 1,
+                effectiveLanguage,
                 preferences.getInt("firmware_settings_colour", 0),
                 birthday.second,
                 birthday.first,
@@ -569,15 +673,19 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun useCustomBios(): Boolean {
-        return preferences.getBoolean("use_custom_bios", false)
+        val dsBiosDir = getDsBiosDirectory()
+        val dsiBiosDir = getDsiBiosDirectory()
+        val explicitlyConfigured = (dsBiosDir != null && dsBiosDir.toString().isNotEmpty()) ||
+                (dsiBiosDir != null && dsiBiosDir.toString().isNotEmpty())
+        return preferences.getBoolean("use_custom_bios", explicitlyConfigured)
     }
 
     override fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode {
-        val raw = preferences.getString("dsiware_boot_mode", "direct") ?: "direct"
+        val raw = preferences.getString("dsiware_boot_mode", "autoload") ?: "autoload"
         return when (raw.lowercase()) {
-            "autoload" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD
+            "direct" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT
             "system_menu" -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU
-            else -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.DIRECT
+            else -> me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD
         }
     }
 
@@ -593,12 +701,36 @@ class SharedPreferencesSettingsRepository(
 
     override fun getDsBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("bios_dir", null)?.firstOrNull()
-        return dirPreference?.toUri()
+        if (dirPreference != null && !dirPreference.contains("data/user/0") && !dirPreference.contains("files/bios")) {
+            return dirPreference.toUri()
+        }
+        val rootBase = getEmulatorBaseDirectory()
+        val rootDir = File(rootBase, "bios/ds").apply { mkdirs() }
+        if (rootDir.exists() && (File(rootDir, "bios7.bin").exists() || File(rootDir, "ds_bios7.bin").exists())) {
+            return Uri.fromFile(rootDir)
+        }
+        val internalDir = File(context.filesDir, "bios/ds")
+        if (internalDir.exists() && (File(internalDir, "bios7.bin").exists() || File(internalDir, "ds_bios7.bin").exists())) {
+            return Uri.fromFile(internalDir)
+        }
+        return Uri.fromFile(rootDir)
     }
 
     override fun getDsiBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("dsi_bios_dir", null)?.firstOrNull()
-        return dirPreference?.toUri()
+        if (dirPreference != null && !dirPreference.contains("data/user/0") && !dirPreference.contains("files/bios")) {
+            return dirPreference.toUri()
+        }
+        val rootBase = getEmulatorBaseDirectory()
+        val rootDir = File(rootBase, "bios/dsi").apply { mkdirs() }
+        if (rootDir.exists() && (File(rootDir, "bios7.bin").exists() || File(rootDir, "dsi_bios7.bin").exists())) {
+            return Uri.fromFile(rootDir)
+        }
+        val internalDir = File(context.filesDir, "bios/dsi")
+        if (internalDir.exists() && (File(internalDir, "bios7.bin").exists() || File(internalDir, "dsi_bios7.bin").exists())) {
+            return Uri.fromFile(internalDir)
+        }
+        return Uri.fromFile(rootDir)
     }
 
     override fun clearBiosDirectories() {
@@ -629,8 +761,17 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isJitEnabled(): Boolean {
-        val defaultJitEnabled = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
-        return preferences.getBoolean("enable_jit", defaultJitEnabled)
+        val is64Bit = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
+        if (!is64Bit) return false
+        val storm = preferences.getBoolean("enable_storm_compiler", true)
+        val jit = preferences.getBoolean("enable_jit", false)
+        return storm || jit
+    }
+
+    override fun isStormCompilerEnabled(): Boolean {
+        val is64Bit = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
+        if (!is64Bit) return false
+        return preferences.getBoolean("enable_storm_compiler", true)
     }
 
     override fun getCurrentVideoRenderer(): VideoRenderer {
@@ -1580,6 +1721,10 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun getEmulatorBaseDirectory(): File {
+        val rootDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+        if (rootDir.exists() || rootDir.mkdirs()) {
+            return rootDir
+        }
         return context.getExternalFilesDir(null) ?: File(context.filesDir, "files")
     }
 
@@ -2003,7 +2148,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isGameTdbCoversEnabled(): Boolean {
-        return preferences.getBoolean("rom_gametdb_covers_enabled", true)
+        return preferences.getBoolean("rom_gametdb_covers_enabled", false)
     }
 
     override fun is3dWidescreenEnabled(): Boolean {
@@ -2016,6 +2161,10 @@ class SharedPreferencesSettingsRepository(
 
     override fun isDualScreenCastEnabled(): Boolean {
         return preferences.getBoolean("video_dual_screen_cast_enabled", false)
+    }
+
+    override fun setDualScreenCastEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("video_dual_screen_cast_enabled", enabled).apply()
     }
 
     override fun isTurboMacrosEnabled(): Boolean {
