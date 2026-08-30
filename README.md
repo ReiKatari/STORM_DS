@@ -1,133 +1,43 @@
-<div align="center">
+# STORM DS
 
-# ⚡ STORM DS
+## **О проекте**
+STORM DS — эмулятор двухэкранной портативной игровой консоли Nintendo DS и лаунчер игровой библиотеки для Windows и Android. Включает расширенный набор визуальных шейдеров, встроенную интеграцию с RetroAchievements, поддержку чит-кодов, управление сенсорным экраном через стилус/мышь/тачпад, оверлеи кастомизации экранов и многопоточный рендеринг.
 
-<p align="center">
-  <b>Высокопроизводительный форк WatermelonDS / melonDS для Android с Vulkan 3D, поддержкой шейдеров RetroArch, внешними экранами и RetroAchievements.</b>
-</p>
+## **Происхождение и форки**
+Форк и расширенная графическая оболочка на базе открытых ядер MelonDS (авторство Arisotura / MelonDS Team) и DeSmuME с добавлением авторского интерфейса, системы шейдеров и оверлеев от ReiKatari.
 
-[![Release](https://img.shields.io/badge/Release-v3.1.2-00D2FF.svg?style=for-the-badge)](https://github.com/ReiKatari/STORM_DS/releases)
-[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-0EA5E9.svg?style=for-the-badge)](https://github.com/ReiKatari/STORM_DS)
-[![License](https://img.shields.io/badge/License-GPL--3.0-10B981.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0.html)
-[![Fork](https://img.shields.io/badge/Fork%20of-WatermelonDS%20%7C%20melonDS-FF6B6B.svg?style=for-the-badge)](https://github.com/SapphireRhodonite/WatermelonDS)
+## **Технологический стек**
+- **Языки программирования**: C++, C, C# (.NET / WPF для Windows Launcher), Java/Kotlin (Android Frontend)
+- **Графические бэкенды**: OpenGL 3.3+, Vulkan, Software Renderer
+- **Аудио**: SDL2 Audio, Cubeb, OpenSL ES / AAudio
+- **Эмуляционные ядра**: MelonDS Core, ARM7/ARM9 JIT Recompiler
+- **Интеграции**: RetroAchievements API (rcheevos), GameDB, FastLZ
 
-</div>
+## **Ключевые возможности**
+- **Двухэкранные режимы отображения**: Горизонтальное, вертикальное, гибридное (фокус на основном экране) и раздельное расположение экранов для двухмониторных конфигураций.
+- **Шейдеры и апскейлинг**: Поддержка xBRZ, CRT, LCD Grid, FXAA и кастомных фильтров постобработки.
+- **Интеграция с RetroAchievements**: Получение достижений, таблицы лидеров и режим хардкора в играх Nintendo DS.
+- **Управление микрофоном и сенсором**: Эмуляция шума микрофона горячей клавишей, точный ввод координат сенсорного экрана и поддержка гироскопа.
+- **Сетевая игра (Local Wi-Fi / DWC)**: Поддержка локального мультиплеера между запущенными копиями эмулятора и подключения к серверам Nintendo Wi-Fi Connection (Wiimmfi).
 
----
+## **Поддерживаемые платформы и эмуляторы**
+- **Операционные системы**: Windows 10, Windows 11 (x64), Android 8.0+ (ARM64-v8a)
+- **Поддерживаемые платформы**: Nintendo DS (NDS), Nintendo DSi, Game Boy Advance (через Slot-2 GBA)
+- **Поддерживаемые эмуляторы и ядра**: STORM DS, MelonDS, DeSmuME, RetroArch (MelonDS Core, DeSmuME Core)
 
-## 🌟 О проекте и происхождение (About & Fork Origin)
+## **Установка и запуск**
+1. Перейдите в раздел **Releases** на GitHub.
+2. Скачайте инсталлятор для Windows или APK-пакет для Android.
+3. Запустите эмулятор, укажите папку с ROM-файлами (поддерживаются форматы `.nds`, `.dsi`, `.zip`, `.7z`).
 
-**STORM DS** — это продвинутый и высокопроизводительный эмулятор Nintendo DS и Nintendo DSi для Android.
+## **Безопасность и цифровые подписи**
+Все Windows-сборки подписаны доверенным сертификатом **CN=STORM SOFT, O=STORM EDEN** (SHA-256 Authenticode). Android APK подписаны ключом разработчика Release Key.
 
-Проект является глубоким форком **[WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS)** (автор *SapphireRhodonite* и контрибьюторы), который в свою очередь создан как современный Android-порт эталонного эмулятора **[melonDS](https://melonds.kuribo64.net/)** (авторы *StapleButter*, *Nadia*, *RSDuck*, *genericretrogeek*, *Arisotura* и команда melonDS).
+## **Авторы и лицензия**
+- **Автор проекта**: ReiKatari (STORM Frontend & Модификации), Arisotura и MelonDS Team (MelonDS Core), DeSmuME Team (DeSmuME Core)
+- **Лицензия**: GPLv3 License
 
-### Архитектурная родословная:
-1. **melonDS** — оригинальное, высокоточное ядро эмуляции Nintendo DS & DSi на C++.
-2. **WatermelonDS** — современный порт для платформы Android с аппаратным Vulkan-рендерером, поддержкой шейдеров librashader, Material Design UI и сенсорным управлением.
-3. **STORM DS** — расширенный форк с устранением критических ограничений ядра, полноценным прямым запуском Slot-1 Cartridge Boot для DSiWare (включая Castle of Magic), защитой файлов прошивки и NAND от повреждений, оффлайн-достижениями RetroAchievements, двухэкранным выводом на внешние дисплеи (ТВ/мониторы по HDMI/USB-C), мгновенным сканером РОМов, эргономичными пресетами экранов в стиле DraStic, синхронизацией тем и полной русской локализацией.
-
----
-
-## ⚡ Ключевые возможности STORM DS
-
-### 🎮 Эталонная эмуляция DS & DSi
-* **Прямой запуск DSi & DSiWare (Direct Boot)**: Корректная загрузка исполняемых регионов ARM9i/ARM7i в память без необходимости предварительной установки в NAND и без риска повреждения системного файла `dsi_nand.bin`.
-* **Защита целостности NAND**: Исключены любые неконтролируемые фоновые модификации образа NAND при сканировании каталогов или запуске игр.
-* **JIT-рекомпилятор**: Высокая скорость работы и стабильные 60 FPS даже на устройствах среднего уровня.
-* **Nintendo Wi-Fi Connection (libslirp)**: Сетевой мультиплеер и онлайн-сервисы через встроенную эмуляцию сетевого стека.
-* **Поддержка микрофона и камеры**: Физические камеры устройства и микрофон Android для интерактивных игр DSi/DS.
-
-### 🚀 Графика и Шейдеры (Vulkan & librashader)
-* **Аппаратный Vulkan Fastpath & OpenGL**: Масштабирование внутреннего 3D-разрешения до 4x/8x.
-* **Шейдерный конвейер RetroArch (librashader)**: Поддержка популярных пресетов Slang (CRT, LCD-сетки, xBRZ, сглаживание, ScaleFX) в реальном времени.
-* **Adrenotools**: Возможность загрузки кастомных GPU-драйверов Turnip / Adreno для устройств на процессорах Snapdragon.
-* **Настраиваемый HUD**: Счетчик FPS и индикатор активного разрешения, симметрично расположенные в верхней части экрана.
-
-### 📺 Вывод на телевизоры и внешние дисплеи (Dual Display)
-* Полноценная игра на телевизоре или внешнем мониторе через USB-C / HDMI док-станции (Odin 2, планшеты, смартфоны).
-* Верхний игровой экран выводится на большой дисплей, а нижний сенсорный экран остается на портативном устройстве с элементами управления.
-
-### 🏆 RetroAchievements & Оффлайн-профиль
-* Полная поддержка достижений, бейджей и режима Hardcore.
-* **Автономная синхронизация (Offline Play)**: Достижения сохраняются локально при игре без интернета и автоматически отправляются на сервер при подключении сети.
-
-### 🎛️ Эргономика и пресеты экранов (DraStic Style)
-* Быстрое меню пресетов экранов: Ровная альбомная, Неровная альбомная (один большой, второй маленький у верхнего края), Ровная портретная, Пропорциональная и Полноэкранная.
-* Экранная кнопка быстрой смены экранов (Swap Screens) в верхней панели.
-* Полный редизайн всех модальных окон (Перемотка, Сохранение, Загрузка, Меню паузы) с унифицированной кнопкой «Назад» снизу по центру и безопасными отступами от системных вырезов.
-
-### 🎨 Премиальный дизайн и синхронизация тем
-* Темы оформления: OLED Cyber Black, Midnight Indigo, Emerald Glass, Sunset, Crimson и светлые темы.
-* Полная динамическая синхронизация цвета векторных иконок в настройках с выбранным акцентным цветом темы.
-
----
-
-## 💖 Благодарности и авторы / Credits & Acknowledgements
-
-STORM DS выражает глубокую признательность авторам и сообществу открытых проектов, сделавших этот эмулятор возможным:
-
-* **[JPeacekeeper](https://4pda.to/forum/index.php?showuser=5768740)** (4PDA):
-  * Неоценимый вклад в тестирование, детальные отчеты об ошибках DSi/NAND, стандартизацию фреймрейта и активное развитие проекта STORM DS.
-* **[WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS)** (Форк melonDS для Android):
-  * **SapphireRhodonite**, **rafaelvcaetano** и всем контрибьюторам WatermelonDS за разработку мощного порта на Android, высокоскоростной аппаратный рендер Vulkan Fastpath, интеграцию шейдерного движка librashader, улучшенные экранные раскладки и современный сенсорный интерфейс.
-* **[melonDS](https://melonds.kuribo64.net/)** (Оригинальное ядро эмулятора Nintendo DS & DSi):
-  * **StapleButter**, **Nadia**, **RSDuck**, **genericretrogeek**, **Arisotura** и всей команде разработчиков melonDS за эталонную точность, быстродействие и чистую архитектуру эмуляции Nintendo DS и DSi.
-* **[melonDS DS (RetroArch Core)](https://github.com/JesseTG/melonds-ds)** (Ядро эмулятора melonDS для RetroArch / Libretro):
-  * **JesseTG** и команде Libretro за передовые наработки по автозагрузке DSiWare, исследования структуры TLNC warmboot и оптимизацию архитектуры ядра.
-* **[DraStic & fastDS](https://drastic-ds.com/)**:
-  * **Exophase** и создателям эмуляторов DraStic и fastDS за вдохновение в создании удобных пресетов раскладки экранов и эргономики сенсорного управления.
-* **Сторонние открытые библиотеки и экосистемы**:
-  * **[Google Oboe](https://github.com/google/oboe)** — высокопроизводительная низколатентная аудиосистема с AAudio и OpenSL ES.
-  * **[librashader](https://github.com/SnowflakePowered/librashader)** — кроссплатформенный конвейер шейдеров RetroArch (Slang).
-  * **[RetroAchievements (rcheevos)](https://github.com/RetroAchievements/rcheevos)** — открытый стандарт интеграции достижений и таблиц рекордов.
-  * **[libslirp](https://gitlab.freedesktop.org/slirp/libslirp)** — пользовательский стек сетевой эмуляции Nintendo Wi-Fi Connection.
-  * **[libadrenotools](https://github.com/bylaws/libadrenotools)** — интеграция кастомных драйверов Qualcomm Adreno / Turnip.
-
----
-
-## 📲 Установка / Download
-
-Релизные сборки APK доступны в разделе [Releases](https://github.com/ReiKatari/STORM_DS/releases):
-
-* **`STORM_DS_3.1.2.apk`** — Главная релизная версия с поддержкой Adrenotools, Vulkan 3D и автоматическими обновлениями.
-
----
-
-## 🕹️ Интеграция с лаунчерами / Frontend Integration
-
-STORM DS поддерживает запуск из популярных Android-оболочек (**Daijishō**, **Beacon Launcher**, **Pegasus**, **EmulationStation-DE**, **LaunchBox**):
-
-* **Package Name**: `me.magnum.melondualds`
-* **Activity Name**: `me.magnum.melonds.ui.emulator.EmulatorActivity`
-* **Параметры запуска (Intent)**:
-  * `Intent data`: URI NDS-файла (`content://...` или `file://...`) с флагом `FLAG_GRANT_READ_URI_PERMISSION`.
-
----
-
-## 🛠️ Сборка из исходного кода / Building
-
-### Требования
-* JDK 17 или новее
-* Android SDK (API 35) + NDK (28.0.13004108)
-* CMake 3.22.1+
-
-### Команды сборки
-```bash
-# Клонирование репозитория вместе с субмодулями
-git clone --recurse-submodules https://github.com/ReiKatari/STORM_DS.git
-cd STORM_DS
-
-# Сборка релизного APK для GitHub
-./gradlew assembleGitHubProdRelease
-
-# Готовый APK будет расположен по пути:
-# app/build/outputs/apk/gitHubProd/release/STORM_DS_3.1.2.apk
-```
-
----
-
-## 📜 Лицензия / License
-
-Проект распространяется под лицензией **GPL-3.0 License**.
-
-Основан на разработках [melonDS](https://melonds.kuribo64.net/) и [WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS) с глубокими модификациями ядра, ускорением ввода/вывода, поддержкой внешних экранов, оффлайн-достижениями и оптимизациями STORM DS.
+## **Благодарности**
+- **Arisotura и MelonDS Team** — за выдающийся эмулятор MelonDS и безупречную эмуляцию архитектуры Nintendo DS.
+- **Команда DeSmuME** — за фундаментальные исследования архитектуры ARM9/ARM7 консоли DS.
+- **Команда RetroAchievements** — за инфраструктуру достижений в классических играх.

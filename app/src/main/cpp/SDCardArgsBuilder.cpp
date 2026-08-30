@@ -30,22 +30,18 @@ std::optional<FATStorageArgs> getSDCardArgs(SdCardSettings settings) noexcept
             .Filename = settings.imagePath,
             .Size = 0,
             .ReadOnly = settings.readOnly,
-            .SourceDir = settings.folderSync ? std::make_optional(settings.folderPath) : std::nullopt
+            .SourceDir = (settings.folderSync && settings.folderPath && settings.folderPath[0] != '\0') ? std::make_optional(settings.folderPath) : std::nullopt
         };
     }
 
-    if (settings.folderSync && settings.folderPath && settings.folderPath[0] != '\0')
-    {
-        u64 targetSize = (settings.imageSize >= 0 && settings.imageSize < 6) ? imgSizes[settings.imageSize] : 0;
-        if (targetSize == 0) targetSize = MB(512);
-        return FATStorageArgs {
-            .Filename = settings.imagePath,
-            .Size = targetSize,
-            .ReadOnly = settings.readOnly,
-            .SourceDir = std::make_optional(settings.folderPath)
-        };
-    }
+    u64 targetSize = (settings.imageSize >= 0 && settings.imageSize < 6) ? imgSizes[settings.imageSize] : 0;
+    if (targetSize == 0) targetSize = MB(512);
 
-    return std::nullopt;
+    return FATStorageArgs {
+        .Filename = settings.imagePath,
+        .Size = targetSize,
+        .ReadOnly = settings.readOnly,
+        .SourceDir = (settings.folderPath && settings.folderPath[0] != '\0') ? std::make_optional(settings.folderPath) : std::nullopt
+    };
 }
 }

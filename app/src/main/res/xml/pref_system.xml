@@ -106,8 +106,8 @@
 
         <Preference
                 android:key="pref_open_dldi_file_manager"
-                android:title="Открыть менеджер файлов DLDI"
-                android:summary="Просмотр и управление файлами виртуальной SD-карты"
+                android:title="@string/open_dldi_file_manager"
+                android:summary="@string/open_dldi_file_manager_summary"
                 app:iconSpaceReserved="false" />
 
         <SwitchPreference
@@ -134,8 +134,8 @@
 
         <Preference
                 android:key="pref_open_dsi_sd_file_manager"
-                android:title="Открыть менеджер файлов SD DSi"
-                android:summary="Просмотр, создание, переименование и удаление файлов SD-карты DSi"
+                android:title="@string/open_dsi_sd_file_manager"
+                android:summary="@string/open_dsi_sd_file_manager_summary"
                 app:iconSpaceReserved="false" />
     </PreferenceCategory>
 

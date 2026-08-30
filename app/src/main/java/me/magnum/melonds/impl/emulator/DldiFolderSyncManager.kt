@@ -97,15 +97,35 @@ class DldiFolderSyncManager(
         val targetSize = if (isDsi) settingsRepository.getDsiSdCardImageSize() else settingsRepository.getDldiSdCardImageSize()
 
         if (sourceUri == null || sourceRoot == null || !sourceRoot.exists() || !sourceRoot.isDirectory || !sourceRoot.canRead()) {
-            Log.i(TAG, "SD card (${if (isDsi) "DSi" else "DLDI"}) running in direct image mode")
+            Log.i(TAG, "SD card (${if (isDsi) "DSi" else "DLDI"}) running in direct image/mirror mode")
             activeDirectoryUri = null
-            val imgPath = baseConfiguration.imagePath?.takeIf { it.isNotBlank() } ?: defaultImage.absolutePath
+            val extBase = android.os.Environment.getExternalStorageDirectory()
+            val candidates = if (isDsi) {
+                listOf(
+                    File(extBase, "STORM DS/bios/dsi/sd_card.bin"),
+                    File(extBase, "STORM DS/bios/dsi/sd.bin"),
+                    File(extBase, "STORM DS/bios/sd_card.bin"),
+                    File(extBase, "STORM DS/bios/sd.bin"),
+                    File(context.filesDir, "bios/dsi/sd_card.bin"),
+                    File(context.filesDir, "dsi_sd/dsi_sd.img"),
+                )
+            } else {
+                listOf(
+                    File(extBase, "STORM DS/dldi/dldi_sd.img"),
+                    File(extBase, "STORM DS/bios/sd_card.bin"),
+                    File(extBase, "STORM DS/bios/sd.bin"),
+                    File(context.filesDir, "dldi/dldi_sd.img"),
+                )
+            }
+            val foundImage = candidates.firstOrNull { it.isFile && it.length() >= 512 }
+            val imgPath = foundImage?.absolutePath ?: baseConfiguration.imagePath?.takeIf { it.isNotBlank() } ?: defaultImage.absolutePath
             File(imgPath).parentFile?.mkdirs()
+            val hasMirrorFiles = mirrorDir.listFiles()?.isNotEmpty() == true
             return baseConfiguration.copy(
                 enabled = true,
                 imagePath = imgPath,
                 imageSize = targetSize,
-                folderSync = false,
+                folderSync = foundImage == null || hasMirrorFiles,
                 folderPath = mirrorDir.absolutePath,
             )
         }
