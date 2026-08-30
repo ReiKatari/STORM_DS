@@ -577,9 +577,25 @@ class SharedPreferencesSettingsRepository(
         val searchDirs = dirPreference?.map { it.toUri() }?.toMutableList() ?: mutableListOf()
 
         if (isDsiSdCardEnabled()) {
-            getDsiSdCardDirectory()?.let { dsiDir ->
-                if (!searchDirs.contains(dsiDir)) {
-                    searchDirs.add(dsiDir)
+            val userDsiDir = getDsiSdCardDirectory()
+            if (userDsiDir != null) {
+                if (!searchDirs.contains(userDsiDir)) {
+                    searchDirs.add(userDsiDir)
+                }
+            } else {
+                val localSync = File(context.filesDir, "dsi_sd/sync")
+                if (localSync.isDirectory && (localSync.listFiles()?.isNotEmpty() == true)) {
+                    val syncUri = localSync.toUri()
+                    if (!searchDirs.contains(syncUri)) {
+                        searchDirs.add(syncUri)
+                    }
+                }
+                val extSd = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/bios/dsi/sd_card")
+                if (extSd.isDirectory && (extSd.listFiles()?.isNotEmpty() == true)) {
+                    val extUri = extSd.toUri()
+                    if (!searchDirs.contains(extUri)) {
+                        searchDirs.add(extUri)
+                    }
                 }
             }
         }

@@ -649,7 +649,7 @@ class FileSystemRomsRepository(
                 markDirectoryNotScanned(directory, getDirectoryState(directory)?.lastScanned)
                 continue
             }
-            val documentFile = DocumentFile.fromTreeUri(context, directory)
+            val documentFile = getDocumentFileForUri(directory)
             if (documentFile != null) {
                 processDirectory(directory, documentFile, this)
             } else {
@@ -973,9 +973,22 @@ class FileSystemRomsRepository(
         return unavailableDirectories
     }
 
+    private fun getDocumentFileForUri(directoryUri: Uri): DocumentFile? {
+        return if (directoryUri.scheme == "file" || directoryUri.scheme == null) {
+            val path = directoryUri.path ?: directoryUri.toString()
+            val file = File(path)
+            if (file.exists() && file.canRead()) DocumentFile.fromFile(file) else null
+        } else {
+            val treeDoc = DocumentFile.fromTreeUri(context, directoryUri)
+            if (treeDoc != null && treeDoc.exists()) treeDoc else DocumentFile.fromSingleUri(context, directoryUri)
+        }
+    }
+
     private fun hasPersistedReadPermission(directoryUri: Uri): Boolean {
         if (directoryUri.scheme != "content") {
-            return true
+            val path = directoryUri.path ?: directoryUri.toString()
+            val file = File(path)
+            return !file.exists() || file.canRead()
         }
         val document = DocumentFile.fromTreeUri(context, directoryUri)
         if (document?.canRead() == true) {
@@ -1003,6 +1016,11 @@ class FileSystemRomsRepository(
             if (romDocId != null && romDocId.startsWith(directoryDocId)) {
                 return true
             }
+        }
+        val dirPath = directoryUri.path ?: directoryUri.toString()
+        val romPath = rom.uri.path ?: rom.uri.toString()
+        if (romPath.startsWith(dirPath)) {
+            return true
         }
         val dirSegment = directoryUri.lastPathSegment ?: directoryUri.toString()
         return rom.uri.toString().contains(dirSegment) || rom.parentTreeUri?.toString() == directoryUri.toString()
