@@ -349,14 +349,14 @@ fun DsiSdFileManagerScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Менеджер файлов SD DSi",
+                        text = "Менеджер файлов SD-карты Nintendo DSi",
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isDocumentMode) "Пользовательская папка SD DSi" else "Внутреннее хранилище SD DSi (Mirror)",
+                        text = if (isDocumentMode) "Пользовательская папка SD-карты Nintendo DSi" else "Внутреннее хранилище SD-карты Nintendo DSi (Mirror)",
                         color = colors.text3,
                         fontFamily = WatermelonMono,
                         fontSize = 11.sp

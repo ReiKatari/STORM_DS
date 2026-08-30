@@ -323,14 +323,14 @@ fun DldiFileManagerScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Менеджер файлов DLDI",
+                        text = "Менеджер файлов SD-карты Nintendo DS",
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isDocumentMode) "Пользовательская папка DLDI SD" else "Внутреннее хранилище DLDI SD (Mirror)",
+                        text = if (isDocumentMode) "Пользовательская папка SD-карты Nintendo DS" else "Внутреннее хранилище SD-карты Nintendo DS (Mirror)",
                         color = colors.text3,
                         fontFamily = WatermelonMono,
                         fontSize = 11.sp
