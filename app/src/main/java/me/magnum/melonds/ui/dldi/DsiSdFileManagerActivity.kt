@@ -28,12 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
-import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.extensions.applyImmersiveFullscreen
+import me.magnum.melonds.impl.SharedPreferencesSettingsRepository
 import me.magnum.melonds.ui.theme.LocalWatermelonColors
 import me.magnum.melonds.ui.theme.MelonTheme
 import me.magnum.melonds.ui.theme.SpaceGrotesk
@@ -41,7 +41,6 @@ import me.magnum.melonds.ui.theme.WatermelonMono
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import javax.inject.Inject
 
 sealed class FileItem {
     abstract val name: String
@@ -64,11 +63,20 @@ sealed class FileItem {
     }
 }
 
-@AndroidEntryPoint
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface DsiSdFileManagerEntryPoint {
+    fun settingsRepository(): SettingsRepository
+}
+
 class DsiSdFileManagerActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository by lazy {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            applicationContext,
+            DsiSdFileManagerEntryPoint::class.java
+        ).settingsRepository()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,13 +119,31 @@ fun DsiSdFileManagerScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // Directory navigation state
-    val localSyncDir = remember { File(context.filesDir, "dsi_sd/sync").apply { mkdirs() } }
-    val dsiSdDirUri = remember { settingsRepository.getDsiSdCardDirectory() }
+    // Safe resolution of directories
+    val localSyncDir = remember {
+        try {
+            File(context.filesDir, "dsi_sd/sync").apply { mkdirs() }
+        } catch (e: Throwable) {
+            File(context.filesDir, "dsi_sync").apply { mkdirs() }
+        }
+    }
 
-    var isDocumentMode by remember { mutableStateOf(dsiSdDirUri != null) }
+    val dsiSdDirUri = remember {
+        runCatching { settingsRepository.getDsiSdCardDirectory() }.getOrNull()
+    }
+
+    val initialDocTree = remember {
+        if (dsiSdDirUri != null) {
+            runCatching {
+                val doc = DocumentFile.fromTreeUri(context, dsiSdDirUri)
+                if (doc != null && doc.exists() && doc.isDirectory && doc.canRead()) doc else null
+            }.getOrNull()
+        } else null
+    }
+
+    var isDocumentMode by remember { mutableStateOf(initialDocTree != null) }
     var currentLocalDir by remember { mutableStateOf(localSyncDir) }
-    var currentDocTree by remember { mutableStateOf(dsiSdDirUri?.let { DocumentFile.fromTreeUri(context, it) }) }
+    var currentDocTree by remember { mutableStateOf(initialDocTree) }
     val docDirectoryStack = remember { mutableStateListOf<DocumentFile>() }
 
     var fileItems by remember { mutableStateOf<List<FileItem>>(emptyList()) }
@@ -138,14 +164,20 @@ fun DsiSdFileManagerScreen(
             if (isDocumentMode && currentDocTree != null) {
                 try {
                     val docs = currentDocTree?.listFiles() ?: emptyArray()
-                    docs.forEach { list.add(FileItem.Document(it)) }
+                    docs.forEach { doc ->
+                        if (doc.name != null) {
+                            list.add(FileItem.Document(doc))
+                        }
+                    }
                 } catch (e: Throwable) {
                     list.clear()
                 }
             } else {
                 try {
                     val files = currentLocalDir.listFiles() ?: emptyArray()
-                    files.forEach { list.add(FileItem.Local(it)) }
+                    files.forEach { file ->
+                        list.add(FileItem.Local(file))
+                    }
                 } catch (e: Throwable) {
                     list.clear()
                 }
@@ -192,11 +224,15 @@ fun DsiSdFileManagerScreen(
         if (newName.isBlank()) return
         coroutineScope.launch(Dispatchers.IO) {
             var success = false
-            if (item is FileItem.Local) {
-                val target = File(item.file.parentFile, newName)
-                success = item.file.renameTo(target)
-            } else if (item is FileItem.Document) {
-                success = item.doc.renameTo(newName)
+            try {
+                if (item is FileItem.Local) {
+                    val target = File(item.file.parentFile, newName)
+                    success = item.file.renameTo(target)
+                } else if (item is FileItem.Document) {
+                    success = item.doc.renameTo(newName)
+                }
+            } catch (e: Throwable) {
+                success = false
             }
             withContext(Dispatchers.Main) {
                 if (success) {
@@ -212,10 +248,14 @@ fun DsiSdFileManagerScreen(
     fun deleteItem(item: FileItem) {
         coroutineScope.launch(Dispatchers.IO) {
             var success = false
-            if (item is FileItem.Local) {
-                success = item.file.deleteRecursively()
-            } else if (item is FileItem.Document) {
-                success = item.doc.delete()
+            try {
+                if (item is FileItem.Local) {
+                    success = item.file.deleteRecursively()
+                } else if (item is FileItem.Document) {
+                    success = item.doc.delete()
+                }
+            } catch (e: Throwable) {
+                success = false
             }
             withContext(Dispatchers.Main) {
                 if (success) {
@@ -232,12 +272,16 @@ fun DsiSdFileManagerScreen(
         if (name.isBlank()) return
         coroutineScope.launch(Dispatchers.IO) {
             var success = false
-            if (isDocumentMode && currentDocTree != null) {
-                val created = currentDocTree?.createDirectory(name)
-                success = created != null
-            } else {
-                val newDir = File(currentLocalDir, name)
-                success = newDir.mkdirs()
+            try {
+                if (isDocumentMode && currentDocTree != null) {
+                    val created = currentDocTree?.createDirectory(name)
+                    success = created != null
+                } else {
+                    val newDir = File(currentLocalDir, name)
+                    success = newDir.mkdirs()
+                }
+            } catch (e: Throwable) {
+                success = false
             }
             withContext(Dispatchers.Main) {
                 if (success) {

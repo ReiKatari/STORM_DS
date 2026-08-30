@@ -574,7 +574,25 @@ class SharedPreferencesSettingsRepository(
 
     override fun getRomSearchDirectories(): Array<Uri> {
         val dirPreference = preferences.getStringSet("rom_search_dirs", emptySet())
-        return dirPreference?.map { it.toUri() }?.toTypedArray() ?: emptyArray()
+        val searchDirs = dirPreference?.map { it.toUri() }?.toMutableList() ?: mutableListOf()
+
+        if (isDsiSdCardEnabled()) {
+            getDsiSdCardDirectory()?.let { dsiDir ->
+                if (!searchDirs.contains(dsiDir)) {
+                    searchDirs.add(dsiDir)
+                }
+            }
+        }
+
+        if (isDldiSdCardEnabled()) {
+            getDldiSdCardDirectory()?.let { dldiDir ->
+                if (!searchDirs.contains(dldiDir)) {
+                    searchDirs.add(dldiDir)
+                }
+            }
+        }
+
+        return searchDirs.toTypedArray()
     }
 
     override fun clearRomSearchDirectories() {
