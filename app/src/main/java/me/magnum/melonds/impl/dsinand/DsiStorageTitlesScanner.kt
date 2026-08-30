@@ -44,17 +44,41 @@ class DsiStorageTitlesScanner @Inject constructor(
             scanUriTarget(uri, gameCodes, titleIds)
         }
 
-        // 2. Scan standard DSi SD card locations
+        // 2. Auto-extract SD image to internal mirror sync directory if sync is empty
+        val dsiSyncDir = File(context.filesDir, "dsi_sd/sync").apply { mkdirs() }
         val extStorage = android.os.Environment.getExternalStorageDirectory()
-        val defaultLocations = listOf(
+        val candidateImages = listOf(
             File(extStorage, "STORM DS/bios/dsi/sd_card.bin"),
             File(extStorage, "STORM DS/bios/dsi/sd.bin"),
-            File(extStorage, "STORM DS/bios/dsi/sd_card"),
-            File(extStorage, "STORM DS/bios/dsi"),
+            File(extStorage, "STORM DS/bios/sd_card.bin"),
+            File(extStorage, "STORM DS/bios/sd.bin"),
+            File(extStorage, "STORM DS/sd_card.bin"),
+            File(extStorage, "STORM DS/dldi/dsi_sd.img"),
+            File(extStorage, "STORM DS/dldi/dldi_sd.img"),
             File(context.filesDir, "bios/dsi/sd_card.bin"),
             File(context.filesDir, "bios/dsi/sd.bin"),
-            File(context.filesDir, "dsi_sd/sync"),
+            File(context.filesDir, "dsi_sd/dsi_sd.img"),
+            File(context.filesDir, "dldi/dsi_sd.img"),
+            File(context.filesDir, "dldi/dldi_sd.img"),
+        )
+        if (dsiSyncDir.listFiles()?.isEmpty() == true) {
+            for (img in candidateImages) {
+                if (img.isFile && img.length() >= 512 * 1024L) {
+                    if (me.magnum.melonds.utils.FatImageExtractor.extractFatImage(img, dsiSyncDir)) {
+                        break
+                    }
+                }
+            }
+        }
+
+        // 3. Scan standard DSi SD card directories and images
+        val defaultLocations = candidateImages + listOf(
+            dsiSyncDir,
+            File(extStorage, "STORM DS/bios/dsi/sd_card"),
+            File(extStorage, "STORM DS/bios/dsi"),
+            File(extStorage, "STORM DS/dldi/sync"),
             File(context.filesDir, "dsi_sd"),
+            File(context.filesDir, "dldi/sync"),
         )
 
         for (loc in defaultLocations) {
@@ -129,6 +153,17 @@ class DsiStorageTitlesScanner @Inject constructor(
         val tid = rom.installedDsiWareTitleId ?: resolveRomTitleId(rom)
         if (tid != null && tid > 0L) {
             if (installedTitleIds.contains(tid) || installedTitleIds.contains(tid and 0xFFFFFFFFL)) {
+                return true
+            }
+        }
+
+        val cleanName = rom.name.lowercase().replace(Regex("[^a-z0-9]"), "")
+        if (cleanName.length >= 3) {
+            val localFiles = File(context.filesDir, "dsi_sd/sync").listFiles() ?: emptyArray()
+            if (localFiles.any { f ->
+                val fClean = f.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9]"), "")
+                fClean.isNotEmpty() && (fClean == cleanName || fClean.contains(cleanName) || cleanName.contains(fClean))
+            }) {
                 return true
             }
         }

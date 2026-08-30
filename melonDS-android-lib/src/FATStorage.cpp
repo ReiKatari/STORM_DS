@@ -20,6 +20,9 @@
 #include <dirent.h>
 #include <inttypes.h>
 #include <vector>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 #include "FATIO.h"
 #include "FATStorage.h"
@@ -211,7 +214,7 @@ u32 FATStorage::ReadSectorsInternal(FileHandle* file, u64 filelen, u32 start, u3
     u64 addr = start * 0x200ULL;
     u32 len = num * 0x200;
 
-    if ((addr+len) > filelen)
+    if (filelen > 0 && (addr+len) > filelen)
     {
         if (addr >= filelen) return 0;
         len = filelen - addr;
@@ -223,11 +226,8 @@ u32 FATStorage::ReadSectorsInternal(FileHandle* file, u64 filelen, u32 start, u3
     u32 res = FileRead(data, 0x200, num, file);
     if (res < num)
     {
-        if (IsEndOfFile(file))
-        {
-            memset(&data[0x200*res], 0, 0x200*(num-res));
-            return num;
-        }
+        memset(&data[0x200*res], 0, 0x200*(num-res));
+        return num;
     }
 
     return res;
@@ -240,7 +240,7 @@ u32 FATStorage::WriteSectorsInternal(FileHandle* file, u64 filelen, u32 start, u
     u64 addr = start * 0x200ULL;
     u32 len = num * 0x200;
 
-    if ((addr+len) > filelen)
+    if (filelen > 0 && (addr+len) > filelen)
     {
         if (addr >= filelen) return 0;
         len = filelen - addr;
@@ -1090,6 +1090,17 @@ bool FATStorage::Load(const std::string& filename, u64 size, const std::optional
         }
 
         ff_disk_close();
+#if !defined(_WIN32)
+        if (File)
+        {
+            FILE* stdfile = reinterpret_cast<FILE *>(File);
+            int fd = fileno(stdfile);
+            if (fd >= 0)
+            {
+                ftruncate(fd, static_cast<off_t>(FileSize));
+            }
+        }
+#endif
         ff_disk_open(FF_ReadStorage(), FF_WriteStorage(), (LBA_t)(FileSize>>9));
 
         DirIndex.clear();
