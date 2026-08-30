@@ -44,12 +44,7 @@ class DsiStorageTitlesScanner @Inject constructor(
             scanUriTarget(uri, gameCodes, titleIds)
         }
 
-        // 2. Scan DSi BIOS / NAND directory / Tree URI from settings
-        settingsRepository.getDsiBiosDirectory()?.let { uri ->
-            scanUriTarget(uri, gameCodes, titleIds)
-        }
-
-        // 3. Scan standard local filesystem locations
+        // 2. Scan standard DSi SD card locations
         val extStorage = android.os.Environment.getExternalStorageDirectory()
         val defaultLocations = listOf(
             File(extStorage, "STORM DS/bios/dsi/sd_card.bin"),
@@ -59,9 +54,7 @@ class DsiStorageTitlesScanner @Inject constructor(
             File(context.filesDir, "bios/dsi/sd_card.bin"),
             File(context.filesDir, "bios/dsi/sd.bin"),
             File(context.filesDir, "dsi_sd/sync"),
-            File(context.filesDir, "dldi/sync"),
-            File(extStorage, "STORM DS/bios/dsi/nand.bin"),
-            File(context.filesDir, "bios/dsi/nand.bin"),
+            File(context.filesDir, "dsi_sd"),
         )
 
         for (loc in defaultLocations) {
@@ -84,7 +77,7 @@ class DsiStorageTitlesScanner @Inject constructor(
         cachedTitleIds.addAll(titleIds)
         lastScanTimestamp = now
 
-        Log.i(TAG, "DSi Storage scanned. Found ${cachedGameCodes.size} GameCodes: $cachedGameCodes")
+        Log.i(TAG, "DSi SD Storage scanned. Found ${cachedGameCodes.size} GameCodes: $cachedGameCodes")
         return cachedGameCodes.toSet() to cachedTitleIds.toSet()
     }
 
@@ -99,20 +92,31 @@ class DsiStorageTitlesScanner @Inject constructor(
     }
 
     fun isDsiWareOrDsiRom(rom: Rom): Boolean {
-        if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return true
+        // DSi Enhanced cartridge games must NEVER be filtered by SD card!
+        if (rom.isDsiEnhanced) return false
+        if (rom.isInstalledDsiWareShortcut) return true
+        if (rom.isDsiWareTitle) return true
         if (rom.fileName.endsWith(".dsi", ignoreCase = true) || rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true) return true
         val code = resolveRomGameCode(rom).trim().uppercase()
-        if (code.length == 4 && (code.startsWith("K") || code.startsWith("V") || code.startsWith("H"))) {
+        if (code.length == 4 && (code.startsWith("K") || code.startsWith("H"))) {
             return true
         }
         return false
     }
 
     fun isDsiTitleInstalledInStorage(rom: Rom): Boolean {
+        // DSi Enhanced cartridge games are always allowed!
+        if (rom.isDsiEnhanced) return true
+
+        // If DSi SD Card is not enabled, do not filter out
+        if (!settingsRepository.isDsiSdCardEnabled()) {
+            return true
+        }
+
         val installedCodes = getInstalledDsiGameCodes()
         val installedTitleIds = getInstalledDsiTitleIds()
 
-        // If no DSi storage was discovered, allow all ROMs
+        // If no DSi SD card was discovered, allow all ROMs
         if (installedCodes.isEmpty() && installedTitleIds.isEmpty()) {
             return true
         }
