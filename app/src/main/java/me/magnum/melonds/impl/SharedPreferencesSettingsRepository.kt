@@ -749,6 +749,15 @@ class SharedPreferencesSettingsRepository(
         return dirPreference?.toUri()
     }
 
+    override fun isDsiSdCardEnabled(): Boolean {
+        return preferences.getBoolean("system_dsi_sd_card_enabled", false)
+    }
+
+    override fun getDsiSdCardDirectory(): Uri? {
+        val dirPreference = preferences.getStringSet("system_dsi_sd_card_dir", null)?.firstOrNull()
+        return dirPreference?.toUri()
+    }
+
     override fun getDldiSdCardImageSize(): Int {
         return preferences.getString("system_dldi_sd_card_image_size", "0")
             ?.toIntOrNull()

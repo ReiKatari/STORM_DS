@@ -20,6 +20,7 @@ data class Rom(
     val installedDsiWareTitleId: Long? = null,
     val installedDsiWareIcon: ByteArray? = null,
     val isDsiEnhanced: Boolean = false,
+    val gameCode: String = "",
 ) {
     val isInstalledDsiWareShortcut: Boolean
         get() = installedDsiWareTitleId != null

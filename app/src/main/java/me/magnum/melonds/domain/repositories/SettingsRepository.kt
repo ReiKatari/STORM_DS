@@ -50,6 +50,8 @@ interface SettingsRepository {
     fun isDldiSdCardEnabled(): Boolean
     fun getDldiSdCardDirectory(): Uri?
     fun getDldiSdCardImageSize(): Int
+    fun isDsiSdCardEnabled(): Boolean
+    fun getDsiSdCardDirectory(): Uri?
     fun showBootScreen(): Boolean
     fun isJitEnabled(): Boolean
     fun isStormCompilerEnabled(): Boolean

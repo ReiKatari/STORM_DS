@@ -28,6 +28,9 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
 
             val isDsiEnhanced = metadata?.isDSiEnhanced ?: false
 
+            val gameCode = metadata?.gameCode ?: RomProcessor.readGameCode(context, romUri)
+            val dsiTitleId = metadata?.titleId?.takeIf { it != 0L }
+
             Rom(
                 name = romName,
                 developerName = metadata?.developerName ?: "",
@@ -38,7 +41,9 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
                 lastPlayed = null,
                 isDsiWareTitle = isDsi,
                 isDsiEnhanced = isDsiEnhanced,
-                retroAchievementsHash = metadata?.retroAchievementsHash ?: ""
+                retroAchievementsHash = metadata?.retroAchievementsHash ?: "",
+                gameCode = gameCode,
+                installedDsiWareTitleId = if (isDsi) dsiTitleId else null,
             )
         } catch (e: Exception) {
             e.printStackTrace()

@@ -48,6 +48,9 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
             val romName = metadata?.romTitle?.takeUnless { it.isBlank() } ?: fallbackName
             val isDsi = metadata?.isDSiWareTitle ?: false
 
+            val gameCode = metadata?.gameCode ?: ""
+            val dsiTitleId = metadata?.titleId?.takeIf { it != 0L }
+
             Rom(
                 name = romName,
                 developerName = metadata?.developerName ?: "",
@@ -57,7 +60,9 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
                 config = if (isDsi) RomConfig.forDsiWareTitle() else RomConfig.default(),
                 lastPlayed = null,
                 isDsiWareTitle = isDsi,
-                retroAchievementsHash = metadata?.retroAchievementsHash ?: ""
+                retroAchievementsHash = metadata?.retroAchievementsHash ?: "",
+                gameCode = gameCode,
+                installedDsiWareTitleId = if (isDsi) dsiTitleId else null,
             )
         } catch (e: Exception) {
             e.printStackTrace()

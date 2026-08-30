@@ -57,6 +57,7 @@ class RomListViewModel @Inject constructor(
     private val retroAchievementsRepository: RetroAchievementsRepository,
     private val boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository,
     private val dsiWareTitlesMetadataStore: me.magnum.melonds.impl.DSiWareTitlesMetadataStore,
+    private val dsiStorageTitlesScanner: me.magnum.melonds.impl.dsinand.DsiStorageTitlesScanner,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -291,6 +292,7 @@ class RomListViewModel @Inject constructor(
     }
 
     fun refreshRoms() {
+        dsiStorageTitlesScanner.refreshStorageTitles()
         refreshInstalledDsiWareShortcuts()
         romsRepository.rescanRoms()
     }
@@ -453,7 +455,17 @@ class RomListViewModel @Inject constructor(
         )
     }
 
+    private fun isRomAllowedByDsiStorage(rom: Rom): Boolean {
+        if (!dsiStorageTitlesScanner.isDsiWareOrDsiRom(rom)) {
+            return true
+        }
+        return dsiStorageTitlesScanner.isDsiTitleInstalledInStorage(rom)
+    }
+
     private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {
+        if (!isRomAllowedByDsiStorage(rom)) {
+            return false
+        }
         return when (filter) {
             RomFilter.ALL -> true
             RomFilter.FAVORITES -> rom.isFavorite

@@ -338,6 +338,8 @@ class FileSystemRomsRepository(
                     isDsiEnhanced = incomingRom.isDsiEnhanced,
                     retroAchievementsHash = incomingRom.retroAchievementsHash,
                     config = optionsConfig ?: existingRom.config,
+                    gameCode = incomingRom.gameCode.takeIf { it.isNotEmpty() } ?: existingRom.gameCode,
+                    installedDsiWareTitleId = incomingRom.installedDsiWareTitleId ?: existingRom.installedDsiWareTitleId,
                 )
                 roms.remove(existingRom)
                 roms.add(updatedRom)

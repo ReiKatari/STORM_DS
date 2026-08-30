@@ -6,4 +6,6 @@ data class RomMetadata(
     val isDSiWareTitle: Boolean,
     val isDSiEnhanced: Boolean = false,
     val retroAchievementsHash: String,
+    val gameCode: String = "",
+    val titleId: Long = 0L,
 )
