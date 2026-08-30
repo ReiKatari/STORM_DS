@@ -24,20 +24,22 @@ class DsiStorageTitlesScanner @Inject constructor(
         private const val TAG = "DsiStorageScanner"
     }
 
-    private val cachedGameCodes = mutableSetOf<String>()
-    private val cachedTitleIds = mutableSetOf<Long>()
+    private val cachedGameCodes = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val cachedTitleIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val cachedCleanNames = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val romGameCodeCache = ConcurrentHashMap<String, String>()
     private var lastScanTimestamp = 0L
 
     @Synchronized
     fun refreshStorageTitles(): Pair<Set<String>, Set<Long>> {
         val now = System.currentTimeMillis()
-        if (now - lastScanTimestamp < 3000L && cachedGameCodes.isNotEmpty()) {
+        if (now - lastScanTimestamp < 60000L && cachedGameCodes.isNotEmpty()) {
             return cachedGameCodes.toSet() to cachedTitleIds.toSet()
         }
 
         val gameCodes = mutableSetOf<String>()
         val titleIds = mutableSetOf<Long>()
+        val cleanNames = mutableSetOf<String>()
 
         // 1. Scan DSi SD-Card directory / Tree URI from settings
         settingsRepository.getDsiSdCardDirectory()?.let { uri ->
@@ -71,7 +73,13 @@ class DsiStorageTitlesScanner @Inject constructor(
             }
         }
 
-        // 3. Scan standard DSi SD card directories and images
+        // 3. Collect clean names from sync directory
+        dsiSyncDir.listFiles()?.forEach { f ->
+            val c = f.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9]"), "")
+            if (c.isNotEmpty()) cleanNames.add(c)
+        }
+
+        // 4. Scan standard DSi SD card directories and images
         val defaultLocations = candidateImages + listOf(
             dsiSyncDir,
             File(extStorage, "STORM DS/bios/dsi/sd_card"),
@@ -99,6 +107,8 @@ class DsiStorageTitlesScanner @Inject constructor(
         cachedGameCodes.addAll(gameCodes)
         cachedTitleIds.clear()
         cachedTitleIds.addAll(titleIds)
+        cachedCleanNames.clear()
+        cachedCleanNames.addAll(cleanNames)
         lastScanTimestamp = now
 
         Log.i(TAG, "DSi SD Storage scanned. Found ${cachedGameCodes.size} GameCodes: $cachedGameCodes")
@@ -106,13 +116,11 @@ class DsiStorageTitlesScanner @Inject constructor(
     }
 
     fun getInstalledDsiGameCodes(): Set<String> {
-        val (codes, _) = refreshStorageTitles()
-        return codes
+        return cachedGameCodes.toSet()
     }
 
     fun getInstalledDsiTitleIds(): Set<Long> {
-        val (_, ids) = refreshStorageTitles()
-        return ids
+        return cachedTitleIds.toSet()
     }
 
     fun isDsiWareOrDsiRom(rom: Rom): Boolean {
@@ -137,33 +145,26 @@ class DsiStorageTitlesScanner @Inject constructor(
             return true
         }
 
-        val installedCodes = getInstalledDsiGameCodes()
-        val installedTitleIds = getInstalledDsiTitleIds()
-
-        // If no DSi SD card was discovered, allow all ROMs
-        if (installedCodes.isEmpty() && installedTitleIds.isEmpty()) {
+        // If no DSi SD card was discovered or not yet scanned, allow all ROMs
+        if (cachedGameCodes.isEmpty() && cachedTitleIds.isEmpty() && cachedCleanNames.isEmpty()) {
             return true
         }
 
         val code = resolveRomGameCode(rom).uppercase().trim()
-        if (code.isNotEmpty() && installedCodes.contains(code)) {
+        if (code.isNotEmpty() && cachedGameCodes.contains(code)) {
             return true
         }
 
         val tid = rom.installedDsiWareTitleId ?: resolveRomTitleId(rom)
         if (tid != null && tid > 0L) {
-            if (installedTitleIds.contains(tid) || installedTitleIds.contains(tid and 0xFFFFFFFFL)) {
+            if (cachedTitleIds.contains(tid) || cachedTitleIds.contains(tid and 0xFFFFFFFFL)) {
                 return true
             }
         }
 
         val cleanName = rom.name.lowercase().replace(Regex("[^a-z0-9]"), "")
         if (cleanName.length >= 3) {
-            val localFiles = File(context.filesDir, "dsi_sd/sync").listFiles() ?: emptyArray()
-            if (localFiles.any { f ->
-                val fClean = f.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9]"), "")
-                fClean.isNotEmpty() && (fClean == cleanName || fClean.contains(cleanName) || cleanName.contains(fClean))
-            }) {
+            if (cachedCleanNames.any { c -> c == cleanName || c.contains(cleanName) || cleanName.contains(c) }) {
                 return true
             }
         }

@@ -440,31 +440,33 @@ class SharedPreferencesSettingsRepository(
         val syncFolder = if (isDsi) File(context.filesDir, "dsi_sd/sync") else File(context.filesDir, "dldi/sync")
 
         val sdCardImage = if (isDsi) {
-            val rootDsiSd = File(stormDsBase, "bios/dsi/sd_card.bin")
-            val rootDsiSdAlt = File(stormDsBase, "bios/dsi/sd.bin")
-            val internalDsiSd = File(context.filesDir, "bios/dsi/sd_card.bin")
-            val internalDsiSdAlt = File(context.filesDir, "bios/dsi/sd.bin")
-            val internalDefault = File(context.filesDir, "dldi/dsi_sd.img")
-            when {
-                rootDsiSd.exists() -> rootDsiSd.absolutePath
-                rootDsiSdAlt.exists() -> rootDsiSdAlt.absolutePath
-                internalDsiSd.exists() -> internalDsiSd.absolutePath
-                internalDsiSdAlt.exists() -> internalDsiSdAlt.absolutePath
-                else -> internalDefault.absolutePath
-            }
+            listOf(
+                File(stormDsBase, "bios/dsi/sd_card.bin"),
+                File(stormDsBase, "bios/dsi/sd.bin"),
+                File(stormDsBase, "bios/sd_card.bin"),
+                File(stormDsBase, "bios/sd.bin"),
+                File(stormDsBase, "sd_card.bin"),
+                File(stormDsBase, "dldi/dsi_sd.img"),
+                File(stormDsBase, "dldi/dldi_sd.img"),
+                File(context.filesDir, "bios/dsi/sd_card.bin"),
+                File(context.filesDir, "bios/dsi/sd.bin"),
+                File(context.filesDir, "dsi_sd/dsi_sd.img"),
+                File(context.filesDir, "dldi/dsi_sd.img"),
+                File(context.filesDir, "dldi/dldi_sd.img"),
+            ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(context.filesDir, "dsi_sd/dsi_sd.img").absolutePath
         } else {
-            val rootDsSd = File(stormDsBase, "bios/ds/sd_card.bin")
-            val rootDsSdAlt = File(stormDsBase, "bios/ds/sd.bin")
-            val internalDsSd = File(context.filesDir, "bios/ds/sd_card.bin")
-            val internalDsSdAlt = File(context.filesDir, "bios/ds/sd.bin")
-            val internalDefault = File(context.filesDir, "dldi/dldi_sd.img")
-            when {
-                rootDsSd.exists() -> rootDsSd.absolutePath
-                rootDsSdAlt.exists() -> rootDsSdAlt.absolutePath
-                internalDsSd.exists() -> internalDsSd.absolutePath
-                internalDsSdAlt.exists() -> internalDsSdAlt.absolutePath
-                else -> internalDefault.absolutePath
-            }
+            listOf(
+                File(stormDsBase, "dldi/dldi_sd.img"),
+                File(stormDsBase, "bios/ds/sd_card.bin"),
+                File(stormDsBase, "bios/ds/sd.bin"),
+                File(stormDsBase, "bios/sd_card.bin"),
+                File(stormDsBase, "bios/sd.bin"),
+                File(stormDsBase, "sd_card.bin"),
+                File(context.filesDir, "bios/ds/sd_card.bin"),
+                File(context.filesDir, "bios/ds/sd.bin"),
+                File(context.filesDir, "dldi/dldi_sd.img"),
+                File(context.filesDir, "dsi_sd/dsi_sd.img"),
+            ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(context.filesDir, "dldi/dldi_sd.img").absolutePath
         }
 
         return EmulatorConfiguration(

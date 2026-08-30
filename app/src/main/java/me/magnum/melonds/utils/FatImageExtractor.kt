@@ -77,14 +77,23 @@ object FatImageExtractor {
                     }
                 }
 
+                fun isValidCluster(cluster: Long): Boolean {
+                    return if (isFat32) {
+                        cluster in 2 until 0x0FFFFFF7L
+                    } else {
+                        cluster in 2 until 0xFFF7L
+                    }
+                }
+
                 fun readClusterChain(startCluster: Long, length: Long): ByteArray {
                     val result = ByteArray(length.toInt().coerceAtLeast(0))
                     var currCluster = startCluster
                     var bytesRemaining = length
                     var destPos = 0
 
-                    while (currCluster in 2..0x0FFFFFF6 && bytesRemaining > 0) {
+                    while (isValidCluster(currCluster) && bytesRemaining > 0) {
                         val clusterOff = getClusterOffset(currCluster)
+                        if (clusterOff + minOf(bytesRemaining, bytesPerCluster.toLong()) > raf.length()) break
                         raf.seek(clusterOff)
                         val toRead = minOf(bytesRemaining, bytesPerCluster.toLong()).toInt()
                         raf.readFully(result, destPos, toRead)
@@ -101,18 +110,23 @@ object FatImageExtractor {
 
                     if (!isCluster) {
                         val rootDirBytes = ByteArray(rootDirSectors * bytesPerSector)
-                        raf.seek(dirOffset)
-                        raf.readFully(rootDirBytes)
-                        for (i in 0 until rootDirBytes.size step 32) {
-                            if (i + 32 <= rootDirBytes.size) {
-                                entries.add(rootDirBytes.copyOfRange(i, i + 32))
+                        if (dirOffset + rootDirBytes.size <= raf.length()) {
+                            raf.seek(dirOffset)
+                            raf.readFully(rootDirBytes)
+                            for (i in 0 until rootDirBytes.size step 32) {
+                                if (i + 32 <= rootDirBytes.size) {
+                                    entries.add(rootDirBytes.copyOfRange(i, i + 32))
+                                }
                             }
                         }
                     } else {
                         var c = currentCluster
-                        while (c in 2..0x0FFFFFF6) {
+                        var visited = mutableSetOf<Long>()
+                        while (isValidCluster(c) && visited.add(c)) {
                             val cBytes = ByteArray(bytesPerCluster)
-                            raf.seek(getClusterOffset(c))
+                            val cOff = getClusterOffset(c)
+                            if (cOff + bytesPerCluster > raf.length()) break
+                            raf.seek(cOff)
                             raf.readFully(cBytes)
                             for (i in 0 until cBytes.size step 32) {
                                 if (i + 32 <= cBytes.size) {
