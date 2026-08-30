@@ -775,6 +775,7 @@ class AndroidEmulatorManager(
         return withContext(Dispatchers.IO) {
             try {
                 val emulatorConfiguration = getFirmwareEmulatorConfiguration(consoleType)
+                    .withPreparedDldiConfiguration()
                 setupEmulator(emulatorConfiguration)
                 val result = MelonEmulator.bootFirmware()
                 if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {

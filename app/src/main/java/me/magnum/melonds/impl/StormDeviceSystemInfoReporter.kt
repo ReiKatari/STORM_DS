@@ -27,6 +27,13 @@ object StormDeviceSystemInfoReporter {
     private const val TAG = "StormSystemInfo"
     const val INFO_FILE_NAME = "!STORM_INFO.txt"
 
+    fun isLoggingEnabled(context: Context): Boolean {
+        return runCatching {
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            prefs.getBoolean("system_app_log_file_enabled", false)
+        }.getOrDefault(false)
+    }
+
     fun saveUnifiedReport(
         context: Context,
         rom: Rom? = null,
@@ -41,6 +48,9 @@ object StormDeviceSystemInfoReporter {
         customBiosEnabled: Boolean = true,
         dsiWareBootMode: String? = null,
     ): String {
+        if (!isLoggingEnabled(context)) {
+            return ""
+        }
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
         val nowStr = dateFormat.format(Date())
 
@@ -281,6 +291,9 @@ object StormDeviceSystemInfoReporter {
         jitEnabled: Boolean = true,
         customBiosEnabled: Boolean = true,
     ) {
+        if (!isLoggingEnabled(context)) {
+            return
+        }
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
         val nowStr = dateFormat.format(Date())
 

@@ -329,12 +329,13 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.rewindCaptureSpacingSeconds = rewindPeriodSeconds;
     finalEmulatorConfiguration.rewindLengthSeconds = rewindWindowSeconds;
     finalEmulatorConfiguration.renderSettings = std::move(buildRenderSettings(env, videoRenderer, rendererConfigurationObject));
+    auto sdSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
     if (consoleType == 1) {
-        finalEmulatorConfiguration.dsiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
-        finalEmulatorConfiguration.dldiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
+        finalEmulatorConfiguration.dsiSdCardSettings = sdSettings;
+        finalEmulatorConfiguration.dldiSdCardSettings = sdSettings;
     } else {
         finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
-        finalEmulatorConfiguration.dldiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
+        finalEmulatorConfiguration.dldiSdCardSettings = sdSettings;
     }
     jfieldID arm9OverclockMultiplierField = getFieldIdOrClear(env, emulatorConfigurationClass, "arm9OverclockMultiplier", "I");
     jfieldID enable3dWidescreenField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable3dWidescreen", "Z");

@@ -19,6 +19,7 @@ class Api24RomFileProcessorFactory(context: Context, uriHandler: UriHandler, nds
             "nds" to ndsRomFileProcessor,
             "dsi" to ndsRomFileProcessor,
             "ids" to ndsRomFileProcessor,
+            "app" to ndsRomFileProcessor,
             "zip" to ZipRomFileProcessor(context, uriHandler, ndsRomCache),
             "7z" to SevenZRomFileProcessor(context, uriHandler, ndsRomCache),
             "rar" to RarRomFileProcessor(context, uriHandler, ndsRomCache)
