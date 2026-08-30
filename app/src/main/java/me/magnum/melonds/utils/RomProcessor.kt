@@ -78,12 +78,18 @@ object RomProcessor {
 
 			val retroAchievementsHash = BigInteger(1, retroAchievementsMd5Digest).toString(16).padStart(32, '0')
 
+			val dsiTitleId = if (header.size >= 0x238) {
+				(byteArrayToInt(header, 0x234).toLong() and 0xFFFFFFFFL).shl(32) or (byteArrayToInt(header, 0x230).toLong() and 0xFFFFFFFFL)
+			} else 0L
+
 			RomMetadata(
 				romName,
 				developerName,
 				isDsiWareTitle,
 				isDsiEnhanced,
 				retroAchievementsHash,
+				gameCode = gameCode,
+				titleId = dsiTitleId,
 			)
 		}.getOrNull()
 	}
@@ -149,14 +155,32 @@ object RomProcessor {
 
 			val retroAchievementsHash = BigInteger(1, retroAchievementsMd5Digest).toString(16).padStart(32, '0')
 
+			val dsiTitleId = if (header.size >= 0x238) {
+				(byteArrayToInt(header, 0x234).toLong() and 0xFFFFFFFFL).shl(32) or (byteArrayToInt(header, 0x230).toLong() and 0xFFFFFFFFL)
+			} else 0L
+
 			RomMetadata(
 				romName,
 				developerName,
 				isDsiWareTitle,
 				isDsiEnhanced,
 				retroAchievementsHash,
+				gameCode = gameCode,
+				titleId = dsiTitleId,
 			)
 		}.getOrNull()
+	}
+
+	fun readGameCode(context: android.content.Context, uri: android.net.Uri): String {
+		return runCatching {
+			context.contentResolver.openInputStream(uri)?.use { stream ->
+				val buf = ByteArray(16)
+				val read = stream.read(buf)
+				if (read >= 16) {
+					String(buf, 12, 4, StandardCharsets.US_ASCII).trim()
+				} else ""
+			} ?: ""
+		}.getOrDefault("")
 	}
 
 	private fun readBannerTitleAndDeveloper(banner: ByteArray): Pair<String, String>? {
@@ -293,7 +317,7 @@ object RomProcessor {
 		}.getOrNull()
 	}
 
-	private fun byteArrayToInt(intData: ByteArray, offset: Int = 0): Int {
+	internal fun byteArrayToInt(intData: ByteArray, offset: Int = 0): Int {
 		// NDS is little endian. Reorder bytes as needed
 		// Also make sure that every byte is treated as an unsigned integer
 		return  (intData[offset + 0].toInt() and 0xFF) or
