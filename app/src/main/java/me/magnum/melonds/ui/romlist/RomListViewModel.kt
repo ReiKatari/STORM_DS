@@ -296,7 +296,9 @@ class RomListViewModel @Inject constructor(
     }
 
     fun refreshRoms() {
-        dsiStorageTitlesScanner.refreshStorageTitles()
+        viewModelScope.launch(Dispatchers.IO) {
+            dsiStorageTitlesScanner.refreshStorageTitles()
+        }
         refreshInstalledDsiWareShortcuts()
         romsRepository.rescanRoms()
     }

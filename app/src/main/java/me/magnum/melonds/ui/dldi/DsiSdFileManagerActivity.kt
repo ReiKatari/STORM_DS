@@ -1,9 +1,9 @@
 package me.magnum.melonds.ui.dldi
 
-import android.app.Activity
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,11 +33,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.extensions.applyImmersiveFullscreen
-import me.magnum.melonds.impl.SharedPreferencesSettingsRepository
 import me.magnum.melonds.ui.theme.LocalWatermelonColors
 import me.magnum.melonds.ui.theme.MelonTheme
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
+import me.magnum.melonds.utils.FatImageExtractor
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -174,6 +174,25 @@ fun DsiSdFileManagerScreen(
                 }
             } else {
                 try {
+                    // Check if local sync dir is empty and an SD card image file exists
+                    val existingFiles = currentLocalDir.listFiles() ?: emptyArray()
+                    if (existingFiles.isEmpty() && currentLocalDir == localSyncDir) {
+                        val extBase = Environment.getExternalStorageDirectory()
+                        val candidateImages = listOf(
+                            File(extBase, "STORM DS/bios/dsi/sd_card.bin"),
+                            File(extBase, "STORM DS/bios/dsi/sd.bin"),
+                            File(context.filesDir, "bios/dsi/sd_card.bin"),
+                            File(context.filesDir, "bios/dsi/sd.bin"),
+                            File(context.filesDir, "dldi/dsi_sd.img"),
+                        )
+                        for (img in candidateImages) {
+                            if (img.isFile && img.length() >= 512 * 1024L) {
+                                FatImageExtractor.extractFatImage(img, localSyncDir)
+                                break
+                            }
+                        }
+                    }
+
                     val files = currentLocalDir.listFiles() ?: emptyArray()
                     files.forEach { file ->
                         list.add(FileItem.Local(file))
