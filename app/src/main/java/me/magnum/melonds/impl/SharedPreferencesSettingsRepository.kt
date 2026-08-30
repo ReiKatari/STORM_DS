@@ -433,18 +433,38 @@ class SharedPreferencesSettingsRepository(
         val dsiNand = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
             ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
 
-        val sdCardImage = if (consoleType == ConsoleType.DSi) {
+        val isDsi = consoleType == ConsoleType.DSi
+        val sdEnabled = if (isDsi) isDsiSdCardEnabled() else isDldiSdCardEnabled()
+        val sdDirectory = if (isDsi) getDsiSdCardDirectory() else getDldiSdCardDirectory()
+        val sdSize = if (isDsi) getDsiSdCardImageSize() else getDldiSdCardImageSize()
+        val syncFolder = if (isDsi) File(context.filesDir, "dsi_sd/sync") else File(context.filesDir, "dldi/sync")
+
+        val sdCardImage = if (isDsi) {
             val rootDsiSd = File(stormDsBase, "bios/dsi/sd_card.bin")
+            val rootDsiSdAlt = File(stormDsBase, "bios/dsi/sd.bin")
             val internalDsiSd = File(context.filesDir, "bios/dsi/sd_card.bin")
-            if (rootDsiSd.exists()) rootDsiSd.absolutePath
-            else if (internalDsiSd.exists()) internalDsiSd.absolutePath
-            else File(context.filesDir, "dldi/dsi_sd.img").absolutePath
+            val internalDsiSdAlt = File(context.filesDir, "bios/dsi/sd.bin")
+            val internalDefault = File(context.filesDir, "dldi/dsi_sd.img")
+            when {
+                rootDsiSd.exists() -> rootDsiSd.absolutePath
+                rootDsiSdAlt.exists() -> rootDsiSdAlt.absolutePath
+                internalDsiSd.exists() -> internalDsiSd.absolutePath
+                internalDsiSdAlt.exists() -> internalDsiSdAlt.absolutePath
+                else -> internalDefault.absolutePath
+            }
         } else {
             val rootDsSd = File(stormDsBase, "bios/ds/sd_card.bin")
+            val rootDsSdAlt = File(stormDsBase, "bios/ds/sd.bin")
             val internalDsSd = File(context.filesDir, "bios/ds/sd_card.bin")
-            if (rootDsSd.exists()) rootDsSd.absolutePath
-            else if (internalDsSd.exists()) internalDsSd.absolutePath
-            else File(context.filesDir, "dldi/dldi_sd.img").absolutePath
+            val internalDsSdAlt = File(context.filesDir, "bios/ds/sd.bin")
+            val internalDefault = File(context.filesDir, "dldi/dldi_sd.img")
+            when {
+                rootDsSd.exists() -> rootDsSd.absolutePath
+                rootDsSdAlt.exists() -> rootDsSdAlt.absolutePath
+                internalDsSd.exists() -> internalDsSd.absolutePath
+                internalDsSdAlt.exists() -> internalDsSdAlt.absolutePath
+                else -> internalDefault.absolutePath
+            }
         }
 
         return EmulatorConfiguration(
@@ -475,11 +495,11 @@ class SharedPreferencesSettingsRepository(
             getFirmwareConfiguration(),
             renderConfigurationFlow.first(),
             DldiSdCardConfiguration(
-                enabled = isDldiSdCardEnabled(),
+                enabled = sdEnabled,
                 imagePath = sdCardImage,
-                imageSize = getDldiSdCardImageSize(),
-                folderSync = isDldiSdCardEnabled() && getDldiSdCardDirectory() != null,
-                folderPath = File(context.filesDir, "dldi/sync").absolutePath,
+                imageSize = sdSize,
+                folderSync = sdEnabled && sdDirectory != null,
+                folderPath = syncFolder.absolutePath,
             ),
             dsiWareAutoloadTitleId = 0L,
             arm9OverclockMultiplier = getArm9Overclock(),
@@ -756,6 +776,13 @@ class SharedPreferencesSettingsRepository(
     override fun getDsiSdCardDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("system_dsi_sd_card_dir", null)?.firstOrNull()
         return dirPreference?.toUri()
+    }
+
+    override fun getDsiSdCardImageSize(): Int {
+        return preferences.getString("system_dsi_sd_card_image_size", "0")
+            ?.toIntOrNull()
+            ?.coerceIn(0, 5)
+            ?: 0
     }
 
     override fun getDldiSdCardImageSize(): Int {
