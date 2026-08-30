@@ -69,33 +69,7 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private suspend fun checkDsiWarePreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
-        if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
-            return checkInstalledDsiWareShortcutPreconditions(rom)
-        }
-
-        // Standard ROM files boot directly from cart slot in DSi mode without modifying NAND
-        return RomLaunchPreconditionCheckResult.Success(rom)
-    }
-
-    private suspend fun checkInstalledDsiWareShortcutPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
-        val installedTitleId = rom.installedDsiWareTitleId
-            ?: return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.RomParseError)
-
-        val openNandResult = dsiNandManager.openNand()
-        if (openNandResult.isFailure()) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.NandError)
-        }
-
-        val isTitleInstalled = try {
-            dsiNandManager.listTitles().any { (it.titleId and 0xFFFFFFFFL) == (installedTitleId and 0xFFFFFFFFL) }
-        } finally {
-            dsiNandManager.closeNand()
-        }
-
-        if (!isTitleInstalled) {
-            return RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed(RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.TitleNotInstalled)
-        }
-
+        // Direct launch: NAND installation is completely bypassed; games boot directly
         return RomLaunchPreconditionCheckResult.Success(rom)
     }
 

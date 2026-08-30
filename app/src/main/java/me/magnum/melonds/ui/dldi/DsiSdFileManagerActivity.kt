@@ -199,6 +199,25 @@ fun DsiSdFileManagerScreen(
                                 }
                             }
                         }
+
+                        val existingAfterExtract = currentLocalDir.listFiles() ?: emptyArray()
+                        if (existingAfterExtract.isEmpty() && currentLocalDir == localSyncDir) {
+                            val fallbackDirs = listOf(
+                                File(extBase, "STORM DS/bios/dsi/sd_card"),
+                                File(extBase, "STORM DS/dldi/sync"),
+                                File(context.filesDir, "dldi/sync"),
+                            )
+                            for (fDir in fallbackDirs) {
+                                if (fDir.isDirectory) {
+                                    fDir.listFiles()?.forEach { f ->
+                                        try {
+                                            f.copyRecursively(File(localSyncDir, f.name), overwrite = true)
+                                        } catch (_: Throwable) {}
+                                    }
+                                    if (localSyncDir.listFiles()?.isNotEmpty() == true) break
+                                }
+                            }
+                        }
                     }
 
                     val files = currentLocalDir.listFiles() ?: emptyArray()
