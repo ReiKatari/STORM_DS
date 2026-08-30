@@ -67,9 +67,13 @@ object FatImageExtractor {
                     }
                     raf.seek(fatOffset)
                     return if (isFat32) {
-                        raf.readInt().toLong() and 0x0FFFFFFF
+                        val b = ByteArray(4)
+                        raf.readFully(b)
+                        readLE32(b, 0) and 0x0FFFFFFF
                     } else {
-                        (raf.readUnsignedShort()).toLong()
+                        val b = ByteArray(2)
+                        raf.readFully(b)
+                        readLE16(b, 0).toLong()
                     }
                 }
 

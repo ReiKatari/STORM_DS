@@ -157,12 +157,17 @@ fun DldiFileManagerScreen(
                             File(extBase, "STORM DS/dldi/dldi_sd.img"),
                             File(extBase, "STORM DS/bios/sd_card.bin"),
                             File(extBase, "STORM DS/bios/sd.bin"),
+                            File(extBase, "STORM DS/bios/dsi/sd_card.bin"),
+                            File(extBase, "STORM DS/bios/dsi/sd.bin"),
+                            File(extBase, "STORM DS/sd_card.bin"),
                             File(context.filesDir, "dldi/dldi_sd.img"),
+                            File(context.filesDir, "dsi_sd/dsi_sd.img"),
                         )
                         for (img in candidateImages) {
                             if (img.isFile && img.length() >= 512 * 1024L) {
-                                FatImageExtractor.extractFatImage(img, localSyncDir)
-                                break
+                                if (FatImageExtractor.extractFatImage(img, localSyncDir)) {
+                                    break
+                                }
                             }
                         }
                     }
