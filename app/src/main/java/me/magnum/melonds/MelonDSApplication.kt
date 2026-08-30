@@ -70,6 +70,11 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     val copyDir = { src: File, dst: File ->
                         if (src.exists() && src.isDirectory) {
                             src.listFiles()?.forEach { file ->
+                                // Clean up duplicate SAF artifact files like "firmware (1).bin"
+                                if (file.name.contains(" (") && file.name.endsWith(").bin")) {
+                                    file.delete()
+                                    return@forEach
+                                }
                                 val target = File(dst, file.name)
                                 if (!target.exists() || target.length() == 0L || target.lastModified() < file.lastModified()) {
                                     runCatching { file.copyTo(target, overwrite = true) }
@@ -78,10 +83,20 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         }
                     }
 
+                    // Clean up duplicate/stray files in all bios directories
+                    listOf(dsDir, dsiDir, biosDir).forEach { bDir ->
+                        if (bDir.exists() && bDir.isDirectory) {
+                            bDir.listFiles()?.forEach { f ->
+                                if (f.name.contains(" (") && f.name.endsWith(").bin")) {
+                                    f.delete()
+                                }
+                            }
+                        }
+                    }
+
                     // Internal app files to root storage
                     copyDir(File(context.filesDir, "bios/ds"), dsDir)
                     copyDir(File(context.filesDir, "bios/dsi"), dsiDir)
-                    copyDir(File(context.filesDir, "bios"), biosDir)
                     copyDir(File(context.filesDir, "saves"), savesDir)
                     copyDir(File(context.filesDir, "quicksaves"), quicksavesDir)
                     copyDir(File(context.filesDir, "cheats"), cheatsDir)
@@ -92,7 +107,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     context.getExternalFilesDir(null)?.let { extFiles ->
                         copyDir(File(extFiles, "bios/ds"), dsDir)
                         copyDir(File(extFiles, "bios/dsi"), dsiDir)
-                        copyDir(File(extFiles, "bios"), biosDir)
                         copyDir(File(extFiles, "saves"), savesDir)
                         copyDir(File(extFiles, "quicksaves"), quicksavesDir)
                         copyDir(File(extFiles, "cheats"), cheatsDir)
@@ -103,7 +117,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     // Root storage back to internal app files (backup/sync)
                     copyDir(dsDir, File(context.filesDir, "bios/ds").apply { mkdirs() })
                     copyDir(dsiDir, File(context.filesDir, "bios/dsi").apply { mkdirs() })
-                    copyDir(biosDir, File(context.filesDir, "bios").apply { mkdirs() })
                     copyDir(savesDir, File(context.filesDir, "saves").apply { mkdirs() })
                     copyDir(quicksavesDir, File(context.filesDir, "quicksaves").apply { mkdirs() })
                     copyDir(cheatsDir, File(context.filesDir, "cheats").apply { mkdirs() })

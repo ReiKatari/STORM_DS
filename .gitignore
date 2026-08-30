@@ -36,3 +36,6 @@ jadx.zip
 /Tools/**/_nds/
 /Tools/**/title/
 /Tools/**/roms/
+
+__pycache__/
+*.pyc
