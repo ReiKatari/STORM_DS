@@ -220,6 +220,10 @@ class RomListViewModel @Inject constructor(
                 }
         }
 
+        viewModelScope.launch(Dispatchers.IO) {
+            dsiStorageTitlesScanner.refreshStorageTitles()
+        }
+
         viewModelScope.launch {
             romsRepository.getRoms().collect { romList ->
                 val romsWithDocIds = withContext(Dispatchers.Default) {

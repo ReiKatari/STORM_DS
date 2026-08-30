@@ -172,6 +172,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         val dsiSdEnabledPreference = findPreference<SwitchPreference>("system_dsi_sd_card_enabled")
         val dsiSdDirPreference = findPreference<StoragePickerPreference>("system_dsi_sd_card_dir")
         val dsiSdSizePreference = findPreference<ListPreference>("system_dsi_sd_card_image_size")
+        val dsiSdManagerPreference = findPreference<Preference>("pref_open_dsi_sd_file_manager")
 
         fun updateDldiVisibility(enabled: Boolean) {
             dldiDirPreference?.isVisible = enabled
@@ -182,6 +183,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         fun updateDsiSdVisibility(enabled: Boolean) {
             dsiSdDirPreference?.isVisible = enabled
             dsiSdSizePreference?.isVisible = enabled
+            dsiSdManagerPreference?.isVisible = enabled
         }
 
         updateDldiVisibility(dldiEnabledPreference?.isChecked ?: false)
@@ -205,6 +207,11 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
 
         dldiManagerPreference?.setOnPreferenceClickListener {
             startActivity(android.content.Intent(requireContext(), me.magnum.melonds.ui.dldi.DldiFileManagerActivity::class.java))
+            true
+        }
+
+        dsiSdManagerPreference?.setOnPreferenceClickListener {
+            startActivity(android.content.Intent(requireContext(), me.magnum.melonds.ui.dldi.DsiSdFileManagerActivity::class.java))
             true
         }
 

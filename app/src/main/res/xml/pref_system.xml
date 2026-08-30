@@ -131,6 +131,12 @@
                 android:defaultValue="0"
                 android:entries="@array/dldi_sd_card_image_size_options"
                 android:entryValues="@array/dldi_sd_card_image_size_values" />
+
+        <Preference
+                android:key="pref_open_dsi_sd_file_manager"
+                android:title="Открыть менеджер файлов SD DSi"
+                android:summary="Просмотр, создание, переименование и удаление файлов SD-карты DSi"
+                app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

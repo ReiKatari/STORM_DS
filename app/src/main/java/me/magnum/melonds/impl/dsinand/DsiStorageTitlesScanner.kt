@@ -3,10 +3,12 @@ package me.magnum.melonds.impl.dsinand
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.documentfile.provider.DocumentFile
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.utils.RomProcessor
 import java.io.File
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
@@ -37,16 +39,17 @@ class DsiStorageTitlesScanner @Inject constructor(
         val gameCodes = mutableSetOf<String>()
         val titleIds = mutableSetOf<Long>()
 
-        val candidateLocations = mutableListOf<File>()
-
-        // 1. DSi SD-Card image / directory from settings or root storage
+        // 1. Scan DSi SD-Card directory / Tree URI from settings
         settingsRepository.getDsiSdCardDirectory()?.let { uri ->
-            uri.path?.let { p ->
-                val f = File(p)
-                if (f.exists()) candidateLocations.add(f)
-            }
+            scanUriTarget(uri, gameCodes, titleIds)
         }
 
+        // 2. Scan DSi BIOS / NAND directory / Tree URI from settings
+        settingsRepository.getDsiBiosDirectory()?.let { uri ->
+            scanUriTarget(uri, gameCodes, titleIds)
+        }
+
+        // 3. Scan standard local filesystem locations
         val extStorage = android.os.Environment.getExternalStorageDirectory()
         val defaultLocations = listOf(
             File(extStorage, "STORM DS/bios/dsi/sd_card.bin"),
@@ -55,25 +58,23 @@ class DsiStorageTitlesScanner @Inject constructor(
             File(extStorage, "STORM DS/bios/dsi"),
             File(context.filesDir, "bios/dsi/sd_card.bin"),
             File(context.filesDir, "bios/dsi/sd.bin"),
+            File(context.filesDir, "dsi_sd/sync"),
+            File(context.filesDir, "dldi/sync"),
             File(extStorage, "STORM DS/bios/dsi/nand.bin"),
             File(context.filesDir, "bios/dsi/nand.bin"),
         )
 
         for (loc in defaultLocations) {
-            if (loc.exists() && !candidateLocations.contains(loc)) {
-                candidateLocations.add(loc)
-            }
-        }
-
-        for (loc in candidateLocations) {
             try {
-                if (loc.isDirectory) {
-                    scanDirectory(loc, gameCodes, titleIds)
-                } else if (loc.isFile && loc.length() >= 512 * 1024L) {
-                    scanImageFile(loc, gameCodes, titleIds)
+                if (loc.exists()) {
+                    if (loc.isDirectory) {
+                        scanLocalDirectory(loc, gameCodes, titleIds)
+                    } else if (loc.isFile && loc.length() >= 512 * 1024L) {
+                        scanImageFile(loc, gameCodes, titleIds)
+                    }
                 }
             } catch (e: Throwable) {
-                Log.w(TAG, "Error scanning DSi storage location: ${loc.absolutePath}", e)
+                Log.w(TAG, "Error scanning local location: ${loc.absolutePath}", e)
             }
         }
 
@@ -83,6 +84,7 @@ class DsiStorageTitlesScanner @Inject constructor(
         cachedTitleIds.addAll(titleIds)
         lastScanTimestamp = now
 
+        Log.i(TAG, "DSi Storage scanned. Found ${cachedGameCodes.size} GameCodes: $cachedGameCodes")
         return cachedGameCodes.toSet() to cachedTitleIds.toSet()
     }
 
@@ -99,16 +101,18 @@ class DsiStorageTitlesScanner @Inject constructor(
     fun isDsiWareOrDsiRom(rom: Rom): Boolean {
         if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return true
         if (rom.fileName.endsWith(".dsi", ignoreCase = true) || rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true) return true
-        val code = resolveRomGameCode(rom)
-        val gc0 = code.getOrNull(0)?.uppercaseChar()
-        return gc0 == 'K' || gc0 == 'V' || gc0 == 'H'
+        val code = resolveRomGameCode(rom).trim().uppercase()
+        if (code.length == 4 && (code.startsWith("K") || code.startsWith("V") || code.startsWith("H"))) {
+            return true
+        }
+        return false
     }
 
     fun isDsiTitleInstalledInStorage(rom: Rom): Boolean {
         val installedCodes = getInstalledDsiGameCodes()
         val installedTitleIds = getInstalledDsiTitleIds()
 
-        // If no DSi storage image/folder exists at all, do not filter out
+        // If no DSi storage was discovered, allow all ROMs
         if (installedCodes.isEmpty() && installedTitleIds.isEmpty()) {
             return true
         }
@@ -167,7 +171,84 @@ class DsiStorageTitlesScanner @Inject constructor(
         }.getOrNull()
     }
 
-    private fun scanDirectory(dir: File, gameCodes: MutableSet<String>, titleIds: MutableSet<Long>) {
+    private fun scanUriTarget(uri: Uri, gameCodes: MutableSet<String>, titleIds: MutableSet<Long>) {
+        runCatching {
+            if (uri.scheme == "file") {
+                val f = uri.path?.let { File(it) }
+                if (f != null && f.exists()) {
+                    if (f.isDirectory) scanLocalDirectory(f, gameCodes, titleIds)
+                    else if (f.isFile) scanImageFile(f, gameCodes, titleIds)
+                }
+                return
+            }
+
+            // Tree URI via SAF
+            val docTree = DocumentFile.fromTreeUri(context, uri)
+            if (docTree != null && docTree.isDirectory) {
+                scanDocumentDirectory(docTree, gameCodes, titleIds, depth = 0)
+                return
+            }
+
+            // Single Document URI
+            val singleDoc = DocumentFile.fromSingleUri(context, uri)
+            if (singleDoc != null && singleDoc.isFile) {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    scanStreamForTitles(stream, gameCodes, titleIds)
+                }
+            }
+        }
+    }
+
+    private fun scanDocumentDirectory(dir: DocumentFile, gameCodes: MutableSet<String>, titleIds: MutableSet<Long>, depth: Int) {
+        if (depth > 4) return
+        val files = dir.listFiles()
+        for (f in files) {
+            if (f.isDirectory) {
+                val name = f.name?.uppercase().orEmpty()
+                if (name.length == 8 && name.all { it in "0123456789ABCDEF" }) {
+                    try {
+                        val tid = name.toLong(16)
+                        titleIds.add(tid)
+                        val bytes = name.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                        val code = String(bytes, StandardCharsets.US_ASCII)
+                        if (code.all { it in 'A'..'Z' || it in '0'..'9' }) {
+                            gameCodes.add(code)
+                        }
+                    } catch (_: Throwable) {}
+                }
+                scanDocumentDirectory(f, gameCodes, titleIds, depth + 1)
+            } else if (f.isFile) {
+                val name = f.name?.lowercase().orEmpty()
+                if (name.endsWith(".nds") || name.endsWith(".dsi") || name.endsWith(".app")) {
+                    runCatching {
+                        context.contentResolver.openInputStream(f.uri)?.use { stream ->
+                            val buf = ByteArray(0x238)
+                            val read = stream.read(buf)
+                            if (read >= 0x238) {
+                                val gc = String(buf, 0x0C, 4, StandardCharsets.US_ASCII).trim()
+                                if (gc.length == 4 && gc.all { it in 'A'..'Z' || it in '0'..'9' }) {
+                                    gameCodes.add(gc.uppercase())
+                                }
+                                val cat = bytesToInt(buf, 0x234).toLong() and 0xFFFFFFFFL
+                                val id = bytesToInt(buf, 0x230).toLong() and 0xFFFFFFFFL
+                                if (id > 0L && (cat == 0x00030004L || cat == 0x00030005L || cat == 0x04000300L)) {
+                                    titleIds.add(id)
+                                }
+                            }
+                        }
+                    }
+                } else if (name.endsWith(".bin") || name.endsWith(".img")) {
+                    runCatching {
+                        context.contentResolver.openInputStream(f.uri)?.use { stream ->
+                            scanStreamForTitles(stream, gameCodes, titleIds)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun scanLocalDirectory(dir: File, gameCodes: MutableSet<String>, titleIds: MutableSet<Long>) {
         val files = dir.listFiles() ?: return
         for (f in files) {
             if (f.isDirectory) {
@@ -183,26 +264,45 @@ class DsiStorageTitlesScanner @Inject constructor(
                         }
                     } catch (_: Throwable) {}
                 }
-                scanDirectory(f, gameCodes, titleIds)
-            } else if (f.isFile && (f.name.endsWith(".nds", ignoreCase = true) || f.name.endsWith(".dsi", ignoreCase = true) || f.name.endsWith(".app", ignoreCase = true))) {
-                runCatching {
-                    RandomAccessFile(f, "r").use { raf ->
-                        if (raf.length() >= 0x238) {
-                            val header = ByteArray(0x238)
-                            raf.readFully(header)
-                            val gc = String(header, 0x0C, 4, StandardCharsets.US_ASCII).trim()
-                            if (gc.length == 4 && gc.all { it in 'A'..'Z' || it in '0'..'9' }) {
-                                gameCodes.add(gc.uppercase())
-                            }
-                            val cat = bytesToInt(header, 0x234).toLong() and 0xFFFFFFFFL
-                            val id = bytesToInt(header, 0x230).toLong() and 0xFFFFFFFFL
-                            if (id > 0L && (cat == 0x00030004L || cat == 0x00030005L || cat == 0x04000300L)) {
-                                titleIds.add(id)
+                scanLocalDirectory(f, gameCodes, titleIds)
+            } else if (f.isFile) {
+                val name = f.name.lowercase()
+                if (name.endsWith(".nds") || name.endsWith(".dsi") || name.endsWith(".app")) {
+                    runCatching {
+                        RandomAccessFile(f, "r").use { raf ->
+                            if (raf.length() >= 0x238) {
+                                val header = ByteArray(0x238)
+                                raf.readFully(header)
+                                val gc = String(header, 0x0C, 4, StandardCharsets.US_ASCII).trim()
+                                if (gc.length == 4 && gc.all { it in 'A'..'Z' || it in '0'..'9' }) {
+                                    gameCodes.add(gc.uppercase())
+                                }
+                                val cat = bytesToInt(header, 0x234).toLong() and 0xFFFFFFFFL
+                                val id = bytesToInt(header, 0x230).toLong() and 0xFFFFFFFFL
+                                if (id > 0L && (cat == 0x00030004L || cat == 0x00030005L || cat == 0x04000300L)) {
+                                    titleIds.add(id)
+                                }
                             }
                         }
                     }
+                } else if (name.endsWith(".bin") || name.endsWith(".img")) {
+                    scanImageFile(f, gameCodes, titleIds)
                 }
             }
+        }
+    }
+
+    private fun scanStreamForTitles(stream: InputStream, gameCodes: MutableSet<String>, titleIds: MutableSet<Long>) {
+        val bufSize = 64 * 1024
+        val buffer = ByteArray(bufSize)
+        var totalRead = 0L
+        val maxRead = 300L * 1024 * 1024L
+
+        while (totalRead < maxRead) {
+            val bytesRead = stream.read(buffer)
+            if (bytesRead <= 0) break
+            totalRead += bytesRead
+            parseBufferForTitles(buffer, bytesRead, gameCodes, titleIds)
         }
     }
 
@@ -218,44 +318,46 @@ class DsiStorageTitlesScanner @Inject constructor(
                     raf.seek(pos)
                     val bytesRead = raf.read(buffer)
                     if (bytesRead <= 0) break
+                    parseBufferForTitles(buffer, bytesRead, gameCodes, titleIds)
+                    pos += (bufSize - 512)
+                }
+            }
+        }
+    }
 
-                    for (i in 0 until bytesRead - 8) {
-                        val c0 = buffer[i].toInt().toChar()
-                        val c1 = buffer[i + 1].toInt().toChar()
-                        if (c0 == '4' && (c1 in 'B'..'F' || c1 in '0'..'9' || c1 in 'b'..'f')) {
-                            val hexCandidate = String(buffer, i, 8, StandardCharsets.US_ASCII)
-                            if (hexCandidate.length == 8 && hexCandidate.all { it in "0123456789ABCDEFabcdef" }) {
-                                val up = hexCandidate.uppercase()
-                                try {
-                                    val tid = up.toLong(16)
-                                    titleIds.add(tid)
-                                    val b0 = up.substring(0, 2).toInt(16).toByte()
-                                    val b1 = up.substring(2, 4).toInt(16).toByte()
-                                    val b2 = up.substring(4, 6).toInt(16).toByte()
-                                    val b3 = up.substring(6, 8).toInt(16).toByte()
-                                    val codeStr = String(byteArrayOf(b0, b1, b2, b3), StandardCharsets.US_ASCII)
-                                    if (codeStr.all { it in 'A'..'Z' || it in '0'..'9' }) {
-                                        gameCodes.add(codeStr)
-                                    }
-                                } catch (_: Throwable) {}
-                            }
+    private fun parseBufferForTitles(buffer: ByteArray, bytesRead: Int, gameCodes: MutableSet<String>, titleIds: MutableSet<Long>) {
+        for (i in 0 until bytesRead - 8) {
+            val c0 = buffer[i].toInt().toChar()
+            val c1 = buffer[i + 1].toInt().toChar()
+            if (c0 == '4' && (c1 in 'B'..'F' || c1 in '0'..'9' || c1 in 'b'..'f')) {
+                val hexCandidate = String(buffer, i, 8, StandardCharsets.US_ASCII)
+                if (hexCandidate.length == 8 && hexCandidate.all { it in "0123456789ABCDEFabcdef" }) {
+                    val up = hexCandidate.uppercase()
+                    try {
+                        val tid = up.toLong(16)
+                        titleIds.add(tid)
+                        val b0 = up.substring(0, 2).toInt(16).toByte()
+                        val b1 = up.substring(2, 4).toInt(16).toByte()
+                        val b2 = up.substring(4, 6).toInt(16).toByte()
+                        val b3 = up.substring(6, 8).toInt(16).toByte()
+                        val codeStr = String(byteArrayOf(b0, b1, b2, b3), StandardCharsets.US_ASCII)
+                        if (codeStr.all { it in 'A'..'Z' || it in '0'..'9' }) {
+                            gameCodes.add(codeStr)
                         }
+                    } catch (_: Throwable) {}
+                }
+            }
 
-                        if (i + 0x200 <= bytesRead) {
-                            val unitCode = buffer[i + 0x12].toInt() and 0xFF
-                            if (unitCode == 0x02 || unitCode == 0x03) {
-                                val gc = String(buffer, i + 0x0C, 4, StandardCharsets.US_ASCII)
-                                if (gc.length == 4 && gc.all { it in 'A'..'Z' || it in '0'..'9' }) {
-                                    val gc0 = gc[0]
-                                    if (gc0 == 'K' || gc0 == 'V' || gc0 == 'H' || gc0 == '4') {
-                                        gameCodes.add(gc.uppercase())
-                                    }
-                                }
-                            }
+            if (i + 0x200 <= bytesRead) {
+                val unitCode = buffer[i + 0x12].toInt() and 0xFF
+                if (unitCode == 0x02 || unitCode == 0x03) {
+                    val gc = String(buffer, i + 0x0C, 4, StandardCharsets.US_ASCII)
+                    if (gc.length == 4 && gc.all { it in 'A'..'Z' || it in '0'..'9' }) {
+                        val gc0 = gc[0]
+                        if (gc0 == 'K' || gc0 == 'V' || gc0 == 'H' || gc0 == '4') {
+                            gameCodes.add(gc.uppercase())
                         }
                     }
-
-                    pos += (bufSize - 512)
                 }
             }
         }

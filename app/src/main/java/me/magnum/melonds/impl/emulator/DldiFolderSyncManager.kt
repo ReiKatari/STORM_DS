@@ -52,72 +52,93 @@ class DldiFolderSyncManager(
     )
 
     private var activeDirectoryUri: Uri? = null
-    private val rootDirectory = File(context.filesDir, DLDI_DIR)
-    private val mirrorDirectory = File(rootDirectory, MIRROR_DIR)
-    private val imageFile = File(rootDirectory, IMAGE_NAME)
-    private val snapshotFile = File(rootDirectory, SNAPSHOT_NAME)
+    private var activeIsDsi: Boolean = false
+
+    private fun getTargetRootDirectory(isDsi: Boolean): File {
+        return if (isDsi) File(context.filesDir, "dsi_sd") else File(context.filesDir, DLDI_DIR)
+    }
+
+    private fun getTargetMirrorDirectory(isDsi: Boolean): File {
+        return if (isDsi) File(getTargetRootDirectory(true), "sync") else File(getTargetRootDirectory(false), MIRROR_DIR)
+    }
+
+    private fun getTargetImageFile(isDsi: Boolean): File {
+        return if (isDsi) File(getTargetRootDirectory(true), "dsi_sd.img") else File(getTargetRootDirectory(false), IMAGE_NAME)
+    }
+
+    private fun getTargetSnapshotFile(isDsi: Boolean): File {
+        return File(getTargetRootDirectory(isDsi), SNAPSHOT_NAME)
+    }
 
     fun prepareConfiguration(baseConfiguration: DldiSdCardConfiguration): DldiSdCardConfiguration? {
+        val isDsi = baseConfiguration.folderPath?.contains("dsi_sd") == true || baseConfiguration.imagePath?.contains("dsi") == true
+        activeIsDsi = isDsi
+        val rootDir = getTargetRootDirectory(isDsi)
+        val mirrorDir = getTargetMirrorDirectory(isDsi)
+        val defaultImage = getTargetImageFile(isDsi)
+
         if (!baseConfiguration.enabled) {
             activeDirectoryUri = null
             return baseConfiguration.copy(
-                imagePath = imageFile.absolutePath,
-                folderPath = mirrorDirectory.absolutePath,
+                imagePath = defaultImage.absolutePath,
+                folderPath = mirrorDir.absolutePath,
                 folderSync = false,
             )
         }
 
         runCatching {
-            rootDirectory.mkdirs()
-            mirrorDirectory.mkdirs()
+            rootDir.mkdirs()
+            mirrorDir.mkdirs()
             baseConfiguration.imagePath?.let { File(it).parentFile?.mkdirs() }
         }
 
-        val sourceUri = settingsRepository.getDldiSdCardDirectory()
+        val sourceUri = if (isDsi) settingsRepository.getDsiSdCardDirectory() else settingsRepository.getDldiSdCardDirectory()
         val sourceRoot = sourceUri?.let { DocumentFile.fromTreeUri(context, it) }
+        val targetSize = if (isDsi) settingsRepository.getDsiSdCardImageSize() else settingsRepository.getDldiSdCardImageSize()
+
         if (sourceUri == null || sourceRoot == null || !sourceRoot.exists() || !sourceRoot.isDirectory || !sourceRoot.canRead()) {
-            Log.i(TAG, "DLDI SD card running in direct image mode (no custom folder selected)")
+            Log.i(TAG, "SD card (${if (isDsi) "DSi" else "DLDI"}) running in direct image mode")
             activeDirectoryUri = null
-            val imgPath = baseConfiguration.imagePath?.takeIf { it.isNotBlank() } ?: imageFile.absolutePath
+            val imgPath = baseConfiguration.imagePath?.takeIf { it.isNotBlank() } ?: defaultImage.absolutePath
             File(imgPath).parentFile?.mkdirs()
             return baseConfiguration.copy(
                 enabled = true,
                 imagePath = imgPath,
-                imageSize = settingsRepository.getDldiSdCardImageSize(),
+                imageSize = targetSize,
                 folderSync = false,
-                folderPath = mirrorDirectory.absolutePath,
+                folderPath = mirrorDir.absolutePath,
             )
         }
 
-        if (!rootDirectory.isDirectory && !rootDirectory.mkdirs()) {
-            Log.w(TAG, "Could not create DLDI root directory: ${rootDirectory.absolutePath}")
+        if (!rootDir.isDirectory && !rootDir.mkdirs()) {
+            Log.w(TAG, "Could not create SD root directory: ${rootDir.absolutePath}")
             activeDirectoryUri = null
             return null
         }
 
-        if (!mirrorDirectory.exists() && !mirrorDirectory.mkdirs()) {
-            Log.w(TAG, "Could not create DLDI mirror directory: ${mirrorDirectory.absolutePath}")
+        if (!mirrorDir.exists() && !mirrorDir.mkdirs()) {
+            Log.w(TAG, "Could not create SD mirror directory: ${mirrorDir.absolutePath}")
             activeDirectoryUri = null
             return null
         }
 
         val snapshotState = readSnapshotState(sourceUri)
         val snapshotEntries = snapshotState.entries
-        val currentLocalEntries = collectLocalEntries(mirrorDirectory)
+        val currentLocalEntries = collectLocalEntries(mirrorDir)
         val currentDocumentEntries = collectDocumentEntries(sourceRoot)
         runCatching {
             syncDocumentAndLocalDirectories(
                 documentRoot = sourceRoot,
-                localRoot = mirrorDirectory,
+                localRoot = mirrorDir,
                 ambiguousPreference = SyncSide.DOCUMENT,
                 relativePath = "",
                 snapshotEntries = snapshotEntries,
                 currentLocalEntries = currentLocalEntries,
                 currentDocumentEntries = currentDocumentEntries,
             )
-            writeSnapshotState(sourceUri, buildSnapshotEntries(sourceRoot, mirrorDirectory))
+            writeSnapshotState(sourceUri, buildSnapshotEntries(sourceRoot, mirrorDir))
         }.onFailure {
-            Log.w(TAG, "Could not reconcile DLDI folder before launch", it)
+            Log.w(TAG, "Could not reconcile SD folder before launch", it)
             activeDirectoryUri = null
             return null
         }
@@ -125,39 +146,40 @@ class DldiFolderSyncManager(
         activeDirectoryUri = sourceUri
         return baseConfiguration.copy(
             enabled = true,
-            imagePath = imageFile.absolutePath,
-            imageSize = settingsRepository.getDldiSdCardImageSize(),
+            imagePath = defaultImage.absolutePath,
+            imageSize = targetSize,
             folderSync = true,
-            folderPath = mirrorDirectory.absolutePath,
+            folderPath = mirrorDir.absolutePath,
         )
     }
 
     fun syncBackIfNeeded() {
         val targetUri = activeDirectoryUri ?: return
+        val mirrorDir = getTargetMirrorDirectory(activeIsDsi)
         val targetRoot = DocumentFile.fromTreeUri(context, targetUri)
         if (targetRoot == null || !targetRoot.exists() || !targetRoot.isDirectory || !targetRoot.canWrite()) {
-            Log.w(TAG, "Skipping DLDI sync-back because the selected folder is not writable")
+            Log.w(TAG, "Skipping SD sync-back because the selected folder is not writable")
             activeDirectoryUri = null
             return
         }
 
         val snapshotState = readSnapshotState(targetUri)
         val snapshotEntries = snapshotState.entries
-        val currentLocalEntries = collectLocalEntries(mirrorDirectory)
+        val currentLocalEntries = collectLocalEntries(mirrorDir)
         val currentDocumentEntries = collectDocumentEntries(targetRoot)
         runCatching {
             syncDocumentAndLocalDirectories(
                 documentRoot = targetRoot,
-                localRoot = mirrorDirectory,
+                localRoot = mirrorDir,
                 ambiguousPreference = SyncSide.LOCAL,
                 relativePath = "",
                 snapshotEntries = snapshotEntries,
                 currentLocalEntries = currentLocalEntries,
                 currentDocumentEntries = currentDocumentEntries,
             )
-            writeSnapshotState(targetUri, buildSnapshotEntries(targetRoot, mirrorDirectory))
+            writeSnapshotState(targetUri, buildSnapshotEntries(targetRoot, mirrorDir))
         }.onFailure {
-            Log.w(TAG, "Could not sync DLDI folder after emulation", it)
+            Log.w(TAG, "Could not sync SD folder after emulation", it)
         }
         activeDirectoryUri = null
     }
@@ -642,12 +664,13 @@ class DldiFolderSyncManager(
     }
 
     private fun readSnapshotState(documentTreeUri: Uri): SnapshotState {
-        if (!snapshotFile.isFile) {
+        val targetSnapshot = getTargetSnapshotFile(activeIsDsi)
+        if (!targetSnapshot.isFile) {
             return SnapshotState(documentTreeUri = documentTreeUri.toString(), entries = emptyMap())
         }
 
         return runCatching {
-            val root = JSONObject(snapshotFile.readText())
+            val root = JSONObject(targetSnapshot.readText())
             val storedTreeUri = root.optString("documentTreeUri")
             if (storedTreeUri != documentTreeUri.toString()) {
                 return SnapshotState(documentTreeUri = documentTreeUri.toString(), entries = emptyMap())
@@ -680,6 +703,7 @@ class DldiFolderSyncManager(
     }
 
     private fun writeSnapshotState(documentTreeUri: Uri, entries: Map<String, SnapshotEntry>) {
+        val targetSnapshot = getTargetSnapshotFile(activeIsDsi)
         val entriesObject = JSONObject()
         entries.toSortedMap().forEach { (path, entry) ->
             entriesObject.put(
@@ -694,7 +718,7 @@ class DldiFolderSyncManager(
             )
         }
 
-        snapshotFile.writeText(
+        targetSnapshot.writeText(
             JSONObject().apply {
                 put("documentTreeUri", documentTreeUri.toString())
                 put("entries", entriesObject)

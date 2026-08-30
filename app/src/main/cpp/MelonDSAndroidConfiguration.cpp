@@ -329,12 +329,17 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.rewindCaptureSpacingSeconds = rewindPeriodSeconds;
     finalEmulatorConfiguration.rewindLengthSeconds = rewindWindowSeconds;
     finalEmulatorConfiguration.renderSettings = std::move(buildRenderSettings(env, videoRenderer, rendererConfigurationObject));
-    finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
+    if (consoleType == 1) {
+        finalEmulatorConfiguration.dsiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
+        finalEmulatorConfiguration.dldiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
+    } else {
+        finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
+        finalEmulatorConfiguration.dldiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
+    }
     jfieldID arm9OverclockMultiplierField = getFieldIdOrClear(env, emulatorConfigurationClass, "arm9OverclockMultiplier", "I");
     jfieldID enable3dWidescreenField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable3dWidescreen", "Z");
     jfieldID enable60FpsPatchField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable60FpsPatch", "Z");
 
-    finalEmulatorConfiguration.dldiSdCardSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
     finalEmulatorConfiguration.renderer = videoRenderer;
     finalEmulatorConfiguration.dsiWareAutoloadTitleId =
         dsiWareAutoloadTitleIdField != nullptr
