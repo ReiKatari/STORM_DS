@@ -1,0 +1,25 @@
+package defpackage;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: zx3  reason: default package */
+/* loaded from: classes.dex */
+public final class zx3 {
+    public final jo1 a = new jo1(13);
+
+    public final boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if ((obj instanceof zx3) && this.a == ((zx3) obj).a) {
+            return true;
+        }
+        return false;
+    }
+
+    public final int hashCode() {
+        return this.a.hashCode() + wh1.a(0, Integer.hashCode(0) * 31, 31);
+    }
+
+    public final String toString() {
+        return "MetadataTransform(past=0, future=0, transformFn=" + this.a + ')';
+    }
+}

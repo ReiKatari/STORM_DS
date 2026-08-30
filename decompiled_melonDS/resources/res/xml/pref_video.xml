@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ListPreference android:entries="@array/video_renderer_options" android:title="@string/renderer" android:key="video_renderer" android:summary="%s" android:defaultValue="software" android:entryValues="@array/video_renderer_values" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/video_internal_resolution_options" android:title="@string/internal_resolution" android:key="video_internal_resolution" android:summary="%s" android:defaultValue="1" android:entryValues="@array/video_internal_resolution_values" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/threaded_rendering" android:key="enable_threaded_rendering" android:summary="@string/threaded_rendering_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/video_filtering_options" android:title="@string/filter" android:key="video_filtering" android:summary="%s" android:defaultValue="none" android:entryValues="@array/video_filtering_values" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/fps_counter_position_options" android:title="@string/fps_counter_position" android:key="fps_counter_position" android:summary="%s" android:defaultValue="hidden" android:entryValues="@array/fps_counter_position_values" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/dsi_camera_source_options" android:title="@string/dsi_camera_source" android:key="dsi_camera_source" android:summary="%s" android:defaultValue="physical_cameras" android:entryValues="@array/dsi_camera_source_values" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference android:title="@string/dsi_camera_image" android:key="dsi_camera_static_image" android:dependency="dsi_camera_source" app:iconSpaceReserved="false" app:mimeType="image/jpeg|image/png" app:permissions="read" app:persistPermissions="true" app:type="linear"/>
+</PreferenceScreen>

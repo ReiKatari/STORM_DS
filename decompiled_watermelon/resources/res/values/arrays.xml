@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="audio_bitrate_options">
+        <item>Auto</item>
+        <item>10-bit</item>
+        <item>16-bit</item>
+    </array>
+    <array name="audio_bitrate_values">
+        <item>auto</item>
+        <item>bit10</item>
+        <item>bit16</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>None</item>
+        <item>Linear</item>
+        <item>Cosine</item>
+        <item>Cubic</item>
+    </array>
+    <array name="audio_interpolation_values">
+        <item>none</item>
+        <item>linear</item>
+        <item>cosine</item>
+        <item>cubic</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>Low (Slower)</item>
+        <item>Medium</item>
+        <item>High (Faster)</item>
+    </array>
+    <array name="audio_latency_values">
+        <item>low</item>
+        <item>medium</item>
+        <item>high</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>Stretch</item>
+        <item>Fit center</item>
+        <item>Fit top</item>
+        <item>Fit left</item>
+        <item>Fit bottom</item>
+        <item>Fit right</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="console_type_values">
+        <item>ds</item>
+        <item>dsi</item>
+    </array>
+    <array name="dldi_sd_card_image_size_options">
+        <item>Auto</item>
+        <item>256 MB</item>
+        <item>512 MB</item>
+        <item>1 GB</item>
+        <item>2 GB</item>
+        <item>4 GB</item>
+    </array>
+    <array name="dldi_sd_card_image_size_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+    </array>
+    <array name="dsi_camera_source_options">
+        <item>Black screen</item>
+        <item>Physical cameras</item>
+        <item>Static image</item>
+    </array>
+    <array name="dsi_camera_source_values">
+        <item>black_screen</item>
+        <item>physical_cameras</item>
+        <item>static_image</item>
+    </array>
+    <array name="external_display_mode_options">
+        <item>Mirror</item>
+        <item>WatermelonDS</item>
+    </array>
+    <array name="external_display_mode_values">
+        <item>mirror</item>
+        <item>melon_dual_ds</item>
+    </array>
+    <array name="external_display_screen_options">
+        <item>@string/top_screen</item>
+        <item>@string/bottom_screen</item>
+        <item>@string/custom_layout</item>
+    </array>
+    <array name="external_display_screen_values">
+        <item>top</item>
+        <item>bottom</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>Unlimited</item>
+        <item>1.5x</item>
+        <item>2x</item>
+        <item>3x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_values">
+        <item>-1</item>
+        <item>1.5</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>8</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>English</item>
+        <item>French</item>
+        <item>German</item>
+        <item>Italian</item>
+        <item>Spanish</item>
+        <item>Japanese</item>
+    </array>
+    <array name="firmware_settings_language_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>0</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>Hidden</item>
+        <item>Top left</item>
+        <item>Top center</item>
+        <item>Top right</item>
+        <item>Bottom left</item>
+        <item>Bottom center</item>
+        <item>Bottom right</item>
+    </array>
+    <array name="fps_counter_position_values">
+        <item>hidden</item>
+        <item>top_left</item>
+        <item>top_center</item>
+        <item>top_right</item>
+        <item>bottom_left</item>
+        <item>bottom_center</item>
+        <item>bottom_right</item>
+    </array>
+    <array name="frame_limit_speed_multiplier_options">
+        <item>1.0x</item>
+        <item>0.75x</item>
+        <item>0.5x</item>
+        <item>0.25x</item>
+    </array>
+    <array name="frame_limit_speed_multiplier_values">
+        <item>1</item>
+        <item>0.75</item>
+        <item>0.5</item>
+        <item>0.25</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>Default</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>Default</item>
+        <item>None</item>
+        <item>Blow</item>
+        <item>Device microphone</item>
+    </array>
+    <array name="gba_slot_options">
+        <item>None</item>
+        <item>GBA ROM</item>
+        <item>Rumble Pak</item>
+        <item>Memory expansion</item>
+        <item>Analog Input</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>Follow system</item>
+        <item>Portrait</item>
+        <item>Landscape</item>
+    </array>
+    <array name="mic_source_options">
+        <item>None</item>
+        <item>Blow</item>
+        <item>Device microphone</item>
+    </array>
+    <array name="mic_source_values">
+        <item>none</item>
+        <item>blow</item>
+        <item>device</item>
+    </array>
+    <array name="ra_offline_backend_options">
+        <item>@string/ra_offline_backend_built_in</item>
+        <item>@string/ra_offline_backend_proxy</item>
+    </array>
+    <array name="ra_offline_backend_values">
+        <item>built_in</item>
+        <item>ra_offline_proxy</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>None (Pixelated)</item>
+        <item>Linear (Smooth)</item>
+    </array>
+    <array name="rom_icon_filtering_values">
+        <item>none</item>
+        <item>linear</item>
+    </array>
+    <array name="rom_input_mode_options">
+        <item>@string/use_global_preference</item>
+        <item>Custom</item>
+    </array>
+    <array name="rom_view_mode_options">
+        <item>@string/rom_view_mode_grid</item>
+        <item>@string/rom_view_mode_list</item>
+    </array>
+    <array name="rom_view_mode_values">
+        <item>grid</item>
+        <item>list</item>
+    </array>
+    <array name="save_state_location_values">
+        <item>save_dir</item>
+        <item>rom_dir</item>
+        <item>internal_dir</item>
+    </array>
+    <array name="save_state_locations">
+        <item>Save file directory</item>
+        <item>ROM directory</item>
+        <item>Internal directory</item>
+    </array>
+    <array name="soft_input_behaviour">
+        <item>always_visible</item>
+        <item>hide_system_buttons_when_controller_connected</item>
+        <item>hide_mapped_buttons_when_controller_connected</item>
+        <item>always_invisible</item>
+    </array>
+    <array name="soft_input_behaviour_descriptions">
+        <item>The soft input is always visible, as set in the current input layout.</item>
+        <item>When a controller is connected, console buttons (A B X Y, D-Pad, L, R, Start, and Select) are hidden. Other buttons in the current input layout remain visible.</item>
+        <item>When a controller is connected, all inputs assigned to that controller are hidden. Other inputs present in the current input layout that are not assigned to the connected controllers remain visible.</item>
+        <item>The soft input is always invisible, independently of the buttons found in the current input layout.</item>
+    </array>
+    <array name="soft_input_behaviour_options">
+        <item>Always visible</item>
+        <item>Hide console buttons when a controller is connected</item>
+        <item>Hide assigned input when a controller is connected</item>
+        <item>Always invisible</item>
+    </array>
+    <array name="theme_options">
+        <item>@string/theme_option_light</item>
+        <item>@string/theme_option_dark</item>
+    </array>
+    <array name="theme_values">
+        <item>light</item>
+        <item>dark</item>
+        <item>system</item>
+    </array>
+    <array name="update_channel_options">
+        <item>@string/update_channel_stable</item>
+        <item>@string/update_channel_prerelease</item>
+    </array>
+    <array name="update_channel_values">
+        <item>stable</item>
+        <item>stable_and_prerelease</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>None</item>
+        <item>Linear</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>Scanlines</item>
+        <item>RetroArch (.slangp)</item>
+    </array>
+    <array name="video_filtering_values">
+        <item>none</item>
+        <item>linear</item>
+        <item>xbr2</item>
+        <item>hq2x</item>
+        <item>hq4x</item>
+        <item>quilez</item>
+        <item>lcd</item>
+        <item>scanlines</item>
+        <item>retroarch</item>
+    </array>
+    <array name="video_internal_resolution_options">
+        <item>1x native (256x192)</item>
+        <item>2x native (512x384)</item>
+        <item>3x native (768x576)</item>
+        <item>4x native (1024x768)</item>
+        <item>5x native (1280x960)</item>
+        <item>6x native (1536x1152)</item>
+        <item>7x native (1792x1344)</item>
+        <item>8x native (2048x1536)</item>
+    </array>
+    <array name="video_internal_resolution_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+    </array>
+    <array name="video_renderer_options">
+        <item>Software</item>
+        <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
+    </array>
+    <array name="video_renderer_values">
+        <item>software</item>
+        <item>opengl</item>
+        <item>vulkan</item>
+        <item>compute</item>
+    </array>
+    <array name="video_vulkan_driver_mode_options">
+        <item>System</item>
+        <item>Custom</item>
+    </array>
+    <array name="video_vulkan_driver_mode_values">
+        <item>system</item>
+        <item>custom</item>
+    </array>
+</resources>

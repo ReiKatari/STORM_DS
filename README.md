@@ -31,9 +31,6 @@ STORM DS является форком и расширенной графиче�
 3. Для Windows: скачайте инсталлятор `STORM_DS_<версия>_Setup.exe` или архив `STORM_DS_<версия>.zip`.
 4. Запустите эмулятор, укажите папку с ROM-файлами (поддерживаются форматы `.nds`, `.dsi`, `.zip`, `.7z`).
 
-## **Безопасность и цифровые подписи**
-Все Windows-сборки подписаны доверенным сертификатом **CN=STORM SOFT, O=STORM EDEN** (SHA-256 Authenticode). Android APK подписаны ключом разработчика Release Key.
-
 ## **Благодарности**
 - **Arisotura (StapleButter) и MelonDS Team** — за выдающийся эмулятор MelonDS и безупречную эмуляцию архитектуры Nintendo DS.
 - **RSDuck, Nadia, GenericHeroGuy** — за ключевой вклад в развитие MelonDS.

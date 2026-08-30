@@ -1,0 +1,33 @@
+package xa;
+/* compiled from: r8-map-id-68a076d6c8e19c01d0388d4729d627070c4f7cff1f6777b7d5e4497c81f45b39 */
+/* loaded from: classes.dex */
+public class b1 extends ua.u {
+    @Override // ua.u
+    public final Object b(cb.a aVar) {
+        if (aVar.d0() == cb.b.NULL) {
+            aVar.Z();
+            return null;
+        }
+        try {
+            int K = aVar.K();
+            if (K <= 255 && K >= -128) {
+                return Byte.valueOf((byte) K);
+            }
+            StringBuilder i2 = kc.a.i("Lossy conversion from ", K, " to byte; at path ");
+            i2.append(aVar.B(true));
+            throw new RuntimeException(i2.toString());
+        } catch (NumberFormatException e6) {
+            throw new RuntimeException(e6);
+        }
+    }
+
+    @Override // ua.u
+    public final void c(cb.c cVar, Object obj) {
+        Number number = (Number) obj;
+        if (number == null) {
+            cVar.F();
+        } else {
+            cVar.L(number.byteValue());
+        }
+    }
+}

@@ -1,0 +1,24 @@
+package cd;
+/* compiled from: r8-map-id-68a076d6c8e19c01d0388d4729d627070c4f7cff1f6777b7d5e4497c81f45b39 */
+/* loaded from: classes.dex */
+public final class k0 implements i {
+    public final /* synthetic */ int A;
+    public final /* synthetic */ nc.t B;
+
+    public /* synthetic */ k0(nc.t tVar, int i2) {
+        this.A = i2;
+        this.B = tVar;
+    }
+
+    @Override // cd.i
+    public final Object a(Object obj, cc.c cVar) {
+        switch (this.A) {
+            case 0:
+                this.B.A = obj;
+                throw new dd.a(this);
+            default:
+                this.B.A = obj;
+                throw new dd.a(this);
+        }
+    }
+}

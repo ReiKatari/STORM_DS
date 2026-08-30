@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="@android:color/transparent" android:paddingTop="4dp" android:paddingBottom="4dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:defaultFocusHighlightEnabled="false">
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:background="@drawable/bg_watermelon_setting_row" android:paddingTop="11dp" android:paddingBottom="11dp" android:duplicateParentState="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="58dp" android:paddingStart="15dp" android:paddingEnd="12dp">
+        <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@+id/icon_frame" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="12dp">
+            <ImageView android:id="@android:id/icon" android:layout_width="22dp" android:layout_height="22dp" app:tint="@color/melonMain"/>
+        </LinearLayout>
+        <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+            <TextView android:textSize="13.5sp" android:textColor="@color/watermelon_pref_title" android:ellipsize="end" android:id="@android:id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="2" android:fontFamily="@font/manrope" android:textFontWeight="600"/>
+            <TextView android:textSize="11.5sp" android:textColor="@color/watermelon_pref_summary" android:id="@android:id/summary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:fontFamily="@font/manrope"/>
+        </LinearLayout>
+        <LinearLayout android:gravity="center_vertical" android:orientation="vertical" android:id="@android:id/widget_frame" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10dp"/>
+    </LinearLayout>
+</FrameLayout>

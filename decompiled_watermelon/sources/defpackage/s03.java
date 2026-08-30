@@ -1,0 +1,32 @@
+package defpackage;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: s03  reason: default package */
+/* loaded from: classes.dex */
+public final class s03 {
+    public final int a;
+
+    public final boolean equals(Object obj) {
+        if (obj instanceof s03) {
+            if (this.a != ((s03) obj).a) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public final int hashCode() {
+        return Integer.hashCode(this.a);
+    }
+
+    public final String toString() {
+        int i = this.a;
+        if (i == 1) {
+            return "Touch";
+        }
+        if (i == 2) {
+            return "Keyboard";
+        }
+        return "Error";
+    }
+}

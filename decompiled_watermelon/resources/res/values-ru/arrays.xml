@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="audio_bitrate_options">
+        <item>Автоматически</item>
+        <item>10-бит</item>
+        <item>16-бит</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>Нет</item>
+        <item>Линейная</item>
+        <item>Косинусная</item>
+        <item>Кубическая</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>Низкая (медленнее)</item>
+        <item>Средняя</item>
+        <item>Высокая (быстрее)</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>На весь экран</item>
+        <item>По центру</item>
+        <item>Вверху</item>
+        <item>Слева</item>
+        <item>Внизу</item>
+        <item>Справа</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="dsi_camera_source_options">
+        <item>Чёрный экран</item>
+        <item>Камеры устройства</item>
+        <item>Статичное изображение</item>
+    </array>
+    <array name="external_display_screen_options">
+        <item>@string/top_screen</item>
+        <item>@string/bottom_screen</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>Без ограничения</item>
+        <item>1.5x</item>
+        <item>2x</item>
+        <item>3x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>Английский</item>
+        <item>Французский</item>
+        <item>Немецкий</item>
+        <item>Итальянский</item>
+        <item>Испанский</item>
+        <item>Японский</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>Выкл.</item>
+        <item>Вверху слева</item>
+        <item>Вверху по центру</item>
+        <item>Вверху справа</item>
+        <item>Внизу слева</item>
+        <item>Внизу по центру</item>
+        <item>Внизу справа</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>По умолчанию</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>По умолчанию</item>
+        <item>Нет</item>
+        <item>Подуть</item>
+        <item>Микрофон устройства</item>
+    </array>
+    <array name="gba_slot_options">
+        <item>Нет</item>
+        <item>Ром GBA</item>
+        <item>Rumble Pak</item>
+        <item>Расширение памяти</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>Как в системе</item>
+        <item>Портретная</item>
+        <item>Альбомная</item>
+    </array>
+    <array name="mic_source_options">
+        <item>Нет</item>
+        <item>Подуть</item>
+        <item>Микрофон устройства</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>Нет (пиксельно)</item>
+        <item>Линейное (сглажено)</item>
+    </array>
+    <array name="save_state_locations">
+        <item>Каталог сохранений</item>
+        <item>Каталог с игрой</item>
+        <item>Внутренний каталог</item>
+    </array>
+    <array name="soft_input_behaviour_descriptions">
+        <item>Экранные кнопки отображаются всегда, согласно настройкам текущей внутренней раскладки.</item>
+        <item>Кнопки консоли (A B X Y, D-Pad, L, R, Start и Select) будут скрыты при подключении контроллера. Прочие кнопки текущей внутренней раскладки останутся видимыми.</item>
+        <item>Все экранные кнопки, действия которых привязаны к подключенному контроллеру будут скрыты. Прочие кнопки текущей внутренней раскладки без привязок к контроллеру останутся видимыми.</item>
+        <item>Экранные кнопки отображаются всегда, независимо от текущих привязок контроллера.</item>
+    </array>
+    <array name="soft_input_behaviour_options">
+        <item>Показывать всегда</item>
+        <item>Скрывать кнопки консоли при подключении контроллера</item>
+        <item>Скрывать привязанные действия при подключении контроллера</item>
+        <item>Скрывать всегда</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>Нет</item>
+        <item>Линейное</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>Сканлайны</item>
+        <item>RetroArch (.slangp)</item>
+    </array>
+    <array name="video_internal_resolution_options">
+        <item>1x (256x192)</item>
+        <item>2x (512x384)</item>
+        <item>3x (768x576)</item>
+        <item>4x (1024x768)</item>
+        <item>5x (1280x960)</item>
+        <item>6x (1536x1152)</item>
+        <item>7x (1792x1344)</item>
+        <item>8x (2048x1536)</item>
+    </array>
+    <array name="video_renderer_options">
+        <item>Программный</item>
+        <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
+    </array>
+</resources>

@@ -1,0 +1,76 @@
+package defpackage;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: as2  reason: default package */
+/* loaded from: classes.dex */
+public final class as2 extends jl2 {
+    private static final as2 DEFAULT_INSTANCE;
+    public static final int HASH_FIELD_NUMBER = 1;
+    private static volatile wj4 PARSER = null;
+    public static final int TAG_SIZE_FIELD_NUMBER = 2;
+    private int hash_;
+    private int tagSize_;
+
+    /* JADX WARN: Type inference failed for: r0v0, types: [jl2, as2] */
+    static {
+        ?? jl2Var = new jl2();
+        DEFAULT_INSTANCE = jl2Var;
+        jl2.l(as2.class, jl2Var);
+    }
+
+    public static as2 m() {
+        return DEFAULT_INSTANCE;
+    }
+
+    /* JADX WARN: Type inference failed for: r2v12, types: [wj4, java.lang.Object] */
+    @Override // defpackage.jl2
+    public final Object f(il2 il2Var) {
+        wj4 wj4Var;
+        switch (zr2.a[il2Var.ordinal()]) {
+            case 1:
+                return new jl2();
+            case 2:
+                return new gl2(DEFAULT_INSTANCE);
+            case 3:
+                return new j45(DEFAULT_INSTANCE, "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\f\u0002\u000b", new Object[]{"hash_", "tagSize_"});
+            case 4:
+                return DEFAULT_INSTANCE;
+            case 5:
+                wj4 wj4Var2 = PARSER;
+                if (wj4Var2 == null) {
+                    synchronized (as2.class) {
+                        try {
+                            wj4 wj4Var3 = PARSER;
+                            wj4Var = wj4Var3;
+                            if (wj4Var3 == null) {
+                                ?? obj = new Object();
+                                PARSER = obj;
+                                wj4Var = obj;
+                            }
+                        } catch (Throwable th) {
+                            throw th;
+                        }
+                    }
+                    return wj4Var;
+                }
+                return wj4Var2;
+            case ig7.b /* 6 */:
+                return (byte) 1;
+            case 7:
+                return null;
+            default:
+                throw new UnsupportedOperationException();
+        }
+    }
+
+    public final rq2 n() {
+        rq2 forNumber = rq2.forNumber(this.hash_);
+        if (forNumber == null) {
+            return rq2.UNRECOGNIZED;
+        }
+        return forNumber;
+    }
+
+    public final int o() {
+        return this.tagSize_;
+    }
+}

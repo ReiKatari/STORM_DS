@@ -1,0 +1,25 @@
+package defpackage;
+
+import me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: nv1  reason: default package */
+/* loaded from: classes.dex */
+public final class nv1 extends k11 {
+    public RARuntimeBridgeConfig R;
+    public /* synthetic */ Object X;
+    public final /* synthetic */ hv1 Y;
+    public int Z;
+
+    /* JADX WARN: 'super' call moved to the top of the method (can break code semantics) */
+    public nv1(hv1 hv1Var, k11 k11Var) {
+        super(k11Var);
+        this.Y = hv1Var;
+    }
+
+    @Override // defpackage.m00
+    public final Object v(Object obj) {
+        this.X = obj;
+        this.Z |= Integer.MIN_VALUE;
+        return this.Y.Z(null, this);
+    }
+}

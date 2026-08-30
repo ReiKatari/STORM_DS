@@ -1,0 +1,12 @@
+package androidx.camera.camera2.compat.quirk;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* loaded from: classes.dex */
+public final class ImageCaptureFailedWhenVideoCaptureIsBoundQuirk implements CaptureIntentPreviewQuirk, kx4 {
+    @Override // androidx.camera.camera2.compat.quirk.CaptureIntentPreviewQuirk
+    public final boolean a() {
+        if (!yf2.A() && !yf2.C() && !yf2.F() && !yf2.D()) {
+            return false;
+        }
+        return true;
+    }
+}

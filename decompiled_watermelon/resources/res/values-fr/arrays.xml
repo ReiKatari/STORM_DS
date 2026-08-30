@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="audio_bitrate_options">
+        <item>Automatique</item>
+        <item>10 bits</item>
+        <item>16 bits</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>Aucune</item>
+        <item>Linéaire</item>
+        <item>Sinusoïdale</item>
+        <item>Cubique</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>Basse (plus lente)</item>
+        <item>Moyenne</item>
+        <item>Haute (plus rapide)</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>Étirer</item>
+        <item>Ajuster au centre</item>
+        <item>Ajuster en haut</item>
+        <item>Ajuster à gauche</item>
+        <item>Ajuster en bas</item>
+        <item>Ajuster à droite</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="dsi_camera_source_options">
+        <item>Écran noir</item>
+        <item>Caméras physiques</item>
+        <item>Image statique</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>Illimitée</item>
+        <item>x1,5</item>
+        <item>x2</item>
+        <item>x3</item>
+        <item>x4</item>
+        <item>x8</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>Anglais</item>
+        <item>Français</item>
+        <item>Allemand</item>
+        <item>Italien</item>
+        <item>Espagnol</item>
+        <item>Japonais</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>Caché</item>
+        <item>Haut-gauche</item>
+        <item>Haut-centre</item>
+        <item>Haut-droite</item>
+        <item>Bas-gauche</item>
+        <item>Bas-centre</item>
+        <item>Bas-droite</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>Par défaut</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>Par défaut</item>
+        <item>Aucun</item>
+        <item>Souffle</item>
+        <item>Microphone de l&apos;appareil</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>Suivre le système</item>
+        <item>Portrait</item>
+        <item>Paysage</item>
+    </array>
+    <array name="mic_source_options">
+        <item>Aucune</item>
+        <item>Souffle</item>
+        <item>Microphone de l&apos;appareil</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>Aucun (pixelisé)</item>
+        <item>Linéaire (lisse)</item>
+    </array>
+    <array name="save_state_locations">
+        <item>Répertoire des fichiers de sauvegarde</item>
+        <item>Répertoire des ROMs</item>
+        <item>Répertoire interne</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>Aucun</item>
+        <item>Linéaire</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>Lignes de balayage</item>
+        <item>RetroArch (.slangp)</item>
+    </array>
+</resources>

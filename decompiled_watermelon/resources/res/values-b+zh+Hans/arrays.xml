@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="audio_bitrate_options">
+        <item>自动</item>
+        <item>10比特</item>
+        <item>16比特</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>无</item>
+        <item>线性</item>
+        <item>余弦</item>
+        <item>立方</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>低（更慢）</item>
+        <item>适中</item>
+        <item>高（更快）</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>拉伸</item>
+        <item>居中</item>
+        <item>顶部</item>
+        <item>左侧</item>
+        <item>底部</item>
+        <item>右侧</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="dsi_camera_source_options">
+        <item>黑屏</item>
+        <item>物理摄像头</item>
+        <item>静态图像</item>
+    </array>
+    <array name="external_display_screen_options">
+        <item>@string/top_screen</item>
+        <item>@string/bottom_screen</item>
+        <item>@string/custom_layout</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>无限制</item>
+        <item>1.5倍</item>
+        <item>2倍</item>
+        <item>3倍</item>
+        <item>4倍</item>
+        <item>8倍</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>英语</item>
+        <item>法语</item>
+        <item>德语</item>
+        <item>意大利语</item>
+        <item>西班牙语</item>
+        <item>日语</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>隐藏</item>
+        <item>左上</item>
+        <item>中上</item>
+        <item>右上</item>
+        <item>左下</item>
+        <item>中下</item>
+        <item>右下</item>
+    </array>
+    <array name="frame_limit_speed_multiplier_options">
+        <item>1.0倍</item>
+        <item>0.75倍</item>
+        <item>0.5倍</item>
+        <item>0.25倍</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>默认</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>默认</item>
+        <item>无</item>
+        <item>吹气</item>
+        <item>设备麦克风</item>
+    </array>
+    <array name="gba_slot_options">
+        <item>无</item>
+        <item>GBA ROM</item>
+        <item>震动包</item>
+        <item>内存扩展卡</item>
+        <item>模拟输入</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>跟随系统</item>
+        <item>竖屏</item>
+        <item>横屏</item>
+    </array>
+    <array name="mic_source_options">
+        <item>无</item>
+        <item>吹气</item>
+        <item>设备麦克风</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>无（像素化）</item>
+        <item>线性（平滑）</item>
+    </array>
+    <array name="rom_input_mode_options">
+        <item>@string/use_global_preference</item>
+        <item>自定义</item>
+    </array>
+    <array name="rom_view_mode_options">
+        <item>@string/rom_view_mode_grid</item>
+        <item>@string/rom_view_mode_list</item>
+    </array>
+    <array name="rom_view_mode_values">
+        <item>grid</item>
+        <item>list</item>
+    </array>
+    <array name="save_state_locations">
+        <item>存档文件目录</item>
+        <item>ROM 目录</item>
+        <item>内部目录</item>
+    </array>
+    <array name="soft_input_behaviour_descriptions">
+        <item>虚拟按键始终可见，与当前输入布局设置一致。</item>
+        <item>当连接到控制器时，游戏机按钮（A B X Y、方向键、L、R、Start 和 Select）被隐藏。当前输入布局中的其它按钮保持可见。</item>
+        <item>当连接到控制器时，所有分配到控制器的按键被隐藏。当前输入布局中未分配到所连接控制器的其它按键保持可见。</item>
+        <item>虚拟按键始终不可见，无论当前输入布局中包含哪些按键。</item>
+    </array>
+    <array name="soft_input_behaviour_options">
+        <item>始终可见</item>
+        <item>连接到控制器时隐藏游戏机按钮</item>
+        <item>连接到控制器时隐藏已分配的按键</item>
+        <item>始终不可见</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>无</item>
+        <item>线性</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>扫描线</item>
+        <item>RetroArch (.slangp)</item>
+    </array>
+    <array name="video_internal_resolution_options">
+        <item>1倍原生（256x192）</item>
+        <item>2倍原生（512x384）</item>
+        <item>3倍原生（768x576）</item>
+        <item>4倍原生（1024x768）</item>
+        <item>5倍原生（1280x960）</item>
+        <item>6倍原生（1536x1152）</item>
+        <item>7倍原生（1792x1344）</item>
+        <item>8倍原生（2048x1536）</item>
+    </array>
+    <array name="video_renderer_options">
+        <item>软件</item>
+        <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
+    </array>
+</resources>

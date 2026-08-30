@@ -1,0 +1,90 @@
+package defpackage;
+
+import java.util.Objects;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: re6  reason: default package */
+/* loaded from: classes.dex */
+public final class re6 implements Runnable {
+    public static final Object c0 = new Object();
+    public final Executor A;
+    public final h94 B;
+    public final AtomicReference R;
+    public final AtomicBoolean L = new AtomicBoolean(true);
+    public Object X = c0;
+    public int Y = -1;
+    public boolean Z = false;
+
+    public re6(AtomicReference atomicReference, Executor executor, h94 h94Var) {
+        this.R = atomicReference;
+        this.A = executor;
+        this.B = h94Var;
+    }
+
+    public final void a(int i) {
+        synchronized (this) {
+            try {
+                if (!this.L.get()) {
+                    return;
+                }
+                if (i <= this.Y) {
+                    return;
+                }
+                this.Y = i;
+                if (this.Z) {
+                    return;
+                }
+                this.Z = true;
+                try {
+                    this.A.execute(this);
+                } catch (Throwable unused) {
+                    synchronized (this) {
+                        this.Z = false;
+                    }
+                }
+            } catch (Throwable th) {
+                throw th;
+            }
+        }
+    }
+
+    @Override // java.lang.Runnable
+    public final void run() {
+        synchronized (this) {
+            try {
+                if (!this.L.get()) {
+                    this.Z = false;
+                    return;
+                }
+                Object obj = this.R.get();
+                int i = this.Y;
+                while (true) {
+                    if (!Objects.equals(this.X, obj)) {
+                        this.X = obj;
+                        boolean z = obj instanceof ix;
+                        h94 h94Var = this.B;
+                        if (z) {
+                            h94Var.onError(null);
+                        } else {
+                            h94Var.L(obj);
+                        }
+                    }
+                    synchronized (this) {
+                        try {
+                            if (i == this.Y || !this.L.get()) {
+                                break;
+                            }
+                            obj = this.R.get();
+                            i = this.Y;
+                        } finally {
+                        }
+                    }
+                }
+                this.Z = false;
+            } finally {
+            }
+        }
+    }
+}

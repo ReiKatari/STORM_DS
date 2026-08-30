@@ -1,0 +1,162 @@
+package defpackage;
+
+import java.util.LinkedHashMap;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: ho0  reason: default package */
+/* loaded from: classes.dex */
+public final class ho0 {
+    public static final y60 b;
+    public static final hd2 c;
+    public static final LinkedHashMap d;
+    public static final ho0 e;
+    public static final ho0 f;
+    public static final ho0 g;
+    public static final ho0 h;
+    public static final ho0 i;
+    public static final ho0 j;
+    public static final ho0 k;
+    public static final ho0 l;
+    public static final ho0 m;
+    public static final ho0 n;
+    public static final ho0 o;
+    public static final ho0 p;
+    public static final ho0 q;
+    public static final ho0 r;
+    public static final ho0 s;
+    public static final ho0 t;
+    public final String a;
+
+    static {
+        y60 y60Var = new y60(26);
+        b = y60Var;
+        c = new hd2(9);
+        d = new LinkedHashMap();
+        y60.e(y60Var, "SSL_RSA_WITH_NULL_MD5");
+        y60.e(y60Var, "SSL_RSA_WITH_NULL_SHA");
+        y60.e(y60Var, "SSL_RSA_EXPORT_WITH_RC4_40_MD5");
+        y60.e(y60Var, "SSL_RSA_WITH_RC4_128_MD5");
+        y60.e(y60Var, "SSL_RSA_WITH_RC4_128_SHA");
+        y60.e(y60Var, "SSL_RSA_EXPORT_WITH_DES40_CBC_SHA");
+        y60.e(y60Var, "SSL_RSA_WITH_DES_CBC_SHA");
+        e = y60.e(y60Var, "SSL_RSA_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "SSL_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA");
+        y60.e(y60Var, "SSL_DHE_DSS_WITH_DES_CBC_SHA");
+        y60.e(y60Var, "SSL_DHE_DSS_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "SSL_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA");
+        y60.e(y60Var, "SSL_DHE_RSA_WITH_DES_CBC_SHA");
+        y60.e(y60Var, "SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "SSL_DH_anon_EXPORT_WITH_RC4_40_MD5");
+        y60.e(y60Var, "SSL_DH_anon_WITH_RC4_128_MD5");
+        y60.e(y60Var, "SSL_DH_anon_EXPORT_WITH_DES40_CBC_SHA");
+        y60.e(y60Var, "SSL_DH_anon_WITH_DES_CBC_SHA");
+        y60.e(y60Var, "SSL_DH_anon_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_KRB5_WITH_DES_CBC_SHA");
+        y60.e(y60Var, "TLS_KRB5_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_KRB5_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_KRB5_WITH_DES_CBC_MD5");
+        y60.e(y60Var, "TLS_KRB5_WITH_3DES_EDE_CBC_MD5");
+        y60.e(y60Var, "TLS_KRB5_WITH_RC4_128_MD5");
+        y60.e(y60Var, "TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA");
+        y60.e(y60Var, "TLS_KRB5_EXPORT_WITH_RC4_40_SHA");
+        y60.e(y60Var, "TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5");
+        y60.e(y60Var, "TLS_KRB5_EXPORT_WITH_RC4_40_MD5");
+        f = y60.e(y60Var, "TLS_RSA_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_DH_anon_WITH_AES_128_CBC_SHA");
+        g = y60.e(y60Var, "TLS_RSA_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_DH_anon_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_RSA_WITH_NULL_SHA256");
+        y60.e(y60Var, "TLS_RSA_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_RSA_WITH_AES_256_CBC_SHA256");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256");
+        y60.e(y60Var, "TLS_DH_anon_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_DH_anon_WITH_AES_256_CBC_SHA256");
+        y60.e(y60Var, "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA");
+        y60.e(y60Var, "TLS_PSK_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_PSK_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_PSK_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_PSK_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_RSA_WITH_SEED_CBC_SHA");
+        h = y60.e(y60Var, "TLS_RSA_WITH_AES_128_GCM_SHA256");
+        i = y60.e(y60Var, "TLS_RSA_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256");
+        y60.e(y60Var, "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_DH_anon_WITH_AES_128_GCM_SHA256");
+        y60.e(y60Var, "TLS_DH_anon_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV");
+        y60.e(y60Var, "TLS_FALLBACK_SCSV");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_NULL_SHA");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_NULL_SHA");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_NULL_SHA");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDHE_RSA_WITH_NULL_SHA");
+        y60.e(y60Var, "TLS_ECDHE_RSA_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA");
+        j = y60.e(y60Var, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA");
+        k = y60.e(y60Var, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_anon_WITH_NULL_SHA");
+        y60.e(y60Var, "TLS_ECDH_anon_WITH_RC4_128_SHA");
+        y60.e(y60Var, "TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_anon_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDH_anon_WITH_AES_256_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384");
+        y60.e(y60Var, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384");
+        l = y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256");
+        m = y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256");
+        y60.e(y60Var, "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384");
+        n = y60.e(y60Var, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        o = y60.e(y60Var, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256");
+        y60.e(y60Var, "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384");
+        y60.e(y60Var, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA");
+        y60.e(y60Var, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA");
+        p = y60.e(y60Var, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
+        q = y60.e(y60Var, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
+        y60.e(y60Var, "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
+        y60.e(y60Var, "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256");
+        r = y60.e(y60Var, "TLS_AES_128_GCM_SHA256");
+        s = y60.e(y60Var, "TLS_AES_256_GCM_SHA384");
+        t = y60.e(y60Var, "TLS_CHACHA20_POLY1305_SHA256");
+        y60.e(y60Var, "TLS_AES_128_CCM_SHA256");
+        y60.e(y60Var, "TLS_AES_128_CCM_8_SHA256");
+    }
+
+    public ho0(String str) {
+        this.a = str;
+    }
+
+    public final String toString() {
+        return this.a;
+    }
+}

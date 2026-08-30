@@ -1,0 +1,36 @@
+package defpackage;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: q57  reason: default package */
+/* loaded from: classes.dex */
+public abstract /* synthetic */ class q57 {
+    public static final /* synthetic */ int[] a;
+
+    static {
+        int[] iArr = new int[r57.values().length];
+        try {
+            iArr[r57.PREVIEW.ordinal()] = 1;
+        } catch (NoSuchFieldError unused) {
+        }
+        try {
+            iArr[r57.IMAGE_CAPTURE.ordinal()] = 2;
+        } catch (NoSuchFieldError unused2) {
+        }
+        try {
+            iArr[r57.IMAGE_ANALYSIS.ordinal()] = 3;
+        } catch (NoSuchFieldError unused3) {
+        }
+        try {
+            iArr[r57.VIDEO_CAPTURE.ordinal()] = 4;
+        } catch (NoSuchFieldError unused4) {
+        }
+        try {
+            iArr[r57.STREAM_SHARING.ordinal()] = 5;
+        } catch (NoSuchFieldError unused5) {
+        }
+        try {
+            iArr[r57.UNDEFINED.ordinal()] = 6;
+        } catch (NoSuchFieldError unused6) {
+        }
+        a = iArr;
+    }
+}

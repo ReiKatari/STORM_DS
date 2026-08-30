@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="retroachievements_pending_achievement_unlocks">
+        <item quantity="other">%d个已解锁成就</item>
+    </plurals>
+    <plurals name="retroachievements_pending_leaderboard_entries">
+        <item quantity="other">%d条排行榜记录</item>
+    </plurals>
+</resources>

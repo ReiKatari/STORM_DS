@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <Preference android:title="@string/internal_firmware_settings" android:key="internal_firmware_settings" android:summary="@string/internal_firmware_settings_summary" android:fragment="me.magnum.melonds.ui.settings.fragments.FirmwarePreferencesFragment" app:iconSpaceReserved="false"/>
+    <Preference android:title="@string/custom_bios_firmware" android:fragment="me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/enable_jit" android:key="enable_jit" android:summary="@string/enable_jit_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <Preference android:title="@string/backup_internal_layout" android:key="backup_internal_layout" app:iconSpaceReserved="false" app:isPreferenceVisible="@bool/settings_backup_restore_enabled"/>
+    <Preference android:title="@string/backup_external_layout" android:key="backup_external_layout" app:iconSpaceReserved="false" app:isPreferenceVisible="false"/>
+    <Preference android:title="@string/restore_internal_layout" android:key="restore_internal_layout" app:iconSpaceReserved="false" app:isPreferenceVisible="@bool/settings_backup_restore_enabled"/>
+    <Preference android:title="@string/restore_external_layout" android:key="restore_external_layout" app:iconSpaceReserved="false" app:isPreferenceVisible="false"/>
+</PreferenceScreen>

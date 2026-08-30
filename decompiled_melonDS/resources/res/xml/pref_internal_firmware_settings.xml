@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <EditTextPreference android:title="@string/firmware_nickname" android:key="firmware_settings_nickname" android:summary="%s" android:defaultValue="Player" app:iconSpaceReserved="false" app:useSimpleSummaryProvider="true"/>
+    <EditTextPreference android:title="@string/firmware_message" android:key="firmware_settings_message" android:summary="%s" android:defaultValue="Hello!" app:iconSpaceReserved="false" app:useSimpleSummaryProvider="true"/>
+    <ListPreference android:entries="@array/firmware_settings_language_options" android:title="@string/firmware_language" android:key="firmware_settings_language" android:summary="%s" android:defaultValue="1" android:entryValues="@array/firmware_settings_language_values" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.FirmwareColourPickerPreference android:title="@string/firmware_favourite_colour" android:key="firmware_settings_colour" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.FirmwareBirthdayPreference android:title="@string/firmware_birthday" android:key="firmware_settings_birthday" android:defaultValue="01/01" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/randomize_mac_address" android:key="internal_randomize_mac_address" android:summary="@string/randomize_mac_address_summary" android:defaultValue="false" android:disableDependentsState="true" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.MacAddressPreference android:title="@string/mac_address" android:key="internal_mac_address" android:dependency="internal_randomize_mac_address" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

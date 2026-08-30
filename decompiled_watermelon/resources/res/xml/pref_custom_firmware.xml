@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <SwitchPreference android:title="@string/use_custom_bios" android:key="use_custom_bios" android:summary="@string/custom_bios_firmware_description" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/show_boot_screen" android:key="show_bios" android:dependency="use_custom_bios" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <ListPreference android:entries="@array/console_type_options" android:title="@string/console_type" android:key="console_type" android:summary="%s" android:defaultValue="ds" android:entryValues="@array/console_type_values" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.BiosDirectoryPickerPreference android:title="@string/bios_directory" android:key="bios_dir" app:consoleType="ds" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.BiosDirectoryPickerPreference android:title="@string/dsi_bios_directory" android:key="dsi_bios_dir" app:consoleType="dsi" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/randomize_mac_address" android:key="custom_randomize_mac_address" android:summary="@string/randomize_mac_address_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

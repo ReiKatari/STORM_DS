@@ -1,0 +1,15 @@
+package defpackage;
+
+import java.util.Map;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: gb5  reason: default package */
+/* loaded from: classes.dex */
+public interface gb5 extends ux3, m37 {
+    Map N();
+
+    sa5 Q();
+
+    boolean f0();
+
+    long x();
+}

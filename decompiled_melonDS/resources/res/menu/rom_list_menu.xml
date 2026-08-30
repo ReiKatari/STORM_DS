@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item android:icon="@drawable/ic_search" android:id="@+id/action_search_roms" android:orderInCategory="1" android:title="@string/action_search_roms" app:actionViewClass="androidx.appcompat.widget.SearchView" app:showAsAction="collapseActionView|ifRoom"/>
+    <item android:icon="@drawable/ic_sort" android:id="@+id/action_sort" android:orderInCategory="2" android:title="@string/action_sort_roms" app:showAsAction="ifRoom">
+        <menu>
+            <item android:icon="@drawable/ic_sort_alpha" android:id="@+id/action_sort_alphabetically" android:orderInCategory="0" android:title="@string/action_sort_alphabetically" app:iconTint="@color/buttonContrasted"/>
+            <item android:icon="@drawable/ic_clock" android:id="@+id/action_sort_recent" android:orderInCategory="1" android:title="@string/action_sort_recently_played" app:iconTint="@color/buttonContrasted"/>
+        </menu>
+    </item>
+    <item android:icon="@drawable/ic_firmware" android:id="@+id/action_boot_firmware" android:orderInCategory="3" android:title="@string/action_boot_firmware" app:showAsAction="ifRoom">
+        <menu>
+            <item android:id="@+id/action_boot_firmware_ds" android:orderInCategory="1" android:title="@string/console_ds"/>
+            <item android:id="@+id/action_boot_firmware_dsi" android:orderInCategory="1" android:title="@string/console_dsi"/>
+        </menu>
+    </item>
+    <item android:id="@+id/action_dsiware_manager" android:orderInCategory="3" android:title="@string/dsiware_manager" app:showAsAction="never"/>
+    <item android:icon="@drawable/ic_refresh" android:id="@+id/action_rom_list_refresh" android:orderInCategory="3" android:title="@string/action_refresh_rom_list" app:showAsAction="never"/>
+    <item android:icon="@drawable/ic_settings" android:id="@+id/action_settings" android:orderInCategory="4" android:title="@string/settings" app:showAsAction="never"/>
+</menu>

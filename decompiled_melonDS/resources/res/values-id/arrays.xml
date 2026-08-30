@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="audio_bitrate_options">
+        <item>Otomatis</item>
+        <item>10-bit</item>
+        <item>16-bit</item>
+    </array>
+    <array name="audio_interpolation_options">
+        <item>Tidak ada</item>
+        <item>Linier</item>
+        <item>Kosinus</item>
+        <item>Kubik</item>
+    </array>
+    <array name="audio_latency_options">
+        <item>Rendah (Lebih lambat)</item>
+        <item>Sedang</item>
+        <item>Tinggi (Lebih cepat)</item>
+    </array>
+    <array name="background_portrait_mode_options">
+        <item>Diregangkan</item>
+        <item>Pas tengah</item>
+        <item>Pas Atas</item>
+        <item>Pas kiri</item>
+        <item>Pas bawah</item>
+        <item>Pas kanan</item>
+    </array>
+    <array name="console_type_options">
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="dsi_camera_source_options">
+        <item>Layar hitam</item>
+        <item>Kamera fisikal</item>
+        <item>Gambar statis</item>
+    </array>
+    <array name="external_display_screen_options">
+        <item>@string/top_screen</item>
+        <item>@string/bottom_screen</item>
+    </array>
+    <array name="fast_forward_speed_multiplier_options">
+        <item>Tidak terbatas</item>
+        <item>1.5x</item>
+        <item>2x</item>
+        <item>3x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </array>
+    <array name="firmware_settings_language_options">
+        <item>Inggris</item>
+        <item>Perancis</item>
+        <item>Jerman</item>
+        <item>Italia</item>
+        <item>Spanyol</item>
+        <item>Jepang</item>
+    </array>
+    <array name="fps_counter_position_options">
+        <item>Tersembunyi</item>
+        <item>Atas kiri</item>
+        <item>Atas tengah</item>
+        <item>Atas kanan</item>
+        <item>Bawah kiri</item>
+        <item>Bawah tengah</item>
+        <item>Bawah kanan</item>
+    </array>
+    <array name="game_runtime_console_type_options">
+        <item>Bawaan</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </array>
+    <array name="game_runtime_mic_source_options">
+        <item>Bawaan</item>
+        <item>Tidak ada</item>
+        <item>Tiup</item>
+        <item>Mikrofon perangkat</item>
+    </array>
+    <array name="gba_slot_options">
+        <item>Tidak ada</item>
+        <item>ROM GBA</item>
+        <item>Pak Getaran</item>
+        <item>Ekspansi memori</item>
+    </array>
+    <array name="layout_orientation_options">
+        <item>Mengikuti sistem</item>
+        <item>Potret</item>
+        <item>Lanskap</item>
+    </array>
+    <array name="mic_source_options">
+        <item>Tidak ada</item>
+        <item>Tiup</item>
+        <item>Mikrofon perangkat</item>
+    </array>
+    <array name="rom_icon_filtering_options">
+        <item>Tidak ada (Berpiksel)</item>
+        <item>Linier (Halus)</item>
+    </array>
+    <array name="save_state_locations">
+        <item>Direktori berkas penyimpanan</item>
+        <item>Direktori ROM</item>
+        <item>Direktori internal</item>
+    </array>
+    <array name="soft_input_behaviour_descriptions">
+        <item>Masukan lunak selalu tampil, seperti yang di atur pada tata letak masukan sekarang.</item>
+        <item>Ketika sebuah kontroler terkoneksi, tombol konsol (A B X Y, D-Pad, L, R, Mulai, dan Pilih) disembunyikan. Tombol lainnya pada tata letak masukan sekarang tetap ditampilkan.</item>
+        <item>Ketika sebuah kontroler terkoneksi, seluruh masukan pada kontroler tersebut disembunyikan. Masukan lainnya yang ada pada tata letak masukan sekarang yang tidak diatur ke kontroler terkonekasi tetap ditampilkan.</item>
+        <item>Masukan lunak selalu disembunyikan, secara mandari dari tombol yang ditemukan pada tata letak input sekarang.</item>
+    </array>
+    <array name="soft_input_behaviour_options">
+        <item>Selalu tampil</item>
+        <item>Sembunyikan tombol konsole ketika sebuah kontroler terkoneksi</item>
+        <item>Sembunyikan masukan yang ditetapkan ketika sebuah kontroler terkoneksi</item>
+        <item>Selalu disembunyikan</item>
+    </array>
+    <array name="video_filtering_options">
+        <item>Tidak ada</item>
+        <item>Linier</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+    </array>
+    <array name="video_internal_resolution_options">
+        <item>1x asli (256x192)</item>
+        <item>2x asli (512x384)</item>
+        <item>3x asli (768x576)</item>
+        <item>4x asli (1024x768)</item>
+        <item>5x asli (1280x960)</item>
+        <item>6x asli (1536x1152)</item>
+        <item>7x asli (1792x1344)</item>
+        <item>8x asli (2048x1536)</item>
+    </array>
+    <array name="video_renderer_options">
+        <item>Perangkat lunak</item>
+        <item>OpenGL</item>
+    </array>
+</resources>

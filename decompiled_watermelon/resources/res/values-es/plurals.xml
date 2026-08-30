@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="mtrl_badge_content_description">
+        <item quantity="one">%d notificación nueva</item>
+        <item quantity="other">%d notificaciones nuevas</item>
+    </plurals>
+    <plurals name="offline_ra_ledger_expires_days">
+        <item quantity="one">%1$d día</item>
+        <item quantity="other">%1$d días</item>
+    </plurals>
+    <plurals name="video_retroarch_shader_browser_passes">
+        <item quantity="one">%1$d pase</item>
+        <item quantity="other">%1$d pases</item>
+    </plurals>
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <Preference android:title="@string/internal_firmware_settings" android:key="internal_firmware_settings" android:summary="@string/internal_firmware_settings_summary" android:fragment="me.magnum.melonds.ui.settings.fragments.FirmwarePreferencesFragment" app:iconSpaceReserved="false"/>
+    <Preference android:title="@string/custom_bios_firmware" android:fragment="me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/enable_jit" android:key="enable_jit" android:summary="@string/enable_jit_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/save_internal_config_as_file" android:key="save_internal_config_as_file" android:summary="@string/save_internal_config_as_file_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/system_app_log_file_enabled" android:key="system_app_log_file_enabled" android:summary="@string/system_app_log_file_enabled_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/system_dldi_sd_card_enabled" android:key="system_dldi_sd_card_enabled" android:summary="@string/system_dldi_sd_card_enabled_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference android:title="@string/system_dldi_sd_card_dir" android:key="system_dldi_sd_card_dir" android:summary="@string/not_set" app:iconSpaceReserved="false" app:permissions="read_write" app:persistPermissions="true" app:selection="single" app:type="radial"/>
+    <ListPreference android:entries="@array/dldi_sd_card_image_size_options" android:title="@string/system_dldi_sd_card_image_size" android:key="system_dldi_sd_card_image_size" android:defaultValue="0" android:entryValues="@array/dldi_sd_card_image_size_values" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/system_disable_touch_gestures_on_touch_screen_area" android:key="system_disable_touch_gestures_on_touch_screen_area" android:summary="@string/system_disable_touch_gestures_on_touch_screen_area_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <SwitchPreference android:title="@string/system_ignore_display_cutout_in_layouts" android:key="system_ignore_display_cutout_in_layouts" android:summary="@string/system_ignore_display_cutout_in_layouts_summary" android:defaultValue="false" app:iconSpaceReserved="false"/>
+    <Preference android:title="@string/backup_internal_layout" android:key="backup_internal_layout" app:iconSpaceReserved="false" app:isPreferenceVisible="@bool/settings_backup_restore_enabled"/>
+    <Preference android:title="@string/backup_external_layout" android:key="backup_external_layout" app:iconSpaceReserved="false"/>
+    <Preference android:title="@string/restore_internal_layout" android:key="restore_internal_layout" app:iconSpaceReserved="false" app:isPreferenceVisible="@bool/settings_backup_restore_enabled"/>
+    <Preference android:title="@string/restore_external_layout" android:key="restore_external_layout" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

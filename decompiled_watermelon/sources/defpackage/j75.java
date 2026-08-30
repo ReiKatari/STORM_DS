@@ -1,0 +1,13 @@
+package defpackage;
+
+import java.io.Serializable;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: j75  reason: default package */
+/* loaded from: classes.dex */
+public final class j75 implements Serializable {
+    public boolean A;
+
+    public final String toString() {
+        return String.valueOf(this.A);
+    }
+}

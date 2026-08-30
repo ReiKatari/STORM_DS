@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <SwitchPreference android:title="@string/check_for_updates" android:key="github_check_for_updates" android:summary="@string/check_for_updates_summary" android:defaultValue="true" app:iconSpaceReserved="false"/>
+</PreferenceScreen>

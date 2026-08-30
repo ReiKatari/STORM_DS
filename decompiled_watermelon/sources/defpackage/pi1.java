@@ -1,0 +1,11 @@
+package defpackage;
+
+import androidx.recyclerview.widget.RecyclerView;
+import java.util.Set;
+/* compiled from: r8-map-id-497bfa0f37aff44fe2e52f5de82fa8e9b472cf58d62eb3c7b7ed26472aaf487a */
+/* renamed from: pi1  reason: default package */
+/* loaded from: classes.dex */
+public abstract class pi1 {
+    public static final Set a = nu.H0(new ji1[]{new ji1(RecyclerView.A1), new ji1(600.0f), new ji1(840.0f)});
+    public static final Set b = nu.H0(new ji1[]{new ji1(RecyclerView.A1), new ji1(600.0f), new ji1(840.0f), new ji1(1200.0f), new ji1(1600.0f)});
+}

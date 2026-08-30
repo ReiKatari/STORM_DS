@@ -1,0 +1,57 @@
+package q4;
+/* compiled from: r8-map-id-68a076d6c8e19c01d0388d4729d627070c4f7cff1f6777b7d5e4497c81f45b39 */
+/* loaded from: classes.dex */
+public final class i {
+
+    /* renamed from: a  reason: collision with root package name */
+    public final int f12248a;
+
+    public static String a(int i2) {
+        if (i2 == -1) {
+            return "Unspecified";
+        }
+        if (i2 == 0) {
+            return "None";
+        }
+        if (i2 == 1) {
+            return "Default";
+        }
+        if (i2 == 2) {
+            return "Go";
+        }
+        if (i2 == 3) {
+            return "Search";
+        }
+        if (i2 == 4) {
+            return "Send";
+        }
+        if (i2 == 5) {
+            return "Previous";
+        }
+        if (i2 == 6) {
+            return "Next";
+        }
+        if (i2 == 7) {
+            return "Done";
+        }
+        return "Invalid";
+    }
+
+    public final boolean equals(Object obj) {
+        if (obj instanceof i) {
+            if (this.f12248a != ((i) obj).f12248a) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public final int hashCode() {
+        return Integer.hashCode(this.f12248a);
+    }
+
+    public final String toString() {
+        return a(this.f12248a);
+    }
+}
