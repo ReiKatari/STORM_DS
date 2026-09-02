@@ -396,9 +396,14 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     bool isArm7Area = (offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size) ||
                       (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize);
 
-    if ((header.DSiCryptoFlags & 0x03) == 0)
+    if (offset == header.DSiModcrypt1Offset && (header.DSiCryptoFlags & (1 << 0)))
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: DSiCryptoFlags indicates already decrypted (0x%02X), skipping\n", header.DSiCryptoFlags);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Modcrypt1 already decrypted (DSiCryptoFlags=0x%02X), skipping\n", header.DSiCryptoFlags);
+        return;
+    }
+    if (offset == header.DSiModcrypt2Offset && (header.DSiCryptoFlags & (1 << 1)))
+    {
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Modcrypt2 already decrypted (DSiCryptoFlags=0x%02X), skipping\n", header.DSiCryptoFlags);
         return;
     }
 
@@ -480,7 +485,7 @@ void DSi::SetupDirectBoot()
     if (!(header.UnitCode & 0x02) && !header.IsDSiWare())
         dsmode = true;
 
-    if (!dsmode && !header.IsDSiWare() && header.IsDSiEnhanced())
+    if (!dsmode && (header.IsDSiEnhanced() || (header.UnitCode == 0x02)))
     {
         if (header.DSiARM9iSize == 0 || header.DSiARM9iROMOffset == 0 ||
             (header.DSiARM9iROMOffset + header.DSiARM9iSize > cartLength) ||
@@ -539,8 +544,7 @@ void DSi::SetupDirectBoot()
     }
     else
     {
-        // Unmap ARM9/ARM9i and ARM7/ARM7i BIOS so ITCM and game memory are fully accessible
-        SCFG_BIOS = 0x0703;
+        SCFG_BIOS = 0x0101;
 
         // WRAM mapping
 
@@ -889,25 +893,27 @@ void DSi::SetupDirectBoot()
         }
 
         // Decrypt modcrypt areas if still encrypted
-        if (header.DSiCryptoFlags & 0x01)
+        if (!(header.DSiCryptoFlags & 0x01))
         {
-            if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0)
+            if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
+                header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
             {
                 DecryptModcryptArea(header.DSiModcrypt1Offset,
                                     header.DSiModcrypt1Size,
                                     header.DSiARM9Hash);
             }
         }
-        if (header.DSiCryptoFlags & 0x02)
+        if (!(header.DSiCryptoFlags & 0x02))
         {
-            if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0)
+            if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
+                header.DSiModcrypt2Size != 0xFFFFFFFF && header.DSiModcrypt2Offset != 0xFFFFFFFF)
             {
                 DecryptModcryptArea(header.DSiModcrypt2Offset,
                                     header.DSiModcrypt2Size,
                                     header.DSiARM7Hash);
             }
         }
-        header.DSiCryptoFlags &= ~0x03;
+        header.DSiCryptoFlags |= 0x03;
     }
 
     if (dsmode)
@@ -2145,9 +2151,7 @@ u8 DSi::ARM7Read8(u32 addr)
                 return ptr ? *(u8*)&ptr[addr & 0x7FFF] : 0;
             }
         }
-        if (addr >= 0x03800000)
-            return NDS::ARM7Read8(addr);
-        return 0;
+        return NDS::ARM7Read8(addr);
 
     case 0x04000000:
         return ARM7IORead8(addr);
@@ -2207,9 +2211,7 @@ u16 DSi::ARM7Read16(u32 addr)
                 return ptr ? *(u16*)&ptr[addr & 0x7FFF] : 0;
             }
         }
-        if (addr >= 0x03800000)
-            return NDS::ARM7Read16(addr);
-        return 0;
+        return NDS::ARM7Read16(addr);
 
     case 0x04000000:
         return ARM7IORead16(addr);
@@ -2268,9 +2270,7 @@ u32 DSi::ARM7Read32(u32 addr)
                 return ptr ? *(u32*)&ptr[addr & 0x7FFF] : 0;
             }
         }
-        if (addr >= 0x03800000)
-            return NDS::ARM7Read32(addr);
-        return 0;
+        return NDS::ARM7Read32(addr);
 
     case 0x04000000:
         return ARM7IORead32(addr);
@@ -2355,9 +2355,7 @@ void DSi::ARM7Write8(u32 addr, u8 val)
                 return;
             }
         }
-        if (addr >= 0x03800000)
-            return NDS::ARM7Write8(addr, val);
-        return;
+        return NDS::ARM7Write8(addr, val);
 
     case 0x04000000:
         ARM7IOWrite8(addr, val);
@@ -2447,9 +2445,7 @@ void DSi::ARM7Write16(u32 addr, u16 val)
                 return;
             }
         }
-        if (addr >= 0x03800000)
-            return NDS::ARM7Write16(addr, val);
-        return;
+        return NDS::ARM7Write16(addr, val);
 
     case 0x04000000:
         ARM7IOWrite16(addr, val);
@@ -2539,9 +2535,7 @@ void DSi::ARM7Write32(u32 addr, u32 val)
                 return;
             }
         }
-        if (addr >= 0x03800000)
-            return NDS::ARM7Write32(addr, val);
-        return;
+        return NDS::ARM7Write32(addr, val);
 
     case 0x04000000:
         ARM7IOWrite32(addr, val);
