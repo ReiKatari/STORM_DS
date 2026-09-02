@@ -322,32 +322,26 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
             val displayText = if (block.isShowingOriginal) block.originalText else block.translatedText.ifBlank { block.originalText }
 
-            // Check if this text block is part of a dialogue box or wide banner
-            val isWideDialogue = (right - left) > w * 0.20f || displayText.length > 18 || (top > h * 0.20f && (right - left) > w * 0.16f)
-            val paddingH = if (isWideDialogue) 24f else 12f
-            val paddingV = if (isWideDialogue) 12f else 6f
+            val origW = right - left
+            val origH = bottom - top
 
-            val minBoxWidth = if (isWideDialogue) (w * 0.90f) else (right - left + paddingH * 2)
-            val boxWidth = max(right - left + paddingH * 2, minBoxWidth).coerceAtMost(w - 16f)
+            // Native in-place replacement: maintain exact local anchor without blowing up to 90% screen width
+            val textLenRatio = if (block.originalText.isNotEmpty()) {
+                (displayText.length.toFloat() / block.originalText.length.toFloat()).coerceIn(1.0f, 1.6f)
+            } else 1.0f
 
-            val boxLeft = if (isWideDialogue) {
-                ((w - boxWidth) / 2f).coerceAtLeast(8f)
-            } else {
-                (left - paddingH).coerceIn(8f, (w - boxWidth - 8f).coerceAtLeast(8f))
-            }
-            val boxRight = (boxLeft + boxWidth).coerceAtMost(w - 8f)
+            val padH = 8f
+            val padV = 5f
+            val targetW = max(origW * textLenRatio, origW) + padH * 2
+            val targetH = origH + padV * 2
 
-            val minBoxHeight = if (isWideDialogue) 92f else (bottom - top + paddingV * 2)
-            val boxHeight = max(bottom - top + paddingV * 2, minBoxHeight).coerceAtMost(h - 16f)
-            val boxTop = if (isWideDialogue) {
-                (top - 8f).coerceIn(8f, (h - boxHeight - 8f).coerceAtLeast(8f))
-            } else {
-                (top - paddingV).coerceIn(8f, (h - boxHeight - 8f).coerceAtLeast(8f))
-            }
-            val boxBottom = (boxTop + boxHeight).coerceAtMost(h - 8f)
+            val boxLeft = (left - padH).coerceIn(4f, (w - targetW - 4f).coerceAtLeast(4f))
+            val boxRight = (boxLeft + targetW).coerceAtMost(w - 4f)
+            val boxTop = (top - padV).coerceIn(4f, (h - targetH - 4f).coerceAtLeast(4f))
+            val boxBottom = (boxTop + targetH).coerceAtMost(h - 4f)
 
             val rect = RectF(boxLeft, boxTop, boxRight, boxBottom)
-            val rx = 14f
+            val rx = 8f
 
             // Smart Comic/Manga Inpainting
             canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
@@ -478,7 +472,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             typeface = Typeface.DEFAULT_BOLD
             textSize = 24f
         }
-        canvas.drawText("📖 Словарь & Разбор фразы", dictCardRect.left + 20f, dictCardRect.top + 34f, headerPaint)
+        canvas.drawText("📖 Словарь и разбор фразы", dictCardRect.left + 20f, dictCardRect.top + 34f, headerPaint)
 
         var curY = dictCardRect.top + 64f
 

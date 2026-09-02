@@ -541,11 +541,7 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
 
 std::optional<FATStorage> loadSDCard(SdCardSettings settings) noexcept
 {
-    auto args = getSDCardArgs(settings);
-    if (!args.has_value())
-        return std::nullopt;
-
-    return FATStorage(args.value());
+    return std::nullopt;
 }
 
 std::optional<std::unique_ptr<NDSArgs>> BuildArgsFromConfiguration(const EmulatorConfiguration& configuration, int instanceId)

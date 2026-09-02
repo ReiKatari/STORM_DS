@@ -93,7 +93,6 @@ class AndroidEmulatorManager(
     override val emulatorEvents: Flow<EmulatorEvent> = _emulatorEvents.asSharedFlow()
 
     private val achievementsSharedFlow = MutableSharedFlow<RAEvent>(replay = 0, extraBufferCapacity = Int.MAX_VALUE)
-    private val dldiFolderSyncManager = DldiFolderSyncManager(context, settingsRepository)
     private var activeDsiWareSession: ActiveDsiWareSession? = null
     @Volatile private var leaderboardDiagnosticsEnabled = false
     private val leaderboardTrackerUpdateLogLimiter = LeaderboardTrackerUpdateLogLimiter()
@@ -399,7 +398,6 @@ class AndroidEmulatorManager(
                             cameraManager.stopCurrentCameraSource()
                             MelonEmulator.stopEmulation()
                             messageQueue.stop()
-                            dldiFolderSyncManager.syncBackIfNeeded()
                             return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                         }
                         MelonEmulator.setupCheats(cheats.toTypedArray())
@@ -419,7 +417,6 @@ class AndroidEmulatorManager(
                     val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
-                    dldiFolderSyncManager.syncBackIfNeeded()
                     writeGameExecutionLog(rom, rom.fileName, false, "loadRom returned terminal error: $loadResult\n$fullDiag", "loadRom")
                     RomLaunchResult.LaunchFailed(loadResult)
                 } else {
@@ -431,7 +428,6 @@ class AndroidEmulatorManager(
                         cameraManager.stopCurrentCameraSource()
                         MelonEmulator.stopEmulation()
                         messageQueue.stop()
-                        dldiFolderSyncManager.syncBackIfNeeded()
                         writeGameExecutionLog(rom, rom.fileName, false, "Vulkan pipeline precompilation failed\n$fullDiag", "loadRom")
                         return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                     }
@@ -459,7 +455,6 @@ class AndroidEmulatorManager(
                 cameraManager.stopCurrentCameraSource()
                 MelonEmulator.stopEmulation()
                 messageQueue.stop()
-                dldiFolderSyncManager.syncBackIfNeeded()
                 writeGameExecutionLog(rom, rom.fileName, false, "Exception during launch: ${exception.message}", "loadRom Exception")
                 RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
@@ -657,7 +652,6 @@ class AndroidEmulatorManager(
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
                     messageQueue.stop()
-                    dldiFolderSyncManager.syncBackIfNeeded()
                     return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
                 }
                 MelonEmulator.setupCheats(cheats.toTypedArray())
@@ -673,7 +667,6 @@ class AndroidEmulatorManager(
             val diag = MelonEmulator.stopAndGetBootDiagnostic()
             cameraManager.stopCurrentCameraSource()
             MelonEmulator.stopEmulation()
-            dldiFolderSyncManager.syncBackIfNeeded()
             writeGameExecutionLog(rom, titleIdHex, false, "loadRom/bootFirmware returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
@@ -684,7 +677,6 @@ class AndroidEmulatorManager(
             cameraManager.stopCurrentCameraSource()
             MelonEmulator.stopEmulation()
             messageQueue.stop()
-            dldiFolderSyncManager.syncBackIfNeeded()
             writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
         }
@@ -960,7 +952,6 @@ class AndroidEmulatorManager(
     override fun stopEmulator() {
         MelonEmulator.stopEmulation()
         syncDsiWareSessionSaveAndCleanup()
-        dldiFolderSyncManager.syncBackIfNeeded()
         cameraManager.stopCurrentCameraSource()
         messageQueue.stop()
     }
@@ -1083,13 +1074,7 @@ class AndroidEmulatorManager(
     }
 
     private fun EmulatorConfiguration.withPreparedDldiConfiguration(): EmulatorConfiguration {
-        val preparedConfiguration = dldiFolderSyncManager.prepareConfiguration(dldiSdCardConfiguration)
-        return if (preparedConfiguration != null) {
-            copy(dldiSdCardConfiguration = preparedConfiguration)
-        } else {
-            Log.w(TAG, "withPreparedDldiConfiguration: failed to prepare DLDI SD Card, falling back to disabled SD Card")
-            copy(dldiSdCardConfiguration = dldiSdCardConfiguration.copy(enabled = false))
-        }
+        return copy(dldiSdCardConfiguration = dldiSdCardConfiguration.copy(enabled = false))
     }
 
     private fun logLeaderboardJni(
