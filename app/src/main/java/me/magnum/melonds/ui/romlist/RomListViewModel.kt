@@ -462,10 +462,8 @@ class RomListViewModel @Inject constructor(
     }
 
     private fun isRomAllowedByDsiStorage(rom: Rom): Boolean {
-        if (!dsiStorageTitlesScanner.isDsiWareOrDsiRom(rom)) {
-            return true
-        }
-        return dsiStorageTitlesScanner.isDsiTitleInstalledInStorage(rom)
+        // Universal visibility: All ROMs placed by user in their folders must be fully visible and accessible
+        return true
     }
 
     private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {

@@ -83,7 +83,12 @@ class EmulatorLaunchPreconditionChecker(
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
-        return configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
+        val result = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
+        if (result.status != ConfigurationDirResult.Status.VALID && (rom.isDsiWareTitle || rom.isDsiEnhanced || romTargetConsoleType == ConsoleType.DSi)) {
+            // Direct DSi Boot support: native engine handles candidate path auto-discovery and synthetic fallback
+            return ConfigurationDirResult(ConsoleType.DSi, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
+        }
+        return result
     }
 
     private suspend fun getRendererValidationFailureOrNull(renderer: VideoRenderer): RendererValidationFailure? {
