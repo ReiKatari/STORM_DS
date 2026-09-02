@@ -217,12 +217,10 @@ struct NDSHeader
 
     /// @return \c true if this header represents a DSiWare title.
     [[nodiscard]] bool IsDSiWare() const {
-        return (UnitCode & 0x02) != 0 ||
-               (UnitCode == 0x03) ||
+        return (UnitCode == 0x03) ||
                (GameCode[0] == 'K') ||
                (GameCode[0] == 'H') ||
-               (GameCode[0] == '4') ||
-               (GameCode[0] == 'D');
+               (GameCode[0] == '4');
     }
 
     /// @return \c true if this header represents a DSi-Enhanced title.
