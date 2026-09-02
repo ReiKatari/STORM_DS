@@ -169,10 +169,62 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                 return@setOnPreferenceChangeListener true
             }
             if (newValue != true) {
+                preferenceManager.sharedPreferences?.edit()?.putBoolean("save_internal_config_as_file", false)?.apply()
                 return@setOnPreferenceChangeListener true
             }
 
-            enableSettingsMirror(mirrorPreference)
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val mirrorDirectory = settingsBackupManager.getActiveMirrorDirectory()
+                    val hasMirror = mirrorDirectory != null && runCatching { settingsBackupManager.hasMirrorAt(mirrorDirectory) }.getOrDefault(false)
+
+                    withContext(Dispatchers.Main) {
+                        if (!isAdded) return@withContext
+                        val ctx = context ?: return@withContext
+
+                        if (!hasMirror || mirrorDirectory == null) {
+                            setMirrorEnabled(mirrorPreference)
+                            settingsBackupManager.requestMirrorWrite()
+                        } else {
+                            AlertDialog.Builder(ctx)
+                                .setTitle(R.string.settings_mirror_detected_title)
+                                .setMessage(R.string.settings_mirror_detected_message)
+                                .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
+                                    setMirrorEnabled(mirrorPreference)
+                                    lifecycleScope.launch(Dispatchers.IO) {
+                                        runCatching {
+                                            settingsBackupManager.restoreMirrorFrom(mirrorDirectory)
+                                            settingsBackupManager.requestMirrorWrite()
+                                        }
+                                    }
+                                }
+                                .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
+                                    setMirrorEnabled(mirrorPreference)
+                                    lifecycleScope.launch(Dispatchers.IO) {
+                                        runCatching {
+                                            settingsBackupManager.overwriteMirrorAt(mirrorDirectory)
+                                            settingsBackupManager.requestMirrorWrite()
+                                        }
+                                    }
+                                }
+                                .setOnCancelListener {
+                                    updatingMirrorPreference = true
+                                    mirrorPreference.isChecked = false
+                                    preferenceManager.sharedPreferences?.edit()?.putBoolean("save_internal_config_as_file", false)?.apply()
+                                    updatingMirrorPreference = false
+                                }
+                                .show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        if (isAdded) {
+                            setMirrorEnabled(mirrorPreference)
+                            settingsBackupManager.requestMirrorWrite()
+                        }
+                    }
+                }
+            }
             false
         }
 
@@ -194,33 +246,10 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         }
     }
 
-    private fun enableSettingsMirror(mirrorPreference: SwitchPreference) {
-        val mirrorDirectory = settingsBackupManager.getActiveMirrorDirectory()
-        if (mirrorDirectory == null || !settingsBackupManager.hasMirrorAt(mirrorDirectory)) {
-            setMirrorEnabled(mirrorPreference)
-            settingsBackupManager.requestMirrorWrite()
-            return
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.settings_mirror_detected_title)
-            .setMessage(R.string.settings_mirror_detected_message)
-            .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
-                setMirrorEnabled(mirrorPreference)
-                settingsBackupManager.restoreMirrorFrom(mirrorDirectory)
-                settingsBackupManager.requestMirrorWrite()
-            }
-            .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
-                setMirrorEnabled(mirrorPreference)
-                settingsBackupManager.overwriteMirrorAt(mirrorDirectory)
-                settingsBackupManager.requestMirrorWrite()
-            }
-            .show()
-    }
-
     private fun setMirrorEnabled(mirrorPreference: SwitchPreference) {
         updatingMirrorPreference = true
         mirrorPreference.isChecked = true
+        preferenceManager.sharedPreferences?.edit()?.putBoolean("save_internal_config_as_file", true)?.apply()
         updatingMirrorPreference = false
     }
 }

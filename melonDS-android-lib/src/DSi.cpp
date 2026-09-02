@@ -483,9 +483,10 @@ void DSi::SetupDirectBoot()
     if (!dsmode && !header.IsDSiWare() && header.IsDSiEnhanced())
     {
         if (header.DSiARM9iSize == 0 || header.DSiARM9iROMOffset == 0 ||
-            (header.DSiARM9iROMOffset + header.DSiARM9iSize > cartLength))
+            (header.DSiARM9iROMOffset + header.DSiARM9iSize > cartLength) ||
+            header.DSiModcrypt1Offset == 0xFFFFFFFF)
         {
-            Log(LogLevel::Warn, "DSi::SetupDirectBoot: DSi-Enhanced ROM has invalid ARM9i bounds, falling back to DS mode.\n");
+            Log(LogLevel::Warn, "DSi::SetupDirectBoot: DSi-Enhanced ROM has invalid ARM9i bounds or no DSi payload, falling back to DS mode.\n");
             dsmode = true;
         }
     }
@@ -538,7 +539,8 @@ void DSi::SetupDirectBoot()
     }
     else
     {
-        SCFG_BIOS = 0x0101;
+        // Unmap ARM9/ARM9i and ARM7/ARM7i BIOS so ITCM and game memory are fully accessible
+        SCFG_BIOS = 0x0703;
 
         // WRAM mapping
 
@@ -921,9 +923,18 @@ void DSi::SetupDirectBoot()
         ARM9.R_SVC[0] = 0x0E003FC0;
     }
 
-    ARM7.R[13] = 0x0380FF00;
-    ARM7.R_IRQ[0] = 0x0380FF80;
-    ARM7.R_SVC[0] = 0x0380FFC0;
+    if (dsmode)
+    {
+        ARM7.R[13] = 0x0380FD80;
+        ARM7.R_IRQ[0] = 0x0380FF80;
+        ARM7.R_SVC[0] = 0x0380FFC0;
+    }
+    else
+    {
+        ARM7.R[13] = 0x0380FF00;
+        ARM7.R_IRQ[0] = 0x0380FF80;
+        ARM7.R_SVC[0] = 0x0380FFC0;
+    }
 
     ARM9.R[12] = header.ARM9EntryAddress;
     ARM9.R[14] = header.ARM9EntryAddress;
@@ -2134,7 +2145,9 @@ u8 DSi::ARM7Read8(u32 addr)
                 return ptr ? *(u8*)&ptr[addr & 0x7FFF] : 0;
             }
         }
-        return NDS::ARM7Read8(addr);
+        if (addr >= 0x03800000)
+            return NDS::ARM7Read8(addr);
+        return 0;
 
     case 0x04000000:
         return ARM7IORead8(addr);
@@ -2194,7 +2207,9 @@ u16 DSi::ARM7Read16(u32 addr)
                 return ptr ? *(u16*)&ptr[addr & 0x7FFF] : 0;
             }
         }
-        return NDS::ARM7Read16(addr);
+        if (addr >= 0x03800000)
+            return NDS::ARM7Read16(addr);
+        return 0;
 
     case 0x04000000:
         return ARM7IORead16(addr);
@@ -2253,7 +2268,9 @@ u32 DSi::ARM7Read32(u32 addr)
                 return ptr ? *(u32*)&ptr[addr & 0x7FFF] : 0;
             }
         }
-        return NDS::ARM7Read32(addr);
+        if (addr >= 0x03800000)
+            return NDS::ARM7Read32(addr);
+        return 0;
 
     case 0x04000000:
         return ARM7IORead32(addr);
@@ -2338,7 +2355,9 @@ void DSi::ARM7Write8(u32 addr, u8 val)
                 return;
             }
         }
-        return NDS::ARM7Write8(addr, val);
+        if (addr >= 0x03800000)
+            return NDS::ARM7Write8(addr, val);
+        return;
 
     case 0x04000000:
         ARM7IOWrite8(addr, val);
@@ -2428,7 +2447,9 @@ void DSi::ARM7Write16(u32 addr, u16 val)
                 return;
             }
         }
-        return NDS::ARM7Write16(addr, val);
+        if (addr >= 0x03800000)
+            return NDS::ARM7Write16(addr, val);
+        return;
 
     case 0x04000000:
         ARM7IOWrite16(addr, val);
@@ -2518,7 +2539,9 @@ void DSi::ARM7Write32(u32 addr, u32 val)
                 return;
             }
         }
-        return NDS::ARM7Write32(addr, val);
+        if (addr >= 0x03800000)
+            return NDS::ARM7Write32(addr, val);
+        return;
 
     case 0x04000000:
         ARM7IOWrite32(addr, val);
@@ -3471,8 +3494,10 @@ void DSi::ARM7IOWrite32(u32 addr, u32 val)
             return;
         SCFG_EXT[0] &= ~0x03000000;
         SCFG_EXT[0] |= (val & 0x03000000);
-        SCFG_EXT[1] &= ~0x93FF0F07;
-        SCFG_EXT[1] |= (val & 0x93FF0F07);
+        // Bit 25 (ARM7 NWRAM enable) is read-only per GBATEK and must stay enabled; bit 31 is the lock bit
+        SCFG_EXT[1] &= ~0x11FF0F07;
+        SCFG_EXT[1] |= (val & 0x11FF0F07);
+        SCFG_EXT[1] |= (1 << 25);
         Log(LogLevel::Debug, "SCFG_EXT = %08X / %08X (val7 %08X)\n", SCFG_EXT[0], SCFG_EXT[1], val);
         return;
     case 0x04004010:
