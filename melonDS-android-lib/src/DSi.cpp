@@ -656,6 +656,21 @@ void DSi::SetupDirectBoot()
                     ARM9Write32(0x02FFFD68+i, *(u32*)&hwinfoS.Bytes[0x88+i]);
             }
         }
+        else
+        {
+            // Synthetic DSi User Settings fallback (English language, valid touch/user flags)
+            ARM9Write8(0x02000406, 1); // Language: English
+            ARM9Write8(0x02000407, 0x01); // RTC / Settings valid flag
+            ARM9Write16(0x02000458, 0x0000);
+            ARM9Write16(0x0200045A, 0x0000);
+            ARM9Write16(0x0200045C, 0x00FF);
+            ARM9Write16(0x0200045E, 0x00BF);
+            const u16 stormName[] = { 'S', 'T', 'O', 'R', 'M', 0 };
+            for (int k = 0; k < 6; ++k)
+            {
+                ARM9Write16(0x02000418 + k * 2, stormName[k]);
+            }
+        }
 
         Firmware::WifiBoard nwifiver = SPI.GetFirmware().GetHeader().WifiBoard;
         ARM9Write8(0x020005E0, static_cast<u8>(nwifiver));
@@ -683,6 +698,20 @@ void DSi::SetupDirectBoot()
             u32 tmp = (i + 4 <= cartLength) ? *(u32*)&cartrom[i] : 0;
             ARM9Write32(0x02FFD7B0 + i, tmp);
             ARM9Write32(0x02FFE000 + i, tmp);
+        }
+
+        // Populate DSi OS App Context structure at 0x02FFD800 (TitleID, Version, AppFlags, SaveSizes)
+        {
+            u32 titleIdLow = *(u32*)&header.GameCode[0];
+            u32 titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
+            ARM9Write32(0x02FFD800, titleIdLow);
+            ARM9Write32(0x02FFD804, titleIdHigh);
+            ARM9Write32(0x02FFD808, (u32)header.ROMVersion);
+            ARM9Write32(0x02FFD80C, (u32)header.AppFlags);
+            ARM9Write32(0x02FFD810, header.DSiPublicSavSize);
+            ARM9Write32(0x02FFD814, header.DSiPrivateSavSize);
+            ARM9Write32(0x02FFD818, titleIdLow);
+            ARM9Write32(0x02FFD81C, 0);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror

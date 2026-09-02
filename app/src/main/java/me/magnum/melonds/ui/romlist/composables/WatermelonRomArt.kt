@@ -77,8 +77,8 @@ fun romGradient(title: String): Brush {
 }
 
 fun romPlatformLabel(rom: Rom): String = when {
-    rom.isDsiWareTitle -> "DSiWare"
-    rom.isDsiEnhanced -> "DSi E."
+    rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut -> "DSiWare"
+    rom.isDsiEnhanced -> "DSi"
     else -> "DS"
 }
 

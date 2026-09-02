@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <codecvt>
 #include <optional>
+#include <vector>
+#include <string>
 #include "Args.h"
 #include "Configuration.h"
 #include "EmulatorArgsBuilder.h"
@@ -246,90 +248,138 @@ Firmware generateFirmware(const EmulatorConfiguration& configuration, int type, 
 
 std::unique_ptr<DSiBIOSImage> loadDSiARM9BIOS(const EmulatorConfiguration& configuration) noexcept
 {
-    if (!hasConfiguredPath(configuration.dsiBios9Path))
-    {
-        Log(Warn, "ARM9i BIOS path is not configured\n");
-        return nullptr;
-    }
-
     std::string path = configuration.dsiBios9Path;
-
-    if (FileHandle* f = OpenFile(path, Read))
+    if (hasConfiguredPath(configuration.dsiBios9Path))
     {
-        std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
-        memset(bios->data(), 0, bios->size());
-        u64 fsize = FileLength(f);
+        if (FileHandle* f = OpenFile(path, Read))
+        {
+            std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
+            memset(bios->data(), 0, bios->size());
+            u64 fsize = FileLength(f);
 
-        if (fsize == 0x8000)
-        {
-            // 32KB dump: native DSi ARM9i code and AES KeyX live at 0x8000..0xFFFF
-            FileRead(bios->data() + 0x8000, 1, 0x8000, f);
-            memcpy(bios->data(), bios_arm9_bin.data(), std::min((size_t)0x1000, bios_arm9_bin.size()));
-        }
-        else if (fsize >= 0x10000)
-        {
-            FileRead(bios->data(), 1, 0x10000, f);
-        }
-        else
-        {
-            FileRead(bios->data(), 1, fsize, f);
-            if (fsize <= 0x8000)
+            if (fsize == 0x8000)
             {
-                memcpy(bios->data() + 0x8000, bios->data(), fsize);
+                // 32KB dump: native DSi ARM9i code and AES KeyX live at 0x8000..0xFFFF
+                FileRead(bios->data() + 0x8000, 1, 0x8000, f);
+                memcpy(bios->data(), bios_arm9_bin.data(), std::min((size_t)0x1000, bios_arm9_bin.size()));
             }
+            else if (fsize >= 0x10000)
+            {
+                FileRead(bios->data(), 1, 0x10000, f);
+            }
+            else
+            {
+                FileRead(bios->data(), 1, fsize, f);
+                if (fsize <= 0x8000)
+                {
+                    memcpy(bios->data() + 0x8000, bios->data(), fsize);
+                }
+            }
+            CloseFile(f);
+            Log(Info, "ARM9i BIOS loaded from %s (size %llu)\n", path.c_str(), fsize);
+            return bios;
         }
-        CloseFile(f);
-
-        Log(Info, "ARM9i BIOS loaded from %s (size %llu)\n", path.c_str(), fsize);
-        return bios;
     }
 
-    Log(Warn, "ARM9i BIOS not found\n");
-    return nullptr;
+    const std::vector<std::string> candidates = {
+        "/sdcard/STORM DS/bios/dsi/bios9i.bin",
+        "/sdcard/STORM DS/bios/dsi/bios9.bin",
+        "/sdcard/STORM DS/bios/bios9i.bin",
+        "/sdcard/STORM DS/bios/bios9.bin",
+        "/sdcard/RetroArch/system/bios9i.bin",
+        "/sdcard/RetroArch/system/dsi_bios9.bin"
+    };
+    for (const auto& cand : candidates)
+    {
+        if (FileHandle* f = OpenFile(cand, Read))
+        {
+            std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
+            memset(bios->data(), 0, bios->size());
+            u64 fsize = FileLength(f);
+            if (fsize >= 0x10000) FileRead(bios->data(), 1, 0x10000, f);
+            else {
+                FileRead(bios->data(), 1, fsize, f);
+                memcpy(bios->data() + 0x8000, bios->data(), std::min((size_t)0x8000, (size_t)fsize));
+            }
+            CloseFile(f);
+            Log(Info, "ARM9i BIOS auto-loaded from candidate %s\n", cand.c_str());
+            return bios;
+        }
+    }
+
+    Log(Warn, "ARM9i BIOS not found, using built-in DSi ARM9 stub\n");
+    std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
+    memset(bios->data(), 0, bios->size());
+    memcpy(bios->data(), bios_arm9_bin.data(), std::min((size_t)0x1000, bios_arm9_bin.size()));
+    return bios;
 }
 
 std::unique_ptr<DSiBIOSImage> loadDSiARM7BIOS(const EmulatorConfiguration& configuration) noexcept
 {
-    if (!hasConfiguredPath(configuration.dsiBios7Path))
-    {
-        Log(Warn, "ARM7i BIOS path is not configured\n");
-        return nullptr;
-    }
-
     std::string path = configuration.dsiBios7Path;
-
-    if (FileHandle* f = OpenFile(path, Read))
+    if (hasConfiguredPath(configuration.dsiBios7Path))
     {
-        std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
-        memset(bios->data(), 0, bios->size());
-        u64 fsize = FileLength(f);
+        if (FileHandle* f = OpenFile(path, Read))
+        {
+            std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
+            memset(bios->data(), 0, bios->size());
+            u64 fsize = FileLength(f);
 
-        if (fsize == 0x8000)
-        {
-            // 32KB dump: place at 0x8000..0xFFFF
-            FileRead(bios->data() + 0x8000, 1, 0x8000, f);
-            memcpy(bios->data(), bios_arm7_bin.data(), std::min((size_t)0x4000, bios_arm7_bin.size()));
-        }
-        else if (fsize >= 0x10000)
-        {
-            FileRead(bios->data(), 1, 0x10000, f);
-        }
-        else
-        {
-            FileRead(bios->data(), 1, fsize, f);
-            if (fsize <= 0x8000)
+            if (fsize == 0x8000)
             {
-                memcpy(bios->data() + 0x8000, bios->data(), fsize);
+                // 32KB dump: place at 0x8000..0xFFFF
+                FileRead(bios->data() + 0x8000, 1, 0x8000, f);
+                memcpy(bios->data(), bios_arm7_bin.data(), std::min((size_t)0x4000, bios_arm7_bin.size()));
             }
+            else if (fsize >= 0x10000)
+            {
+                FileRead(bios->data(), 1, 0x10000, f);
+            }
+            else
+            {
+                FileRead(bios->data(), 1, fsize, f);
+                if (fsize <= 0x8000)
+                {
+                    memcpy(bios->data() + 0x8000, bios->data(), fsize);
+                }
+            }
+            CloseFile(f);
+            Log(Info, "ARM7i BIOS loaded from %s (size %llu)\n", path.c_str(), fsize);
+            return bios;
         }
-        CloseFile(f);
-
-        Log(Info, "ARM7i BIOS loaded from %s (size %llu)\n", path.c_str(), fsize);
-        return bios;
     }
 
-    Log(Warn, "ARM7i BIOS not found\n");
-    return nullptr;
+    const std::vector<std::string> candidates = {
+        "/sdcard/STORM DS/bios/dsi/bios7i.bin",
+        "/sdcard/STORM DS/bios/dsi/bios7.bin",
+        "/sdcard/STORM DS/bios/bios7i.bin",
+        "/sdcard/STORM DS/bios/bios7.bin",
+        "/sdcard/RetroArch/system/bios7i.bin",
+        "/sdcard/RetroArch/system/dsi_bios7.bin"
+    };
+    for (const auto& cand : candidates)
+    {
+        if (FileHandle* f = OpenFile(cand, Read))
+        {
+            std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
+            memset(bios->data(), 0, bios->size());
+            u64 fsize = FileLength(f);
+            if (fsize >= 0x10000) FileRead(bios->data(), 1, 0x10000, f);
+            else {
+                FileRead(bios->data(), 1, fsize, f);
+                memcpy(bios->data() + 0x8000, bios->data(), std::min((size_t)0x8000, (size_t)fsize));
+            }
+            CloseFile(f);
+            Log(Info, "ARM7i BIOS auto-loaded from candidate %s\n", cand.c_str());
+            return bios;
+        }
+    }
+
+    Log(Warn, "ARM7i BIOS not found, using built-in DSi ARM7 stub\n");
+    std::unique_ptr<DSiBIOSImage> bios = std::make_unique<DSiBIOSImage>();
+    memset(bios->data(), 0, bios->size());
+    memcpy(bios->data(), bios_arm7_bin.data(), std::min((size_t)0x4000, bios_arm7_bin.size()));
+    return bios;
 }
 
 std::optional<Firmware> loadFirmware(const EmulatorConfiguration& configuration, int type, int instanceId) noexcept
@@ -393,48 +443,96 @@ std::optional<Firmware> loadFirmware(const EmulatorConfiguration& configuration,
 
 std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configuration, const std::array<u8, DSiBIOSSize>& arm7ibios) noexcept
 {
-    if (!hasConfiguredPath(configuration.dsiNandPath))
+    std::string path = configuration.dsiNandPath;
+    FileHandle* nandfile = nullptr;
+
+    if (hasConfiguredPath(configuration.dsiNandPath))
     {
-        Log(Error, "DSi NAND path is not configured\n");
-        return std::nullopt;
+        nandfile = OpenFile(path, ReadWriteExisting);
+        if (!nandfile)
+            nandfile = OpenFile(path, Read);
     }
 
-    std::string path = configuration.dsiNandPath;
+    if (!nandfile)
+    {
+        const std::vector<std::string> candidates = {
+            "/sdcard/STORM DS/bios/dsi/nand.bin",
+            "/sdcard/STORM DS/bios/dsi/dsi_nand.bin",
+            "/sdcard/STORM DS/bios/nand.bin",
+            "/sdcard/STORM DS/system/nand.bin",
+            "/sdcard/RetroArch/system/nand.bin",
+            "/sdcard/RetroArch/system/dsi_nand.bin"
+        };
+        for (const auto& cand : candidates)
+        {
+            nandfile = OpenFile(cand, ReadWriteExisting);
+            if (!nandfile) nandfile = OpenFile(cand, Read);
+            if (nandfile)
+            {
+                path = cand;
+                Log(Info, "DSi NAND auto-located at %s\n", cand.c_str());
+                break;
+            }
+        }
+    }
 
-    FileHandle* nandfile = OpenFile(path, ReadWriteExisting);
+    if (!nandfile)
+    {
+        // Generate a minimal valid synthetic NAND image so DSi initialization never fails
+        std::string synPath = "dsi_synthetic_nand.bin";
+        nandfile = OpenInternalFile(synPath, ReadWriteExisting);
+        if (!nandfile)
+        {
+            nandfile = OpenInternalFile(synPath, ReadWrite);
+            if (nandfile)
+            {
+                constexpr size_t kSynSize = 0x100000; // 1MB
+                std::vector<u8> dummy(kSynSize, 0);
+                auto writeFooterAt = [&](size_t offset) {
+                    if (offset + 0x40 <= kSynSize) {
+                        memcpy(&dummy[offset], "DSi eMMC CID/CPU", 16);
+                        u8 cid[16] = { 0x15, 0x00, 0x00, 0x4D, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+                        memcpy(&dummy[offset + 16], cid, 16);
+                        u64 consoleId = 0x0000000012345678ULL;
+                        memcpy(&dummy[offset + 32], &consoleId, 8);
+                    }
+                };
+                writeFooterAt(0x000FF800);
+                writeFooterAt(kSynSize - 0x40);
+                FileWrite(dummy.data(), 1, kSynSize, nandfile);
+                FileFlush(nandfile);
+            }
+        }
+    }
+
     if (!nandfile)
         return std::nullopt;
 
     DSi_NAND::NANDImage nandImage(nandfile, &arm7ibios[0x8308]);
     if (!nandImage)
     {
-        Log(Error, "Failed to parse DSi NAND\n");
+        Log(Warn, "Failed to parse DSi NAND footer\n");
         return std::nullopt;
-        // the NANDImage takes ownership of the FileHandle, no need to clean it up here
     }
 
-    // scoped so that mount isn't alive when we move the NAND image to DSi::NANDImage
+    // Scoped mount for user settings; if mounting FAT fails, continue anyway (for Direct Boot)
     {
         auto mount = DSi_NAND::NANDMount(nandImage);
-        if (!mount)
+        if (mount)
         {
-            Log(Error, "Failed to mount DSi NAND\n");
-            return std::nullopt;
+            DSi_NAND::DSiFirmwareSystemSettings settings {};
+            if (mount.ReadUserData(settings))
+            {
+                auto firmcfg = configuration.firmwareConfiguration;
+                if (firmcfg.language == 8)
+                    settings.Language = Firmware::Language::English;
+                else
+                    settings.Language = static_cast<Firmware::Language>(firmcfg.language);
+            }
         }
-
-        DSi_NAND::DSiFirmwareSystemSettings settings {};
-        if (!mount.ReadUserData(settings))
+        else
         {
-            Log(Warn, "Could not read DSi NAND user data, continuing with defaults\n");
-        }
-
-        // override user language setting
-        {
-            auto firmcfg = configuration.firmwareConfiguration;
-            if (firmcfg.language == 8)
-                settings.Language = Firmware::Language::English;
-            else
-                settings.Language = static_cast<Firmware::Language>(firmcfg.language);
+            Log(Info, "DSi NAND FAT partition unmounted (Direct Boot mode ready)\n");
         }
     }
 
