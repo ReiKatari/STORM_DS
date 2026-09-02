@@ -483,10 +483,9 @@ void DSi::SetupDirectBoot()
     if (!dsmode && !header.IsDSiWare() && header.IsDSiEnhanced())
     {
         if (header.DSiARM9iSize == 0 || header.DSiARM9iROMOffset == 0 ||
-            (header.DSiARM9iROMOffset + header.DSiARM9iSize > cartLength) ||
-            header.DSiModcrypt1Offset == 0xFFFFFFFF)
+            (header.DSiARM9iROMOffset + header.DSiARM9iSize > cartLength))
         {
-            Log(LogLevel::Warn, "DSi::SetupDirectBoot: DSi-Enhanced ROM is running in DS mode.\n");
+            Log(LogLevel::Warn, "DSi::SetupDirectBoot: DSi-Enhanced ROM has invalid ARM9i bounds, falling back to DS mode.\n");
             dsmode = true;
         }
     }
@@ -658,25 +657,31 @@ void DSi::SetupDirectBoot()
         }
         else
         {
-            // Synthetic DSi User Settings fallback (English language, valid touch/user flags)
-            ARM9Write8(0x02000406, 1); // Language: English
-            ARM9Write8(0x02000407, 0x01); // RTC / Settings valid flag
-            ARM9Write16(0x02000458, 0x0000);
-            ARM9Write16(0x0200045A, 0x0000);
-            ARM9Write16(0x0200045C, 0x00FF);
-            ARM9Write16(0x0200045E, 0x00BF);
-            const u16 stormName[] = { 'S', 'T', 'O', 'R', 'M', 0 };
-            for (int k = 0; k < 6; ++k)
-            {
-                ARM9Write16(0x02000418 + k * 2, stormName[k]);
-            }
+            // Synthetic DSi User Settings fallback (English language, calibrated touch, valid flags)
+            DSi_NAND::DSiFirmwareSystemSettings userdata {};
+            userdata.Version = 1;
+            userdata.ConfigFlags = 0x00000001; // Valid settings flag
+            userdata.CountryCode = 1;
+            userdata.Language = Firmware::Language::English;
+            userdata.TouchCalibrationADC1 = {0, 0};
+            userdata.TouchCalibrationPixel1 = {0, 0};
+            userdata.TouchCalibrationADC2 = {255 << 4, 191 << 4};
+            userdata.TouchCalibrationPixel2 = {255, 191};
+            const char16_t stormName[] = u"STORM";
+            memcpy(userdata.Nickname, stormName, sizeof(stormName));
+            userdata.UpdateHash();
+
+            for (u32 i = 0; i < 0x128; i += 4)
+                ARM9Write32(0x02000400 + i, *(u32*)&userdata.Bytes[0x88 + i]);
+
+            ARM9Write32(0x02000600, 0x00000001);
+            ARM9Write32(0x02FFFD68, 0x00000001);
         }
 
         Firmware::WifiBoard nwifiver = SPI.GetFirmware().GetHeader().WifiBoard;
         ARM9Write8(0x020005E0, static_cast<u8>(nwifiver));
 
-        // TODO: these should be taken from the wifi firmware in NAND
-        // but, hey, this works too.
+        // Setup wifi firmware parameters
         if (nwifiver == Firmware::WifiBoard::W015)
         {
             ARM9Write16(0x020005E2, 0xB57E);
@@ -692,26 +697,27 @@ void DSi::SetupDirectBoot()
             ARM9Write32(0x020005EC, 0x00020000);
         }
 
-        // Populate DSi Boot tables at 0x02FFD7B0..0x02FFD9F0 and 0x02FFE000..0x02FFE240
+        // 0x02FFD7B0: DSi Version Data & Filename table according to GBATEK
+        const char verFileName[] = "00000004";
+        for (int k = 0; k < 8; ++k)
+            ARM9Write8(0x02FFD7B0 + k, verFileName[k]);
+        ARM9Write8(0x02FFD7B8, 0x00);
+        ARM9Write8(0x02FFD7B9, 'E'); // Region: USA / English ('E')
+        ARM9Write8(0x02FFD7BA, 0x00); // Warmboot flag bit 0 = 0
+        ARM9Write8(0x02FFD7BB, 0x00);
+        // eMMC CID at 0x02FFD7BC (16 bytes)
+        const u8 dummyCID[16] = { 0x15, 0x00, 0x00, 0x4D, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+        for (int k = 0; k < 16; ++k)
+            ARM9Write8(0x02FFD7BC + k, dummyCID[k]);
+        // Zero out 0x02FFD7CC through 0x02FFD850 (Title list count = 0, zero padding)
+        for (u32 addr = 0x02FFD7CC; addr < 0x02FFD850; addr += 4)
+            ARM9Write32(addr, 0);
+
+        // Populate Cartridge Header mirror strictly at 0x02FFE000..0x02FFE240
         for (u32 i = 0; i < 0x240; i += 4)
         {
             u32 tmp = (i + 4 <= cartLength) ? *(u32*)&cartrom[i] : 0;
-            ARM9Write32(0x02FFD7B0 + i, tmp);
             ARM9Write32(0x02FFE000 + i, tmp);
-        }
-
-        // Populate DSi OS App Context structure at 0x02FFD800 (TitleID, Version, AppFlags, SaveSizes)
-        {
-            u32 titleIdLow = *(u32*)&header.GameCode[0];
-            u32 titleIdHigh = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
-            ARM9Write32(0x02FFD800, titleIdLow);
-            ARM9Write32(0x02FFD804, titleIdHigh);
-            ARM9Write32(0x02FFD808, (u32)header.ROMVersion);
-            ARM9Write32(0x02FFD80C, (u32)header.AppFlags);
-            ARM9Write32(0x02FFD810, header.DSiPublicSavSize);
-            ARM9Write32(0x02FFD814, header.DSiPrivateSavSize);
-            ARM9Write32(0x02FFD818, titleIdLow);
-            ARM9Write32(0x02FFD81C, 0);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror
@@ -739,6 +745,7 @@ void DSi::SetupDirectBoot()
 
         ARM9Write8(0x02FFFDFA, I2C.GetBPTWL()->GetBootFlag() | 0x80);
         ARM9Write8(0x02FFFDFB, 0x01);
+        ARM9Write32(0x02FFFDFC, 0x02000400); // Pointer to TWLCFGn.dat (System Settings)
     }
 
     ARM7BIOSProt = 0x20;

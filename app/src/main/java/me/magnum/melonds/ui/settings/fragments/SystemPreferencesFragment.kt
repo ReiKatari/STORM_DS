@@ -164,57 +164,6 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             }
         }
 
-        val dldiEnabledPreference = findPreference<SwitchPreference>("system_dldi_sd_card_enabled")
-        val dldiDirPreference = findPreference<StoragePickerPreference>("system_dldi_sd_card_dir")
-        val dldiSizePreference = findPreference<ListPreference>("system_dldi_sd_card_image_size")
-        val dldiManagerPreference = findPreference<Preference>("pref_open_dldi_file_manager")
-
-        val dsiSdEnabledPreference = findPreference<SwitchPreference>("system_dsi_sd_card_enabled")
-        val dsiSdDirPreference = findPreference<StoragePickerPreference>("system_dsi_sd_card_dir")
-        val dsiSdSizePreference = findPreference<ListPreference>("system_dsi_sd_card_image_size")
-        val dsiSdManagerPreference = findPreference<Preference>("pref_open_dsi_sd_file_manager")
-
-        fun updateDldiVisibility(enabled: Boolean) {
-            dldiDirPreference?.isVisible = enabled
-            dldiSizePreference?.isVisible = enabled
-            dldiManagerPreference?.isVisible = enabled
-        }
-
-        fun updateDsiSdVisibility(enabled: Boolean) {
-            dsiSdDirPreference?.isVisible = enabled
-            dsiSdSizePreference?.isVisible = enabled
-            dsiSdManagerPreference?.isVisible = enabled
-        }
-
-        updateDldiVisibility(dldiEnabledPreference?.isChecked ?: false)
-        updateDsiSdVisibility(dsiSdEnabledPreference?.isChecked ?: false)
-
-        dldiEnabledPreference?.setOnPreferenceChangeListener { _, newValue ->
-            updateDldiVisibility(newValue as Boolean)
-            true
-        }
-
-        dsiSdEnabledPreference?.setOnPreferenceChangeListener { _, newValue ->
-            updateDsiSdVisibility(newValue as Boolean)
-            true
-        }
-
-        dldiDirPreference?.let { helper.setupStoragePickerPreference(it) }
-        dsiSdDirPreference?.let { helper.setupStoragePickerPreference(it) }
-
-        dldiSizePreference?.let { helper.bindPreferenceSummaryToValue(it) }
-        dsiSdSizePreference?.let { helper.bindPreferenceSummaryToValue(it) }
-
-        dldiManagerPreference?.setOnPreferenceClickListener {
-            startActivity(android.content.Intent(requireContext(), me.magnum.melonds.ui.dldi.DldiFileManagerActivity::class.java))
-            true
-        }
-
-        dsiSdManagerPreference?.setOnPreferenceClickListener {
-            startActivity(android.content.Intent(requireContext(), me.magnum.melonds.ui.dldi.DsiSdFileManagerActivity::class.java))
-            true
-        }
-
         mirrorPreference.setOnPreferenceChangeListener { _, newValue ->
             if (updatingMirrorPreference) {
                 return@setOnPreferenceChangeListener true

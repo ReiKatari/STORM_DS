@@ -78,66 +78,7 @@
                 android:fragment="me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment" />
     </PreferenceCategory>
 
-    <PreferenceCategory
-            android:title="@string/pref_cat_sd_cards"
-            app:iconSpaceReserved="false">
 
-        <SwitchPreference
-                android:key="system_dldi_sd_card_enabled"
-                android:title="@string/system_dldi_sd_card_enabled"
-                android:summary="@string/system_dldi_sd_card_enabled_summary"
-                app:iconSpaceReserved="false"
-                android:defaultValue="false" />
-
-        <me.magnum.melonds.ui.settings.preferences.SdCardDirectoryPickerPreference
-                android:key="system_dldi_sd_card_dir"
-                android:title="@string/system_dldi_sd_card_dir"
-                android:summary="@string/not_set"
-                app:iconSpaceReserved="false"
-                app:sdConsoleType="ds" />
-
-        <ListPreference
-                android:key="system_dldi_sd_card_image_size"
-                android:title="@string/system_dldi_sd_card_image_size"
-                app:iconSpaceReserved="false"
-                android:defaultValue="0"
-                android:entries="@array/dldi_sd_card_image_size_options"
-                android:entryValues="@array/dldi_sd_card_image_size_values" />
-
-        <Preference
-                android:key="pref_open_dldi_file_manager"
-                android:title="@string/open_dldi_file_manager"
-                android:summary="@string/open_dldi_file_manager_summary"
-                app:iconSpaceReserved="false" />
-
-        <SwitchPreference
-                android:key="system_dsi_sd_card_enabled"
-                android:title="@string/system_dsi_sd_card_enabled"
-                android:summary="@string/system_dsi_sd_card_enabled_summary"
-                app:iconSpaceReserved="false"
-                android:defaultValue="false" />
-
-        <me.magnum.melonds.ui.settings.preferences.SdCardDirectoryPickerPreference
-                android:key="system_dsi_sd_card_dir"
-                android:title="@string/system_dsi_sd_card_dir"
-                android:summary="@string/not_set"
-                app:iconSpaceReserved="false"
-                app:sdConsoleType="dsi" />
-
-        <ListPreference
-                android:key="system_dsi_sd_card_image_size"
-                android:title="@string/system_dsi_sd_card_image_size"
-                app:iconSpaceReserved="false"
-                android:defaultValue="0"
-                android:entries="@array/dldi_sd_card_image_size_options"
-                android:entryValues="@array/dldi_sd_card_image_size_values" />
-
-        <Preference
-                android:key="pref_open_dsi_sd_file_manager"
-                android:title="@string/open_dsi_sd_file_manager"
-                android:summary="@string/open_dsi_sd_file_manager_summary"
-                app:iconSpaceReserved="false" />
-    </PreferenceCategory>
 
     <PreferenceCategory
             android:title="@string/pref_cat_network_wfc"

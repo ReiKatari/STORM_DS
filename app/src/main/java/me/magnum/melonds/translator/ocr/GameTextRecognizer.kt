@@ -54,6 +54,22 @@ class GameTextRecognizer {
         TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     }
 
+    private val ocrLruCache = object : android.util.LruCache<Long, List<TranslatedTextBlock>>(32) {}
+
+    private fun computeBitmapHash(bitmap: Bitmap): Long {
+        val w = bitmap.width
+        val h = bitmap.height
+        var hash = 1125899906842597L
+        val stepX = max(1, w / 8)
+        val stepY = max(1, h / 8)
+        for (y in 0 until h step stepY) {
+            for (x in 0 until w step stepX) {
+                hash = 31L * hash + bitmap.getPixel(x, y)
+            }
+        }
+        return hash
+    }
+
     suspend fun recognizeTextBlocks(
         bitmap: Bitmap,
         sourceLang: String,
@@ -61,6 +77,16 @@ class GameTextRecognizer {
     ): List<TranslatedTextBlock> = withContext(Dispatchers.Default) {
         lastOcrError = null
         val safeBitmap = ensureSoftwareBitmap(bitmap)
+
+        if (regions.isEmpty()) {
+            val bmpHash = computeBitmapHash(safeBitmap)
+            ocrLruCache.get(bmpHash)?.let { cached ->
+                Log.i(TAG, "OCR Cache hit: returning ${cached.size} cached blocks instantly")
+                if (safeBitmap !== bitmap) safeBitmap.recycle()
+                return@withContext cached
+            }
+        }
+
         Log.i(TAG, "OCR start: bitmap=${safeBitmap.width}x${safeBitmap.height}, regions=${regions.size}, lang=$sourceLang")
 
         if (regions.isNotEmpty()) {
@@ -116,10 +142,12 @@ class GameTextRecognizer {
         }
 
         // Full Screen OCR: Multi-pass pixel preprocessing pipeline
+        val bmpHash = computeBitmapHash(safeBitmap)
         val blocks = recognizeWithMultiPass(safeBitmap, sourceLang)
         if (safeBitmap !== bitmap) safeBitmap.recycle()
         val merged = mergeAdjacentBlocks(blocks)
-        Log.i(TAG, "OCR finished fullscreen with ${merged.size} total blocks")
+        ocrLruCache.put(bmpHash, merged)
+        Log.i(TAG, "OCR finished fullscreen with ${merged.size} total blocks (cached)")
         merged
     }
 
@@ -549,6 +577,9 @@ class GameTextRecognizer {
             val text = block.text.trim()
             if (text.isBlank()) continue
 
+            val correctedText = SmartWordCorrector.correctText(text, sourceLang)
+            if (correctedText.isBlank()) continue
+
             val relBox = RectF(
                 (blockBox.left / imgWidth).coerceIn(0f, 1f),
                 (blockBox.top / imgHeight).coerceIn(0f, 1f),
@@ -561,7 +592,7 @@ class GameTextRecognizer {
 
             resultBlocks.add(
                 TranslatedTextBlock(
-                    originalText = text,
+                    originalText = correctedText,
                     translatedText = "",
                     boundingBox = relBox,
                     backgroundColor = sampledBgColor,
