@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import me.magnum.melonds.MelonRomDecryptor
 import me.magnum.melonds.R
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.uridelegates.UriHandler
@@ -608,6 +609,22 @@ class FileSystemRomsRepository(
                 onRomsChanged(persist = unavailableDirectories.isEmpty())
             }
 
+            coroutineScope.launch(Dispatchers.IO) {
+                for (cachedRom in fixedCachedRoms) {
+                    if (cachedRom.isDsiWareTitle || cachedRom.isDsiEnhanced ||
+                        cachedRom.fileName.endsWith(".nds", ignoreCase = true) ||
+                        cachedRom.fileName.endsWith(".dsi", ignoreCase = true)) {
+                        runCatching {
+                            val encStatus = MelonRomDecryptor.checkEncryption(context, cachedRom.uri)
+                            if (encStatus == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                                Log.i(TAG, "Auto-decrypting cached ROM in-place on disk: ${cachedRom.fileName}")
+                                MelonRomDecryptor.decryptRom(context, cachedRom.uri)
+                            }
+                        }
+                    }
+                }
+            }
+
             var scannedRom = false
             try {
                 val buffer = mutableListOf<Rom>()
@@ -734,6 +751,23 @@ class FileSystemRomsRepository(
                     semaphore.withPermit {
                         runCatching {
                             val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
+
+                            // Auto-decrypt encrypted DSi / DSiWare ROMs in-place upon discovery/addition
+                            if (fileName.endsWith(".nds", ignoreCase = true) ||
+                                fileName.endsWith(".dsi", ignoreCase = true) ||
+                                fileName.endsWith(".app", ignoreCase = true)) {
+                                runCatching {
+                                    val encStatus = MelonRomDecryptor.checkEncryption(context, fileState.uri)
+                                    if (encStatus == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                                        Log.i(TAG, "Auto-decrypting encrypted DSi ROM in-place on addition: $fileName (${fileState.uri})")
+                                        val decResult = MelonRomDecryptor.decryptRom(context, fileState.uri)
+                                        Log.i(TAG, "In-place decryption for $fileName finished with: $decResult")
+                                    }
+                                }.onFailure { e ->
+                                    Log.w(TAG, "Auto-decrypt check failed for $fileName", e)
+                                }
+                            }
+
                             val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
                                 ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
                                 ?: return@runCatching null
