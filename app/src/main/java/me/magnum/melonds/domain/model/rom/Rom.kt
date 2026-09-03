@@ -23,7 +23,7 @@ data class Rom(
     val gameCode: String = "",
 ) {
     val isInstalledDsiWareShortcut: Boolean
-        get() = installedDsiWareTitleId != null
+        get() = uri.scheme == INSTALLED_DSIWARE_URI_SCHEME
 
     fun hasSameFileAsRom(other: Rom): Boolean {
         return uri == other.uri

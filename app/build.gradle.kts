@@ -54,8 +54,8 @@ android {
         }
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -Wno-write-strings -O3 -fomit-frame-pointer -ffast-math -funroll-loops -flto=thin -fvisibility-inlines-hidden")
-                arguments("-DENABLE_LTO_RELEASE=ON", "-DENABLE_LTO=ON")
+                cppFlags("-std=c++17 -Wno-write-strings")
+                arguments("-DENABLE_LTO_RELEASE=OFF", "-DENABLE_LTO=OFF")
             }
         }
         vectorDrawables.useSupportLibrary = true
@@ -644,8 +644,11 @@ tasks.register("renameReleaseApk") {
         val releaseDir = layout.buildDirectory.dir("outputs/apk/gitHubProd/release").get().asFile
         val defaultApk = File(releaseDir, "app-gitHub-prod-release.apk")
         val targetApk = File(releaseDir, "STORM_DS_${AppConfig.versionName}.apk")
+        val filesDir = rootDir.resolve("Files").apply { mkdirs() }
+        val persistentApk = File(filesDir, "STORM_DS_${AppConfig.versionName}.apk")
         if (defaultApk.exists()) {
             defaultApk.copyTo(targetApk, overwrite = true)
+            defaultApk.copyTo(persistentApk, overwrite = true)
         }
     }
 }

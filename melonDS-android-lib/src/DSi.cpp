@@ -398,15 +398,30 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
 
 
-    // Plaintext check: if words look like ARM / Thumb opcode / zero patterns
+    // Plaintext check: if words look like ARM / Thumb opcode / RAM address / zero patterns
     size_t checkWords = std::min<size_t>(decryptSize / 4, 32);
-    size_t armCount = 0;
+    size_t plaintextCount = 0;
     size_t thumbCount = 0;
     for (size_t i = 0; i < checkWords; i++)
     {
         u32 w = isArm7Area ? ARM7Read32(binaryaddr + i * 4) : ARM9Read32(binaryaddr + i * 4);
-        if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
-            armCount++;
+        u32 cond = w >> 28;
+        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+        {
+            plaintextCount++;
+        }
+        else if (cond <= 0xE)
+        {
+            u32 op = (w >> 25) & 0x7;
+            if (op <= 0x7 && w != 0xE7FFDEFF)
+                plaintextCount++;
+        }
+        else if (cond == 0xF)
+        {
+            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
+                plaintextCount++;
+        }
+
         u16 hw0 = (u16)w;
         u16 hw1 = (u16)(w >> 16);
         if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
@@ -414,10 +429,10 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
             thumbCount++;
     }
-    if (checkWords >= 8 && (armCount >= (checkWords * 8) / 10 || thumbCount >= (checkWords * 2 * 8) / 10))
+    if (checkWords >= 8 && (plaintextCount >= (checkWords * 6) / 10 || thumbCount >= (checkWords * 2 * 6) / 10))
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (arm=%zu, thumb=%zu / %zu), skipping\n",
-            binaryaddr, armCount, thumbCount, checkWords);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (score=%zu, thumb=%zu / %zu), skipping\n",
+            binaryaddr, plaintextCount, thumbCount, checkWords);
         return;
     }
 

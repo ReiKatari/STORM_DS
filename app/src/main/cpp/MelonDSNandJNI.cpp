@@ -642,6 +642,110 @@ Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, 
 }
 
 JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonDSiNand_ensureTitleSaveStructure(JNIEnv* env, jobject thiz, jint titleId, jbyteArray romHeaderBytes, jbyteArray tmdMetadata)
+{
+    if (!nand || !nandMount)
+        return false;
+
+    melonDS::NDSHeader header {};
+    if (romHeaderBytes != nullptr)
+    {
+        jsize hLen = env->GetArrayLength(romHeaderBytes);
+        jbyte* hBytes = env->GetByteArrayElements(romHeaderBytes, nullptr);
+        if (hBytes != nullptr)
+        {
+            memcpy(&header, hBytes, std::min<size_t>((size_t)hLen, sizeof(header)));
+            env->ReleaseByteArrayElements(romHeaderBytes, hBytes, JNI_ABORT);
+        }
+    }
+
+    char path[256];
+    f_mkdir("0:/ticket");
+    snprintf(path, sizeof(path), "0:/ticket/%08x", DSI_NAND_FILE_CATEGORY);
+    f_mkdir(path);
+
+    f_mkdir("0:/title");
+    snprintf(path, sizeof(path), "0:/title/%08x", DSI_NAND_FILE_CATEGORY);
+    f_mkdir(path);
+    snprintf(path, sizeof(path), "0:/title/%08x/%08x", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    f_mkdir(path);
+    snprintf(path, sizeof(path), "0:/title/%08x/%08x/content", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    f_mkdir(path);
+    snprintf(path, sizeof(path), "0:/title/%08x/%08x/data", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    f_mkdir(path);
+
+    // Create ticket if missing or empty
+    snprintf(path, sizeof(path), "0:/ticket/%08x/%08x.tik", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+    FF_FILINFO tikInfo;
+    if (f_stat(path, &tikInfo) != FR_OK || tikInfo.fsize == 0)
+    {
+        u32 catNoSwap = (DSI_NAND_FILE_CATEGORY >> 24) | ((DSI_NAND_FILE_CATEGORY & 0xFF0000) >> 8) | ((DSI_NAND_FILE_CATEGORY & 0xFF00) << 8) | (DSI_NAND_FILE_CATEGORY << 24);
+        u32 idNoSwap = ((u32)titleId >> 24) | (((u32)titleId & 0xFF0000) >> 8) | (((u32)titleId & 0xFF00) << 8) | ((u32)titleId << 24);
+        nandMount->CreateTicket(path, catNoSwap, idNoSwap, header.ROMVersion);
+    }
+
+    // Create TMD if provided and missing
+    if (tmdMetadata != nullptr)
+    {
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x/content/title.tmd", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        FF_FILINFO tmdInfo;
+        if (f_stat(path, &tmdInfo) != FR_OK || tmdInfo.fsize == 0)
+        {
+            jsize tmdLen = env->GetArrayLength(tmdMetadata);
+            jbyte* tmdBytes = env->GetByteArrayElements(tmdMetadata, nullptr);
+            if (tmdBytes != nullptr)
+            {
+                FF_FIL tmdFile;
+                if (f_open(&tmdFile, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+                {
+                    u32 nw = 0;
+                    f_write(&tmdFile, tmdBytes, tmdLen, &nw);
+                    f_close(&tmdFile);
+                }
+                env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
+            }
+        }
+    }
+
+    u32 pubSavSize = header.DSiPublicSavSize;
+    if (pubSavSize > 0)
+    {
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        ensureValidSaveFile(path, pubSavSize);
+    }
+
+    u32 privSavSize = header.DSiPrivateSavSize;
+    if (privSavSize > 0)
+    {
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/private.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        ensureValidSaveFile(path, privSavSize);
+    }
+
+    if (header.AppFlags & 0x04)
+    {
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/banner.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        FF_FILINFO binfo;
+        if (f_stat(path, &binfo) != FR_OK || binfo.fsize != 0x4000)
+        {
+            FF_FIL file;
+            if (f_open(&file, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+            {
+                u8 bannersav[0x4000];
+                memset(bannersav, 0, sizeof(bannersav));
+                u32 nwrite = 0;
+                f_write(&file, bannersav, sizeof(bannersav), &nwrite);
+                f_close(&file);
+            }
+        }
+    }
+
+    updateWrapAndTwlCfg(DSI_NAND_FILE_CATEGORY, (u32) titleId, true);
+
+    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: ensureTitleSaveStructure completed for title=%08x pubSav=%x privSav=%x\n", (u32) titleId, pubSavSize, privSavSize);
+    return true;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonDSiNand_exportTitleExecutable(JNIEnv* env, jobject thiz, jint titleId, jstring outputPath)
 {
     if (!nand || !nandMount || outputPath == nullptr)
