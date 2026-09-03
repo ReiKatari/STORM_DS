@@ -65,8 +65,7 @@ public static class DsiDecryptorEngine
         for (int i = 3; i >= 0; i--)
         {
             ulong sum = (ulong)counter[i] + carry;
-            if (sum < counter[i]) carry = 1;
-            else carry = 0;
+            carry = (uint)(sum >> 32);
             counter[i] = (uint)sum;
         }
 
@@ -147,8 +146,7 @@ public static class DsiDecryptorEngine
 
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         byte[] header = new byte[0x400];
-        int read = fs.Read(header, 0, 0x400);
-        if (read < 0x400) return info;
+        fs.ReadExactly(header, 0, 0x400);
 
         info.GameTitle = System.Text.Encoding.ASCII.GetString(header, 0, 12).Trim((char)0);
         info.GameCode = System.Text.Encoding.ASCII.GetString(header, 0x0C, 4);
@@ -171,7 +169,7 @@ public static class DsiDecryptorEngine
             {
                 fs.Seek(info.Modcrypt1Offset, SeekOrigin.Begin);
                 byte[] sample = new byte[Math.Min(256, (int)info.Modcrypt1Size)];
-                fs.Read(sample, 0, sample.Length);
+                fs.ReadExactly(sample, 0, sample.Length);
                 mod1Enc = !IsBufferPlaintext(sample, 0, sample.Length);
             }
 
@@ -180,7 +178,7 @@ public static class DsiDecryptorEngine
             {
                 fs.Seek(info.Modcrypt2Offset, SeekOrigin.Begin);
                 byte[] sample = new byte[Math.Min(256, (int)info.Modcrypt2Size)];
-                fs.Read(sample, 0, sample.Length);
+                fs.ReadExactly(sample, 0, sample.Length);
                 mod2Enc = !IsBufferPlaintext(sample, 0, sample.Length);
             }
 

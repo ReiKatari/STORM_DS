@@ -102,8 +102,15 @@
             </Setter>
         </Style>
 
-        <!-- Rounded RadioButton / CheckBox -->
+        <!-- Rounded CheckBox -->
         <Style x:Key="StormCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimary}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <!-- Rounded RadioButton -->
+        <Style x:Key="StormRadioButton" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimary}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
@@ -229,8 +236,8 @@
 
                 <!-- Options Row -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                    <RadioButton x:Name="RbCopy" GroupName="DecMode" IsChecked="True" Content="Создавать копию (Decrypted)" Style="{StaticResource StormCheckBox}" Margin="0,0,24,0" />
-                    <RadioButton x:Name="RbInPlace" GroupName="DecMode" Content="Перезаписывать оригиналы на месте" Style="{StaticResource StormCheckBox}" />
+                    <RadioButton x:Name="RbCopy" GroupName="DecMode" IsChecked="True" Content="Создавать копию (Decrypted)" Style="{StaticResource StormRadioButton}" Margin="0,0,24,0" />
+                    <RadioButton x:Name="RbInPlace" GroupName="DecMode" Content="Перезаписывать оригиналы на месте" Style="{StaticResource StormRadioButton}" />
                 </StackPanel>
 
                 <!-- Buttons & Progress Row -->

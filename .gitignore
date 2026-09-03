@@ -67,3 +67,8 @@ installer/Output/
 *.tmp*
 *.wal
 
+# Tools build artifacts
+Tools/**/publish/
+Tools/**/Payload/*.exe
+
+

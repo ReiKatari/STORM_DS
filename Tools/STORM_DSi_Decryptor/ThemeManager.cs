@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
+using Color = System.Windows.Media.Color;
 
 namespace StormDsiDecryptor;
 
