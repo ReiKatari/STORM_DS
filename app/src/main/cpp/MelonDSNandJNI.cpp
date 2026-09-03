@@ -261,6 +261,76 @@ static void updateWrapAndTwlCfg(u32 category, u32 titleId, bool add)
     }
 }
 
+static void sanitizeLauncherWrapBin()
+{
+    if (!nand || !nandMount)
+        return;
+
+    const char* wrapPath = "0:/shared2/launcher/wrap.bin";
+    std::vector<u8> wrap(DSI_WRAP_TOTAL_SIZE, 0);
+
+    FF_FIL file;
+    if (f_open(&file, wrapPath, FA_READ) != FR_OK)
+        return;
+
+    u32 bytesRead = 0;
+    f_read(&file, wrap.data(), DSI_WRAP_TOTAL_SIZE, &bytesRead);
+    f_close(&file);
+
+    if (wrap.size() < DSI_WRAP_TOTAL_SIZE)
+        return;
+
+    bool modified = false;
+    for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
+    {
+        u8* entry = wrap.data() + 0x40 + slot * DSI_TITLE_ID_SIZE;
+        u32 eCat   = (static_cast<u32>(entry[4]) << 24) |
+                     (static_cast<u32>(entry[5]) << 16) |
+                     (static_cast<u32>(entry[6]) << 8)  |
+                     static_cast<u32>(entry[7]);
+
+        // If this slot is a DSiWare user title (00030004), remove it from wrap.bin
+        // so that the NAND launcher / DSi firmware stays in pure clean factory state
+        if (eCat == DSI_NAND_FILE_CATEGORY)
+        {
+            memset(entry, 0, DSI_TITLE_ID_SIZE);
+            wrap[0x30 + (slot / 8)] &= ~(1 << (slot % 8));
+            modified = true;
+        }
+    }
+
+    if (modified)
+    {
+        refreshWrapHashes(wrap);
+
+        if (f_open(&file, wrapPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+        {
+            u32 bytesWritten = 0;
+            f_write(&file, wrap.data(), wrap.size(), &bytesWritten);
+            f_close(&file);
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: sanitized wrap.bin to clean factory state\n");
+        }
+
+        u8 usedCount = 0;
+        for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
+        {
+            u8* entry = wrap.data() + 0x40 + slot * DSI_TITLE_ID_SIZE;
+            if (readLe32(entry) != 0 || readLe32(entry + 4) != 0)
+                usedCount++;
+        }
+
+        melonDS::DSi_NAND::DSiFirmwareSystemSettings settings {};
+        if (nandMount->ReadUserData(settings))
+        {
+            u8 clampedUsed = std::min<u8>(usedCount, 39);
+            settings.SystemMenuUsedTitleSlots = clampedUsed;
+            settings.SystemMenuFreeTitleSlots = (clampedUsed >= 39) ? 0 : static_cast<u8>(39 - clampedUsed);
+            settings.UpdateHash();
+            nandMount->ApplyUserData(settings);
+        }
+    }
+}
+
 extern "C"
 {
 JNIEXPORT jint JNICALL
@@ -293,6 +363,10 @@ Java_me_magnum_melonds_MelonDSiNand_openNand(JNIEnv* env, jobject thiz, jobject 
     }
 
     nandMount = new melonDS::DSi_NAND::NANDMount(*nand);
+    if (nandMount)
+    {
+        sanitizeLauncherWrapBin();
+    }
 
     return NAND_INIT_OK;
 }
