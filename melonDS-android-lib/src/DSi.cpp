@@ -643,9 +643,12 @@ void DSi::SetupDirectBoot()
         {
             u32 tmp = *(u32*)&cartrom[i];
             ARM9Write32(0x02FFC000+i, tmp);
-            ARM9Write32(0x02FFD000+i, tmp);
             ARM9Write32(0x02FFE000+i, tmp);
         }
+
+        // 0x02FFD000 - 0x02FFD7AF: 0x7B0 bytes of zeroes according to GBATEK BIOS RAM usage
+        for (u32 i = 0; i < 0x7B0; i += 4)
+            ARM9Write32(0x02FFD000 + i, 0);
 
         if (DSi_NAND::NANDImage* image = SDMMC.GetNAND(); image && *image)
         { // If a NAND image is installed, and it's valid...
@@ -710,24 +713,23 @@ void DSi::SetupDirectBoot()
             ARM9Write32(0x020005EC, 0x00020000);
         }
 
-        // 0x02FFD7B0: DSi Version Data & Filename table according to GBATEK
-        if (header.IsDSiWare())
-        {
-            for (int k = 0; k < 4; ++k)
-                ARM9Write8(0x02FFD7B0 + k, header.GameCode[k]);
-            for (int k = 4; k < 8; ++k)
-                ARM9Write8(0x02FFD7B0 + k, 0);
-        }
-        else
-        {
-            const char verFileName[] = "00000004";
-            for (int k = 0; k < 8; ++k)
-                ARM9Write8(0x02FFD7B0 + k, verFileName[k]);
-        }
+        // 0x02FFD7B0: DSi Version Data Filename table ("00000004") according to GBATEK
+        const char verFileName[] = "00000004";
+        for (int k = 0; k < 8; ++k)
+            ARM9Write8(0x02FFD7B0 + k, verFileName[k]);
+
         ARM9Write8(0x02FFD7B8, 0x00);
-        ARM9Write8(0x02FFD7B9, 'E'); // Region: USA / English ('E')
+        u8 regionByte = 'E';
+        if (header.GameCode[3] == 'P' || header.GameCode[3] == 'E' || header.GameCode[3] == 'J')
+            regionByte = header.GameCode[3];
+        ARM9Write8(0x02FFD7B9, regionByte); // Region: E=USA, P=EUR, J=JPN
         ARM9Write8(0x02FFD7BA, 0x00); // Warmboot flag bit 0 = 0
         ARM9Write8(0x02FFD7BB, 0x00);
+
+        // Zero out 0x02FFD7CC..0x02FFDFFF
+        for (u32 i = 0x7CC; i < 0x1000; i += 4)
+            ARM9Write32(0x02FFD000 + i, 0);
+
         // eMMC CID at 0x02FFD7BC (16 bytes) and ARM7 eMMC card info at 0x03FFE6E4
         if (DSi_NAND::NANDImage* image = SDMMC.GetNAND(); image && *image)
         {

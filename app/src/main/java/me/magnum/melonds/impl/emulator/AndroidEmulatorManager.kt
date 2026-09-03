@@ -555,16 +555,167 @@ class AndroidEmulatorManager(
         }
 
         val isDirectRomFile = !rom.isInstalledDsiWareShortcut && rom.uri.scheme != Rom.INSTALLED_DSIWARE_URI_SCHEME
-        val shortcutCacheDir = File(context.cacheDir, "installed_dsiware").apply { mkdirs() }
-        val executableFile = File(shortcutCacheDir, "$titleIdHex.app")
-        val saveFile = File(shortcutCacheDir, "$titleIdHex.public.sav")
-
         val openNandResult = dsiNandManager.openNand()
         if (openNandResult.isFailure()) {
             Log.w(TAG, "loadDsiWare: failed to open NAND title=$titleIdHex result=$openNandResult")
             writeGameExecutionLog(rom, titleIdHex, false, "Failed to open NAND: $openNandResult", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
         }
+
+        if (isDirectRomFile) {
+            try {
+                val headerBytes = context.contentResolver.openInputStream(rom.uri)?.use { stream ->
+                    val buf = ByteArray(0x1000)
+                    var read = 0
+                    while (read < 0x1000) {
+                        val count = stream.read(buf, read, 0x1000 - read)
+                        if (count <= 0) break
+                        read += count
+                    }
+                    if (read >= 0x160) buf else null
+                }
+                if (headerBytes != null) {
+                    val pubSav = ((headerBytes[0x238].toInt() and 0xFF) or
+                        ((headerBytes[0x239].toInt() and 0xFF) shl 8) or
+                        ((headerBytes[0x23A].toInt() and 0xFF) shl 16) or
+                        ((headerBytes[0x23B].toInt() and 0xFF) shl 24)).toUInt()
+                    val privSav = ((headerBytes[0x23C].toInt() and 0xFF) or
+                        ((headerBytes[0x23D].toInt() and 0xFF) shl 8) or
+                        ((headerBytes[0x23E].toInt() and 0xFF) shl 16) or
+                        ((headerBytes[0x23F].toInt() and 0xFF) shl 24)).toUInt()
+                    val romVersion = (headerBytes[0x01E].toInt() and 0xFF).toUShort()
+                    val tmdMetadata = runCatching {
+                        NusDSiWareMetadataRepository.createTmd(
+                            categoryId = 0x00030004u,
+                            titleId = titleId.toUInt(),
+                            publicSaveSize = pubSav,
+                            privateSaveSize = privSav,
+                            titleVersion = romVersion,
+                            contentSize = 0L,
+                            contentSha1 = null,
+                        )
+                    }.getOrNull()
+
+                    dsiNandManager.ensureTitleSaveStructure(titleId, headerBytes, tmdMetadata)
+
+                    // If user has existing .sav in their save folder, sync it into NAND before launching;
+                    // otherwise export newly formatted NAND public.sav so user storage immediately has valid FAT12 save
+                    try {
+                        val sramDoc = DocumentFile.fromSingleUri(context, sram)
+                        if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
+                            val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
+                            if (sramBytes != null && sramBytes.size >= 512 &&
+                                sramBytes[0x1FE] == 0x55.toByte() && sramBytes[0x1FF] == 0xAA.toByte() &&
+                                (sramBytes[0] == 0xEB.toByte() || sramBytes[0] == 0xE9.toByte())) {
+                                dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            }
+                        } else {
+                            dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                        }
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "loadDsiWare: error syncing user save into NAND", e)
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "loadDsiWare: error preparing NAND title save structure", e)
+            } finally {
+                dsiNandManager.closeNand()
+            }
+
+            val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+                .copy(
+                    consoleType = ConsoleType.DSi,
+                    useCustomBios = true,
+                    showBootScreen = false,
+                    dsiWareAutoloadTitleId = 0L,
+                )
+                .withPreparedDldiConfiguration()
+
+            setupEmulator(emulatorConfiguration)
+
+            Log.i(TAG, "loadDsiWare: direct booting title $titleIdHex in DSi mode directly from ${rom.fileName}")
+            MelonEmulator.startBootDiagnosticCapture()
+            val loadResult = MelonEmulator.loadRom(
+                romUri = rom.uri,
+                sramUri = sram,
+                gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                gbaRomUri = null,
+                gbaSramUri = null,
+            )
+            if (loadResult.isTerminal || !isActive) {
+                Log.w(TAG, "loadDsiWare: DSi direct launch failed ($loadResult), falling back to standard DS launch for '${rom.name}'")
+                val fallbackConfig = emulatorConfiguration.copy(
+                    consoleType = ConsoleType.DS,
+                    useCustomBios = false,
+                    showBootScreen = false,
+                    dsiWareAutoloadTitleId = 0L,
+                )
+                setupEmulator(fallbackConfig)
+                val retryResult = MelonEmulator.loadRom(
+                    romUri = rom.uri,
+                    sramUri = sram,
+                    gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                    gbaRomUri = null,
+                    gbaSramUri = null,
+                )
+                if (!retryResult.isTerminal && isActive) {
+                    messageQueue.start()
+                    if (!precompileVulkanPipelines(fallbackConfig)) {
+                        val diag = MelonEmulator.stopAndGetBootDiagnostic()
+                        cameraManager.stopCurrentCameraSource()
+                        MelonEmulator.stopEmulation()
+                        messageQueue.stop()
+                        writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare (DS Fallback)")
+                        return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                    }
+                    MelonEmulator.setupCheats(cheats.toTypedArray())
+                    activeDsiWareSession = null
+                    MelonEmulator.startEmulation(startPaused = true)
+                    delay(500)
+                    val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+                    val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
+                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                    writeGameExecutionLog(rom, titleIdHex, true, "Fallback boot successful in standard DS mode\n$fullDiag", "loadDsiWare (DS Fallback)")
+                    return@withContext RomLaunchResult.LaunchSuccessful(true)
+                }
+
+                val diag = MelonEmulator.stopAndGetBootDiagnostic()
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                writeGameExecutionLog(rom, titleIdHex, false, "loadRom returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
+                return@withContext RomLaunchResult.LaunchFailed(loadResult)
+            }
+
+            messageQueue.start()
+            if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                val diag = MelonEmulator.stopAndGetBootDiagnostic()
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                messageQueue.stop()
+                writeGameExecutionLog(rom, titleIdHex, false, "Vulkan pipeline precompilation failed\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
+                return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+            }
+
+            MelonEmulator.setupCheats(cheats.toTypedArray())
+            activeDsiWareSession = ActiveDsiWareSession(
+                rom = rom,
+                titleId = titleId,
+                titleIdHex = titleIdHex,
+                sramUri = sram,
+                cachePublicSaveFile = null,
+                isTemporaryInjected = false,
+                fileType = DSiWareTitleFileType.PUBLIC_SAV,
+            )
+            MelonEmulator.startEmulation(startPaused = true)
+            delay(500)
+            val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+            writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)\n--- Native Boot Diagnostic ---\n$nativeDiag", "loadDsiWare")
+            return@withContext RomLaunchResult.LaunchSuccessful(isGbaLoadSuccessful = true)
+        }
+
+        val shortcutCacheDir = File(context.cacheDir, "installed_dsiware").apply { mkdirs() }
+        val executableFile = File(shortcutCacheDir, "$titleIdHex.app")
+        val saveFile = File(shortcutCacheDir, "$titleIdHex.public.sav")
 
         var isTemp = false
         var hasPublicSave = false
@@ -573,17 +724,6 @@ class AndroidEmulatorManager(
         val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
 
         try {
-            val installedTitles = dsiNandManager.listTitles()
-            Log.i(TAG, "loadDsiWare: titleId=0x$titleIdHex, NAND has ${installedTitles.size} titles: [${installedTitles.joinToString { "0x${(it.titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0')} (${it.name})" }}]")
-            val alreadyInstalled = installedTitles.any { it.titleId == titleId }
-            if (!alreadyInstalled) {
-                Log.i(TAG, "loadDsiWare: title 0x$titleIdHex not in NAND, importing from ${rom.fileName}...")
-                val importResult = dsiNandManager.importTitle(rom.uri)
-                Log.i(TAG, "loadDsiWare: auto-import result: $importResult")
-            } else {
-                Log.i(TAG, "loadDsiWare: title 0x$titleIdHex already in NAND, skipping import")
-            }
-
             val installedTitle = dsiNandManager.listTitles().firstOrNull { it.titleId == titleId }
             if (installedTitle != null) {
                 dsiNandManager.repairTitleSaves(titleId)
