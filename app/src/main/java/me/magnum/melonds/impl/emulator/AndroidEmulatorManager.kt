@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.MelonRomDecryptor
+import me.magnum.melonds.impl.NusDSiWareMetadataRepository
 import me.magnum.melonds.impl.StormDeviceSystemInfoReporter
 import me.magnum.melonds.common.PermissionHandler
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
@@ -330,10 +331,15 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                if (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+                val isDsiWare = rom.isDsiWareTitle ||
+                    rom.isInstalledDsiWareShortcut ||
+                    rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME ||
+                    isRealDsiWareTitle(rom)
+
+                if (isDsiWare) {
                     val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
-                        Log.i(TAG, "loadRom: Routing installed DSiWare shortcut '${rom.name}' to DSi NAND launch environment")
+                        Log.i(TAG, "loadRom: Routing DSiWare title '${rom.name}' to DSi NAND launch environment")
                         return@withContext loadDsiWare(rom, cheats)
                     }
                 }
@@ -366,6 +372,49 @@ class AndroidEmulatorManager(
                     RomGbaSlotConfig.AnalogInput -> MelonEmulator.GbaSlotType.ANALOG_INPUT
                 }
                 Log.w(TAG, "loadRom: rom='${rom.name}' gbaSlotType=${gbaSlotType.name}")
+
+                if (emulatorConfiguration.consoleType == ConsoleType.DSi && (rom.isDsiWareTitle || isRealDsiWareTitle(rom))) {
+                    try {
+                        val titleId = extractDsiWareTitleId(rom)
+                        if (titleId != null) {
+                            val headerBytes = context.contentResolver.openInputStream(rom.uri)?.use { stream ->
+                                val buf = ByteArray(0x1000)
+                                var read = 0
+                                while (read < 0x1000) {
+                                    val count = stream.read(buf, read, 0x1000 - read)
+                                    if (count <= 0) break
+                                    read += count
+                                }
+                                if (read >= 0x160) buf else null
+                            }
+                            if (headerBytes != null && dsiNandManager.openNand().isSuccess()) {
+                                try {
+                                    val pubSav = ((headerBytes[0x238].toInt() and 0xFF) or
+                                        ((headerBytes[0x239].toInt() and 0xFF) shl 8) or
+                                        ((headerBytes[0x23A].toInt() and 0xFF) shl 16) or
+                                        ((headerBytes[0x23B].toInt() and 0xFF) shl 24)).toUInt()
+                                    val privSav = ((headerBytes[0x23C].toInt() and 0xFF) or
+                                        ((headerBytes[0x23D].toInt() and 0xFF) shl 8) or
+                                        ((headerBytes[0x23E].toInt() and 0xFF) shl 16) or
+                                        ((headerBytes[0x23F].toInt() and 0xFF) shl 24)).toUInt()
+                                    val romVersion = (headerBytes[0x01E].toInt() and 0xFF).toUShort()
+                                    val tmd = NusDSiWareMetadataRepository.createTmd(
+                                        categoryId = 0x00030004u,
+                                        titleId = titleId.toUInt(),
+                                        publicSaveSize = pubSav,
+                                        privateSaveSize = privSav,
+                                        titleVersion = romVersion,
+                                    )
+                                    dsiNandManager.ensureTitleSaveStructure(titleId, headerBytes, tmd)
+                                } finally {
+                                    dsiNandManager.closeNand()
+                                }
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "loadRom: safety NAND structure preparation error", e)
+                    }
+                }
 
                 MelonEmulator.startBootDiagnosticCapture()
                 var loadResult = MelonEmulator.loadRom(
@@ -508,6 +557,74 @@ class AndroidEmulatorManager(
         val isDirectRomFile = !rom.isInstalledDsiWareShortcut && rom.uri.scheme != Rom.INSTALLED_DSIWARE_URI_SCHEME
 
         if (isDirectRomFile) {
+            // Ensure title save structure exists on DSi NAND so TWL-SDK FS calls succeed without "SYSTEM MEMORY IS DAMAGED"
+            val headerBytes = try {
+                context.contentResolver.openInputStream(rom.uri)?.use { stream ->
+                    val buf = ByteArray(0x1000)
+                    var read = 0
+                    while (read < 0x1000) {
+                        val count = stream.read(buf, read, 0x1000 - read)
+                        if (count <= 0) break
+                        read += count
+                    }
+                    if (read >= 0x160) buf else null
+                }
+            } catch (e: Throwable) {
+                null
+            }
+
+            if (headerBytes != null) {
+                try {
+                    val openNandResult = dsiNandManager.openNand()
+                    if (openNandResult.isSuccess()) {
+                        val tmdMetadata: ByteArray? = runCatching {
+                            val pubSav = ((headerBytes[0x238].toInt() and 0xFF) or
+                                ((headerBytes[0x239].toInt() and 0xFF) shl 8) or
+                                ((headerBytes[0x23A].toInt() and 0xFF) shl 16) or
+                                ((headerBytes[0x23B].toInt() and 0xFF) shl 24)).toUInt()
+                            val privSav = ((headerBytes[0x23C].toInt() and 0xFF) or
+                                ((headerBytes[0x23D].toInt() and 0xFF) shl 8) or
+                                ((headerBytes[0x23E].toInt() and 0xFF) shl 16) or
+                                ((headerBytes[0x23F].toInt() and 0xFF) shl 24)).toUInt()
+                            val romVersion = (headerBytes[0x01E].toInt() and 0xFF).toUShort()
+                            NusDSiWareMetadataRepository.createTmd(
+                                categoryId = 0x00030004u,
+                                titleId = titleId.toUInt(),
+                                publicSaveSize = pubSav,
+                                privateSaveSize = privSav,
+                                titleVersion = romVersion,
+                                contentSize = 0L,
+                                contentSha1 = null,
+                            )
+                        }.getOrNull()
+
+                        dsiNandManager.ensureTitleSaveStructure(titleId, headerBytes, tmdMetadata)
+
+                        // If user has existing .sav in their save folder, sync it into NAND before launching;
+                        // otherwise export newly formatted NAND public.sav so user storage immediately has valid FAT12 save
+                        try {
+                            val sramDoc = DocumentFile.fromSingleUri(context, sram)
+                            if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
+                                val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
+                                if (sramBytes != null && sramBytes.size >= 512 &&
+                                    sramBytes[0x1FE] == 0x55.toByte() && sramBytes[0x1FF] == 0xAA.toByte() &&
+                                    (sramBytes[0] == 0xEB.toByte() || sramBytes[0] == 0xE9.toByte())) {
+                                    dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                                }
+                            } else {
+                                dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            }
+                        } catch (e: Throwable) {
+                            Log.w(TAG, "loadDsiWare: error syncing user save into NAND", e)
+                        }
+                    }
+                } catch (e: Throwable) {
+                    Log.w(TAG, "loadDsiWare: error preparing NAND title save structure", e)
+                } finally {
+                    dsiNandManager.closeNand()
+                }
+            }
+
             val emulatorConfiguration = getRomEmulatorConfiguration(rom)
                 .copy(
                     consoleType = ConsoleType.DSi,
@@ -1082,6 +1199,13 @@ class AndroidEmulatorManager(
                         filePath = cacheSave.absolutePath,
                     )
                     Log.i(TAG, "DSiWare session: synced save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
+                } else if (cacheSave == null) {
+                    val exported = dsiNandManager.exportTitleFile(
+                        titleId = session.titleId,
+                        fileType = session.fileType,
+                        fileUri = session.sramUri,
+                    )
+                    Log.i(TAG, "DSiWare session: exported NAND save to user sramUri result=$exported")
                 }
             } catch (e: Throwable) {
                 Log.w(TAG, "DSiWare session: error during save sync title=${session.titleIdHex}", e)

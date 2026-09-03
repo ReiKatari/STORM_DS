@@ -287,6 +287,18 @@ class AndroidDSiNandManager(
         return MelonDSiNand.repairTitleSaves((titleId and 0xFFFFFFFF).toInt())
     }
 
+    override suspend fun ensureTitleSaveStructure(
+        titleId: Long,
+        romHeaderBytes: ByteArray,
+        tmdMetadata: ByteArray?,
+    ): Boolean = nandControlLock.withLock {
+        if (!isNandOpen.get()) {
+            return false
+        }
+
+        return MelonDSiNand.ensureTitleSaveStructure((titleId and 0xFFFFFFFF).toInt(), romHeaderBytes, tmdMetadata)
+    }
+
     override suspend fun exportTitleExecutable(titleId: Long, outputPath: String): Boolean = nandControlLock.withLock {
         if (!isNandOpen.get()) {
             return false

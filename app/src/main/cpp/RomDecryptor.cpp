@@ -85,6 +85,42 @@ static constexpr uint32_t OFFSET_DSI_ARM9I_HASH   = 0x350; // KeyY source (ARM9i
 static constexpr uint32_t OFFSET_DSI_ARM7I_HASH   = 0x364; // KeyY source (ARM7i HMAC-SHA1)
 static constexpr uint32_t HEADER_SIZE             = 0x1000;
 
+static bool isBufferPlaintext(const uint8_t* data, size_t size)
+{
+    if (!data || size < 16) return false;
+    size_t checkWords = std::min<size_t>(size / 4, 32);
+    size_t score = 0;
+    size_t thumbCount = 0;
+    for (size_t i = 0; i < checkWords; i++)
+    {
+        uint32_t w = *(const uint32_t*)&data[i * 4];
+        uint32_t cond = w >> 28;
+        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+        {
+            score++;
+        }
+        else if (cond <= 0xE)
+        {
+            uint32_t op = (w >> 25) & 0x7;
+            if (op <= 0x7 && w != 0xE7FFDEFF)
+                score++;
+        }
+        else if (cond == 0xF)
+        {
+            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
+                score++;
+        }
+
+        uint16_t hw0 = (uint16_t)w;
+        uint16_t hw1 = (uint16_t)(w >> 16);
+        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
+            thumbCount++;
+        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
+            thumbCount++;
+    }
+    return (checkWords >= 8 && (score >= (checkWords * 6) / 10 || thumbCount >= (checkWords * 2 * 6) / 10));
+}
+
 static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
 {
     if (offset == 0 || size == 0) return false;
@@ -94,32 +130,7 @@ static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
     size_t sampleRead = fread(buffer, 1, sizeof(buffer), f);
     if (sampleRead < 16) return false;
 
-    size_t wordCount = sampleRead / 4;
-    size_t armOpcodeCount = 0;
-    size_t thumbOpcodeCount = 0;
-    const uint32_t* words = (const uint32_t*)buffer;
-    const uint16_t* halfwords = (const uint16_t*)buffer;
-
-    for (size_t i = 0; i < wordCount; i++)
-    {
-        uint32_t w = words[i];
-        if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
-            armOpcodeCount++;
-    }
-
-    for (size_t i = 0; i < wordCount * 2; i++)
-    {
-        uint16_t hw = halfwords[i];
-        if ((hw & 0xF000) == 0x2000 || (hw & 0xF800) == 0x4800 ||
-            (hw & 0xFF00) == 0xB500 || (hw & 0xF000) == 0xD000 ||
-            (hw & 0xF800) == 0xE000 || hw == 0)
-            thumbOpcodeCount++;
-    }
-
-    if (armOpcodeCount >= (wordCount * 3) / 10 || thumbOpcodeCount >= (wordCount * 2 * 3) / 10)
-        return false; // Plaintext ARM/Thumb code (ALREADY DECRYPTED)
-
-    return true; // Ciphertext (ENCRYPTED)
+    return !isBufferPlaintext(buffer, sampleRead);
 }
 
 namespace MelonDSAndroid {
@@ -505,29 +516,13 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     bool mod1Encrypted = false;
     if (mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
     {
-        size_t checkWords = (mod1Size < 128) ? (mod1Size / 4) : 32;
-        size_t armCount = 0;
-        for (size_t i = 0; i < checkWords; i++)
-        {
-            uint32_t w = *(uint32_t*)&rom[mod1Off + i * 4];
-            if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
-                armCount++;
-        }
-        mod1Encrypted = (armCount < (checkWords * 4) / 10);
+        mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
     }
 
     bool mod2Encrypted = false;
     if (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
     {
-        size_t checkWords = (mod2Size < 128) ? (mod2Size / 4) : 32;
-        size_t armCount = 0;
-        for (size_t i = 0; i < checkWords; i++)
-        {
-            uint32_t w = *(uint32_t*)&rom[mod2Off + i * 4];
-            if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
-                armCount++;
-        }
-        mod2Encrypted = (armCount < (checkWords * 4) / 10);
+        mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
     }
 
     if (!mod1Encrypted && !mod2Encrypted)

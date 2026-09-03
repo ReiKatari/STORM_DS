@@ -709,6 +709,14 @@ class FileSystemRomsRepository(
         val removedFiles = cachedFiles.keys - currentFiles.keys
         removeRomsByUriStrings(removedFiles)
 
+        // Also dynamically remove any ROM currently in repository for this directory whose file no longer exists on disk
+        val existingDirRomUris = roms.filter { isRomInDirectory(it, directoryUri) }.map { it.uri.toString() }.toSet()
+        val missingFromDiskUris = existingDirRomUris - currentFiles.keys
+        if (missingFromDiskUris.isNotEmpty()) {
+            Log.i(TAG, "processDirectory: removing ${missingFromDiskUris.size} deleted/moved ROM(s) from directory $directoryUri")
+            removeRomsByUriStrings(missingFromDiskUris)
+        }
+
         val updatedExistingUris = updatedFiles.mapNotNull { fileState ->
             fileState.uri.toString().takeIf { cachedFiles.containsKey(it) }
         }.toSet()
