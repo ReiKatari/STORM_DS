@@ -754,15 +754,167 @@ void DSi::SetupDirectBoot()
             for (int k = 0; k < 16; ++k)
                 ARM9Write8(0x02FFD7BC + k, dummyCID[k]);
         }
-        // Zero out 0x02FFD7CC through 0x02FFD850 (Title list count = 0, zero padding)
-        for (u32 addr = 0x02FFD7CC; addr < 0x02FFD850; addr += 4)
-            ARM9Write32(addr, 0);
+        // Populate DSi OS App Context and Installed Title List at 0x02FFD800
+        // TWL-SDK FS driver checks [0x02FFD800] (title count), [0x02FFD840] (title bitmask),
+        // and [0x02FFD850 + i*8] (TitleIDLow, TitleIDHigh) to verify title permissions for dataPub/dataPrv.
+        {
+            u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
+            u32 titleId1 = header.DSiTitleIDLow;
+            if (!titleId1)
+            {
+                titleId1 = ((u32)header.GameCode[0] << 24) |
+                           ((u32)header.GameCode[1] << 16) |
+                           ((u32)header.GameCode[2] << 8) |
+                           (u32)header.GameCode[3];
+            }
+
+            // Zero out 0x02FFD7CC through 0x02FFD850
+            for (u32 addr = 0x02FFD7CC; addr < 0x02FFD850; addr += 4)
+                ARM9Write32(addr, 0);
+
+            // [0x02FFD800]: Installed title count = 1
+            ARM9Write8(0x02FFD800, 1);
+
+            // [0x02FFD840..0x02FFD84F]: Title permission bitmask = all 1s (enabled)
+            for (u32 b = 0; b < 16; ++b)
+                ARM9Write8(0x02FFD840 + b, 0xFF);
+
+            // [0x02FFD850]: Title 0 TitleIDLow
+            // [0x02FFD854]: Title 0 TitleIDHigh
+            ARM9Write32(0x02FFD850, titleId1);
+            ARM9Write32(0x02FFD854, titleId0);
+        }
 
         // Populate Cartridge Header mirror strictly at 0x02FFE000..0x02FFE240
         for (u32 i = 0; i < 0x240; i += 4)
         {
             u32 tmp = (i + 4 <= cartLength) ? *(u32*)&cartrom[i] : 0;
             ARM9Write32(0x02FFE000 + i, tmp);
+        }
+
+        // DSi SD/MMC Device List at header.DSiSDMMCDeviceList (cart_header[0x1D4])
+        // Canonical GBATEK specification: 400h-byte table in ARM7 RAM containing up to 11 entries (each 54h bytes)
+        // defining virtual/physical storage mappings (nand, nand2, content, shared1, shared2, photo, dataPrv, dataPub, sdmc)
+        if (header.DSiSDMMCDeviceList != 0)
+        {
+            u32 devListAddr = header.DSiSDMMCDeviceList;
+            u8 devList[0x400];
+            memset(devList, 0, sizeof(devList));
+
+            u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
+            u32 titleId1 = header.DSiTitleIDLow;
+            if (!titleId1)
+            {
+                titleId1 = ((u32)header.GameCode[0] << 24) |
+                           ((u32)header.GameCode[1] << 16) |
+                           ((u32)header.GameCode[2] << 8) |
+                           (u32)header.GameCode[3];
+            }
+
+            struct DeviceListEntry
+            {
+                char DriveLetter;
+                u8 Flags;
+                u8 AccessRights;
+                u8 Zero;
+                char Name[16];
+                char Path[64];
+            };
+            static_assert(sizeof(DeviceListEntry) == 0x54, "DeviceListEntry must be 0x54 bytes");
+
+            DeviceListEntry* entries = (DeviceListEntry*)&devList[0];
+            int count = 0;
+
+            // Entry 0 ('A'): Internal eMMC Partition 1 ("nand") -> "/"
+            entries[count].DriveLetter = 'A';
+            entries[count].Flags = 0x81;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "nand", 16);
+            strncpy(entries[count].Path, "/", 64);
+            count++;
+
+            // Entry 1 ('B'): Internal eMMC Partition 2 ("nand2") -> "/"
+            entries[count].DriveLetter = 'B';
+            entries[count].Flags = 0xA1;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "nand2", 16);
+            strncpy(entries[count].Path, "/", 64);
+            count++;
+
+            // Entry 2 ('C'): Content directory ("content") -> "nand:/title/%08x/%08x/content"
+            entries[count].DriveLetter = 'C';
+            entries[count].Flags = 0x11;
+            entries[count].AccessRights = 0x04;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "content", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/content", titleId0, titleId1);
+            count++;
+
+            // Entry 3 ('D'): Shared1 ("shared1") -> "nand:/shared1"
+            entries[count].DriveLetter = 'D';
+            entries[count].Flags = 0x11;
+            entries[count].AccessRights = 0x04;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "shared1", 16);
+            strncpy(entries[count].Path, "nand:/shared1", 64);
+            count++;
+
+            // Entry 4 ('E'): Shared2 ("shared2") -> "nand:/shared2"
+            entries[count].DriveLetter = 'E';
+            entries[count].Flags = 0x11;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "shared2", 16);
+            strncpy(entries[count].Path, "nand:/shared2", 64);
+            count++;
+
+            // Entry 5 ('F'): Photo ("photo") -> "nand2:/photo"
+            entries[count].DriveLetter = 'F';
+            entries[count].Flags = 0x31;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "photo", 16);
+            strncpy(entries[count].Path, "nand2:/photo", 64);
+            count++;
+
+            // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
+            entries[count].DriveLetter = 'G';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPrv", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+            count++;
+
+            // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            entries[count].DriveLetter = 'H';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPub", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+            count++;
+
+            // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
+            entries[count].DriveLetter = 'I';
+            entries[count].Flags = 0x00;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "sdmc", 16);
+            strncpy(entries[count].Path, "/", 64);
+            count++;
+
+            // Offset 0x3C0: Canonical application path string
+            snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
+
+            for (u32 k = 0; k < 0x400; ++k)
+                ARM7Write8(devListAddr + k, devList[k]);
+
+            Log(LogLevel::Info,
+                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, dataPub=%s)\n",
+                devListAddr, titleId0, titleId1, entries[7].Path);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror
