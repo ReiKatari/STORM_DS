@@ -396,16 +396,7 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     bool isArm7Area = (offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size) ||
                       (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize);
 
-    if (offset == header.DSiModcrypt1Offset && (header.DSiCryptoFlags & (1 << 0)))
-    {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Modcrypt1 already decrypted (DSiCryptoFlags=0x%02X), skipping\n", header.DSiCryptoFlags);
-        return;
-    }
-    if (offset == header.DSiModcrypt2Offset && (header.DSiCryptoFlags & (1 << 1)))
-    {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Modcrypt2 already decrypted (DSiCryptoFlags=0x%02X), skipping\n", header.DSiCryptoFlags);
-        return;
-    }
+
 
     // Plaintext check: if words look like ARM / Thumb opcode / zero patterns
     size_t checkWords = std::min<size_t>(decryptSize / 4, 32);
@@ -896,26 +887,20 @@ void DSi::SetupDirectBoot()
             }
         }
 
-        // Decrypt modcrypt areas if still encrypted
-        if (!(header.DSiCryptoFlags & 0x01))
+        // Decrypt modcrypt areas (DecryptModcryptArea will safely skip if memory already contains plaintext ARM/Thumb code)
+        if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
+            header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
         {
-            if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
-                header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
-            {
-                DecryptModcryptArea(header.DSiModcrypt1Offset,
-                                    header.DSiModcrypt1Size,
-                                    header.DSiARM9Hash);
-            }
+            DecryptModcryptArea(header.DSiModcrypt1Offset,
+                                header.DSiModcrypt1Size,
+                                header.DSiARM9Hash);
         }
-        if (!(header.DSiCryptoFlags & 0x02))
+        if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
+            header.DSiModcrypt2Size != 0xFFFFFFFF && header.DSiModcrypt2Offset != 0xFFFFFFFF)
         {
-            if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
-                header.DSiModcrypt2Size != 0xFFFFFFFF && header.DSiModcrypt2Offset != 0xFFFFFFFF)
-            {
-                DecryptModcryptArea(header.DSiModcrypt2Offset,
-                                    header.DSiModcrypt2Size,
-                                    header.DSiARM7Hash);
-            }
+            DecryptModcryptArea(header.DSiModcrypt2Offset,
+                                header.DSiModcrypt2Size,
+                                header.DSiARM7Hash);
         }
         header.DSiCryptoFlags |= 0x03;
     }
