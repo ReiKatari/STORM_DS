@@ -2,8 +2,15 @@
 #include <cstring>
 #include <cstdio>
 #include <vector>
+#include <algorithm>
 #include <unistd.h>
 #include <fcntl.h>
+#include <android/log.h>
+
+#define LOG_TAG "STORM_RomDecryptor"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 extern "C" {
 #include "../../../melonDS-android-lib/src/tiny-AES-c/aes.h"
@@ -51,6 +58,52 @@ static void DeriveNormalKey(const uint8_t* keyX, const uint8_t* keyY, uint8_t* n
 
     ROL16(tmp, 42);
     memcpy(normalkey, tmp, 16);
+}
+
+static void AddCtr(uint8_t* ctr, uint32_t carry)
+{
+    uint32_t counter[4];
+    for (int i = 0; i < 4; i++)
+        counter[i] = ((uint32_t)ctr[i * 4 + 0] << 24) | ((uint32_t)ctr[i * 4 + 1] << 16) |
+                     ((uint32_t)ctr[i * 4 + 2] << 8)  | (uint32_t)ctr[i * 4 + 3];
+
+    for (int i = 3; i >= 0; i--)
+    {
+        uint64_t sum = (uint64_t)counter[i] + carry;
+        carry = (uint32_t)(sum >> 32);
+        counter[i] = (uint32_t)sum;
+    }
+
+    for (int i = 0; i < 4; i++)
+    {
+        ctr[i * 4 + 0] = (uint8_t)(counter[i] >> 24);
+        ctr[i * 4 + 1] = (uint8_t)(counter[i] >> 16);
+        ctr[i * 4 + 2] = (uint8_t)(counter[i] >> 8);
+        ctr[i * 4 + 3] = (uint8_t)(counter[i] >> 0);
+    }
+}
+
+static void CryptArea(const struct AES_ctx* ctx, const uint8_t* ctrInit, uint8_t* rom, uint32_t offset, uint32_t size)
+{
+    uint8_t ctr[16];
+    for (int i = 0; i < 16; i++)
+        ctr[i] = ctrInit[15 - i];
+
+    uint8_t stream[16];
+
+    for (uint32_t i = 0; i < size; i += 16)
+    {
+        memcpy(stream, ctr, 16);
+        AES_ECB_encrypt(ctx, stream);
+
+        uint32_t blockLen = (size - i < 16) ? (size - i) : 16;
+        for (uint32_t b = 0; b < blockLen; b++)
+        {
+            rom[offset + i + b] ^= stream[15 - b];
+        }
+
+        AddCtr(ctr, 1);
+    }
 }
 
 static uint16_t CalcHeaderCRC16(const uint8_t* data, size_t len)
@@ -309,123 +362,38 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     }
 
     // Derive the AES key
+    uint8_t keyX[16];
+    memcpy(keyX, "Nintendo", 8);
+    memcpy(&keyX[8], &rom[OFFSET_GAME_CODE], 4);
+    keyX[12] = rom[OFFSET_GAME_CODE + 3];
+    keyX[13] = rom[OFFSET_GAME_CODE + 2];
+    keyX[14] = rom[OFFSET_GAME_CODE + 1];
+    keyX[15] = rom[OFFSET_GAME_CODE + 0];
+
+    uint8_t keyY[16];
+    memcpy(keyY, &rom[0x350], 16);
+
     uint8_t normalKey[16];
+    DeriveNormalKey(keyX, keyY, normalKey);
 
-    bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
-    if (devKey)
+    uint8_t keySwap[16];
+    for (int i = 0; i < 16; i++)
+        keySwap[i] = normalKey[15 - i];
+
+    struct AES_ctx ctx;
+    AES_init_ctx(&ctx, keySwap);
+
+    if (mod1Encrypted)
     {
-        uint8_t tmp[16];
-        memcpy(tmp, &rom[0], 16);
-        Bswap128(normalKey, tmp);
-    }
-    else
-    {
-        uint8_t keyX[16], keyY[16], tmp[16];
-
-        *(uint32_t*)&keyX[0] = 0x746E694E; // "Nint" (little-endian)
-        *(uint32_t*)&keyX[4] = 0x6F646E65; // "endo"
-        keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-        keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-        keyX[10] = rom[OFFSET_GAME_CODE + 2];
-        keyX[11] = rom[OFFSET_GAME_CODE + 3];
-        keyX[12] = rom[OFFSET_GAME_CODE + 3];
-        keyX[13] = rom[OFFSET_GAME_CODE + 2];
-        keyX[14] = rom[OFFSET_GAME_CODE + 1];
-        keyX[15] = rom[OFFSET_GAME_CODE + 0];
-
-        if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
-            memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-        else
-            memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-
-        DeriveNormalKey(keyX, keyY, tmp);
-        Bswap128(normalKey, tmp);
+        CryptArea(&ctx, &rom[0x300], rom.data(), mod1Off, mod1Size);
     }
 
-    // --- Decrypt Modcrypt Area 1 (ARM9i) ---
-    if (mod1Encrypted && mod1Off > 0 && mod1Size > 0)
+    if (mod2Encrypted)
     {
-        AES_ctx ctx;
-        uint8_t iv[16];
-        Bswap128(iv, &rom[OFFSET_DSI_ARM9_HASH]);
-        AES_init_ctx_iv(&ctx, normalKey, iv);
-
-        for (uint32_t i = 0; i < mod1Size; i += 16)
-        {
-            uint32_t blockLen = (i + 16 <= mod1Size) ? 16 : (mod1Size - i);
-            uint8_t block[16] = {0};
-            memcpy(block, &rom[mod1Off + i], blockLen);
-            uint8_t swapped[16];
-            Bswap128(swapped, block);
-            AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
-            Bswap128(block, swapped);
-            memcpy(&rom[mod1Off + i], block, blockLen);
-
-            currentWork += blockLen;
-            if (progressCallback && (i % 65536 == 0))
-                progressCallback(currentWork, totalWork);
-        }
+        CryptArea(&ctx, &rom[0x314], rom.data(), mod2Off, mod2Size);
     }
 
-    // --- Decrypt Modcrypt Area 2 (ARM7i) ---
-    if (mod2Encrypted && mod2Off > 0 && mod2Size > 0)
-    {
-        uint8_t normalKey2[16];
-        if (devKey)
-        {
-            memcpy(normalKey2, normalKey, 16);
-        }
-        else
-        {
-            uint8_t keyX[16], keyY[16], tmp[16];
-            *(uint32_t*)&keyX[0] = 0x746E694E;
-            *(uint32_t*)&keyX[4] = 0x6F646E65;
-            keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-            keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-            keyX[10] = rom[OFFSET_GAME_CODE + 2];
-            keyX[11] = rom[OFFSET_GAME_CODE + 3];
-            keyX[12] = rom[OFFSET_GAME_CODE + 3];
-            keyX[13] = rom[OFFSET_GAME_CODE + 2];
-            keyX[14] = rom[OFFSET_GAME_CODE + 1];
-            keyX[15] = rom[OFFSET_GAME_CODE + 0];
-
-            if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
-                memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-            else
-                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-
-            DeriveNormalKey(keyX, keyY, tmp);
-            Bswap128(normalKey2, tmp);
-        }
-
-        AES_ctx ctx;
-        uint8_t iv[16];
-        Bswap128(iv, &rom[OFFSET_DSI_ARM7_HASH]);
-        AES_init_ctx_iv(&ctx, normalKey2, iv);
-
-        for (uint32_t i = 0; i < mod2Size; i += 16)
-        {
-            uint32_t blockLen = (i + 16 <= mod2Size) ? 16 : (mod2Size - i);
-            uint8_t block[16] = {0};
-            memcpy(block, &rom[mod2Off + i], blockLen);
-            uint8_t swapped[16];
-            Bswap128(swapped, block);
-            AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
-            Bswap128(block, swapped);
-            memcpy(&rom[mod2Off + i], block, blockLen);
-
-            currentWork += blockLen;
-            if (progressCallback && (i % 65536 == 0))
-                progressCallback(currentWork, totalWork);
-        }
-    }
-
-    // Set Modcrypt decrypted flags (bits 0 and 1: 03h=both decrypted) and recalculate header CRC16
-    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
-    uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
-    *(uint16_t*)&rom[0x15E] = headerCrc;
-
-    // Write decrypted ROM back in-place
+    // Write decrypted ROM back in-place (without modifying header flags or CRC)
     fseek(f, 0, SEEK_SET);
     size_t written = fwrite(rom.data(), 1, fileSize, f);
     fflush(f);
@@ -476,117 +444,49 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     bool mod2Encrypted = (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize) &&
                          !isBufferPlaintext(&rom[mod2Off], std::min<size_t>(mod2Size, 256));
 
+    LOGI("DecryptRomBuffer: GameCode=%.4s mod1=[0x%X, 0x%X, enc=%d] mod2=[0x%X, 0x%X, enc=%d]",
+         (char*)&rom[OFFSET_GAME_CODE], mod1Off, mod1Size, mod1Encrypted, mod2Off, mod2Size, mod2Encrypted);
+
     if (!mod1Encrypted && !mod2Encrypted)
     {
-        rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+        LOGI("DecryptRomBuffer: ROM is already plaintext in memory, skipping decryption.");
         return true;
     }
 
-    // Derive the AES key
+    uint8_t keyX[16];
+    memcpy(keyX, "Nintendo", 8);
+    memcpy(&keyX[8], &rom[OFFSET_GAME_CODE], 4);
+    keyX[12] = rom[OFFSET_GAME_CODE + 3];
+    keyX[13] = rom[OFFSET_GAME_CODE + 2];
+    keyX[14] = rom[OFFSET_GAME_CODE + 1];
+    keyX[15] = rom[OFFSET_GAME_CODE + 0];
+
+    uint8_t keyY[16];
+    memcpy(keyY, &rom[0x350], 16);
+
     uint8_t normalKey[16];
-    bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
-    if (devKey)
-    {
-        uint8_t tmp[16];
-        memcpy(tmp, &rom[0], 16);
-        Bswap128(normalKey, tmp);
-    }
-    else
-    {
-        uint8_t keyX[16], keyY[16], tmp[16];
-        *(uint32_t*)&keyX[0] = 0x746E694E; // "Nint"
-        *(uint32_t*)&keyX[4] = 0x6F646E65; // "endo"
-        keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-        keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-        keyX[10] = rom[OFFSET_GAME_CODE + 2];
-        keyX[11] = rom[OFFSET_GAME_CODE + 3];
-        keyX[12] = rom[OFFSET_GAME_CODE + 3];
-        keyX[13] = rom[OFFSET_GAME_CODE + 2];
-        keyX[14] = rom[OFFSET_GAME_CODE + 1];
-        keyX[15] = rom[OFFSET_GAME_CODE + 0];
+    DeriveNormalKey(keyX, keyY, normalKey);
 
-        if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
-            memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-        else
-            memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
+    uint8_t keySwap[16];
+    for (int i = 0; i < 16; i++)
+        keySwap[i] = normalKey[15 - i];
 
-        DeriveNormalKey(keyX, keyY, tmp);
-        Bswap128(normalKey, tmp);
+    struct AES_ctx ctx;
+    AES_init_ctx(&ctx, keySwap);
+
+    if (mod1Encrypted)
+    {
+        CryptArea(&ctx, &rom[0x300], rom, mod1Off, mod1Size);
+        LOGI("DecryptRomBuffer: In-memory decrypted Area 1 (ARM9i) at 0x%X (size=0x%X)", mod1Off, mod1Size);
     }
 
-    // --- Decrypt Modcrypt Area 1 (ARM9i) ---
-    if (mod1Encrypted && mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
+    if (mod2Encrypted)
     {
-        AES_ctx ctx;
-        uint8_t iv[16];
-        Bswap128(iv, &rom[OFFSET_DSI_ARM9_HASH]);
-        AES_init_ctx_iv(&ctx, normalKey, iv);
-
-        for (uint32_t i = 0; i < mod1Size; i += 16)
-        {
-            uint32_t blockLen = (i + 16 <= mod1Size) ? 16 : (mod1Size - i);
-            uint8_t block[16] = {0};
-            memcpy(block, &rom[mod1Off + i], blockLen);
-            uint8_t swapped[16];
-            Bswap128(swapped, block);
-            AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
-            Bswap128(block, swapped);
-            memcpy(&rom[mod1Off + i], block, blockLen);
-        }
+        CryptArea(&ctx, &rom[0x314], rom, mod2Off, mod2Size);
+        LOGI("DecryptRomBuffer: In-memory decrypted Area 2 (ARM7i) at 0x%X (size=0x%X)", mod2Off, mod2Size);
     }
 
-    // --- Decrypt Modcrypt Area 2 (ARM7i) ---
-    if (mod2Encrypted && mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
-    {
-        uint8_t normalKey2[16];
-        if (devKey)
-        {
-            memcpy(normalKey2, normalKey, 16);
-        }
-        else
-        {
-            uint8_t keyX[16], keyY[16], tmp[16];
-            *(uint32_t*)&keyX[0] = 0x746E694E;
-            *(uint32_t*)&keyX[4] = 0x6F646E65;
-            keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-            keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-            keyX[10] = rom[OFFSET_GAME_CODE + 2];
-            keyX[11] = rom[OFFSET_GAME_CODE + 3];
-            keyX[12] = rom[OFFSET_GAME_CODE + 3];
-            keyX[13] = rom[OFFSET_GAME_CODE + 2];
-            keyX[14] = rom[OFFSET_GAME_CODE + 1];
-            keyX[15] = rom[OFFSET_GAME_CODE + 0];
-
-            if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
-                memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-            else
-                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-
-            DeriveNormalKey(keyX, keyY, tmp);
-            Bswap128(normalKey2, tmp);
-        }
-
-        AES_ctx ctx;
-        uint8_t iv[16];
-        Bswap128(iv, &rom[OFFSET_DSI_ARM7_HASH]);
-        AES_init_ctx_iv(&ctx, normalKey2, iv);
-
-        for (uint32_t i = 0; i < mod2Size; i += 16)
-        {
-            uint32_t blockLen = (i + 16 <= mod2Size) ? 16 : (mod2Size - i);
-            uint8_t block[16] = {0};
-            memcpy(block, &rom[mod2Off + i], blockLen);
-            uint8_t swapped[16];
-            Bswap128(swapped, block);
-            AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
-            Bswap128(block, swapped);
-            memcpy(&rom[mod2Off + i], block, blockLen);
-        }
-    }
-
-    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
-    uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
-    *(uint16_t*)&rom[0x15E] = headerCrc;
+    // Header flags and CRC remain untouched for 100% byte-exact retail parity
     return true;
 }
 
