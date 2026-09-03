@@ -47,29 +47,74 @@ NANDImage::NANDImage(Platform::FileHandle* nandfile, const u8* es_keyY) noexcept
     Length = FileLength(nandfile);
 
     // read the nocash footer
-
-    FileSeek(nandfile, -0x40, FileSeekOrigin::End);
-
+    bool foundFooter = false;
     char nand_footer[16];
     const char* nand_footer_ref = "DSi eMMC CID/CPU";
-    FileRead(nand_footer, 1, sizeof(nand_footer), nandfile);
-    if (memcmp(nand_footer, nand_footer_ref, sizeof(nand_footer)))
+
+    // 1. Try from Start at Length - 0x40 (safe on all SAF streams)
+    if (Length >= 0x40)
     {
-        // There is another copy of the footer at 000FF800h for the case
-        // that by external tools the image was cut off
-        // See https://problemkaputt.de/gbatek.htm#dsisdmmcimages
-        FileSeek(nandfile, 0x000FF800, FileSeekOrigin::Start);
-        FileRead(nand_footer, 1, sizeof(nand_footer), nandfile);
-        if (memcmp(nand_footer, nand_footer_ref, sizeof(nand_footer)))
+        if (FileSeek(nandfile, Length - 0x40, FileSeekOrigin::Start))
         {
-            Log(LogLevel::Error, "ERROR: NAND missing nocash footer\n");
-            CloseFile(nandfile);
-            return;
+            if (FileRead(nand_footer, 1, sizeof(nand_footer), nandfile) == sizeof(nand_footer) &&
+                memcmp(nand_footer, nand_footer_ref, sizeof(nand_footer)) == 0)
+            {
+                foundFooter = true;
+            }
         }
     }
 
-    FileRead(eMMC_CID.data(), 1, sizeof(eMMC_CID), nandfile);
-    FileRead(&ConsoleID, 1, sizeof(ConsoleID), nandfile);
+    // 2. Try from End at -0x40
+    if (!foundFooter)
+    {
+        if (FileSeek(nandfile, -0x40, FileSeekOrigin::End))
+        {
+            if (FileRead(nand_footer, 1, sizeof(nand_footer), nandfile) == sizeof(nand_footer) &&
+                memcmp(nand_footer, nand_footer_ref, sizeof(nand_footer)) == 0)
+            {
+                foundFooter = true;
+            }
+        }
+    }
+
+    // 3. Try at 0x000FF800 (1MB cut-off image fallback per GBATEK)
+    if (!foundFooter && Length >= 0x000FF800 + 0x40)
+    {
+        if (FileSeek(nandfile, 0x000FF800, FileSeekOrigin::Start))
+        {
+            if (FileRead(nand_footer, 1, sizeof(nand_footer), nandfile) == sizeof(nand_footer) &&
+                memcmp(nand_footer, nand_footer_ref, sizeof(nand_footer)) == 0)
+            {
+                foundFooter = true;
+            }
+        }
+    }
+
+    // 4. Try at Length - 0x200 (512-byte sector padding alignment)
+    if (!foundFooter && Length >= 0x200)
+    {
+        if (FileSeek(nandfile, Length - 0x200, FileSeekOrigin::Start))
+        {
+            if (FileRead(nand_footer, 1, sizeof(nand_footer), nandfile) == sizeof(nand_footer) &&
+                memcmp(nand_footer, nand_footer_ref, sizeof(nand_footer)) == 0)
+            {
+                foundFooter = true;
+            }
+        }
+    }
+
+    if (foundFooter)
+    {
+        FileRead(eMMC_CID.data(), 1, sizeof(eMMC_CID), nandfile);
+        FileRead(&ConsoleID, 1, sizeof(ConsoleID), nandfile);
+    }
+    else
+    {
+        Log(LogLevel::Warn, "DSi NAND missing nocash footer; applying default eMMC CID and ConsoleID\n");
+        const u8 defCid[16] = { 0x15, 0x00, 0x00, 0x4D, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+        memcpy(eMMC_CID.data(), defCid, 16);
+        ConsoleID = 0x0000000012345678ULL;
+    }
 
     // init NAND crypto
 

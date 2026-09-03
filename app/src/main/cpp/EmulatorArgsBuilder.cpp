@@ -476,15 +476,30 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
         }
     }
 
-    if (!nandfile)
+    std::optional<DSi_NAND::NANDImage> nandImage;
+
+    if (nandfile)
+    {
+        DSi_NAND::NANDImage img(nandfile, &arm7ibios[0x8308]);
+        if (img)
+        {
+            nandImage = std::move(img);
+        }
+        else
+        {
+            Log(Warn, "Failed to initialize configured DSi NAND image at %s, falling back to synthetic NAND\n", path.c_str());
+        }
+    }
+
+    if (!nandImage)
     {
         // Generate a minimal valid synthetic NAND image so DSi initialization never fails
         std::string synPath = "dsi_synthetic_nand.bin";
-        nandfile = OpenInternalFile(synPath, ReadWriteExisting);
-        if (!nandfile)
+        FileHandle* synFile = OpenInternalFile(synPath, ReadWriteExisting);
+        if (!synFile)
         {
-            nandfile = OpenInternalFile(synPath, ReadWrite);
-            if (nandfile)
+            synFile = OpenInternalFile(synPath, ReadWrite);
+            if (synFile)
             {
                 constexpr size_t kSynSize = 0x100000; // 1MB
                 std::vector<u8> dummy(kSynSize, 0);
@@ -499,25 +514,31 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
                 };
                 writeFooterAt(0x000FF800);
                 writeFooterAt(kSynSize - 0x40);
-                FileWrite(dummy.data(), 1, kSynSize, nandfile);
-                FileFlush(nandfile);
+                FileWrite(dummy.data(), 1, kSynSize, synFile);
+                FileFlush(synFile);
+            }
+        }
+
+        if (synFile)
+        {
+            DSi_NAND::NANDImage synImg(synFile, &arm7ibios[0x8308]);
+            if (synImg)
+            {
+                Log(Info, "Synthetic DSi NAND fallback successfully initialized\n");
+                nandImage = std::move(synImg);
             }
         }
     }
 
-    if (!nandfile)
-        return std::nullopt;
-
-    DSi_NAND::NANDImage nandImage(nandfile, &arm7ibios[0x8308]);
     if (!nandImage)
     {
-        Log(Warn, "Failed to parse DSi NAND footer\n");
+        Log(Error, "Critical: Could not initialize any DSi NAND\n");
         return std::nullopt;
     }
 
     // Scoped mount for user settings; if mounting FAT fails, continue anyway (for Direct Boot)
     {
-        auto mount = DSi_NAND::NANDMount(nandImage);
+        auto mount = DSi_NAND::NANDMount(*nandImage);
         if (mount)
         {
             DSi_NAND::DSiFirmwareSystemSettings settings {};
