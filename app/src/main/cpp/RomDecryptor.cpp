@@ -452,8 +452,8 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         }
     }
 
-    // Clear Modcrypt encryption flags (bits 0 and 1) and recalculate header CRC16
-    rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
+    // Set Modcrypt decrypted flags (bits 0 and 1: 03h=both decrypted) and recalculate header CRC16
+    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
     uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
     *(uint16_t*)&rom[0x15E] = headerCrc;
 
@@ -532,7 +532,7 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
 
     if (!mod1Encrypted && !mod2Encrypted)
     {
-        rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
+        rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
         return true;
     }
 
@@ -634,7 +634,7 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
         }
     }
 
-    rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
+    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
     uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
     *(uint16_t*)&rom[0x15E] = headerCrc;
     return true;

@@ -18,6 +18,10 @@ FILE* UriFileHandler::open(const char* path, FileMode mode)
     jclass handlerClass = env->GetObjectClass(this->uriFileHandler);
     jmethodID openMethod = env->GetMethodID(handlerClass, "open", "(Ljava/lang/String;Ljava/lang/String;)I");
     jint fileDescriptor = env->CallIntMethod(this->uriFileHandler, openMethod, pathString, modeString);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
 
     if (fileDescriptor == -1) {
         return nullptr;

@@ -38,14 +38,14 @@ class UriFileHandler(private val context: Context, private val uriHandler: UriHa
             if (uriHandler.fileExists(uri)) {
                 try {
                     context.contentResolver.openFileDescriptor(uri, mode)?.detachFd()
-                } catch (_: FileNotFoundException) {
+                } catch (_: Exception) {
                     null
                 }
             } else {
                 uriHandler.createFileDocument(uri)?.let { document ->
                     try {
                         context.contentResolver.openFileDescriptor(document.uri, mode)?.detachFd()
-                    } catch (_: FileNotFoundException) {
+                    } catch (_: Exception) {
                         null
                     }
                 }

@@ -423,7 +423,7 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
             thumbCount++;
     }
-    if (checkWords >= 8 && (armCount >= (checkWords * 3) / 10 || thumbCount >= (checkWords * 2 * 3) / 10))
+    if (checkWords >= 8 && (armCount >= (checkWords * 8) / 10 || thumbCount >= (checkWords * 2 * 8) / 10))
     {
         Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (arm=%zu, thumb=%zu / %zu), skipping\n",
             binaryaddr, armCount, thumbCount, checkWords);
