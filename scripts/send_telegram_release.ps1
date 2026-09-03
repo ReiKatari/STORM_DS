@@ -57,7 +57,7 @@ function Upload-TelegramDocument([string]$filePath, [string]$docCaption) {
     $form.Add($byteContent, "document", $fileName)
 
     $resp = $client.PostAsync("https://api.telegram.org/bot$Token/sendDocument", $form).Result
-    Write-Host "Done $fileName: " ($resp.Content.ReadAsStringAsync().Result)
+    Write-Host "Done ${fileName}: " ($resp.Content.ReadAsStringAsync().Result)
 }
 
 if ($Announcement) {
