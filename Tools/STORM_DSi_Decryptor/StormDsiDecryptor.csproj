@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>AppIcon.ico</ApplicationIcon>
+    <AssemblyName>STORM DSi Decryptor</AssemblyName>
+    <RootNamespace>StormDsiDecryptor</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>ReiKatari</Authors>
+    <Company>STORM SOFT</Company>
+    <Product>STORM DSi Decryptor</Product>
+    <Description>Утилита сверхбыстрой расшифровки Modcrypt для Nintendo DSi и DSiWare</Description>
+    <Copyright>Copyright © 2026 ReiKatari. All rights reserved.</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="AppIcon.ico" />
+  </ItemGroup>
+
+</Project>

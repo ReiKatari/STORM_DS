@@ -1,0 +1,208 @@
+using System;
+using System.Collections.Generic;
+
+namespace StormDsiDecryptor;
+
+public static class LocalizationManager
+{
+    public static string CurrentLanguage { get; set; } = "ru";
+
+    private static readonly Dictionary<string, Dictionary<string, string>> Strings = new()
+    {
+        ["ru"] = new()
+        {
+            ["AppTitle"] = "STORM DSi Decryptor",
+            ["Subtitle"] = "Сверхбыстрая утилита расшифровки Modcrypt для Nintendo DSi и DSiWare",
+            ["DragDropHint"] = "Перетащите сюда файлы .nds, .dsi, .app или целую папку с играми",
+            ["AddFiles"] = "Добавить файлы",
+            ["AddFolder"] = "Добавить папку",
+            ["DecryptAll"] = "Расшифровать все",
+            ["ClearList"] = "Очистить список",
+            ["OpenFolder"] = "Открыть папку",
+            ["ColFileName"] = "Имя файла",
+            ["ColTitle"] = "Название игры",
+            ["ColCode"] = "Код",
+            ["ColSize"] = "Размер",
+            ["ColStatus"] = "Статус",
+            ["StatusEncrypted"] = "Зашифрован (Modcrypt)",
+            ["StatusDecrypted"] = "Расшифрован (Готов)",
+            ["StatusNotDsi"] = "Обычный DS (Без шифрования)",
+            ["StatusProcessing"] = "Расшифровка...",
+            ["StatusSuccess"] = "Успешно расшифрован",
+            ["StatusFailed"] = "Ошибка расшифровки",
+            ["ModeCopy"] = "Создавать копию (Decrypted)",
+            ["ModeInPlace"] = "Перезаписывать оригиналы на месте",
+            ["TotalGames"] = "Всего игр",
+            ["EncryptedCount"] = "Требуют расшифровки",
+            ["DecryptedCount"] = "Готово к запуску",
+            ["LogTitle"] = "Журнал операций",
+            ["ThemeLabel"] = "Тема оформления",
+            ["LangLabel"] = "Язык интерфейса",
+            ["AllDone"] = "Все выбранные игры успешно расшифрованы и готовы к запуску!"
+        },
+        ["en"] = new()
+        {
+            ["AppTitle"] = "STORM DSi Decryptor",
+            ["Subtitle"] = "Ultra-fast Modcrypt decryption utility for Nintendo DSi and DSiWare",
+            ["DragDropHint"] = "Drag and drop .nds, .dsi, .app files or an entire folder here",
+            ["AddFiles"] = "Add files",
+            ["AddFolder"] = "Add folder",
+            ["DecryptAll"] = "Decrypt all",
+            ["ClearList"] = "Clear list",
+            ["OpenFolder"] = "Open folder",
+            ["ColFileName"] = "File name",
+            ["ColTitle"] = "Game title",
+            ["ColCode"] = "Code",
+            ["ColSize"] = "Size",
+            ["ColStatus"] = "Status",
+            ["StatusEncrypted"] = "Encrypted (Modcrypt)",
+            ["StatusDecrypted"] = "Decrypted (Ready)",
+            ["StatusNotDsi"] = "Standard DS (No encryption)",
+            ["StatusProcessing"] = "Decrypting...",
+            ["StatusSuccess"] = "Successfully decrypted",
+            ["StatusFailed"] = "Decryption error",
+            ["ModeCopy"] = "Create copy (Decrypted)",
+            ["ModeInPlace"] = "Overwrite originals in-place",
+            ["TotalGames"] = "Total games",
+            ["EncryptedCount"] = "Need decryption",
+            ["DecryptedCount"] = "Ready to play",
+            ["LogTitle"] = "Operation log",
+            ["ThemeLabel"] = "Visual theme",
+            ["LangLabel"] = "Interface language",
+            ["AllDone"] = "All selected games have been successfully decrypted and are ready to run!"
+        },
+        ["de"] = new()
+        {
+            ["AppTitle"] = "STORM DSi Decryptor",
+            ["Subtitle"] = "Ultraschnelles Modcrypt-Entschlüsselungstool für Nintendo DSi und DSiWare",
+            ["DragDropHint"] = "Dateien oder Ordner hierher ziehen",
+            ["AddFiles"] = "Dateien hinzufügen",
+            ["AddFolder"] = "Ordner hinzufügen",
+            ["DecryptAll"] = "Alle entschlüsseln",
+            ["ClearList"] = "Liste leeren",
+            ["OpenFolder"] = "Ordner öffnen",
+            ["ColFileName"] = "Dateiname",
+            ["ColTitle"] = "Spieltitel",
+            ["ColCode"] = "Code",
+            ["ColSize"] = "Größe",
+            ["ColStatus"] = "Status",
+            ["StatusEncrypted"] = "Verschlüsselt (Modcrypt)",
+            ["StatusDecrypted"] = "Entschlüsselt (Bereit)",
+            ["StatusNotDsi"] = "Standard DS (Nicht verschlüsselt)",
+            ["StatusProcessing"] = "Entschlüsseln...",
+            ["StatusSuccess"] = "Erfolgreich entschlüsselt",
+            ["StatusFailed"] = "Fehler",
+            ["ModeCopy"] = "Kopie erstellen (Decrypted)",
+            ["ModeInPlace"] = "Originale überschreiben",
+            ["TotalGames"] = "Spiele gesamt",
+            ["EncryptedCount"] = "Benötigt Entschlüsselung",
+            ["DecryptedCount"] = "Spielbereit",
+            ["LogTitle"] = "Protokoll",
+            ["ThemeLabel"] = "Design",
+            ["LangLabel"] = "Sprache",
+            ["AllDone"] = "Alle Spiele wurden erfolgreich entschlüsselt!"
+        },
+        ["fr"] = new()
+        {
+            ["AppTitle"] = "STORM DSi Decryptor",
+            ["Subtitle"] = "Utilitaire de décryptage Modcrypt ultra-rapide pour Nintendo DSi et DSiWare",
+            ["DragDropHint"] = "Glissez-déposez des fichiers ou un dossier ici",
+            ["AddFiles"] = "Ajouter des fichiers",
+            ["AddFolder"] = "Ajouter un dossier",
+            ["DecryptAll"] = "Tout décrypter",
+            ["ClearList"] = "Effacer la liste",
+            ["OpenFolder"] = "Ouvrir le dossier",
+            ["ColFileName"] = "Nom de fichier",
+            ["ColTitle"] = "Titre du jeu",
+            ["ColCode"] = "Code",
+            ["ColSize"] = "Taille",
+            ["ColStatus"] = "Statut",
+            ["StatusEncrypted"] = "Crypté (Modcrypt)",
+            ["StatusDecrypted"] = "Décrypté (Prêt)",
+            ["StatusNotDsi"] = "DS standard (Non crypté)",
+            ["StatusProcessing"] = "Décryptage...",
+            ["StatusSuccess"] = "Décrypté avec succès",
+            ["StatusFailed"] = "Erreur",
+            ["ModeCopy"] = "Créer une copie (Decrypted)",
+            ["ModeInPlace"] = "Écraser sur place",
+            ["TotalGames"] = "Total jeux",
+            ["EncryptedCount"] = "À décrypter",
+            ["DecryptedCount"] = "Prêt à lancer",
+            ["LogTitle"] = "Journal",
+            ["ThemeLabel"] = "Thème",
+            ["LangLabel"] = "Langue",
+            ["AllDone"] = "Tous les jeux ont été décryptés avec succès!"
+        },
+        ["zh"] = new()
+        {
+            ["AppTitle"] = "STORM DSi Decryptor",
+            ["Subtitle"] = "适用于 Nintendo DSi 和 DSiWare 的极速 Modcrypt 解密工具",
+            ["DragDropHint"] = "将 .nds, .dsi, .app 文件或文件夹拖放到此处",
+            ["AddFiles"] = "添加文件",
+            ["AddFolder"] = "添加文件夹",
+            ["DecryptAll"] = "全部解密",
+            ["ClearList"] = "清空列表",
+            ["OpenFolder"] = "打开文件夹",
+            ["ColFileName"] = "文件名",
+            ["ColTitle"] = "游戏名称",
+            ["ColCode"] = "代码",
+            ["ColSize"] = "大小",
+            ["ColStatus"] = "状态",
+            ["StatusEncrypted"] = "已加密 (Modcrypt)",
+            ["StatusDecrypted"] = "已解密 (就绪)",
+            ["StatusNotDsi"] = "标准 DS (未加密)",
+            ["StatusProcessing"] = "解密中...",
+            ["StatusSuccess"] = "解密成功",
+            ["StatusFailed"] = "解密失败",
+            ["ModeCopy"] = "创建副本 (Decrypted)",
+            ["ModeInPlace"] = "就地覆盖原始文件",
+            ["TotalGames"] = "游戏总数",
+            ["EncryptedCount"] = "需要解密",
+            ["DecryptedCount"] = "准备就绪",
+            ["LogTitle"] = "操作日志",
+            ["ThemeLabel"] = "界面主题",
+            ["LangLabel"] = "显示语言",
+            ["AllDone"] = "所有选定游戏已成功解密，可直接运行！"
+        },
+        ["ja"] = new()
+        {
+            ["AppTitle"] = "STORM DSi Decryptor",
+            ["Subtitle"] = "Nintendo DSi および DSiWare 用の超高速 Modcrypt 復号ユーティリティ",
+            ["DragDropHint"] = "ここに .nds、.dsi、.app ファイルまたはフォルダをドラッグ＆ドロップ",
+            ["AddFiles"] = "ファイルを追加",
+            ["AddFolder"] = "フォルダを追加",
+            ["DecryptAll"] = "すべて復号",
+            ["ClearList"] = "リストをクリア",
+            ["OpenFolder"] = "フォルダを開く",
+            ["ColFileName"] = "ファイル名",
+            ["ColTitle"] = "ゲーム名",
+            ["ColCode"] = "コード",
+            ["ColSize"] = "サイズ",
+            ["ColStatus"] = "状態",
+            ["StatusEncrypted"] = "暗号化済み (Modcrypt)",
+            ["StatusDecrypted"] = "復号済み (準備完了)",
+            ["StatusNotDsi"] = "通常 DS (暗号化なし)",
+            ["StatusProcessing"] = "復号中...",
+            ["StatusSuccess"] = "復号完了",
+            ["StatusFailed"] = "エラー",
+            ["ModeCopy"] = "コピーを作成 (Decrypted)",
+            ["ModeInPlace"] = "元のファイルを直接上書き",
+            ["TotalGames"] = "総ゲーム数",
+            ["EncryptedCount"] = "復号が必要",
+            ["DecryptedCount"] = "プレイ可能",
+            ["LogTitle"] = "操作ログ",
+            ["ThemeLabel"] = "テーマ",
+            ["LangLabel"] = "言語",
+            ["AllDone"] = "選択されたすべてのゲームが正常に復号されました！"
+        }
+    };
+
+    public static string Get(string key)
+    {
+        if (Strings.TryGetValue(CurrentLanguage, out var langDict) && langDict.TryGetValue(key, out var val))
+            return val;
+        if (Strings["en"].TryGetValue(key, out var enVal))
+            return enVal;
+        return key;
+    }
+}

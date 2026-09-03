@@ -45,15 +45,7 @@ class EmulatorLaunchPreconditionChecker(
             targetRom = dsiWareCheckResult.rom
         }
 
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val encStatus = MelonRomDecryptor.checkEncryption(context, targetRom.uri)
-                if (encStatus == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                    android.util.Log.i("EmulatorLaunchChecker", "Auto-decrypting encrypted ROM in-place on launch: ${targetRom.fileName}")
-                    MelonRomDecryptor.decryptRom(context, targetRom.uri)
-                }
-            }
-        }
+
 
         val configurationDirResult = getRomConfigurationDirectoryResult(targetRom)
         if (configurationDirResult.status != ConfigurationDirResult.Status.VALID) {
