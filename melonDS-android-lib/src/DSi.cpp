@@ -643,6 +643,7 @@ void DSi::SetupDirectBoot()
         {
             u32 tmp = *(u32*)&cartrom[i];
             ARM9Write32(0x02FFC000+i, tmp);
+            ARM9Write32(0x02FFD000+i, tmp);
             ARM9Write32(0x02FFE000+i, tmp);
         }
 
@@ -710,17 +711,47 @@ void DSi::SetupDirectBoot()
         }
 
         // 0x02FFD7B0: DSi Version Data & Filename table according to GBATEK
-        const char verFileName[] = "00000004";
-        for (int k = 0; k < 8; ++k)
-            ARM9Write8(0x02FFD7B0 + k, verFileName[k]);
+        if (header.IsDSiWare())
+        {
+            for (int k = 0; k < 4; ++k)
+                ARM9Write8(0x02FFD7B0 + k, header.GameCode[k]);
+            for (int k = 4; k < 8; ++k)
+                ARM9Write8(0x02FFD7B0 + k, 0);
+        }
+        else
+        {
+            const char verFileName[] = "00000004";
+            for (int k = 0; k < 8; ++k)
+                ARM9Write8(0x02FFD7B0 + k, verFileName[k]);
+        }
         ARM9Write8(0x02FFD7B8, 0x00);
         ARM9Write8(0x02FFD7B9, 'E'); // Region: USA / English ('E')
         ARM9Write8(0x02FFD7BA, 0x00); // Warmboot flag bit 0 = 0
         ARM9Write8(0x02FFD7BB, 0x00);
-        // eMMC CID at 0x02FFD7BC (16 bytes)
-        const u8 dummyCID[16] = { 0x15, 0x00, 0x00, 0x4D, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
-        for (int k = 0; k < 16; ++k)
-            ARM9Write8(0x02FFD7BC + k, dummyCID[k]);
+        // eMMC CID at 0x02FFD7BC (16 bytes) and ARM7 eMMC card info at 0x03FFE6E4
+        if (DSi_NAND::NANDImage* image = SDMMC.GetNAND(); image && *image)
+        {
+            const auto& emmccid = image->GetEMMCID();
+            for (int k = 0; k < 16; ++k)
+                ARM9Write8(0x02FFD7BC + k, emmccid[k]);
+
+            u32 eaddr = 0x03FFE6E4;
+            ARM7Write32(eaddr+0x00, *(const u32*)&emmccid[0]);
+            ARM7Write32(eaddr+0x04, *(const u32*)&emmccid[4]);
+            ARM7Write32(eaddr+0x08, *(const u32*)&emmccid[8]);
+            ARM7Write32(eaddr+0x0C, *(const u32*)&emmccid[12]);
+            ARM7Write16(eaddr+0x2C, 0x0001);
+            ARM7Write16(eaddr+0x2E, 0x0001);
+            ARM7Write16(eaddr+0x3C, 0x0100);
+            ARM7Write16(eaddr+0x3E, 0x40E0);
+            ARM7Write16(eaddr+0x42, 0x0001);
+        }
+        else
+        {
+            const u8 dummyCID[16] = { 0x15, 0x00, 0x00, 0x4D, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+            for (int k = 0; k < 16; ++k)
+                ARM9Write8(0x02FFD7BC + k, dummyCID[k]);
+        }
         // Zero out 0x02FFD7CC through 0x02FFD850 (Title list count = 0, zero padding)
         for (u32 addr = 0x02FFD7CC; addr < 0x02FFD850; addr += 4)
             ARM9Write32(addr, 0);
