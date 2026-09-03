@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
+import me.magnum.melonds.MelonRomDecryptor
 import me.magnum.melonds.domain.model.ConfigurationDirResult
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.VideoRenderer
@@ -42,6 +43,16 @@ class EmulatorLaunchPreconditionChecker(
                 return dsiWareCheckResult
             }
             targetRom = dsiWareCheckResult.rom
+        }
+
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val encStatus = MelonRomDecryptor.checkEncryption(context, targetRom.uri)
+                if (encStatus == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
+                    android.util.Log.i("EmulatorLaunchChecker", "Auto-decrypting encrypted ROM in-place on launch: ${targetRom.fileName}")
+                    MelonRomDecryptor.decryptRom(context, targetRom.uri)
+                }
+            }
         }
 
         val configurationDirResult = getRomConfigurationDirectoryResult(targetRom)
