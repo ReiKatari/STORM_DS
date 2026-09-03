@@ -421,10 +421,10 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
             keyX[14] = rom[OFFSET_GAME_CODE + 1];
             keyX[15] = rom[OFFSET_GAME_CODE + 0];
 
-            if (*(uint32_t*)&rom[OFFSET_DSI_ARM7I_HASH] != 0)
-                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-            else
+            if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
                 memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
+            else
+                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
 
             DeriveNormalKey(keyX, keyY, tmp);
             Bswap128(normalKey2, tmp);
@@ -607,10 +607,10 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
             keyX[14] = rom[OFFSET_GAME_CODE + 1];
             keyX[15] = rom[OFFSET_GAME_CODE + 0];
 
-            if (*(uint32_t*)&rom[OFFSET_DSI_ARM7I_HASH] != 0)
-                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-            else
+            if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
                 memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
+            else
+                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
 
             DeriveNormalKey(keyX, keyY, tmp);
             Bswap128(normalKey2, tmp);

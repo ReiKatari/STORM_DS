@@ -347,10 +347,10 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         keyX[14] = header.GameCode[1];
         keyX[15] = header.GameCode[0];
 
-        if (offset == header.DSiModcrypt2Offset && *(u32*)&header.DSiARM7iHash[0] != 0)
-            memcpy(keyY, header.DSiARM7iHash, 16);
-        else
+        if (*(u32*)&header.DSiARM9iHash[0] != 0)
             memcpy(keyY, header.DSiARM9iHash, 16);
+        else
+            memcpy(keyY, header.DSiARM7iHash, 16);
 
         DSi_AES::DeriveNormalKey(keyX, keyY, tmp);
     }
@@ -746,6 +746,10 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x02FFFC08, header.HeaderCRC16);
         ARM9Write16(0x02FFFC0A, header.SecureAreaCRC16);
         ARM9Write16(0x02FFFC10, 0x5835);
+        ARM9Write16(0x02FFFC20, 0x0001);
+        ARM9Write16(0x02FFFC24, 0x0001);
+        ARM9Write16(0x02FFFC28, 0x0001);
+        ARM9Write16(0x02FFFC2C, 0x0001);
         ARM9Write16(0x02FFFC30, 0xFFFF);
         ARM9Write16(0x02FFFC40, 0x0001); // boot indicator
 
@@ -1641,9 +1645,9 @@ u8 DSi::ARM9Read8(u32 addr)
 
         return *(u8*)&ARM9iBIOS[addr & 0xFFFF];
     }
-    if ((addr >= 0x01FF8000 && addr < 0x02000000) && (!(SCFG_BIOS & (1<<1))))
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
     {
-        return *(u8*)&ARM9iBIOS[addr & 0xFFFF];
+        return *(u8*)&ARM9.ITCM[addr & 0x7FFF];
     }
 
     switch (addr & 0xFF000000)
@@ -1696,9 +1700,9 @@ u16 DSi::ARM9Read16(u32 addr)
 
         return *(u16*)&ARM9iBIOS[addr & 0xFFFF];
     }
-    if ((addr >= 0x01FF8000 && addr < 0x02000000) && (!(SCFG_BIOS & (1<<1))))
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
     {
-        return *(u16*)&ARM9iBIOS[addr & 0xFFFF];
+        return *(u16*)&ARM9.ITCM[addr & 0x7FFF];
     }
 
     switch (addr & 0xFF000000)
@@ -1750,9 +1754,9 @@ u32 DSi::ARM9Read32(u32 addr)
             return 0xFFFFFFFF;
         return *(u32*)&ARM9iBIOS[addr & 0xFFFF];
     }
-    if ((addr >= 0x01FF8000 && addr < 0x02000000) && (!(SCFG_BIOS & (1<<1))))
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
     {
-        return *(u32*)&ARM9iBIOS[addr & 0xFFFF];
+        return *(u32*)&ARM9.ITCM[addr & 0x7FFF];
     }
 
     switch (addr & 0xFF000000)
@@ -1802,6 +1806,13 @@ u32 DSi::ARM9Read32(u32 addr)
 void DSi::ARM9Write8(u32 addr, u8 val)
 {
     assert(ConsoleType == 1);
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
+    {
+        *(u8*)&ARM9.ITCM[addr & 0x7FFF] = val;
+        JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_ITCM>(addr);
+        return;
+    }
+
     switch (addr & 0xFF000000)
     {
     case 0x03000000:
@@ -1899,6 +1910,13 @@ void DSi::ARM9Write16(u32 addr, u16 val)
     assert(ConsoleType == 1);
     addr &= ~0x1;
 
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
+    {
+        *(u16*)&ARM9.ITCM[addr & 0x7FFF] = val;
+        JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_ITCM>(addr);
+        return;
+    }
+
     switch (addr & 0xFF000000)
     {
     case 0x03000000:
@@ -1983,6 +2001,13 @@ void DSi::ARM9Write32(u32 addr, u32 val)
 {
     assert(ConsoleType == 1);
     addr &= ~0x3;
+
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
+    {
+        *(u32*)&ARM9.ITCM[addr & 0x7FFF] = val;
+        JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_ITCM>(addr);
+        return;
+    }
 
     switch (addr & 0xFF000000)
     {
@@ -2097,16 +2122,11 @@ bool DSi::ARM9GetMemRegion(u32 addr, bool write, MemRegion* region)
         return true;
     }
 
-    if ((addr >= 0x01FF8000 && addr < 0x02000000) && !write)
+    if (addr >= 0x01FF8000 && addr < 0x02000000)
     {
-        if (!(SCFG_BIOS & (1<<1)))
-        {
-            region->Mem = &ARM9iBIOS[0x8000];
-            region->Mask = 0x7FFF;
-            return true;
-        }
-        region->Mem = NULL;
-        return false;
+        region->Mem = &ARM9.ITCM[0];
+        region->Mask = 0x7FFF;
+        return true;
     }
 
     region->Mem = NULL;

@@ -1276,9 +1276,9 @@ int ARMJIT_Memory::ClassifyAddress9(u32 addr) const noexcept
 
                 return memregion_BIOS9DSi;
             }
-            if ((addr >= 0x01FF8000 && addr < 0x02000000) && !(dsi.SCFG_BIOS & (1<<1)))
+            if (addr >= 0x01FF8000 && addr < 0x02000000)
             {
-                return memregion_BIOS9DSi;
+                return memregion_ITCM;
             }
         }
 
