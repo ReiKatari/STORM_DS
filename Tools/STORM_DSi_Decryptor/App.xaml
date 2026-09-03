@@ -1,0 +1,18 @@
+<Application x:Class="StormDsiDecryptor.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Startup="Application_Startup"
+             Exit="Application_Exit">
+    <Application.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="ThemeBg" Color="#0F1117" />
+            <SolidColorBrush x:Key="ThemeCardBg" Color="#181B24" />
+            <SolidColorBrush x:Key="ThemeCardBorder" Color="#3300D2FF" />
+            <SolidColorBrush x:Key="ThemeAccent" Color="#00D2FF" />
+            <SolidColorBrush x:Key="ThemeTextPrimary" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="ThemeTextSecondary" Color="#94A3B8" />
+            <SolidColorBrush x:Key="ThemeSuccess" Color="#10B981" />
+            <SolidColorBrush x:Key="ThemeWarning" Color="#F59E0B" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

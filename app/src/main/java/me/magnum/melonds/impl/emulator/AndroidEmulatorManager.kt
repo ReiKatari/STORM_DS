@@ -375,13 +375,6 @@ class AndroidEmulatorManager(
 
                 if (emulatorConfiguration.consoleType == ConsoleType.DSi && (rom.isDsiWareTitle || isRealDsiWareTitle(rom))) {
                     try {
-                        runCatching {
-                            val encStatus = MelonRomDecryptor.checkEncryption(context, rom.uri)
-                            if (encStatus == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                                Log.i(TAG, "loadRom: auto-decrypting encrypted DSi ROM in-place: ${rom.fileName}")
-                                MelonRomDecryptor.decryptRom(context, rom.uri)
-                            }
-                        }
                         val titleId = extractDsiWareTitleId(rom)
                         if (titleId != null) {
                             val headerBytes = context.contentResolver.openInputStream(rom.uri)?.use { stream ->
@@ -571,13 +564,6 @@ class AndroidEmulatorManager(
 
         if (isDirectRomFile) {
             try {
-                runCatching {
-                    val encStatus = MelonRomDecryptor.checkEncryption(context, rom.uri)
-                    if (encStatus == MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                        Log.i(TAG, "loadDsiWare: auto-decrypting encrypted DSi ROM in-place: ${rom.fileName}")
-                        MelonRomDecryptor.decryptRom(context, rom.uri)
-                    }
-                }
                 val headerBytes = context.contentResolver.openInputStream(rom.uri)?.use { stream ->
                     val buf = ByteArray(0x1000)
                     var read = 0
