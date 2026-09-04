@@ -310,23 +310,15 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     uint32_t mod2Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT2_OFF];
     uint32_t mod2Size = *(uint32_t*)&rom[OFFSET_MODCRYPT2_SIZE];
 
-    // Check if encrypted (0x03 = both areas decrypted)
-    uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
-    if ((cryptoFlags & 0x03) == 0x03)
-    {
-        fclose(f);
-        return DecryptResult::ALREADY_DECRYPTED;
-    }
-
     // Validate if data is actually encrypted
     bool mod1Encrypted = false;
-    if ((cryptoFlags & 0x01) == 0 && mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
+    if (mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
     {
         mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
     }
 
     bool mod2Encrypted = false;
-    if ((cryptoFlags & 0x02) == 0 && mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
+    if (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
     {
         mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
     }
@@ -502,11 +494,6 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     if (!(unitCode & 0x02) && unitCode != 0x03)
         return false;
 
-    // Check if already decrypted (0x03 = both areas decrypted)
-    uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
-    if ((cryptoFlags & 0x03) == 0x03)
-        return true;
-
     // Read modcrypt area offsets and sizes
     uint32_t mod1Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT1_OFF];
     uint32_t mod1Size = *(uint32_t*)&rom[OFFSET_MODCRYPT1_SIZE];
@@ -517,13 +504,13 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
         return false;
 
     bool mod1Encrypted = false;
-    if ((cryptoFlags & 0x01) == 0 && mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
+    if (mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
     {
         mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
     }
 
     bool mod2Encrypted = false;
-    if ((cryptoFlags & 0x02) == 0 && mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
+    if (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
     {
         mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
     }
