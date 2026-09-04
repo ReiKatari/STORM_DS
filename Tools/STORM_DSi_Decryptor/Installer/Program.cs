@@ -21,7 +21,7 @@ namespace StormUniversal.Installer
         private Button btnCancel = null!;
         private CyberHeaderPanel headerPanel = null!;
 
-        private const string AppVersion = "1.1.2";
+        private const string AppVersion = "1.1.3";
         private const string AppDisplayName = "STORM DSi Decryptor";
         private const string AppFolderName = "STORM DSi Decryptor";
         private const string ExeName = "STORM DSi Decryptor.exe";

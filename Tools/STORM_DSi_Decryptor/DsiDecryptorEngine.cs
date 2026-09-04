@@ -135,15 +135,6 @@ public static class DsiDecryptorEngine
     {
         if (offset == 0 || size == 0 || offset + size > fileLength) return false;
 
-        // Check if header already explicitly flags this area as decrypted
-        byte cryptoFlags = header.Length > 0x1C ? header[0x1C] : (byte)0;
-        if ((cryptoFlags & 0x03) == 0x03)
-            return false;
-        if (ivOffset == 0x300 && (cryptoFlags & 0x01) != 0)
-            return false;
-        if (ivOffset == 0x314 && (cryptoFlags & 0x02) != 0)
-            return false;
-
         // 1. Check zero-byte distribution across up to 4096 bytes
         int scanLen = (int)Math.Min(size, 4096);
         byte[] scanBuf = new byte[scanLen];
@@ -221,14 +212,6 @@ public static class DsiDecryptorEngine
     public static bool IsAreaEncryptedBuffer(byte[] rom, uint offset, uint size, int ivOffset)
     {
         if (offset == 0 || size == 0 || offset + size > rom.Length) return false;
-
-        byte cryptoFlags = rom.Length > 0x1C ? rom[0x1C] : (byte)0;
-        if ((cryptoFlags & 0x03) == 0x03)
-            return false;
-        if (ivOffset == 0x300 && (cryptoFlags & 0x01) != 0)
-            return false;
-        if (ivOffset == 0x314 && (cryptoFlags & 0x02) != 0)
-            return false;
 
         int scanLen = (int)Math.Min(size, 4096);
         int origZeros = 0;
@@ -346,10 +329,6 @@ public static class DsiDecryptorEngine
     public static bool DecryptRomBuffer(byte[] rom)
     {
         if (rom.Length < 0x400) return false;
-
-        byte cryptoFlags = rom.Length > 0x1C ? rom[0x1C] : (byte)0;
-        if ((cryptoFlags & 0x03) == 0x03)
-            return true;
 
         byte[] keyX = BuildKeyX(rom);
         byte[] keyY = new byte[16];
