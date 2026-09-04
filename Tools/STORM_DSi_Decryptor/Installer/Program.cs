@@ -493,12 +493,28 @@ namespace StormUniversal.Installer
                 if (File.Exists(directExePath))
                 {
                     UnblockFile(directExePath);
-                    Process.Start(new ProcessStartInfo
+                    try
                     {
-                        FileName = directExePath,
-                        WorkingDirectory = workingDir,
-                        UseShellExecute = true
-                    });
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = directExePath,
+                            WorkingDirectory = workingDir,
+                            UseShellExecute = true
+                        });
+                        return;
+                    }
+                    catch { }
+
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = directExePath,
+                            WorkingDirectory = workingDir,
+                            UseShellExecute = false
+                        });
+                    }
+                    catch { }
                 }
             }
             catch { }

@@ -41,15 +41,60 @@ public partial class App : Application
         }
 
         // Single instance check
-        _mutex = new Mutex(true, MutexName, out _hasHandle);
+        try
+        {
+            _mutex = new Mutex(true, MutexName, out _hasHandle);
+        }
+        catch (AbandonedMutexException)
+        {
+            _hasHandle = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            try
+            {
+                _mutex = new Mutex(true, @"Local\STORM_DSI_DECRYPTOR_SingleInstanceMutex", out _hasHandle);
+            }
+            catch
+            {
+                _hasHandle = true;
+            }
+        }
+        catch
+        {
+            _hasHandle = true;
+        }
+
         if (!_hasHandle)
         {
-            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor");
+            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.3");
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor");
+            }
+            if (hWnd == IntPtr.Zero)
+            {
+                try
+                {
+                    var current = System.Diagnostics.Process.GetCurrentProcess();
+                    foreach (var p in System.Diagnostics.Process.GetProcessesByName(current.ProcessName))
+                    {
+                        if (p.Id != current.Id && p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            hWnd = p.MainWindowHandle;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+            }
+
             if (hWnd != IntPtr.Zero)
             {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             }
+
             MessageBox.Show(
                 "Программа уже запущена в одном экземпляре.\nСуществующее окно было выведено на передний план.",
                 "STORM DSi Decryptor",
