@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using Microsoft.Win32;
 
 namespace StormDsiDecryptor;
@@ -15,11 +18,23 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<RomItem> _games = new();
     private string? _lastFolderPath;
+    private bool _isScanning;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
+
+    private const uint WM_DROPFILES = 0x0233;
+    private const uint WM_COPYDATA = 0x004A;
+    private const uint WM_COPYGLOBALDATA = 0x0049;
+    private const uint MSGFLT_ALLOW = 1;
 
     public MainWindow()
     {
         InitializeComponent();
         GridGames.ItemsSource = _games;
+
+        HistoryManager.Load();
+        GridHistory.ItemsSource = HistoryManager.Items;
 
         // Init themes
         foreach (var theme in ThemeManager.Themes)
@@ -39,6 +54,20 @@ public partial class MainWindow : Window
 
         UpdateLocalization();
         UpdateStats();
+        UpdateHistoryStats();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, IntPtr.Zero);
+            ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, IntPtr.Zero);
+            ChangeWindowMessageFilterEx(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, IntPtr.Zero);
+        }
+        catch { }
     }
 
     private void UpdateLocalization()
@@ -64,6 +93,23 @@ public partial class MainWindow : Window
         ColStatus.Header = LocalizationManager.Get("ColStatus");
         MenuDeleteSelected.Header = LocalizationManager.Get("MenuDeleteSelected");
         MenuClearAll.Header = LocalizationManager.Get("MenuClearAll");
+
+        // History localization
+        TxtTabQueue.Text = LocalizationManager.Get("TabQueue");
+        TxtTabHistory.Text = LocalizationManager.Get("TabHistory");
+        TxtHistoryEmpty.Text = LocalizationManager.Get("HistoryEmpty");
+        BtnClearHistory.Content = LocalizationManager.Get("ClearHistory");
+        BtnDeleteHistory.Content = LocalizationManager.Get("MenuDeleteSelected");
+        BtnOpenHistoryFolder.Content = LocalizationManager.Get("ShowInExplorer");
+        ColHistFileName.Header = LocalizationManager.Get("ColFileName");
+        ColHistTitle.Header = LocalizationManager.Get("ColTitle");
+        ColHistCode.Header = LocalizationManager.Get("ColCode");
+        ColHistDate.Header = LocalizationManager.Get("ColProcessedAt");
+        ColHistSize.Header = LocalizationManager.Get("ColSize");
+        ColHistStatus.Header = LocalizationManager.Get("ColStatus");
+        MenuHistDelete.Header = LocalizationManager.Get("MenuDeleteSelected");
+        MenuHistOpen.Header = LocalizationManager.Get("ShowInExplorer");
+        MenuHistClearAll.Header = LocalizationManager.Get("ClearHistory");
     }
 
     private void UpdateStats()
@@ -71,11 +117,58 @@ public partial class MainWindow : Window
         TxtTotalCount.Text = _games.Count.ToString();
         TxtEncryptedCount.Text = _games.Count(g => g.IsEncrypted).ToString();
         TxtDecryptedCount.Text = _games.Count(g => !g.IsEncrypted).ToString();
+        TxtTabQueueCount.Text = $" ({_games.Count})";
 
         bool hasItems = _games.Count > 0;
         EmptyHintPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
         GridGames.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
         BtnDecrypt.IsEnabled = _games.Any(g => g.IsEncrypted);
+    }
+
+    private void UpdateHistoryStats()
+    {
+        int count = HistoryManager.Items.Count;
+        TxtHistTotalCount.Text = count.ToString();
+        TxtHistSuccessCount.Text = HistoryManager.Items.Count(x =>
+            x.Status.Contains("Успешно", StringComparison.OrdinalIgnoreCase) ||
+            x.Status.Contains("Success", StringComparison.OrdinalIgnoreCase) ||
+            x.Status.Contains("Erfolgreich", StringComparison.OrdinalIgnoreCase) ||
+            x.Status.Contains("succès", StringComparison.OrdinalIgnoreCase) ||
+            x.Status.Contains("成功", StringComparison.OrdinalIgnoreCase)).ToString();
+        TxtHistReadyCount.Text = count.ToString();
+        TxtTabHistoryCount.Text = $" ({count})";
+
+        bool hasHist = count > 0;
+        EmptyHistoryPanel.Visibility = hasHist ? Visibility.Collapsed : Visibility.Visible;
+        GridHistory.Visibility = hasHist ? Visibility.Visible : Visibility.Collapsed;
+        BtnClearHistory.IsEnabled = hasHist;
+        BtnDeleteHistory.IsEnabled = hasHist;
+    }
+
+    private void TabBtnQueue_Click(object sender, RoutedEventArgs e)
+    {
+        QueueViewPanel.Visibility = Visibility.Visible;
+        QueueStatsPanel.Visibility = Visibility.Visible;
+        QueueActionsPanel.Visibility = Visibility.Visible;
+
+        HistoryViewPanel.Visibility = Visibility.Collapsed;
+        HistoryStatsPanel.Visibility = Visibility.Collapsed;
+        HistoryActionsPanel.Visibility = Visibility.Collapsed;
+
+        UpdateStats();
+    }
+
+    private void TabBtnHistory_Click(object sender, RoutedEventArgs e)
+    {
+        QueueViewPanel.Visibility = Visibility.Collapsed;
+        QueueStatsPanel.Visibility = Visibility.Collapsed;
+        QueueActionsPanel.Visibility = Visibility.Collapsed;
+
+        HistoryViewPanel.Visibility = Visibility.Visible;
+        HistoryStatsPanel.Visibility = Visibility.Visible;
+        HistoryActionsPanel.Visibility = Visibility.Visible;
+
+        UpdateHistoryStats();
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -90,39 +183,62 @@ public partial class MainWindow : Window
         }
     }
 
-    private void BtnMinimize_Click(object sender, RoutedEventArgs e)
-    {
-        WindowState = WindowState.Minimized;
-    }
+    private void BtnMinimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void BtnMaximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void BtnMaximize_Click(object sender, RoutedEventArgs e)
-    {
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-    }
-
-    private void BtnClose_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
+    // --- Drag & Drop (Crash-Proof, OLE Standard) ---
     private void Window_DragOver(object sender, DragEventArgs e)
     {
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        try
         {
-            e.Effects = DragDropEffects.Copy;
-            e.Handled = true;
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                e.Effects = DragDropEffects.Copy;
+                e.Handled = true;
+                return;
+            }
         }
+        catch { }
+        e.Effects = DragDropEffects.None;
+        e.Handled = true;
     }
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        try
         {
-            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files != null && files.Length > 0)
+            e.Handled = true;
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                AddPaths(files);
+                var raw = e.Data.GetData(DataFormats.FileDrop);
+                if (raw is string[] files && files.Length > 0)
+                {
+                    // Switch to Queue tab so user sees added games
+                    TabBtnQueue.IsChecked = true;
+                    TabBtnQueue_Click(this, new RoutedEventArgs());
+                    AddPaths(files);
+                }
+                else if (raw is System.Collections.IEnumerable enumerable)
+                {
+                    var fileList = new List<string>();
+                    foreach (var item in enumerable)
+                    {
+                        if (item is string s && !string.IsNullOrWhiteSpace(s))
+                            fileList.Add(s);
+                    }
+                    if (fileList.Count > 0)
+                    {
+                        TabBtnQueue.IsChecked = true;
+                        TabBtnQueue_Click(this, new RoutedEventArgs());
+                        AddPaths(fileList.ToArray());
+                    }
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Drop Exception]: {ex.Message}");
         }
     }
 
@@ -162,48 +278,76 @@ public partial class MainWindow : Window
 
     private async void AddPaths(string[] paths)
     {
-        TxtStatusLog.Text = "Сканирование файлов...";
-        await Task.Run(() =>
+        if (_isScanning) return;
+        _isScanning = true;
+
+        try
         {
-            foreach (var path in paths)
+            TxtStatusLog.Text = "Сканирование файлов...";
+            var newItems = new List<RomItem>();
+
+            await Task.Run(() =>
             {
-                if (File.Exists(path))
+                foreach (var path in paths)
                 {
-                    InspectAndAddFile(path);
-                }
-                else if (Directory.Exists(path))
-                {
-                    _lastFolderPath = path;
-                    var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                    foreach (var f in files)
+                    try
                     {
-                        string ext = Path.GetExtension(f).ToLowerInvariant();
-                        if (ext == ".nds" || ext == ".dsi" || ext == ".app")
+                        if (File.Exists(path))
                         {
-                            InspectAndAddFile(f);
+                            var item = CreateRomItem(path);
+                            if (item != null) newItems.Add(item);
+                        }
+                        else if (Directory.Exists(path))
+                        {
+                            _lastFolderPath = path;
+                            var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                            foreach (var f in files)
+                            {
+                                string ext = Path.GetExtension(f).ToLowerInvariant();
+                                if (ext == ".nds" || ext == ".dsi" || ext == ".app")
+                                {
+                                    var item = CreateRomItem(f);
+                                    if (item != null) newItems.Add(item);
+                                }
+                            }
                         }
                     }
+                    catch { }
+                }
+            });
+
+            foreach (var item in newItems)
+            {
+                if (!_games.Any(g => g.FilePath.Equals(item.FilePath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _games.Add(item);
+                    _lastFolderPath ??= Path.GetDirectoryName(item.FilePath);
                 }
             }
-        });
 
-        UpdateStats();
-        TxtStatusLog.Text = $"Загружено игр: {_games.Count}. Готово к расшифровке.";
+            UpdateStats();
+            TxtStatusLog.Text = $"Загружено игр: {_games.Count}. Готово к расшифровке.";
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AddPaths Exception]: {ex.Message}");
+        }
+        finally
+        {
+            _isScanning = false;
+        }
     }
 
-    private void InspectAndAddFile(string file)
+    private RomItem? CreateRomItem(string file)
     {
-        if (_games.Any(g => g.FilePath.Equals(file, StringComparison.OrdinalIgnoreCase)))
-            return;
-
-        var info = DsiDecryptorEngine.InspectRom(file);
-        string statusText = info.IsEncrypted
-            ? LocalizationManager.Get("StatusEncrypted")
-            : (info.IsDsiRom ? LocalizationManager.Get("StatusDecrypted") : LocalizationManager.Get("StatusNotDsi"));
-
-        Dispatcher.Invoke(() =>
+        try
         {
-            _games.Add(new RomItem
+            var info = DsiDecryptorEngine.InspectRom(file);
+            string statusText = info.IsEncrypted
+                ? LocalizationManager.Get("StatusEncrypted")
+                : (info.IsDsiRom ? LocalizationManager.Get("StatusDecrypted") : LocalizationManager.Get("StatusNotDsi"));
+
+            return new RomItem
             {
                 FilePath = file,
                 FileName = info.FileName,
@@ -212,11 +356,15 @@ public partial class MainWindow : Window
                 FileSize = info.FileSize,
                 IsEncrypted = info.IsEncrypted,
                 Status = statusText
-            });
-            _lastFolderPath ??= Path.GetDirectoryName(file);
-        });
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 
+    // --- Decryption with Duplicate History Checking ---
     private async void BtnDecrypt_Click(object sender, RoutedEventArgs e)
     {
         var targetGames = _games.Where(g => g.IsEncrypted).ToList();
@@ -234,18 +382,60 @@ public partial class MainWindow : Window
             if (mbr != true) return;
         }
 
+        // Duplicate history checking
+        DuplicateAction? appliedToAll = null;
+        var gamesToProcess = new List<RomItem>();
+
+        foreach (var item in targetGames)
+        {
+            var previous = HistoryManager.FindPrevious(item.FilePath, item.GameCode);
+            if (previous != null)
+            {
+                DuplicateAction decision;
+                if (appliedToAll.HasValue)
+                {
+                    decision = appliedToAll.Value;
+                }
+                else
+                {
+                    var dlg = new DuplicatePromptDialog(this, item.GameTitle, item.FileName, previous.ProcessedAtFormatted);
+                    dlg.ShowDialog();
+                    decision = dlg.Decision;
+                    if (dlg.ApplyToAll)
+                    {
+                        appliedToAll = decision;
+                    }
+                }
+
+                if (decision == DuplicateAction.Skip)
+                {
+                    item.Status = $"{LocalizationManager.Get("BtnSkip")} ({previous.ProcessedAtFormatted})";
+                    continue;
+                }
+            }
+
+            gamesToProcess.Add(item);
+        }
+
+        if (gamesToProcess.Count == 0)
+        {
+            UpdateStats();
+            TxtStatusLog.Text = "Все повторно добавленные игры пропущены.";
+            return;
+        }
+
         BtnDecrypt.IsEnabled = false;
         BtnAddFiles.IsEnabled = false;
         BtnAddFolder.IsEnabled = false;
         BtnClear.IsEnabled = false;
 
         ProgBar.Value = 0;
-        ProgBar.Maximum = targetGames.Count;
+        ProgBar.Maximum = gamesToProcess.Count;
 
         int processed = 0;
         var totalSw = Stopwatch.StartNew();
 
-        foreach (var item in targetGames)
+        foreach (var item in gamesToProcess)
         {
             item.Status = LocalizationManager.Get("StatusProcessing");
             TxtStatusLog.Text = $"Расшифровка: {item.FileName}...";
@@ -271,6 +461,20 @@ public partial class MainWindow : Window
                 item.IsEncrypted = false;
                 item.IsSuccess = true;
                 item.Status = $"{LocalizationManager.Get("StatusSuccess")} ({elapsedMs} мс)";
+
+                // Record to persistent history
+                HistoryManager.Add(new HistoryItem
+                {
+                    FilePath = item.FilePath,
+                    FileName = item.FileName,
+                    GameTitle = item.GameTitle,
+                    GameCode = item.GameCode,
+                    FileSize = item.FileSize,
+                    ProcessedAt = DateTime.Now,
+                    Status = LocalizationManager.Get("StatusSuccess"),
+                    ElapsedMs = elapsedMs,
+                    OutPath = outPath
+                });
             }
             else
             {
@@ -283,12 +487,13 @@ public partial class MainWindow : Window
 
         totalSw.Stop();
         UpdateStats();
+        UpdateHistoryStats();
 
         BtnAddFiles.IsEnabled = true;
         BtnAddFolder.IsEnabled = true;
         BtnClear.IsEnabled = true;
 
-        TxtStatusLog.Text = $"Все {processed} игр успешно расшифрованы за {totalSw.ElapsedMilliseconds} мс!";
+        TxtStatusLog.Text = $"Обработано {processed} игр за {totalSw.ElapsedMilliseconds} мс!";
         StormMessageBox.Show(
             this,
             LocalizationManager.Get("AllDone"),
@@ -297,34 +502,7 @@ public partial class MainWindow : Window
             MessageBoxImage.Information);
     }
 
-    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
-
-    [System.Runtime.InteropServices.DllImport("shell32.dll", SetLastError = true)]
-    private static extern void DragAcceptFiles(IntPtr hWnd, bool fAccept);
-
-    private const uint WM_DROPFILES = 0x0233;
-    private const uint WM_COPYDATA = 0x004A;
-    private const uint WM_COPYGLOBALDATA = 0x0049;
-    private const uint MSGFLT_ALLOW = 1;
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        try
-        {
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, IntPtr.Zero);
-            ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, IntPtr.Zero);
-            ChangeWindowMessageFilterEx(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, IntPtr.Zero);
-            DragAcceptFiles(hwnd, true);
-        }
-        catch
-        {
-            // Ignore if OS does not support
-        }
-    }
-
+    // --- Queue Management ---
     private void GridGames_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Delete)
@@ -334,15 +512,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private void MenuDeleteSelected_Click(object sender, RoutedEventArgs e)
-    {
-        DeleteSelectedGames();
-    }
-
-    private void MenuClearAll_Click(object sender, RoutedEventArgs e)
-    {
-        ClearAllGames();
-    }
+    private void MenuDeleteSelected_Click(object sender, RoutedEventArgs e) => DeleteSelectedGames();
+    private void MenuClearAll_Click(object sender, RoutedEventArgs e) => ClearAllGames();
+    private void BtnClear_Click(object sender, RoutedEventArgs e) => ClearAllGames();
 
     private void DeleteSelectedGames()
     {
@@ -369,11 +541,6 @@ public partial class MainWindow : Window
         TxtStatusLog.Text = "Список очищен";
     }
 
-    private void BtnClear_Click(object sender, RoutedEventArgs e)
-    {
-        ClearAllGames();
-    }
-
     private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
     {
         string? target = _lastFolderPath;
@@ -393,6 +560,77 @@ public partial class MainWindow : Window
         }
     }
 
+    // --- History Management ---
+    private void GridHistory_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelectedHistory();
+            e.Handled = true;
+        }
+    }
+
+    private void BtnDeleteHistory_Click(object sender, RoutedEventArgs e) => DeleteSelectedHistory();
+
+    private void DeleteSelectedHistory()
+    {
+        var selected = GridHistory.SelectedItems.Cast<HistoryItem>().ToList();
+        if (selected.Count == 0 && GridHistory.SelectedItem is HistoryItem item)
+        {
+            selected.Add(item);
+        }
+        if (selected.Count == 0) return;
+
+        foreach (var h in selected)
+        {
+            HistoryManager.Remove(h);
+        }
+        UpdateHistoryStats();
+        TxtStatusLog.Text = $"Удалено из истории: {selected.Count}. Всего: {HistoryManager.Items.Count}.";
+    }
+
+    private void BtnClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (HistoryManager.Items.Count == 0) return;
+
+        bool? res = StormMessageBox.Show(
+            this,
+            LocalizationManager.Get("ConfirmClearHistory"),
+            LocalizationManager.Get("ClearHistory"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (res == true)
+        {
+            HistoryManager.Clear();
+            UpdateHistoryStats();
+            TxtStatusLog.Text = "История операций очищена";
+        }
+    }
+
+    private void BtnOpenHistoryFolder_Click(object sender, RoutedEventArgs e)
+    {
+        string? target = null;
+        if (GridHistory.SelectedItem is HistoryItem item && !string.IsNullOrEmpty(item.FilePath))
+        {
+            target = Path.GetDirectoryName(item.FilePath);
+        }
+        if (string.IsNullOrEmpty(target) || !Directory.Exists(target))
+        {
+            target = _lastFolderPath;
+        }
+
+        if (!string.IsNullOrEmpty(target) && Directory.Exists(target))
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", target) { UseShellExecute = true });
+        }
+        else
+        {
+            StormMessageBox.Show(this, "Папка недоступна", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    // --- Settings & Themes ---
     private void CmbTheme_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CmbTheme.SelectedItem is string themeName)

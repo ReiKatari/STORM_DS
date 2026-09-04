@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
-import me.magnum.melonds.MelonRomDecryptor
 import me.magnum.melonds.R
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.uridelegates.UriHandler
@@ -609,8 +608,6 @@ class FileSystemRomsRepository(
                 onRomsChanged(persist = unavailableDirectories.isEmpty())
             }
 
-
-
             var scannedRom = false
             try {
                 val buffer = mutableListOf<Rom>()
@@ -737,9 +734,6 @@ class FileSystemRomsRepository(
                     semaphore.withPermit {
                         runCatching {
                             val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
-
-
-
                             val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
                                 ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
                                 ?: return@runCatching null

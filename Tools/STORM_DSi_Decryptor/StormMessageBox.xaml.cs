@@ -12,20 +12,33 @@ public partial class StormMessageBox : Window
         InitializeComponent();
     }
 
-    public static bool? Show(Window owner, string message, string title = "STORM DSi Decryptor", MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage icon = MessageBoxImage.Information)
+    public static bool? Show(Window? owner, string message, string title = "STORM DSi Decryptor", MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage icon = MessageBoxImage.Information)
     {
         var dlg = new StormMessageBox
         {
-            Owner = owner,
             Title = title
         };
+        if (owner != null)
+        {
+            dlg.Owner = owner;
+            dlg.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+        else
+        {
+            dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
 
         dlg.TxtMessage.Text = message;
+
+        var warningBrush = (owner != null ? owner.TryFindResource("ThemeWarning") : Application.Current?.TryFindResource("ThemeWarning")) as System.Windows.Media.Brush
+            ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF5, 0x9E, 0x0B));
+        var accentBrush = (owner != null ? owner.TryFindResource("ThemeAccent") : Application.Current?.TryFindResource("ThemeAccent")) as System.Windows.Media.Brush
+            ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x00, 0xD2, 0xFF));
 
         if (icon == MessageBoxImage.Warning || icon == MessageBoxImage.Exclamation)
         {
             dlg.TxtIcon.Text = "!";
-            dlg.TxtIcon.Foreground = (System.Windows.Media.Brush)owner.FindResource("ThemeWarning");
+            dlg.TxtIcon.Foreground = warningBrush;
         }
         else if (icon == MessageBoxImage.Error || icon == MessageBoxImage.Hand || icon == MessageBoxImage.Stop)
         {
@@ -35,7 +48,7 @@ public partial class StormMessageBox : Window
         else
         {
             dlg.TxtIcon.Text = "✔";
-            dlg.TxtIcon.Foreground = (System.Windows.Media.Brush)owner.FindResource("ThemeAccent");
+            dlg.TxtIcon.Foreground = accentBrush;
         }
 
         if (buttons == MessageBoxButton.YesNo || buttons == MessageBoxButton.OKCancel)
