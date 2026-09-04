@@ -599,18 +599,26 @@ class AndroidEmulatorManager(
                     dsiNandManager.ensureTitleSaveStructure(titleId, headerBytes, tmdMetadata)
 
                     // If user has existing .sav in their save folder, sync it into NAND before launching;
-                    // otherwise export newly formatted NAND public.sav so user storage immediately has valid FAT12 save
+                    // otherwise or if corrupted/empty, repair NAND and export valid FAT12 public.sav so user storage immediately has valid FAT12 save
                     try {
                         val sramDoc = DocumentFile.fromSingleUri(context, sram)
+                        var isUserSaveValid = false
                         if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
                             val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
-                            if (sramBytes != null && sramBytes.size >= 512 &&
-                                sramBytes[0x1FE] == 0x55.toByte() && sramBytes[0x1FF] == 0xAA.toByte() &&
-                                (sramBytes[0] == 0xEB.toByte() || sramBytes[0] == 0xE9.toByte())) {
+                            if (isValidDsiWareFatSave(sramBytes)) {
+                                isUserSaveValid = true
                                 dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                                Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
+                            } else {
+                                Log.w(TAG, "loadDsiWare: existing save file is corrupt/invalid FAT12 (${sramDoc.name}, size=${sramDoc.length()}), auto-repairing...")
                             }
-                        } else {
+                        }
+
+                        if (!isUserSaveValid) {
+                            // User save is missing, 0 bytes, or corrupted: format clean valid FAT12 in NAND and export to user sram
+                            dsiNandManager.repairTitleSaves(titleId)
                             dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            Log.i(TAG, "loadDsiWare: exported newly formatted valid FAT12 save from NAND to user sram=$sram")
                         }
                     } catch (e: Throwable) {
                         Log.w(TAG, "loadDsiWare: error syncing user save into NAND", e)
@@ -731,15 +739,19 @@ class AndroidEmulatorManager(
                 // If user has existing .sav in their save folder, sync it into NAND before launching
                 try {
                     val sramDoc = DocumentFile.fromSingleUri(context, sram)
+                    var isUserSaveValid = false
                     if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
                         val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
-                        if (sramBytes != null && sramBytes.size >= 512 &&
-                            sramBytes[0x1FE] == 0x55.toByte() && sramBytes[0x1FF] == 0xAA.toByte() &&
-                            (sramBytes[0] == 0xEB.toByte() || sramBytes[0] == 0xE9.toByte())) {
+                        if (isValidDsiWareFatSave(sramBytes)) {
+                            isUserSaveValid = true
                             dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
+                        } else {
+                            Log.w(TAG, "loadDsiWare: installed title user save is corrupt/invalid FAT12 (${sramDoc.name}), auto-repairing...")
                         }
-                    } else {
-                        // User save file is missing or empty: export valid formatted FAT12 save from NAND to user sramUri
+                    }
+                    if (!isUserSaveValid) {
+                        dsiNandManager.repairTitleSaves(titleId)
                         dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
                     }
                 } catch (e: Throwable) {
@@ -778,11 +790,11 @@ class AndroidEmulatorManager(
                     fileType = primaryFileType,
                     filePath = saveFile.absolutePath,
                 )
-                if (!exportedSave) {
-                    saveFile.writeBytes(ByteArray(0))
+                if (!exportedSave || saveFile.length() == 0L) {
+                    runCatching { saveFile.delete() }
                 }
             } else {
-                saveFile.writeBytes(ByteArray(0))
+                runCatching { saveFile.delete() }
             }
         } finally {
             dsiNandManager.closeNand()
@@ -951,6 +963,23 @@ class AndroidEmulatorManager(
 
     private fun Long.toDsiWareTitleIdHex(): String {
         return (this and 0xFFFFFFFFL).toString(16).padStart(8, '0')
+    }
+
+    private fun isValidDsiWareFatSave(sramBytes: ByteArray?): Boolean {
+        if (sramBytes == null || sramBytes.size < 512) return false
+        val boot0 = sramBytes[0].toInt() and 0xFF
+        val sig0 = sramBytes[0x1FE].toInt() and 0xFF
+        val sig1 = sramBytes[0x1FF].toInt() and 0xFF
+        if (sig0 != 0x55 || sig1 != 0xAA) return false
+        if (boot0 != 0xEB && boot0 != 0xE9) return false
+        val numFats = sramBytes[0x10].toInt() and 0xFF
+        if (numFats < 1) return false
+        if (sramBytes.size > 0x200) {
+            val mediaDesc = sramBytes[0x200].toInt() and 0xFF
+            if (mediaDesc != 0xF8) return false
+        }
+        val firstByte = sramBytes[0]
+        return sramBytes.any { it != firstByte }
     }
 
     override suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult {
@@ -1153,7 +1182,7 @@ class AndroidEmulatorManager(
         val cacheSave = session.cachePublicSaveFile
         runBlocking(Dispatchers.IO) {
             // Step 1: Copy the emulated .sav from cache to user's save folder
-            if (cacheSave != null && cacheSave.exists()) {
+            if (cacheSave != null && cacheSave.exists() && cacheSave.length() > 0L) {
                 runCatching {
                     context.contentResolver.openOutputStream(session.sramUri, "wt")?.use { output ->
                         cacheSave.inputStream().use { input ->
@@ -1174,7 +1203,7 @@ class AndroidEmulatorManager(
             }
 
             try {
-                if (cacheSave != null && cacheSave.exists()) {
+                if (cacheSave != null && cacheSave.exists() && cacheSave.length() > 0L) {
                     val imported = dsiNandManager.importTitleFileFromPath(
                         titleId = session.titleId,
                         fileType = session.fileType,

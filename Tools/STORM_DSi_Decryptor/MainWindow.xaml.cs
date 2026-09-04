@@ -18,7 +18,9 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<RomItem> _games = new();
     private string? _lastFolderPath;
+    private string? _customOutputDir;
     private bool _isScanning;
+    private DateTime _lastDropHandledTime = DateTime.MinValue;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
@@ -90,6 +92,12 @@ public partial class MainWindow : Window
             IntPtr hDrop = wParam;
             try
             {
+                if ((DateTime.UtcNow - _lastDropHandledTime).TotalMilliseconds < 500)
+                {
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
                 uint count = DragQueryFile(hDrop, 0xFFFFFFFF, null, 0);
                 var files = new List<string>();
                 for (uint i = 0; i < count; i++)
@@ -134,9 +142,16 @@ public partial class MainWindow : Window
         BtnAddFolder.Content = LocalizationManager.Get("AddFolder");
         BtnDecrypt.Content = LocalizationManager.Get("DecryptAll");
         BtnClear.Content = LocalizationManager.Get("ClearList");
-        BtnOpenFolder.Content = LocalizationManager.Get("OpenFolder");
-        RbCopy.Content = LocalizationManager.Get("ModeCopy");
-        RbInPlace.Content = LocalizationManager.Get("ModeInPlace");
+        ChkCopy.Content = LocalizationManager.Get("ModeCopy");
+        ChkInPlace.Content = LocalizationManager.Get("ModeInPlace");
+        LblOutFolder.Text = LocalizationManager.Get("OutputFolderLabel");
+        BtnBrowseOutFolder.Content = LocalizationManager.Get("BrowseFolder");
+        BtnResetOutFolder.ToolTip = LocalizationManager.Get("ResetOutputFolderTooltip");
+        if (string.IsNullOrWhiteSpace(_customOutputDir))
+        {
+            TxtOutFolder.Text = LocalizationManager.Get("OutputFolderDefault");
+        }
+        UpdateModeUI();
         LblTotalGames.Text = LocalizationManager.Get("TotalGames");
         LblEncrypted.Text = LocalizationManager.Get("EncryptedCount");
         LblDecrypted.Text = LocalizationManager.Get("DecryptedCount");
@@ -243,16 +258,174 @@ public partial class MainWindow : Window
     private void BtnMaximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
+    // --- Mode Selection & Output Folder ---
+    private void ChkCopy_Click(object sender, RoutedEventArgs e)
+    {
+        ChkCopy.IsChecked = true;
+        ChkInPlace.IsChecked = false;
+        UpdateModeUI();
+    }
+
+    private void ChkInPlace_Click(object sender, RoutedEventArgs e)
+    {
+        ChkInPlace.IsChecked = true;
+        ChkCopy.IsChecked = false;
+        UpdateModeUI();
+    }
+
+    private void UpdateModeUI()
+    {
+        bool isCopy = ChkCopy.IsChecked == true;
+        LblOutFolder.Opacity = isCopy ? 1.0 : 0.4;
+        BorderOutFolder.IsEnabled = isCopy;
+        BorderOutFolder.Opacity = isCopy ? 1.0 : 0.4;
+        TxtOutFolder.IsEnabled = isCopy;
+        TxtOutFolder.Opacity = isCopy ? 1.0 : 0.4;
+        BtnBrowseOutFolder.IsEnabled = isCopy;
+        BtnBrowseOutFolder.Opacity = isCopy ? 1.0 : 0.4;
+        BtnResetOutFolder.IsEnabled = isCopy;
+        BtnResetOutFolder.Opacity = isCopy ? 1.0 : 0.4;
+    }
+
+    private void BtnBrowseOutFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFolderDialog
+        {
+            Title = LocalizationManager.Get("SelectOutputFolderTitle")
+        };
+        if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.FolderName))
+        {
+            _customOutputDir = dlg.FolderName;
+            TxtOutFolder.Text = _customOutputDir;
+            TxtOutFolder.Foreground = (System.Windows.Media.Brush)FindResource("ThemeTextPrimary");
+        }
+    }
+
+    private void BtnResetOutFolder_Click(object sender, RoutedEventArgs e)
+    {
+        _customOutputDir = null;
+        TxtOutFolder.Text = LocalizationManager.Get("OutputFolderDefault");
+        TxtOutFolder.Foreground = (System.Windows.Media.Brush)FindResource("ThemeTextSecondary");
+    }
+
+    private void BorderOutFolder_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ChkCopy.IsChecked != true)
+        {
+            ChkCopy.IsChecked = true;
+            ChkInPlace.IsChecked = false;
+            UpdateModeUI();
+        }
+        BtnBrowseOutFolder_Click(sender, e);
+    }
+
+    private void BorderOutFolder_DragEnter(object sender, DragEventArgs e) => HandleFolderDragOver(e);
+    private void BorderOutFolder_DragOver(object sender, DragEventArgs e) => HandleFolderDragOver(e);
+
+    private void HandleFolderDragOver(DragEventArgs e)
+    {
+        try
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent("FileDrop") ||
+                e.Data.GetDataPresent("FileNameW") || e.Data.GetDataPresent("FileName"))
+            {
+                e.Effects = DragDropEffects.Copy;
+                BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeAccent");
+                e.Handled = true;
+                return;
+            }
+        }
+        catch { }
+        e.Effects = DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void BorderOutFolder_DragLeave(object sender, DragEventArgs e)
+    {
+        BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeCardBorder");
+        e.Handled = true;
+    }
+
+    private void BorderOutFolder_Drop(object sender, DragEventArgs e)
+    {
+        BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeCardBorder");
+        HandleOutputFolderDrop(e);
+        e.Handled = true;
+    }
+
+    private void HandleOutputFolderDrop(DragEventArgs e)
+    {
+        try
+        {
+            string[]? items = ExtractDroppedPaths(e.Data);
+            if (items != null && items.Length > 0)
+            {
+                string target = items[0];
+                string? folder = null;
+                if (Directory.Exists(target))
+                {
+                    folder = target;
+                }
+                else if (File.Exists(target))
+                {
+                    folder = Path.GetDirectoryName(target);
+                }
+
+                if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
+                {
+                    _customOutputDir = folder;
+                    TxtOutFolder.Text = folder;
+                    TxtOutFolder.Foreground = (System.Windows.Media.Brush)FindResource("ThemeTextPrimary");
+
+                    ChkCopy.IsChecked = true;
+                    ChkInPlace.IsChecked = false;
+                    UpdateModeUI();
+
+                    TxtStatusLog.Text = $"Папка сохранения установлена: {folder}";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[OutputFolderDrop Exception]: {ex.Message}");
+        }
+    }
+
     // --- Drag & Drop (Crash-Proof, Universal OLE & Tunneling Standard) ---
+    private void Window_DragEnter(object sender, DragEventArgs e) => HandleDragOver(e);
+    private void Window_DragOver(object sender, DragEventArgs e) => HandleDragOver(e);
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+        if (BorderOutFolder != null)
+        {
+            BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeCardBorder");
+        }
+    }
+    private void Window_Drop(object sender, DragEventArgs e) => HandleDrop(e);
+
     private void Window_PreviewDragEnter(object sender, DragEventArgs e) => HandleDragOver(e);
     private void Window_PreviewDragOver(object sender, DragEventArgs e) => HandleDragOver(e);
-    private void Window_DragOver(object sender, DragEventArgs e) => HandleDragOver(e);
+    private void Window_PreviewDrop(object sender, DragEventArgs e) => HandleDrop(e);
 
     private void HandleDragOver(DragEventArgs e)
     {
         try
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop, true))
+            if (BorderOutFolder != null && BorderOutFolder.IsVisible)
+            {
+                Point pt = e.GetPosition(BorderOutFolder);
+                if (pt.X >= 0 && pt.X <= BorderOutFolder.ActualWidth && pt.Y >= 0 && pt.Y <= BorderOutFolder.ActualHeight)
+                {
+                    BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeAccent");
+                }
+                else
+                {
+                    BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeCardBorder");
+                }
+            }
+
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent("FileDrop") ||
+                e.Data.GetDataPresent("FileNameW") || e.Data.GetDataPresent("FileName"))
             {
                 e.Effects = DragDropEffects.Copy;
                 e.Handled = true;
@@ -264,46 +437,131 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void Window_PreviewDrop(object sender, DragEventArgs e) => HandleDrop(e);
-    private void Window_Drop(object sender, DragEventArgs e) => HandleDrop(e);
-
     private void HandleDrop(DragEventArgs e)
     {
         try
         {
             e.Handled = true;
-            if (e.Data.GetDataPresent(DataFormats.FileDrop, true))
-            {
-                var raw = e.Data.GetData(DataFormats.FileDrop, true);
-                string[]? files = null;
-                if (raw is string[] sa && sa.Length > 0)
-                {
-                    files = sa;
-                }
-                else if (raw is System.Collections.IEnumerable enumerable)
-                {
-                    var fileList = new List<string>();
-                    foreach (var item in enumerable)
-                    {
-                        if (item is string s && !string.IsNullOrWhiteSpace(s))
-                            fileList.Add(s);
-                    }
-                    if (fileList.Count > 0)
-                        files = fileList.ToArray();
-                }
 
-                if (files != null && files.Length > 0)
+            if (BorderOutFolder != null)
+            {
+                BorderOutFolder.BorderBrush = (System.Windows.Media.Brush)FindResource("ThemeCardBorder");
+            }
+
+            // Check if drop occurred over the output folder selection control
+            if (BorderOutFolder != null && BorderOutFolder.IsVisible)
+            {
+                Point pt = e.GetPosition(BorderOutFolder);
+                if (pt.X >= 0 && pt.X <= BorderOutFolder.ActualWidth && pt.Y >= 0 && pt.Y <= BorderOutFolder.ActualHeight)
                 {
-                    TabBtnQueue.IsChecked = true;
-                    TabBtnQueue_Click(this, new RoutedEventArgs());
-                    AddPaths(files);
+                    HandleOutputFolderDrop(e);
+                    return;
                 }
+            }
+
+            if ((DateTime.UtcNow - _lastDropHandledTime).TotalMilliseconds < 350)
+            {
+                return;
+            }
+
+            string[]? files = ExtractDroppedPaths(e.Data);
+            if (files != null && files.Length > 0)
+            {
+                _lastDropHandledTime = DateTime.UtcNow;
+                TabBtnQueue.IsChecked = true;
+                TabBtnQueue_Click(this, new RoutedEventArgs());
+                AddPaths(files);
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[Drop Exception]: {ex.Message}");
         }
+    }
+
+    private static string[]? ExtractDroppedPaths(IDataObject data)
+    {
+        if (data == null) return null;
+        try
+        {
+            if (data.GetDataPresent(DataFormats.FileDrop))
+            {
+                if (data.GetData(DataFormats.FileDrop) is string[] sa && sa.Length > 0)
+                    return sa;
+                if (data.GetData(DataFormats.FileDrop) is System.Collections.IEnumerable en)
+                {
+                    var list = new List<string>();
+                    foreach (var it in en)
+                        if (it is string s && !string.IsNullOrWhiteSpace(s)) list.Add(s);
+                    if (list.Count > 0) return list.ToArray();
+                }
+            }
+            if (data.GetDataPresent("FileDrop"))
+            {
+                if (data.GetData("FileDrop") is string[] sa && sa.Length > 0)
+                    return sa;
+            }
+            if (data.GetDataPresent("FileNameW"))
+            {
+                if (data.GetData("FileNameW") is string[] sa && sa.Length > 0) return sa;
+                if (data.GetData("FileNameW") is string s && !string.IsNullOrWhiteSpace(s)) return new[] { s };
+            }
+            if (data.GetDataPresent("FileName"))
+            {
+                if (data.GetData("FileName") is string[] sa && sa.Length > 0) return sa;
+                if (data.GetData("FileName") is string s && !string.IsNullOrWhiteSpace(s)) return new[] { s };
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static List<string> EnumerateRomFilesRecursively(string rootDir)
+    {
+        var result = new List<string>();
+        var validExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".nds", ".dsi", ".app" };
+        var stack = new Stack<string>();
+        stack.Push(rootDir);
+
+        while (stack.Count > 0)
+        {
+            string current = stack.Pop();
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(current))
+                {
+                    try
+                    {
+                        string ext = Path.GetExtension(file);
+                        if (validExtensions.Contains(ext))
+                        {
+                            result.Add(file);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(current))
+                {
+                    try
+                    {
+                        var di = new DirectoryInfo(subDir);
+                        if ((di.Attributes & FileAttributes.ReparsePoint) == 0)
+                        {
+                            stack.Push(subDir);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        return result;
     }
 
     private void DropZone_MouseDown(object sender, MouseButtonEventArgs e)
@@ -364,15 +622,11 @@ public partial class MainWindow : Window
                         else if (Directory.Exists(path))
                         {
                             _lastFolderPath = path;
-                            var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                            var files = EnumerateRomFilesRecursively(path);
                             foreach (var f in files)
                             {
-                                string ext = Path.GetExtension(f).ToLowerInvariant();
-                                if (ext == ".nds" || ext == ".dsi" || ext == ".app")
-                                {
-                                    var item = CreateRomItem(f);
-                                    if (item != null) newItems.Add(item);
-                                }
+                                var item = CreateRomItem(f);
+                                if (item != null) newItems.Add(item);
                             }
                         }
                     }
@@ -434,7 +688,7 @@ public partial class MainWindow : Window
         var targetGames = _games.Where(g => g.IsEncrypted).ToList();
         if (targetGames.Count == 0) return;
 
-        bool inPlace = RbInPlace.IsChecked == true;
+        bool inPlace = ChkInPlace.IsChecked == true;
         if (inPlace)
         {
             bool? mbr = StormMessageBox.Show(
@@ -488,6 +742,25 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!inPlace && (string.IsNullOrWhiteSpace(_customOutputDir) || !Directory.Exists(_customOutputDir)))
+        {
+            var dlg = new OpenFolderDialog
+            {
+                Title = LocalizationManager.Get("SelectOutputFolderTitle")
+            };
+            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.FolderName))
+            {
+                _customOutputDir = dlg.FolderName;
+                TxtOutFolder.Text = _customOutputDir;
+                TxtOutFolder.Foreground = (System.Windows.Media.Brush)FindResource("ThemeTextPrimary");
+            }
+            else
+            {
+                TxtStatusLog.Text = "Операция отменена: выберите папку для сохранения копий.";
+                return;
+            }
+        }
+
         BtnDecrypt.IsEnabled = false;
         BtnAddFiles.IsEnabled = false;
         BtnAddFolder.IsEnabled = false;
@@ -504,10 +777,13 @@ public partial class MainWindow : Window
             item.Status = LocalizationManager.Get("StatusProcessing");
             TxtStatusLog.Text = $"Расшифровка: {item.FileName}...";
 
+            string targetDir = (!string.IsNullOrWhiteSpace(_customOutputDir) && Directory.Exists(_customOutputDir))
+                ? _customOutputDir
+                : (Path.GetDirectoryName(item.FilePath) ?? "");
+
             string outPath = inPlace
                 ? item.FilePath
-                : Path.Combine(Path.GetDirectoryName(item.FilePath) ?? "",
-                               Path.GetFileNameWithoutExtension(item.FilePath) + " (Decrypted)" + Path.GetExtension(item.FilePath));
+                : Path.Combine(targetDir, Path.GetFileName(item.FilePath));
 
             bool success = false;
             long elapsedMs = 0;
@@ -607,11 +883,19 @@ public partial class MainWindow : Window
 
     private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
     {
-        string? target = _lastFolderPath;
-        if (string.IsNullOrEmpty(target) || !Directory.Exists(target))
+        string? target = null;
+        if (ChkCopy.IsChecked == true && !string.IsNullOrWhiteSpace(_customOutputDir) && Directory.Exists(_customOutputDir))
         {
-            if (_games.Count > 0)
-                target = Path.GetDirectoryName(_games[0].FilePath);
+            target = _customOutputDir;
+        }
+        else
+        {
+            target = _lastFolderPath;
+            if (string.IsNullOrEmpty(target) || !Directory.Exists(target))
+            {
+                if (_games.Count > 0)
+                    target = Path.GetDirectoryName(_games[0].FilePath);
+            }
         }
 
         if (!string.IsNullOrEmpty(target) && Directory.Exists(target))

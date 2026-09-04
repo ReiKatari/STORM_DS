@@ -15,8 +15,8 @@
             BorderBrush="{DynamicResource ThemeAccent}"
             BorderThickness="1.5"
             CornerRadius="14"
-            MinWidth="480"
-            MaxWidth="560"
+            MinWidth="520"
+            MaxWidth="600"
             Margin="20">
         <Border.Effect>
             <DropShadowEffect BlurRadius="28" Direction="270" ShadowDepth="5" Opacity="0.65" Color="#000000" />
@@ -100,10 +100,10 @@
                       Cursor="Hand" Margin="2,0,0,16" />
 
             <!-- Action Buttons -->
-            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="BtnSkip" Content="Пропустить" Width="120" Height="34" Margin="0,0,10,0"
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,14,0">
+                <Button x:Name="BtnSkip" Content="Пропустить" MinWidth="130" Height="36" Margin="0,0,12,0" Padding="18,0"
                         Style="{StaticResource StormButton}" Click="BtnSkip_Click" />
-                <Button x:Name="BtnReprocess" Content="Обработать заново" Width="160" Height="34"
+                <Button x:Name="BtnReprocess" Content="Обработать заново" MinWidth="185" Height="36" Padding="20,0"
                         Style="{StaticResource StormHeroButton}" Click="BtnReprocess_Click" />
             </StackPanel>
         </Grid>

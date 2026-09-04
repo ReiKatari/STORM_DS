@@ -12,7 +12,54 @@
             <SolidColorBrush x:Key="ThemeTextPrimary" Color="#F1F5F9" />
             <SolidColorBrush x:Key="ThemeTextSecondary" Color="#94A3B8" />
             <SolidColorBrush x:Key="ThemeSuccess" Color="#10B981" />
-            <SolidColorBrush x:Key="ThemeWarning" Color="#F59E0B" />
+            <!-- Global Neon Solid Square CheckBox Style (No checkmarks, pure filled neon square per Rule 4) -->
+            <Style x:Key="StormCheckBoxStyle" TargetType="CheckBox">
+                <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimary}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="CheckBox">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="CheckSquare"
+                                        Width="18" Height="18"
+                                        CornerRadius="4"
+                                        Background="{DynamicResource ThemeCardBg}"
+                                        BorderBrush="{DynamicResource ThemeCardBorder}"
+                                        BorderThickness="1.5"
+                                        VerticalAlignment="Center">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="8" Direction="270" ShadowDepth="1.5" Opacity="0.35" Color="#000000" />
+                                    </Border.Effect>
+                                    <Border x:Name="InnerFill"
+                                            CornerRadius="2"
+                                            Margin="2"
+                                            Background="Transparent" />
+                                </Border>
+                                <ContentPresenter Margin="10,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True" />
+                            </StackPanel>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="CheckSquare" Property="Background" Value="{DynamicResource ThemeAccent}" />
+                                    <Setter TargetName="CheckSquare" Property="BorderBrush" Value="{DynamicResource ThemeAccent}" />
+                                    <Setter TargetName="InnerFill" Property="Background" Value="{DynamicResource ThemeAccent}" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="CheckSquare" Property="BorderBrush" Value="{DynamicResource ThemeAccent}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="CheckSquare" Property="Opacity" Value="0.4" />
+                                    <Setter Property="Opacity" Value="0.4" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style TargetType="CheckBox" BasedOn="{StaticResource StormCheckBoxStyle}" />
 
             <!-- 3D Standard Button Style -->
             <Style x:Key="StormButton" TargetType="Button">

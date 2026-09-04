@@ -332,29 +332,23 @@ class AndroidDSiNandManager(
             return false
         }
 
-        val targetPath: String = if (fileUri.scheme == "content") {
-            val tempFile = File(context.cacheDir, "dsiware_import_data_${System.currentTimeMillis()}.bin")
-            val copyResult = runCatching {
-                context.contentResolver.openInputStream(fileUri)?.use { input ->
-                    tempFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                } ?: throw EOFException("Unable to open content URI")
-            }
-            if (copyResult.isFailure) {
-                runCatching { tempFile.delete() }
-                return false
-            }
-            try {
-                return MelonDSiNand.importTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
-            } finally {
-                runCatching { tempFile.delete() }
-            }
-        } else {
-            fileUri.path ?: fileUri.toString()
+        val tempFile = File(context.cacheDir, "dsiware_import_${System.currentTimeMillis()}.bin")
+        val copyResult = runCatching {
+            context.contentResolver.openInputStream(fileUri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: throw EOFException("Unable to open URI: $fileUri")
         }
-
-        return MelonDSiNand.importTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, targetPath)
+        if (copyResult.isFailure || !tempFile.exists() || tempFile.length() < 512L) {
+            runCatching { tempFile.delete() }
+            return false
+        }
+        try {
+            return MelonDSiNand.importTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
+        } finally {
+            runCatching { tempFile.delete() }
+        }
     }
 
     override suspend fun exportTitleFile(title: DSiWareTitle, fileType: DSiWareTitleFileType, fileUri: Uri): Boolean {
@@ -366,24 +360,28 @@ class AndroidDSiNandManager(
             return false
         }
 
-        return if (fileUri.scheme == "content") {
-            val tempFile = File(context.cacheDir, "dsiware_export_data_${System.currentTimeMillis()}.bin")
-            val exported = MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
-            if (exported && tempFile.exists()) {
-                runCatching {
-                    context.contentResolver.openOutputStream(fileUri, "wt")?.use { output ->
-                        tempFile.inputStream().use { input ->
-                            input.copyTo(output)
+        val tempFile = File(context.cacheDir, "dsiware_export_${System.currentTimeMillis()}.bin")
+        val exported = MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
+        if (exported && tempFile.exists() && tempFile.length() > 0L) {
+            runCatching {
+                if (fileUri.scheme == "file") {
+                    val destFile = fileUri.path?.let(::File)
+                    if (destFile != null) {
+                        tempFile.copyTo(destFile, overwrite = true)
+                    } else {
+                        context.contentResolver.openOutputStream(fileUri, "wt")?.use { output ->
+                            tempFile.inputStream().use { input -> input.copyTo(output) }
                         }
+                    }
+                } else {
+                    context.contentResolver.openOutputStream(fileUri, "wt")?.use { output ->
+                        tempFile.inputStream().use { input -> input.copyTo(output) }
                     }
                 }
             }
-            runCatching { tempFile.delete() }
-            exported
-        } else {
-            val path = fileUri.path ?: fileUri.toString()
-            MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, path)
         }
+        runCatching { tempFile.delete() }
+        return exported
     }
 
     override fun closeNand() {

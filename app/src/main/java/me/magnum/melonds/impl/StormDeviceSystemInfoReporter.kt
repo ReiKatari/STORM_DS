@@ -69,7 +69,7 @@ object StormDeviceSystemInfoReporter {
 
         val report = buildString {
             appendLine("================================================================================")
-            appendLine("STORM DS v$versionName (Build $versionCode) - Comprehensive Unified System & Game Log")
+            appendLine("STORM DS $versionName (Build $versionCode) - Comprehensive Unified System and Game Log")
             appendLine("Generated: $nowStr")
             appendLine("================================================================================")
             appendLine()
@@ -77,7 +77,7 @@ object StormDeviceSystemInfoReporter {
             // 1. ACTIVE GAME & EMULATION EXECUTION TELEMETRY
             if (rom != null) {
                 appendLine("================================================================================")
-                appendLine("1. ACTIVE GAME EXECUTION TELEMETRY & MODE BREAKDOWN")
+                appendLine("1. ACTIVE GAME EXECUTION TELEMETRY AND MODE BREAKDOWN")
                 appendLine("================================================================================")
                 appendLine("  Game Name: ${rom.name}")
                 appendLine("  File Name: ${rom.fileName}")
@@ -100,7 +100,7 @@ object StormDeviceSystemInfoReporter {
                 appendLine("  Execution Method: $bootMethod")
                 appendLine("  Launch Status: ${if (success) "SUCCESS" else "FAILED / ERROR DETECTED"}")
                 if (!details.isNullOrBlank()) {
-                    appendLine("  Diagnostics & Execution Log:")
+                    appendLine("  Diagnostics and Execution Log:")
                     appendLine(details)
                 }
                 appendLine("================================================================================")
@@ -108,7 +108,7 @@ object StormDeviceSystemInfoReporter {
             }
 
             // 2. DEVICE & HARDWARE PROFILE
-            appendLine("2. DEVICE & HARDWARE PROFILE:")
+            appendLine("2. DEVICE AND HARDWARE PROFILE:")
             appendLine("   Manufacturer: ${Build.MANUFACTURER}")
             appendLine("   Brand: ${Build.BRAND}")
             appendLine("   Model: ${Build.MODEL}")
@@ -122,7 +122,7 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 3. OPERATING SYSTEM & ANDROID RUNTIME
-            appendLine("3. OPERATING SYSTEM & ANDROID RUNTIME:")
+            appendLine("3. OPERATING SYSTEM AND ANDROID RUNTIME:")
             appendLine("   Android Release: Android ${Build.VERSION.RELEASE}")
             appendLine("   SDK / API Level: ${Build.VERSION.SDK_INT}")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -135,7 +135,7 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 4. DISPLAY & RESOLUTION PROFILE
-            appendLine("4. DISPLAY & RESOLUTION PROFILE:")
+            appendLine("4. DISPLAY AND RESOLUTION PROFILE:")
             val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
             val display = windowManager?.defaultDisplay
             val metrics = DisplayMetrics()
@@ -153,7 +153,7 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 5. MEMORY & STORAGE TELEMETRY
-            appendLine("5. MEMORY & STORAGE TELEMETRY:")
+            appendLine("5. MEMORY AND STORAGE TELEMETRY:")
             val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
             val memInfo = ActivityManager.MemoryInfo()
             actManager?.getMemoryInfo(memInfo)
@@ -176,7 +176,7 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 6. THERMAL & POWER STATUS
-            appendLine("6. THERMAL & POWER STATUS:")
+            appendLine("6. THERMAL AND POWER STATUS:")
             val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
             val batteryStatus = context.registerReceiver(null, batteryFilter)
             val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
@@ -191,7 +191,7 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 7. AUDIO SUBSYSTEM & LOW-LATENCY PROFILE
-            appendLine("7. AUDIO SUBSYSTEM & LOW-LATENCY PROFILE:")
+            appendLine("7. AUDIO SUBSYSTEM AND LOW-LATENCY PROFILE:")
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             val sampleRate = audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) ?: "48000"
             val framesPerBurst = audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER) ?: "192"
@@ -201,7 +201,7 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 8. SENSORS & HARDWARE STATUS
-            appendLine("8. SENSORS & HARDWARE STATUS:")
+            appendLine("8. SENSORS AND HARDWARE STATUS:")
             val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
             val accel = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
             val gyro = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
@@ -210,14 +210,14 @@ object StormDeviceSystemInfoReporter {
             appendLine()
 
             // 9. EMULATOR SUBSYSTEM ARCHITECTURE & STATUS
-            appendLine("9. EMULATOR SUBSYSTEM ARCHITECTURE & STATUS:")
-            appendLine("   ARM64 JIT Recompiler: Active & Optimized (64-bit JIT Engine)")
+            appendLine("9. EMULATOR SUBSYSTEM ARCHITECTURE AND STATUS:")
+            appendLine("   ARM64 JIT Recompiler: Active and Optimized (64-bit JIT Engine)")
             appendLine("   Vulkan 3D Engine: Active (SPIR-V Dynamic Indexing, Fence Sync, Pipeline Cache)")
             appendLine("   OpenGL ES 3.2 Renderer: Available Fallback")
             appendLine("   Librashader Shader Engine: Active (Rust C-API, Slang Shaders runtime)")
             appendLine("   RetroAchievements Engine: Active (rcheevos v11.6.0 native bridge)")
             appendLine("   Screen Layout Provider: Robust Orientation-Aware Presentation Engine")
-            appendLine("   Modcrypt AES Engine: Hardware-accurate DSiWare decryption & DirectBoot")
+            appendLine("   Modcrypt AES Engine: Hardware-accurate DSiWare decryption and DirectBoot")
             appendLine("   Save State Rewind: Active (Circular snapshot frame buffer)")
             appendLine("================================================================================")
         }
@@ -318,7 +318,7 @@ object StormDeviceSystemInfoReporter {
             appendLine("DS BIOS Status: $dsBiosStatus")
             appendLine("DSi BIOS Status: $dsiBiosStatus")
             appendLine("--------------------------------------------------------------------------------")
-            appendLine("DIAGNOSTICS & EXECUTION DETAILS:")
+            appendLine("DIAGNOSTICS AND EXECUTION DETAILS:")
             appendLine(details ?: "No additional diagnostic output available.")
             appendLine("================================================================================")
         }

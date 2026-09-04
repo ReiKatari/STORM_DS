@@ -88,37 +88,38 @@ static constexpr uint32_t HEADER_SIZE             = 0x1000;
 static bool isBufferPlaintext(const uint8_t* data, size_t size)
 {
     if (!data || size < 16) return false;
-    size_t checkWords = std::min<size_t>(size / 4, 32);
-    size_t score = 0;
-    size_t thumbCount = 0;
+
+    size_t sampleLen = std::min<size_t>(size, 256);
+    size_t zeros = 0;
+    for (size_t i = 0; i < sampleLen; i++)
+    {
+        if (data[i] == 0) zeros++;
+    }
+
+    size_t checkWords = sampleLen / 4;
+    size_t armMatches = 0;
     for (size_t i = 0; i < checkWords; i++)
     {
         uint32_t w = *(const uint32_t*)&data[i * 4];
         uint32_t cond = w >> 28;
-        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+        if (w == 0 || (w >= 0x02000000 && w < 0x04000000))
         {
-            score++;
+            armMatches++;
         }
-        else if (cond <= 0xE)
+        else if (cond == 0xE)
         {
-            uint32_t op = (w >> 25) & 0x7;
-            if (op <= 0x7 && w != 0xE7FFDEFF)
-                score++;
+            uint32_t group = (w >> 25) & 0x7;
+            if (group <= 5)
+                armMatches++;
         }
         else if (cond == 0xF)
         {
-            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
-                score++;
+            if ((w & 0xFE000000) == 0xFA000000)
+                armMatches++;
         }
-
-        uint16_t hw0 = (uint16_t)w;
-        uint16_t hw1 = (uint16_t)(w >> 16);
-        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
-            thumbCount++;
-        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
-            thumbCount++;
     }
-    return (checkWords >= 8 && (score >= (checkWords * 6) / 10 || thumbCount >= (checkWords * 2 * 6) / 10));
+
+    return (zeros >= sampleLen / 20) || (checkWords >= 8 && armMatches >= (checkWords * 6) / 10);
 }
 
 static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)

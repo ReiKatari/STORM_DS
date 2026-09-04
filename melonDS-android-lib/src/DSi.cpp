@@ -398,41 +398,43 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
 
 
-    // Plaintext check: if words look like ARM / Thumb opcode / RAM address / zero patterns
-    size_t checkWords = std::min<size_t>(decryptSize / 4, 32);
-    size_t plaintextCount = 0;
-    size_t thumbCount = 0;
+    // Plaintext check: zero-byte entropy and ARM opcode verification
+    size_t sampleLen = std::min<size_t>(decryptSize, 256);
+    size_t zeros = 0;
+    for (size_t i = 0; i < sampleLen; i++)
+    {
+        u8 b = isArm7Area ? ARM7Read8(binaryaddr + i) : ARM9Read8(binaryaddr + i);
+        if (b == 0) zeros++;
+    }
+
+    size_t checkWords = sampleLen / 4;
+    size_t armMatches = 0;
     for (size_t i = 0; i < checkWords; i++)
     {
         u32 w = isArm7Area ? ARM7Read32(binaryaddr + i * 4) : ARM9Read32(binaryaddr + i * 4);
         u32 cond = w >> 28;
-        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+        if (w == 0 || (w >= 0x02000000 && w < 0x04000000))
         {
-            plaintextCount++;
+            armMatches++;
         }
-        else if (cond <= 0xE)
+        else if (cond == 0xE)
         {
-            u32 op = (w >> 25) & 0x7;
-            if (op <= 0x7 && w != 0xE7FFDEFF)
-                plaintextCount++;
+            u32 group = (w >> 25) & 0x7;
+            if (group <= 5)
+                armMatches++;
         }
         else if (cond == 0xF)
         {
-            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
-                plaintextCount++;
+            if ((w & 0xFE000000) == 0xFA000000)
+                armMatches++;
         }
-
-        u16 hw0 = (u16)w;
-        u16 hw1 = (u16)(w >> 16);
-        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
-            thumbCount++;
-        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
-            thumbCount++;
     }
-    if (checkWords >= 8 && (plaintextCount >= (checkWords * 6) / 10 || thumbCount >= (checkWords * 2 * 6) / 10))
+
+    bool isPlaintext = (zeros >= sampleLen / 20) || (checkWords >= 8 && armMatches >= (checkWords * 6) / 10);
+    if (isPlaintext)
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (score=%zu, thumb=%zu / %zu), skipping\n",
-            binaryaddr, plaintextCount, thumbCount, checkWords);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (zeros=%zu/%zu, arm=%zu/%zu), skipping\n",
+            binaryaddr, zeros, sampleLen, armMatches, checkWords);
         return;
     }
 
@@ -775,9 +777,9 @@ void DSi::SetupDirectBoot()
             // [0x02FFD800]: Installed title count = 1
             ARM9Write8(0x02FFD800, 1);
 
-            // [0x02FFD840..0x02FFD84F]: Title permission bitmask = all 1s (enabled)
-            for (u32 b = 0; b < 16; ++b)
-                ARM9Write8(0x02FFD840 + b, 0xFF);
+            // [0x02FFD804..0x02FFD84F]: Title permission bitmasks for all groups (0x10=dataPub, 0x20=dataPrv, 0x30, 0x40)
+            for (u32 b = 0x04; b < 0x50; ++b)
+                ARM9Write8(0x02FFD800 + b, 0xFF);
 
             // [0x02FFD850]: Title 0 TitleIDLow
             // [0x02FFD854]: Title 0 TitleIDHigh
@@ -1088,14 +1090,15 @@ void DSi::SetupDirectBoot()
         }
 
         // Decrypt modcrypt areas (DecryptModcryptArea will safely skip if memory already contains plaintext ARM/Thumb code)
-        if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
+        bool modcryptActive = (header.DSiCryptoFlags & (1 << 1)) != 0 || (header.DSiCryptoFlags == 0);
+        if (modcryptActive && header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
             header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
         {
             DecryptModcryptArea(header.DSiModcrypt1Offset,
                                 header.DSiModcrypt1Size,
                                 header.DSiARM9Hash);
         }
-        if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
+        if (modcryptActive && header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
             header.DSiModcrypt2Size != 0xFFFFFFFF && header.DSiModcrypt2Offset != 0xFFFFFFFF)
         {
             DecryptModcryptArea(header.DSiModcrypt2Offset,

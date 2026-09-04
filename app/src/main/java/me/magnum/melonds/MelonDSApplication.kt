@@ -75,8 +75,13 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                                     file.delete()
                                     return@forEach
                                 }
+                                // Skip 0-byte corrupt files
+                                if (file.isFile && file.length() == 0L) {
+                                    file.delete()
+                                    return@forEach
+                                }
                                 val target = File(dst, file.name)
-                                if (!target.exists() || target.length() == 0L || target.lastModified() < file.lastModified()) {
+                                if (!target.exists() || (target.length() == 0L && file.length() > 0L) || (target.length() > 0L && file.length() > 0L && target.lastModified() < file.lastModified())) {
                                     runCatching { file.copyTo(target, overwrite = true) }
                                 }
                             }
@@ -94,10 +99,9 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         }
                     }
 
-                    // Internal app files to root storage
+                    // Internal app files to root storage (excluding saves to prevent resurrecting deleted saves)
                     copyDir(File(context.filesDir, "bios/ds"), dsDir)
                     copyDir(File(context.filesDir, "bios/dsi"), dsiDir)
-                    copyDir(File(context.filesDir, "saves"), savesDir)
                     copyDir(File(context.filesDir, "quicksaves"), quicksavesDir)
                     copyDir(File(context.filesDir, "cheats"), cheatsDir)
                     copyDir(File(context.filesDir, "textures"), texturesDir)
@@ -107,17 +111,84 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     context.getExternalFilesDir(null)?.let { extFiles ->
                         copyDir(File(extFiles, "bios/ds"), dsDir)
                         copyDir(File(extFiles, "bios/dsi"), dsiDir)
-                        copyDir(File(extFiles, "saves"), savesDir)
                         copyDir(File(extFiles, "quicksaves"), quicksavesDir)
                         copyDir(File(extFiles, "cheats"), cheatsDir)
                         copyDir(File(extFiles, "textures"), texturesDir)
                         copyDir(File(extFiles, "dldi"), dldiDir)
                     }
 
-                    // Root storage back to internal app files (backup/sync)
+                    // One-time migration for legacy saves from internal storage, then purge internal copy to prevent ghost saves
+                    val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                    val legacySavesMigrated = prefs.getBoolean("storm_legacy_saves_migrated_v416", false)
+                    val legacySaveDirs = listOf(
+                        File(context.filesDir, "saves"),
+                        File(context.getExternalFilesDir(null), "saves"),
+                    )
+
+                    if (!legacySavesMigrated) {
+                        val existingSaves = savesDir.listFiles()?.filter { it.isFile && it.length() > 0L }
+                        if (existingSaves.isNullOrEmpty()) {
+                            legacySaveDirs.forEach { legacyDir ->
+                                if (legacyDir.exists() && legacyDir.isDirectory) {
+                                    legacyDir.listFiles()?.forEach { f ->
+                                        if (f.isFile && f.length() > 0L && (f.name.endsWith(".sav", ignoreCase = true) || f.name.endsWith(".srm", ignoreCase = true))) {
+                                            val target = File(savesDir, f.name)
+                                            runCatching { f.copyTo(target, overwrite = true) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        legacySaveDirs.forEach { legacyDir ->
+                            runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
+                        }
+                        prefs.edit().putBoolean("storm_legacy_saves_migrated_v416", true).apply()
+                    } else {
+                        // Ensure legacy internal save folders are purged so deleted saves are never resurrected
+                        legacySaveDirs.forEach { legacyDir ->
+                            runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
+                        }
+                    }
+
+                    // Auto-cleanup corrupted save files in root saves folder (0-byte stubs, .bak clutter, stray 0-byte public saves)
+                    if (savesDir.exists() && savesDir.isDirectory) {
+                        savesDir.listFiles()?.forEach { f ->
+                            if (!f.isFile) return@forEach
+                            if (f.length() == 0L) {
+                                Log.i("MelonDSApplication", "Auto-cleaned 0-byte corrupt save artifact: ${f.name}")
+                                f.delete()
+                                return@forEach
+                            }
+                            if (f.name.endsWith(".sav.bak", ignoreCase = true) || f.name.endsWith(".srm.bak", ignoreCase = true)) {
+                                f.delete()
+                                return@forEach
+                            }
+                            if (f.name.endsWith(".public.sav", ignoreCase = true) && f.length() == 0L) {
+                                f.delete()
+                                return@forEach
+                            }
+                        }
+                    }
+
+                    // Auto-cleanup stale nds-bootstrap error/offset caches on external storage without touching saves
+                    val externalStorage = android.os.Environment.getExternalStorageDirectory()
+                    val ndsBootstrapDir = File(externalStorage, "_nds/nds-bootstrap")
+                    if (ndsBootstrapDir.exists() && ndsBootstrapDir.isDirectory) {
+                        listOf(File(ndsBootstrapDir, "fatTableCache"), File(ndsBootstrapDir, "patchOffsetCache"), File(ndsBootstrapDir, "ramDumps")).forEach { cacheFolder ->
+                            if (cacheFolder.exists() && cacheFolder.isDirectory) {
+                                cacheFolder.listFiles()?.forEach { cFile ->
+                                    if (cFile.isFile && (cFile.length() == 0L || cFile.lastModified() < now - 86_400_000L)) {
+                                        cFile.delete()
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Root storage back to internal app files (backup/sync for bios, cheats, textures, dldi, logs)
+                    // Note: savesDir is NOT mirrored back to filesDir to ensure user deletions are respected 100%
                     copyDir(dsDir, File(context.filesDir, "bios/ds").apply { mkdirs() })
                     copyDir(dsiDir, File(context.filesDir, "bios/dsi").apply { mkdirs() })
-                    copyDir(savesDir, File(context.filesDir, "saves").apply { mkdirs() })
                     copyDir(quicksavesDir, File(context.filesDir, "quicksaves").apply { mkdirs() })
                     copyDir(cheatsDir, File(context.filesDir, "cheats").apply { mkdirs() })
                     copyDir(texturesDir, File(context.filesDir, "textures").apply { mkdirs() })
@@ -125,7 +196,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     copyDir(dldiDir, File(context.filesDir, "dldi").apply { mkdirs() })
 
                     // Ensure preferences point to root paths
-                    val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
                     val currentDs = prefs.getStringSet("bios_dir", null)?.firstOrNull()
                     if (currentDs == null || currentDs.contains("data/user/0") || currentDs.contains("files/bios")) {
                         prefs.edit().putStringSet("bios_dir", setOf(android.net.Uri.fromFile(dsDir).toString())).apply()

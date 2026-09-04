@@ -27,16 +27,32 @@ public partial class App : Application
     [DllImport("kernel32.dll")]
     private static extern bool AllocConsole();
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ChangeWindowMessageFilter(uint message, uint dwFlag);
+
+    private const uint WM_DROPFILES = 0x0233;
+    private const uint WM_COPYDATA = 0x004A;
+    private const uint WM_COPYGLOBALDATA = 0x0049;
+    private const uint MSGFLT_ALLOW = 1;
+
     private const int ATTACH_PARENT_PROCESS = -1;
     private const int SW_RESTORE = 9;
 
     private void Application_Startup(object sender, StartupEventArgs e)
     {
+        // Unblock Windows UIPI message filtering at process level for Drag & Drop
+        try
+        {
+            ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ALLOW);
+            ChangeWindowMessageFilter(WM_COPYDATA, MSGFLT_ALLOW);
+            ChangeWindowMessageFilter(WM_COPYGLOBALDATA, MSGFLT_ALLOW);
+        }
+        catch { }
         // CLI mode check
         if (e.Args.Length > 0)
         {
             RunCliMode(e.Args);
-            Shutdown(0);
+            Environment.Exit(0);
             return;
         }
 
@@ -98,10 +114,30 @@ public partial class App : Application
 
         if (!_hasHandle)
         {
-            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.4");
+            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.1");
             if (hWnd == IntPtr.Zero)
             {
-                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.3");
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.0");
+            }
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.9");
+            }
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.7");
+            }
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.6");
+            }
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.5");
+            }
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.4");
             }
             if (hWnd == IntPtr.Zero)
             {
@@ -152,24 +188,31 @@ public partial class App : Application
 
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine("  STORM DSi Decryptor 1.0.4 (STORM SOFT)");
+        Console.WriteLine("  STORM DSi Decryptor 1.1.1 (STORM SOFT)");
         Console.WriteLine("  Nintendo DSi and DSiWare Fast Modcrypt Decryptor");
         Console.WriteLine("==========================================================");
 
         bool inPlace = false;
+        string? outDir = null;
         var targets = new System.Collections.Generic.List<string>();
 
-        foreach (var arg in args)
+        for (int i = 0; i < args.Length; i++)
         {
+            var arg = args[i];
             if (arg.Equals("--inplace", StringComparison.OrdinalIgnoreCase) || arg.Equals("-i", StringComparison.OrdinalIgnoreCase))
             {
                 inPlace = true;
             }
+            else if ((arg.Equals("--out", StringComparison.OrdinalIgnoreCase) || arg.Equals("-o", StringComparison.OrdinalIgnoreCase)) && i + 1 < args.Length)
+            {
+                outDir = args[++i];
+            }
             else if (arg.Equals("--help", StringComparison.OrdinalIgnoreCase) || arg.Equals("-h", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("Использование: STORM_DSi_Decryptor.exe [--inplace] <файл.nds | папка>...");
+                Console.WriteLine("Использование: STORM_DSi_Decryptor.exe [--inplace] [-o <папка>] <файл.nds | папка>...");
                 Console.WriteLine("  --inplace, -i    Перезаписывать оригинальные файлы на месте");
-                Console.WriteLine("  по умолчанию     Создает копии с суффиксом (Decrypted)");
+                Console.WriteLine("  --out, -o <дир>  Папка для сохранения копий");
+                Console.WriteLine("  по умолчанию     Создает копии файлов без изменения имени");
                 return;
             }
             else
@@ -185,7 +228,7 @@ public partial class App : Application
         {
             if (File.Exists(target))
             {
-                ProcessFile(target, inPlace, ref successCount, ref failCount);
+                ProcessFile(target, inPlace, outDir, ref successCount, ref failCount);
             }
             else if (Directory.Exists(target))
             {
@@ -195,7 +238,7 @@ public partial class App : Application
                     string ext = Path.GetExtension(f).ToLowerInvariant();
                     if (ext == ".nds" || ext == ".dsi" || ext == ".app")
                     {
-                        ProcessFile(f, inPlace, ref successCount, ref failCount);
+                        ProcessFile(f, inPlace, outDir, ref successCount, ref failCount);
                     }
                 }
             }
@@ -211,7 +254,7 @@ public partial class App : Application
         Console.WriteLine("==========================================================");
     }
 
-    private static void ProcessFile(string file, bool inPlace, ref int successCount, ref int failCount)
+    private static void ProcessFile(string file, bool inPlace, string? outDir, ref int successCount, ref int failCount)
     {
         try
         {
@@ -229,9 +272,10 @@ public partial class App : Application
                 return;
             }
 
+            string targetDir = !string.IsNullOrWhiteSpace(outDir) ? outDir : (Path.GetDirectoryName(file) ?? "");
             string outPath = inPlace
                 ? file
-                : Path.Combine(Path.GetDirectoryName(file) ?? "", Path.GetFileNameWithoutExtension(file) + " (Decrypted)" + Path.GetExtension(file));
+                : Path.Combine(targetDir, Path.GetFileName(file));
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool ok = DsiDecryptorEngine.DecryptFile(file, outPath);
