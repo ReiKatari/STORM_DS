@@ -7,16 +7,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
-    <Version>1.0.4</Version>
-    <AssemblyVersion>1.0.4.0</AssemblyVersion>
-    <FileVersion>1.0.4.0</FileVersion>
-    <AssemblyTitle>STORM DSi Decryptor Setup 1.0.4</AssemblyTitle>
-    <Product>STORM DSi Decryptor Setup</Product>
-    <Title>STORM DSi Decryptor Setup</Title>
-    <Description>Программа установки STORM DSi Decryptor</Description>
+    <Version>1.1.1</Version>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <FileVersion>1.1.1.0</FileVersion>
+    <AssemblyTitle>STORM DSi Decryptor 1.1.1</AssemblyTitle>
+    <Product>STORM DSi Decryptor 1.1.1</Product>
+    <Title>STORM DSi Decryptor 1.1.1</Title>
+    <Description>STORM DSi Decryptor 1.1.1</Description>
     <Company>STORM SOFT</Company>
     <Authors>ReiKatari</Authors>
-    <Copyright>Copyright © 2026 STORM SOFT</Copyright>
+    <Copyright>Copyright © 2026 STORM TEAM</Copyright>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
@@ -25,6 +25,7 @@
     <EmbeddedResource Include="Payload\Быстрая_Расшифровка_Игр.bat" Link="Payload\Быстрая_Расшифровка_Игр.bat" />
     <EmbeddedResource Include="Resources\AppIcon.ico" Link="Resources\AppIcon.ico" />
     <EmbeddedResource Include="Resources\logo.png" Link="Resources\logo.png" />
+    <EmbeddedResource Include="Resources\STORM_Certificate.cer" Link="Resources\STORM_Certificate.cer" />
   </ItemGroup>
 
 </Project>

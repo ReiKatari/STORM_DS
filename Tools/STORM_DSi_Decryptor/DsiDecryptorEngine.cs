@@ -114,6 +114,23 @@ public static class DsiDecryptorEngine
         return keyX;
     }
 
+    public static ushort CalcHeaderCRC16(byte[] data, int len)
+    {
+        ushort crc = 0xFFFF;
+        for (int i = 0; i < len; i++)
+        {
+            crc ^= (ushort)data[i];
+            for (int b = 0; b < 8; b++)
+            {
+                if ((crc & 1) != 0)
+                    crc = (ushort)((crc >> 1) ^ 0xA001);
+                else
+                    crc >>= 1;
+            }
+        }
+        return crc;
+    }
+
     public static bool IsAreaEncrypted(Stream fs, uint offset, uint size, int ivOffset, byte[] header, long fileLength)
     {
         if (offset == 0 || size == 0 || offset + size > fileLength) return false;
@@ -291,32 +308,19 @@ public static class DsiDecryptorEngine
 
         if (info.HasModcrypt)
         {
-            // Decrypted marker checks:
-            // 1. Filename suffix indicates it was already decrypted
-            bool isDecName = fi.Name.Contains("(Decrypted)", StringComparison.OrdinalIgnoreCase);
-            // 2. Previously processed in session/persistent history
-            bool inHistory = HistoryManager.FindPrevious(filePath, info.GameCode) != null;
-
-            if (isDecName || inHistory)
+            bool mod1Enc = false;
+            if (info.Modcrypt1Offset != 0 && info.Modcrypt1Size > 0 && info.Modcrypt1Offset + info.Modcrypt1Size <= fi.Length)
             {
-                info.IsEncrypted = false;
+                mod1Enc = IsAreaEncrypted(fs, info.Modcrypt1Offset, info.Modcrypt1Size, 0x300, header, fi.Length);
             }
-            else
+
+            bool mod2Enc = false;
+            if (info.Modcrypt2Offset != 0 && info.Modcrypt2Size > 0 && info.Modcrypt2Offset + info.Modcrypt2Size <= fi.Length)
             {
-                bool mod1Enc = false;
-                if (info.Modcrypt1Offset != 0 && info.Modcrypt1Size > 0 && info.Modcrypt1Offset + info.Modcrypt1Size <= fi.Length)
-                {
-                    mod1Enc = IsAreaEncrypted(fs, info.Modcrypt1Offset, info.Modcrypt1Size, 0x300, header, fi.Length);
-                }
-
-                bool mod2Enc = false;
-                if (info.Modcrypt2Offset != 0 && info.Modcrypt2Size > 0 && info.Modcrypt2Offset + info.Modcrypt2Size <= fi.Length)
-                {
-                    mod2Enc = IsAreaEncrypted(fs, info.Modcrypt2Offset, info.Modcrypt2Size, 0x314, header, fi.Length);
-                }
-
-                info.IsEncrypted = mod1Enc || mod2Enc;
+                mod2Enc = IsAreaEncrypted(fs, info.Modcrypt2Offset, info.Modcrypt2Size, 0x314, header, fi.Length);
             }
+
+            info.IsEncrypted = mod1Enc || mod2Enc;
         }
 
         return info;
@@ -365,8 +369,15 @@ public static class DsiDecryptorEngine
             }
         }
 
-        // Set DSi cart header flags (Modcrypt areas decrypted)
+
+        // Set DSi cart header flags (Modcrypt areas decrypted: 0x03 = both decrypted)
+        // Modcrypt offsets and sizes at 0x220..0x22F are preserved as required by TWL-SDK / DSi OS
         rom[0x1C] |= 0x03;
+
+        // Recalculate Header CRC16 over 0x00..0x15D and store at 0x15E
+        ushort headerCrc = CalcHeaderCRC16(rom, 0x15E);
+        rom[0x15E] = (byte)(headerCrc & 0xFF);
+        rom[0x15F] = (byte)(headerCrc >> 8);
 
         return true;
     }

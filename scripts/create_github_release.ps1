@@ -1,9 +1,9 @@
 # GitHub Release Publisher for STORM DS
 param(
-    [string]$TagName = "4.1.5",
-    [string]$ReleaseName = "STORM DS 4.1.5",
-    [string]$ApkPath = "E:\STORM DS\Files\STORM_DS_4.1.5.apk",
-    [string]$SetupPath = "E:\STORM DS\Files\STORM_DSi_Decryptor_1.0.4_Setup.exe"
+    [string]$TagName = "4.1.6",
+    [string]$ReleaseName = "STORM DS 4.1.6",
+    [string]$ApkPath = "E:\STORM DS\Files\STORM_DS_4.1.6.apk",
+    [string]$SetupPath = "E:\STORM DS\Files\STORM_DSi_Decryptor_1.1.1_Setup.exe"
 )
 
 $inputData = @"
@@ -27,34 +27,37 @@ if (-not $token) {
 $repo = "ReiKatari/STORM_DS"
 
 $body = @'
-> 💡 **Релиз 4.1.5** — *Продвинутый эмулятор двухэкранных консолей Nintendo DS и Nintendo DSi для Android с аппаратным ускорением Vulkan, шейдерами librashader и эталонной архитектурной поддержкой DSiWare.*
+> 💡 **Релиз 4.1.6** — *Продвинутый эмулятор двухэкранных консолей Nintendo DS и Nintendo DSi для Android с аппаратным ускорением Vulkan, шейдерами librashader, интеллектуальной защитой сохранений и эталонной архитектурной поддержкой DSiWare.*
 
 ---
 
 ### 🚀 Ключевые изменения и улучшения
-- 🌟 **[Восстановление эталонного ядра melonDS (база 4.1.1)]**: Выполнен полный побайтовый откат ядра эмуляции DSi к стабильному эталону релиза 4.1.1. Восстановлена генерация системной таблицы накопителей SD/MMC Device List в памяти ARM7 (спецификация GBATEK `carthdr[1D4h]`) и контекста установленных приложений DSi OS (`0x02FFD800`, `0x02FFD840`, `0x02FFD850`), что устраняет зависания на белом экране в *Dr. Mario Express*, *SteamWorld Tower Defense*, *Castle of Magic* и *Gangstar 2*.
-- 🌟 **[STORM DSi Decryptor 1.0.4 — Безупречный Drag and Drop]**: Полная переработка архитектуры перетаскивания: сквозная обработка `PreviewDragOver` / `PreviewDrop` на корневом уровне окна, контейнере `DropZone` и таблицах `DataGrid`, а также системная поддержка `WM_DROPFILES` через `ChangeWindowMessageFilterEx` и запуск приложения из инсталлятора через оболочку проводника для обхода ограничений UIPI.
-- 🌟 **[Точное определение статуса расшифрованных игр]**: Реализован гибридный статистический алгоритм детекции (анализ энтропии нулей по эталону melonDS и пробное дешифрование блока AES-CTR). Расшифрованные игры (`... (Decrypted).nds`) теперь безошибочно определяются как «Расшифрован (Готов)» без ложных срабатываний.
-- 🌟 **[Стилизованная история операций и обнаружение дубликатов]**: В утилиту внедрена вкладка «История операций» с сохранением в `%APPDATA%\STORM DSi Decryptor\history.json`, поддержкой полной очистки, выборочного удаления (DEL) и перехода к файлам в проводнике.
+- 🌟 **[Ликвидация файлов-призраков (Ghost Saves Fix)]**: Полностью устранён двухсторонний цикл синхронизации хранилища, приводивший к воскрешению удалённых пользователем сохранений из внутреннего каталога `/data/data/.../files/saves`. Папка `/sdcard/STORM DS/saves/` стала единственным и непререкаемым источником сохранений, а устаревшие внутренние копии и файлы-призраки надёжно очищаются.
+- 🌟 **[Автоочистка повреждённых сохранений и устранение белого экрана (Corrupted Save Auto-Cleanup)]**: Внедрена строгая валидация структуры FAT12 для сохранений DSiWare (проверка загрузочного сектора `0x55 0xAA`, перехода `0xEB`/`0xE9`, таблиц FAT и дескриптора `0xF8`). При обнаружении 0-байтовых или повреждённых старыми версиями файлов эмулятор автоматически генерирует и экспортирует чистое валидное сохранение из NAND, предотвращая зависание на белом экране при старте. Реальные валидные сохранения пользователя гарантированно сохраняются.
+- 🌟 **[Чистота каталога сохранений]**: Полностью исключено создание теневых дубликатов `.sav.bak` и `.srm.bak` в пользовательской папке сохранений, а все старые и нулевые артефакты автоматически вычищаются.
+- 🌟 **[Безопасная очистка кеша nds-bootstrap]**: Добавлена интеллектуальная очистка устаревших и повреждённых файлов кеша `fatTableCache` и `patchOffsetCache` для совместимости с физическими консолями и TWiLight Menu++ без риска повреждения реальных сохранений.
 
 <details>
 <summary><b>📋 Полный список изменений (нажмите, чтобы развернуть)</b></summary>
 
-- 🔹 **[Ядро эмулятора DSi]**: Чистый откат `DSi.cpp`, `RomDecryptor.cpp`, `FileSystemRomsRepository.kt` и `EmulatorLaunchPreconditionChecker.kt` к эталону 4.1.1.
-- 🔹 **[SD/MMC Device List]**: Полноценная регистрация виртуальных устройств `'A'`..`'I'`, включая точки монтирования `dataPub` (`nand:/title/.../data/public.sav`) и `dataPrv`.
-- 🔹 **[STORM DSi Decryptor]**: Обновление до версии 1.0.4. Добавлены вкладки переключения между очередью обработки и историей, стилизованный диалог проверки дубликатов, расширенный список визуальных тем.
-- 🔹 **[Локализация]**: 100% локализация интерфейса и диалогов истории на 6 языках: русский, английский, немецкий, французский, китайский, японский.
-- 🔹 **[Пакеты установки]**: Сборка релизного APK `STORM_DS_4.1.5.apk` и полнофункционального автономного инсталлятора `STORM_DSi_Decryptor_1.0.4_Setup.exe`.
+- 🔹 **[Синхронизация сохранений]**: Отключено обратное копирование `savesDir` во внутреннюю память приложения, гарантируя сохранность действий пользователя при ручном удалении файлов.
+- 🔹 **[Защита от 0-байтовых файлов]**: В `AndroidDSiNandManager` экспорт и импорт переведены на промежуточный безопасный буфер — создание пустых 0-байтовых файлов `.sav` при сбоях полностью исключено.
+- 🔹 **[Проверка целостности FAT12]**: Автоматическое распознавание повреждённых файлов сохранений DSiWare и их безопасное переформатирование через `repairTitleSaves` в NAND.
+- 🔹 **[SramProvider]**: Автоматическое удаление пустых 0-байтовых заглушек при открытии сохранений стандартных DS и DSi игр.
+- 🔹 **[Совместимость с консолями]**: Автоматическая очистка устаревшего кеша смещений и таблиц FAT в каталоге `_nds/nds-bootstrap` при наличии.
+- 🔹 **[STORM DSi Decryptor 1.1.1]**: Комплектация инсталлятором утилиты дешифрования 1.1.1 со 100% побайтовым совпадением расшифрованных образов и исправленным интерфейсом.
+- 🔹 **[Пакеты установки]**: Сборка релизного APK `STORM_DS_4.1.6.apk` и полнофункционального автономного инсталлятора `STORM_DSi_Decryptor_1.1.1_Setup.exe`.
 
 </details>
 
 <details>
 <summary><b>🌐 English Changelog (click to expand)</b></summary>
 
-- 🔸 **[melonDS DSi Core Restored to 4.1.1 Golden Baseline]**: Restored exact 4.1.1 DSi core architecture. SD/MMC Device List in ARM7 memory (`carthdr[1D4h]`) and DSi OS application context (`0x02FFD800`, `0x02FFD840`, `0x02FFD850`) properly initialized, resolving white/black screen hangs on *Dr. Mario Express*, *SteamWorld Tower Defense*, *Castle of Magic*, and *Gangstar 2*.
-- 🔸 **[STORM DSi Decryptor 1.0.4 — Seamless Drag and Drop]**: Integrated root-level tunneling `PreviewDragOver` / `PreviewDrop` alongside `WM_DROPFILES` message filters bypassing UIPI integrity restrictions. The installer now spawns the application via Windows Explorer shell, ensuring flawless drag-and-drop from Explorer.
-- 🔸 **[Decrypted ROM Detection Fix]**: Multi-tier detection algorithm combining statistical zero-entropy analysis, AES-CTR trial block decryption, and session history prevents already-decrypted ROMs (`(Decrypted).nds`) from being falsely flagged as encrypted.
-- 🔸 **[Operation History and Duplicate Detection]**: Added a dedicated History tab with persistent `%APPDATA%\STORM DSi Decryptor\history.json` storage, clear/delete capabilities, and an intelligent duplicate prompt dialog offering skip or reprocess options with batch support.
+- 🔸 **[Ghost Saves Resurrection Eliminated]**: Fixed two-way storage synchronization loop where deleted user saves were being restored from internal `/data/data/.../files/saves`. The user-accessible `/sdcard/STORM DS/saves/` directory is now the single source of truth, and stale internal ghost files are purged.
+- 🔸 **[Corrupted Save Auto-Cleanup and White Screen Boot Fix]**: Introduced comprehensive FAT12 integrity verification for DSiWare public/private saves (`0x55 0xAA` signature, `0xEB`/`0xE9` boot jmp, FAT count, media descriptor `0xF8`). If a 0-byte or corrupted save from previous aborted launches is detected, the emulator automatically formats and exports a fresh, valid FAT12 filesystem from NAND, preventing white screen freezes. Real valid user progress is 100% protected and preserved.
+- 🔸 **[Clean Saves Folder Architecture]**: Eradicated in-place `.sav.bak` and `.srm.bak` duplicates from cluttering the user saves folder; stray 0-byte stubs are cleanly purged.
+- 🔸 **[nds-bootstrap Stale Cache Maintenance]**: Added safe purging of outdated and zero-byte cache files in `_nds/nds-bootstrap/fatTableCache` and `patchOffsetCache` without touching real save files.
+- 🔸 **[STORM DSi Decryptor 1.1.1 Included]**: Bundled with the updated standalone desktop decryptor featuring bit-exact Modcrypt decryption and modernized UI.
 
 </details>
 

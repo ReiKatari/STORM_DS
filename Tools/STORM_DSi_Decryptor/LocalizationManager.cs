@@ -30,7 +30,7 @@ public static class LocalizationManager
             ["StatusProcessing"] = "Расшифровка...",
             ["StatusSuccess"] = "Успешно расшифрован",
             ["StatusFailed"] = "Ошибка расшифровки",
-            ["ModeCopy"] = "Создавать копию (Decrypted)",
+            ["ModeCopy"] = "Создавать копию",
             ["ModeInPlace"] = "Перезаписывать оригиналы на месте",
             ["TotalGames"] = "Всего игр",
             ["EncryptedCount"] = "Требуют расшифровки",
@@ -52,7 +52,12 @@ public static class LocalizationManager
             ["BtnSkip"] = "Пропустить",
             ["BtnReprocess"] = "Обработать заново",
             ["ChkApplyToAllDuplicates"] = "Применить ко всем повторным играм",
-            ["ShowInExplorer"] = "Показать в проводнике"
+            ["ShowInExplorer"] = "Показать в проводнике",
+            ["OutputFolderLabel"] = "Папка сохранения:",
+            ["OutputFolderDefault"] = "Выберите папку для сохранения копий...",
+            ["BrowseFolder"] = "Обзор...",
+            ["SelectOutputFolderTitle"] = "Выберите папку для сохранения копий",
+            ["ResetOutputFolderTooltip"] = "Сбросить на папку по умолчанию"
         },
         ["en"] = new()
         {
@@ -75,7 +80,7 @@ public static class LocalizationManager
             ["StatusProcessing"] = "Decrypting...",
             ["StatusSuccess"] = "Successfully decrypted",
             ["StatusFailed"] = "Decryption error",
-            ["ModeCopy"] = "Create copy (Decrypted)",
+            ["ModeCopy"] = "Create copy",
             ["ModeInPlace"] = "Overwrite originals in-place",
             ["TotalGames"] = "Total games",
             ["EncryptedCount"] = "Need decryption",
@@ -97,7 +102,12 @@ public static class LocalizationManager
             ["BtnSkip"] = "Skip",
             ["BtnReprocess"] = "Reprocess",
             ["ChkApplyToAllDuplicates"] = "Apply to all duplicate games",
-            ["ShowInExplorer"] = "Show in Explorer"
+            ["ShowInExplorer"] = "Show in Explorer",
+            ["OutputFolderLabel"] = "Save to folder:",
+            ["OutputFolderDefault"] = "Select folder to save copies...",
+            ["BrowseFolder"] = "Browse...",
+            ["SelectOutputFolderTitle"] = "Select folder to save copies",
+            ["ResetOutputFolderTooltip"] = "Reset to default folder"
         },
         ["de"] = new()
         {
@@ -120,7 +130,7 @@ public static class LocalizationManager
             ["StatusProcessing"] = "Entschlüsselung...",
             ["StatusSuccess"] = "Erfolgreich entschlüsselt",
             ["StatusFailed"] = "Fehler bei der Entschlüsselung",
-            ["ModeCopy"] = "Kopie erstellen (Decrypted)",
+            ["ModeCopy"] = "Kopie erstellen",
             ["ModeInPlace"] = "Originale direkt überschreiben",
             ["TotalGames"] = "Spiele gesamt",
             ["EncryptedCount"] = "Benötigen Entschlüsselung",
@@ -142,7 +152,12 @@ public static class LocalizationManager
             ["BtnSkip"] = "Überspringen",
             ["BtnReprocess"] = "Erneut verarbeiten",
             ["ChkApplyToAllDuplicates"] = "Auf alle Duplikate anwenden",
-            ["ShowInExplorer"] = "Im Explorer anzeigen"
+            ["ShowInExplorer"] = "Im Explorer anzeigen",
+            ["OutputFolderLabel"] = "Zielordner:",
+            ["OutputFolderDefault"] = "Ordner zum Speichern von Kopien auswählen...",
+            ["BrowseFolder"] = "Durchsuchen...",
+            ["SelectOutputFolderTitle"] = "Ordner zum Speichern von Kopien auswählen",
+            ["ResetOutputFolderTooltip"] = "Auf Standardordner zurücksetzen"
         },
         ["fr"] = new()
         {
@@ -165,7 +180,7 @@ public static class LocalizationManager
             ["StatusProcessing"] = "Déchiffrement...",
             ["StatusSuccess"] = "Déchiffré avec succès",
             ["StatusFailed"] = "Erreur de déchiffrement",
-            ["ModeCopy"] = "Créer une copie (Decrypted)",
+            ["ModeCopy"] = "Créer une copie",
             ["ModeInPlace"] = "Écraser les originaux sur place",
             ["TotalGames"] = "Total des jeux",
             ["EncryptedCount"] = "À déchiffrer",
@@ -187,7 +202,12 @@ public static class LocalizationManager
             ["BtnSkip"] = "Ignorer",
             ["BtnReprocess"] = "Retraiter",
             ["ChkApplyToAllDuplicates"] = "Appliquer à tous les doublons",
-            ["ShowInExplorer"] = "Afficher dans l'Explorateur"
+            ["ShowInExplorer"] = "Afficher dans l'Explorateur",
+            ["OutputFolderLabel"] = "Dossier de sortie :",
+            ["OutputFolderDefault"] = "Sélectionnez un dossier pour enregistrer les copies...",
+            ["BrowseFolder"] = "Parcourir...",
+            ["SelectOutputFolderTitle"] = "Sélectionnez un dossier pour enregistrer les copies",
+            ["ResetOutputFolderTooltip"] = "Réinitialiser au dossier par défaut"
         },
         ["zh"] = new()
         {
@@ -210,7 +230,7 @@ public static class LocalizationManager
             ["StatusProcessing"] = "正在解密...",
             ["StatusSuccess"] = "解密成功",
             ["StatusFailed"] = "解密失败",
-            ["ModeCopy"] = "创建副本 (Decrypted)",
+            ["ModeCopy"] = "创建副本",
             ["ModeInPlace"] = "直接就地覆盖原文件",
             ["TotalGames"] = "游戏总数",
             ["EncryptedCount"] = "待解密",
@@ -232,7 +252,12 @@ public static class LocalizationManager
             ["BtnSkip"] = "跳过",
             ["BtnReprocess"] = "重新处理",
             ["ChkApplyToAllDuplicates"] = "应用到所有重复项",
-            ["ShowInExplorer"] = "在资源管理器中显示"
+            ["ShowInExplorer"] = "在资源管理器中显示",
+            ["OutputFolderLabel"] = "输出目录：",
+            ["OutputFolderDefault"] = "选择保存副本的文件夹...",
+            ["BrowseFolder"] = "浏览...",
+            ["SelectOutputFolderTitle"] = "选择保存副本的文件夹",
+            ["ResetOutputFolderTooltip"] = "重置为默认文件夹"
         },
         ["ja"] = new()
         {
@@ -255,7 +280,7 @@ public static class LocalizationManager
             ["StatusProcessing"] = "復号処理中...",
             ["StatusSuccess"] = "復号完了",
             ["StatusFailed"] = "復号エラー",
-            ["ModeCopy"] = "コピーを作成 (Decrypted)",
+            ["ModeCopy"] = "コピーを作成",
             ["ModeInPlace"] = "元のファイルを上書き",
             ["TotalGames"] = "ゲーム総数",
             ["EncryptedCount"] = "要復号",
@@ -277,7 +302,12 @@ public static class LocalizationManager
             ["BtnSkip"] = "スキップ",
             ["BtnReprocess"] = "再処理",
             ["ChkApplyToAllDuplicates"] = "すべての重複項目に適用",
-            ["ShowInExplorer"] = "エクスプローラーで表示"
+            ["ShowInExplorer"] = "エクスプローラーで表示",
+            ["OutputFolderLabel"] = "保存先フォルダ：",
+            ["OutputFolderDefault"] = "コピー保存先フォルダを選択...",
+            ["BrowseFolder"] = "参照...",
+            ["SelectOutputFolderTitle"] = "コピー保存先フォルダを選択",
+            ["ResetOutputFolderTooltip"] = "デフォルトフォルダにリセット"
         }
     };
 

@@ -41,6 +41,7 @@ app/.cxx/
 *.dex
 
 # IDE & Environment
+.kotlin/
 .vs/
 .vscode/
 .idea/

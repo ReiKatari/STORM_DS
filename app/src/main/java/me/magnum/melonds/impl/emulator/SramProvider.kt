@@ -41,25 +41,27 @@ class SramProvider(
 
         val sramDocument = rootDocument.findFile(sramFileName)
         return if (sramDocument != null) {
-            // Create a shadow backup copy (.sav.bak) to protect user progress from corruption
-            runCatching {
-                if (sramDocument.length() > 0) {
-                    val backupFileName = "$sramFileName.bak"
-                    var backupDoc = rootDocument.findFile(backupFileName)
-                    if (backupDoc == null) {
-                        backupDoc = rootDocument.createFile("application/*", backupFileName)
-                    }
-                    if (backupDoc != null) {
-                        context.contentResolver.openInputStream(sramDocument.uri)?.use { input ->
-                            context.contentResolver.openOutputStream(backupDoc.uri)?.use { output ->
-                                input.copyTo(output)
-                            }
+            if (sramDocument.length() == 0L) {
+                Log.w("SramProvider", "Detected 0-byte corrupt save stub '$sramFileName', purging and recreating")
+                runCatching { sramDocument.delete() }
+                val recreated = rootDocument.createFile("application/*", sramFileName)?.uri
+                recreated ?: (rootDocument.findFile(sramFileName)?.uri ?: throw SramLoadException("Could not recreate SRAM file at ${rootDocument.uri}"))
+            } else {
+                // Remove legacy in-place .bak duplicate to keep user folder clean
+                runCatching { rootDocument.findFile("$sramFileName.bak")?.delete() }
+
+                // Keep emergency recovery copy in private cache directory without cluttering user saves folder
+                runCatching {
+                    val cacheBackupDir = File(context.cacheDir, "save_backups").apply { mkdirs() }
+                    val backupFile = File(cacheBackupDir, "$sramFileName.bak")
+                    context.contentResolver.openInputStream(sramDocument.uri)?.use { input ->
+                        backupFile.outputStream().use { output ->
+                            input.copyTo(output)
                         }
-                        Log.i("SramProvider", "Created shadow backup '$backupFileName'")
                     }
                 }
+                sramDocument.uri
             }
-            sramDocument.uri
         } else {
             val newSramUri = rootDocument.createFile("application/*", sramFileName)?.uri
             if (newSramUri == null) {
