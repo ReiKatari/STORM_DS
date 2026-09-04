@@ -1,7 +1,7 @@
 # GitHub Release Publisher for STORM DS
 param(
     [string]$TagName = "4.1.5",
-    [string]$ReleaseName = "Релиз 4.1.5",
+    [string]$ReleaseName = "STORM DS 4.1.5",
     [string]$ApkPath = "E:\STORM DS\Files\STORM_DS_4.1.5.apk",
     [string]$SetupPath = "E:\STORM DS\Files\STORM_DSi_Decryptor_1.0.4_Setup.exe"
 )
@@ -76,6 +76,7 @@ $headers = @{
 
 # 1. Create or update existing release
 $release = $null
+$tmpPayloadFile = [System.IO.Path]::GetTempFileName()
 try {
     Write-Host "Checking if release $TagName exists..."
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$TagName" -Method Get -Headers $headers -ErrorAction Stop
@@ -85,9 +86,17 @@ try {
         name = $ReleaseName
         body = $body
     } | ConvertTo-Json -Depth 5
-    $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($patchPayload)
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/$($release.id)" -Method Patch -Headers $headers -Body $utf8Bytes -ContentType "application/json; charset=utf-8"
-    Write-Host "Release details updated successfully!"
+    [System.IO.File]::WriteAllText($tmpPayloadFile, $patchPayload, [System.Text.UTF8Encoding]::new($false))
+
+    $resJson = & curl.exe -s -X PATCH `
+        -H "Authorization: Bearer $token" `
+        -H "Accept: application/vnd.github.v3+json" `
+        -H "Content-Type: application/json; charset=utf-8" `
+        -H "User-Agent: STORM-Release-Manager" `
+        --data-binary "@$tmpPayloadFile" `
+        "https://api.github.com/repos/$repo/releases/$($release.id)"
+    $release = $resJson | ConvertFrom-Json
+    Write-Host "Release details updated successfully! Name: $($release.name)"
 } catch {
     Write-Host "Release does not exist, creating..."
     $payload = [ordered]@{
@@ -97,10 +106,19 @@ try {
         draft = $false
         prerelease = $false
     } | ConvertTo-Json -Depth 5
-    $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+    [System.IO.File]::WriteAllText($tmpPayloadFile, $payload, [System.Text.UTF8Encoding]::new($false))
 
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Method Post -Headers $headers -Body $utf8Bytes -ContentType "application/json; charset=utf-8"
+    $resJson = & curl.exe -s -X POST `
+        -H "Authorization: Bearer $token" `
+        -H "Accept: application/vnd.github.v3+json" `
+        -H "Content-Type: application/json; charset=utf-8" `
+        -H "User-Agent: STORM-Release-Manager" `
+        --data-binary "@$tmpPayloadFile" `
+        "https://api.github.com/repos/$repo/releases"
+    $release = $resJson | ConvertFrom-Json
     Write-Host "Release created successfully! ID: $($release.id)"
+} finally {
+    if (Test-Path $tmpPayloadFile) { Remove-Item -Force $tmpPayloadFile }
 }
 
 # 2. Upload Assets if not already uploaded
