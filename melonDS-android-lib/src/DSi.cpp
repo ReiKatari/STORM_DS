@@ -326,6 +326,18 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     const NDSHeader& header = NDSCartSlot.GetCart()->GetHeader();
     const u8* cartrom = NDSCartSlot.GetCart()->GetROM();
 
+    // GBATEK: DSiCryptoFlags bit 0 = Area 1 decrypted, bit 1 = Area 2 decrypted.
+    // If flag marks this area as decrypted, do not re-encrypt it.
+    if ((header.DSiCryptoFlags & 0x03) == 0x03)
+        return;
+
+    bool isModcrypt1 = (header.DSiModcrypt1Offset > 0 && offset >= header.DSiModcrypt1Offset && offset < header.DSiModcrypt1Offset + header.DSiModcrypt1Size);
+    bool isModcrypt2 = (header.DSiModcrypt2Offset > 0 && offset >= header.DSiModcrypt2Offset && offset < header.DSiModcrypt2Offset + header.DSiModcrypt2Size);
+    if (isModcrypt1 && (header.DSiCryptoFlags & 0x01))
+        return;
+    if (isModcrypt2 && (header.DSiCryptoFlags & 0x02))
+        return;
+
     if ((header.DSiCryptoFlags & (1<<4)) ||
         (header.AppFlags & (1<<7)))
     {
@@ -1089,8 +1101,8 @@ void DSi::SetupDirectBoot()
             }
         }
 
-        // Decrypt modcrypt areas (DecryptModcryptArea will safely skip if memory already contains plaintext ARM/Thumb code)
-        bool modcryptActive = (header.DSiCryptoFlags & (1 << 1)) != 0 || (header.DSiCryptoFlags == 0);
+        // Decrypt modcrypt areas only if not already marked decrypted (0x03 = both areas decrypted)
+        bool modcryptActive = (header.DSiCryptoFlags & 0x03) != 0x03;
         if (modcryptActive && header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
             header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
         {

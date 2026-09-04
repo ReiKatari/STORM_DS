@@ -671,12 +671,18 @@ Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, 
     u32 version = 0xFFFFFFFF;
     melonDS::NDSHeader header {};
     nandMount->GetTitleInfo(DSI_NAND_FILE_CATEGORY, (u32) titleId, version, &header, nullptr);
-    if (version == 0xFFFFFFFF)
-        return false;
 
     char dataDir[128];
     snprintf(dataDir, sizeof(dataDir), "0:/title/%08x/%08x/data", DSI_NAND_FILE_CATEGORY, (u32) titleId);
     f_mkdir(dataDir);
+
+    if (version == 0xFFFFFFFF)
+    {
+        // Direct ROM launched from storage: format standard 64KB public.sav in NAND
+        char pubSavPath[128];
+        snprintf(pubSavPath, sizeof(pubSavPath), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        return ensureValidSaveFile(pubSavPath, 0x10000);
+    }
 
     if (header.DSiPublicSavSize > 0)
     {

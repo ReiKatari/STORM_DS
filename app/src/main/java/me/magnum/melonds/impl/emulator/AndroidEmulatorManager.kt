@@ -336,7 +336,9 @@ class AndroidEmulatorManager(
                     rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME ||
                     isRealDsiWareTitle(rom)
 
-                if (isDsiWare) {
+                // If user explicitly configured this ROM to run in DS mode, skip DSi routing
+                val userForcedDs = rom.config.runtimeConsoleType == RuntimeConsoleType.DS
+                if (isDsiWare && !userForcedDs) {
                     val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
                         Log.i(TAG, "loadRom: Routing DSiWare title '${rom.name}' to DSi NAND launch environment")
@@ -615,10 +617,20 @@ class AndroidEmulatorManager(
                         }
 
                         if (!isUserSaveValid) {
-                            // User save is missing, 0 bytes, or corrupted: format clean valid FAT12 in NAND and export to user sram
+                            // User save is missing, 0 bytes, or corrupted:
+                            // 1. Generate a valid FAT12 filesystem matching pubSav (or default 64KB)
+                            val targetSaveSize = if (pubSav > 0u) pubSav.toInt() else 64 * 1024
+                            val validFatBytes = createFormattedFat12(targetSaveSize)
+
+                            // 2. Directly write valid FAT12 into user sramUri
+                            val openStream = runCatching { context.contentResolver.openOutputStream(sram, "rwt") }.getOrNull()
+                                ?: runCatching { context.contentResolver.openOutputStream(sram, "w") }.getOrNull()
+                            openStream?.use { output -> output.write(validFatBytes) }
+                            Log.i(TAG, "loadDsiWare: wrote valid formatted FAT12 save (${validFatBytes.size} B) directly to user sram=$sram")
+
+                            // 3. Format and sync into NAND
                             dsiNandManager.repairTitleSaves(titleId)
-                            dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                            Log.i(TAG, "loadDsiWare: exported newly formatted valid FAT12 save from NAND to user sram=$sram")
+                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
                         }
                     } catch (e: Throwable) {
                         Log.w(TAG, "loadDsiWare: error syncing user save into NAND", e)
@@ -980,6 +992,69 @@ class AndroidEmulatorManager(
         }
         val firstByte = sramBytes[0]
         return sramBytes.any { it != firstByte }
+    }
+
+    private fun createFormattedFat12(size: Int): ByteArray {
+        val targetSize = if (size < 0x200) 64 * 1024 else size
+        val buf = ByteArray(targetSize)
+        val bytesPerSector = 512
+        val totalSectors = targetSize / bytesPerSector
+        val sectorsPerCluster = 1
+        val reservedSectors = 1
+        val numFats = 2
+        val rootDirEntries = if (targetSize <= 0x20000) 64 else 128
+        val sectorsPerFat = if (targetSize <= 0x80000) 1 else 2
+
+        buf[0x00] = 0xEB.toByte()
+        buf[0x01] = 0x3C.toByte()
+        buf[0x02] = 0x90.toByte()
+        System.arraycopy("MSDOS5.0".toByteArray(java.nio.charset.StandardCharsets.US_ASCII), 0, buf, 0x03, 8)
+        buf[0x0B] = (bytesPerSector and 0xFF).toByte()
+        buf[0x0C] = ((bytesPerSector shr 8) and 0xFF).toByte()
+        buf[0x0D] = sectorsPerCluster.toByte()
+        buf[0x0E] = (reservedSectors and 0xFF).toByte()
+        buf[0x0F] = ((reservedSectors shr 8) and 0xFF).toByte()
+        buf[0x10] = numFats.toByte()
+        buf[0x11] = (rootDirEntries and 0xFF).toByte()
+        buf[0x12] = ((rootDirEntries shr 8) and 0xFF).toByte()
+        if (totalSectors < 0x10000) {
+            buf[0x13] = (totalSectors and 0xFF).toByte()
+            buf[0x14] = ((totalSectors shr 8) and 0xFF).toByte()
+        } else {
+            buf[0x20] = (totalSectors and 0xFF).toByte()
+            buf[0x21] = ((totalSectors shr 8) and 0xFF).toByte()
+            buf[0x22] = ((totalSectors shr 16) and 0xFF).toByte()
+            buf[0x23] = ((totalSectors shr 24) and 0xFF).toByte()
+        }
+        buf[0x15] = 0xF8.toByte()
+        buf[0x16] = (sectorsPerFat and 0xFF).toByte()
+        buf[0x17] = ((sectorsPerFat shr 8) and 0xFF).toByte()
+        buf[0x24] = 0x80.toByte()
+        buf[0x26] = 0x29.toByte()
+        buf[0x1FE] = 0x55.toByte()
+        buf[0x1FF] = 0xAA.toByte()
+
+        val fat1Offset = reservedSectors * bytesPerSector
+        if (fat1Offset + 3 <= targetSize) {
+            buf[fat1Offset + 0] = 0xF8.toByte()
+            buf[fat1Offset + 1] = 0xFF.toByte()
+            buf[fat1Offset + 2] = 0xFF.toByte()
+            if (targetSize > 0x80000 && fat1Offset + 4 <= targetSize) {
+                buf[fat1Offset + 3] = 0xFF.toByte()
+            }
+        }
+
+        val fat2Offset = (reservedSectors + sectorsPerFat) * bytesPerSector
+        if (fat2Offset + 3 <= targetSize) {
+            buf[fat2Offset + 0] = 0xF8.toByte()
+            buf[fat2Offset + 1] = 0xFF.toByte()
+            buf[fat2Offset + 2] = 0xFF.toByte()
+            if (targetSize > 0x80000 && fat2Offset + 4 <= targetSize) {
+                buf[fat2Offset + 3] = 0xFF.toByte()
+            }
+        }
+
+        return buf
     }
 
     override suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult {

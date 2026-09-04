@@ -9,7 +9,7 @@
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
     <AssemblyName>STORM DSi Decryptor</AssemblyName>
     <RootNamespace>StormDsiDecryptor</RootNamespace>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <Authors>ReiKatari</Authors>
     <Company>STORM SOFT</Company>
     <Product>STORM DSi Decryptor</Product>

@@ -391,6 +391,76 @@ const NDSBanner* CartCommon::Banner() const
     return nullptr;
 }
 
+static void formatDsiWareFat12(u8* buf, u32 size)
+{
+    memset(buf, 0, size);
+    if (size < 0x200)
+        return;
+
+    const u16 bytesPerSector = 512;
+    const u32 totalSectors = size / bytesPerSector;
+    const u8 sectorsPerCluster = 1;
+    const u16 reservedSectors = 1;
+    const u8 numFats = 2;
+    const u16 rootDirEntries = (size <= 0x20000) ? 64 : 128;
+    const u16 sectorsPerFat = (size <= 0x80000) ? 1 : 2;
+
+    // Boot Sector (Sector 0)
+    buf[0x00] = 0xEB; buf[0x01] = 0x3C; buf[0x02] = 0x90;
+    memcpy(&buf[0x03], "MSDOS5.0", 8);
+    buf[0x0B] = static_cast<u8>(bytesPerSector & 0xFF);
+    buf[0x0C] = static_cast<u8>((bytesPerSector >> 8) & 0xFF);
+    buf[0x0D] = sectorsPerCluster;
+    buf[0x0E] = static_cast<u8>(reservedSectors & 0xFF);
+    buf[0x0F] = static_cast<u8>((reservedSectors >> 8) & 0xFF);
+    buf[0x10] = numFats;
+    buf[0x11] = static_cast<u8>(rootDirEntries & 0xFF);
+    buf[0x12] = static_cast<u8>((rootDirEntries >> 8) & 0xFF);
+    if (totalSectors < 0x10000)
+    {
+        buf[0x13] = static_cast<u8>(totalSectors & 0xFF);
+        buf[0x14] = static_cast<u8>((totalSectors >> 8) & 0xFF);
+    }
+    else
+    {
+        buf[0x20] = static_cast<u8>(totalSectors & 0xFF);
+        buf[0x21] = static_cast<u8>((totalSectors >> 8) & 0xFF);
+        buf[0x22] = static_cast<u8>((totalSectors >> 16) & 0xFF);
+        buf[0x23] = static_cast<u8>((totalSectors >> 24) & 0xFF);
+    }
+    buf[0x15] = 0xF8;
+    buf[0x16] = static_cast<u8>(sectorsPerFat & 0xFF);
+    buf[0x17] = static_cast<u8>((sectorsPerFat >> 8) & 0xFF);
+    buf[0x18] = 0x00; buf[0x19] = 0x00;
+    buf[0x1A] = 0x00; buf[0x1B] = 0x00;
+    buf[0x24] = 0x80;
+    buf[0x26] = 0x29;
+    buf[0x1FE] = 0x55;
+    buf[0x1FF] = 0xAA;
+
+    // FAT1
+    const size_t fat1Offset = reservedSectors * bytesPerSector;
+    if (fat1Offset + 3 <= size)
+    {
+        buf[fat1Offset + 0] = 0xF8;
+        buf[fat1Offset + 1] = 0xFF;
+        buf[fat1Offset + 2] = 0xFF;
+        if (size > 0x80000 && fat1Offset + 4 <= size)
+            buf[fat1Offset + 3] = 0xFF;
+    }
+
+    // FAT2
+    const size_t fat2Offset = (reservedSectors + sectorsPerFat) * bytesPerSector;
+    if (fat2Offset + 3 <= size)
+    {
+        buf[fat2Offset + 0] = 0xF8;
+        buf[fat2Offset + 1] = 0xFF;
+        buf[fat2Offset + 2] = 0xFF;
+        if (size > 0x80000 && fat2Offset + 4 <= size)
+            buf[fat2Offset + 3] = 0xFF;
+    }
+}
+
 CartRetail::CartRetail(const u8* rom, u32 len, u32 chipid, bool badDSiDump, ROMListEntry romparams, std::unique_ptr<u8[]>&& sram, u32 sramlen, void* userdata, melonDS::NDSCart::CartType type) :
     CartRetail(CopyToUnique(rom, len), len, chipid, badDSiDump, romparams, std::move(sram), sramlen, userdata, type)
 {
@@ -408,9 +478,22 @@ CartRetail::CartRetail(std::unique_ptr<u8[]>&& rom, u32 len, u32 chipid, bool ba
         256*1024, 512*1024, 1024*1024,
         8192*1024, 16384*1024, 65536*1024
     };
-    if (Header.IsDSiWare() && sram && sramlen != 0)
+    if (Header.IsDSiWare())
     {
-        SRAMLength = sramlen;
+        if (sram && sramlen != 0)
+        {
+            SRAMLength = sramlen;
+        }
+        else if (Header.DSiPublicSavSize > 0)
+        {
+            SRAMLength = Header.DSiPublicSavSize;
+        }
+        else
+        {
+            SRAMLength = sramlengths[savememtype];
+            if (SRAMLength == 0)
+                SRAMLength = 64 * 1024;
+        }
     }
     else
     {
@@ -428,9 +511,14 @@ CartRetail::CartRetail(std::unique_ptr<u8[]>&& rom, u32 len, u32 chipid, bool ba
             SRAM = std::make_unique<u8[]>(SRAMLength);
             memset(SRAM.get(), 0xFF, SRAMLength);
 
-            if (sram)
+            if (sram && sramlen > 0)
             { // If we have anything to copy, that is.
                 memcpy(SRAM.get(), sram.get(), std::min(sramlen, SRAMLength));
+            }
+            else if (Header.IsDSiWare() && SRAMLength >= 512)
+            {
+                // Format valid FAT12 filesystem for DSiWare so TWL-SDK FAT driver does not hang on 0xFF
+                formatDsiWareFat12(SRAM.get(), SRAMLength);
             }
         }
     }
