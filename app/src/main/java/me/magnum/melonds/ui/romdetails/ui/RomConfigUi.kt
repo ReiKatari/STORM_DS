@@ -220,7 +220,6 @@ private fun Content(
                 } else {
                     consoleOptions[romConfig.runtimeConsoleType.ordinal]
                 },
-                enabled = !rom.isDsiWareTitle,
                 showDivider = true,
                 onClick = {
                     consoleDialogState.show(

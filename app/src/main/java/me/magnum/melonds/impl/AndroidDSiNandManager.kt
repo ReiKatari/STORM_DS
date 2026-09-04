@@ -364,17 +364,21 @@ class AndroidDSiNandManager(
         val exported = MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
         if (exported && tempFile.exists() && tempFile.length() > 0L) {
             runCatching {
+                val openStream = {
+                    runCatching { context.contentResolver.openOutputStream(fileUri, "rwt") }.getOrNull()
+                        ?: runCatching { context.contentResolver.openOutputStream(fileUri, "w") }.getOrNull()
+                }
                 if (fileUri.scheme == "file") {
                     val destFile = fileUri.path?.let(::File)
                     if (destFile != null) {
                         tempFile.copyTo(destFile, overwrite = true)
                     } else {
-                        context.contentResolver.openOutputStream(fileUri, "wt")?.use { output ->
+                        openStream()?.use { output ->
                             tempFile.inputStream().use { input -> input.copyTo(output) }
                         }
                     }
                 } else {
-                    context.contentResolver.openOutputStream(fileUri, "wt")?.use { output ->
+                    openStream()?.use { output ->
                         tempFile.inputStream().use { input -> input.copyTo(output) }
                     }
                 }

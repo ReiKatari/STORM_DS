@@ -1,7 +1,7 @@
 <Window x:Class="StormDsiDecryptor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="STORM DSi Decryptor 1.1.1"
+        Title="STORM DSi Decryptor 1.1.2"
         Height="760" Width="1080"
         MinHeight="620" MinWidth="900"
         WindowStartupLocation="CenterScreen"
@@ -325,7 +325,7 @@
                             <Run Text=" DSi Decryptor" FontWeight="Bold" Foreground="{DynamicResource ThemeTextPrimary}" />
                         </TextBlock>
                         <Border Background="{DynamicResource ThemeCardBorder}" BorderBrush="{DynamicResource ThemeAccent}" BorderThickness="1" CornerRadius="6" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="1.1.1" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource ThemeAccent}" />
+                            <TextBlock Text="1.1.2" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource ThemeAccent}" />
                         </Border>
                     </StackPanel>
                     <TextBlock x:Name="TxtSubtitle" Text="Сверхбыстрая утилита расшифровки Modcrypt для Nintendo DSi и DSiWare" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}" Margin="52,4,0,0" />

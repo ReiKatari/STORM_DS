@@ -89,7 +89,7 @@ static bool isBufferPlaintext(const uint8_t* data, size_t size)
 {
     if (!data || size < 16) return false;
 
-    size_t sampleLen = std::min<size_t>(size, 256);
+    size_t sampleLen = std::min<size_t>(size, 1024);
     size_t zeros = 0;
     for (size_t i = 0; i < sampleLen; i++)
     {
@@ -98,28 +98,36 @@ static bool isBufferPlaintext(const uint8_t* data, size_t size)
 
     size_t checkWords = sampleLen / 4;
     size_t armMatches = 0;
+    size_t thumbMatches = 0;
     for (size_t i = 0; i < checkWords; i++)
     {
         uint32_t w = *(const uint32_t*)&data[i * 4];
         uint32_t cond = w >> 28;
-        if (w == 0 || (w >= 0x02000000 && w < 0x04000000))
+        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
         {
             armMatches++;
         }
-        else if (cond == 0xE)
+        else if (cond <= 0xE)
         {
             uint32_t group = (w >> 25) & 0x7;
-            if (group <= 5)
+            if (group <= 5 && w != 0xE7FFDEFF)
                 armMatches++;
         }
         else if (cond == 0xF)
         {
-            if ((w & 0xFE000000) == 0xFA000000)
+            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
                 armMatches++;
         }
+
+        uint16_t hw0 = (uint16_t)w;
+        uint16_t hw1 = (uint16_t)(w >> 16);
+        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
+            thumbMatches++;
+        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
+            thumbMatches++;
     }
 
-    return (zeros >= sampleLen / 20) || (checkWords >= 8 && armMatches >= (checkWords * 6) / 10);
+    return (zeros >= sampleLen / 20) || (checkWords >= 8 && (armMatches >= (checkWords * 5) / 10 || thumbMatches >= (checkWords * 2 * 5) / 10));
 }
 
 static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
@@ -302,42 +310,31 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     uint32_t mod2Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT2_OFF];
     uint32_t mod2Size = *(uint32_t*)&rom[OFFSET_MODCRYPT2_SIZE];
 
-    // Check if encrypted
+    // Check if encrypted (0x03 = both areas decrypted)
     uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
+    if ((cryptoFlags & 0x03) == 0x03)
+    {
+        fclose(f);
+        return DecryptResult::ALREADY_DECRYPTED;
+    }
 
     // Validate if data is actually encrypted
     bool mod1Encrypted = false;
-    if (mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
+    if ((cryptoFlags & 0x01) == 0 && mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
     {
-        size_t checkWords = (mod1Size < 128) ? (mod1Size / 4) : 32;
-        size_t armCount = 0;
-        for (size_t i = 0; i < checkWords; i++)
-        {
-            uint32_t w = *(uint32_t*)&rom[mod1Off + i * 4];
-            if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
-                armCount++;
-        }
-        mod1Encrypted = (armCount < (checkWords * 4) / 10);
+        mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
     }
 
     bool mod2Encrypted = false;
-    if (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
+    if ((cryptoFlags & 0x02) == 0 && mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
     {
-        size_t checkWords = (mod2Size < 128) ? (mod2Size / 4) : 32;
-        size_t armCount = 0;
-        for (size_t i = 0; i < checkWords; i++)
-        {
-            uint32_t w = *(uint32_t*)&rom[mod2Off + i * 4];
-            if (((w & 0xF0000000) == 0xE0000000 && w != 0xE7FFDEFF) || w == 0)
-                armCount++;
-        }
-        mod2Encrypted = (armCount < (checkWords * 4) / 10);
+        mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
     }
 
     if (!mod1Encrypted && !mod2Encrypted)
     {
-        // Already decrypted: clear header flag
-        rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
+        // Already decrypted: ensure header flag is set to 0x03
+        rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
         fseek(f, 0, SEEK_SET);
         fwrite(rom.data(), 1, fileSize, f);
         fflush(f);
@@ -505,6 +502,11 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     if (!(unitCode & 0x02) && unitCode != 0x03)
         return false;
 
+    // Check if already decrypted (0x03 = both areas decrypted)
+    uint8_t cryptoFlags = rom[OFFSET_DSI_CRYPTO_FLAGS];
+    if ((cryptoFlags & 0x03) == 0x03)
+        return true;
+
     // Read modcrypt area offsets and sizes
     uint32_t mod1Off  = *(uint32_t*)&rom[OFFSET_MODCRYPT1_OFF];
     uint32_t mod1Size = *(uint32_t*)&rom[OFFSET_MODCRYPT1_SIZE];
@@ -515,13 +517,13 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
         return false;
 
     bool mod1Encrypted = false;
-    if (mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
+    if ((cryptoFlags & 0x01) == 0 && mod1Off > 0 && mod1Size > 0 && mod1Off + mod1Size <= (uint32_t)fileSize)
     {
         mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
     }
 
     bool mod2Encrypted = false;
-    if (mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
+    if ((cryptoFlags & 0x02) == 0 && mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
     {
         mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
     }
