@@ -23,7 +23,7 @@ namespace StormUniversal.Installer
         private PictureBox picHeaderLogo = null!;
         private Panel headerPanel = null!;
 
-        private const string AppVersion = "1.0.2";
+        private const string AppVersion = "1.0.3";
         private const string AppDisplayName = "STORM DSi Decryptor";
         private const string AppFolderName = "STORM DSi Decryptor";
         private const string ExeName = "STORM DSi Decryptor.exe";
@@ -185,7 +185,7 @@ namespace StormUniversal.Installer
 
             rbStandard = new RadioButton
             {
-                Text = "Стандартная установка в Programs (рекомендуется)",
+                Text = "Стандартная установка в Program Files (рекомендуется)",
                 Checked = true,
                 Location = new Point(10, 25),
                 AutoSize = true,
@@ -219,7 +219,7 @@ namespace StormUniversal.Installer
 
             txtInstallPath = new TextBox
             {
-                Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", AppFolderName),
+                Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), AppFolderName),
                 Location = new Point(5, 105),
                 Size = new Size(460, 26),
                 BackColor = Color.FromArgb(17, 24, 39),
@@ -373,7 +373,7 @@ namespace StormUniversal.Installer
             }
             else
             {
-                txtInstallPath.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", AppFolderName);
+                txtInstallPath.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), AppFolderName);
                 chkDesktop.Checked = true;
                 chkDesktop.Enabled = true;
                 chkStartMenu.Checked = true;
@@ -414,7 +414,7 @@ namespace StormUniversal.Installer
                 string targetDir = txtInstallPath.Text.Trim();
                 if (string.IsNullOrEmpty(targetDir))
                 {
-                    targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", AppFolderName);
+                    targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), AppFolderName);
                 }
 
                 Directory.CreateDirectory(targetDir);
