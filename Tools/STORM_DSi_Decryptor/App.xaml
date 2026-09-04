@@ -89,6 +89,45 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- 3D Navigation Tab Button (Radio style) -->
+            <Style x:Key="StormTabButton" TargetType="RadioButton">
+                <Setter Property="Background" Value="{DynamicResource ThemeCardBg}" />
+                <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondary}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="16,8" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8" SnapsToDevicePixels="True">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="8" Direction="270" ShadowDepth="2" Opacity="0.35" Color="#000000" />
+                                </Border.Effect>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource ThemeAccent}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimary}" />
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#2500D2FF" />
+                                    <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource ThemeAccent}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource ThemeAccent}" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

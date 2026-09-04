@@ -65,9 +65,44 @@ public partial class App : Application
             _hasHandle = true;
         }
 
+        // Global unhandled exception handlers to guarantee the application never abruptly terminates
+        this.DispatcherUnhandledException += (s, args) =>
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[CRITICAL DISPATCHER ERROR]: {args.Exception}");
+                args.Handled = true;
+                StormMessageBox.Show(
+                    null,
+                    $"Произошла непредвиденная ошибка:\n{args.Exception.Message}",
+                    "Ошибка приложения",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch
+            {
+                args.Handled = true;
+            }
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[CRITICAL DOMAIN ERROR]: {args.ExceptionObject}");
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, args) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[CRITICAL TASK ERROR]: {args.Exception}");
+            args.SetObserved();
+        };
+
         if (!_hasHandle)
         {
-            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.3");
+            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.4");
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.0.3");
+            }
             if (hWnd == IntPtr.Zero)
             {
                 hWnd = FindWindow(null, "STORM DSi Decryptor");
@@ -117,7 +152,7 @@ public partial class App : Application
 
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine("  STORM DSi Decryptor 1.0.3 (STORM SOFT)");
+        Console.WriteLine("  STORM DSi Decryptor 1.0.4 (STORM SOFT)");
         Console.WriteLine("  Nintendo DSi and DSiWare Fast Modcrypt Decryptor");
         Console.WriteLine("==========================================================");
 

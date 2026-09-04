@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
-import me.magnum.melonds.MelonRomDecryptor
 import me.magnum.melonds.domain.model.ConfigurationDirResult
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.VideoRenderer
@@ -44,8 +43,6 @@ class EmulatorLaunchPreconditionChecker(
             }
             targetRom = dsiWareCheckResult.rom
         }
-
-
 
         val configurationDirResult = getRomConfigurationDirectoryResult(targetRom)
         if (configurationDirResult.status != ConfigurationDirResult.Status.VALID) {
