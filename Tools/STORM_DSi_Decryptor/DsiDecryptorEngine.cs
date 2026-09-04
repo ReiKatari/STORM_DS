@@ -188,6 +188,23 @@ public static class DsiDecryptorEngine
         return info;
     }
 
+    public static ushort CalcHeaderCRC16(byte[] data, int len)
+    {
+        ushort crc = 0xFFFF;
+        for (int i = 0; i < len; i++)
+        {
+            crc ^= (ushort)data[i];
+            for (int b = 0; b < 8; b++)
+            {
+                if ((crc & 1) != 0)
+                    crc = (ushort)((crc >> 1) ^ 0xA001);
+                else
+                    crc >>= 1;
+            }
+        }
+        return crc;
+    }
+
     public static bool DecryptRomBuffer(byte[] rom)
     {
         if (rom.Length < 0x400) return false;
@@ -238,6 +255,12 @@ public static class DsiDecryptorEngine
                 CryptArea(aes, iv2, rom, mod2Off, mod2Sz);
             }
         }
+
+        // Mark Modcrypt areas as decrypted in DSi header and recalculate Header CRC16
+        rom[0x1C] |= 0x03;
+        ushort headerCrc = CalcHeaderCRC16(rom, 0x15E);
+        rom[0x15E] = (byte)(headerCrc & 0xFF);
+        rom[0x15F] = (byte)(headerCrc >> 8);
 
         return true;
     }
