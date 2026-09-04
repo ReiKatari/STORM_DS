@@ -6,7 +6,11 @@ param(
     [string]$SetupPath = "E:\STORM DS\Files\STORM_DSi_Decryptor_1.0.3_Setup.exe"
 )
 
-$inputData = "protocol=https`nhost=github.com`n`n"
+$inputData = @"
+protocol=https
+host=github.com
+
+"@
 $res = $inputData | git credential fill
 $token = ''
 foreach ($line in $res) {
@@ -22,7 +26,7 @@ if (-not $token) {
 
 $repo = "ReiKatari/STORM_DS"
 
-$body = @"
+$body = @'
 > 💡 **Релиз 4.1.4** — *Продвинутый эмулятор двухэкранных консолей Nintendo DS и Nintendo DSi для Android с аппаратным ускорением Vulkan, шейдерами librashader и автоматической поддержкой DSiWare.*
 
 ---
@@ -62,7 +66,7 @@ $body = @"
 - 💻 **Установка**: Скачайте соответствующий архив/инсталлятор из списка Assets и следуйте стандартным инструкциям.
 
 </details>
-"@
+'@
 
 $headers = @{
     "Authorization" = "Bearer $token"
@@ -70,27 +74,36 @@ $headers = @{
     "User-Agent" = "STORM-Release-Manager"
 }
 
-# 1. Create or get existing release
+# 1. Create or update existing release
 $release = $null
 try {
     Write-Host "Checking if release $TagName exists..."
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$TagName" -Method Get -Headers $headers -ErrorAction Stop
-    Write-Host "Release already exists with ID $($release.id)"
+    Write-Host "Release already exists with ID $($release.id). Updating title and body..."
+    
+    $patchPayload = [ordered]@{
+        name = $ReleaseName
+        body = $body
+    } | ConvertTo-Json -Depth 5
+    $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($patchPayload)
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/$($release.id)" -Method Patch -Headers $headers -Body $utf8Bytes -ContentType "application/json; charset=utf-8"
+    Write-Host "Release details updated successfully!"
 } catch {
     Write-Host "Release does not exist, creating..."
-    $payload = @{
+    $payload = [ordered]@{
         tag_name = $TagName
         name = $ReleaseName
         body = $body
         draft = $false
         prerelease = $false
     } | ConvertTo-Json -Depth 5
+    $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
 
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Method Post -Headers $headers -Body $payload -ContentType "application/json; charset=utf-8"
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Method Post -Headers $headers -Body $utf8Bytes -ContentType "application/json; charset=utf-8"
     Write-Host "Release created successfully! ID: $($release.id)"
 }
 
-# 2. Upload APK Asset if not already uploaded
+# 2. Upload Assets if not already uploaded
 function Upload-Asset([string]$filePath, [string]$contentType) {
     if (-not ($filePath -and (Test-Path $filePath))) { return }
     $name = [System.IO.Path]::GetFileName($filePath)
