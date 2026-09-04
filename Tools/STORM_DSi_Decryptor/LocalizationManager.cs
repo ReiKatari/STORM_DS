@@ -38,6 +38,8 @@ public static class LocalizationManager
             ["LogTitle"] = "Журнал операций",
             ["ThemeLabel"] = "Тема оформления",
             ["LangLabel"] = "Язык интерфейса",
+            ["MenuDeleteSelected"] = "Удалить выбранное (DEL)",
+            ["MenuClearAll"] = "Очистить весь список",
             ["AllDone"] = "Все выбранные игры успешно расшифрованы и готовы к запуску!"
         },
         ["en"] = new()
@@ -69,6 +71,8 @@ public static class LocalizationManager
             ["LogTitle"] = "Operation log",
             ["ThemeLabel"] = "Visual theme",
             ["LangLabel"] = "Interface language",
+            ["MenuDeleteSelected"] = "Delete selected (DEL)",
+            ["MenuClearAll"] = "Clear entire list",
             ["AllDone"] = "All selected games have been successfully decrypted and are ready to run!"
         },
         ["de"] = new()
@@ -100,6 +104,8 @@ public static class LocalizationManager
             ["LogTitle"] = "Protokoll",
             ["ThemeLabel"] = "Design",
             ["LangLabel"] = "Sprache",
+            ["MenuDeleteSelected"] = "Ausgewählte löschen (DEL)",
+            ["MenuClearAll"] = "Gesamte Liste leeren",
             ["AllDone"] = "Alle Spiele wurden erfolgreich entschlüsselt!"
         },
         ["fr"] = new()
@@ -131,6 +137,8 @@ public static class LocalizationManager
             ["LogTitle"] = "Journal",
             ["ThemeLabel"] = "Thème",
             ["LangLabel"] = "Langue",
+            ["MenuDeleteSelected"] = "Supprimer la sélection (DEL)",
+            ["MenuClearAll"] = "Effacer toute la liste",
             ["AllDone"] = "Tous les jeux ont été décryptés avec succès!"
         },
         ["zh"] = new()
@@ -162,6 +170,8 @@ public static class LocalizationManager
             ["LogTitle"] = "操作日志",
             ["ThemeLabel"] = "界面主题",
             ["LangLabel"] = "显示语言",
+            ["MenuDeleteSelected"] = "删除所选项目 (DEL)",
+            ["MenuClearAll"] = "清空整个列表",
             ["AllDone"] = "所有选定游戏已成功解密，可直接运行！"
         },
         ["ja"] = new()
@@ -193,6 +203,8 @@ public static class LocalizationManager
             ["LogTitle"] = "操作ログ",
             ["ThemeLabel"] = "テーマ",
             ["LangLabel"] = "言語",
+            ["MenuDeleteSelected"] = "選択項目を削除 (DEL)",
+            ["MenuClearAll"] = "リスト全体をクリア",
             ["AllDone"] = "選択されたすべてのゲームが正常に復号されました！"
         }
     };

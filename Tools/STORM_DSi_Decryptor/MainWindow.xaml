@@ -9,6 +9,8 @@
         Foreground="{DynamicResource ThemeTextPrimary}"
         Icon="AppIcon.ico"
         AllowDrop="True"
+        PreviewDragOver="Window_DragOver"
+        PreviewDrop="Window_Drop"
         DragOver="Window_DragOver"
         Drop="Window_Drop">
 
@@ -250,17 +252,17 @@
                     <TextBlock x:Name="TxtSubtitle" Text="Сверхбыстрая утилита расшифровки Modcrypt для Nintendo DSi и DSiWare" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}" Margin="52,4,0,0" />
                 </StackPanel>
 
-                <!-- Selectors (Theme & Language) - Equal Width 165px -->
+                <!-- Selectors (Theme & Language) - Wider for full text display -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Theme Selector -->
                     <StackPanel Orientation="Vertical" Margin="0,0,14,0">
                         <TextBlock x:Name="LblTheme" Text="Тема" FontSize="11" Foreground="{DynamicResource ThemeTextSecondary}" Margin="0,0,0,4" />
-                        <ComboBox x:Name="CmbTheme" Style="{StaticResource StormComboBox}" Width="165" Height="32" SelectionChanged="CmbTheme_SelectionChanged" />
+                        <ComboBox x:Name="CmbTheme" Style="{StaticResource StormComboBox}" Width="215" Height="32" SelectionChanged="CmbTheme_SelectionChanged" />
                     </StackPanel>
                     <!-- Language Selector -->
                     <StackPanel Orientation="Vertical">
                         <TextBlock x:Name="LblLang" Text="Язык" FontSize="11" Foreground="{DynamicResource ThemeTextSecondary}" Margin="0,0,0,4" />
-                        <ComboBox x:Name="CmbLang" Style="{StaticResource StormComboBox}" Width="165" Height="32" SelectionChanged="CmbLang_SelectionChanged" />
+                        <ComboBox x:Name="CmbLang" Style="{StaticResource StormComboBox}" Width="170" Height="32" SelectionChanged="CmbLang_SelectionChanged" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -298,7 +300,7 @@
             <!-- Main Content Area: Drag & Drop + List -->
             <Grid Grid.Row="2" Margin="0,0,0,16">
                 <!-- Drop Hint Container (visible when list is empty) -->
-                <Border x:Name="DropZone" Style="{StaticResource StormCard}" Background="{DynamicResource ThemeCardBg}" BorderThickness="2" Cursor="Hand" MouseDown="DropZone_MouseDown">
+                <Border x:Name="DropZone" Style="{StaticResource StormCard}" Background="{DynamicResource ThemeCardBg}" BorderThickness="2" Cursor="Hand" MouseDown="DropZone_MouseDown" AllowDrop="True" PreviewDragOver="Window_DragOver" PreviewDrop="Window_Drop" DragOver="Window_DragOver" Drop="Window_Drop">
                     <Grid>
                         <!-- Empty List Hint -->
                         <StackPanel x:Name="EmptyHintPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -317,7 +319,16 @@
                                   VerticalGridLinesBrush="{DynamicResource ThemeCardBorder}"
                                   ColumnHeaderStyle="{StaticResource StormColumnHeader}"
                                   CanUserAddRows="False" CanUserDeleteRows="False" CanUserResizeRows="False"
-                                  SelectionMode="Extended" HeadersVisibility="Column" Visibility="Collapsed">
+                                  SelectionMode="Extended" HeadersVisibility="Column" Visibility="Collapsed"
+                                  AllowDrop="True" PreviewDragOver="Window_DragOver" PreviewDrop="Window_Drop" DragOver="Window_DragOver" Drop="Window_Drop"
+                                  PreviewKeyDown="GridGames_PreviewKeyDown">
+                            <DataGrid.ContextMenu>
+                                <ContextMenu Background="{DynamicResource ThemeCardBg}" BorderBrush="{DynamicResource ThemeCardBorder}" BorderThickness="1">
+                                    <MenuItem x:Name="MenuDeleteSelected" Header="Удалить выбранное (DEL)" Foreground="{DynamicResource ThemeTextPrimary}" Click="MenuDeleteSelected_Click" />
+                                    <Separator Background="{DynamicResource ThemeCardBorder}" Margin="4,2" />
+                                    <MenuItem x:Name="MenuClearAll" Header="Очистить весь список" Foreground="{DynamicResource ThemeTextPrimary}" Click="MenuClearAll_Click" />
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
                             <DataGrid.Columns>
                                 <DataGridTextColumn x:Name="ColFileName" Header="Имя файла" Binding="{Binding FileName}" Width="2*">
                                     <DataGridTextColumn.ElementStyle>

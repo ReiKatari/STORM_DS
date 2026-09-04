@@ -62,6 +62,8 @@ public partial class MainWindow : Window
         ColCode.Header = LocalizationManager.Get("ColCode");
         ColSize.Header = LocalizationManager.Get("ColSize");
         ColStatus.Header = LocalizationManager.Get("ColStatus");
+        MenuDeleteSelected.Header = LocalizationManager.Get("MenuDeleteSelected");
+        MenuClearAll.Header = LocalizationManager.Get("MenuClearAll");
     }
 
     private void UpdateStats()
@@ -295,12 +297,81 @@ public partial class MainWindow : Window
             MessageBoxImage.Information);
     }
 
-    private void BtnClear_Click(object sender, RoutedEventArgs e)
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", SetLastError = true)]
+    private static extern void DragAcceptFiles(IntPtr hWnd, bool fAccept);
+
+    private const uint WM_DROPFILES = 0x0233;
+    private const uint WM_COPYDATA = 0x004A;
+    private const uint WM_COPYGLOBALDATA = 0x0049;
+    private const uint MSGFLT_ALLOW = 1;
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, IntPtr.Zero);
+            ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, IntPtr.Zero);
+            ChangeWindowMessageFilterEx(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, IntPtr.Zero);
+            DragAcceptFiles(hwnd, true);
+        }
+        catch
+        {
+            // Ignore if OS does not support
+        }
+    }
+
+    private void GridGames_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelectedGames();
+            e.Handled = true;
+        }
+    }
+
+    private void MenuDeleteSelected_Click(object sender, RoutedEventArgs e)
+    {
+        DeleteSelectedGames();
+    }
+
+    private void MenuClearAll_Click(object sender, RoutedEventArgs e)
+    {
+        ClearAllGames();
+    }
+
+    private void DeleteSelectedGames()
+    {
+        var selected = GridGames.SelectedItems.Cast<RomItem>().ToList();
+        if (selected.Count == 0 && GridGames.SelectedItem is RomItem item)
+        {
+            selected.Add(item);
+        }
+        if (selected.Count == 0) return;
+
+        foreach (var game in selected)
+        {
+            _games.Remove(game);
+        }
+        UpdateStats();
+        TxtStatusLog.Text = $"Удалено игр: {selected.Count}. В списке: {_games.Count}.";
+    }
+
+    private void ClearAllGames()
     {
         _games.Clear();
         ProgBar.Value = 0;
         UpdateStats();
         TxtStatusLog.Text = "Список очищен";
+    }
+
+    private void BtnClear_Click(object sender, RoutedEventArgs e)
+    {
+        ClearAllGames();
     }
 
     private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
