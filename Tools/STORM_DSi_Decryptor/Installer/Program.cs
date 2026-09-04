@@ -23,7 +23,7 @@ namespace StormUniversal.Installer
         private PictureBox picHeaderLogo = null!;
         private Panel headerPanel = null!;
 
-        private const string AppVersion = "1.0.1";
+        private const string AppVersion = "1.0.2";
         private const string AppDisplayName = "STORM DSi Decryptor";
         private const string AppFolderName = "STORM DSi Decryptor";
         private const string ExeName = "STORM DSi Decryptor.exe";

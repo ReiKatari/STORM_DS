@@ -7,7 +7,7 @@ cd /d "%~dp0"
 
 if "%~1"=="" (
     echo ============================================================
-    echo   STORM DSi Decryptor v1.0.0 (STORM SOFT)
+    echo   STORM DSi Decryptor 1.0.2 (STORM SOFT)
     echo ============================================================
     echo.
     echo Перетащите файлы .nds, .dsi, .app или папку на этот файл,
@@ -20,7 +20,7 @@ if "%~1"=="" (
 )
 
 echo ============================================================
-echo   STORM DSi Decryptor v1.0.0 (STORM SOFT)
+echo   STORM DSi Decryptor 1.0.2 (STORM SOFT)
 echo   Сверхбыстрая расшифровка образов Nintendo DSi и DSiWare
 echo ============================================================
 echo.

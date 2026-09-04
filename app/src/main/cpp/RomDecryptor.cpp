@@ -486,7 +486,9 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
         LOGI("DecryptRomBuffer: In-memory decrypted Area 2 (ARM7i) at 0x%X (size=0x%X)", mod2Off, mod2Size);
     }
 
-    // Header flags and CRC remain untouched for 100% byte-exact retail parity
+    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+    uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
+    *(uint16_t*)&rom[0x15E] = headerCrc;
     return true;
 }
 

@@ -443,6 +443,13 @@ void DSi::SetupDirectBoot()
 
         if (!(header.AppFlags & (1<<0)))
             tsc->SetMode(0x00);
+
+        SCFG_Clock9 = 0x0187;
+        SCFG_Clock7 = 0x0187;
+        SCFG_EXT[0] = 0x8307F100;
+        SCFG_EXT[1] = 0x93FFFB06;
+        Set_SCFG_Clock9(SCFG_Clock9);
+        ApplyNewRAMSize(3);
     }
 
     // setup main RAM data
@@ -859,13 +866,6 @@ void DSi::SetupDirectBoot()
 
     if (!dsmode)
     {
-        SCFG_Clock9 = 0x0187;
-        SCFG_Clock7 = 0x0187;
-        SCFG_EXT[0] = 0x8307F100;
-        SCFG_EXT[1] = 0x93FFFB06;
-        Set_SCFG_Clock9(SCFG_Clock9);
-        ApplyNewRAMSize(3);
-
         memcpy(&ARM9.ITCM[0x4400], &ARM9iBIOS[0x87F4], 0x400);
         memcpy(&ARM9.ITCM[0x4800], &ARM9iBIOS[0x9920], 0x80);
         memcpy(&ARM9.ITCM[0x4894], &ARM9iBIOS[0x99A0], 0x1048);
