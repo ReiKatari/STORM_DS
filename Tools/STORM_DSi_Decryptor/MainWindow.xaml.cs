@@ -43,7 +43,6 @@ public partial class MainWindow : Window
 
     private void UpdateLocalization()
     {
-        TxtAppTitle.Text = LocalizationManager.Get("AppTitle");
         TxtSubtitle.Text = LocalizationManager.Get("Subtitle");
         TxtDragDropHint.Text = LocalizationManager.Get("DragDropHint");
         BtnAddFiles.Content = LocalizationManager.Get("AddFiles");
@@ -56,6 +55,8 @@ public partial class MainWindow : Window
         LblTotalGames.Text = LocalizationManager.Get("TotalGames");
         LblEncrypted.Text = LocalizationManager.Get("EncryptedCount");
         LblDecrypted.Text = LocalizationManager.Get("DecryptedCount");
+        LblTheme.Text = LocalizationManager.Get("ThemeLabel");
+        LblLang.Text = LocalizationManager.Get("LangLabel");
         ColFileName.Header = LocalizationManager.Get("ColFileName");
         ColTitle.Header = LocalizationManager.Get("ColTitle");
         ColCode.Header = LocalizationManager.Get("ColCode");
@@ -73,6 +74,33 @@ public partial class MainWindow : Window
         EmptyHintPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
         GridGames.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
         BtnDecrypt.IsEnabled = _games.Any(g => g.IsEncrypted);
+    }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
+        else
+        {
+            DragMove();
+        }
+    }
+
+    private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void BtnMaximize_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void BtnClose_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
     }
 
     private void Window_DragOver(object sender, DragEventArgs e)
@@ -195,12 +223,13 @@ public partial class MainWindow : Window
         bool inPlace = RbInPlace.IsChecked == true;
         if (inPlace)
         {
-            var mbr = MessageBox.Show(
+            bool? mbr = StormMessageBox.Show(
+                this,
                 "Вы выбрали перезапись оригинальных файлов на месте.\n\nФайлы будут расшифрованы без создания резервных копий. Продолжить?",
                 "Подтверждение операции",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
-            if (mbr != MessageBoxResult.Yes) return;
+            if (mbr != true) return;
         }
 
         BtnDecrypt.IsEnabled = false;
@@ -258,7 +287,8 @@ public partial class MainWindow : Window
         BtnClear.IsEnabled = true;
 
         TxtStatusLog.Text = $"Все {processed} игр успешно расшифрованы за {totalSw.ElapsedMilliseconds} мс!";
-        MessageBox.Show(
+        StormMessageBox.Show(
+            this,
             LocalizationManager.Get("AllDone"),
             LocalizationManager.Get("AppTitle"),
             MessageBoxButton.OK,
@@ -288,7 +318,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            MessageBox.Show("Папка с играми пока не выбрана", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
+            StormMessageBox.Show(this, "Папка с играми пока не выбрана", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 

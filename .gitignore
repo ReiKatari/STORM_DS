@@ -25,10 +25,11 @@ gar_data/
 !tools/**/*.exe
 !tools/**/*.dll
 
-# Keep branding icons
+# Keep branding icons and release files in Files/
 !Files/*.ico
 !Files/*.png
 !Files/*.svg
+!Files/STORM_DSi_Decryptor_*_Setup.exe
 
 .gradle/
 buildSrc/.gradle/
