@@ -1,8 +1,9 @@
 # GitHub Release Publisher for STORM DS
 param(
-    [string]$TagName = "4.1.2",
-    [string]$ReleaseName = "Релиз 4.1.2",
-    [string]$ApkPath = "E:\STORM DS\Files\STORM_DS_4.1.2.apk"
+    [string]$TagName = "4.1.4",
+    [string]$ReleaseName = "Релиз 4.1.4",
+    [string]$ApkPath = "E:\STORM DS\Files\STORM_DS_4.1.4.apk",
+    [string]$SetupPath = "E:\STORM DS\Files\STORM_DSi_Decryptor_1.0.3_Setup.exe"
 )
 
 $inputData = "protocol=https`nhost=github.com`n`n"
@@ -22,33 +23,34 @@ if (-not $token) {
 $repo = "ReiKatari/STORM_DS"
 
 $body = @"
-> 💡 **Релиз 4.1.2** — *Продвинутый эмулятор двухэкранных консолей Nintendo DS и Nintendo DSi для Android с аппаратным ускорением Vulkan, шейдерами librashader и автоматической поддержкой DSiWare.*
+> 💡 **Релиз 4.1.4** — *Продвинутый эмулятор двухэкранных консолей Nintendo DS и Nintendo DSi для Android с аппаратным ускорением Vulkan, шейдерами librashader и автоматической поддержкой DSiWare.*
 
 ---
 
 ### 🚀 Ключевые изменения и улучшения
-- 🌟 **[DSiWare Auto-Decryption]**: Внедрена встроенная автоматическая in-place расшифровка Modcrypt для ROM-файлов Nintendo DSi и DSiWare (`.nds`, `.dsi`, `.app`). Больше не требуется предварительно дешифровать файлы на ПК!
-- 🌟 **[Фоновая обработка медиатеки]**: Автоматическое обнаружение и безопасная расшифровка зашифрованных образов при стартовом сканировании директорий и добавлении новых игр с сохранением контрольных сумм заголовка.
-- 🌟 **[Pre-Launch Boot Guard]**: Превентивная проверка и дешифровка непосредственно перед передачей в ядро (`loadRom` / `loadDsiWare`) и зеркалированием в виртуальный NAND.
+- 🌟 **[Архитектура памяти DSi и устранение белого экрана]**: Устранена критическая проблема зависания на белом экране при прямом запуске игр DSiWare (включая *Dr. Mario Express*, *SteamWorld Tower Defense*, *Castle of Magic*, *Gangstar 2*). Вызовы инициализации регистров системного контроллера `SCFG_EXT`, таймингов процессора `SCFG_Clock` и переключения физической маски `ApplyNewRAMSize(3)` перенесены в самое начало входа в DSi-режим, исключая искажение системных таблиц в 16 МБ MainRAM.
+- 🌟 **[Таблица устройств SD/MMC в ARM7 NWRAM]**: Исправлена запись таблицы монтирования накопителей (`devListAddr`) в память ARM7. Для тайтлов, размещающих таблицу в области NWRAM (например, адрес `0x030315BC` в *Dr. Mario Express*), гарантирована своевременная активация шины NWRAM через бит 25 `SCFG_EXT[1]`.
+- 🌟 **[Сквозное дешифрование Modcrypt в эмуляторе]**: Встроенный нативный модуль `RomDecryptor` производит прозрачную расшифровку зашифрованных областей DSiWare прямо в оперативной памяти устройства без перезаписи и изменения оригинальных ROM-файлов пользователя.
+- 🌟 **[Утилита STORM DSi Decryptor 1.0.3]**: Обновлена автономная программа расшифровки для Windows. Инсталлятор по умолчанию устанавливает утилиту в системный каталог `Program Files`, при расшифровке автоматически устанавливаются официальные флаги заголовка DSi (`0x1C |= 0x03`) и пересчитывается контрольная сумма Header CRC16 (`0x15E`), обеспечивая 100% совместимость со всеми эмуляторами и реальным оборудованием.
 
 <details>
 <summary><b>📋 Полный список изменений (нажмите, чтобы развернуть)</b></summary>
 
-- 🔹 **[Modcrypt Key Derivation]**: Адаптивный fallback получения ключей KeyY между хешами ARM9i и ARM7i в нативном модуле `RomDecryptor.cpp` для полной совместимости с различными дампами.
-- 🔹 **[FileSystemRomsRepository]**: Асинхронное сканирование кэшированных тайтлов в фоновом пуле корутин без блокировки пользовательского интерфейса.
-- 🔹 **[EmulatorLaunchPreconditionChecker]**: Предупреждение сбоев прошивки DSi путем превентивной in-place расшифровки прямо на накопителе устройства.
-- 🔹 **[AndroidEmulatorManager]**: Защита прямого запуска (Direct Boot) от повреждений контекста системной памяти DSiWare.
-- 🔹 **[Версионирование]**: Обновлен номер версии до 4.1.2 (версионный код 412).
+- 🔹 **[Ядро melonDS]**: Корректный порядок инициализации 16 МБ физической памяти (`MainRAMMask = 0xFFFFFF`) перед записью системных структур DSi OS, зеркал заголовка картриджа (`0x02FFE000`) и контекста приложений (`0x02FFD800`).
+- 🔹 **[ARM7 NWRAM Bank A]**: Полноценная поддержка записи таблицы устройств SD/MMC по адресам диапазона `0x03000000`–`0x03040000`.
+- 🔹 **[RomDecryptor.cpp]**: Установка флагов дешифрования Modcrypt и синхронизация Header CRC16 в оперативной памяти перед загрузкой виртуального картриджа.
+- 🔹 **[STORM DSi Decryptor]**: Версия 1.0.3 со стандартной установкой в `Program Files`, поддержкой UAC-элевации, обновленным интерфейсом и валидацией заголовков.
+- 🔹 **[Версионирование]**: Версия эмулятора обновлена до 4.1.4 (номер сборки 414).
 
 </details>
 
 <details>
 <summary><b>🌐 English Changelog (click to expand)</b></summary>
 
-- 🔸 **[Automatic In-Place Decryption]**: Implemented native automatic Modcrypt decryption for Nintendo DSi and DSiWare ROMs (`.nds`, `.dsi`, `.app`), removing the need for external PC decryption.
-- 🔸 **[Background Library Indexing]**: Encrypted titles are seamlessly discovered and decrypted in the background upon addition or startup scan.
-- 🔸 **[Pre-Launch Boot Guard]**: Verifies encryption status right before launching and decrypts directly on storage before loading into NAND/emulation core.
-- 🔸 **[Modcrypt Key Fallback]**: Adaptive KeyY calculation in `RomDecryptor.cpp` between ARM9i and ARM7i hashes.
+- 🔸 **[DSi Memory Architecture & White Screen Fix]**: Resolved white screen hangs on DSiWare titles (such as *Dr. Mario Express* and *SteamWorld Tower Defense*). Moved `SCFG_EXT`, `SCFG_Clock`, and `ApplyNewRAMSize(3)` to the start of DSi direct boot setup, preventing memory wrapping and ensuring clean 16MB RAM access.
+- 🔸 **[SD/MMC Device List in ARM7 NWRAM]**: Ensured ARM7 NWRAM mapping is active prior to populating device storage tables, allowing titles using NWRAM addresses (like `0x030315BC`) to boot reliably.
+- 🔸 **[In-Memory Modcrypt Decryption]**: Native real-time decryption in RAM without altering source files.
+- 🔸 **[STORM DSi Decryptor 1.0.3]**: Installer now defaults to `Program Files` with UAC elevation, updates DSi header CryptoFlags (`0x1C |= 0x03`) and recalculates Header CRC16 (`0x15E`) for full compatibility.
 
 </details>
 
@@ -89,26 +91,30 @@ try {
 }
 
 # 2. Upload APK Asset if not already uploaded
-if ($ApkPath -and (Test-Path $ApkPath)) {
-    $apkName = [System.IO.Path]::GetFileName($ApkPath)
-    $existingAsset = $release.assets | Where-Object { $_.name -eq $apkName }
+function Upload-Asset([string]$filePath, [string]$contentType) {
+    if (-not ($filePath -and (Test-Path $filePath))) { return }
+    $name = [System.IO.Path]::GetFileName($filePath)
+    $existingAsset = $release.assets | Where-Object { $_.name -eq $name }
     if ($existingAsset) {
-        Write-Host "Asset $apkName already exists on release!"
+        Write-Host "Asset $name already exists on release!"
     } else {
-        $uploadUrl = $release.upload_url -replace '\{\?name,label\}', "?name=$apkName"
-        Write-Host "Uploading $apkName to $uploadUrl..."
-        $apkBytes = [System.IO.File]::ReadAllBytes($ApkPath)
+        $uploadUrl = $release.upload_url -replace '\{\?name,label\}', "?name=$name"
+        Write-Host "Uploading $name to $uploadUrl..."
+        $bytes = [System.IO.File]::ReadAllBytes($filePath)
         
         $uploadHeaders = @{
             "Authorization" = "Bearer $token"
             "Accept" = "application/vnd.github.v3+json"
             "User-Agent" = "STORM-Release-Manager"
-            "Content-Type" = "application/vnd.android.package-archive"
+            "Content-Type" = $contentType
         }
 
-        $asset = Invoke-RestMethod -Uri $uploadUrl -Method Post -Headers $uploadHeaders -Body $apkBytes
-        Write-Host "Asset uploaded! URL: $($asset.browser_download_url)"
+        $asset = Invoke-RestMethod -Uri $uploadUrl -Method Post -Headers $uploadHeaders -Body $bytes
+        Write-Host "Asset $name uploaded! URL: $($asset.browser_download_url)"
     }
 }
+
+Upload-Asset $ApkPath "application/vnd.android.package-archive"
+Upload-Asset $SetupPath "application/octet-stream"
 
 Write-Host "All release operations completed successfully!"

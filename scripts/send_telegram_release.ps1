@@ -3,7 +3,9 @@ param(
     [string]$Token = "8210884351:AAEh4VOWHViz2KF_oElAqEfrMPHlI5TWCjM",
     [string]$ChatId = "-5389146045",
     [string]$ApkPath,
+    [string]$SetupPath,
     [string]$Caption,
+    [string]$SetupCaption,
     [string]$Announcement
 )
 
@@ -70,5 +72,13 @@ if ($ApkPath) {
         $Caption = "$fileName (Release • Nintendo DS and DSi Emulator)"
     }
     Upload-TelegramDocument $ApkPath $Caption
+}
+
+if ($SetupPath) {
+    $setupFileName = [System.IO.Path]::GetFileNameWithoutExtension($SetupPath)
+    if (-not $SetupCaption) {
+        $SetupCaption = "$setupFileName (STORM DSi Decryptor for Windows)"
+    }
+    Upload-TelegramDocument $SetupPath $SetupCaption
 }
 

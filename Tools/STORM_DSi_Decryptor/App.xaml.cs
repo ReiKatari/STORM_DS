@@ -72,7 +72,7 @@ public partial class App : Application
 
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine("  STORM DSi Decryptor 1.0.2 (STORM SOFT)");
+        Console.WriteLine("  STORM DSi Decryptor 1.0.3 (STORM SOFT)");
         Console.WriteLine("  Nintendo DSi and DSiWare Fast Modcrypt Decryptor");
         Console.WriteLine("==========================================================");
 
