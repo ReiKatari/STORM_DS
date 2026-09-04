@@ -101,35 +101,162 @@ public static class DsiDecryptorEngine
         }
     }
 
-    public static bool IsBufferPlaintext(byte[] data, int offset, int size)
+    public static byte[] BuildKeyX(byte[] header)
     {
-        if (data == null || size < 16 || offset + size > data.Length) return false;
-        int checkWords = Math.Min(size / 4, 32);
-        if (checkWords < 8) return false;
+        byte[] keyX = new byte[16];
+        byte[] nintendo = System.Text.Encoding.ASCII.GetBytes("Nintendo");
+        Array.Copy(nintendo, 0, keyX, 0, 8);
+        Array.Copy(header, 0x0C, keyX, 8, 4);
+        keyX[12] = header[0x0C + 3];
+        keyX[13] = header[0x0C + 2];
+        keyX[14] = header[0x0C + 1];
+        keyX[15] = header[0x0C + 0];
+        return keyX;
+    }
 
-        int armAlCount = 0;
-        int thumbCount = 0;
+    public static bool IsAreaEncrypted(Stream fs, uint offset, uint size, int ivOffset, byte[] header, long fileLength)
+    {
+        if (offset == 0 || size == 0 || offset + size > fileLength) return false;
 
-        for (int i = 0; i < checkWords; i++)
+        // 1. Check zero-byte distribution across up to 4096 bytes
+        int scanLen = (int)Math.Min(size, 4096);
+        byte[] scanBuf = new byte[scanLen];
+        fs.Seek(offset, SeekOrigin.Begin);
+        fs.ReadExactly(scanBuf, 0, scanLen);
+
+        int origZeros = 0;
+        for (int i = 0; i < scanLen; i++)
+            if (scanBuf[i] == 0) origZeros++;
+
+        // In AES ciphertext, zeros are ~0.39% (approx 16 in 4096).
+        // In real executable code / uncompressed data, zeros exceed 5% (>= 200 in 4096).
+        if (origZeros > scanLen / 20)
+            return false;
+
+        // 2. Perform trial AES-CTR decryption on first 512 bytes
+        try
         {
-            uint w = BitConverter.ToUInt32(data, offset + i * 4);
-            uint cond = w >> 28;
-            if (w == 0 || cond == 0xE)
+            int trialLen = (int)Math.Min(size, 512);
+            byte[] trialBuf = new byte[trialLen];
+            Array.Copy(scanBuf, 0, trialBuf, 0, trialLen);
+
+            byte[] keyX = BuildKeyX(header);
+            byte[] keyY = new byte[16];
+            Array.Copy(header, 0x350, keyY, 0, 16);
+            byte[] normalKey = DeriveNormalKey(keyX, keyY);
+            byte[] keySwap = new byte[16];
+            for (int i = 0; i < 16; i++) keySwap[i] = normalKey[15 - i];
+
+            byte[] iv = new byte[16];
+            Array.Copy(header, ivOffset, iv, 0, 16);
+
+            using (var aes = Aes.Create())
             {
-                armAlCount++;
+                aes.Mode = CipherMode.ECB;
+                aes.Padding = PaddingMode.None;
+                aes.Key = keySwap;
+                CryptArea(aes, iv, trialBuf, 0, (uint)trialLen);
             }
 
-            ushort hw0 = (ushort)w;
-            ushort hw1 = (ushort)(w >> 16);
-            if (hw0 == 0 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xF000) == 0x2000 || (hw0 & 0xFF00) == 0xB000)
-                thumbCount++;
-            if (hw1 == 0 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xF000) == 0x2000 || (hw1 & 0xFF00) == 0xB000)
-                thumbCount++;
+            int trialZeros = 0;
+            for (int i = 0; i < trialLen; i++)
+                if (trialBuf[i] == 0) trialZeros++;
+
+            int origTrialZeros = 0;
+            for (int i = 0; i < trialLen; i++)
+                if (scanBuf[i] == 0) origTrialZeros++;
+
+            // If trial decryption yields significantly more zeros than orig, original was ENCRYPTED!
+            if (trialZeros >= 12 && trialZeros > origTrialZeros * 2)
+                return true;
+
+            // If orig has significantly more zeros than decrypted, original was PLAINTEXT!
+            if (origTrialZeros >= 12 && origTrialZeros > trialZeros)
+                return false;
+        }
+        catch { }
+
+        // 3. Fallback: ARM opcode check across up to 256 words
+        int checkWords = Math.Min(scanLen / 4, 256);
+        int armCount = 0;
+        for (int i = 0; i < checkWords; i++)
+        {
+            uint w = BitConverter.ToUInt32(scanBuf, i * 4);
+            uint cond = w >> 28;
+            if (w == 0 || cond == 0xE) armCount++;
         }
 
-        bool isArmPlaintext = armAlCount >= (checkWords * 12) / 32;
-        bool isThumbPlaintext = thumbCount >= (checkWords * 2 * 12) / 32;
-        return isArmPlaintext || isThumbPlaintext;
+        if (armCount > checkWords / 3)
+            return false;
+
+        return true;
+    }
+
+    public static bool IsAreaEncryptedBuffer(byte[] rom, uint offset, uint size, int ivOffset)
+    {
+        if (offset == 0 || size == 0 || offset + size > rom.Length) return false;
+
+        int scanLen = (int)Math.Min(size, 4096);
+        int origZeros = 0;
+        for (int i = 0; i < scanLen; i++)
+            if (rom[offset + i] == 0) origZeros++;
+
+        if (origZeros > scanLen / 20)
+            return false;
+
+        try
+        {
+            int trialLen = (int)Math.Min(size, 512);
+            byte[] trialBuf = new byte[trialLen];
+            Array.Copy(rom, offset, trialBuf, 0, trialLen);
+
+            byte[] keyX = BuildKeyX(rom);
+            byte[] keyY = new byte[16];
+            Array.Copy(rom, 0x350, keyY, 0, 16);
+            byte[] normalKey = DeriveNormalKey(keyX, keyY);
+            byte[] keySwap = new byte[16];
+            for (int i = 0; i < 16; i++) keySwap[i] = normalKey[15 - i];
+
+            byte[] iv = new byte[16];
+            Array.Copy(rom, ivOffset, iv, 0, 16);
+
+            using (var aes = Aes.Create())
+            {
+                aes.Mode = CipherMode.ECB;
+                aes.Padding = PaddingMode.None;
+                aes.Key = keySwap;
+                CryptArea(aes, iv, trialBuf, 0, (uint)trialLen);
+            }
+
+            int trialZeros = 0;
+            for (int i = 0; i < trialLen; i++)
+                if (trialBuf[i] == 0) trialZeros++;
+
+            int origTrialZeros = 0;
+            for (int i = 0; i < trialLen; i++)
+                if (rom[offset + i] == 0) origTrialZeros++;
+
+            if (trialZeros >= 12 && trialZeros > origTrialZeros * 2)
+                return true;
+
+            if (origTrialZeros >= 12 && origTrialZeros > trialZeros)
+                return false;
+        }
+        catch { }
+
+        int checkWords = Math.Min(scanLen / 4, 256);
+        int armCount = 0;
+        for (int i = 0; i < checkWords; i++)
+        {
+            uint w = BitConverter.ToUInt32(rom, (int)offset + i * 4);
+            uint cond = w >> 28;
+            if (w == 0 || cond == 0xE) armCount++;
+        }
+
+        if (armCount > checkWords / 3)
+            return false;
+
+        return true;
     }
 
     public static RomInfo InspectRom(string filePath)
@@ -164,25 +291,32 @@ public static class DsiDecryptorEngine
 
         if (info.HasModcrypt)
         {
-            bool mod1Enc = false;
-            if (info.Modcrypt1Offset != 0 && info.Modcrypt1Size > 0 && info.Modcrypt1Offset + info.Modcrypt1Size <= fi.Length)
-            {
-                fs.Seek(info.Modcrypt1Offset, SeekOrigin.Begin);
-                byte[] sample = new byte[Math.Min(256, (int)info.Modcrypt1Size)];
-                fs.ReadExactly(sample, 0, sample.Length);
-                mod1Enc = !IsBufferPlaintext(sample, 0, sample.Length);
-            }
+            // Decrypted marker checks:
+            // 1. Filename suffix indicates it was already decrypted
+            bool isDecName = fi.Name.Contains("(Decrypted)", StringComparison.OrdinalIgnoreCase);
+            // 2. Previously processed in session/persistent history
+            bool inHistory = HistoryManager.FindPrevious(filePath, info.GameCode) != null;
 
-            bool mod2Enc = false;
-            if (info.Modcrypt2Offset != 0 && info.Modcrypt2Size > 0 && info.Modcrypt2Offset + info.Modcrypt2Size <= fi.Length)
+            if (isDecName || inHistory)
             {
-                fs.Seek(info.Modcrypt2Offset, SeekOrigin.Begin);
-                byte[] sample = new byte[Math.Min(256, (int)info.Modcrypt2Size)];
-                fs.ReadExactly(sample, 0, sample.Length);
-                mod2Enc = !IsBufferPlaintext(sample, 0, sample.Length);
+                info.IsEncrypted = false;
             }
+            else
+            {
+                bool mod1Enc = false;
+                if (info.Modcrypt1Offset != 0 && info.Modcrypt1Size > 0 && info.Modcrypt1Offset + info.Modcrypt1Size <= fi.Length)
+                {
+                    mod1Enc = IsAreaEncrypted(fs, info.Modcrypt1Offset, info.Modcrypt1Size, 0x300, header, fi.Length);
+                }
 
-            info.IsEncrypted = mod1Enc || mod2Enc;
+                bool mod2Enc = false;
+                if (info.Modcrypt2Offset != 0 && info.Modcrypt2Size > 0 && info.Modcrypt2Offset + info.Modcrypt2Size <= fi.Length)
+                {
+                    mod2Enc = IsAreaEncrypted(fs, info.Modcrypt2Offset, info.Modcrypt2Size, 0x314, header, fi.Length);
+                }
+
+                info.IsEncrypted = mod1Enc || mod2Enc;
+            }
         }
 
         return info;
@@ -192,15 +326,7 @@ public static class DsiDecryptorEngine
     {
         if (rom.Length < 0x400) return false;
 
-        byte[] keyX = new byte[16];
-        byte[] nintendo = System.Text.Encoding.ASCII.GetBytes("Nintendo");
-        Array.Copy(nintendo, 0, keyX, 0, 8);
-        Array.Copy(rom, 0x0C, keyX, 8, 4);
-        keyX[12] = rom[0x0C + 3];
-        keyX[13] = rom[0x0C + 2];
-        keyX[14] = rom[0x0C + 1];
-        keyX[15] = rom[0x0C + 0];
-
+        byte[] keyX = BuildKeyX(rom);
         byte[] keyY = new byte[16];
         Array.Copy(rom, 0x350, keyY, 0, 16);
 
@@ -221,7 +347,7 @@ public static class DsiDecryptorEngine
 
         if (mod1Off != 0 && mod1Sz != 0 && mod1Sz != 0xFFFFFFFF && mod1Off + mod1Sz <= rom.Length)
         {
-            if (!IsBufferPlaintext(rom, (int)mod1Off, Math.Min(256, (int)mod1Sz)))
+            if (IsAreaEncryptedBuffer(rom, mod1Off, mod1Sz, 0x300))
             {
                 byte[] iv1 = new byte[16];
                 Array.Copy(rom, 0x300, iv1, 0, 16);
@@ -231,13 +357,16 @@ public static class DsiDecryptorEngine
 
         if (mod2Off != 0 && mod2Sz != 0 && mod2Sz != 0xFFFFFFFF && mod2Off + mod2Sz <= rom.Length)
         {
-            if (!IsBufferPlaintext(rom, (int)mod2Off, Math.Min(256, (int)mod2Sz)))
+            if (IsAreaEncryptedBuffer(rom, mod2Off, mod2Sz, 0x314))
             {
                 byte[] iv2 = new byte[16];
                 Array.Copy(rom, 0x314, iv2, 0, 16);
                 CryptArea(aes, iv2, rom, mod2Off, mod2Sz);
             }
         }
+
+        // Set DSi cart header flags (Modcrypt areas decrypted)
+        rom[0x1C] |= 0x03;
 
         return true;
     }

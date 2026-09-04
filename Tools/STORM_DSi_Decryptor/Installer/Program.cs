@@ -493,6 +493,23 @@ namespace StormUniversal.Installer
                 if (File.Exists(directExePath))
                 {
                     UnblockFile(directExePath);
+
+                    // 1. Launch through Windows Explorer shell to ensure process runs at Medium integrity (non-elevated).
+                    // This allows standard drag-and-drop from Windows Explorer to work without UIPI restrictions.
+                    try
+                    {
+                        var psiExplorer = new ProcessStartInfo
+                        {
+                            FileName = "explorer.exe",
+                            Arguments = $"\"{directExePath}\"",
+                            UseShellExecute = false
+                        };
+                        using var pExp = Process.Start(psiExplorer);
+                        return;
+                    }
+                    catch { }
+
+                    // 2. Direct launch fallback
                     try
                     {
                         Process.Start(new ProcessStartInfo

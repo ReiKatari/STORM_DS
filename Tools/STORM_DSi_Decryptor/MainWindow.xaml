@@ -9,8 +9,12 @@
         Foreground="{DynamicResource ThemeTextPrimary}"
         Icon="AppIcon.ico"
         AllowDrop="True"
-        DragOver="Window_DragOver"
-        Drop="Window_Drop">
+        PreviewDragEnter="Window_PreviewDragEnter"
+        PreviewDragOver="Window_PreviewDragOver"
+        PreviewDrop="Window_PreviewDrop"
+        DragEnter="Window_PreviewDragEnter"
+        DragOver="Window_PreviewDragOver"
+        Drop="Window_PreviewDrop">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40"
@@ -353,7 +357,7 @@
             <Grid Grid.Row="3" Margin="0,0,0,16">
                 <!-- 1. QUEUE VIEW -->
                 <Grid x:Name="QueueViewPanel">
-                    <Border x:Name="DropZone" Style="{StaticResource StormCard}" Background="{DynamicResource ThemeCardBg}" BorderThickness="2" Cursor="Hand" MouseDown="DropZone_MouseDown">
+                    <Border x:Name="DropZone" Style="{StaticResource StormCard}" Background="{DynamicResource ThemeCardBg}" BorderThickness="2" Cursor="Hand" MouseDown="DropZone_MouseDown" AllowDrop="True">
                         <Grid>
                             <!-- Empty List Hint -->
                             <StackPanel x:Name="EmptyHintPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -364,6 +368,7 @@
 
                             <!-- Games Table -->
                             <DataGrid x:Name="GridGames" AutoGenerateColumns="False" IsReadOnly="True"
+                                      AllowDrop="True"
                                       Background="Transparent" BorderThickness="0"
                                       RowBackground="Transparent" AlternatingRowBackground="#06FFFFFF"
                                       Foreground="{DynamicResource ThemeTextPrimary}"

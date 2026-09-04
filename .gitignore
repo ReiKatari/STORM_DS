@@ -29,7 +29,6 @@ gar_data/
 !Files/*.ico
 !Files/*.png
 !Files/*.svg
-!Files/STORM_DSi_Decryptor_*_Setup.exe
 
 .gradle/
 buildSrc/.gradle/

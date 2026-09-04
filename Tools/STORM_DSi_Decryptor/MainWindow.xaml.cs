@@ -23,6 +23,15 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint DragQueryFile(IntPtr hDrop, uint iFile, [Out] System.Text.StringBuilder? lpszFile, uint cch);
+
+    [DllImport("shell32.dll")]
+    private static extern void DragFinish(IntPtr hDrop);
+
+    [DllImport("shell32.dll")]
+    private static extern void DragAcceptFiles(IntPtr hWnd, bool fAccept);
+
     private const uint WM_DROPFILES = 0x0233;
     private const uint WM_COPYDATA = 0x004A;
     private const uint WM_COPYGLOBALDATA = 0x0049;
@@ -66,8 +75,55 @@ public partial class MainWindow : Window
             ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, IntPtr.Zero);
             ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, IntPtr.Zero);
             ChangeWindowMessageFilterEx(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, IntPtr.Zero);
+            DragAcceptFiles(hwnd, true);
+
+            var source = HwndSource.FromHwnd(hwnd);
+            source?.AddHook(WndProc);
         }
         catch { }
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == (int)WM_DROPFILES)
+        {
+            IntPtr hDrop = wParam;
+            try
+            {
+                uint count = DragQueryFile(hDrop, 0xFFFFFFFF, null, 0);
+                var files = new List<string>();
+                for (uint i = 0; i < count; i++)
+                {
+                    var sb = new System.Text.StringBuilder(1024);
+                    if (DragQueryFile(hDrop, i, sb, 1024) > 0)
+                    {
+                        files.Add(sb.ToString());
+                    }
+                }
+
+                if (files.Count > 0)
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        TabBtnQueue.IsChecked = true;
+                        TabBtnQueue_Click(this, new RoutedEventArgs());
+                        AddPaths(files.ToArray());
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WM_DROPFILES Error]: {ex.Message}");
+            }
+            finally
+            {
+                DragFinish(hDrop);
+            }
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        return IntPtr.Zero;
     }
 
     private void UpdateLocalization()
@@ -187,12 +243,16 @@ public partial class MainWindow : Window
     private void BtnMaximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
-    // --- Drag & Drop (Crash-Proof, OLE Standard) ---
-    private void Window_DragOver(object sender, DragEventArgs e)
+    // --- Drag & Drop (Crash-Proof, Universal OLE & Tunneling Standard) ---
+    private void Window_PreviewDragEnter(object sender, DragEventArgs e) => HandleDragOver(e);
+    private void Window_PreviewDragOver(object sender, DragEventArgs e) => HandleDragOver(e);
+    private void Window_DragOver(object sender, DragEventArgs e) => HandleDragOver(e);
+
+    private void HandleDragOver(DragEventArgs e)
     {
         try
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            if (e.Data.GetDataPresent(DataFormats.FileDrop, true))
             {
                 e.Effects = DragDropEffects.Copy;
                 e.Handled = true;
@@ -204,20 +264,21 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void Window_Drop(object sender, DragEventArgs e)
+    private void Window_PreviewDrop(object sender, DragEventArgs e) => HandleDrop(e);
+    private void Window_Drop(object sender, DragEventArgs e) => HandleDrop(e);
+
+    private void HandleDrop(DragEventArgs e)
     {
         try
         {
             e.Handled = true;
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            if (e.Data.GetDataPresent(DataFormats.FileDrop, true))
             {
-                var raw = e.Data.GetData(DataFormats.FileDrop);
-                if (raw is string[] files && files.Length > 0)
+                var raw = e.Data.GetData(DataFormats.FileDrop, true);
+                string[]? files = null;
+                if (raw is string[] sa && sa.Length > 0)
                 {
-                    // Switch to Queue tab so user sees added games
-                    TabBtnQueue.IsChecked = true;
-                    TabBtnQueue_Click(this, new RoutedEventArgs());
-                    AddPaths(files);
+                    files = sa;
                 }
                 else if (raw is System.Collections.IEnumerable enumerable)
                 {
@@ -228,11 +289,14 @@ public partial class MainWindow : Window
                             fileList.Add(s);
                     }
                     if (fileList.Count > 0)
-                    {
-                        TabBtnQueue.IsChecked = true;
-                        TabBtnQueue_Click(this, new RoutedEventArgs());
-                        AddPaths(fileList.ToArray());
-                    }
+                        files = fileList.ToArray();
+                }
+
+                if (files != null && files.Length > 0)
+                {
+                    TabBtnQueue.IsChecked = true;
+                    TabBtnQueue_Click(this, new RoutedEventArgs());
+                    AddPaths(files);
                 }
             }
         }
