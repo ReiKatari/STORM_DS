@@ -46,9 +46,9 @@ class DsiStorageTitlesScanner @Inject constructor(
             scanUriTarget(uri, gameCodes, titleIds)
         }
 
-        // 2. Auto-extract SD image to internal mirror sync directory if sync is empty
-        val dsiSyncDir = File(context.filesDir, "dsi_sd/sync").apply { mkdirs() }
+        // 2. Auto-extract SD image to external sync directory if sync is empty
         val extStorage = android.os.Environment.getExternalStorageDirectory()
+        val dsiSyncDir = File(extStorage, "STORM DS/bios/dsi/sync").apply { mkdirs() }
         val candidateImages = listOf(
             File(extStorage, "STORM DS/bios/dsi/sd_card.bin"),
             File(extStorage, "STORM DS/bios/dsi/sd.bin"),
@@ -57,11 +57,6 @@ class DsiStorageTitlesScanner @Inject constructor(
             File(extStorage, "STORM DS/sd_card.bin"),
             File(extStorage, "STORM DS/dldi/dsi_sd.img"),
             File(extStorage, "STORM DS/dldi/dldi_sd.img"),
-            File(context.filesDir, "bios/dsi/sd_card.bin"),
-            File(context.filesDir, "bios/dsi/sd.bin"),
-            File(context.filesDir, "dsi_sd/dsi_sd.img"),
-            File(context.filesDir, "dldi/dsi_sd.img"),
-            File(context.filesDir, "dldi/dldi_sd.img"),
         )
         if (dsiSyncDir.listFiles()?.isEmpty() == true) {
             for (img in candidateImages) {
@@ -85,8 +80,6 @@ class DsiStorageTitlesScanner @Inject constructor(
             File(extStorage, "STORM DS/bios/dsi/sd_card"),
             File(extStorage, "STORM DS/bios/dsi"),
             File(extStorage, "STORM DS/dldi/sync"),
-            File(context.filesDir, "dsi_sd"),
-            File(context.filesDir, "dldi/sync"),
         )
 
         for (loc in defaultLocations) {

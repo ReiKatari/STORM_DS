@@ -28,13 +28,6 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         listOf(
             java.io.File(extStorage, "STORM DS/$subFolder"),
             java.io.File(extStorage, "STORM DS/bios"),
-            java.io.File(extStorage, "STORM DS/system"),
-            java.io.File(extStorage, "RetroArch/system"),
-            java.io.File(context.getExternalFilesDir(null), subFolder),
-            java.io.File(context.getExternalFilesDir(null), "bios"),
-            java.io.File(context.filesDir, subFolder),
-            java.io.File(context.filesDir, "bios"),
-            context.filesDir,
         ).forEach { dir ->
             if (dir != null && dir.exists() && dir.isDirectory) {
                 candidateUris.add(Uri.fromFile(dir))

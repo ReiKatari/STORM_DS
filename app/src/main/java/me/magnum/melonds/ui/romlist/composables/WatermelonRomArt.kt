@@ -213,7 +213,8 @@ private val failedCoverUrls = java.util.Collections.synchronizedSet(mutableSetOf
 
 fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
     val clean = rom.fileName.substringBeforeLast('.').trim()
-    val file = java.io.File(java.io.File(context.filesDir, "custom_covers"), "$clean.png")
+    val coversDir = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers")
+    val file = java.io.File(coversDir, "$clean.png")
     return if (file.exists()) file else null
 }
 

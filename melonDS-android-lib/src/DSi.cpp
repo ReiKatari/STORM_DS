@@ -477,12 +477,75 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         {
             isPlaintext = true;
         }
-        // If trial decryption yields < 6 zeros (pseudo-random noise ≈ 1 zero in 256 bytes),
-        // and ROM is marked decrypted (DSiCryptoFlags & 0x03 == 0x03), keep RAM as-is without corrupting it.
-        if (!isPlaintext && trialZeros < 6 && ((header.DSiCryptoFlags & 0x03) == 0x03))
+
+        // If primary trial decryption yields noise, test alternative header hashes (e.g. 0x328 for romhacks with shifted hashes)
+        if (!isPlaintext && trialZeros < 6)
         {
-            Log(LogLevel::Info, "DSi::DecryptModcryptArea: DSiCryptoFlags 0x%02X and trial decryption produced noise (trialZeros=%zu), keeping RAM as-is\n",
-                header.DSiCryptoFlags, trialZeros);
+            const u8* altHashes[] = { header.DSiDigestMasterHash, header.DSiARM7iHash };
+            for (const u8* altHash : altHashes)
+            {
+                if (*(u32*)&altHash[0] == 0) continue;
+                u8 altKeyX[16], altKeyY[16], altTmp[16], altKey[16];
+                *(u32*)&altKeyX[0] = 0x746E694E;
+                *(u32*)&altKeyX[4] = 0x6F646E65;
+                altKeyX[8]  = header.GameCode[0];
+                altKeyX[9]  = header.GameCode[1];
+                altKeyX[10] = header.GameCode[2];
+                altKeyX[11] = header.GameCode[3];
+                altKeyX[12] = header.GameCode[3];
+                altKeyX[13] = header.GameCode[2];
+                altKeyX[14] = header.GameCode[1];
+                altKeyX[15] = header.GameCode[0];
+                memcpy(altKeyY, altHash, 16);
+                DSi_AES::DeriveNormalKey(altKeyX, altKeyY, altTmp);
+                Bswap128(altKey, altTmp);
+                Bswap128(altTmp, iv);
+                AES_ctx altCtx;
+                AES_init_ctx_iv(&altCtx, altKey, altTmp);
+
+                size_t altTrialZeros = 0;
+                AES_ctx testCtx = altCtx;
+                for (size_t i = 0; i < trialLen; i += 16)
+                {
+                    u32 d[4];
+                    if (isArm7Area)
+                    {
+                        d[0] = ARM7Read32(binaryaddr + i);
+                        d[1] = ARM7Read32(binaryaddr + i + 4);
+                        d[2] = ARM7Read32(binaryaddr + i + 8);
+                        d[3] = ARM7Read32(binaryaddr + i + 12);
+                    }
+                    else
+                    {
+                        d[0] = ARM9Read32(binaryaddr + i);
+                        d[1] = ARM9Read32(binaryaddr + i + 4);
+                        d[2] = ARM9Read32(binaryaddr + i + 8);
+                        d[3] = ARM9Read32(binaryaddr + i + 12);
+                    }
+                    u8 t[16];
+                    Bswap128(t, d);
+                    AES_CTR_xcrypt_buffer(&testCtx, t, 16);
+                    for (int b = 0; b < 16; b++)
+                    {
+                        if (t[b] == 0) altTrialZeros++;
+                    }
+                }
+                if (altTrialZeros >= 10)
+                {
+                    Log(LogLevel::Info, "DSi::DecryptModcryptArea: Alternative hash yielded valid code (zeros=%zu), using alt key\n", altTrialZeros);
+                    ctx = altCtx;
+                    trialZeros = altTrialZeros;
+                    break;
+                }
+            }
+        }
+
+        // If trial decryption still yields < 6 zeros (pseudo-random noise ≈ 1 zero in 256 bytes),
+        // keep RAM as-is without corrupting it.
+        if (!isPlaintext && trialZeros < 6)
+        {
+            Log(LogLevel::Info, "DSi::DecryptModcryptArea: Trial decryption produced noise (trialZeros=%zu), keeping RAM as-is\n",
+                trialZeros);
             return;
         }
     }
@@ -1157,15 +1220,14 @@ void DSi::SetupDirectBoot()
         }
 
         // Decrypt modcrypt areas (DecryptModcryptArea safely skips if RAM already contains plaintext code)
-        bool modcryptActive = (header.DSiCryptoFlags & (1 << 1)) != 0;
-        if (modcryptActive && header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
+        if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
             header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
         {
             DecryptModcryptArea(header.DSiModcrypt1Offset,
                                 header.DSiModcrypt1Size,
                                 header.DSiARM9Hash);
         }
-        if (modcryptActive && header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
+        if (header.DSiModcrypt2Size > 0 && header.DSiModcrypt2Offset > 0 &&
             header.DSiModcrypt2Size != 0xFFFFFFFF && header.DSiModcrypt2Offset != 0xFFFFFFFF)
         {
             DecryptModcryptArea(header.DSiModcrypt2Offset,

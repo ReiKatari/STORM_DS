@@ -125,7 +125,7 @@ fun FullScreenCoverDialog(
         }
     }
 
-    val customCoversDir = remember { java.io.File(context.filesDir, "custom_covers").apply { mkdirs() } }
+    val customCoversDir = remember { java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers").apply { mkdirs() } }
     val cleanTitle = remember(rom.fileName) { rom.fileName.substringBeforeLast('.').trim() }
     val customCoverFile = remember(cleanTitle) { java.io.File(customCoversDir, "$cleanTitle.png") }
     var hasCustomCover by remember { mutableStateOf(customCoverFile.exists()) }

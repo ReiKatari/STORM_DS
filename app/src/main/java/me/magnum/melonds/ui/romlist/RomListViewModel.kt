@@ -75,7 +75,7 @@ class RomListViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val boxArtRequestsInFlight = mutableSetOf<String>()
-    private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(4)
+    private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(12)
 
     fun requestBoxArt(rom: Rom) {
         if (!settingsRepository.isRaCoverEnabled()) return
