@@ -33,7 +33,7 @@ public static class DsiDecryptorEngine
             val[i] = (byte)((tmp[i] << n_fine) | (tmp[(i - 1) & 0xF] >> (8 - n_fine)));
     }
 
-    private static byte[] DeriveNormalKey(byte[] keyX, byte[] keyY)
+    public static byte[] DeriveNormalKey(byte[] keyX, byte[] keyY)
     {
         byte[] keyConst = new byte[] {
             0xFF, 0xFE, 0xFB, 0x4E, 0x29, 0x59, 0x02, 0x58,
@@ -78,7 +78,7 @@ public static class DsiDecryptorEngine
         }
     }
 
-    private static void CryptArea(Aes aes, byte[] ctrInit, byte[] rom, uint offset, uint size)
+    public static void CryptArea(Aes aes, byte[] ctrInit, byte[] rom, uint offset, uint size)
     {
         byte[] ctr = new byte[16];
         for (int i = 0; i < 16; i++)
@@ -188,22 +188,49 @@ public static class DsiDecryptorEngine
                 return true;
 
             // If orig has significantly more zeros than decrypted, original was PLAINTEXT!
-            if (origTrialZeros >= 12 && origTrialZeros > trialZeros)
+            if (origTrialZeros >= 6 && origTrialZeros > trialZeros)
+                return false;
+
+            // If trial decryption yields < 6 zeros (pseudo-random noise ≈ 1 zero in 512 bytes)
+            // and ROM header indicates already decrypted (DSiCryptoFlags & 0x03 == 0x03), do not encrypt
+            if (trialZeros < 6 && (header[0x1C] & 0x03) == 0x03)
                 return false;
         }
         catch { }
 
-        // 3. Fallback: ARM opcode check across up to 256 words
+        // 3. Fallback: ARM and Thumb opcode check across up to 256 words
         int checkWords = Math.Min(scanLen / 4, 256);
-        int armCount = 0;
+        int armMatches = 0;
+        int thumbMatches = 0;
         for (int i = 0; i < checkWords; i++)
         {
             uint w = BitConverter.ToUInt32(scanBuf, i * 4);
             uint cond = w >> 28;
-            if (w == 0 || cond == 0xE) armCount++;
+            if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+            {
+                armMatches++;
+            }
+            else if (cond <= 0xE)
+            {
+                uint group = (w >> 25) & 0x7;
+                if (group <= 5 && w != 0xE7FFDEFF)
+                    armMatches++;
+            }
+            else if (cond == 0xF)
+            {
+                if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
+                    armMatches++;
+            }
+
+            ushort hw0 = (ushort)w;
+            ushort hw1 = (ushort)(w >> 16);
+            if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
+                thumbMatches++;
+            if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
+                thumbMatches++;
         }
 
-        if (armCount > checkWords / 3)
+        if (armMatches >= (checkWords * 5) / 10 || thumbMatches >= (checkWords * 2 * 5) / 10)
             return false;
 
         return true;
@@ -256,21 +283,46 @@ public static class DsiDecryptorEngine
             if (trialZeros >= 12 && trialZeros > origTrialZeros * 2)
                 return true;
 
-            if (origTrialZeros >= 12 && origTrialZeros > trialZeros)
+            if (origTrialZeros >= 6 && origTrialZeros > trialZeros)
+                return false;
+
+            if (trialZeros < 6 && (rom[0x1C] & 0x03) == 0x03)
                 return false;
         }
         catch { }
 
         int checkWords = Math.Min(scanLen / 4, 256);
-        int armCount = 0;
+        int armMatches = 0;
+        int thumbMatches = 0;
         for (int i = 0; i < checkWords; i++)
         {
             uint w = BitConverter.ToUInt32(rom, (int)offset + i * 4);
             uint cond = w >> 28;
-            if (w == 0 || cond == 0xE) armCount++;
+            if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+            {
+                armMatches++;
+            }
+            else if (cond <= 0xE)
+            {
+                uint group = (w >> 25) & 0x7;
+                if (group <= 5 && w != 0xE7FFDEFF)
+                    armMatches++;
+            }
+            else if (cond == 0xF)
+            {
+                if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
+                    armMatches++;
+            }
+
+            ushort hw0 = (ushort)w;
+            ushort hw1 = (ushort)(w >> 16);
+            if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
+                thumbMatches++;
+            if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
+                thumbMatches++;
         }
 
-        if (armCount > checkWords / 3)
+        if (armMatches >= (checkWords * 5) / 10 || thumbMatches >= (checkWords * 2 * 5) / 10)
             return false;
 
         return true;
