@@ -1511,7 +1511,7 @@
     <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
 
     <!-- Scraper Pro & Covers -->
-    <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart &amp; High-Res Covers</string>
+    <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart and High-Res Covers</string>
     <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
     <string name="pick_custom_cover">Change Cover from Gallery</string>
     <string name="reset_custom_cover">Reset Custom Cover</string>

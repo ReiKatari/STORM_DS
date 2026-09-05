@@ -786,8 +786,8 @@
   <string name="check_for_updates">Проверка обновлений</string>
   <string name="check_for_updates_summary">Периодическая проверка доступных обновлений</string>
   <string name="rom_icon_filtering">Фильтрация иконок игр</string>
-  <string name="rom_ra_cover_enabled">Обложки RetroAchievements</string>
-  <string name="rom_ra_cover_enabled_summary">Загружать обложки игр с серверов RetroAchievements</string>
+  <string name="rom_ra_cover_enabled">Бейджи RetroAchievements</string>
+  <string name="rom_ra_cover_enabled_summary">Использовать значки игр RetroAchievements в качестве обложек</string>
   <string name="rom_filter_all">Все игры</string>
   <string name="rom_filter_favorites">Избранные</string>
   <string name="rom_filter_ds">Игры Nintendo DS</string>

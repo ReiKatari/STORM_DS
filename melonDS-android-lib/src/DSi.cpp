@@ -316,48 +316,11 @@ void DSi::SetCartInserted(bool inserted)
 
 void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 {
-    AES_ctx ctx;
-    u8 key[16];
-    u8 tmp[16];
-
     if ((offset == 0) || (size == 0) || !NDSCartSlot.GetCart())
         return;
 
     const NDSHeader& header = NDSCartSlot.GetCart()->GetHeader();
     const u8* cartrom = NDSCartSlot.GetCart()->GetROM();
-
-    if ((header.DSiCryptoFlags & (1<<4)) ||
-        (header.AppFlags & (1<<7)))
-    {
-        // dev key
-        memcpy(key, &cartrom[0], 16);
-    }
-    else
-    {
-        u8 keyX[16], keyY[16];
-
-        *(u32*)&keyX[0] = 0x746E694E;
-        *(u32*)&keyX[4] = 0x6F646E65;
-        keyX[8]  = header.GameCode[0];
-        keyX[9]  = header.GameCode[1];
-        keyX[10] = header.GameCode[2];
-        keyX[11] = header.GameCode[3];
-        keyX[12] = header.GameCode[3];
-        keyX[13] = header.GameCode[2];
-        keyX[14] = header.GameCode[1];
-        keyX[15] = header.GameCode[0];
-
-        if (*(u32*)&header.DSiARM9iHash[0] != 0)
-            memcpy(keyY, header.DSiARM9iHash, 16);
-        else
-            memcpy(keyY, header.DSiARM7iHash, 16);
-
-        DSi_AES::DeriveNormalKey(keyX, keyY, tmp);
-    }
-
-    Bswap128(key, tmp);
-    Bswap128(tmp, iv);
-    AES_init_ctx_iv(&ctx, key, tmp);
 
     // find a matching binary area
     u32 binaryaddr = 0;
@@ -391,50 +354,128 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     }
 
     u32 decryptSize = std::min(size, binarysize);
-    u32 targetRAMOffset = binaryaddr & NDS::MainRAMMask;
-
     bool isArm7Area = (offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size) ||
                       (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize);
 
-
-
-    // Plaintext check: if words look like ARM / Thumb opcode / RAM address / zero patterns
-    size_t checkWords = std::min<size_t>(decryptSize / 4, 32);
-    size_t plaintextCount = 0;
-    size_t thumbCount = 0;
-    for (size_t i = 0; i < checkWords; i++)
+    // 1. Check if memory is ALREADY plaintext executable code by measuring zero bytes.
+    // In AES ciphertext, zeros are ~0.39% (0-2 in 256 bytes). In real ARM code/alignment, zeros exceed 10% (>= 25 in 256 bytes).
+    size_t sampleLen = std::min<size_t>(decryptSize, 256);
+    size_t rawZeros = 0;
+    for (size_t i = 0; i < sampleLen; i += 4)
     {
-        u32 w = isArm7Area ? ARM7Read32(binaryaddr + i * 4) : ARM9Read32(binaryaddr + i * 4);
-        u32 cond = w >> 28;
-        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
-        {
-            plaintextCount++;
-        }
-        else if (cond <= 0xE)
-        {
-            u32 op = (w >> 25) & 0x7;
-            if (op <= 0x7 && w != 0xE7FFDEFF)
-                plaintextCount++;
-        }
-        else if (cond == 0xF)
-        {
-            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
-                plaintextCount++;
-        }
-
-        u16 hw0 = (u16)w;
-        u16 hw1 = (u16)(w >> 16);
-        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
-            thumbCount++;
-        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
-            thumbCount++;
+        u32 w = isArm7Area ? ARM7Read32(binaryaddr + i) : ARM9Read32(binaryaddr + i);
+        if ((w & 0xFF) == 0) rawZeros++;
+        if (((w >> 8) & 0xFF) == 0) rawZeros++;
+        if (((w >> 16) & 0xFF) == 0) rawZeros++;
+        if (((w >> 24) & 0xFF) == 0) rawZeros++;
     }
-    if (checkWords >= 8 && (plaintextCount >= (checkWords * 6) / 10 || thumbCount >= (checkWords * 2 * 6) / 10))
+
+    if (rawZeros >= 25)
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (score=%zu, thumb=%zu / %zu), skipping\n",
-            binaryaddr, plaintextCount, thumbCount, checkWords);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X is already plaintext (rawZeros=%zu/%zu), skipping\n",
+            binaryaddr, rawZeros, sampleLen);
         return;
     }
+
+    u8 selectedKey[16];
+    bool keyFound = false;
+
+    if ((header.DSiCryptoFlags & (1<<4)) || (header.AppFlags & (1<<7)))
+    {
+        // dev key
+        memcpy(selectedKey, &cartrom[0], 16);
+        keyFound = true;
+    }
+    else
+    {
+        u8 keyX[16];
+        *(u32*)&keyX[0] = 0x746E694E;
+        *(u32*)&keyX[4] = 0x6F646E65;
+        keyX[8]  = header.GameCode[0];
+        keyX[9]  = header.GameCode[1];
+        keyX[10] = header.GameCode[2];
+        keyX[11] = header.GameCode[3];
+        keyX[12] = header.GameCode[3];
+        keyX[13] = header.GameCode[2];
+        keyX[14] = header.GameCode[1];
+        keyX[15] = header.GameCode[0];
+
+        // Candidate hashes to test:
+        // 1. DSiARM9iHash (0x350) - standard retail DSiWare (e.g. Castle of Magic)
+        // 2. DSiDigestMasterHash (0x328) - modified / translated ROMs (e.g. Dark Void Zero [MOD - RUS])
+        // 3. DSiARM7iHash (0x364) - secondary ARM7i area
+        const u8* hashCandidates[] = {
+            header.DSiARM9iHash,
+            header.DSiDigestMasterHash,
+            header.DSiARM7iHash
+        };
+
+        for (const u8* candHash : hashCandidates)
+        {
+            if (*(const u32*)&candHash[0] == 0 && *(const u32*)&candHash[4] == 0)
+                continue;
+
+            u8 candKeyY[16];
+            memcpy(candKeyY, candHash, 16);
+
+            u8 candKey[16], candTmp[16];
+            DSi_AES::DeriveNormalKey(keyX, candKeyY, candTmp);
+            Bswap128(candKey, candTmp);
+            Bswap128(candTmp, iv);
+
+            AES_ctx trialCtx;
+            AES_init_ctx_iv(&trialCtx, candKey, candTmp);
+
+            // Trial decrypt first 256 bytes and count zeros
+            size_t trialZeros = 0;
+            for (size_t i = 0; i < sampleLen; i += 16)
+            {
+                u32 d[4];
+                if (isArm7Area)
+                {
+                    d[0] = ARM7Read32(binaryaddr + i);
+                    d[1] = ARM7Read32(binaryaddr + i + 4);
+                    d[2] = ARM7Read32(binaryaddr + i + 8);
+                    d[3] = ARM7Read32(binaryaddr + i + 12);
+                }
+                else
+                {
+                    d[0] = ARM9Read32(binaryaddr + i);
+                    d[1] = ARM9Read32(binaryaddr + i + 4);
+                    d[2] = ARM9Read32(binaryaddr + i + 8);
+                    d[3] = ARM9Read32(binaryaddr + i + 12);
+                }
+                u8 block[16];
+                Bswap128(block, d);
+                AES_CTR_xcrypt_buffer(&trialCtx, block, 16);
+                for (int b = 0; b < 16; b++)
+                {
+                    if (block[b] == 0) trialZeros++;
+                }
+            }
+
+            if (trialZeros >= 10)
+            {
+                Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected matching key (trialZeros=%zu/%zu)\n",
+                    trialZeros, sampleLen);
+                memcpy(selectedKey, candKey, 16);
+                keyFound = true;
+                break;
+            }
+        }
+    }
+
+    if (!keyFound)
+    {
+        Log(LogLevel::Warn, "DSi::DecryptModcryptArea: No valid decryption key found (rawZeros=%zu/%zu), keeping RAM as-is\n",
+            rawZeros, sampleLen);
+        return;
+    }
+
+    AES_ctx ctx;
+    u8 tmp[16];
+    Bswap128(tmp, iv);
+    AES_init_ctx_iv(&ctx, selectedKey, tmp);
 
     for (u32 i = 0; i < decryptSize; i += 16)
     {
@@ -905,6 +946,8 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Name, "sdmc", 16);
             strncpy(entries[count].Path, "/", 64);
             count++;
+
+            // Slots 9 and 10 remain ZERO (DriveLetter = 0) for dynamic system mounts
 
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
