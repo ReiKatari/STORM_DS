@@ -32,7 +32,7 @@ class BoxArtRepository @Inject constructor(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val cacheDir = File(context.filesDir, "boxart").apply { mkdirs() }
+    private val cacheDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers/boxart").apply { mkdirs() }
     private val indexFile = File(cacheDir, "named_boxarts_index_v3.txt")
     private val matchesFile = File(cacheDir, "matches_v3.json")
 
@@ -47,6 +47,13 @@ class BoxArtRepository @Inject constructor(
 
     init {
         scope.launch {
+            val oldCacheDir = File(context.filesDir, "boxart")
+            if (oldCacheDir.exists()) {
+                runCatching {
+                    oldCacheDir.copyRecursively(cacheDir, overwrite = false)
+                    oldCacheDir.deleteRecursively()
+                }
+            }
             loadMatches()
             loadIndex()
         }
@@ -70,8 +77,15 @@ class BoxArtRepository @Inject constructor(
         }
 
         val entries = indexEntries ?: run {
-            // Non-blocking load from disk or schedule background fetch
-            loadIndex() ?: return@withContext null
+            loadIndex()
+            // If index is still downloading, generate a direct candidate URL so covers load immediately
+            val candidateName = rom.fileName.substringBeforeLast('.').trim()
+            val encoded = runCatching { java.net.URLEncoder.encode("$candidateName.png", "UTF-8").replace("+", "%20") }.getOrNull()
+            if (encoded != null) {
+                val baseUrl = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) BASE_URL_DSI else BASE_URL_DS
+                return@withContext baseUrl + encoded
+            }
+            return@withContext null
         }
 
         val candidates = buildList {
@@ -122,23 +136,38 @@ class BoxArtRepository @Inject constructor(
     private fun loadIndex(): List<IndexEntry>? {
         indexEntries?.let { return it }
 
-        val raw: String = (if (indexFile.isFile && System.currentTimeMillis() - indexFile.lastModified() < INDEX_MAX_AGE_MS) {
-            runCatching { indexFile.readText() }.getOrNull()
-        } else if (indexFile.isFile) {
-            // Use stale cached file immediately, refresh in background
-            scope.launch {
-                downloadIndex()?.let { content ->
-                    runCatching { indexFile.writeText(content) }
+        if (indexFile.isFile) {
+            val raw = runCatching { indexFile.readText() }.getOrNull()
+            if (raw != null) {
+                val entries = parseIndex(raw)
+                indexEntries = entries
+                if (System.currentTimeMillis() - indexFile.lastModified() >= INDEX_MAX_AGE_MS) {
+                    scope.launch {
+                        downloadIndex()?.let { content ->
+                            runCatching {
+                                indexFile.writeText(content)
+                                indexEntries = parseIndex(content)
+                            }
+                        }
+                    }
+                }
+                return entries
+            }
+        }
+
+        // First time - schedule background download without stalling callers
+        scope.launch {
+            downloadIndex()?.let { content ->
+                runCatching {
+                    indexFile.writeText(content)
+                    indexEntries = parseIndex(content)
                 }
             }
-            runCatching { indexFile.readText() }.getOrNull()
-        } else {
-            // First time - try to download or schedule
-            downloadIndex()?.also { content ->
-                runCatching { indexFile.writeText(content) }
-            }
-        }) ?: return null
+        }
+        return null
+    }
 
+    private fun parseIndex(raw: String): List<IndexEntry> {
         val entries = raw.lineSequence()
             .filter { it.isNotBlank() }
             .mapNotNull { line ->
@@ -159,7 +188,6 @@ class BoxArtRepository @Inject constructor(
                 } else null
             }
             .toList()
-        indexEntries = entries
         return entries
     }
 

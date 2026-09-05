@@ -46,12 +46,6 @@ class BiosDownloadManager @Inject constructor(
             }
             mkdirs()
         }
-        val targetDir = File(context.filesDir, "bios/ds").apply {
-            if (exists()) {
-                listFiles()?.forEach { it.deleteRecursively() }
-            }
-            mkdirs()
-        }
         val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
@@ -60,11 +54,7 @@ class BiosDownloadManager @Inject constructor(
             try {
                 downloadFile(mirrorUrl, tempZip, onProgress)
                 extractZipDirectly(tempZip, rootDsDir)
-                // Also copy to app internal targetDir
-                rootDsDir.listFiles()?.forEach { file ->
-                    runCatching { file.copyTo(File(targetDir, file.name), overwrite = true) }
-                }
-                if (hasValidDsFiles(rootDsDir) || hasValidDsFiles(targetDir)) {
+                if (hasValidDsFiles(rootDsDir)) {
                     downloadSuccess = true
                     break
                 }
@@ -77,22 +67,18 @@ class BiosDownloadManager @Inject constructor(
 
         if (!downloadSuccess) {
             // Fallback to assets only if network download failed
-            val extractedFromAssets = copyDsBiosFromAssets(targetDir)
-            if (extractedFromAssets && hasValidDsFiles(targetDir)) {
-                targetDir.listFiles()?.forEach { file ->
-                    runCatching { file.copyTo(File(rootDsDir, file.name), overwrite = true) }
-                }
+            val extractedFromAssets = copyDsBiosFromAssets(rootDsDir)
+            if (extractedFromAssets && hasValidDsFiles(rootDsDir)) {
                 downloadSuccess = true
             }
         }
 
-        val finalDir = if (hasValidDsFiles(rootDsDir)) rootDsDir else targetDir
-        if (downloadSuccess && hasValidDsFiles(finalDir)) {
+        if (downloadSuccess && hasValidDsFiles(rootDsDir)) {
             onProgress(100)
-            val dirUri = Uri.fromFile(finalDir)
+            val dirUri = Uri.fromFile(rootDsDir)
             settingsRepository.setDsBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
-            Result.success(finalDir)
+            Result.success(rootDsDir)
         } else {
             Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS."))
         }
@@ -107,12 +93,6 @@ class BiosDownloadManager @Inject constructor(
             }
             mkdirs()
         }
-        val targetDir = File(context.filesDir, "bios/dsi").apply {
-            if (exists()) {
-                listFiles()?.forEach { it.deleteRecursively() }
-            }
-            mkdirs()
-        }
         val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
@@ -121,11 +101,7 @@ class BiosDownloadManager @Inject constructor(
             try {
                 downloadFile(mirrorUrl, tempZip, onProgress)
                 extractZipDirectly(tempZip, rootDsiDir)
-                // Also copy to app internal targetDir
-                rootDsiDir.listFiles()?.forEach { file ->
-                    runCatching { file.copyTo(File(targetDir, file.name), overwrite = true) }
-                }
-                if (hasValidDsiFiles(rootDsiDir) || hasValidDsiFiles(targetDir)) {
+                if (hasValidDsiFiles(rootDsiDir)) {
                     downloadSuccess = true
                     break
                 }
@@ -138,28 +114,24 @@ class BiosDownloadManager @Inject constructor(
 
         if (!downloadSuccess) {
             // Fallback to assets only if network download failed
-            copyDsiBiosFromAssets(targetDir)
-            if (!hasValidDsiFiles(targetDir)) {
-                val nandFile = File(targetDir, "nand.bin")
-                if (!nandFile.exists() || !hasValidDsiFiles(targetDir)) {
+            copyDsiBiosFromAssets(rootDsiDir)
+            if (!hasValidDsiFiles(rootDsiDir)) {
+                val nandFile = File(rootDsiDir, "nand.bin")
+                if (!nandFile.exists() || !hasValidDsiFiles(rootDsiDir)) {
                     createCleanDsiNand(nandFile)
                 }
             }
-            if (hasValidDsiFiles(targetDir)) {
-                targetDir.listFiles()?.forEach { file ->
-                    runCatching { file.copyTo(File(rootDsiDir, file.name), overwrite = true) }
-                }
+            if (hasValidDsiFiles(rootDsiDir)) {
                 downloadSuccess = true
             }
         }
 
-        val finalDir = if (hasValidDsiFiles(rootDsiDir)) rootDsiDir else targetDir
-        if (downloadSuccess && hasValidDsiFiles(finalDir)) {
+        if (downloadSuccess && hasValidDsiFiles(rootDsiDir)) {
             onProgress(100)
-            val dirUri = Uri.fromFile(finalDir)
+            val dirUri = Uri.fromFile(rootDsiDir)
             settingsRepository.setDsiBiosDirectory(dirUri)
             settingsRepository.setUseCustomBios(true)
-            Result.success(finalDir)
+            Result.success(rootDsiDir)
         } else {
             Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi и образ NAND."))
         }

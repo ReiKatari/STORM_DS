@@ -188,15 +188,6 @@ class SharedPreferencesSettingsRepository(
             File(extStorage, "STORM DS/bios/dsi"),
             File(extStorage, "STORM DS/bios/ds"),
             File(extStorage, "STORM DS/bios"),
-            File(extStorage, "STORM DS/system"),
-            File(extStorage, "RetroArch/system"),
-            File(context.getExternalFilesDir(null), "bios/dsi"),
-            File(context.getExternalFilesDir(null), "bios/ds"),
-            File(context.getExternalFilesDir(null), "bios"),
-            File(context.filesDir, "bios/dsi"),
-            File(context.filesDir, "bios/ds"),
-            File(context.filesDir, "bios"),
-            context.filesDir,
         )
 
         for (dir in candidateDirs) {
@@ -409,9 +400,6 @@ class SharedPreferencesSettingsRepository(
         val stormDsDsiDir = File(stormDsBase, "bios/dsi").apply { mkdirs() }
         val stormDsBiosDir = File(stormDsBase, "bios").apply { mkdirs() }
 
-        val internalDsDir = File(context.filesDir, "bios/ds")
-        val internalDsiDir = File(context.filesDir, "bios/dsi")
-
         val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin")
             ?: resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7.bin", "ds_bios7.bin", "arm7.bin")
 
@@ -437,7 +425,7 @@ class SharedPreferencesSettingsRepository(
         val sdEnabled = if (isDsi) isDsiSdCardEnabled() else isDldiSdCardEnabled()
         val sdDirectory = if (isDsi) getDsiSdCardDirectory() else getDldiSdCardDirectory()
         val sdSize = if (isDsi) getDsiSdCardImageSize() else getDldiSdCardImageSize()
-        val syncFolder = if (isDsi) File(context.filesDir, "dsi_sd/sync") else File(context.filesDir, "dldi/sync")
+        val syncFolder = if (isDsi) File(stormDsBase, "bios/dsi/sync").apply { mkdirs() } else File(stormDsBase, "dldi/sync").apply { mkdirs() }
 
         val sdCardImage = if (isDsi) {
             listOf(
@@ -448,12 +436,7 @@ class SharedPreferencesSettingsRepository(
                 File(stormDsBase, "sd_card.bin"),
                 File(stormDsBase, "dldi/dsi_sd.img"),
                 File(stormDsBase, "dldi/dldi_sd.img"),
-                File(context.filesDir, "bios/dsi/sd_card.bin"),
-                File(context.filesDir, "bios/dsi/sd.bin"),
-                File(context.filesDir, "dsi_sd/dsi_sd.img"),
-                File(context.filesDir, "dldi/dsi_sd.img"),
-                File(context.filesDir, "dldi/dldi_sd.img"),
-            ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(context.filesDir, "dsi_sd/dsi_sd.img").absolutePath
+            ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(stormDsBase, "bios/dsi/sd.bin").absolutePath
         } else {
             listOf(
                 File(stormDsBase, "dldi/dldi_sd.img"),
@@ -462,11 +445,7 @@ class SharedPreferencesSettingsRepository(
                 File(stormDsBase, "bios/sd_card.bin"),
                 File(stormDsBase, "bios/sd.bin"),
                 File(stormDsBase, "sd_card.bin"),
-                File(context.filesDir, "bios/ds/sd_card.bin"),
-                File(context.filesDir, "bios/ds/sd.bin"),
-                File(context.filesDir, "dldi/dldi_sd.img"),
-                File(context.filesDir, "dsi_sd/dsi_sd.img"),
-            ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(context.filesDir, "dldi/dldi_sd.img").absolutePath
+            ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(stormDsBase, "dldi/dldi_sd.img").absolutePath
         }
 
         return EmulatorConfiguration(
@@ -730,13 +709,6 @@ class SharedPreferencesSettingsRepository(
         }
         val rootBase = getEmulatorBaseDirectory()
         val rootDir = File(rootBase, "bios/ds").apply { mkdirs() }
-        if (rootDir.exists() && (File(rootDir, "bios7.bin").exists() || File(rootDir, "ds_bios7.bin").exists())) {
-            return Uri.fromFile(rootDir)
-        }
-        val internalDir = File(context.filesDir, "bios/ds")
-        if (internalDir.exists() && (File(internalDir, "bios7.bin").exists() || File(internalDir, "ds_bios7.bin").exists())) {
-            return Uri.fromFile(internalDir)
-        }
         return Uri.fromFile(rootDir)
     }
 
@@ -747,13 +719,6 @@ class SharedPreferencesSettingsRepository(
         }
         val rootBase = getEmulatorBaseDirectory()
         val rootDir = File(rootBase, "bios/dsi").apply { mkdirs() }
-        if (rootDir.exists() && (File(rootDir, "bios7.bin").exists() || File(rootDir, "dsi_bios7.bin").exists())) {
-            return Uri.fromFile(rootDir)
-        }
-        val internalDir = File(context.filesDir, "bios/dsi")
-        if (internalDir.exists() && (File(internalDir, "bios7.bin").exists() || File(internalDir, "dsi_bios7.bin").exists())) {
-            return Uri.fromFile(internalDir)
-        }
         return Uri.fromFile(rootDir)
     }
 
