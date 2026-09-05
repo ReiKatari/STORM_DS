@@ -263,9 +263,6 @@ fun WatermelonRomArt(
         isScraperProEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
         isScraperProEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
         isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
-        gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
-        boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
-        raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
         else -> null
     }
 
@@ -281,7 +278,7 @@ fun WatermelonRomArt(
                 modifier = Modifier.align(Alignment.Center),
             )
             if (activeModel == null) {
-                if (boxArtLoading) {
+                if (boxArtLoading && (isScraperProEnabled || isRaCoversEnabled)) {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center).size(22.dp),
                         color = Color.White.copy(alpha = 0.85f),

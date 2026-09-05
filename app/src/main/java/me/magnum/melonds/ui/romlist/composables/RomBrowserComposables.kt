@@ -415,6 +415,9 @@ fun ContinuePlayingShelf(
     if (roms.isEmpty()) return
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
     var isCollapsed by remember { mutableStateOf(prefs.getBoolean("continue_playing_shelf_collapsed", false)) }
     val colors = watermelon
 
@@ -490,7 +493,7 @@ fun ContinuePlayingShelf(
                         rom = rom,
                         coverUrl = coverByHash[rom.retroAchievementsHash],
                         boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
-                        boxArtLoading = boxArtByUri[rom.uri.toString()] == null,
+                        boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
                         onClick = { onRomClicked(rom) },
                         onLongPress = { onRomLongPressed(rom) },
                         onFocused = onRomFocused,
@@ -627,6 +630,11 @@ fun ContinuePlayingLandscapeColumn(
     onRomVisible: (Rom) -> Unit = {},
 ) {
     val colors = watermelon
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
     Column(modifier = modifier.fillMaxSize()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -700,7 +708,7 @@ fun ContinuePlayingLandscapeColumn(
                         rom = rom,
                         coverUrl = coverByHash[rom.retroAchievementsHash],
                         boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
-                        boxArtLoading = boxArtByUri[rom.uri.toString()] == null,
+                        boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
                         onClick = { onRomClicked(rom) },
                         onLongPress = { onRomLongPressed(rom) },
                         onFocused = onRomFocused,

@@ -398,132 +398,41 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
 
 
-    // Plaintext check: zero-byte entropy and zero differential trial check
-    size_t sampleLen = std::min<size_t>(decryptSize, 256);
-    size_t zeros = 0;
-    for (size_t i = 0; i < sampleLen; i++)
+    // Plaintext check: if words look like ARM / Thumb opcode / RAM address / zero patterns
+    size_t checkWords = std::min<size_t>(decryptSize / 4, 32);
+    size_t plaintextCount = 0;
+    size_t thumbCount = 0;
+    for (size_t i = 0; i < checkWords; i++)
     {
-        u8 b = isArm7Area ? ARM7Read8(binaryaddr + i) : ARM9Read8(binaryaddr + i);
-        if (b == 0) zeros++;
+        u32 w = isArm7Area ? ARM7Read32(binaryaddr + i * 4) : ARM9Read32(binaryaddr + i * 4);
+        u32 cond = w >> 28;
+        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
+        {
+            plaintextCount++;
+        }
+        else if (cond <= 0xE)
+        {
+            u32 op = (w >> 25) & 0x7;
+            if (op <= 0x7 && w != 0xE7FFDEFF)
+                plaintextCount++;
+        }
+        else if (cond == 0xF)
+        {
+            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
+                plaintextCount++;
+        }
+
+        u16 hw0 = (u16)w;
+        u16 hw1 = (u16)(w >> 16);
+        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
+            thumbCount++;
+        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
+            thumbCount++;
     }
-
-    // Encrypted AES ciphertext has only 0-4 zeros per 256 bytes. Real plaintext ARM code has >= 15 zeros.
-    bool isPlaintext = (zeros >= 15);
-
-    // Statistical zero differential trial check over first 256 bytes
-    if (!isPlaintext)
+    if (checkWords >= 8 && (plaintextCount >= (checkWords * 6) / 10 || thumbCount >= (checkWords * 2 * 6) / 10))
     {
-        AES_ctx trialCtx = ctx;
-        size_t trialLen = std::min<size_t>(decryptSize, 256);
-        size_t trialZeros = 0;
-        for (size_t i = 0; i < trialLen; i += 16)
-        {
-            u32 d[4];
-            if (isArm7Area)
-            {
-                d[0] = ARM7Read32(binaryaddr + i);
-                d[1] = ARM7Read32(binaryaddr + i + 4);
-                d[2] = ARM7Read32(binaryaddr + i + 8);
-                d[3] = ARM7Read32(binaryaddr + i + 12);
-            }
-            else
-            {
-                d[0] = ARM9Read32(binaryaddr + i);
-                d[1] = ARM9Read32(binaryaddr + i + 4);
-                d[2] = ARM9Read32(binaryaddr + i + 8);
-                d[3] = ARM9Read32(binaryaddr + i + 12);
-            }
-            u8 t[16];
-            Bswap128(t, d);
-            AES_CTR_xcrypt_buffer(&trialCtx, t, 16);
-            for (int b = 0; b < 16; b++)
-            {
-                if (t[b] == 0) trialZeros++;
-            }
-        }
-
-        // If trial decryption yields fewer zeros than original RAM, original was already plaintext.
-        if (zeros >= 6 && zeros > trialZeros)
-        {
-            isPlaintext = true;
-        }
-
-        // If primary trial decryption yields noise, test alternative header hashes (e.g. 0x328 for romhacks with shifted hashes)
-        if (!isPlaintext && trialZeros < 6)
-        {
-            const u8* altHashes[] = { header.DSiDigestMasterHash, header.DSiARM7iHash };
-            for (const u8* altHash : altHashes)
-            {
-                if (*(u32*)&altHash[0] == 0) continue;
-                u8 altKeyX[16], altKeyY[16], altTmp[16], altKey[16];
-                *(u32*)&altKeyX[0] = 0x746E694E;
-                *(u32*)&altKeyX[4] = 0x6F646E65;
-                altKeyX[8]  = header.GameCode[0];
-                altKeyX[9]  = header.GameCode[1];
-                altKeyX[10] = header.GameCode[2];
-                altKeyX[11] = header.GameCode[3];
-                altKeyX[12] = header.GameCode[3];
-                altKeyX[13] = header.GameCode[2];
-                altKeyX[14] = header.GameCode[1];
-                altKeyX[15] = header.GameCode[0];
-                memcpy(altKeyY, altHash, 16);
-                DSi_AES::DeriveNormalKey(altKeyX, altKeyY, altTmp);
-                Bswap128(altKey, altTmp);
-                Bswap128(altTmp, iv);
-                AES_ctx altCtx;
-                AES_init_ctx_iv(&altCtx, altKey, altTmp);
-
-                size_t altTrialZeros = 0;
-                AES_ctx testCtx = altCtx;
-                for (size_t i = 0; i < trialLen; i += 16)
-                {
-                    u32 d[4];
-                    if (isArm7Area)
-                    {
-                        d[0] = ARM7Read32(binaryaddr + i);
-                        d[1] = ARM7Read32(binaryaddr + i + 4);
-                        d[2] = ARM7Read32(binaryaddr + i + 8);
-                        d[3] = ARM7Read32(binaryaddr + i + 12);
-                    }
-                    else
-                    {
-                        d[0] = ARM9Read32(binaryaddr + i);
-                        d[1] = ARM9Read32(binaryaddr + i + 4);
-                        d[2] = ARM9Read32(binaryaddr + i + 8);
-                        d[3] = ARM9Read32(binaryaddr + i + 12);
-                    }
-                    u8 t[16];
-                    Bswap128(t, d);
-                    AES_CTR_xcrypt_buffer(&testCtx, t, 16);
-                    for (int b = 0; b < 16; b++)
-                    {
-                        if (t[b] == 0) altTrialZeros++;
-                    }
-                }
-                if (altTrialZeros >= 10)
-                {
-                    Log(LogLevel::Info, "DSi::DecryptModcryptArea: Alternative hash yielded valid code (zeros=%zu), using alt key\n", altTrialZeros);
-                    ctx = altCtx;
-                    trialZeros = altTrialZeros;
-                    break;
-                }
-            }
-        }
-
-        // If trial decryption still yields < 6 zeros (pseudo-random noise ≈ 1 zero in 256 bytes),
-        // keep RAM as-is without corrupting it.
-        if (!isPlaintext && trialZeros < 6)
-        {
-            Log(LogLevel::Info, "DSi::DecryptModcryptArea: Trial decryption produced noise (trialZeros=%zu), keeping RAM as-is\n",
-                trialZeros);
-            return;
-        }
-    }
-
-    if (isPlaintext)
-    {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (zeros=%zu/%zu), skipping\n",
-            binaryaddr, zeros, sampleLen);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (score=%zu, thumb=%zu / %zu), skipping\n",
+            binaryaddr, plaintextCount, thumbCount, checkWords);
         return;
     }
 
@@ -866,23 +775,14 @@ void DSi::SetupDirectBoot()
             // [0x02FFD800]: Installed title count = 1
             ARM9Write8(0x02FFD800, 1);
 
-            // [0x02FFD804..0x02FFD84F]: Title permission bitmasks for all groups (0x10=dataPub, 0x20=dataPrv, 0x30, 0x40)
-            for (u32 b = 0x04; b < 0x50; ++b)
-                ARM9Write8(0x02FFD800 + b, 0xFF);
+            // [0x02FFD840..0x02FFD84F]: Title permission bitmask = all 1s (enabled)
+            for (u32 b = 0; b < 16; ++b)
+                ARM9Write8(0x02FFD840 + b, 0xFF);
 
             // [0x02FFD850]: Title 0 TitleIDLow
             // [0x02FFD854]: Title 0 TitleIDHigh
             ARM9Write32(0x02FFD850, titleId1);
             ARM9Write32(0x02FFD854, titleId0);
-
-            // Mirror permission block to 4MB DS mirror at 0x027FD800
-            for (u32 addr = 0x027FD7CC; addr < 0x027FD850; addr += 4)
-                ARM9Write32(addr, 0);
-            ARM9Write8(0x027FD800, 1);
-            for (u32 b = 0x04; b < 0x50; ++b)
-                ARM9Write8(0x027FD800 + b, 0xFF);
-            ARM9Write32(0x027FD850, titleId1);
-            ARM9Write32(0x027FD854, titleId0);
         }
 
         // Populate Cartridge Header mirror strictly at 0x02FFE000..0x02FFE240
@@ -979,7 +879,25 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "nand2:/photo", 64);
             count++;
 
-            // Entry 6 ('I'): External SD/MMC ("sdmc") -> "/"
+            // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
+            entries[count].DriveLetter = 'G';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPrv", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+            count++;
+
+            // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            entries[count].DriveLetter = 'H';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPub", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+            count++;
+
+            // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
             entries[count].DriveLetter = 'I';
             entries[count].Flags = 0x00;
             entries[count].AccessRights = 0x06;
@@ -988,9 +906,6 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "/", 64);
             count++;
 
-            // Slots 7, 8, 9, 10 remain ZERO (DriveLetter = 0) so the DSiWare runtime
-            // can dynamically mount dataPub, dataPrv, banner, and sharedFont via FS_MountArchive without slot exhaustion!
-
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
 
@@ -998,8 +913,8 @@ void DSi::SetupDirectBoot()
                 ARM7Write8(devListAddr + k, devList[k]);
 
             Log(LogLevel::Info,
-                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, sdmc=%s)\n",
-                devListAddr, titleId0, titleId1, entries[6].Path);
+                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, dataPub=%s)\n",
+                devListAddr, titleId0, titleId1, entries[7].Path);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror
@@ -1172,7 +1087,7 @@ void DSi::SetupDirectBoot()
             }
         }
 
-        // Decrypt modcrypt areas (DecryptModcryptArea safely skips if RAM already contains plaintext code)
+        // Decrypt modcrypt areas (DecryptModcryptArea will safely skip if memory already contains plaintext ARM/Thumb code)
         if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
             header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
         {

@@ -67,12 +67,7 @@ class RomListViewModel @Inject constructor(
     val isRaCoverEnabled: StateFlow<Boolean> = settingsRepository.observeRaCoverEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, settingsRepository.isRaCoverEnabled())
 
-    val boxArtByUri: StateFlow<Map<String, String>> = combine(
-        _boxArtByUri,
-        isRaCoverEnabled,
-    ) { artMap, enabled ->
-        if (enabled) artMap else emptyMap()
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    val boxArtByUri: StateFlow<Map<String, String>> = _boxArtByUri.asStateFlow()
 
     private val boxArtRequestsInFlight = mutableSetOf<String>()
     private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(12)
@@ -88,19 +83,23 @@ class RomListViewModel @Inject constructor(
             if (!boxArtRequestsInFlight.add(key)) return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            if (isRaEnabled && rom.retroAchievementsHash.isNotBlank()) {
-                if (!raCoverByHash.value.containsKey(rom.retroAchievementsHash)) {
-                    runCatching { retroAchievementsRepository.getGameSummary(rom.retroAchievementsHash) }
+            try {
+                if (isRaEnabled && rom.retroAchievementsHash.isNotBlank()) {
+                    if (!raCoverByHash.value.containsKey(rom.retroAchievementsHash)) {
+                        runCatching { retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, false) }
+                    }
                 }
-            }
-            if (isScraperPro) {
-                val url = boxArtSemaphore.withPermit {
-                    runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
-                }
+                val url = if (isScraperPro) {
+                    boxArtSemaphore.withPermit {
+                        runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+                    }
+                } else null
+
                 _boxArtByUri.update { it + (key to (url ?: "")) }
-            }
-            synchronized(boxArtRequestsInFlight) {
-                boxArtRequestsInFlight.remove(key)
+            } finally {
+                synchronized(boxArtRequestsInFlight) {
+                    boxArtRequestsInFlight.remove(key)
+                }
             }
         }
     }
