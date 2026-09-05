@@ -601,24 +601,25 @@ class AndroidEmulatorManager(
                     // If user has existing .sav in their save folder, sync it into NAND before launching;
                     // otherwise or if corrupted/empty, repair NAND and export valid FAT12 public.sav so user storage immediately has valid FAT12 save
                     try {
+                        val expectedSize = if (pubSav > 0u) pubSav.toInt() else 64 * 1024
                         val sramDoc = DocumentFile.fromSingleUri(context, sram)
                         var isUserSaveValid = false
                         if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
                             val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
-                            if (isValidDsiWareFatSave(sramBytes)) {
+                            val isSizeMatching = sramBytes != null && (sramBytes.size == expectedSize || pubSav == 0u)
+                            if (isSizeMatching && isValidDsiWareFatSave(sramBytes)) {
                                 isUserSaveValid = true
                                 dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
                                 Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
                             } else {
-                                Log.w(TAG, "loadDsiWare: existing save file is corrupt/invalid FAT12 (${sramDoc.name}, size=${sramDoc.length()}), auto-repairing...")
+                                Log.w(TAG, "loadDsiWare: existing save file is corrupt, mismatched size, or invalid FAT12 (${sramDoc.name}, size=${sramDoc.length()}, expected=$expectedSize), auto-repairing...")
                             }
                         }
 
                         if (!isUserSaveValid) {
-                            // User save is missing, 0 bytes, or corrupted:
+                            // User save is missing, mismatched size, or corrupted:
                             // 1. Generate a valid FAT12 filesystem matching pubSav (or default 64KB)
-                            val targetSaveSize = if (pubSav > 0u) pubSav.toInt() else 64 * 1024
-                            val validFatBytes = createFormattedFat12(targetSaveSize)
+                            val validFatBytes = createFormattedFat12(expectedSize)
 
                             // 2. Directly write valid FAT12 into user sramUri
                             val openStream = runCatching { context.contentResolver.openOutputStream(sram, "rwt") }.getOrNull()
@@ -627,7 +628,6 @@ class AndroidEmulatorManager(
                             Log.i(TAG, "loadDsiWare: wrote valid formatted FAT12 save (${validFatBytes.size} B) directly to user sram=$sram")
 
                             // 3. Format and sync into NAND
-                            dsiNandManager.repairTitleSaves(titleId)
                             dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
                         }
                     } catch (e: Throwable) {

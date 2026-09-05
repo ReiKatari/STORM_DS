@@ -90,6 +90,12 @@ class FileSystemRomsRepository(
     private val skipNextRomDataSave = AtomicBoolean(false)
 
     init {
+        runCatching {
+            val syncDir = File(context.filesDir, "dsi_sd/sync")
+            if (syncDir.exists()) {
+                syncDir.deleteRecursively()
+            }
+        }
         loadDirectoryStates()
 
         coroutineScope.launch {
@@ -128,6 +134,7 @@ class FileSystemRomsRepository(
         if (removedDirectoryUris.isNotEmpty()) {
             removeRomsForDirectories(removedDirectoryUris)
         }
+        purgeNonExistentRoms()
 
         if (addedDirectoryStrings.isNotEmpty()) {
             coroutineScope.launch {
@@ -144,6 +151,7 @@ class FileSystemRomsRepository(
                     addRoms(buffer)
                     buffer.clear()
                 }
+                purgeNonExistentRoms()
                 scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
             }
         }
@@ -276,6 +284,7 @@ class FileSystemRomsRepository(
 
         coroutineScope.launch {
             scanningStatusSubject.emit(RomScanningStatus.SCANNING)
+            purgeNonExistentRoms()
             val buffer = mutableListOf<Rom>()
             scanForNewRoms().collect {
                 buffer.add(it)
@@ -288,6 +297,7 @@ class FileSystemRomsRepository(
                 addRoms(buffer)
                 buffer.clear()
             }
+            purgeNonExistentRoms()
             scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
         }
     }
@@ -556,14 +566,18 @@ class FileSystemRomsRepository(
         try {
             val prefs = context.getSharedPreferences("fs_roms_repo_meta", Context.MODE_PRIVATE)
             val appCacheVersion = prefs.getInt("rom_cache_schema_version", 0)
-            if (appCacheVersion < 260) {
-                prefs.edit().putInt("rom_cache_schema_version", 260).apply()
+            if (appCacheVersion < 261) {
+                prefs.edit().putInt("rom_cache_schema_version", 261).apply()
                 synchronized(directoryStatesLock) {
                     directoryStates.clear()
                     directoryScanStatuses.clear()
                     emitDirectoryScanStatusesLocked()
                 }
                 saveDirectoryStates()
+                val cacheFile = File(context.filesDir, ROM_DATA_FILE)
+                if (cacheFile.isFile) {
+                    cacheFile.delete()
+                }
             }
 
             val searchDirectories = settingsRepository.getRomSearchDirectories()
@@ -578,9 +592,17 @@ class FileSystemRomsRepository(
             }
 
             val validCachedRoms = if (searchDirectories.isNotEmpty()) {
-                cachedRoms.filter { rom ->
-                    searchDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) } && doesRomFileExist(rom)
-                }
+                cachedRoms
+                    .filterNot { rom ->
+                        val uriStr = rom.uri.toString()
+                        val pathStr = rom.uri.path.orEmpty()
+                        uriStr.contains("dsi_sd") || pathStr.contains("dsi_sd") ||
+                            uriStr.startsWith(Rom.INSTALLED_DSIWARE_URI_SCHEME) ||
+                            pathStr.startsWith(context.filesDir.path)
+                    }
+                    .filter { rom ->
+                        searchDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) } && doesRomFileExist(rom)
+                    }
             } else {
                 emptyList()
             }
@@ -603,6 +625,7 @@ class FileSystemRomsRepository(
                 }
             }
 
+            roms.clear()
             roms.addAll(fixedCachedRoms)
             if (fixedCachedRoms.isNotEmpty() || cacheReadResult.isValid) {
                 onRomsChanged(persist = unavailableDirectories.isEmpty())
@@ -626,6 +649,7 @@ class FileSystemRomsRepository(
             } catch (e: Exception) {
                 Log.e(TAG, "Error during scanForNewRoms", e)
             }
+            purgeNonExistentRoms()
             if (!cacheReadResult.isValid && !scannedRom) {
                 onRomsChanged(persist = false)
             }
@@ -679,7 +703,9 @@ class FileSystemRomsRepository(
         val currentRomUris = roms.map { it.uri.toString() }.toSet()
 
         val currentDocIds = currentFiles.values.mapNotNull { runCatching { DocumentsContract.getDocumentId(it.uri) }.getOrNull() }.toSet()
-        val currentFileNames = currentFiles.values.mapNotNull { it.documentFile.name ?: it.uri.lastPathSegment?.substringAfterLast('/') }.toSet()
+        val currentFileNames = currentFiles.values.mapNotNull {
+            it.displayName.takeIf { n -> n.isNotEmpty() } ?: it.documentFile.name ?: it.uri.lastPathSegment?.substringAfterLast('/')
+        }.toSet()
         val currentUriStrings = currentFiles.keys
 
         // Reconcile and purge any stale ROMs currently in memory for this directory that no longer exist on storage
@@ -687,10 +713,8 @@ class FileSystemRomsRepository(
             .filter { rom ->
                 val uriStr = rom.uri.toString()
                 val docId = runCatching { DocumentsContract.getDocumentId(rom.uri) }.getOrNull()
-                val isPresent = currentUriStrings.contains(uriStr) ||
-                    (docId != null && currentDocIds.contains(docId)) ||
-                    currentFileNames.contains(rom.fileName) ||
-                    currentFileNames.contains(rom.uri.lastPathSegment?.substringAfterLast('/'))
+                val isPresent = (currentUriStrings.contains(uriStr) || (docId != null && currentDocIds.contains(docId))) &&
+                    doesRomFileExist(rom)
                 !isPresent
             }
             .map { it.uri.toString() }
@@ -867,7 +891,8 @@ class FileSystemRomsRepository(
                                 parentUri = parentUri,
                                 lastModified = lastModified,
                                 size = size,
-                                documentFile = docFile
+                                documentFile = docFile,
+                                displayName = displayName
                             )
                         )
                     }
@@ -1023,6 +1048,11 @@ class FileSystemRomsRepository(
     }
 
     private fun isRomInDirectory(rom: Rom, directoryUri: Uri): Boolean {
+        val romUriStr = rom.uri.toString()
+        val romPath = rom.uri.path ?: romUriStr
+        if (romUriStr.contains("dsi_sd") || romPath.startsWith(context.filesDir.path) || romUriStr.startsWith(Rom.INSTALLED_DSIWARE_URI_SCHEME)) {
+            return false
+        }
         val parentUri = rom.parentTreeUri
         val directoryDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull()
         if (directoryDocId != null) {
@@ -1041,7 +1071,6 @@ class FileSystemRomsRepository(
             }
         }
         val dirPath = directoryUri.path ?: directoryUri.toString()
-        val romPath = rom.uri.path ?: rom.uri.toString()
         if (romPath.startsWith(dirPath)) {
             return true
         }
@@ -1050,25 +1079,35 @@ class FileSystemRomsRepository(
     }
 
     private fun doesRomFileExist(rom: Rom): Boolean {
-        if (rom.isInstalledDsiWareShortcut) return true
+        val romUriStr = rom.uri.toString()
+        val romPath = rom.uri.path ?: romUriStr
+        if (romUriStr.contains("dsi_sd") || romPath.startsWith(context.filesDir.path)) {
+            return false
+        }
+        if (rom.isInstalledDsiWareShortcut || romUriStr.startsWith(Rom.INSTALLED_DSIWARE_URI_SCHEME)) {
+            return false
+        }
         return try {
             val scheme = rom.uri.scheme
             if (scheme == "file" || scheme == null) {
                 val path = rom.uri.path ?: return false
-                File(path).exists()
+                val file = File(path)
+                file.exists() && file.isFile && file.length() > 0
             } else {
-                context.contentResolver.query(
-                    rom.uri,
-                    arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-                    null,
-                    null,
-                    null
-                )?.use { cursor ->
-                    cursor.count > 0 && cursor.moveToFirst()
+                context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
+                    pfd.statSize > 0
                 } ?: false
             }
         } catch (_: Throwable) {
             false
+        }
+    }
+
+    private fun purgeNonExistentRoms() {
+        val nonExistentUris = roms.filterNot { doesRomFileExist(it) }.map { it.uri.toString() }.toSet()
+        if (nonExistentUris.isNotEmpty()) {
+            Log.i(TAG, "purgeNonExistentRoms: purging ${nonExistentUris.size} ghost ROM(s) that no longer exist on storage")
+            removeRomsByUriStrings(nonExistentUris)
         }
     }
 
@@ -1234,7 +1273,8 @@ class FileSystemRomsRepository(
         val parentUri: Uri,
         val lastModified: Long,
         val size: Long,
-        val documentFile: DocumentFile
+        val documentFile: DocumentFile,
+        val displayName: String = "",
     )
 
     private data class RomMetadataMirrorDto(

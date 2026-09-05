@@ -576,42 +576,10 @@ class SharedPreferencesSettingsRepository(
 
     override fun getRomSearchDirectories(): Array<Uri> {
         val dirPreference = preferences.getStringSet("rom_search_dirs", emptySet())
-        val searchDirs = dirPreference?.map { it.toUri() }?.toMutableList() ?: mutableListOf()
-
-        if (isDsiSdCardEnabled()) {
-            val userDsiDir = getDsiSdCardDirectory()
-            if (userDsiDir != null) {
-                if (!searchDirs.contains(userDsiDir)) {
-                    searchDirs.add(userDsiDir)
-                }
-            } else {
-                val localSync = File(context.filesDir, "dsi_sd/sync")
-                if (localSync.isDirectory && (localSync.listFiles()?.isNotEmpty() == true)) {
-                    val syncUri = localSync.toUri()
-                    if (!searchDirs.contains(syncUri)) {
-                        searchDirs.add(syncUri)
-                    }
-                }
-                val extSd = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/bios/dsi/sd_card")
-                if (extSd.isDirectory && (extSd.listFiles()?.isNotEmpty() == true)) {
-                    val extUri = extSd.toUri()
-                    if (!searchDirs.contains(extUri)) {
-                        searchDirs.add(extUri)
-                    }
-                }
-            }
-        }
-
-        if (isDldiSdCardEnabled()) {
-            getDldiSdCardDirectory()?.let { dldiDir ->
-                if (!searchDirs.contains(dldiDir)) {
-                    searchDirs.add(dldiDir)
-                }
-            }
-        }
-
+        val searchDirs = dirPreference?.map { it.toUri() } ?: emptyList()
         return searchDirs.toTypedArray()
     }
+
 
     override fun clearRomSearchDirectories() {
         preferences.edit {

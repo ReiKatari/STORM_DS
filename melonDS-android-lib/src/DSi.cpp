@@ -841,6 +841,15 @@ void DSi::SetupDirectBoot()
             // [0x02FFD854]: Title 0 TitleIDHigh
             ARM9Write32(0x02FFD850, titleId1);
             ARM9Write32(0x02FFD854, titleId0);
+
+            // Mirror permission block to 4MB DS mirror at 0x027FD800
+            for (u32 addr = 0x027FD7CC; addr < 0x027FD850; addr += 4)
+                ARM9Write32(addr, 0);
+            ARM9Write8(0x027FD800, 1);
+            for (u32 b = 0x04; b < 0x50; ++b)
+                ARM9Write8(0x027FD800 + b, 0xFF);
+            ARM9Write32(0x027FD850, titleId1);
+            ARM9Write32(0x027FD854, titleId0);
         }
 
         // Populate Cartridge Header mirror strictly at 0x02FFE000..0x02FFE240
@@ -963,6 +972,8 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Name, "sdmc", 16);
             strncpy(entries[count].Path, "/", 64);
             count++;
+
+            // Slots 9 and 10 remain ZERO (DriveLetter = 0) for dynamic system mounts
 
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
