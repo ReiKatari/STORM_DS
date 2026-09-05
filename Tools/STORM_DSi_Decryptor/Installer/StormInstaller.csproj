@@ -7,17 +7,22 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
-    <Version>1.1.6</Version>
-    <AssemblyVersion>1.1.6.0</AssemblyVersion>
-    <FileVersion>1.1.6.0</FileVersion>
-    <AssemblyTitle>STORM DSi Decryptor 1.1.6</AssemblyTitle>
-    <Product>STORM DSi Decryptor 1.1.6</Product>
-    <Title>STORM DSi Decryptor 1.1.6</Title>
-    <Description>STORM DSi Decryptor 1.1.6</Description>
+    <Version>1.1.7</Version>
+    <AssemblyVersion>1.1.7.0</AssemblyVersion>
+    <FileVersion>1.1.7.0</FileVersion>
+    <AssemblyTitle>STORM DSi Decryptor 1.1.7</AssemblyTitle>
+    <Product>STORM DSi Decryptor 1.1.7</Product>
+    <Title>STORM DSi Decryptor 1.1.7</Title>
+    <Description>STORM DSi Decryptor 1.1.7</Description>
     <Company>STORM SOFT</Company>
     <Authors>ReiKatari</Authors>
     <Copyright>Copyright © 2026 STORM TEAM</Copyright>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
