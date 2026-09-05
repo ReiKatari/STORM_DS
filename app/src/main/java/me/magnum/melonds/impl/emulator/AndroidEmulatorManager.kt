@@ -336,9 +336,7 @@ class AndroidEmulatorManager(
                     rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME ||
                     isRealDsiWareTitle(rom)
 
-                // If user explicitly configured this ROM to run in DS mode, skip DSi routing
-                val userForcedDs = rom.config.runtimeConsoleType == RuntimeConsoleType.DS
-                if (isDsiWare && !userForcedDs) {
+                if (isDsiWare) {
                     val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
                         Log.i(TAG, "loadRom: Routing DSiWare title '${rom.name}' to DSi NAND launch environment")
@@ -1325,16 +1323,9 @@ class AndroidEmulatorManager(
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isDsiTitle = rom.isInstalledDsiWareShortcut || isRealDsiWareTitle(rom) || rom.isDsiWareTitle
-        val consoleType = when {
-            rom.config.runtimeConsoleType == RuntimeConsoleType.DSi -> ConsoleType.DSi
-            rom.config.runtimeConsoleType == RuntimeConsoleType.DS -> ConsoleType.DS
-            isDsiTitle -> ConsoleType.DSi
-            rom.isDsiEnhanced -> ConsoleType.DSi
-            baseConfiguration.consoleType == ConsoleType.DSi -> ConsoleType.DSi
-            else -> ConsoleType.DS
-        }
-        val mustUseCustomBios = (consoleType == ConsoleType.DSi) || baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT
+        val isDsiTitle = rom.isInstalledDsiWareShortcut || isRealDsiWareTitle(rom) || rom.isDsiWareTitle || rom.isDsiEnhanced
+        val consoleType = if (isDsiTitle) ConsoleType.DSi else ConsoleType.DS
+        val mustUseCustomBios = (consoleType == ConsoleType.DSi) || baseConfiguration.useCustomBios
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,

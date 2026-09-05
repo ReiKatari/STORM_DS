@@ -39,7 +39,6 @@ import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.rom.config.RomInputMode
-import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.domain.model.rom.config.RuntimeMicSource
 import me.magnum.melonds.ui.common.MelonPreviewSet
 import me.magnum.melonds.ui.common.component.dialog.SingleChoiceDialog
@@ -104,7 +103,6 @@ private fun Content(
 ) {
     val context = LocalContext.current
     val renameDialogState = rememberTextInputDialogState()
-    val consoleDialogState = rememberSingleChoiceDialogState<RuntimeConsoleType>()
     val micDialogState = rememberSingleChoiceDialogState<RuntimeMicSource>()
     val inputModeDialogState = rememberSingleChoiceDialogState<RomInputMode>()
     val gbaSlotDialogState = rememberSingleChoiceDialogState<RomGbaSlotConfigUiModel.Type>()
@@ -132,7 +130,6 @@ private fun Content(
         if (result != null) onConfigUpdate(RomConfigUpdateEvent.GbaSavePathUpdate(result))
     }
 
-    val consoleOptions = stringArrayResource(id = R.array.game_runtime_console_type_options)
     val micOptions = stringArrayResource(id = R.array.game_runtime_mic_source_options)
     val inputModeOptions = stringArrayResource(id = R.array.rom_input_mode_options)
     val gbaSlotOptions = stringArrayResource(id = R.array.gba_slot_options)
@@ -162,7 +159,6 @@ private fun Content(
     fun useGlobalWithValue(value: String): String {
         return context.getString(R.string.use_global_preference_with_value, value)
     }
-    val globalConsoleLabel = consoleOptions.getOrNull(romConfig.globalRuntimeConsoleType.ordinal + 1) ?: consoleOptions.firstOrNull().orEmpty()
     val globalMicLabel = micOptions.getOrNull(romConfig.globalRuntimeMicSource.ordinal + 1) ?: micOptions.firstOrNull().orEmpty()
     val globalInputModeLabel = context.getString(R.string.global_controller_mapping)
     val globalLayoutLabel = romConfig.globalLayoutName ?: context.getString(R.string.not_set)
@@ -212,31 +208,7 @@ private fun Content(
             )
         }
 
-        ConfigSection(title = stringResource(R.string.console_type)) {
-            ConfigRow(
-                title = stringResource(R.string.label_rom_config_console),
-                value = if (romConfig.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
-                    useGlobalWithValue(globalConsoleLabel)
-                } else {
-                    consoleOptions[romConfig.runtimeConsoleType.ordinal]
-                },
-                showDivider = true,
-                onClick = {
-                    consoleDialogState.show(
-                        title = context.getString(R.string.label_rom_config_console),
-                        items = RuntimeConsoleType.entries.toList(),
-                        labelOf = {
-                            if (it == RuntimeConsoleType.DEFAULT) {
-                                useGlobalWithValue(globalConsoleLabel)
-                            } else {
-                                consoleOptions[it.ordinal]
-                            }
-                        },
-                        selected = romConfig.runtimeConsoleType,
-                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.RuntimeConsoleUpdate(it)) },
-                    )
-                },
-            )
+        ConfigSection(title = stringResource(R.string.audio)) {
             ConfigRow(
                 title = stringResource(R.string.microphone_source),
                 value = if (romConfig.runtimeMicSource == RuntimeMicSource.DEFAULT) {
@@ -503,7 +475,6 @@ private fun Content(
         textValidator = { true },
         onDelete = { onConfigUpdate(RomConfigUpdateEvent.CustomNameUpdate(null)) },
     )
-    SingleChoiceDialog(consoleDialogState)
     SingleChoiceDialog(micDialogState)
     SingleChoiceDialog(inputModeDialogState)
     SingleChoiceDialog(gbaSlotDialogState)

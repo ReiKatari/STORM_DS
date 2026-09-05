@@ -685,10 +685,20 @@ public partial class MainWindow : Window
     // --- Decryption with Duplicate History Checking ---
     private async void BtnDecrypt_Click(object sender, RoutedEventArgs e)
     {
-        var targetGames = _games.Where(g => g.IsEncrypted).ToList();
-        if (targetGames.Count == 0) return;
-
         bool inPlace = ChkInPlace.IsChecked == true;
+        var targetGames = inPlace
+            ? _games.Where(g => g.IsEncrypted).ToList()
+            : _games.ToList();
+
+        if (targetGames.Count == 0)
+        {
+            if (inPlace && _games.Count > 0)
+            {
+                TxtStatusLog.Text = "Все файлы в списке уже расшифрованы.";
+            }
+            return;
+        }
+
         if (inPlace)
         {
             bool? mbr = StormMessageBox.Show(
@@ -774,9 +784,6 @@ public partial class MainWindow : Window
 
         foreach (var item in gamesToProcess)
         {
-            item.Status = LocalizationManager.Get("StatusProcessing");
-            TxtStatusLog.Text = $"Расшифровка: {item.FileName}...";
-
             string targetDir = (!string.IsNullOrWhiteSpace(_customOutputDir) && Directory.Exists(_customOutputDir))
                 ? _customOutputDir
                 : (Path.GetDirectoryName(item.FilePath) ?? "");
@@ -787,20 +794,57 @@ public partial class MainWindow : Window
 
             bool success = false;
             long elapsedMs = 0;
+            bool wasEncrypted = item.IsEncrypted;
 
-            await Task.Run(() =>
+            if (item.IsEncrypted)
             {
-                var sw = Stopwatch.StartNew();
-                success = DsiDecryptorEngine.DecryptFile(item.FilePath, outPath);
-                sw.Stop();
-                elapsedMs = sw.ElapsedMilliseconds;
-            });
+                item.Status = LocalizationManager.Get("StatusProcessing");
+                TxtStatusLog.Text = $"Расшифровка: {item.FileName}...";
+
+                await Task.Run(() =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    success = DsiDecryptorEngine.DecryptFile(item.FilePath, outPath);
+                    sw.Stop();
+                    elapsedMs = sw.ElapsedMilliseconds;
+                });
+            }
+            else
+            {
+                item.Status = LocalizationManager.Get("StatusCopying");
+                TxtStatusLog.Text = $"Копирование: {item.FileName}...";
+
+                await Task.Run(() =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    try
+                    {
+                        if (!string.Equals(Path.GetFullPath(item.FilePath), Path.GetFullPath(outPath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            var dir = Path.GetDirectoryName(outPath);
+                            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                            File.Copy(item.FilePath, outPath, true);
+                        }
+                        success = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error copying file: {ex.Message}");
+                        success = false;
+                    }
+                    sw.Stop();
+                    elapsedMs = sw.ElapsedMilliseconds;
+                });
+            }
 
             if (success)
             {
                 item.IsEncrypted = false;
                 item.IsSuccess = true;
-                item.Status = $"{LocalizationManager.Get("StatusSuccess")} ({elapsedMs} мс)";
+                string statusText = wasEncrypted
+                    ? LocalizationManager.Get("StatusSuccess")
+                    : LocalizationManager.Get("StatusCopied");
+                item.Status = $"{statusText} ({elapsedMs} мс)";
 
                 // Record to persistent history
                 HistoryManager.Add(new HistoryItem
@@ -811,14 +855,16 @@ public partial class MainWindow : Window
                     GameCode = item.GameCode,
                     FileSize = item.FileSize,
                     ProcessedAt = DateTime.Now,
-                    Status = LocalizationManager.Get("StatusSuccess"),
+                    Status = statusText,
                     ElapsedMs = elapsedMs,
                     OutPath = outPath
                 });
             }
             else
             {
-                item.Status = LocalizationManager.Get("StatusFailed");
+                item.Status = wasEncrypted
+                    ? LocalizationManager.Get("StatusFailed")
+                    : LocalizationManager.Get("StatusCopyFailed");
             }
 
             processed++;

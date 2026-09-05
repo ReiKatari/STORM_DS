@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
-    <Version>1.1.4</Version>
-    <AssemblyVersion>1.1.4.0</AssemblyVersion>
-    <FileVersion>1.1.4.0</FileVersion>
-    <AssemblyTitle>STORM DSi Decryptor 1.1.4</AssemblyTitle>
-    <Product>STORM DSi Decryptor 1.1.4</Product>
-    <Title>STORM DSi Decryptor 1.1.4</Title>
-    <Description>STORM DSi Decryptor 1.1.4</Description>
+    <Version>1.1.5</Version>
+    <AssemblyVersion>1.1.5.0</AssemblyVersion>
+    <FileVersion>1.1.5.0</FileVersion>
+    <AssemblyTitle>STORM DSi Decryptor 1.1.5</AssemblyTitle>
+    <Product>STORM DSi Decryptor 1.1.5</Product>
+    <Title>STORM DSi Decryptor 1.1.5</Title>
+    <Description>STORM DSi Decryptor 1.1.5</Description>
     <Company>STORM SOFT</Company>
     <Authors>ReiKatari</Authors>
     <Copyright>Copyright © 2026 STORM TEAM</Copyright>

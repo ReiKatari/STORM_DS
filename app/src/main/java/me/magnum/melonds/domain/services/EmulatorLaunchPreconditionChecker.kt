@@ -74,17 +74,15 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private fun getRomConfigurationDirectoryResult(rom: Rom): ConfigurationDirResult {
-        if (!settingsRepository.useCustomBios() && rom.config.runtimeConsoleType == RuntimeConsoleType.DEFAULT) {
-            return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
-        }
+        val isDsiTitle = rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut || rom.isDsiEnhanced
+        val romTargetConsoleType = if (isDsiTitle) ConsoleType.DSi else ConsoleType.DS
 
-        val romTargetConsoleType = rom.config.runtimeConsoleType.targetConsoleType ?: settingsRepository.getDefaultConsoleType()
         if (!settingsRepository.useCustomBios() && romTargetConsoleType == ConsoleType.DS) {
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
         val result = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
-        if (result.status != ConfigurationDirResult.Status.VALID && (rom.isDsiWareTitle || rom.isDsiEnhanced || romTargetConsoleType == ConsoleType.DSi)) {
+        if (result.status != ConfigurationDirResult.Status.VALID && romTargetConsoleType == ConsoleType.DSi) {
             // Direct DSi Boot support: native engine handles candidate path auto-discovery and synthetic fallback
             return ConfigurationDirResult(ConsoleType.DSi, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
