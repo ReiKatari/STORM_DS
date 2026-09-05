@@ -114,7 +114,11 @@ public partial class App : Application
 
         if (!_hasHandle)
         {
-            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.3");
+            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.4");
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.3");
+            }
             if (hWnd == IntPtr.Zero)
             {
                 hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.2");
@@ -196,7 +200,7 @@ public partial class App : Application
 
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine("  STORM DSi Decryptor 1.1.3 (STORM SOFT)");
+        Console.WriteLine("  STORM DSi Decryptor 1.1.4 (STORM SOFT)");
         Console.WriteLine("  Nintendo DSi and DSiWare Fast Modcrypt Decryptor");
         Console.WriteLine("==========================================================");
 
