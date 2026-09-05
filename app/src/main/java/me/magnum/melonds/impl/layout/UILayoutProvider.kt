@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import me.magnum.melonds.domain.model.Point
 import me.magnum.melonds.domain.model.Rect
 import me.magnum.melonds.domain.model.layout.Insets
+import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.model.layout.LayoutDisplayPair
 import me.magnum.melonds.domain.model.layout.ScreenFold
@@ -127,6 +128,13 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             val defaultButtons = defaultLayout.mainScreenLayout.components?.filter { !it.isScreen() } ?: emptyList()
             val mergedComponents = (mainComponents ?: emptyList()) + defaultButtons
             return UILayout(baseLayout.mainScreenLayout.copy(components = mergedComponents), baseLayout.secondaryScreenLayout)
+        }
+
+        if (variant.displays.secondaryScreenDisplay != null) {
+            val mainCleanComponents = baseLayout.mainScreenLayout.components?.filter { it.component != LayoutComponent.BOTTOM_SCREEN }
+            if (mainCleanComponents != null && mainCleanComponents.size != baseLayout.mainScreenLayout.components?.size) {
+                return baseLayout.copy(mainScreenLayout = baseLayout.mainScreenLayout.copy(components = mainCleanComponents))
+            }
         }
 
         return baseLayout

@@ -331,15 +331,13 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                val isDsiWare = rom.isDsiWareTitle ||
-                    rom.isInstalledDsiWareShortcut ||
-                    rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME ||
-                    isRealDsiWareTitle(rom)
+                val isInstalledShortcut = rom.isInstalledDsiWareShortcut ||
+                    rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME
 
-                if (isDsiWare) {
+                if (isInstalledShortcut) {
                     val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
-                        Log.i(TAG, "loadRom: Routing DSiWare title '${rom.name}' to DSi NAND launch environment")
+                        Log.i(TAG, "loadRom: Routing installed DSiWare shortcut '${rom.name}' to DSi NAND launch environment")
                         return@withContext loadDsiWare(rom, cheats)
                     }
                 }

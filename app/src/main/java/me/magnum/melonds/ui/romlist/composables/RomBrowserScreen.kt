@@ -578,6 +578,12 @@ private fun GridContent(
     val folders = state.entries.take(folderCount).filterIsInstance<RomBrowserEntry.Folder>()
     val roms = state.entries.drop(folderCount).filterIsInstance<RomBrowserEntry.RomItem>()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
+
     RomListOverscrollProvider {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
@@ -632,7 +638,7 @@ private fun GridContent(
                     rom = entry.rom,
                     coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                     boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
-                    boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
+                    boxArtLoading = anyCoversEnabled && (boxArtByUri[entry.rom.uri.toString()] == null),
                     showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || entry.rom.retroAchievementsHash.isNotBlank()),
                     onClick = { onRomClick(entry.rom) },
                     onLongPress = {
@@ -678,6 +684,12 @@ private fun ListContent(
     onNavigateUp: () -> Unit,
     onRomVisible: (Rom) -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
+
     RomListOverscrollProvider {
         LazyColumn(
             state = listState,
@@ -723,7 +735,7 @@ private fun ListContent(
                             rom = entry.rom,
                             coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                             boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
-                            boxArtLoading = boxArtByUri[entry.rom.uri.toString()] == null,
+                            boxArtLoading = anyCoversEnabled && (boxArtByUri[entry.rom.uri.toString()] == null),
                             allowConfiguration = allowConfiguration,
                             showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || entry.rom.retroAchievementsHash.isNotBlank()),
                             onClick = { onRomClick(entry.rom) },

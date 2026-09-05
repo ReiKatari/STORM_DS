@@ -42,7 +42,7 @@ cd STORM_DS
 ```
 
 После завершения сборки исполняемый пакет APK будет сформирован по пути:
-`app/build/outputs/apk/gitHubProd/release/STORM_DS_4.2.3.apk`
+`app/build/outputs/apk/gitHubProd/release/STORM_DS_4.2.4.apk`
 
 ## **Благодарности**
 - **SapphireRhodonite (автор WatermelonDS)** — за создание эмулятора WatermelonDS, послужившего основой форка, разработку высокопроизводительного порта на Android, аппаратный рендерер Vulkan, внедрение шейдерного конвейера librashader и инновационный интерфейс.

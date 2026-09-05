@@ -197,8 +197,8 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     copyAssetFile("bios/dsi/firmware.bin", File(dsiDir, "firmware.bin"))
 
                     val nandFile = File(dsiDir, "nand.bin")
-                    if (!nandFile.exists() || nandFile.length() < 1024 * 1024L) {
-                        createCleanDsiNand(nandFile)
+                    if (nandFile.exists() && (nandFile.length() == 251658240L || nandFile.length() < 1024 * 1024L)) {
+                        runCatching { nandFile.delete() }
                     }
 
                     // Ensure preferences point exclusively to root paths
@@ -221,73 +221,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     isMigrating = false
                 }
             }
-        }
-
-        private fun createCleanDsiNand(nandFile: File) {
-            try {
-                java.io.RandomAccessFile(nandFile, "rw").use { raf ->
-                    raf.setLength(251658240L) // 240 MB
-
-                    // 1. Write MBR at sector 0
-                    val mbr = ByteArray(512)
-                    mbr[0x1BE] = 0x80.toByte()
-                    mbr[0x1C2] = 0x06.toByte() // FAT16
-                    mbr[0x1C6] = 0x00.toByte(); mbr[0x1C7] = 0x08.toByte(); mbr[0x1C8] = 0x00.toByte(); mbr[0x1C9] = 0x00.toByte()
-                    mbr[0x1CA] = 0x00.toByte(); mbr[0x1CB] = 0x00.toByte(); mbr[0x1CC] = 0x06.toByte(); mbr[0x1CD] = 0x00.toByte()
-                    mbr[0x1FE] = 0x55.toByte(); mbr[0x1FF] = 0xAA.toByte()
-
-                    raf.seek(0)
-                    raf.write(mbr)
-
-                    // 2. Write Partition 1 FAT16 Boot Sector at offset 0x100000 (1 MB)
-                    val vbr = ByteArray(512)
-                    vbr[0] = 0xEB.toByte(); vbr[1] = 0x3C.toByte(); vbr[2] = 0x90.toByte()
-                    System.arraycopy("MSDOS5.0".toByteArray(Charsets.US_ASCII), 0, vbr, 3, 8)
-                    vbr[11] = 0x00.toByte(); vbr[12] = 0x02.toByte() // 512 bytes/sector
-                    vbr[13] = 0x08.toByte() // 8 sectors/cluster (4KB)
-                    vbr[14] = 0x04.toByte(); vbr[15] = 0x00.toByte() // 4 reserved sectors
-                    vbr[16] = 0x02.toByte() // 2 FATs
-                    vbr[17] = 0x00.toByte(); vbr[18] = 0x02.toByte() // 512 root entries
-                    vbr[21] = 0xF8.toByte() // Media descriptor
-                    vbr[22] = 0x00.toByte(); vbr[23] = 0x01.toByte() // 256 sectors per FAT
-                    vbr[24] = 0x20.toByte(); vbr[25] = 0x00.toByte()
-                    vbr[26] = 0x40.toByte(); vbr[27] = 0x00.toByte()
-                    vbr[28] = 0x00.toByte(); vbr[29] = 0x08.toByte(); vbr[30] = 0x00.toByte(); vbr[31] = 0x00.toByte()
-                    vbr[32] = 0x00.toByte(); vbr[33] = 0x00.toByte(); vbr[34] = 0x06.toByte(); vbr[35] = 0x00.toByte()
-                    vbr[38] = 0x29.toByte()
-                    System.arraycopy("DSi NAND   ".toByteArray(Charsets.US_ASCII), 0, vbr, 43, 11)
-                    System.arraycopy("FAT16   ".toByteArray(Charsets.US_ASCII), 0, vbr, 54, 8)
-                    vbr[510] = 0x55.toByte(); vbr[511] = 0xAA.toByte()
-
-                    raf.seek(0x100000L)
-                    raf.write(vbr)
-
-                    val fatHeader = byteArrayOf(0xF8.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte())
-                    raf.seek(0x100800L)
-                    raf.write(fatHeader)
-                    raf.seek(0x120800L)
-                    raf.write(fatHeader)
-
-                    // 3. Write NOCASH footer at offset 0x000FF800 AND at end of file
-                    val footer = ByteArray(64)
-                    val magic = "DSi eMMC CID/CPU".toByteArray(Charsets.US_ASCII)
-                    System.arraycopy(magic, 0, footer, 0, magic.size)
-                    val cid = byteArrayOf(
-                        0x15.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(),
-                        0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(),
-                        0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(),
-                        0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x01.toByte()
-                    )
-                    System.arraycopy(cid, 0, footer, 16, 16)
-                    footer[32] = 0x01.toByte(); footer[36] = 0x01.toByte()
-
-                    raf.seek(0x000FF800L)
-                    raf.write(footer)
-
-                    raf.seek(251658240L - 0x40L)
-                    raf.write(footer)
-                }
-            } catch (_: Throwable) {}
         }
     }
 
