@@ -937,7 +937,25 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "nand2:/photo", 64);
             count++;
 
-            // Entry 6 ('I'): External SD/MMC ("sdmc") -> "/"
+            // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
+            entries[count].DriveLetter = 'G';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPrv", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+            count++;
+
+            // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            entries[count].DriveLetter = 'H';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPub", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+            count++;
+
+            // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
             entries[count].DriveLetter = 'I';
             entries[count].Flags = 0x00;
             entries[count].AccessRights = 0x06;
@@ -946,11 +964,6 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "/", 64);
             count++;
 
-            // Slots 7 through 10 are deliberately left ZERO (DriveLetter = 0).
-            // DSiWare applications dynamically mount up to 3-4 archives (dataPub, dataPrv, banner, sharedFont, tmp/jump)
-            // into the 11-entry DSiSDMMCDeviceList. Pre-populating 'G' and 'H' statically exhausted the table,
-            // causing Castle of Magic and Dark Void Zero to fail on FS_MountArchive with FS_RESULT_ERROR (white screen).
-
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
 
@@ -958,8 +971,8 @@ void DSi::SetupDirectBoot()
                 ARM7Write8(devListAddr + k, devList[k]);
 
             Log(LogLevel::Info,
-                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, static_count=%d)\n",
-                devListAddr, titleId0, titleId1, count);
+                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, dataPub=%s)\n",
+                devListAddr, titleId0, titleId1, entries[7].Path);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror

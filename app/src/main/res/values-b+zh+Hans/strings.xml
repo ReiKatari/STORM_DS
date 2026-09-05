@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">STORM DS</string>
     <string name="ok">确定</string>
@@ -24,8 +24,8 @@
     <string name="version_alpha">Alpha</string>
     <string name="version_beta">Beta</string>
     <string name="version_nightly">Nightly</string>
-    <string name="console_ds">DS</string>
-    <string name="console_dsi">DSi（实验性）</string>
+    <string name="console_ds">Nintendo DS</string>
+    <string name="console_dsi">Nintendo DSi</string>
     <string name="console_ds_full">任天堂 DS</string>
     <string name="console_dsi_full">任天堂 DSi</string>
     <string name="size_bytes">B</string>

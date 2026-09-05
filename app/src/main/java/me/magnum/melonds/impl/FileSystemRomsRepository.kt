@@ -579,7 +579,7 @@ class FileSystemRomsRepository(
 
             val validCachedRoms = if (searchDirectories.isNotEmpty()) {
                 cachedRoms.filter { rom ->
-                    searchDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) }
+                    searchDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) } && doesRomFileExist(rom)
                 }
             } else {
                 emptyList()
@@ -674,16 +674,39 @@ class FileSystemRomsRepository(
         val directoryHash = computeDirectoryHash(fileStates)
         val now = System.currentTimeMillis()
 
+        val cachedFiles = cachedState?.files ?: emptyMap()
+        val currentFiles = fileStates.associateBy { it.uri.toString() }
+        val currentRomUris = roms.map { it.uri.toString() }.toSet()
+
+        val currentDocIds = currentFiles.values.mapNotNull { runCatching { DocumentsContract.getDocumentId(it.uri) }.getOrNull() }.toSet()
+        val currentFileNames = currentFiles.values.mapNotNull { it.documentFile.name ?: it.uri.lastPathSegment?.substringAfterLast('/') }.toSet()
+        val currentUriStrings = currentFiles.keys
+
+        // Reconcile and purge any stale ROMs currently in memory for this directory that no longer exist on storage
+        val staleRomUris = roms.filter { isRomInDirectory(it, directoryUri) }
+            .filter { rom ->
+                val uriStr = rom.uri.toString()
+                val docId = runCatching { DocumentsContract.getDocumentId(rom.uri) }.getOrNull()
+                val isPresent = currentUriStrings.contains(uriStr) ||
+                    (docId != null && currentDocIds.contains(docId)) ||
+                    currentFileNames.contains(rom.fileName) ||
+                    currentFileNames.contains(rom.uri.lastPathSegment?.substringAfterLast('/'))
+                !isPresent
+            }
+            .map { it.uri.toString() }
+            .toSet()
+
+        if (staleRomUris.isNotEmpty()) {
+            Log.i(TAG, "processDirectory: removing ${staleRomUris.size} stale/deleted ROM(s) from directory $directoryUri")
+            removeRomsByUriStrings(staleRomUris)
+        }
+
         val hasRomsForDirectory = roms.any { isRomInDirectory(it, directoryUri) }
-        if (cachedState != null && cachedState.hash == directoryHash && hasRomsForDirectory) {
+        if (cachedState != null && cachedState.hash == directoryHash && hasRomsForDirectory && staleRomUris.isEmpty()) {
             val refreshedState = cachedState.copy(lastScanned = now)
             updateDirectoryState(refreshedState, RomDirectoryScanStatus.ScanResult.UNCHANGED)
             return
         }
-
-        val cachedFiles = cachedState?.files ?: emptyMap()
-        val currentFiles = fileStates.associateBy { it.uri.toString() }
-        val currentRomUris = roms.map { it.uri.toString() }.toSet()
 
         val directoryMetadataChanged = cachedState != null &&
             cachedState.hash != directoryHash &&
@@ -708,14 +731,6 @@ class FileSystemRomsRepository(
 
         val removedFiles = cachedFiles.keys - currentFiles.keys
         removeRomsByUriStrings(removedFiles)
-
-        // Also dynamically remove any ROM currently in repository for this directory whose file no longer exists on disk
-        val existingDirRomUris = roms.filter { isRomInDirectory(it, directoryUri) }.map { it.uri.toString() }.toSet()
-        val missingFromDiskUris = existingDirRomUris - currentFiles.keys
-        if (missingFromDiskUris.isNotEmpty()) {
-            Log.i(TAG, "processDirectory: removing ${missingFromDiskUris.size} deleted/moved ROM(s) from directory $directoryUri")
-            removeRomsByUriStrings(missingFromDiskUris)
-        }
 
         val updatedExistingUris = updatedFiles.mapNotNull { fileState ->
             fileState.uri.toString().takeIf { cachedFiles.containsKey(it) }
@@ -1032,6 +1047,29 @@ class FileSystemRomsRepository(
         }
         val dirSegment = directoryUri.lastPathSegment ?: directoryUri.toString()
         return rom.uri.toString().contains(dirSegment) || rom.parentTreeUri?.toString() == directoryUri.toString()
+    }
+
+    private fun doesRomFileExist(rom: Rom): Boolean {
+        if (rom.isInstalledDsiWareShortcut) return true
+        return try {
+            val scheme = rom.uri.scheme
+            if (scheme == "file" || scheme == null) {
+                val path = rom.uri.path ?: return false
+                File(path).exists()
+            } else {
+                context.contentResolver.query(
+                    rom.uri,
+                    arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    cursor.count > 0 && cursor.moveToFirst()
+                } ?: false
+            }
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun loadDirectoryStates() {
