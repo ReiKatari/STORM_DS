@@ -3,6 +3,7 @@
 #include <locale>
 #include <codecvt>
 #include <vector>
+#include <set>
 #include <algorithm>
 #include <cstring>
 #include "DSi_NAND.h"
@@ -280,22 +281,76 @@ static void sanitizeLauncherWrapBin()
     if (wrap.size() < DSI_WRAP_TOTAL_SIZE)
         return;
 
+    // 1. Query all physically installed titles from NAND
+    std::vector<u32> installedTitles;
+    nandMount->ListTitles(DSI_NAND_FILE_CATEGORY, installedTitles);
+    std::set<u32> installedSet(installedTitles.begin(), installedTitles.end());
+    std::set<u32> titlesInWrap;
+
     bool modified = false;
+
+    // 2. Reconcile existing slots in wrap.bin
     for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
     {
         u8* entry = wrap.data() + 0x40 + slot * DSI_TITLE_ID_SIZE;
+        u32 eTitle = (static_cast<u32>(entry[0]) << 24) |
+                     (static_cast<u32>(entry[1]) << 16) |
+                     (static_cast<u32>(entry[2]) << 8)  |
+                     static_cast<u32>(entry[3]);
         u32 eCat   = (static_cast<u32>(entry[4]) << 24) |
                      (static_cast<u32>(entry[5]) << 16) |
                      (static_cast<u32>(entry[6]) << 8)  |
                      static_cast<u32>(entry[7]);
 
-        // If this slot is a DSiWare user title (00030004), remove it from wrap.bin
-        // so that the NAND launcher / DSi firmware stays in pure clean factory state
-        if (eCat == DSI_NAND_FILE_CATEGORY)
+        if (eCat == DSI_NAND_FILE_CATEGORY && eTitle != 0)
         {
-            memset(entry, 0, DSI_TITLE_ID_SIZE);
-            wrap[0x30 + (slot / 8)] &= ~(1 << (slot % 8));
-            modified = true;
+            if (installedSet.find(eTitle) == installedSet.end())
+            {
+                // Title has no content in NAND (orphan or direct ROM bug). Remove from wrap.bin to prevent system error!
+                memset(entry, 0, DSI_TITLE_ID_SIZE);
+                wrap[0x30 + (slot / 8)] &= ~(1 << (slot % 8));
+                modified = true;
+            }
+            else
+            {
+                // Valid installed title: ensure unwrapped bit is active
+                wrap[0x30 + (slot / 8)] |= (1 << (slot % 8));
+                titlesInWrap.insert(eTitle);
+            }
+        }
+    }
+
+    // 3. Restore any valid installed titles that were accidentally missing from wrap.bin
+    for (u32 titleId : installedTitles)
+    {
+        if (titlesInWrap.find(titleId) == titlesInWrap.end())
+        {
+            int emptySlot = -1;
+            for (size_t slot = 0; slot < DSI_LAUNCHER_SLOT_COUNT; slot++)
+            {
+                u8* entry = wrap.data() + 0x40 + slot * DSI_TITLE_ID_SIZE;
+                if (readLe32(entry) == 0 && readLe32(entry + 4) == 0)
+                {
+                    emptySlot = static_cast<int>(slot);
+                    break;
+                }
+            }
+
+            if (emptySlot != -1)
+            {
+                u8* entry = wrap.data() + 0x40 + emptySlot * DSI_TITLE_ID_SIZE;
+                entry[0] = static_cast<u8>((titleId >> 24) & 0xFF);
+                entry[1] = static_cast<u8>((titleId >> 16) & 0xFF);
+                entry[2] = static_cast<u8>((titleId >> 8) & 0xFF);
+                entry[3] = static_cast<u8>(titleId & 0xFF);
+                entry[4] = static_cast<u8>((DSI_NAND_FILE_CATEGORY >> 24) & 0xFF);
+                entry[5] = static_cast<u8>((DSI_NAND_FILE_CATEGORY >> 16) & 0xFF);
+                entry[6] = static_cast<u8>((DSI_NAND_FILE_CATEGORY >> 8) & 0xFF);
+                entry[7] = static_cast<u8>(DSI_NAND_FILE_CATEGORY & 0xFF);
+                wrap[0x30 + (emptySlot / 8)] |= (1 << (emptySlot % 8));
+                titlesInWrap.insert(titleId);
+                modified = true;
+            }
         }
     }
 
@@ -308,7 +363,7 @@ static void sanitizeLauncherWrapBin()
             u32 bytesWritten = 0;
             f_write(&file, wrap.data(), wrap.size(), &bytesWritten);
             f_close(&file);
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: sanitized wrap.bin to clean factory state\n");
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: synchronized wrap.bin (%zu installed titles)\n", titlesInWrap.size());
         }
 
         u8 usedCount = 0;
@@ -678,9 +733,14 @@ Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, 
 
     if (version == 0xFFFFFFFF)
     {
-        // Direct ROM launched from storage: format standard 64KB public.sav in NAND
+        // Direct ROM launched from storage: preserve existing public.sav size if valid, fallback to 64KB only if absent
         char pubSavPath[128];
         snprintf(pubSavPath, sizeof(pubSavPath), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        FF_FILINFO pinfo;
+        if (f_stat(pubSavPath, &pinfo) == FR_OK && pinfo.fsize > 0)
+        {
+            return ensureValidSaveFile(pubSavPath, (u32) pinfo.fsize);
+        }
         return ensureValidSaveFile(pubSavPath, 0x10000);
     }
 
@@ -818,8 +878,6 @@ Java_me_magnum_melonds_MelonDSiNand_ensureTitleSaveStructure(JNIEnv* env, jobjec
             }
         }
     }
-
-    updateWrapAndTwlCfg(DSI_NAND_FILE_CATEGORY, (u32) titleId, true);
 
     melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: ensureTitleSaveStructure completed for title=%08x pubSav=%x privSav=%x\n", (u32) titleId, pubSavSize, privSavSize);
     return true;
