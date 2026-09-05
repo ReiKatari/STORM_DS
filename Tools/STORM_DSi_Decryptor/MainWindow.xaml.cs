@@ -193,7 +193,9 @@ public partial class MainWindow : Window
         bool hasItems = _games.Count > 0;
         EmptyHintPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
         GridGames.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
-        BtnDecrypt.IsEnabled = _games.Any(g => g.IsEncrypted);
+
+        bool isCopy = ChkCopy.IsChecked == true;
+        BtnDecrypt.IsEnabled = isCopy ? hasItems : _games.Any(g => g.IsEncrypted);
     }
 
     private void UpdateHistoryStats()
@@ -285,6 +287,7 @@ public partial class MainWindow : Window
         BtnBrowseOutFolder.Opacity = isCopy ? 1.0 : 0.4;
         BtnResetOutFolder.IsEnabled = isCopy;
         BtnResetOutFolder.Opacity = isCopy ? 1.0 : 0.4;
+        UpdateStats();
     }
 
     private void BtnBrowseOutFolder_Click(object sender, RoutedEventArgs e)

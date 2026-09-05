@@ -245,7 +245,9 @@ public static class DsiDecryptorEngine
                 return true;
         }
 
-        return origZeros < 6;
+        // If no candidate key can decrypt this area into valid executable code,
+        // it cannot be decrypted with Modcrypt and is not an active Modcrypt area.
+        return false;
     }
 
     public static bool IsAreaEncryptedBuffer(byte[] rom, uint offset, uint size, int ivOffset)
@@ -261,10 +263,7 @@ public static class DsiDecryptorEngine
             return false;
 
         byte[]? workingKey = FindWorkingNormalKey(rom, offset, size, ivOffset);
-        if (workingKey != null)
-            return true;
-
-        return origZeros < 6;
+        return workingKey != null;
     }
 
     public static RomInfo InspectRom(string filePath)
@@ -332,10 +331,13 @@ public static class DsiDecryptorEngine
         if (!mod1Encrypted && !mod2Encrypted)
         {
             // Already decrypted: ensure header flag is set
-            rom[0x1C] |= 0x03;
-            ushort crc = CalcHeaderCRC16(rom, 0x15E);
-            rom[0x15E] = (byte)(crc & 0xFF);
-            rom[0x15F] = (byte)(crc >> 8);
+            if ((rom[0x1C] & 0x03) != 0x03)
+            {
+                rom[0x1C] |= 0x03;
+                ushort crc = CalcHeaderCRC16(rom, 0x15E);
+                rom[0x15E] = (byte)(crc & 0xFF);
+                rom[0x15F] = (byte)(crc >> 8);
+            }
             return true;
         }
 
@@ -390,6 +392,21 @@ public static class DsiDecryptorEngine
 
     public static bool DecryptFile(string inputPath, string outputPath)
     {
+        var info = InspectRom(inputPath);
+        if (!info.IsEncrypted)
+        {
+            // If already decrypted or not encrypted, copy file verbatim to destination
+            string? outDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir))
+                Directory.CreateDirectory(outDir);
+
+            if (!string.Equals(Path.GetFullPath(inputPath), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase))
+            {
+                File.Copy(inputPath, outputPath, true);
+            }
+            return true;
+        }
+
         byte[] rom = File.ReadAllBytes(inputPath);
         bool res = DecryptRomBuffer(rom);
         if (!res) return false;
