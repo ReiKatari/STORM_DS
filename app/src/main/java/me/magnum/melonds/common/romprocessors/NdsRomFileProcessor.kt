@@ -11,6 +11,8 @@ import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.extensions.isBlank
 import me.magnum.melonds.utils.RomProcessor
 import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileInputStream
 
 class NdsRomFileProcessor(private val context: Context, private val uriHandler: UriHandler) : RomFileProcessor {
 
@@ -52,6 +54,18 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     override fun getRomIcon(rom: Rom): Bitmap? {
+        if (rom.uri.scheme == android.content.ContentResolver.SCHEME_FILE) {
+            val file = rom.uri.path?.let(::File)
+            if (file != null && file.exists() && file.canRead()) {
+                try {
+                    java.io.FileInputStream(file).channel.use { channel ->
+                        val icon = RomProcessor.getRomIcon(channel)
+                        if (icon != null) return icon
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
+
         try {
             context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
                 java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
@@ -62,7 +76,7 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
         } catch (_: Throwable) {}
 
         return try {
-            context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
+            context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 131072) }?.use { inputStream ->
                 RomProcessor.getRomIcon(inputStream)
             }
         } catch (e: Exception) {
@@ -72,6 +86,18 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     override fun getRomInfo(rom: Rom): RomInfo? {
+        if (rom.uri.scheme == android.content.ContentResolver.SCHEME_FILE) {
+            val file = rom.uri.path?.let(::File)
+            if (file != null && file.exists() && file.canRead()) {
+                try {
+                    java.io.FileInputStream(file).channel.use { channel ->
+                        val info = RomProcessor.getRomInfo(rom, channel)
+                        if (info != null) return info
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
+
         try {
             context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
                 java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
@@ -82,7 +108,7 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
         } catch (_: Throwable) {}
 
         return try {
-            context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
+            context.contentResolver.openInputStream(rom.uri)?.let { BufferedInputStream(it, 131072) }?.use { inputStream ->
                 RomProcessor.getRomInfo(rom, inputStream)
             }
         } catch (e: Exception) {
@@ -96,6 +122,18 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     private fun getRomMetadata(uri: Uri): RomMetadata? {
+        if (uri.scheme == android.content.ContentResolver.SCHEME_FILE) {
+            val file = uri.path?.let(::File)
+            if (file != null && file.exists() && file.canRead()) {
+                try {
+                    java.io.FileInputStream(file).channel.use { channel ->
+                        val metadata = RomProcessor.getRomMetadata(channel)
+                        if (metadata != null) return metadata
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
+
         try {
             context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                 java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
@@ -105,7 +143,7 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
             }
         } catch (_: Throwable) {}
 
-        return context.contentResolver.openInputStream(uri)?.let { BufferedInputStream(it, 65536) }?.use { inputStream ->
+        return context.contentResolver.openInputStream(uri)?.let { BufferedInputStream(it, 131072) }?.use { inputStream ->
             RomProcessor.getRomMetadata(inputStream)
         }
     }

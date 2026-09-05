@@ -398,7 +398,7 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
 
 
-    // Plaintext check: zero-byte entropy, ARM/Thumb opcode verification, and zero differential trial check
+    // Plaintext check: zero-byte entropy and zero differential trial check
     size_t sampleLen = std::min<size_t>(decryptSize, 256);
     size_t zeros = 0;
     for (size_t i = 0; i < sampleLen; i++)
@@ -407,38 +407,8 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         if (b == 0) zeros++;
     }
 
-    size_t checkWords = sampleLen / 4;
-    size_t armMatches = 0;
-    size_t thumbMatches = 0;
-    for (size_t i = 0; i < checkWords; i++)
-    {
-        u32 w = isArm7Area ? ARM7Read32(binaryaddr + i * 4) : ARM9Read32(binaryaddr + i * 4);
-        u32 cond = w >> 28;
-        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
-        {
-            armMatches++;
-        }
-        else if (cond <= 0xE)
-        {
-            u32 group = (w >> 25) & 0x7;
-            if (group <= 5 && w != 0xE7FFDEFF)
-                armMatches++;
-        }
-        else if (cond == 0xF)
-        {
-            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
-                armMatches++;
-        }
-
-        u16 hw0 = (u16)w;
-        u16 hw1 = (u16)(w >> 16);
-        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
-            thumbMatches++;
-        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
-            thumbMatches++;
-    }
-
-    bool isPlaintext = (zeros >= sampleLen / 20) || (checkWords >= 8 && (armMatches >= (checkWords * 5) / 10 || thumbMatches >= (checkWords * 2 * 5) / 10));
+    // Encrypted AES ciphertext has only 0-4 zeros per 256 bytes. Real plaintext ARM code has >= 15 zeros.
+    bool isPlaintext = (zeros >= 15);
 
     // Statistical zero differential trial check over first 256 bytes
     if (!isPlaintext)
@@ -552,8 +522,8 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
 
     if (isPlaintext)
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (zeros=%zu/%zu, arm=%zu/%zu, thumb=%zu/%zu), skipping\n",
-            binaryaddr, zeros, sampleLen, armMatches, checkWords, thumbMatches, checkWords * 2);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X looks like plaintext (zeros=%zu/%zu), skipping\n",
+            binaryaddr, zeros, sampleLen);
         return;
     }
 
@@ -1009,25 +979,7 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "nand2:/photo", 64);
             count++;
 
-            // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
-            entries[count].DriveLetter = 'G';
-            entries[count].Flags = 0x09;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "dataPrv", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
-            count++;
-
-            // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
-            entries[count].DriveLetter = 'H';
-            entries[count].Flags = 0x09;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "dataPub", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
-            count++;
-
-            // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
+            // Entry 6 ('I'): External SD/MMC ("sdmc") -> "/"
             entries[count].DriveLetter = 'I';
             entries[count].Flags = 0x00;
             entries[count].AccessRights = 0x06;
@@ -1036,7 +988,8 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "/", 64);
             count++;
 
-            // Slots 9 and 10 remain ZERO (DriveLetter = 0) for dynamic system mounts
+            // Slots 7, 8, 9, 10 remain ZERO (DriveLetter = 0) so the DSiWare runtime
+            // can dynamically mount dataPub, dataPrv, banner, and sharedFont via FS_MountArchive without slot exhaustion!
 
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
@@ -1045,8 +998,8 @@ void DSi::SetupDirectBoot()
                 ARM7Write8(devListAddr + k, devList[k]);
 
             Log(LogLevel::Info,
-                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, dataPub=%s)\n",
-                devListAddr, titleId0, titleId1, entries[7].Path);
+                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, sdmc=%s)\n",
+                devListAddr, titleId0, titleId1, entries[6].Path);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror
