@@ -78,13 +78,6 @@ class BoxArtRepository @Inject constructor(
 
         val entries = indexEntries ?: run {
             loadIndex()
-            // If index is still downloading, generate a direct candidate URL so covers load immediately
-            val candidateName = rom.fileName.substringBeforeLast('.').trim()
-            val encoded = runCatching { java.net.URLEncoder.encode("$candidateName.png", "UTF-8").replace("+", "%20") }.getOrNull()
-            if (encoded != null) {
-                val baseUrl = if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) BASE_URL_DSI else BASE_URL_DS
-                return@withContext baseUrl + encoded
-            }
             return@withContext null
         }
 

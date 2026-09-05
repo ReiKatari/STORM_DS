@@ -78,17 +78,27 @@ class RomListViewModel @Inject constructor(
     private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(12)
 
     fun requestBoxArt(rom: Rom) {
-        if (!settingsRepository.isRaCoverEnabled()) return
+        val isRaEnabled = settingsRepository.isRaCoverEnabled()
+        val isScraperPro = settingsRepository.isGameTdbCoversEnabled()
+        if (!isRaEnabled && !isScraperPro) return
+
         val key = rom.uri.toString()
         if (_boxArtByUri.value.containsKey(key)) return
         synchronized(boxArtRequestsInFlight) {
             if (!boxArtRequestsInFlight.add(key)) return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val url = boxArtSemaphore.withPermit {
-                runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+            if (isRaEnabled && rom.retroAchievementsHash.isNotBlank()) {
+                if (!raCoverByHash.value.containsKey(rom.retroAchievementsHash)) {
+                    runCatching { retroAchievementsRepository.getGameSummary(rom.retroAchievementsHash) }
+                }
             }
-            _boxArtByUri.update { it + (key to (url ?: "")) }
+            if (isScraperPro) {
+                val url = boxArtSemaphore.withPermit {
+                    runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+                }
+                _boxArtByUri.update { it + (key to (url ?: "")) }
+            }
             synchronized(boxArtRequestsInFlight) {
                 boxArtRequestsInFlight.remove(key)
             }

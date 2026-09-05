@@ -254,11 +254,18 @@ fun WatermelonRomArt(
     var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || failedCoverUrls.contains(raCoverUrl)) }
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
+    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    val isScraperProEnabled = remember { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isRaCoversEnabled = remember { prefs.getBoolean("rom_ra_covers_enabled", true) }
+
     val activeModel: Any? = when {
         customCover != null -> customCover
+        isScraperProEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
+        isScraperProEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
+        isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
+        gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
         boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
         raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
-        gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
         else -> null
     }
 
