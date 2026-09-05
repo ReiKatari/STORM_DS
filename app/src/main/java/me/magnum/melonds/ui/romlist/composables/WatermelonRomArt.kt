@@ -220,18 +220,49 @@ fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
 
 fun getGameTdbCover3dUrl(rom: Rom): String? {
     if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return null
+    val code = when {
+        rom.gameCode.isNotBlank() && rom.gameCode.length == 4 && rom.gameCode.all { it.isLetterOrDigit() } -> rom.gameCode.uppercase()
+        rom.name.length == 4 && rom.name.all { it.isLetterOrDigit() } -> rom.name.uppercase()
+        else -> null
+    } ?: return null
+
     val clean = rom.fileName.uppercase()
+    val fourthChar = code.getOrNull(3)?.uppercaseChar()
     val region = when {
+        fourthChar == 'E' -> "US"
+        fourthChar == 'J' -> "JA"
+        fourthChar == 'K' -> "KO"
         clean.contains("JAP") || clean.contains("JPN") || clean.contains("(J)") -> "JA"
         clean.contains("EUR") || clean.contains("(E)") -> "EN"
+        clean.contains("USA") || clean.contains("(U)") -> "US"
+        fourthChar == 'P' || fourthChar == 'X' || fourthChar == 'Y' || fourthChar == 'Z' || fourthChar == 'D' || fourthChar == 'F' || fourthChar == 'I' || fourthChar == 'S' || fourthChar == 'U' -> "EN"
         else -> "US"
     }
-    val code = if (rom.name.length == 4 && rom.name.all { it.isLetterOrDigit() }) {
-        rom.name.uppercase()
-    } else {
-        rom.fileName.filter { it.isLetterOrDigit() }.take(4).uppercase()
+    val url = if (!code.startsWith("NDS", true)) "https://art.gametdb.com/ds/box/$region/$code.png" else null
+    return if (url != null && !failedCoverUrls.contains(url)) url else null
+}
+
+fun getGameTdbCover2dUrl(rom: Rom): String? {
+    if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return null
+    val code = when {
+        rom.gameCode.isNotBlank() && rom.gameCode.length == 4 && rom.gameCode.all { it.isLetterOrDigit() } -> rom.gameCode.uppercase()
+        rom.name.length == 4 && rom.name.all { it.isLetterOrDigit() } -> rom.name.uppercase()
+        else -> null
+    } ?: return null
+
+    val clean = rom.fileName.uppercase()
+    val fourthChar = code.getOrNull(3)?.uppercaseChar()
+    val region = when {
+        fourthChar == 'E' -> "US"
+        fourthChar == 'J' -> "JA"
+        fourthChar == 'K' -> "KO"
+        clean.contains("JAP") || clean.contains("JPN") || clean.contains("(J)") -> "JA"
+        clean.contains("EUR") || clean.contains("(E)") -> "EN"
+        clean.contains("USA") || clean.contains("(U)") -> "US"
+        fourthChar == 'P' || fourthChar == 'X' || fourthChar == 'Y' || fourthChar == 'Z' || fourthChar == 'D' || fourthChar == 'F' || fourthChar == 'I' || fourthChar == 'S' || fourthChar == 'U' -> "EN"
+        else -> "US"
     }
-    val url = if (code.length == 4 && !code.startsWith("NDS", true)) "https://art.gametdb.com/ds/cover3D/$region/$code.png" else null
+    val url = if (!code.startsWith("NDS", true)) "https://art.gametdb.com/ds/coverM/$region/$code.jpg" else null
     return if (url != null && !failedCoverUrls.contains(url)) url else null
 }
 
@@ -248,19 +279,22 @@ fun WatermelonRomArt(
 ) {
     val context = LocalContext.current
     val customCover = remember(rom.fileName) { getCustomCoverFile(context, rom) }
-    val gameTdbUrl = remember(rom.fileName) { getGameTdbCover3dUrl(rom) }
+    val gameTdbUrl = remember(rom.fileName, rom.gameCode) { getGameTdbCover3dUrl(rom) }
+    val gameTdb2dUrl = remember(rom.fileName, rom.gameCode) { getGameTdbCover2dUrl(rom) }
     var gameTdbFailed by remember(rom.uri) { mutableStateOf(gameTdbUrl == null || failedCoverUrls.contains(gameTdbUrl)) }
+    var gameTdb2dFailed by remember(rom.uri) { mutableStateOf(gameTdb2dUrl == null || failedCoverUrls.contains(gameTdb2dUrl)) }
     var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(boxArtUrl == null || failedCoverUrls.contains(boxArtUrl)) }
     var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || failedCoverUrls.contains(raCoverUrl)) }
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isScraperProEnabled = remember { prefs.getBoolean("rom_gametdb_covers_enabled", true) }
     val isRaCoversEnabled = remember { prefs.getBoolean("rom_ra_covers_enabled", true) }
 
     val activeModel: Any? = when {
         customCover != null -> customCover
         isScraperProEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
+        isScraperProEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !failedCoverUrls.contains(gameTdb2dUrl) -> gameTdb2dUrl
         isScraperProEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
         isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
         else -> null
@@ -321,12 +355,14 @@ fun WatermelonRomArt(
                             if (activeModel is String) {
                                 failedCoverUrls.add(activeModel)
                             }
-                            if (activeModel == boxArtUrl) {
+                            if (activeModel == gameTdbUrl) {
+                                gameTdbFailed = true
+                            } else if (activeModel == gameTdb2dUrl) {
+                                gameTdb2dFailed = true
+                            } else if (activeModel == boxArtUrl) {
                                 boxArtFailed = true
                             } else if (activeModel == raCoverUrl) {
                                 raFailed = true
-                            } else if (activeModel == gameTdbUrl) {
-                                gameTdbFailed = true
                             }
                             artLoaded = false
                             onArtLoadedChanged(false)

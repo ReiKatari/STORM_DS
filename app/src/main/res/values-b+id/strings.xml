@@ -1290,7 +1290,7 @@
     <string name="arm9_overclock_2x">133 MHz (DSi Mode / 2x)</string>
     <string name="arm9_overclock_3x">200 MHz (3x Overclock)</string>
     <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
-    <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart &amp; High-Res Covers</string>
+    <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart dan High-Res Covers</string>
     <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
     <string name="pick_custom_cover">Change Cover from Gallery</string>
     <string name="reset_custom_cover">Reset Custom Cover</string>

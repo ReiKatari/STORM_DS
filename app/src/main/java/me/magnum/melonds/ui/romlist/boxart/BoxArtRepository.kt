@@ -89,6 +89,9 @@ class BoxArtRepository @Inject constructor(
         }.filter { it.isNotBlank() }
 
         val match = findBestMatch(candidates, entries)
+        if (entries.size < 500) {
+            return@withContext match?.fullUrl
+        }
         val matchValue = match?.fullUrl ?: NO_MATCH
         memoryCache[key] = matchValue
         schedulePersistMatches()
@@ -188,6 +191,7 @@ class BoxArtRepository @Inject constructor(
         return runCatching {
             val dsLines = downloadRepoIndex(BASE_URL_DS, "DS")
             val dsiLines = downloadRepoIndex(BASE_URL_DSI, "DSI")
+            if (dsLines.size < 500 && dsiLines.size < 5) return null
             (dsLines + dsiLines).joinToString("\n").takeIf { it.isNotBlank() }
         }.getOrNull()
     }
@@ -195,9 +199,9 @@ class BoxArtRepository @Inject constructor(
     private fun downloadRepoIndex(baseUrl: String, prefix: String): List<String> {
         return runCatching {
             val connection = URL(baseUrl).openConnection() as HttpURLConnection
-            connection.connectTimeout = 8000
-            connection.readTimeout = 15000
-            connection.setRequestProperty("User-Agent", "melonDS-android-boxart")
+            connection.connectTimeout = 15000
+            connection.readTimeout = 45000
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             try {
                 val html = connection.inputStream.bufferedReader().readText()
                 Regex("href=\"([^\"]+\\.png)\"").findAll(html)

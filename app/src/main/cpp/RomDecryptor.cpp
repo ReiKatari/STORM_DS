@@ -82,6 +82,7 @@ static constexpr uint32_t OFFSET_MODCRYPT2_SIZE   = 0x22C;
 static constexpr uint32_t OFFSET_DSI_ARM9_HASH    = 0x300; // IV for area 1
 static constexpr uint32_t OFFSET_DSI_ARM7_HASH    = 0x314; // IV for area 2
 static constexpr uint32_t OFFSET_DSI_ARM9I_HASH   = 0x350; // KeyY source (ARM9i HMAC-SHA1)
+static constexpr uint32_t OFFSET_DSI_DIGEST_HASH  = 0x328; // KeyY source (Digest master hash)
 static constexpr uint32_t OFFSET_DSI_ARM7I_HASH   = 0x364; // KeyY source (ARM7i HMAC-SHA1)
 static constexpr uint32_t HEADER_SIZE             = 0x1000;
 
@@ -140,6 +141,73 @@ static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
     if (sampleRead < 16) return false;
 
     return !isBufferPlaintext(buffer, sampleRead);
+}
+
+static bool TryDeriveAndTestKey(
+    const uint8_t* rom,
+    uint32_t keyYOffset,
+    uint32_t modcryptOffset,
+    uint32_t modcryptSize,
+    uint32_t ivOffset,
+    bool devKey,
+    uint8_t* outNormalKey
+)
+{
+    if (devKey)
+    {
+        uint8_t tmp[16];
+        memcpy(tmp, &rom[0], 16);
+        Bswap128(outNormalKey, tmp);
+        return true;
+    }
+
+    uint8_t keyX[16], keyY[16], tmp[16];
+    *(uint32_t*)&keyX[0] = 0x746E694E; // "Nint"
+    *(uint32_t*)&keyX[4] = 0x6F646E65; // "endo"
+    keyX[8]  = rom[OFFSET_GAME_CODE + 0];
+    keyX[9]  = rom[OFFSET_GAME_CODE + 1];
+    keyX[10] = rom[OFFSET_GAME_CODE + 2];
+    keyX[11] = rom[OFFSET_GAME_CODE + 3];
+    keyX[12] = rom[OFFSET_GAME_CODE + 3];
+    keyX[13] = rom[OFFSET_GAME_CODE + 2];
+    keyX[14] = rom[OFFSET_GAME_CODE + 1];
+    keyX[15] = rom[OFFSET_GAME_CODE + 0];
+
+    memcpy(keyY, &rom[keyYOffset], 16);
+
+    bool allZeros = true;
+    for (int i = 0; i < 16; i++) {
+        if (keyY[i] != 0) { allZeros = false; break; }
+    }
+    if (allZeros) return false;
+
+    DeriveNormalKey(keyX, keyY, tmp);
+    Bswap128(outNormalKey, tmp);
+
+    if (modcryptOffset == 0 || modcryptSize == 0) return true;
+
+    size_t testLen = std::min<size_t>(modcryptSize, 256);
+    std::vector<uint8_t> testBuf(testLen);
+    memcpy(testBuf.data(), &rom[modcryptOffset], testLen);
+
+    AES_ctx ctx;
+    uint8_t iv[16];
+    Bswap128(iv, &rom[ivOffset]);
+    AES_init_ctx_iv(&ctx, outNormalKey, iv);
+
+    for (size_t i = 0; i < testLen; i += 16)
+    {
+        size_t blockLen = (i + 16 <= testLen) ? 16 : (testLen - i);
+        uint8_t block[16] = {0};
+        memcpy(block, &testBuf[i], blockLen);
+        uint8_t swapped[16];
+        Bswap128(swapped, block);
+        AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
+        Bswap128(block, swapped);
+        memcpy(&testBuf[i], block, blockLen);
+    }
+
+    return isBufferPlaintext(testBuf.data(), testLen);
 }
 
 namespace MelonDSAndroid {
@@ -344,35 +412,23 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         return DecryptResult::ERROR_MODCRYPT_AREA_OUT_OF_BOUNDS;
     }
 
-    // Derive the AES key
-    uint8_t normalKey[16];
-
+    // Derive the AES keys with multi-candidate trial
     bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
-    if (devKey)
+    const uint32_t keyCandidates[] = { OFFSET_DSI_ARM9I_HASH, OFFSET_DSI_DIGEST_HASH, OFFSET_DSI_ARM7I_HASH };
+
+    uint8_t normalKey[16];
+    bool key1Found = false;
+    for (uint32_t cand : keyCandidates)
     {
-        uint8_t tmp[16];
-        memcpy(tmp, &rom[0], 16);
-        Bswap128(normalKey, tmp);
+        if (TryDeriveAndTestKey(rom.data(), cand, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH, devKey, normalKey))
+        {
+            key1Found = true;
+            break;
+        }
     }
-    else
+    if (!key1Found)
     {
-        uint8_t keyX[16], keyY[16], tmp[16];
-
-        *(uint32_t*)&keyX[0] = 0x746E694E; // "Nint" (little-endian)
-        *(uint32_t*)&keyX[4] = 0x6F646E65; // "endo"
-        keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-        keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-        keyX[10] = rom[OFFSET_GAME_CODE + 2];
-        keyX[11] = rom[OFFSET_GAME_CODE + 3];
-        keyX[12] = rom[OFFSET_GAME_CODE + 3];
-        keyX[13] = rom[OFFSET_GAME_CODE + 2];
-        keyX[14] = rom[OFFSET_GAME_CODE + 1];
-        keyX[15] = rom[OFFSET_GAME_CODE + 0];
-
-        memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-
-        DeriveNormalKey(keyX, keyY, tmp);
-        Bswap128(normalKey, tmp);
+        TryDeriveAndTestKey(rom.data(), OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM9_HASH, devKey, normalKey);
     }
 
     // --- Decrypt Modcrypt Area 1 (ARM9i) ---
@@ -404,31 +460,18 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     if (mod2Encrypted && mod2Off > 0 && mod2Size > 0)
     {
         uint8_t normalKey2[16];
-        if (devKey)
+        bool key2Found = false;
+        for (uint32_t cand : keyCandidates)
         {
-            memcpy(normalKey2, normalKey, 16);
+            if (TryDeriveAndTestKey(rom.data(), cand, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH, devKey, normalKey2))
+            {
+                key2Found = true;
+                break;
+            }
         }
-        else
+        if (!key2Found)
         {
-            uint8_t keyX[16], keyY[16], tmp[16];
-            *(uint32_t*)&keyX[0] = 0x746E694E;
-            *(uint32_t*)&keyX[4] = 0x6F646E65;
-            keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-            keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-            keyX[10] = rom[OFFSET_GAME_CODE + 2];
-            keyX[11] = rom[OFFSET_GAME_CODE + 3];
-            keyX[12] = rom[OFFSET_GAME_CODE + 3];
-            keyX[13] = rom[OFFSET_GAME_CODE + 2];
-            keyX[14] = rom[OFFSET_GAME_CODE + 1];
-            keyX[15] = rom[OFFSET_GAME_CODE + 0];
-
-            if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
-                memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-            else
-                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-
-            DeriveNormalKey(keyX, keyY, tmp);
-            Bswap128(normalKey2, tmp);
+            TryDeriveAndTestKey(rom.data(), OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM7_HASH, devKey, normalKey2);
         }
 
         AES_ctx ctx;
@@ -522,31 +565,23 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     }
 
     // Derive the AES key
-    uint8_t normalKey[16];
+    // Derive the AES keys with multi-candidate trial
     bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
-    if (devKey)
-    {
-        uint8_t tmp[16];
-        memcpy(tmp, &rom[0], 16);
-        Bswap128(normalKey, tmp);
-    }
-    else
-    {
-        uint8_t keyX[16], keyY[16], tmp[16];
-        *(uint32_t*)&keyX[0] = 0x746E694E; // "Nint"
-        *(uint32_t*)&keyX[4] = 0x6F646E65; // "endo"
-        keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-        keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-        keyX[10] = rom[OFFSET_GAME_CODE + 2];
-        keyX[11] = rom[OFFSET_GAME_CODE + 3];
-        keyX[12] = rom[OFFSET_GAME_CODE + 3];
-        keyX[13] = rom[OFFSET_GAME_CODE + 2];
-        keyX[14] = rom[OFFSET_GAME_CODE + 1];
-        keyX[15] = rom[OFFSET_GAME_CODE + 0];
+    const uint32_t keyCandidates[] = { OFFSET_DSI_ARM9I_HASH, OFFSET_DSI_DIGEST_HASH, OFFSET_DSI_ARM7I_HASH };
 
-        memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-        DeriveNormalKey(keyX, keyY, tmp);
-        Bswap128(normalKey, tmp);
+    uint8_t normalKey[16];
+    bool key1Found = false;
+    for (uint32_t cand : keyCandidates)
+    {
+        if (TryDeriveAndTestKey(rom, cand, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH, devKey, normalKey))
+        {
+            key1Found = true;
+            break;
+        }
+    }
+    if (!key1Found)
+    {
+        TryDeriveAndTestKey(rom, OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM9_HASH, devKey, normalKey);
     }
 
     // --- Decrypt Modcrypt Area 1 (ARM9i) ---
@@ -574,31 +609,18 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     if (mod2Encrypted && mod2Off > 0 && mod2Size > 0 && mod2Off + mod2Size <= (uint32_t)fileSize)
     {
         uint8_t normalKey2[16];
-        if (devKey)
+        bool key2Found = false;
+        for (uint32_t cand : keyCandidates)
         {
-            memcpy(normalKey2, normalKey, 16);
+            if (TryDeriveAndTestKey(rom, cand, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH, devKey, normalKey2))
+            {
+                key2Found = true;
+                break;
+            }
         }
-        else
+        if (!key2Found)
         {
-            uint8_t keyX[16], keyY[16], tmp[16];
-            *(uint32_t*)&keyX[0] = 0x746E694E;
-            *(uint32_t*)&keyX[4] = 0x6F646E65;
-            keyX[8]  = rom[OFFSET_GAME_CODE + 0];
-            keyX[9]  = rom[OFFSET_GAME_CODE + 1];
-            keyX[10] = rom[OFFSET_GAME_CODE + 2];
-            keyX[11] = rom[OFFSET_GAME_CODE + 3];
-            keyX[12] = rom[OFFSET_GAME_CODE + 3];
-            keyX[13] = rom[OFFSET_GAME_CODE + 2];
-            keyX[14] = rom[OFFSET_GAME_CODE + 1];
-            keyX[15] = rom[OFFSET_GAME_CODE + 0];
-
-            if (*(uint32_t*)&rom[OFFSET_DSI_ARM9I_HASH] != 0)
-                memcpy(keyY, &rom[OFFSET_DSI_ARM9I_HASH], 16);
-            else
-                memcpy(keyY, &rom[OFFSET_DSI_ARM7I_HASH], 16);
-
-            DeriveNormalKey(keyX, keyY, tmp);
-            Bswap128(normalKey2, tmp);
+            TryDeriveAndTestKey(rom, OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM7_HASH, devKey, normalKey2);
         }
 
         AES_ctx ctx;
