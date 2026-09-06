@@ -581,7 +581,7 @@ private fun GridContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
     val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
     val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
 
     RomListOverscrollProvider {
@@ -687,7 +687,7 @@ private fun ListContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
     val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
     val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
 
     RomListOverscrollProvider {

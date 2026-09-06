@@ -49,9 +49,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                 try {
                     val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
                     if (!rootBase.exists()) rootBase.mkdirs()
-                    val dsDir = File(rootBase, "bios/ds").apply { mkdirs() }
-                    val dsiDir = File(rootBase, "bios/dsi").apply { mkdirs() }
-                    val biosDir = File(rootBase, "bios").apply { mkdirs() }
                     val savesDir = File(rootBase, "saves").apply { mkdirs() }
                     val quicksavesDir = File(rootBase, "quicksaves").apply { mkdirs() }
                     val texturesDir = File(rootBase, "textures").apply { mkdirs() }
@@ -88,7 +85,10 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         }
                     }
 
-                    // Clean up duplicate/stray files in all bios directories
+                    // Clean up duplicate/stray files in all bios directories if they exist
+                    val dsDir = File(rootBase, "bios/ds")
+                    val dsiDir = File(rootBase, "bios/dsi")
+                    val biosDir = File(rootBase, "bios")
                     listOf(dsDir, dsiDir, biosDir).forEach { bDir ->
                         if (bDir.exists() && bDir.isDirectory) {
                             bDir.listFiles()?.forEach { f ->
@@ -175,42 +175,60 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         }
                     }
 
-                    // Extract embedded BIOS files from assets directly into /storage/emulated/0/STORM DS/bios/
-                    val copyAssetFile = { assetPath: String, targetFile: File ->
-                        if (!targetFile.exists() || targetFile.length() == 0L) {
-                            runCatching {
-                                context.assets.open(assetPath).use { input ->
-                                    targetFile.outputStream().use { output ->
-                                        input.copyTo(output)
+                    // Extract embedded BIOS files ONLY if user hasn't configured custom BIOS paths
+                    val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                    val currentDs = prefs.getStringSet("bios_dir", null)?.firstOrNull()
+                    val currentDsi = prefs.getStringSet("dsi_bios_dir", null)?.firstOrNull()
+
+                    val isCustomDs = currentDs != null &&
+                            !currentDs.contains("data/user/0") &&
+                            !currentDs.contains("files/bios") &&
+                            !currentDs.contains("STORM%20DS/bios") &&
+                            !currentDs.contains("STORM DS/bios")
+                    val isCustomDsi = currentDsi != null &&
+                            !currentDsi.contains("data/user/0") &&
+                            !currentDsi.contains("files/bios") &&
+                            !currentDsi.contains("STORM%20DS/bios") &&
+                            !currentDsi.contains("STORM DS/bios")
+
+                    if (!isCustomDs && !isCustomDsi && (currentDs == null || currentDsi == null)) {
+                        dsDir.mkdirs()
+                        dsiDir.mkdirs()
+                        biosDir.mkdirs()
+
+                        val copyAssetFile = { assetPath: String, targetFile: File ->
+                            if (!targetFile.exists() || targetFile.length() == 0L) {
+                                runCatching {
+                                    context.assets.open(assetPath).use { input ->
+                                        targetFile.outputStream().use { output ->
+                                            input.copyTo(output)
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        copyAssetFile("bios/ds/bios7.bin", File(dsDir, "bios7.bin"))
+                        copyAssetFile("bios/ds/bios9.bin", File(dsDir, "bios9.bin"))
+                        copyAssetFile("bios/ds/firmware.bin", File(dsDir, "firmware.bin"))
+
+                        copyAssetFile("bios/dsi/bios7.bin", File(dsiDir, "bios7.bin"))
+                        copyAssetFile("bios/dsi/bios9.bin", File(dsiDir, "bios9.bin"))
+                        copyAssetFile("bios/dsi/firmware.bin", File(dsiDir, "firmware.bin"))
+
+                        val nandFile = File(dsiDir, "nand.bin")
+                        if (nandFile.exists() && (nandFile.length() == 251658240L || nandFile.length() < 1024 * 1024L)) {
+                            runCatching { nandFile.delete() }
+                        }
+
+                        if (currentDs == null || currentDs.contains("data/user/0") || currentDs.contains("files/bios")) {
+                            prefs.edit().putStringSet("bios_dir", setOf(android.net.Uri.fromFile(dsDir).toString())).apply()
+                        }
+                        if (currentDsi == null || currentDsi.contains("data/user/0") || currentDsi.contains("files/bios")) {
+                            prefs.edit().putStringSet("dsi_bios_dir", setOf(android.net.Uri.fromFile(dsiDir).toString())).apply()
+                        }
                     }
 
-                    copyAssetFile("bios/ds/bios7.bin", File(dsDir, "bios7.bin"))
-                    copyAssetFile("bios/ds/bios9.bin", File(dsDir, "bios9.bin"))
-                    copyAssetFile("bios/ds/firmware.bin", File(dsDir, "firmware.bin"))
-
-                    copyAssetFile("bios/dsi/bios7.bin", File(dsiDir, "bios7.bin"))
-                    copyAssetFile("bios/dsi/bios9.bin", File(dsiDir, "bios9.bin"))
-                    copyAssetFile("bios/dsi/firmware.bin", File(dsiDir, "firmware.bin"))
-
-                    val nandFile = File(dsiDir, "nand.bin")
-                    if (nandFile.exists() && (nandFile.length() == 251658240L || nandFile.length() < 1024 * 1024L)) {
-                        runCatching { nandFile.delete() }
-                    }
-
-                    // Ensure preferences point exclusively to root paths
-                    val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-                    val currentDs = prefs.getStringSet("bios_dir", null)?.firstOrNull()
-                    if (currentDs == null || currentDs.contains("data/user/0") || currentDs.contains("files/bios")) {
-                        prefs.edit().putStringSet("bios_dir", setOf(android.net.Uri.fromFile(dsDir).toString())).apply()
-                    }
-                    val currentDsi = prefs.getStringSet("dsi_bios_dir", null)?.firstOrNull()
-                    if (currentDsi == null || currentDsi.contains("data/user/0") || currentDsi.contains("files/bios")) {
-                        prefs.edit().putStringSet("dsi_bios_dir", setOf(android.net.Uri.fromFile(dsiDir).toString())).apply()
-                    }
                     if (!prefs.contains("use_custom_bios")) {
                         prefs.edit().putBoolean("use_custom_bios", true).apply()
                     }

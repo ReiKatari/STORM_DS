@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.Rect
 import me.magnum.melonds.domain.model.layout.Insets
+import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.model.layout.ScreenFold
 import me.magnum.melonds.domain.model.ui.Orientation
 import me.magnum.melonds.extensions.insetsControllerCompat
@@ -211,16 +212,20 @@ class LayoutEditorActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                var lastOrientation: LayoutConfiguration.LayoutOrientation? = null
                 viewModel.currentLayout.collect {
                     if (it == null) {
                         layoutEditorManager.layoutEditorView.destroyLayout()
                         externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.destroyLayout()
+                        lastOrientation = null
                     } else {
                         handler.removeCallbacksAndMessages(null)
                         handler.post {
-                            if (!layoutEditorManager.layoutEditorView.isModifiedByUser()) {
+                            val orientationChanged = lastOrientation != it.orientation
+                            if (!layoutEditorManager.layoutEditorView.isModifiedByUser() || orientationChanged) {
                                 layoutEditorManager.layoutEditorView.instantiateLayout(it.layout)
                                 externalLayoutEditorPresentation?.instantiateLayout(it.layout)
+                                lastOrientation = it.orientation
                             }
                             setLayoutOrientation(it.orientation)
                         }
@@ -286,6 +291,10 @@ class LayoutEditorActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         storeLayoutChanges()
+        if (::layoutEditorManager.isInitialized) {
+            layoutEditorManager.layoutEditorView.resetModifiedState()
+        }
+        externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.resetModifiedState()
         updateOrientation(newConfig)
         handler.post {
             updateDisplays()
@@ -347,6 +356,10 @@ class LayoutEditorActivity : AppCompatActivity() {
         }
         if (primaryDisplayLayoutComponents != null || secondaryDisplayLayoutComponents != null) {
             viewModel.saveLayoutToCurrentConfiguration(primaryDisplayLayoutComponents, secondaryDisplayLayoutComponents)
+            if (::layoutEditorManager.isInitialized) {
+                layoutEditorManager.layoutEditorView.resetModifiedState()
+            }
+            externalPresentationLayoutView?.resetModifiedState()
         }
     }
 

@@ -396,9 +396,9 @@ class SharedPreferencesSettingsRepository(
         val dsiDirDocument = getTreeDocument(dsiBiosDirUri, "dsi_bios_dir")
 
         val stormDsBase = getEmulatorBaseDirectory()
-        val stormDsDsDir = File(stormDsBase, "bios/ds").apply { mkdirs() }
-        val stormDsDsiDir = File(stormDsBase, "bios/dsi").apply { mkdirs() }
-        val stormDsBiosDir = File(stormDsBase, "bios").apply { mkdirs() }
+        val stormDsDsDir = File(stormDsBase, "bios/ds")
+        val stormDsDsiDir = File(stormDsBase, "bios/dsi")
+        val stormDsBiosDir = File(stormDsBase, "bios")
 
         val dsBios7 = resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin")
             ?: resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "bios7.bin", "ds_bios7.bin", "arm7.bin")
@@ -425,7 +425,12 @@ class SharedPreferencesSettingsRepository(
         val sdEnabled = if (isDsi) isDsiSdCardEnabled() else isDldiSdCardEnabled()
         val sdDirectory = if (isDsi) getDsiSdCardDirectory() else getDldiSdCardDirectory()
         val sdSize = if (isDsi) getDsiSdCardImageSize() else getDldiSdCardImageSize()
-        val syncFolder = if (isDsi) File(stormDsBase, "bios/dsi/sync").apply { mkdirs() } else File(stormDsBase, "dldi/sync").apply { mkdirs() }
+        val syncFolder = if (isDsi) {
+            val dsiSync = File(stormDsBase, "bios/dsi/sync")
+            if (dsiSync.parentFile?.exists() == true) dsiSync.apply { mkdirs() } else null
+        } else {
+            File(stormDsBase, "dldi/sync").apply { mkdirs() }
+        }
 
         val sdCardImage = if (isDsi) {
             listOf(
@@ -480,7 +485,7 @@ class SharedPreferencesSettingsRepository(
                 imagePath = sdCardImage,
                 imageSize = sdSize,
                 folderSync = sdEnabled && sdDirectory != null,
-                folderPath = syncFolder.absolutePath,
+                folderPath = syncFolder?.absolutePath,
             ),
             dsiWareAutoloadTitleId = 0L,
             arm9OverclockMultiplier = getArm9Overclock(),
@@ -596,7 +601,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isRaCoverEnabled(): Boolean {
-        return preferences.getBoolean("rom_ra_covers_enabled", true)
+        return preferences.getBoolean("rom_ra_covers_enabled", false)
     }
 
     override fun observeRaCoverEnabled(): Flow<Boolean> {
@@ -708,8 +713,11 @@ class SharedPreferencesSettingsRepository(
             return dirPreference.toUri()
         }
         val rootBase = getEmulatorBaseDirectory()
-        val rootDir = File(rootBase, "bios/ds").apply { mkdirs() }
-        return Uri.fromFile(rootDir)
+        val rootDir = File(rootBase, "bios/ds")
+        if (rootDir.exists()) {
+            return Uri.fromFile(rootDir)
+        }
+        return null
     }
 
     override fun getDsiBiosDirectory(): Uri? {
@@ -718,8 +726,11 @@ class SharedPreferencesSettingsRepository(
             return dirPreference.toUri()
         }
         val rootBase = getEmulatorBaseDirectory()
-        val rootDir = File(rootBase, "bios/dsi").apply { mkdirs() }
-        return Uri.fromFile(rootDir)
+        val rootDir = File(rootBase, "bios/dsi")
+        if (rootDir.exists()) {
+            return Uri.fromFile(rootDir)
+        }
+        return null
     }
 
     override fun clearBiosDirectories() {

@@ -248,7 +248,13 @@ object MelonModule {
     @Provides
     @Singleton
     fun provideDeviceLayoutDisplayMapper(@ApplicationContext context: Context): DeviceLayoutDisplayMapper {
-        return if (Build.MANUFACTURER == "AYN" && Build.MODEL == "AYN Thor") {
+        val isAynThor = (Build.MANUFACTURER.equals("AYN", ignoreCase = true) ||
+                Build.BRAND.equals("AYN", ignoreCase = true)) &&
+                (Build.MODEL.contains("Thor", ignoreCase = true) ||
+                        Build.PRODUCT.contains("Thor", ignoreCase = true) ||
+                        Build.DEVICE.contains("Thor", ignoreCase = true) ||
+                        Build.MODEL.contains("Odin", ignoreCase = true))
+        return if (isAynThor || Build.MODEL.contains("Thor", ignoreCase = true)) {
             AynThorLayoutDisplayMapper(context)
         } else {
             DefaultLayoutDisplayMapper(context)

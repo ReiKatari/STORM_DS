@@ -73,8 +73,13 @@ class PhysicalDSiCameraSource(
     }
 
     override fun captureFrame(camera: CameraType, buffer: ByteArray, width: Int, height: Int, isYuv: Boolean) {
-        val currentFrontBuffer = cameraBuffers.getFrontBuffer()
-        System.arraycopy(currentFrontBuffer, 0, buffer, 0, currentFrontBuffer.size)
+        try {
+            val currentFrontBuffer = cameraBuffers.getFrontBuffer()
+            val copyLen = minOf(currentFrontBuffer.size, buffer.size)
+            System.arraycopy(currentFrontBuffer, 0, buffer, 0, copyLen)
+        } catch (e: Throwable) {
+            Arrays.fill(buffer, 0)
+        }
     }
 
     override fun dispose() {
@@ -85,54 +90,64 @@ class PhysicalDSiCameraSource(
     }
 
     private fun initializeCamera(camera: CameraType) {
-        val future = ProcessCameraProvider.getInstance(context)
-        future.addListener(
-            {
-                val cameraProvider = future.get()
+        try {
+            val future = ProcessCameraProvider.getInstance(context)
+            future.addListener(
+                {
+                    try {
+                        val cameraProvider = future.get()
 
-                val analyzer = ImageAnalysis.Builder()
-                    .setResolutionSelector(
-                        ResolutionSelector.Builder()
-                            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
-                            .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER))
+                        val analyzer = ImageAnalysis.Builder()
+                            .setResolutionSelector(
+                                ResolutionSelector.Builder()
+                                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                                    .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER))
+                                    .build()
+                            )
+                            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
-                    )
-                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
 
-                analyzer.setAnalyzer(executor) { imageProxy ->
-                    val yBuffer = imageProxy.planes[0].buffer
-                    val uPlane = imageProxy.planes[1]
-                    val vPlane = imageProxy.planes[2]
+                        analyzer.setAnalyzer(executor) { imageProxy ->
+                            try {
+                                val yBuffer = imageProxy.planes[0].buffer
+                                val uPlane = imageProxy.planes[1]
+                                val vPlane = imageProxy.planes[2]
 
-                    yBuffer.rewind()
-                    uPlane.buffer.rewind()
-                    vPlane.buffer.rewind()
+                                yBuffer.rewind()
+                                uPlane.buffer.rewind()
+                                vPlane.buffer.rewind()
 
-                    captureFrameSample(yBuffer, uPlane, vPlane, imageProxy.width, imageProxy.height, imageProxy.imageInfo)
+                                captureFrameSample(yBuffer, uPlane, vPlane, imageProxy.width, imageProxy.height, imageProxy.imageInfo)
+                            } catch (e: Throwable) {
+                                // Ignore sample capture error
+                            } finally {
+                                imageProxy.close()
+                            }
+                        }
 
-                    imageProxy.close()
-                }
+                        val cameraSelector = when (camera) {
+                            DSiCameraSource.FrontCamera -> CameraSelector.DEFAULT_FRONT_CAMERA
+                            DSiCameraSource.BackCamera -> CameraSelector.DEFAULT_BACK_CAMERA
+                            else -> throw UnsupportedOperationException("Unknown camera type $camera")
+                        }
 
-                val cameraSelector = when (camera) {
-                    DSiCameraSource.FrontCamera -> CameraSelector.DEFAULT_FRONT_CAMERA
-                    DSiCameraSource.BackCamera -> CameraSelector.DEFAULT_BACK_CAMERA
-                    else -> throw UnsupportedOperationException("Unknown camera type $camera")
-                }
+                        cameraProvider.unbindAll()
 
-                cameraProvider.unbindAll()
-
-                val lifecycleOwner = emulatorLifecycleOwnerProvider.getCurrentLifecycleOwner()
-                if (lifecycleOwner == null) {
-                    error("No current emulator lifecycle owner")
-                }
-
-                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, analyzer)
-                currentCameraProvider = cameraProvider
-            },
-            ContextCompat.getMainExecutor(context)
-        )
+                        val lifecycleOwner = emulatorLifecycleOwnerProvider.getCurrentLifecycleOwner()
+                        if (lifecycleOwner != null) {
+                            cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, analyzer)
+                            currentCameraProvider = cameraProvider
+                        }
+                    } catch (e: Throwable) {
+                        currentCameraProvider = null
+                    }
+                },
+                ContextCompat.getMainExecutor(context)
+            )
+        } catch (e: Throwable) {
+            // Ignore camera initialization failure
+        }
     }
 
     private fun captureFrameSample(yBuffer: ByteBuffer, uPlane: PlaneProxy, vPlane: PlaneProxy, sourceWidth: Int, sourceHeight: Int, imageInfo: ImageInfo) {

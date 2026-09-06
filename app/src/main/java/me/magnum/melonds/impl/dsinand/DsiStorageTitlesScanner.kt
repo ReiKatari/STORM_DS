@@ -48,7 +48,7 @@ class DsiStorageTitlesScanner @Inject constructor(
 
         // 2. Auto-extract SD image to external sync directory if sync is empty
         val extStorage = android.os.Environment.getExternalStorageDirectory()
-        val dsiSyncDir = File(extStorage, "STORM DS/bios/dsi/sync").apply { mkdirs() }
+        val dsiSyncDir = File(extStorage, "STORM DS/bios/dsi/sync")
         val candidateImages = listOf(
             File(extStorage, "STORM DS/bios/dsi/sd_card.bin"),
             File(extStorage, "STORM DS/bios/dsi/sd.bin"),
@@ -58,7 +58,7 @@ class DsiStorageTitlesScanner @Inject constructor(
             File(extStorage, "STORM DS/dldi/dsi_sd.img"),
             File(extStorage, "STORM DS/dldi/dldi_sd.img"),
         )
-        if (dsiSyncDir.listFiles()?.isEmpty() == true) {
+        if (dsiSyncDir.exists() && dsiSyncDir.listFiles()?.isEmpty() == true) {
             for (img in candidateImages) {
                 if (img.isFile && img.length() >= 512 * 1024L) {
                     if (me.magnum.melonds.utils.FatImageExtractor.extractFatImage(img, dsiSyncDir)) {

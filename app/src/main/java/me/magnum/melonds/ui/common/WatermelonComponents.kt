@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -238,13 +239,16 @@ fun UnifiedBackButton(
 
 fun Modifier.bouncingClickable(
     enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
     hapticType: HapticFeedbackType = HapticFeedbackType.TextHandleMove,
     onClick: () -> Unit,
 ): Modifier = composed {
     val haptic = LocalHapticFeedback.current
+    val currentInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
     var isPressed by remember { mutableStateOf(false) }
+    val isFocused by currentInteractionSource.collectIsFocusedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.93f else 1f,
+        targetValue = if (isPressed) 0.93f else if (isFocused) 1.02f else 1f,
         animationSpec = spring(
             stiffness = Spring.StiffnessMedium,
             dampingRatio = Spring.DampingRatioMediumBouncy
@@ -257,19 +261,14 @@ fun Modifier.bouncingClickable(
             scaleX = scale
             scaleY = scale
         }
-        .pointerInput(enabled) {
-            if (!enabled) return@pointerInput
-            detectTapGestures(
-                onPress = {
-                    isPressed = true
-                    haptic.performHapticFeedback(hapticType)
-                    val released = tryAwaitRelease()
-                    isPressed = false
-                    if (released) {
-                        onClick()
-                    }
-                }
-            )
-        }
+        .clickable(
+            interactionSource = currentInteractionSource,
+            indication = null,
+            enabled = enabled,
+            onClick = {
+                haptic.performHapticFeedback(hapticType)
+                onClick()
+            }
+        )
 }
 

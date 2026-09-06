@@ -53,6 +53,9 @@ public:
 
     void InputFrame(const u32* data, int width, int height, bool rgb);
 
+    u8 GetState() const { return MCURegs[0x2104]; }
+    void SetState(u8 state) { MCURegs[0x2104] = state; }
+
     u32 Num;
 
 private:
