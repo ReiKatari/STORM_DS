@@ -119,7 +119,7 @@ function Upload-Asset([string]$filePath, [string]$contentType) {
     if ($assetObj -and $assetObj.id) {
         Write-Host "Successfully uploaded $name (ID: $($assetObj.id))"
     } else {
-        Write-Error "Failed to upload $name: $resAsset"
+        Write-Error "Failed to upload ${name}: $resAsset"
     }
 }
 
