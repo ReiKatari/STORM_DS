@@ -241,11 +241,13 @@ class BiosDownloadManager @Inject constructor(
 
     private fun copyDsiBiosFromAssets(targetDir: File): Boolean {
         return try {
-            val files = listOf("bios7.bin", "bios9.bin", "firmware.bin")
+            val files = listOf("bios7.bin", "bios9.bin", "firmware.bin", "TWLFontTable.dat")
             for (name in files) {
-                context.assets.open("bios/dsi/$name").use { input ->
-                    File(targetDir, name).outputStream().use { output ->
-                        input.copyTo(output)
+                runCatching {
+                    context.assets.open("bios/dsi/$name").use { input ->
+                        File(targetDir, name).outputStream().use { output ->
+                            input.copyTo(output)
+                        }
                     }
                 }
             }

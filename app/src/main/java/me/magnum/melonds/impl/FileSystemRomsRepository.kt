@@ -389,6 +389,8 @@ class FileSystemRomsRepository(
         val found = metadata.firstOrNull {
             rom.retroAchievementsHash.isNotBlank() && it.retroAchievementsHash == rom.retroAchievementsHash
         } ?: metadata.firstOrNull {
+            rom.gameCode.isNotBlank() && it.gameCode == rom.gameCode
+        } ?: metadata.firstOrNull {
             it.fileName == rom.fileName && it.isDsiWareTitle == rom.isDsiWareTitle
         }
         return if (found != null) {
@@ -397,6 +399,7 @@ class FileSystemRomsRepository(
                 lastPlayed = found.lastPlayed,
                 totalPlayTime = found.totalPlayTime.milliseconds,
                 isFavorite = found.isFavorite,
+                gameCode = if (rom.gameCode.isNotBlank()) rom.gameCode else found.gameCode,
             )
         } else {
             optionsConfig?.let { rom.copy(config = it) } ?: rom
@@ -599,9 +602,6 @@ class FileSystemRomsRepository(
                         uriStr.contains("dsi_sd") || pathStr.contains("dsi_sd") ||
                             uriStr.startsWith(Rom.INSTALLED_DSIWARE_URI_SCHEME) ||
                             pathStr.startsWith(context.filesDir.path)
-                    }
-                    .filter { rom ->
-                        searchDirectories.any { directoryUri -> isRomInDirectory(rom, directoryUri) } && doesRomFileExist(rom)
                     }
             } else {
                 emptyList()
@@ -1211,6 +1211,7 @@ class FileSystemRomsRepository(
                 retroAchievementsHash = it.retroAchievementsHash,
                 totalPlayTime = it.totalPlayTime.inWholeMilliseconds,
                 isFavorite = it.isFavorite,
+                gameCode = it.gameCode,
             )
         }
         writeTextAtomically(metadataFile, gson.toJson(metadata))
@@ -1288,6 +1289,7 @@ class FileSystemRomsRepository(
         val retroAchievementsHash: String,
         val totalPlayTime: Long = 0,
         val isFavorite: Boolean = false,
+        val gameCode: String = "",
     )
 
     private data class RomOptionsDto(

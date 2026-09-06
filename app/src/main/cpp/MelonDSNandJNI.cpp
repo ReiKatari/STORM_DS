@@ -799,6 +799,12 @@ Java_me_magnum_melonds_MelonDSiNand_ensureTitleSaveStructure(JNIEnv* env, jobjec
         }
     }
 
+    u32 idNormal = (u32)titleId;
+    u32 idSwapped = ((idNormal >> 24) & 0xFF) | ((idNormal >> 8) & 0xFF00) | ((idNormal & 0xFF00) << 8) | ((idNormal & 0xFF) << 24);
+    std::vector<u32> targetIds = { idNormal };
+    if (idSwapped != idNormal)
+        targetIds.push_back(idSwapped);
+
     char path[256];
     f_mkdir("0:/ticket");
     snprintf(path, sizeof(path), "0:/ticket/%08x", DSI_NAND_FILE_CATEGORY);
@@ -807,80 +813,118 @@ Java_me_magnum_melonds_MelonDSiNand_ensureTitleSaveStructure(JNIEnv* env, jobjec
     f_mkdir("0:/title");
     snprintf(path, sizeof(path), "0:/title/%08x", DSI_NAND_FILE_CATEGORY);
     f_mkdir(path);
-    snprintf(path, sizeof(path), "0:/title/%08x/%08x", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-    f_mkdir(path);
-    snprintf(path, sizeof(path), "0:/title/%08x/%08x/content", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-    f_mkdir(path);
-    snprintf(path, sizeof(path), "0:/title/%08x/%08x/data", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-    f_mkdir(path);
-
-    // Create ticket if missing or empty
-    snprintf(path, sizeof(path), "0:/ticket/%08x/%08x.tik", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-    FF_FILINFO tikInfo;
-    if (f_stat(path, &tikInfo) != FR_OK || tikInfo.fsize == 0)
-    {
-        u32 catNoSwap = (DSI_NAND_FILE_CATEGORY >> 24) | ((DSI_NAND_FILE_CATEGORY & 0xFF0000) >> 8) | ((DSI_NAND_FILE_CATEGORY & 0xFF00) << 8) | (DSI_NAND_FILE_CATEGORY << 24);
-        u32 idNoSwap = ((u32)titleId >> 24) | (((u32)titleId & 0xFF0000) >> 8) | (((u32)titleId & 0xFF00) << 8) | ((u32)titleId << 24);
-        nandMount->CreateTicket(path, catNoSwap, idNoSwap, header.ROMVersion);
-    }
-
-    // Create TMD if provided and missing
-    if (tmdMetadata != nullptr)
-    {
-        snprintf(path, sizeof(path), "0:/title/%08x/%08x/content/title.tmd", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        FF_FILINFO tmdInfo;
-        if (f_stat(path, &tmdInfo) != FR_OK || tmdInfo.fsize == 0)
-        {
-            jsize tmdLen = env->GetArrayLength(tmdMetadata);
-            jbyte* tmdBytes = env->GetByteArrayElements(tmdMetadata, nullptr);
-            if (tmdBytes != nullptr)
-            {
-                FF_FIL tmdFile;
-                if (f_open(&tmdFile, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
-                {
-                    u32 nw = 0;
-                    f_write(&tmdFile, tmdBytes, tmdLen, &nw);
-                    f_close(&tmdFile);
-                }
-                env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-            }
-        }
-    }
 
     u32 pubSavSize = header.DSiPublicSavSize;
-    if (pubSavSize > 0)
-    {
-        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        ensureValidSaveFile(path, pubSavSize);
-    }
-
+    if (pubSavSize == 0) pubSavSize = 0x10000; // 64KB minimum FAT12 public save
     u32 privSavSize = header.DSiPrivateSavSize;
-    if (privSavSize > 0)
-    {
-        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/private.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        ensureValidSaveFile(path, privSavSize);
-    }
 
-    if (header.AppFlags & 0x04)
+    for (u32 tid : targetIds)
     {
-        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/banner.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
-        FF_FILINFO binfo;
-        if (f_stat(path, &binfo) != FR_OK || binfo.fsize != 0x4000)
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x", DSI_NAND_FILE_CATEGORY, tid);
+        f_mkdir(path);
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x/content", DSI_NAND_FILE_CATEGORY, tid);
+        f_mkdir(path);
+        snprintf(path, sizeof(path), "0:/title/%08x/%08x/data", DSI_NAND_FILE_CATEGORY, tid);
+        f_mkdir(path);
+
+        // Create ticket if missing or empty
+        snprintf(path, sizeof(path), "0:/ticket/%08x/%08x.tik", DSI_NAND_FILE_CATEGORY, tid);
+        FF_FILINFO tikInfo;
+        if (f_stat(path, &tikInfo) != FR_OK || tikInfo.fsize == 0)
         {
-            FF_FIL file;
-            if (f_open(&file, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+            u32 catNoSwap = (DSI_NAND_FILE_CATEGORY >> 24) | ((DSI_NAND_FILE_CATEGORY & 0xFF0000) >> 8) | ((DSI_NAND_FILE_CATEGORY & 0xFF00) << 8) | (DSI_NAND_FILE_CATEGORY << 24);
+            u32 idNoSwap = (tid >> 24) | ((tid & 0xFF0000) >> 8) | ((tid & 0xFF00) << 8) | (tid << 24);
+            nandMount->CreateTicket(path, catNoSwap, idNoSwap, header.ROMVersion);
+        }
+
+        // Create TMD if provided and missing
+        if (tmdMetadata != nullptr)
+        {
+            snprintf(path, sizeof(path), "0:/title/%08x/%08x/content/title.tmd", DSI_NAND_FILE_CATEGORY, tid);
+            FF_FILINFO tmdInfo;
+            if (f_stat(path, &tmdInfo) != FR_OK || tmdInfo.fsize == 0)
             {
-                u8 bannersav[0x4000];
-                memset(bannersav, 0, sizeof(bannersav));
-                u32 nwrite = 0;
-                f_write(&file, bannersav, sizeof(bannersav), &nwrite);
-                f_close(&file);
+                jsize tmdLen = env->GetArrayLength(tmdMetadata);
+                jbyte* tmdBytes = env->GetByteArrayElements(tmdMetadata, nullptr);
+                if (tmdBytes != nullptr)
+                {
+                    FF_FIL tmdFile;
+                    if (f_open(&tmdFile, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+                    {
+                        u32 nw = 0;
+                        f_write(&tmdFile, tmdBytes, tmdLen, &nw);
+                        f_close(&tmdFile);
+                    }
+                    env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
+                }
+            }
+        }
+
+        if (pubSavSize > 0)
+        {
+            snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, tid);
+            ensureValidSaveFile(path, pubSavSize);
+        }
+
+        if (privSavSize > 0)
+        {
+            snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/private.sav", DSI_NAND_FILE_CATEGORY, tid);
+            ensureValidSaveFile(path, privSavSize);
+        }
+
+        if (header.AppFlags & 0x04)
+        {
+            snprintf(path, sizeof(path), "0:/title/%08x/%08x/data/banner.sav", DSI_NAND_FILE_CATEGORY, tid);
+            FF_FILINFO binfo;
+            if (f_stat(path, &binfo) != FR_OK || binfo.fsize != 0x4000)
+            {
+                FF_FIL file;
+                if (f_open(&file, path, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+                {
+                    u8 bannersav[0x4000];
+                    memset(bannersav, 0, sizeof(bannersav));
+                    u32 nwrite = 0;
+                    f_write(&file, bannersav, sizeof(bannersav), &nwrite);
+                    f_close(&file);
+                }
             }
         }
     }
 
     melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: ensureTitleSaveStructure completed for title=%08x pubSav=%x privSav=%x\n", (u32) titleId, pubSavSize, privSavSize);
     return true;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonDSiNand_ensureSystemFontTable(JNIEnv* env, jobject thiz, jbyteArray fontData)
+{
+    if (!nand || !nandMount || fontData == nullptr)
+        return false;
+
+    FF_FILINFO fontInfo;
+    if (f_stat("0:/sys/TWLFontTable.dat", &fontInfo) == FR_OK && fontInfo.fsize >= 100000)
+    {
+        return true; // Already valid
+    }
+
+    f_mkdir("0:/sys");
+    jsize fLen = env->GetArrayLength(fontData);
+    jbyte* fBytes = env->GetByteArrayElements(fontData, nullptr);
+    if (fBytes == nullptr)
+        return false;
+
+    FF_FIL fFile;
+    bool success = false;
+    if (f_open(&fFile, "0:/sys/TWLFontTable.dat", FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+    {
+        u32 nw = 0;
+        f_write(&fFile, fBytes, fLen, &nw);
+        f_close(&fFile);
+        success = (nw == (u32)fLen);
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: Wrote 0:/sys/TWLFontTable.dat (%u bytes) to NAND\n", nw);
+    }
+    env->ReleaseByteArrayElements(fontData, fBytes, JNI_ABORT);
+    return success;
 }
 
 JNIEXPORT jboolean JNICALL

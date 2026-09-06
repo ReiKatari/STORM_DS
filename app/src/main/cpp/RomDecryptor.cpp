@@ -351,77 +351,9 @@ static int IndexOfSequence(const uint8_t* buffer, size_t bufferLen, const uint8_
 bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
 {
     if (!rom || fileSize < HEADER_SIZE) return false;
-    bool patched = false;
-
-    // AlphaBounce [KALE] / [KALP] compatibility fix:
-    // The game aborts on missing TWLFontTable.dat in NAND.
-    // We patch the font validation error branch to success (0x20ba058) and neutralize OS_Terminate / OS_Halt.
-    if (memcmp(&rom[OFFSET_GAME_CODE], "KAL", 3) == 0)
-    {
-        uint32_t arm9Off  = *(uint32_t*)&rom[OFFSET_ARM9_ROM_OFFSET];
-        uint32_t arm9Size = *(uint32_t*)&rom[OFFSET_ARM9_SIZE];
-
-        auto patchRomOffset = [&](uint32_t romOffset, uint32_t newOp) {
-            if (romOffset + 4 <= fileSize)
-            {
-                *(uint32_t*)&rom[romOffset] = newOp;
-                patched = true;
-            }
-        };
-
-        // 1. 0xba014: bl OS_Terminate on font validation failure -> b 0x20ba058 (0xea00000f)
-        patchRomOffset(0xba014, 0xea00000f);
-
-        // 2. NOP known OS_Terminate call sites
-        patchRomOffset(0x50d4, 0xe1a00000);
-        patchRomOffset(0xe4548, 0xe1a00000);
-        patchRomOffset(0xf5c50, 0xe1a00000);
-        patchRomOffset(0xf5f0c, 0xe1a00000);
-
-        // 3. Neutralize OS_Terminate entrypoint at 0x26768 with 'bx lr' (0xe12fff1e)
-        patchRomOffset(0x26768, 0xe12fff1e);
-
-        // 4. Neutralize OS_Halt CP15 WFI loop at 0x26804 with 'bx lr' (0xe12fff1e)
-        patchRomOffset(0x26800, 0xe12fff1e);
-        patchRomOffset(0x26804, 0xe12fff1e);
-        patchRomOffset(0x26808, 0xe12fff1e);
-
-        // 5. Neutralize fatal caller at 0x245e4 / 0x245e8 with NOP
-        patchRomOffset(0x245e4, 0xe1a00000);
-        patchRomOffset(0x245e8, 0xe1a00000);
-
-        // 6. Scan ARM9 binary range to neutralize any remaining matching opcodes
-        if (arm9Off > 0 && arm9Off + arm9Size <= fileSize)
-        {
-            for (uint32_t i = arm9Off; i + 4 <= arm9Off + arm9Size; i += 4)
-            {
-                uint32_t op = *(uint32_t*)&rom[i];
-                if (op == 0xebfdb1d3)
-                {
-                    *(uint32_t*)&rom[i] = 0xea00000f;
-                    patched = true;
-                }
-                else if (op == 0xeb0085a3 || op == 0xebfd0886 || op == 0xebfcc2c4 || op == 0xebfcc215)
-                {
-                    *(uint32_t*)&rom[i] = 0xe1a00000;
-                    patched = true;
-                }
-            }
-        }
-
-        // 7. Recalculate Secure Area CRC16 if present
-        if (fileSize >= 0x8000)
-        {
-            uint16_t secCrc = CalcHeaderCRC16(&rom[0x4000], 0x4000);
-            *(uint16_t*)&rom[0x6C] = secCrc;
-        }
-
-        // 8. Recalculate Header CRC16
-        uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
-        *(uint16_t*)&rom[0x15E] = headerCrc;
-    }
-
-    return patched;
+    // Compatibility patches: AlphaBounce and other titles are now handled natively via
+    // proper NAND save and TWLFontTable.dat auto-provisioning in melonDS core.
+    return false;
 }
 
 DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)

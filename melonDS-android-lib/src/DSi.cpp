@@ -739,6 +739,116 @@ void DSi::SetupDirectBoot()
 
                 for (u32 i = 0; i < 0x18; i+=4)
                     ARM9Write32(0x02FFFD68+i, *(u32*)&hwinfoS.Bytes[0x88+i]);
+
+                // DSiWare / DSi-Enhanced title and save file auto-provisioning on NAND
+                if (header.IsDSiWare() || (header.UnitCode & 0x02))
+                {
+                    u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
+                    u32 idNormal = ((u32)(u8)header.GameCode[0] << 24) |
+                                   ((u32)(u8)header.GameCode[1] << 16) |
+                                   ((u32)(u8)header.GameCode[2] << 8) |
+                                   (u32)(u8)header.GameCode[3];
+                    u32 idSwapped = ((idNormal >> 24) & 0xFF) |
+                                    ((idNormal >> 8) & 0xFF00) |
+                                    ((idNormal & 0xFF00) << 8) |
+                                    ((idNormal & 0xFF) << 24);
+
+                    std::vector<u32> targetIds = { idNormal, idSwapped };
+                    if (header.DSiTitleIDLow != 0 && header.DSiTitleIDLow != idNormal && header.DSiTitleIDLow != idSwapped)
+                        targetIds.push_back(header.DSiTitleIDLow);
+
+                    u32 pubSavSize = header.DSiPublicSavSize;
+                    if (pubSavSize == 0 && header.IsDSiWare())
+                        pubSavSize = 0x10000; // 64KB minimum FAT12 public save for DSiWare
+
+                    char dirPath[128];
+                    f_mkdir("0:/ticket");
+                    snprintf(dirPath, sizeof(dirPath), "0:/ticket/%08x", titleId0);
+                    f_mkdir(dirPath);
+
+                    f_mkdir("0:/title");
+                    snprintf(dirPath, sizeof(dirPath), "0:/title/%08x", titleId0);
+                    f_mkdir(dirPath);
+
+                    for (u32 tid : targetIds)
+                    {
+                        snprintf(dirPath, sizeof(dirPath), "0:/ticket/%08x/%08x.tik", titleId0, tid);
+                        FF_FILINFO tikInfo;
+                        if (f_stat(dirPath, &tikInfo) != FR_OK || tikInfo.fsize == 0)
+                        {
+                            u32 catNoSwap = (titleId0 >> 24) | ((titleId0 & 0xFF0000) >> 8) | ((titleId0 & 0xFF00) << 8) | (titleId0 << 24);
+                            u32 idNoSwap = (tid >> 24) | ((tid & 0xFF0000) >> 8) | ((tid & 0xFF00) << 8) | (tid << 24);
+                            nand.CreateTicket(dirPath, catNoSwap, idNoSwap, header.ROMVersion);
+                        }
+
+                        snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x", titleId0, tid);
+                        f_mkdir(dirPath);
+                        snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/content", titleId0, tid);
+                        f_mkdir(dirPath);
+                        snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/data", titleId0, tid);
+                        f_mkdir(dirPath);
+
+                        if (pubSavSize > 0)
+                        {
+                            snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/data/public.sav", titleId0, tid);
+                            nand.CreateSaveFile(dirPath, pubSavSize);
+                        }
+
+                        if (header.DSiPrivateSavSize > 0)
+                        {
+                            snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/data/private.sav", titleId0, tid);
+                            nand.CreateSaveFile(dirPath, header.DSiPrivateSavSize);
+                        }
+
+                        if (header.AppFlags & 0x04)
+                        {
+                            snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/data/banner.sav", titleId0, tid);
+                            FF_FILINFO bInfo;
+                            if (f_stat(dirPath, &bInfo) != FR_OK || bInfo.fsize != 0x4000)
+                            {
+                                FF_FIL bFile;
+                                if (f_open(&bFile, dirPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+                                {
+                                    u8 zeroBanner[0x4000] = {0};
+                                    u32 written = 0;
+                                    f_write(&bFile, zeroBanner, sizeof(zeroBanner), &written);
+                                    f_close(&bFile);
+                                }
+                            }
+                        }
+                    }
+
+                    Log(LogLevel::Info,
+                        "DSi::SetupDirectBoot: Auto-provisioned DSiWare NAND structure for title %08x/%08x (pubSav=%d, privSav=%d)\n",
+                        titleId0, idNormal, pubSavSize, header.DSiPrivateSavSize);
+                }
+
+                // Check and auto-provision TWLFontTable.dat on NAND (0:/sys/TWLFontTable.dat)
+                f_mkdir("0:/sys");
+                FF_FILINFO fontInfo;
+                if (f_stat("0:/sys/TWLFontTable.dat", &fontInfo) != FR_OK || fontInfo.fsize < 100000)
+                {
+                    const char* candidateFontPaths[] = {
+                        "/sdcard/STORM DS/bios/dsi/TWLFontTable.dat",
+                        "/sdcard/bios/dsi/TWLFontTable.dat",
+                        "/storage/emulated/0/STORM DS/bios/dsi/TWLFontTable.dat",
+                        "/storage/emulated/0/Android/data/me.magnum.melonds/files/bios/dsi/TWLFontTable.dat"
+                    };
+                    bool imported = false;
+                    for (const char* fontPath : candidateFontPaths)
+                    {
+                        if (nand.ImportFile("0:/sys/TWLFontTable.dat", fontPath))
+                        {
+                            Log(LogLevel::Info, "DSi::SetupDirectBoot: Auto-imported TWLFontTable.dat from %s\n", fontPath);
+                            imported = true;
+                            break;
+                        }
+                    }
+                    if (!imported)
+                    {
+                        Log(LogLevel::Warn, "DSi::SetupDirectBoot: 0:/sys/TWLFontTable.dat is missing on NAND and candidates not accessible\n");
+                    }
+                }
             }
         }
         else
@@ -829,30 +939,33 @@ void DSi::SetupDirectBoot()
         // and [0x02FFD850 + i*8] (TitleIDLow, TitleIDHigh) to verify title permissions for dataPub/dataPrv.
         {
             u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
-            u32 titleId1 = header.DSiTitleIDLow;
-            if (!titleId1)
-            {
-                titleId1 = ((u32)header.GameCode[0] << 24) |
-                           ((u32)header.GameCode[1] << 16) |
-                           ((u32)header.GameCode[2] << 8) |
-                           (u32)header.GameCode[3];
-            }
+            u32 idNormal = ((u32)(u8)header.GameCode[0] << 24) |
+                           ((u32)(u8)header.GameCode[1] << 16) |
+                           ((u32)(u8)header.GameCode[2] << 8) |
+                           (u32)(u8)header.GameCode[3];
+            u32 idSwapped = ((idNormal >> 24) & 0xFF) |
+                            ((idNormal >> 8) & 0xFF00) |
+                            ((idNormal & 0xFF00) << 8) |
+                            ((idNormal & 0xFF) << 24);
 
-            // Zero out 0x02FFD7CC through 0x02FFD850
-            for (u32 addr = 0x02FFD7CC; addr < 0x02FFD850; addr += 4)
+            // Zero out 0x02FFD7CC through 0x02FFD860
+            for (u32 addr = 0x02FFD7CC; addr < 0x02FFD860; addr += 4)
                 ARM9Write32(addr, 0);
 
-            // [0x02FFD800]: Installed title count = 1
-            ARM9Write8(0x02FFD800, 1);
+            // [0x02FFD800]: Installed title count = 2 (register both normal and swapped to guarantee SDK lookup match)
+            ARM9Write8(0x02FFD800, 2);
 
             // [0x02FFD840..0x02FFD84F]: Title permission bitmask = all 1s (enabled)
             for (u32 b = 0; b < 16; ++b)
                 ARM9Write8(0x02FFD840 + b, 0xFF);
 
-            // [0x02FFD850]: Title 0 TitleIDLow
-            // [0x02FFD854]: Title 0 TitleIDHigh
-            ARM9Write32(0x02FFD850, titleId1);
+            // Title 0: idNormal
+            ARM9Write32(0x02FFD850, idNormal);
             ARM9Write32(0x02FFD854, titleId0);
+
+            // Title 1: idSwapped
+            ARM9Write32(0x02FFD858, idSwapped);
+            ARM9Write32(0x02FFD85C, titleId0);
         }
 
         // Populate Cartridge Header mirror strictly at 0x02FFE000..0x02FFE240
@@ -872,14 +985,10 @@ void DSi::SetupDirectBoot()
             memset(devList, 0, sizeof(devList));
 
             u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
-            u32 titleId1 = header.DSiTitleIDLow;
-            if (!titleId1)
-            {
-                titleId1 = ((u32)header.GameCode[0] << 24) |
-                           ((u32)header.GameCode[1] << 16) |
-                           ((u32)header.GameCode[2] << 8) |
-                           (u32)header.GameCode[3];
-            }
+            u32 titleId1 = ((u32)(u8)header.GameCode[0] << 24) |
+                           ((u32)(u8)header.GameCode[1] << 16) |
+                           ((u32)(u8)header.GameCode[2] << 8) |
+                           (u32)(u8)header.GameCode[3];
 
             struct DeviceListEntry
             {
@@ -1176,44 +1285,6 @@ void DSi::SetupDirectBoot()
                                 header.DSiARM7Hash);
         }
         header.DSiCryptoFlags |= 0x03;
-    }
-
-    if (memcmp(header.GameCode, "KAL", 3) == 0)
-    {
-        // AlphaBounce (KAL*) direct RAM patches:
-        // 1. Target font error branch: bypass font abort to 0x020ba058
-        ARM9Write32(0x020ba014, 0xea00000f);
-
-        // 2. NOP known OS_Terminate call sites
-        ARM9Write32(0x020050d4, 0xe1a00000);
-        ARM9Write32(0x020e4548, 0xe1a00000);
-        ARM9Write32(0x020f5c50, 0xe1a00000);
-        ARM9Write32(0x020f5f0c, 0xe1a00000);
-
-        // 3. Neutralize OS_Terminate entrypoint at 0x02026768 with 'bx lr' (0xe12fff1e)
-        ARM9Write32(0x02026768, 0xe12fff1e);
-
-        // 4. Neutralize OS_Halt CP15 WFI loop at 0x02026804 with 'bx lr' (0xe12fff1e)
-        ARM9Write32(0x02026800, 0xe12fff1e);
-        ARM9Write32(0x02026804, 0xe12fff1e);
-        ARM9Write32(0x02026808, 0xe12fff1e);
-
-        // 5. Neutralize fatal caller at 0x020245e4 / 0x020245e8 with NOP
-        ARM9Write32(0x020245e4, 0xe1a00000);
-        ARM9Write32(0x020245e8, 0xe1a00000);
-
-        // 6. Scan ARM9 RAM range to neutralize any remaining matching opcodes
-        u32 base = header.ARM9RAMAddress;
-        for (u32 addr = base; addr + 4 <= base + header.ARM9Size; addr += 4)
-        {
-            u32 op = ARM9Read32(addr);
-            if (op == 0xebfdb1d3)
-                ARM9Write32(addr, 0xea00000f);
-            else if (op == 0xeb0085a3 || op == 0xebfd0886 || op == 0xebfcc2c4 || op == 0xebfcc215)
-                ARM9Write32(addr, 0xe1a00000);
-        }
-
-        Log(LogLevel::Info, "DSi::SetupDirectBoot: Applied AlphaBounce (KAL*) dynamic RAM patches.\n");
     }
 
     if (dsmode)
