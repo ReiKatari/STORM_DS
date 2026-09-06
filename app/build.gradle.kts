@@ -399,24 +399,39 @@ val prepareLibrashaderSource by tasks.registering {
         resolveBuildTool("rustup")
 
         val sourceDir = librashaderSourceDir.get().asFile
+        val revFile = librashaderSourceRevisionFile.get().asFile
+        if (revFile.exists() && revFile.readText().trim() == librashaderPinnedRevision && sourceDir.resolve(".git").isDirectory) {
+            logger.lifecycle("librashader source is already at revision $librashaderPinnedRevision")
+            return@doLast
+        }
+
         if (!sourceDir.resolve(".git").isDirectory) {
             delete(sourceDir)
             runBuildCommand(listOf(git, "clone", "--filter=blob:none", librashaderRepoUrl, sourceDir.absolutePath))
         }
 
-        runBuildCommand(listOf(git, "-C", sourceDir.absolutePath, "fetch", "--depth=1", "origin", librashaderPinnedRevision))
-        runBuildCommand(listOf(git, "-C", sourceDir.absolutePath, "checkout", "--force", "--detach", librashaderPinnedRevision))
+        val currentHead = try {
+            val process = ProcessBuilder(listOf(git, "-C", sourceDir.absolutePath, "rev-parse", "HEAD")).start()
+            val text = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            text
+        } catch (_: Exception) { "" }
 
-        val patches = librashaderPatchDir.asFile
-            .listFiles { file -> file.isFile && file.name.endsWith(".patch") }
-            ?.sortedBy { it.name }
-            .orEmpty()
-        patches.forEach { patch ->
-            logger.lifecycle("Applying librashader patch ${patch.name}")
-            runBuildCommand(listOf(git, "-C", sourceDir.absolutePath, "apply", patch.absolutePath))
+        if (currentHead != librashaderPinnedRevision) {
+            runBuildCommand(listOf(git, "-C", sourceDir.absolutePath, "fetch", "--depth=1", "origin", librashaderPinnedRevision))
+            runBuildCommand(listOf(git, "-C", sourceDir.absolutePath, "checkout", "--force", "--detach", librashaderPinnedRevision))
+
+            val patches = librashaderPatchDir.asFile
+                .listFiles { file -> file.isFile && file.name.endsWith(".patch") }
+                ?.sortedBy { it.name }
+                .orEmpty()
+            patches.forEach { patch ->
+                logger.lifecycle("Applying librashader patch ${patch.name}")
+                runBuildCommand(listOf(git, "-C", sourceDir.absolutePath, "apply", patch.absolutePath))
+            }
         }
 
-        librashaderSourceRevisionFile.get().asFile.writeText("${librashaderPinnedRevision}\n")
+        revFile.writeText("${librashaderPinnedRevision}\n")
     }
 }
 
