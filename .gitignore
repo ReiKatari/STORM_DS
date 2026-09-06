@@ -1,6 +1,7 @@
-# Build outputs & Executables
+# Build outputs and executables
 bin/
 obj/
+publish/
 dist/
 build/
 out/
@@ -21,10 +22,6 @@ gar_data/
 *.pfx
 *.cer
 
-# Keep tools in STORM SWITCH BOX if needed
-!tools/**/*.exe
-!tools/**/*.dll
-
 # Keep branding icons and release files in Files/
 !Files/*.ico
 !Files/*.png
@@ -40,7 +37,7 @@ app/.cxx/
 *.so
 *.dex
 
-# IDE & Environment
+# IDE and Environment
 .kotlin/
 .vs/
 .vscode/
@@ -54,7 +51,7 @@ Desktop.ini
 node_modules/
 
 
-# STORM SOFT Security & Large File Shield
+# STORM SOFT Security and Large File Shield
 .env
 .env.*
 *credential*.json
@@ -68,8 +65,9 @@ installer/Output/
 *.tmp*
 *.wal
 
-# Tools build artifacts
-Tools/**/publish/
-Tools/**/Payload/*.exe
+# Local secret configs
+*.local.json
+config.local.json
+scripts/config.local.json
 
 

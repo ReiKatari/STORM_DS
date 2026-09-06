@@ -75,11 +75,28 @@ class PhysicalDSiCameraSource(
     override fun captureFrame(camera: CameraType, buffer: ByteArray, width: Int, height: Int, isYuv: Boolean) {
         try {
             val currentFrontBuffer = cameraBuffers.getFrontBuffer()
-            val copyLen = minOf(currentFrontBuffer.size, buffer.size)
-            System.arraycopy(currentFrontBuffer, 0, buffer, 0, copyLen)
+            if (currentCameraProvider != null && currentFrontBuffer.isNotEmpty() && !isBufferAllZeros(currentFrontBuffer)) {
+                val copyLen = minOf(currentFrontBuffer.size, buffer.size)
+                System.arraycopy(currentFrontBuffer, 0, buffer, 0, copyLen)
+                return
+            }
+            fillMockCameraFrame(buffer)
         } catch (e: Throwable) {
-            Arrays.fill(buffer, 0)
+            fillMockCameraFrame(buffer)
         }
+    }
+
+    private fun isBufferAllZeros(buf: ByteArray): Boolean {
+        val checkLen = minOf(buf.size, 1024)
+        for (i in 0 until checkLen) {
+            if (buf[i] != 0.toByte()) return false
+        }
+        return true
+    }
+
+    private fun fillMockCameraFrame(buffer: ByteArray) {
+        // Neutral YUV422 luminance/chroma (Y=128, U=128, V=128) ensuring live feed detection
+        Arrays.fill(buffer, 128.toByte())
     }
 
     override fun dispose() {

@@ -60,6 +60,8 @@ const uint kFilterQuilez = 5u;
 const uint kFilterLcd = 6u;
 const uint kFilterScanlines = 7u;
 const uint kFilterScale2x = 8u;
+const uint kPackedScreenWidth = 256u;
+const uint kPackedScreenHeight = 192u;
 
 layout(location = 0) in vec2 fragUv;
 layout(location = 1) in float fragAlpha;
