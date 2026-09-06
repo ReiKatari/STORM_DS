@@ -86,9 +86,10 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
         val persisted = getPersistedStringSet(emptySet()).firstOrNull()
         val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
         val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
-        val defaultDir = java.io.File(baseDir, subFolder).apply { mkdirs() }
-        val defaultUri = Uri.fromFile(defaultDir)
+        val defaultDir = java.io.File(baseDir, subFolder)
         if (persisted == null || persisted.contains("data/user/0") || persisted.contains("files/bios")) {
+            defaultDir.mkdirs()
+            val defaultUri = Uri.fromFile(defaultDir)
             persistStringSet(setOf(defaultUri.toString()))
             summary = defaultDir.absolutePath
             validateDirectory(defaultUri)

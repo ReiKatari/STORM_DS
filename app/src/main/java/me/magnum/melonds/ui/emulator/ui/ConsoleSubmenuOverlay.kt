@@ -117,6 +117,13 @@ fun ConsoleSubmenuOverlayDetailed(
     val colors = watermelon
     val firstFocusRequester = remember { FocusRequester() }
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(50)
+        try {
+            firstFocusRequester.requestFocus()
+        } catch (_: Throwable) {}
+    }
+
     BackHandler { onDismiss() }
 
     Box(
@@ -260,7 +267,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                         shape = shape,
                                     )
                                     .let { if (index == 0) it.focusRequester(firstFocusRequester) else it }
-                                    .bouncingClickable { onEntrySelected(index) }
+                                    .bouncingClickable(interactionSource = interactionSource) { onEntrySelected(index) }
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
                             ) {
                                 if (item.icon != null) {

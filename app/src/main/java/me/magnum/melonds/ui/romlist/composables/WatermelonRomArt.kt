@@ -288,8 +288,8 @@ fun WatermelonRomArt(
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember { prefs.getBoolean("rom_gametdb_covers_enabled", true) }
-    val isRaCoversEnabled = remember { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val isScraperProEnabled = remember { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
+    val isRaCoversEnabled = remember { prefs.getBoolean("rom_ra_covers_enabled", false) }
 
     val activeModel: Any? = when {
         customCover != null -> customCover

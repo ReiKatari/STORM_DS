@@ -416,7 +416,7 @@ fun ContinuePlayingShelf(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
     val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
     val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
     var isCollapsed by remember { mutableStateOf(prefs.getBoolean("continue_playing_shelf_collapsed", false)) }
     val colors = watermelon
@@ -633,7 +633,7 @@ fun ContinuePlayingLandscapeColumn(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
     val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", true) }
+    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
     val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
     Column(modifier = modifier.fillMaxSize()) {
         Row(

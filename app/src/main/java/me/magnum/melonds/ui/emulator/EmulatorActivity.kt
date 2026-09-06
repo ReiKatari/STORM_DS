@@ -4446,15 +4446,21 @@ class EmulatorActivity : AppCompatActivity() {
             if (hasComposeOverlayOpen() && event.action == MotionEvent.ACTION_MOVE) {
                 val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
                 val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
+                val stickX = event.getAxisValue(MotionEvent.AXIS_X)
+                val stickY = event.getAxisValue(MotionEvent.AXIS_Y)
+
+                val effectiveX = if (Math.abs(hatX) > 0.5f) hatX else if (Math.abs(stickX) > 0.5f) stickX else 0f
+                val effectiveY = if (Math.abs(hatY) > 0.5f) hatY else if (Math.abs(stickY) > 0.5f) stickY else 0f
+
                 val direction = when {
-                    hatX > 0.5f && lastOverlayHatX <= 0.5f -> androidx.compose.ui.focus.FocusDirection.Right
-                    hatX < -0.5f && lastOverlayHatX >= -0.5f -> androidx.compose.ui.focus.FocusDirection.Left
-                    hatY > 0.5f && lastOverlayHatY <= 0.5f -> androidx.compose.ui.focus.FocusDirection.Down
-                    hatY < -0.5f && lastOverlayHatY >= -0.5f -> androidx.compose.ui.focus.FocusDirection.Up
+                    effectiveX > 0.5f && lastOverlayHatX <= 0.5f -> androidx.compose.ui.focus.FocusDirection.Right
+                    effectiveX < -0.5f && lastOverlayHatX >= -0.5f -> androidx.compose.ui.focus.FocusDirection.Left
+                    effectiveY > 0.5f && lastOverlayHatY <= 0.5f -> androidx.compose.ui.focus.FocusDirection.Down
+                    effectiveY < -0.5f && lastOverlayHatY >= -0.5f -> androidx.compose.ui.focus.FocusDirection.Up
                     else -> null
                 }
-                lastOverlayHatX = hatX
-                lastOverlayHatY = hatY
+                lastOverlayHatX = effectiveX
+                lastOverlayHatY = effectiveY
                 if (direction != null) {
                     moveOverlayFocus(direction)
                     return true
@@ -4473,7 +4479,7 @@ class EmulatorActivity : AppCompatActivity() {
     private fun hasComposeOverlayOpen(): Boolean {
         return pauseMenuState.value != null || saveStatesOverlayState.value != null ||
             consoleOverlayStack.isNotEmpty() || showDualScreenPresets.value ||
-            rewindOverlayState.value != null
+            rewindOverlayState.value != null || activeOverlays.hasActiveOverlays()
     }
 
     private fun requestOverlayHostFocus(attempt: Int = 0) {

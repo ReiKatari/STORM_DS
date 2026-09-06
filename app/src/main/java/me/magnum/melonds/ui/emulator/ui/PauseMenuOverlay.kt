@@ -412,7 +412,7 @@ private fun PauseOptionRow(
             .background(bg)
             .border(1.dp, border, shape)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
-            .bouncingClickable(onClick = onClick)
+            .bouncingClickable(interactionSource = interactionSource, onClick = onClick)
             .padding(horizontal = 14.dp),
     ) {
         if (highlighted) {
@@ -548,7 +548,7 @@ private fun ConfirmButton(
             .clip(shape)
             .background(background)
             .let { if (isFocused) it.border(2.dp, colors.green, shape) else it }
-            .bouncingClickable(onClick = onClick),
+            .bouncingClickable(interactionSource = interactionSource, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
