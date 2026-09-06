@@ -73,8 +73,10 @@ jobs:
           echo TAG=${GITHUB_REF/refs\/tags\//} >> $GITHUB_OUTPUT
           echo VERSION=$(grep -oP 'versionName = "\K(.*?)(?=")' buildSrc/src/main/kotlin/AppConfig.kt) >> $GITHUB_OUTPUT
 
+      # Automatic release creation disabled to prevent conflicts with official STORM release publisher scripts
       - name: Create GitHub Release
         id: create_release
+        if: false
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

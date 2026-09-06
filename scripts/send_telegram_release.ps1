@@ -1,6 +1,6 @@
 # Telegram Uploader Utility for STORM DS
 param(
-    [string]$Token = "8210884351:AAEh4VOWHViz2KF_oElAqEfrMPHlI5TWCjM",
+    [string]$Token = "",
     [string]$ChatId = "-5389146045",
     [string]$ApkPath,
     [string]$SetupPath,
@@ -8,6 +8,23 @@ param(
     [string]$SetupCaption,
     [string]$Announcement
 )
+
+if (-not $Token) {
+    if ($env:STORM_TELEGRAM_BOT_TOKEN) {
+        $Token = $env:STORM_TELEGRAM_BOT_TOKEN
+    } else {
+        $localConfigFile = Join-Path $PSScriptRoot "config.local.json"
+        if (Test-Path $localConfigFile) {
+            $json = Get-Content $localConfigFile -Raw | ConvertFrom-Json
+            $Token = $json.telegram_bot_token
+        }
+    }
+}
+
+if (-not $Token) {
+    Write-Error "Telegram Bot Token not specified! Set `$env:STORM_TELEGRAM_BOT_TOKEN or provide scripts/config.local.json."
+    exit 1
+}
 
 Add-Type -AssemblyName System.Net.Http
 

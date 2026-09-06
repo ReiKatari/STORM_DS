@@ -328,6 +328,112 @@ EncryptionStatus CheckEncryption(const char* romPath)
     return EncryptionStatus::MODCRYPT_ENCRYPTED;
 }
 
+static int IndexOfSequence(const uint8_t* buffer, size_t bufferLen, const uint8_t* pattern, size_t patternLen)
+{
+    if (bufferLen < patternLen) return -1;
+    size_t max = bufferLen - patternLen;
+    for (size_t i = 0; i <= max; i++)
+    {
+        if (buffer[i] != pattern[0]) continue;
+        if (memcmp(&buffer[i], pattern, patternLen) == 0)
+            return (int)i;
+    }
+    return -1;
+}
+
+static bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
+{
+    if (!rom || fileSize < HEADER_SIZE) return false;
+    bool patched = false;
+
+    // AlphaBounce [KALE] / [KALP] compatibility fix:
+    // The game attempts to load TWLFontTable.dat from NAND, fails magic check, and calls OS_Terminate.
+    // We NOP/redirect OS_Terminate calls and redirect the NAND font path to internal rom:/Arial.NFTR.
+    if (memcmp(&rom[OFFSET_GAME_CODE], "KAL", 3) == 0)
+    {
+        // 1. 0x50d4: bl OS_Terminate in NitroMain (0xeb0085a3 -> nop 0xe1a00000)
+        if (fileSize > 0x50d7)
+        {
+            uint32_t op1 = *(uint32_t*)&rom[0x50d4];
+            if (op1 == 0xeb0085a3)
+            {
+                *(uint32_t*)&rom[0x50d4] = 0xe1a00000;
+                patched = true;
+            }
+        }
+
+        // 2. 0xba014: bl OS_Terminate on font validation failure (0xebfdb1d3 -> b 0x20ba058 0xea00000f)
+        if (fileSize > 0xba017)
+        {
+            uint32_t op2 = *(uint32_t*)&rom[0xba014];
+            if (op2 == 0xebfdb1d3)
+            {
+                *(uint32_t*)&rom[0xba014] = 0xea00000f;
+                patched = true;
+            }
+        }
+
+        // 3. 0xe4548: bl OS_Terminate (0xebfd0886 -> nop 0xe1a00000)
+        if (fileSize > 0xe454b)
+        {
+            uint32_t op3 = *(uint32_t*)&rom[0xe4548];
+            if (op3 == 0xebfd0886)
+            {
+                *(uint32_t*)&rom[0xe4548] = 0xe1a00000;
+                patched = true;
+            }
+        }
+
+        // 4. 0xf5c50: bl OS_Terminate (0xebfcc2c4 -> nop 0xe1a00000)
+        if (fileSize > 0xf5c53)
+        {
+            uint32_t op4 = *(uint32_t*)&rom[0xf5c50];
+            if (op4 == 0xebfcc2c4)
+            {
+                *(uint32_t*)&rom[0xf5c50] = 0xe1a00000;
+                patched = true;
+            }
+        }
+
+        // 5. 0xf5f0c: bl OS_Terminate (0xebfcc215 -> nop 0xe1a00000)
+        if (fileSize > 0xf5f0f)
+        {
+            uint32_t op5 = *(uint32_t*)&rom[0xf5f0c];
+            if (op5 == 0xebfcc215)
+            {
+                *(uint32_t*)&rom[0xf5f0c] = 0xe1a00000;
+                patched = true;
+            }
+        }
+
+        // 6. Font path redirect: replace "nand:/sys/TWLFontTable.dat" with "rom:/Arial.NFTR"
+        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
+        const size_t targetLen = sizeof(targetPath) - 1;
+        int pathIdx = IndexOfSequence(rom, fileSize, (const uint8_t*)targetPath, targetLen);
+        if (pathIdx != -1)
+        {
+            const char replacementFont[] = "rom:/Arial.NFTR";
+            char replacement[sizeof(targetPath)] = {0};
+            memcpy(replacement, replacementFont, strlen(replacementFont));
+            memcpy(&rom[pathIdx], replacement, targetLen);
+            patched = true;
+        }
+
+        // 7. Recalculate Secure Area CRC16 if present
+        if (fileSize >= 0x8000)
+        {
+            uint16_t secCrc = CalcHeaderCRC16(&rom[0x4000], 0x4000);
+            *(uint16_t*)&rom[0x6C] = secCrc;
+        }
+
+        // 8. Recalculate Header CRC16
+        uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
+        *(uint16_t*)&rom[0x15E] = headerCrc;
+    }
+
+    return patched;
+}
+
 DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 {
     if (fd < 0)
@@ -393,8 +499,13 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 
     if (!mod1Encrypted && !mod2Encrypted)
     {
-        // Already decrypted: ensure header flag is set to 0x03
+        bool patched = ApplyCompatibilityPatches(rom.data(), fileSize);
         rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+        if (patched)
+        {
+            uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
+            *(uint16_t*)&rom[0x15E] = headerCrc;
+        }
         fseek(f, 0, SEEK_SET);
         fwrite(rom.data(), 1, fileSize, f);
         fflush(f);
@@ -496,6 +607,9 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
         }
     }
 
+    // Apply compatibility patches if needed
+    ApplyCompatibilityPatches(rom.data(), fileSize);
+
     // Set Modcrypt decrypted flags (bits 0 and 1: 03h=both decrypted) and recalculate header CRC16
     rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
     uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
@@ -560,7 +674,13 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
 
     if (!mod1Encrypted && !mod2Encrypted)
     {
+        bool patched = ApplyCompatibilityPatches(rom, fileSize);
         rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+        if (patched)
+        {
+            uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
+            *(uint16_t*)&rom[0x15E] = headerCrc;
+        }
         return true;
     }
 
@@ -641,6 +761,7 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
         }
     }
 
+    ApplyCompatibilityPatches(rom, fileSize);
     rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
     uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
     *(uint16_t*)&rom[0x15E] = headerCrc;
