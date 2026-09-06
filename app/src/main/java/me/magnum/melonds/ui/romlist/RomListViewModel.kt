@@ -62,7 +62,7 @@ class RomListViewModel @Inject constructor(
 
     private val _searchQuery = MutableStateFlow("")
 
-    private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val _boxArtByUri = MutableStateFlow<Map<String, String>>(boxArtRepository.getAllCachedMatches())
 
     val isRaCoverEnabled: StateFlow<Boolean> = settingsRepository.observeRaCoverEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, settingsRepository.isRaCoverEnabled())
@@ -140,7 +140,7 @@ class RomListViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     /** True when the user is logged into RetroAchievements. Badge is hidden when false. */
-    private val _isRaAuthenticated = MutableStateFlow(false)
+    private val _isRaAuthenticated = MutableStateFlow(retroAchievementsRepository.isUserAuthenticatedSync())
     val isRaAuthenticated: StateFlow<Boolean> = _isRaAuthenticated.asStateFlow()
 
     fun refreshAuthenticationState() {

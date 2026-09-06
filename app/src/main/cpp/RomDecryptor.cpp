@@ -82,12 +82,16 @@ static constexpr uint32_t OFFSET_MODCRYPT1_OFF    = 0x220;
 static constexpr uint32_t OFFSET_MODCRYPT1_SIZE   = 0x224;
 static constexpr uint32_t OFFSET_MODCRYPT2_OFF    = 0x228;
 static constexpr uint32_t OFFSET_MODCRYPT2_SIZE   = 0x22C;
-static constexpr uint32_t OFFSET_DSI_ARM9_HASH    = 0x300; // IV for area 1
-static constexpr uint32_t OFFSET_DSI_ARM7_HASH    = 0x314; // IV for area 2
-static constexpr uint32_t OFFSET_DSI_ARM9I_HASH   = 0x350; // KeyY source (ARM9i HMAC-SHA1)
-static constexpr uint32_t OFFSET_DSI_DIGEST_HASH  = 0x328; // KeyY source (Digest master hash)
-static constexpr uint32_t OFFSET_DSI_ARM7I_HASH   = 0x364; // KeyY source (ARM7i HMAC-SHA1)
-static constexpr uint32_t HEADER_SIZE             = 0x1000;
+static constexpr uint32_t OFFSET_DSI_ARM9_HASH        = 0x300; // IV for area 1
+static constexpr uint32_t OFFSET_DSI_ARM7_HASH        = 0x314; // IV for area 2
+static constexpr uint32_t OFFSET_DSI_DIGEST_HASH      = 0x328; // KeyY source (Digest master hash)
+static constexpr uint32_t OFFSET_BANNER_HASH          = 0x33C;
+static constexpr uint32_t OFFSET_DSI_ARM9I_HASH       = 0x350; // KeyY source (ARM9i HMAC-SHA1)
+static constexpr uint32_t OFFSET_DSI_ARM7I_HASH       = 0x364; // KeyY source (ARM7i HMAC-SHA1)
+static constexpr uint32_t OFFSET_HEADER_BIN_HASH      = 0x378;
+static constexpr uint32_t OFFSET_ARM9_OVERLAY_HASH    = 0x38C;
+static constexpr uint32_t OFFSET_DSI_ARM9_NOSEC_HASH  = 0x3A0;
+static constexpr uint32_t HEADER_SIZE                 = 0x1000;
 
 static bool isBufferPlaintext(const uint8_t* data, size_t size)
 {
@@ -350,64 +354,43 @@ bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
     bool patched = false;
 
     // AlphaBounce [KALE] / [KALP] compatibility fix:
-    // The game attempts to load TWLFontTable.dat from NAND, fails magic check, and calls OS_Terminate.
-    // We NOP/redirect OS_Terminate calls and redirect the NAND font path to internal rom:/Arial.NFTR.
+    // The game aborts on missing TWLFontTable.dat in NAND.
+    // We patch the font validation error branch to success (0x20ba058) and neutralize OS_Terminate / OS_Halt.
     if (memcmp(&rom[OFFSET_GAME_CODE], "KAL", 3) == 0)
     {
         uint32_t arm9Off  = *(uint32_t*)&rom[OFFSET_ARM9_ROM_OFFSET];
         uint32_t arm9Size = *(uint32_t*)&rom[OFFSET_ARM9_SIZE];
 
-        auto patchAt = [&](uint32_t relOffset, uint32_t expectedOp, uint32_t newOp) {
-            // Check ARM9 binary offset
-            if (arm9Off > 0 && arm9Off + relOffset + 4 <= fileSize)
+        auto patchRomOffset = [&](uint32_t romOffset, uint32_t newOp) {
+            if (romOffset + 4 <= fileSize)
             {
-                uint32_t op = *(uint32_t*)&rom[arm9Off + relOffset];
-                if (op == expectedOp)
-                {
-                    *(uint32_t*)&rom[arm9Off + relOffset] = newOp;
-                    patched = true;
-                }
-            }
-            // Also check direct ROM offset as fallback
-            if (relOffset + 4 <= fileSize)
-            {
-                uint32_t op = *(uint32_t*)&rom[relOffset];
-                if (op == expectedOp)
-                {
-                    *(uint32_t*)&rom[relOffset] = newOp;
-                    patched = true;
-                }
+                *(uint32_t*)&rom[romOffset] = newOp;
+                patched = true;
             }
         };
 
-        // 1. 0x50d4: bl OS_Terminate in NitroMain (0xeb0085a3 -> nop 0xe1a00000)
-        patchAt(0x50d4, 0xeb0085a3, 0xe1a00000);
+        // 1. 0xba014: bl OS_Terminate on font validation failure -> b 0x20ba058 (0xea00000f)
+        patchRomOffset(0xba014, 0xea00000f);
 
-        // 2. 0xba014: bl OS_Terminate on font validation failure (0xebfdb1d3 -> b 0x20ba058 0xea00000f)
-        patchAt(0xba014, 0xebfdb1d3, 0xea00000f);
+        // 2. NOP known OS_Terminate call sites
+        patchRomOffset(0x50d4, 0xe1a00000);
+        patchRomOffset(0xe4548, 0xe1a00000);
+        patchRomOffset(0xf5c50, 0xe1a00000);
+        patchRomOffset(0xf5f0c, 0xe1a00000);
 
-        // 3. 0xe4548: bl OS_Terminate (0xebfd0886 -> nop 0xe1a00000)
-        patchAt(0xe4548, 0xebfd0886, 0xe1a00000);
+        // 3. Neutralize OS_Terminate entrypoint at 0x26768 with 'bx lr' (0xe12fff1e)
+        patchRomOffset(0x26768, 0xe12fff1e);
 
-        // 4. 0xf5c50: bl OS_Terminate (0xebfcc2c4 -> nop 0xe1a00000)
-        patchAt(0xf5c50, 0xebfcc2c4, 0xe1a00000);
+        // 4. Neutralize OS_Halt CP15 WFI loop at 0x26804 with 'bx lr' (0xe12fff1e)
+        patchRomOffset(0x26800, 0xe12fff1e);
+        patchRomOffset(0x26804, 0xe12fff1e);
+        patchRomOffset(0x26808, 0xe12fff1e);
 
-        // 5. 0xf5f0c: bl OS_Terminate (0xebfcc215 -> nop 0xe1a00000)
-        patchAt(0xf5f0c, 0xebfcc215, 0xe1a00000);
+        // 5. Neutralize fatal caller at 0x245e4 / 0x245e8 with NOP
+        patchRomOffset(0x245e4, 0xe1a00000);
+        patchRomOffset(0x245e8, 0xe1a00000);
 
-        // 6. Neutralize OS_Terminate entrypoint at 0x26768 with 'bx lr' (0xe12fff1e)
-        if (arm9Off > 0 && arm9Off + 0x26768 + 4 <= fileSize)
-        {
-            *(uint32_t*)&rom[arm9Off + 0x26768] = 0xe12fff1e;
-            patched = true;
-        }
-        if (0x26768 + 4 <= fileSize)
-        {
-            *(uint32_t*)&rom[0x26768] = 0xe12fff1e;
-            patched = true;
-        }
-
-        // 7. Scan ARM9 binary range to neutralize any remaining matching opcodes
+        // 6. Scan ARM9 binary range to neutralize any remaining matching opcodes
         if (arm9Off > 0 && arm9Off + arm9Size <= fileSize)
         {
             for (uint32_t i = arm9Off; i + 4 <= arm9Off + arm9Size; i += 4)
@@ -426,32 +409,14 @@ bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
             }
         }
 
-        // 8. Font path redirect: replace ALL occurrences of "nand:/sys/TWLFontTable.dat" with "rom:/Arial.NFTR"
-        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
-        const size_t targetLen = sizeof(targetPath) - 1;
-        const char replacementFont[] = "rom:/Arial.NFTR";
-        char replacement[sizeof(targetPath)] = {0};
-        memcpy(replacement, replacementFont, strlen(replacementFont));
-
-        size_t searchPos = 0;
-        while (searchPos + targetLen <= fileSize)
-        {
-            int found = IndexOfSequence(rom + searchPos, fileSize - searchPos, (const uint8_t*)targetPath, targetLen);
-            if (found == -1)
-                break;
-            memcpy(&rom[searchPos + found], replacement, targetLen);
-            patched = true;
-            searchPos += found + targetLen;
-        }
-
-        // 9. Recalculate Secure Area CRC16 if present
+        // 7. Recalculate Secure Area CRC16 if present
         if (fileSize >= 0x8000)
         {
             uint16_t secCrc = CalcHeaderCRC16(&rom[0x4000], 0x4000);
             *(uint16_t*)&rom[0x6C] = secCrc;
         }
 
-        // 10. Recalculate Header CRC16
+        // 8. Recalculate Header CRC16
         uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
         *(uint16_t*)&rom[0x15E] = headerCrc;
     }
@@ -550,7 +515,17 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 
     // Derive the AES keys with multi-candidate trial
     bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
-    const uint32_t keyCandidates[] = { OFFSET_DSI_ARM9I_HASH, OFFSET_DSI_DIGEST_HASH, OFFSET_DSI_ARM7I_HASH };
+    const uint32_t keyCandidates[] = {
+        OFFSET_DSI_ARM9I_HASH,
+        OFFSET_DSI_DIGEST_HASH,
+        OFFSET_DSI_ARM7I_HASH,
+        OFFSET_DSI_ARM9_HASH,
+        OFFSET_DSI_ARM7_HASH,
+        OFFSET_BANNER_HASH,
+        OFFSET_HEADER_BIN_HASH,
+        OFFSET_ARM9_OVERLAY_HASH,
+        OFFSET_DSI_ARM9_NOSEC_HASH
+    };
 
     uint8_t normalKey[16];
     bool key1Found = false;
@@ -715,7 +690,17 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     // Derive the AES key
     // Derive the AES keys with multi-candidate trial
     bool devKey = (rom[OFFSET_DSI_CRYPTO_FLAGS] & (1 << 4)) || (rom[OFFSET_APP_FLAGS] & (1 << 7));
-    const uint32_t keyCandidates[] = { OFFSET_DSI_ARM9I_HASH, OFFSET_DSI_DIGEST_HASH, OFFSET_DSI_ARM7I_HASH };
+    const uint32_t keyCandidates[] = {
+        OFFSET_DSI_ARM9I_HASH,
+        OFFSET_DSI_DIGEST_HASH,
+        OFFSET_DSI_ARM7I_HASH,
+        OFFSET_DSI_ARM9_HASH,
+        OFFSET_DSI_ARM7_HASH,
+        OFFSET_BANNER_HASH,
+        OFFSET_HEADER_BIN_HASH,
+        OFFSET_ARM9_OVERLAY_HASH,
+        OFFSET_DSI_ARM9_NOSEC_HASH
+    };
 
     uint8_t normalKey[16];
     bool key1Found = false;

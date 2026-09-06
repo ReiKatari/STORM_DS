@@ -176,6 +176,9 @@ fun romIconRequest(context: Context, rom: Rom): ImageRequest {
     return ImageRequest.Builder(context)
         .data(rom)
         .memoryCacheKey("rom-icon:${rom.uri}")
+        .diskCacheKey("rom-icon:${rom.uri}")
+        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
         .crossfade(false)
         .build()
 }
@@ -311,34 +314,20 @@ fun WatermelonRomArt(
                 fontSize = initialsFontSize,
                 modifier = Modifier.align(Alignment.Center),
             )
-            if (activeModel == null) {
-                if (boxArtLoading && (isScraperProEnabled || isRaCoversEnabled)) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center).size(22.dp),
-                        color = Color.White.copy(alpha = 0.85f),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    AsyncImage(
-                        model = romIconRequest(context, rom),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        filterQuality = FilterQuality.None,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .fillMaxSize(),
-                    )
-                }
-            }
         }
+
+        // Instant baseline cartridge icon layer (loaded from persistent cache so tiles are never blank)
+        AsyncImage(
+            model = romIconRequest(context, rom),
+            contentDescription = null,
+            contentScale = ContentScale.FillBounds,
+            filterQuality = FilterQuality.None,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxSize(),
+        )
+
         if (activeModel != null) {
-            if (!artLoaded) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center).size(22.dp),
-                    color = Color.White.copy(alpha = 0.85f),
-                    strokeWidth = 2.dp,
-                )
-            }
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(activeModel)

@@ -365,6 +365,7 @@ void NDS::SetupDirectBoot()
     ARM7BIOSProt = 0x1204;
 
     SPI.GetFirmwareMem()->SetupDirectBoot();
+    NDSCartSlot.WriteSPICnt(0x8000);
 
     ARM9.CP15Write(0x100, 0x00012078);
     ARM9.CP15Write(0x200, 0x00000042);

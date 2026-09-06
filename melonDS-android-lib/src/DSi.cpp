@@ -357,10 +357,10 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     bool isArm7Area = (offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size) ||
                       (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize);
 
-    // 1. Check if memory is ALREADY plaintext executable code by measuring zero bytes.
-    // In AES ciphertext, zeros are ~0.39% (0-2 in 256 bytes). In real ARM code/alignment, zeros exceed 10% (>= 25 in 256 bytes).
+    // 1. Check if memory is ALREADY plaintext executable code by measuring zero bytes and ARM instructions.
     size_t sampleLen = std::min<size_t>(decryptSize, 256);
     size_t rawZeros = 0;
+    size_t rawArmE = 0;
     for (size_t i = 0; i < sampleLen; i += 4)
     {
         u32 w = isArm7Area ? ARM7Read32(binaryaddr + i) : ARM9Read32(binaryaddr + i);
@@ -368,12 +368,13 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         if (((w >> 8) & 0xFF) == 0) rawZeros++;
         if (((w >> 16) & 0xFF) == 0) rawZeros++;
         if (((w >> 24) & 0xFF) == 0) rawZeros++;
+        if ((w >> 28) == 0xE) rawArmE++;
     }
 
-    if (rawZeros >= 25)
+    if (rawZeros >= 25 || (rawArmE >= 16 && rawZeros >= 5))
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X is already plaintext (rawZeros=%zu/%zu), skipping\n",
-            binaryaddr, rawZeros, sampleLen);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X is already plaintext (rawZeros=%zu, rawArmE=%zu/%zu), skipping\n",
+            binaryaddr, rawZeros, rawArmE, sampleLen / 4);
         return;
     }
 
@@ -400,15 +401,21 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         keyX[14] = header.GameCode[1];
         keyX[15] = header.GameCode[0];
 
-        // Candidate hashes to test:
-        // 1. DSiARM9iHash (0x350) - standard retail DSiWare (e.g. Castle of Magic)
-        // 2. DSiDigestMasterHash (0x328) - modified / translated ROMs (e.g. Dark Void Zero [MOD - RUS])
-        // 3. DSiARM7iHash (0x364) - secondary ARM7i area
+        // Candidate hashes to test (all standard TWL header hashes):
         const u8* hashCandidates[] = {
             header.DSiARM9iHash,
             header.DSiDigestMasterHash,
-            header.DSiARM7iHash
+            header.DSiARM7iHash,
+            header.DSiARM9Hash,
+            header.DSiARM7Hash,
+            header.BannerHash,
+            header.HeaderBinariesHash,
+            header.ARM9OverlayHash,
+            header.DSiARM9NoSecureHash
         };
+
+        int bestScore = -1;
+        u8 bestKey[16];
 
         for (const u8* candHash : hashCandidates)
         {
@@ -426,8 +433,9 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
             AES_ctx trialCtx;
             AES_init_ctx_iv(&trialCtx, candKey, candTmp);
 
-            // Trial decrypt first 256 bytes and count zeros
+            // Trial decrypt first 256 bytes and count zeros and ARM 0xE condition opcodes
             size_t trialZeros = 0;
+            size_t trialArmE = 0;
             for (size_t i = 0; i < sampleLen; i += 16)
             {
                 u32 d[4];
@@ -446,22 +454,43 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
                     d[3] = ARM9Read32(binaryaddr + i + 12);
                 }
                 u8 block[16];
-                Bswap128(block, d);
+                Bswap128(block, (const u8*)d);
                 AES_CTR_xcrypt_buffer(&trialCtx, block, 16);
+                u8 swapped[16];
+                Bswap128(swapped, block);
                 for (int b = 0; b < 16; b++)
                 {
-                    if (block[b] == 0) trialZeros++;
+                    if (swapped[b] == 0) trialZeros++;
+                }
+                for (int w = 0; w < 4; w++)
+                {
+                    u32 instr = *(const u32*)&swapped[w * 4];
+                    if ((instr >> 28) == 0xE) trialArmE++;
                 }
             }
 
-            if (trialZeros >= 10)
+            int score = (int)(trialArmE * 3 + trialZeros);
+            if (score > bestScore)
             {
-                Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected matching key (trialZeros=%zu/%zu)\n",
-                    trialZeros, sampleLen);
+                bestScore = score;
+                memcpy(bestKey, candKey, 16);
+            }
+
+            if (trialZeros >= 10 || (trialArmE >= 16 && trialZeros >= 4))
+            {
+                Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected matching key (trialZeros=%zu, trialArmE=%zu/%zu, score=%d)\n",
+                    trialZeros, trialArmE, sampleLen / 4, score);
                 memcpy(selectedKey, candKey, 16);
                 keyFound = true;
                 break;
             }
+        }
+
+        if (!keyFound && bestScore >= 20)
+        {
+            Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected best key candidate by score (bestScore=%d)\n", bestScore);
+            memcpy(selectedKey, bestKey, 16);
+            keyFound = true;
         }
     }
 
@@ -997,6 +1026,7 @@ void DSi::SetupDirectBoot()
     SPI.GetFirmwareMem()->SetupDirectBoot();
 
     I2S.WriteSndExCnt(0x8008, 0xFFFF);
+    NDSCartSlot.WriteSPICnt(0x8000); // Enable Game Card Slot bus (AUXSPICNT bit 15 = 1) for DSiWare / ROM direct boot
 
     if (dsmode)
     {
@@ -1150,25 +1180,30 @@ void DSi::SetupDirectBoot()
 
     if (memcmp(header.GameCode, "KAL", 3) == 0)
     {
-        u32 base = header.ARM9RAMAddress;
+        // AlphaBounce (KAL*) direct RAM patches:
         // 1. Target font error branch: bypass font abort to 0x020ba058
-        if (ARM9Read32(base + 0xba014) == 0xebfdb1d3)
-            ARM9Write32(base + 0xba014, 0xea00000f);
+        ARM9Write32(0x020ba014, 0xea00000f);
 
         // 2. NOP known OS_Terminate call sites
-        if (ARM9Read32(base + 0x50d4) == 0xeb0085a3)
-            ARM9Write32(base + 0x50d4, 0xe1a00000);
-        if (ARM9Read32(base + 0xe4548) == 0xebfd0886)
-            ARM9Write32(base + 0xe4548, 0xe1a00000);
-        if (ARM9Read32(base + 0xf5c50) == 0xebfcc2c4)
-            ARM9Write32(base + 0xf5c50, 0xe1a00000);
-        if (ARM9Read32(base + 0xf5f0c) == 0xebfcc215)
-            ARM9Write32(base + 0xf5f0c, 0xe1a00000);
+        ARM9Write32(0x020050d4, 0xe1a00000);
+        ARM9Write32(0x020e4548, 0xe1a00000);
+        ARM9Write32(0x020f5c50, 0xe1a00000);
+        ARM9Write32(0x020f5f0c, 0xe1a00000);
 
         // 3. Neutralize OS_Terminate entrypoint at 0x02026768 with 'bx lr' (0xe12fff1e)
         ARM9Write32(0x02026768, 0xe12fff1e);
 
-        // 4. Scan ARM9 RAM range to neutralize any remaining matching opcodes
+        // 4. Neutralize OS_Halt CP15 WFI loop at 0x02026804 with 'bx lr' (0xe12fff1e)
+        ARM9Write32(0x02026800, 0xe12fff1e);
+        ARM9Write32(0x02026804, 0xe12fff1e);
+        ARM9Write32(0x02026808, 0xe12fff1e);
+
+        // 5. Neutralize fatal caller at 0x020245e4 / 0x020245e8 with NOP
+        ARM9Write32(0x020245e4, 0xe1a00000);
+        ARM9Write32(0x020245e8, 0xe1a00000);
+
+        // 6. Scan ARM9 RAM range to neutralize any remaining matching opcodes
+        u32 base = header.ARM9RAMAddress;
         for (u32 addr = base; addr + 4 <= base + header.ARM9Size; addr += 4)
         {
             u32 op = ARM9Read32(addr);
@@ -1178,34 +1213,7 @@ void DSi::SetupDirectBoot()
                 ARM9Write32(addr, 0xe1a00000);
         }
 
-        // 5. Replace font string in RAM if present
-        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
-        const u32 targetLen = sizeof(targetPath) - 1;
-        const char replacementFont[] = "rom:/Arial.NFTR";
-        u8 replacement[sizeof(targetPath)] = {0};
-        memcpy(replacement, replacementFont, strlen(replacementFont));
-
-        for (u32 addr = base; addr + targetLen <= base + header.ARM9Size; addr++)
-        {
-            if (ARM9Read8(addr) == (u8)targetPath[0])
-            {
-                bool match = true;
-                for (u32 k = 1; k < targetLen; k++)
-                {
-                    if (ARM9Read8(addr + k) != (u8)targetPath[k])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match)
-                {
-                    for (u32 k = 0; k < targetLen; k++)
-                        ARM9Write8(addr + k, replacement[k]);
-                }
-            }
-        }
-        Log(LogLevel::Info, "DSi::SetupDirectBoot: Applied AlphaBounce (KAL*) dynamic RAM and font patches.\n");
+        Log(LogLevel::Info, "DSi::SetupDirectBoot: Applied AlphaBounce (KAL*) dynamic RAM patches.\n");
     }
 
     if (dsmode)

@@ -100,6 +100,12 @@ class AndroidRetroAchievementsRepository(
         return raUserAuthStore.getUserAuth() is RAUserAuth.Authenticated
     }
 
+    override fun isUserAuthenticatedSync(): Boolean {
+        val username = sharedPreferences.getString("ra_username", null)
+        val token = sharedPreferences.getString("ra_token", null)
+        return !username.isNullOrBlank() && !token.isNullOrBlank()
+    }
+
     override suspend fun getUserAuthentication(): RAUserAuth? {
         return raUserAuthStore.getUserAuth()
     }
