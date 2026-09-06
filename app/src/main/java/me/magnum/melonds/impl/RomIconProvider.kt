@@ -24,7 +24,7 @@ import kotlin.concurrent.withLock
 class RomIconProvider(private val context: Context, private val romFileProcessorFactory: RomFileProcessorFactory) {
     companion object {
         private const val ICON_CACHE_DIR = "rom_icons"
-        private const val MAX_MEMORY_CACHE_BYTES = 16 * 1024 * 1024
+        private const val MAX_MEMORY_CACHE_BYTES = 32 * 1024 * 1024
     }
 
     private val memoryIconCache = object : android.util.LruCache<String, Bitmap>(MAX_MEMORY_CACHE_BYTES) {
@@ -32,82 +32,146 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
     }
     private val romIconLocks = Collections.synchronizedMap(mutableMapOf<String, ReentrantLock>())
 
+    private val internalIconCacheDir: File by lazy {
+        File(context.filesDir, ICON_CACHE_DIR).apply {
+            if (!exists()) {
+                mkdirs()
+                // Seamlessly migrate legacy cached icons from externalCacheDir if present
+                runCatching {
+                    context.externalCacheDir?.let { ext ->
+                        val extDir = File(ext, ICON_CACHE_DIR)
+                        if (extDir.isDirectory) {
+                            extDir.copyRecursively(this, overwrite = false)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun getRomIcon(rom: Rom): Bitmap? = withContext(Dispatchers.IO) {
-        val romHash = rom.uri.hashCode().toString()
-        getRomIconLock(romHash).withLock {
-            loadIconFromMemory(romHash, rom)
+        val primaryKey = getPrimaryCacheKey(rom)
+        getRomIconLock(primaryKey).withLock {
+            loadIcon(rom)
         }
     }
 
     fun clearIconCache() {
         memoryIconCache.evictAll()
-        val iconCacheDir = getIconCacheDir() ?: return
-        if (iconCacheDir.isDirectory) {
-            iconCacheDir.deleteRecursively()
+        runCatching {
+            if (internalIconCacheDir.isDirectory) {
+                internalIconCacheDir.deleteRecursively()
+            }
+            context.externalCacheDir?.let { ext ->
+                val extDir = File(ext, ICON_CACHE_DIR)
+                if (extDir.isDirectory) {
+                    extDir.deleteRecursively()
+                }
+            }
         }
     }
 
-    private fun getRomIconLock(romHash: String): ReentrantLock {
+    private fun getRomIconLock(lockKey: String): ReentrantLock {
         synchronized(romIconLocks) {
-            return romIconLocks.getOrPut(romHash) {
+            return romIconLocks.getOrPut(lockKey) {
                 ReentrantLock()
             }
         }
     }
 
-    private fun loadIconFromMemory(hash: String, rom: Rom): Bitmap? {
-        var bitmap = memoryIconCache.get(hash)
-        if (bitmap != null)
-            return bitmap
+    private fun getPrimaryCacheKey(rom: Rom): String {
+        return runCatching {
+            val md = java.security.MessageDigest.getInstance("MD5")
+            val bytes = md.digest(rom.uri.toString().toByteArray(Charsets.UTF_8))
+            bytes.joinToString("") { "%02x".format(it) }
+        }.getOrElse {
+            rom.uri.hashCode().toString()
+        }
+    }
 
-        bitmap = loadIconFromDisk(hash, rom)
-        if (bitmap != null)
-            memoryIconCache.put(hash, bitmap)
+    private fun getCandidateKeys(rom: Rom): List<String> {
+        val keys = mutableListOf<String>()
+        keys.add(getPrimaryCacheKey(rom))
+        if (rom.gameCode.isNotBlank()) {
+            keys.add("code_${rom.gameCode}_${rom.fileName.hashCode()}")
+        }
+        keys.add(rom.uri.hashCode().toString())
+        return keys.distinct()
+    }
 
+    private fun loadIcon(rom: Rom): Bitmap? {
+        val keys = getCandidateKeys(rom)
+        for (k in keys) {
+            val fromMem = memoryIconCache.get(k)
+            if (fromMem != null) return fromMem
+        }
+
+        val bitmap = loadIconFromDisk(rom)
+        if (bitmap != null) {
+            for (k in keys) {
+                memoryIconCache.put(k, bitmap)
+            }
+        }
         return bitmap
     }
 
-    private fun loadIconFromDisk(hash: String, rom: Rom): Bitmap? {
+    private fun loadIconFromDisk(rom: Rom): Bitmap? {
         rom.installedDsiWareIcon?.let { icon ->
             return createBitmap(32, 32).apply {
                 copyPixelsFromBuffer(ByteBuffer.wrap(icon))
             }
         }
 
-        val iconCacheDir = getIconCacheDir()
-        if (iconCacheDir?.isDirectory == true) {
-            val iconFile = File(iconCacheDir, hash)
-            if (iconFile.isFile) {
-                return BitmapFactory.decodeFile(iconFile.absolutePath)
+        val keys = getCandidateKeys(rom)
+        // 1. Search persistent internal cache directory
+        for (k in keys) {
+            val file = File(internalIconCacheDir, k)
+            if (file.isFile && file.length() > 0) {
+                val bmp = BitmapFactory.decodeFile(file.absolutePath)
+                if (bmp != null) return bmp
             }
         }
 
+        // 2. Fallback: check legacy external cache directory
+        val extCacheDir = context.externalCacheDir?.let { File(it, ICON_CACHE_DIR) }
+        if (extCacheDir?.isDirectory == true) {
+            for (k in keys) {
+                val file = File(extCacheDir, k)
+                if (file.isFile && file.length() > 0) {
+                    val bmp = BitmapFactory.decodeFile(file.absolutePath)
+                    if (bmp != null) {
+                        saveRomIcon(rom, bmp) // Persist to internal cache
+                        return bmp
+                    }
+                }
+            }
+        }
+
+        // 3. Extract icon from ROM binary via processor
         val romProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
             ?: (DocumentFile.fromSingleUri(context, rom.uri)?.let { romFileProcessorFactory.getFileRomProcessorForDocument(it) })
             ?: romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)
             ?: return null
         val bitmap = romProcessor.getRomIcon(rom)
-        if (bitmap != null && iconCacheDir != null) {
-            saveRomIcon(hash, bitmap)
+        if (bitmap != null) {
+            saveRomIcon(rom, bitmap)
         }
         return bitmap
     }
 
-    private fun saveRomIcon(romHash: String, icon: Bitmap) {
-        val iconCacheDir = getIconCacheDir() ?: return
-        if (iconCacheDir.isDirectory || iconCacheDir.mkdirs()) {
-            val iconFile = File(iconCacheDir, romHash)
-            try {
-                iconFile.outputStream().use {
-                    icon.compress(Bitmap.CompressFormat.PNG, 100, it)
+    private fun saveRomIcon(rom: Rom, icon: Bitmap) {
+        val keys = getCandidateKeys(rom)
+        if (internalIconCacheDir.isDirectory || internalIconCacheDir.mkdirs()) {
+            for (k in keys) {
+                val iconFile = File(internalIconCacheDir, k)
+                try {
+                    iconFile.outputStream().use {
+                        icon.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                } catch (_: Exception) {
+                    // Ignore disk write errors
                 }
-            } catch (_: Exception) {
-                // Ignore errors
             }
         }
-    }
-
-    private fun getIconCacheDir(): File? {
-        return context.externalCacheDir?.let { File(it, ICON_CACHE_DIR) }
     }
 }

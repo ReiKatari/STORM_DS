@@ -26,6 +26,7 @@ interface RetroAchievementsRepository {
     suspend fun refreshUserProfile()
 
     suspend fun isUserAuthenticated(): Boolean
+    fun isUserAuthenticatedSync(): Boolean
     suspend fun getUserAuthentication(): RAUserAuth?
     suspend fun login(username: String, password: String): Result<Unit>
     suspend fun logout(): Boolean

@@ -99,6 +99,14 @@ class BoxArtRepository @Inject constructor(
         if (matchValue == NO_MATCH) null else matchValue
     }
 
+    fun getAllCachedMatches(): Map<String, String> {
+        if (!isMatchesLoaded) {
+            loadMatches()
+        }
+        return memoryCache.filterValues { it != NO_MATCH }
+    }
+
+    @Synchronized
     private fun loadMatches() {
         if (isMatchesLoaded) return
         runCatching {

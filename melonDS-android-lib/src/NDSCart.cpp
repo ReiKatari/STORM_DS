@@ -1881,7 +1881,7 @@ void NDSCartSlot::ResetCart() noexcept
 {
     // CHECKME: what if there is a transfer in progress?
 
-    SPICnt = 0;
+    SPICnt = 0x8000; // Default: Game Card Slot bus enabled (bit 15 = 1)
     ROMCnt = 0;
 
     SPIData = 0;
@@ -1965,6 +1965,11 @@ void NDSCartSlot::WriteROMCnt(u32 val) noexcept
 
     // transfers will only start when bit31 changes from 0 to 1
     // and if AUXSPICNT is configured correctly
+    if (xferstart && !(SPICnt & (1<<15)))
+    {
+        // Direct boot / hardware compatibility: ensure slot is enabled when transfer initiated
+        SPICnt |= (1<<15);
+    }
     if (!(SPICnt & (1<<15))) return;
     if (SPICnt & (1<<13)) return;
     if (!xferstart) return;
