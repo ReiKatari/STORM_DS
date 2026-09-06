@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <time.h>
+#include <sys/resource.h>
 #include <MelonDS.h>
 #include <MelonDSAudio.h>
 #include <RomGbaSlotConfig.h>
@@ -2543,6 +2544,9 @@ double getCurrentMillis() {
 
 void* emulate(void*)
 {
+    // Elevate emulation worker thread priority to high-performance class (-8)
+    (void)setpriority(PRIO_PROCESS, gettid(), -8);
+
     int64_t nextFrameTimeNs = getMonotonicNanos();
     int64_t lastMeasureFpsTimeNs = nextFrameTimeNs;
     int observedFrames = 0;
@@ -2604,11 +2608,22 @@ void* emulate(void*)
             }
             else if (nowNs < nextFrameTimeNs)
             {
-                timespec targetTs = {
-                    .tv_sec = static_cast<time_t>(nextFrameTimeNs / 1000000000LL),
-                    .tv_nsec = static_cast<long>(nextFrameTimeNs % 1000000000LL),
-                };
-                clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &targetTs, nullptr);
+                int64_t sleepNs = nextFrameTimeNs - nowNs;
+                if (sleepNs > 350000LL)
+                {
+                    int64_t sleepTargetNs = nextFrameTimeNs - 150000LL;
+                    timespec targetTs = {
+                        .tv_sec = static_cast<time_t>(sleepTargetNs / 1000000000LL),
+                        .tv_nsec = static_cast<long>(sleepTargetNs % 1000000000LL),
+                    };
+                    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &targetTs, nullptr);
+                }
+                while (getMonotonicNanos() < nextFrameTimeNs)
+                {
+                    #if defined(__arm__) || defined(__aarch64__)
+                    __builtin_arm_yield();
+                    #endif
+                }
             }
         }
         else

@@ -62,7 +62,8 @@ std::optional<NDSCart::NDSCartArgs> BuildNdsCartArgs(EmulatorConfiguration confi
         .SRAMLength = sramFileLength,
     };
 
-    // In-memory transparent Modcrypt decryption for DSi / DSiWare ROMs
+    // In-memory transparent Modcrypt decryption and compatibility patching for DSi / DSiWare ROMs
+    MelonDSAndroid::RomDecryptor::ApplyCompatibilityPatches(romData.get(), (size_t) romFileLength);
     MelonDSAndroid::RomDecryptor::DecryptRomBuffer(romData.get(), (size_t) romFileLength);
 
     // nullptr as user-data is not OK!

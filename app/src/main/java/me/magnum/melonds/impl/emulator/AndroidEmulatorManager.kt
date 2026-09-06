@@ -452,7 +452,7 @@ class AndroidEmulatorManager(
                         delay(10)
                         val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                         val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
-                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                         writeGameExecutionLog(rom, rom.fileName, true, "Fallback boot successful in standard DS FreeBIOS mode\n$fullDiag", "loadRom (DS Fallback)")
                         return@withContext RomLaunchResult.LaunchSuccessful(retryResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
                     }
@@ -461,7 +461,7 @@ class AndroidEmulatorManager(
                 if (loadResult.isTerminal || !isActive) {
                     val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                     val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
-                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                     cameraManager.stopCurrentCameraSource()
                     MelonEmulator.stopEmulation()
                     writeGameExecutionLog(rom, rom.fileName, false, "loadRom returned terminal error: $loadResult\n$fullDiag", "loadRom")
@@ -471,7 +471,7 @@ class AndroidEmulatorManager(
                     if (!precompileVulkanPipelines(emulatorConfiguration)) {
                         val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                         val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
-                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                         cameraManager.stopCurrentCameraSource()
                         MelonEmulator.stopEmulation()
                         messageQueue.stop()
@@ -488,7 +488,7 @@ class AndroidEmulatorManager(
                     coroutineScope.launch {
                         delay(2000)
                         val liveCpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
-                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic (Live After 2s) ---\n$liveCpuDiag"
+                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic (Live After 2s) ---\n$liveCpuDiag"
                         writeGameExecutionLog(rom, rom.fileName, true, "ROM launch successful in ${emulatorConfiguration.consoleType} mode\n$fullDiag", "loadRom (Live)")
                     }
 
@@ -690,7 +690,7 @@ class AndroidEmulatorManager(
                     delay(500)
                     val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                     val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
-                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                    val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                     writeGameExecutionLog(rom, titleIdHex, true, "Fallback boot successful in standard DS mode\n$fullDiag", "loadDsiWare (DS Fallback)")
                     return@withContext RomLaunchResult.LaunchSuccessful(true)
                 }
@@ -869,7 +869,7 @@ class AndroidEmulatorManager(
                 delay(10)
                 val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                 val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
-                val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU & Hardware Diagnostic ---\n$cpuDiag"
+                val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                 writeGameExecutionLog(rom, titleIdHex, true, "Fallback boot successful in standard DS mode\n$fullDiag", "loadDsiWare (DS Fallback)")
                 return@withContext RomLaunchResult.LaunchSuccessful(true)
             }
