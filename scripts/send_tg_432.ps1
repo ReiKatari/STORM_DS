@@ -1,36 +1,13 @@
 # Telegram Announcement and APK uploader for STORM DS 4.3.2
-$announcement = @"
-🚀 STORM DS 4.3.2 — Релиз обновления!
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
-Эмулятор двухэкранной портативной игровой консоли Nintendo DS и Nintendo DSi для Android на базе WatermelonDS и melonDS Core.
+$announcementFile = Join-Path $PSScriptRoot "announcement_432.txt"
 
-🌟 Ключевые изменения и улучшения версии 4.3.2:
-
-🔹 Совместимость AlphaBounce (KALE и KALP):
-• Нативная интеграция таблицы шрифтов TWLFontTable.dat в файловую систему NAND (0:/sys/TWLFontTable.dat).
-• Устранён белый экран и зависание: шрифт загружается штатным системным вызовом DSi, игровой текст и интерфейс отрисовываются корректно без деструктивных патчей памяти.
-
-🔹 Совместимость Dragon Quest Wars (KDQE) и DSiWare:
-• Реализована автоматическая инициализация и подготовка структуры сохранений public.sav, private.sav, тикетов и метаданных на NAND.
-• Обеспечена поддержка как прямого, так и байт-реверсивного представления Title ID, устраняя системную ошибку запуска при монтировании тома dataPub.
-
-🔹 Стабильность библиотеки игр и бэйджей:
-• Исключён блокирующий фильтр проверки хранилища SAF при холодном старте на Android 11+: все игры из кэша появляются моментально без мерцания и отложенного дорисовывания.
-• Восстановлено и синхронизировано сохранение кода игры в зеркале метаданных кэша.
-
-🔹 Поддержка сжатых ROM с DSi-улучшениями:
-• В обработчик архивов возвращена корректная передача флага расширений DSi — значок DSi теперь надёжно отображается для всех сжатых игр.
-
-🔹 Кэширование иконок DSiWare:
-• Иконки установленных DSiWare-игр кэшируются на внутренний накопитель устройства для мгновенного последующего открытия.
-
-📦 Исполняемый файл STORM_DS_4.3.2.apk прикреплён ниже.
-"@
-
-powershell -ExecutionPolicy Bypass -File scripts/send_telegram_release.ps1 `
+powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "send_telegram_release.ps1") `
     -ChatId "-5389146045" `
     -ApkPath "E:\STORM DS\Files\STORM_DS_4.3.2.apk" `
-    -Announcement $announcement `
+    -AnnouncementFile $announcementFile `
     -Caption "STORM_DS_4.3.2.apk (Релиз • Эмулятор Nintendo DS и Nintendo DSi)"
 
 Write-Host "Telegram publication script finished."

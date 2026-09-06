@@ -1,4 +1,7 @@
 # Telegram Uploader Utility for STORM DS
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 param(
     [string]$Token = "",
     [string]$ChatId = "-5389146045",
@@ -6,7 +9,8 @@ param(
     [string]$SetupPath,
     [string]$Caption,
     [string]$SetupCaption,
-    [string]$Announcement
+    [string]$Announcement,
+    [string]$AnnouncementFile
 )
 
 if (-not $Token) {
@@ -77,6 +81,10 @@ function Upload-TelegramDocument([string]$filePath, [string]$docCaption) {
 
     $resp = $client.PostAsync("https://api.telegram.org/bot$Token/sendDocument", $form).Result
     Write-Host "Done ${fileName}: " ($resp.Content.ReadAsStringAsync().Result)
+}
+
+if ($AnnouncementFile -and (Test-Path $AnnouncementFile)) {
+    $Announcement = [System.IO.File]::ReadAllText($AnnouncementFile, [System.Text.Encoding]::UTF8)
 }
 
 if ($Announcement) {
