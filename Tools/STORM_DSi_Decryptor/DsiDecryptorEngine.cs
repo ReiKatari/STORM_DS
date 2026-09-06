@@ -14,6 +14,7 @@ public class RomInfo
     public bool IsDsiRom { get; set; }
     public bool HasModcrypt { get; set; }
     public bool IsEncrypted { get; set; }
+    public bool NeedsCompatibilityPatch { get; set; }
     public uint Modcrypt1Offset { get; set; }
     public uint Modcrypt1Size { get; set; }
     public uint Modcrypt2Offset { get; set; }
@@ -114,12 +115,12 @@ public static class DsiDecryptorEngine
         return keyX;
     }
 
-    public static ushort CalcHeaderCRC16(byte[] data, int len)
+    public static ushort CalcHeaderCRC16(byte[] data, int offset, int len)
     {
         ushort crc = 0xFFFF;
         for (int i = 0; i < len; i++)
         {
-            crc ^= (ushort)data[i];
+            crc ^= (ushort)data[offset + i];
             for (int b = 0; b < 8; b++)
             {
                 if ((crc & 1) != 0)
@@ -130,6 +131,8 @@ public static class DsiDecryptorEngine
         }
         return crc;
     }
+
+    public static ushort CalcHeaderCRC16(byte[] data, int len) => CalcHeaderCRC16(data, 0, len);
 
     public static byte[]? FindWorkingNormalKey(byte[] rom, uint offset, uint size, int ivOffset)
     {
@@ -313,7 +316,146 @@ public static class DsiDecryptorEngine
             info.IsEncrypted = mod1Enc || mod2Enc;
         }
 
+        // Check for compatibility patches (e.g. AlphaBounce [KAL])
+        if (info.GameCode.StartsWith("KAL", StringComparison.OrdinalIgnoreCase))
+        {
+            if (info.IsEncrypted)
+            {
+                info.NeedsCompatibilityPatch = true;
+            }
+            else if (fi.Length > 0x50d7)
+            {
+                fs.Seek(0x50d4, SeekOrigin.Begin);
+                byte[] checkBytes = new byte[4];
+                fs.ReadExactly(checkBytes, 0, 4);
+                uint val = BitConverter.ToUInt32(checkBytes, 0);
+                // 0xeb0085a3 is unpatched bl to OS_Terminate in NitroMain; 0xe1a00000 is nop
+                if (val == 0xeb0085a3)
+                {
+                    info.NeedsCompatibilityPatch = true;
+                }
+            }
+        }
+
         return info;
+    }
+
+    public static bool ApplyCompatibilityPatches(byte[] rom, string gameCode)
+    {
+        bool patched = false;
+
+        // AlphaBounce [KALE] / [KALP] compatibility fix:
+        // The game attempts to load TWLFontTable.dat from NAND, fails magic check, and calls OS_Terminate.
+        // We NOP/redirect OS_Terminate calls and redirect the NAND font path to internal rom:/Arial.NFTR.
+        if (gameCode.StartsWith("KAL", StringComparison.OrdinalIgnoreCase))
+        {
+            // 1. 0x50d4: bl OS_Terminate in NitroMain (0xeb0085a3 -> nop 0xe1a00000)
+            if (rom.Length > 0x50d7)
+            {
+                uint op1 = BitConverter.ToUInt32(rom, 0x50d4);
+                if (op1 == 0xeb0085a3)
+                {
+                    byte[] nop = BitConverter.GetBytes(0xe1a00000u);
+                    Array.Copy(nop, 0, rom, 0x50d4, 4);
+                    patched = true;
+                }
+            }
+
+            // 2. 0xba014: bl OS_Terminate on font validation failure (0xebfdb1d3 -> b 0x20ba058 0xea00000f)
+            if (rom.Length > 0xba017)
+            {
+                uint op2 = BitConverter.ToUInt32(rom, 0xba014);
+                if (op2 == 0xebfdb1d3)
+                {
+                    byte[] branch = BitConverter.GetBytes(0xea00000fu);
+                    Array.Copy(branch, 0, rom, 0xba014, 4);
+                    patched = true;
+                }
+            }
+
+            // 3. 0xe4548: bl OS_Terminate (0xebfd0886 -> nop 0xe1a00000)
+            if (rom.Length > 0xe454b)
+            {
+                uint op3 = BitConverter.ToUInt32(rom, 0xe4548);
+                if (op3 == 0xebfd0886)
+                {
+                    byte[] nop = BitConverter.GetBytes(0xe1a00000u);
+                    Array.Copy(nop, 0, rom, 0xe4548, 4);
+                    patched = true;
+                }
+            }
+
+            // 4. 0xf5c50: bl OS_Terminate (0xebfcc2c4 -> nop 0xe1a00000)
+            if (rom.Length > 0xf5c53)
+            {
+                uint op4 = BitConverter.ToUInt32(rom, 0xf5c50);
+                if (op4 == 0xebfcc2c4)
+                {
+                    byte[] nop = BitConverter.GetBytes(0xe1a00000u);
+                    Array.Copy(nop, 0, rom, 0xf5c50, 4);
+                    patched = true;
+                }
+            }
+
+            // 5. 0xf5f0c: bl OS_Terminate (0xebfcc215 -> nop 0xe1a00000)
+            if (rom.Length > 0xf5f0f)
+            {
+                uint op5 = BitConverter.ToUInt32(rom, 0xf5f0c);
+                if (op5 == 0xebfcc215)
+                {
+                    byte[] nop = BitConverter.GetBytes(0xe1a00000u);
+                    Array.Copy(nop, 0, rom, 0xf5f0c, 4);
+                    patched = true;
+                }
+            }
+
+            // 6. Font path redirect: replace "nand:/sys/TWLFontTable.dat" with "rom:/Arial.NFTR"
+            byte[] targetPath = System.Text.Encoding.ASCII.GetBytes("nand:/sys/TWLFontTable.dat");
+            int pathIdx = IndexOfSequence(rom, targetPath);
+            if (pathIdx != -1)
+            {
+                byte[] replacement = new byte[targetPath.Length];
+                byte[] fontName = System.Text.Encoding.ASCII.GetBytes("rom:/Arial.NFTR");
+                Array.Copy(fontName, 0, replacement, 0, fontName.Length);
+                Array.Copy(replacement, 0, rom, pathIdx, targetPath.Length);
+                patched = true;
+            }
+
+            // 7. Recalculate Secure Area CRC16 if present
+            if (rom.Length >= 0x8000)
+            {
+                ushort secCrc = CalcHeaderCRC16(rom, 0x4000, 0x4000);
+                rom[0x6C] = (byte)(secCrc & 0xFF);
+                rom[0x6D] = (byte)(secCrc >> 8);
+            }
+
+            // 8. Recalculate Header CRC16
+            ushort headerCrc = CalcHeaderCRC16(rom, 0, 0x15E);
+            rom[0x15E] = (byte)(headerCrc & 0xFF);
+            rom[0x15F] = (byte)(headerCrc >> 8);
+        }
+
+        return patched;
+    }
+
+    private static int IndexOfSequence(byte[] buffer, byte[] pattern)
+    {
+        int max = buffer.Length - pattern.Length;
+        for (int i = 0; i <= max; i++)
+        {
+            if (buffer[i] != pattern[0]) continue;
+            bool match = true;
+            for (int k = 1; k < pattern.Length; k++)
+            {
+                if (buffer[i + k] != pattern[k])
+                {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
     }
 
     public static bool DecryptRomBuffer(byte[] rom)
@@ -330,10 +472,18 @@ public static class DsiDecryptorEngine
 
         if (!mod1Encrypted && !mod2Encrypted)
         {
-            // Already decrypted: ensure header flag is set
+            // Already decrypted: check if compatibility patch is needed
+            string code = System.Text.Encoding.ASCII.GetString(rom, 0x0C, 4);
+            bool patched = ApplyCompatibilityPatches(rom, code);
+
             if ((rom[0x1C] & 0x03) != 0x03)
             {
                 rom[0x1C] |= 0x03;
+                patched = true;
+            }
+
+            if (patched)
+            {
                 ushort crc = CalcHeaderCRC16(rom, 0x15E);
                 rom[0x15E] = (byte)(crc & 0xFF);
                 rom[0x15F] = (byte)(crc >> 8);
@@ -379,6 +529,10 @@ public static class DsiDecryptorEngine
             }
         }
 
+        // Apply compatibility patches if needed (e.g. AlphaBounce)
+        string gameCode = System.Text.Encoding.ASCII.GetString(rom, 0x0C, 4);
+        ApplyCompatibilityPatches(rom, gameCode);
+
         // Set DSi cart header flags (Modcrypt areas decrypted: 0x03 = both decrypted)
         rom[0x1C] |= 0x03;
 
@@ -393,9 +547,9 @@ public static class DsiDecryptorEngine
     public static bool DecryptFile(string inputPath, string outputPath)
     {
         var info = InspectRom(inputPath);
-        if (!info.IsEncrypted)
+        if (!info.IsEncrypted && !info.NeedsCompatibilityPatch)
         {
-            // If already decrypted or not encrypted, copy file verbatim to destination
+            // If already decrypted and doesn't need patches, copy file verbatim to destination
             string? outDir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir))
                 Directory.CreateDirectory(outDir);

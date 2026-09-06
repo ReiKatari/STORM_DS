@@ -23,6 +23,13 @@ public class RomItem : INotifyPropertyChanged
         set { _isEncrypted = value; OnPropertyChanged(); }
     }
 
+    private bool _needsCompatibilityPatch;
+    public bool NeedsCompatibilityPatch
+    {
+        get => _needsCompatibilityPatch;
+        set { _needsCompatibilityPatch = value; OnPropertyChanged(); }
+    }
+
     public string Status
     {
         get => _status;

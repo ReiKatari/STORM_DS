@@ -114,7 +114,11 @@ public partial class App : Application
 
         if (!_hasHandle)
         {
-            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.7");
+            IntPtr hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.8");
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.7");
+            }
             if (hWnd == IntPtr.Zero)
             {
                 hWnd = FindWindow(null, "STORM DSi Decryptor 1.1.6");
@@ -208,7 +212,7 @@ public partial class App : Application
 
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine("  STORM DSi Decryptor 1.1.7 (STORM SOFT)");
+        Console.WriteLine("  STORM DSi Decryptor 1.1.8 (STORM SOFT)");
         Console.WriteLine("  Nintendo DSi and DSiWare Fast Modcrypt Decryptor");
         Console.WriteLine("==========================================================");
 
@@ -290,7 +294,7 @@ public partial class App : Application
                 ? file
                 : Path.Combine(targetDir, Path.GetFileName(file));
 
-            if (!info.IsEncrypted)
+            if (!info.IsEncrypted && !info.NeedsCompatibilityPatch)
             {
                 if (!inPlace && !string.IsNullOrWhiteSpace(outDir))
                 {
@@ -311,12 +315,13 @@ public partial class App : Application
 
             if (ok)
             {
-                Console.WriteLine($"[+] {info.FileName} -> {Path.GetFileName(outPath)} ({sw.ElapsedMilliseconds} мс)");
+                string action = info.IsEncrypted ? "Расшифрован" : "Пропатчен";
+                Console.WriteLine($"[+] {info.FileName} -> {Path.GetFileName(outPath)} [{action}] ({sw.ElapsedMilliseconds} мс)");
                 successCount++;
             }
             else
             {
-                Console.WriteLine($"[ERR] {info.FileName}: Ошибка дешифровки");
+                Console.WriteLine($"[ERR] {info.FileName}: Ошибка обработки");
                 failCount++;
             }
         }

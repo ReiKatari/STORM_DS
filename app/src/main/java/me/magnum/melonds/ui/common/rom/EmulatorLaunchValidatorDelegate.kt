@@ -17,7 +17,6 @@ import me.magnum.melonds.domain.model.emulator.validation.FirmwareLaunchPrecondi
 import me.magnum.melonds.domain.model.emulator.validation.RomLaunchPreconditionCheckResult
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.common.rom.model.LaunchValidationResult
-import me.magnum.melonds.ui.dsiwaremanager.DSiWareManagerActivity
 import me.magnum.melonds.ui.settings.SettingsActivity
 
 class EmulatorLaunchValidatorDelegate(
@@ -29,9 +28,6 @@ class EmulatorLaunchValidatorDelegate(
 
     private val firmwareSettingsLauncher = context.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         viewModel.onReturnFromFirmwareSettings()
-    }
-    private val dsiWareManagerLauncher = context.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        viewModel.onReturnFromDsiWareManagerSetup()
     }
 
     init {
@@ -126,11 +122,7 @@ class EmulatorLaunchValidatorDelegate(
         AlertDialog.Builder(context)
             .setTitle(R.string.failed_launch_dsiware_title)
             .setMessage(message)
-            .setPositiveButton(R.string.dsiware_manager) { _, _ ->
-                val intent = Intent(context, DSiWareManagerActivity::class.java)
-                dsiWareManagerLauncher.launch(intent)
-            }
-            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
+            .setPositiveButton(R.string.ok) { _, _ -> callback.onValidationAborted() }
             .setOnCancelListener {
                 callback.onValidationAborted()
             }

@@ -195,7 +195,7 @@ public partial class MainWindow : Window
         GridGames.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
 
         bool isCopy = ChkCopy.IsChecked == true;
-        BtnDecrypt.IsEnabled = isCopy ? hasItems : _games.Any(g => g.IsEncrypted);
+        BtnDecrypt.IsEnabled = isCopy ? hasItems : _games.Any(g => g.IsEncrypted || g.NeedsCompatibilityPatch);
     }
 
     private void UpdateHistoryStats()
@@ -664,9 +664,23 @@ public partial class MainWindow : Window
         try
         {
             var info = DsiDecryptorEngine.InspectRom(file);
-            string statusText = info.IsEncrypted
-                ? LocalizationManager.Get("StatusEncrypted")
-                : (info.IsDsiRom ? LocalizationManager.Get("StatusDecrypted") : LocalizationManager.Get("StatusNotDsi"));
+            string statusText;
+            if (info.IsEncrypted)
+            {
+                statusText = LocalizationManager.Get("StatusEncrypted");
+            }
+            else if (info.NeedsCompatibilityPatch)
+            {
+                statusText = LocalizationManager.Get("StatusNeedsPatch");
+            }
+            else if (info.IsDsiRom)
+            {
+                statusText = LocalizationManager.Get("StatusDecrypted");
+            }
+            else
+            {
+                statusText = LocalizationManager.Get("StatusNotDsi");
+            }
 
             return new RomItem
             {
@@ -676,6 +690,7 @@ public partial class MainWindow : Window
                 GameCode = string.IsNullOrWhiteSpace(info.GameCode) ? "-" : info.GameCode,
                 FileSize = info.FileSize,
                 IsEncrypted = info.IsEncrypted,
+                NeedsCompatibilityPatch = info.NeedsCompatibilityPatch,
                 Status = statusText
             };
         }
@@ -690,14 +705,14 @@ public partial class MainWindow : Window
     {
         bool inPlace = ChkInPlace.IsChecked == true;
         var targetGames = inPlace
-            ? _games.Where(g => g.IsEncrypted).ToList()
+            ? _games.Where(g => g.IsEncrypted || g.NeedsCompatibilityPatch).ToList()
             : _games.ToList();
 
         if (targetGames.Count == 0)
         {
             if (inPlace && _games.Count > 0)
             {
-                TxtStatusLog.Text = "Все файлы в списке уже расшифрованы.";
+                TxtStatusLog.Text = "Все файлы в списке уже расшифрованы и не требуют исправлений.";
             }
             return;
         }
@@ -798,11 +813,15 @@ public partial class MainWindow : Window
             bool success = false;
             long elapsedMs = 0;
             bool wasEncrypted = item.IsEncrypted;
+            bool neededPatch = item.NeedsCompatibilityPatch;
 
-            if (item.IsEncrypted)
+            if (item.IsEncrypted || item.NeedsCompatibilityPatch)
             {
-                item.Status = LocalizationManager.Get("StatusProcessing");
-                TxtStatusLog.Text = $"Расшифровка: {item.FileName}...";
+                string statusProg = item.IsEncrypted
+                    ? LocalizationManager.Get("StatusProcessing")
+                    : LocalizationManager.Get("StatusPatching");
+                item.Status = statusProg;
+                TxtStatusLog.Text = $"{statusProg} {item.FileName}...";
 
                 await Task.Run(() =>
                 {
@@ -843,10 +862,11 @@ public partial class MainWindow : Window
             if (success)
             {
                 item.IsEncrypted = false;
+                item.NeedsCompatibilityPatch = false;
                 item.IsSuccess = true;
                 string statusText = wasEncrypted
                     ? LocalizationManager.Get("StatusSuccess")
-                    : LocalizationManager.Get("StatusCopied");
+                    : (neededPatch ? LocalizationManager.Get("StatusPatched") : LocalizationManager.Get("StatusCopied"));
                 item.Status = $"{statusText} ({elapsedMs} мс)";
 
                 // Record to persistent history
@@ -867,7 +887,7 @@ public partial class MainWindow : Window
             {
                 item.Status = wasEncrypted
                     ? LocalizationManager.Get("StatusFailed")
-                    : LocalizationManager.Get("StatusCopyFailed");
+                    : (neededPatch ? LocalizationManager.Get("StatusFailed") : LocalizationManager.Get("StatusCopyFailed"));
             }
 
             processed++;

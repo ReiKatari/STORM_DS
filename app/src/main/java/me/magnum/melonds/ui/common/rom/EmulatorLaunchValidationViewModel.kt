@@ -82,9 +82,7 @@ class EmulatorLaunchValidationViewModel @Inject constructor(
         retryLaunchValidation()
     }
 
-    fun onReturnFromDsiWareManagerSetup() {
-        retryLaunchValidation()
-    }
+
 
     fun clearBiosDirectoriesAndRetry() {
         settingsRepository.clearBiosDirectories()
