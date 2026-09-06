@@ -75,6 +75,9 @@ static constexpr uint32_t OFFSET_GAME_CODE       = 0x0C;
 static constexpr uint32_t OFFSET_UNIT_CODE        = 0x12;
 static constexpr uint32_t OFFSET_DSI_CRYPTO_FLAGS = 0x1C;
 static constexpr uint32_t OFFSET_APP_FLAGS        = 0x1D;
+static constexpr uint32_t OFFSET_ARM9_ROM_OFFSET  = 0x20;
+static constexpr uint32_t OFFSET_ARM9_RAM_ADDR    = 0x28;
+static constexpr uint32_t OFFSET_ARM9_SIZE        = 0x2C;
 static constexpr uint32_t OFFSET_MODCRYPT1_OFF    = 0x220;
 static constexpr uint32_t OFFSET_MODCRYPT1_SIZE   = 0x224;
 static constexpr uint32_t OFFSET_MODCRYPT2_OFF    = 0x228;
@@ -341,7 +344,7 @@ static int IndexOfSequence(const uint8_t* buffer, size_t bufferLen, const uint8_
     return -1;
 }
 
-static bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
+bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
 {
     if (!rom || fileSize < HEADER_SIZE) return false;
     bool patched = false;
@@ -351,82 +354,104 @@ static bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
     // We NOP/redirect OS_Terminate calls and redirect the NAND font path to internal rom:/Arial.NFTR.
     if (memcmp(&rom[OFFSET_GAME_CODE], "KAL", 3) == 0)
     {
-        // 1. 0x50d4: bl OS_Terminate in NitroMain (0xeb0085a3 -> nop 0xe1a00000)
-        if (fileSize > 0x50d7)
-        {
-            uint32_t op1 = *(uint32_t*)&rom[0x50d4];
-            if (op1 == 0xeb0085a3)
+        uint32_t arm9Off  = *(uint32_t*)&rom[OFFSET_ARM9_ROM_OFFSET];
+        uint32_t arm9Size = *(uint32_t*)&rom[OFFSET_ARM9_SIZE];
+
+        auto patchAt = [&](uint32_t relOffset, uint32_t expectedOp, uint32_t newOp) {
+            // Check ARM9 binary offset
+            if (arm9Off > 0 && arm9Off + relOffset + 4 <= fileSize)
             {
-                *(uint32_t*)&rom[0x50d4] = 0xe1a00000;
-                patched = true;
+                uint32_t op = *(uint32_t*)&rom[arm9Off + relOffset];
+                if (op == expectedOp)
+                {
+                    *(uint32_t*)&rom[arm9Off + relOffset] = newOp;
+                    patched = true;
+                }
             }
-        }
+            // Also check direct ROM offset as fallback
+            if (relOffset + 4 <= fileSize)
+            {
+                uint32_t op = *(uint32_t*)&rom[relOffset];
+                if (op == expectedOp)
+                {
+                    *(uint32_t*)&rom[relOffset] = newOp;
+                    patched = true;
+                }
+            }
+        };
+
+        // 1. 0x50d4: bl OS_Terminate in NitroMain (0xeb0085a3 -> nop 0xe1a00000)
+        patchAt(0x50d4, 0xeb0085a3, 0xe1a00000);
 
         // 2. 0xba014: bl OS_Terminate on font validation failure (0xebfdb1d3 -> b 0x20ba058 0xea00000f)
-        if (fileSize > 0xba017)
-        {
-            uint32_t op2 = *(uint32_t*)&rom[0xba014];
-            if (op2 == 0xebfdb1d3)
-            {
-                *(uint32_t*)&rom[0xba014] = 0xea00000f;
-                patched = true;
-            }
-        }
+        patchAt(0xba014, 0xebfdb1d3, 0xea00000f);
 
         // 3. 0xe4548: bl OS_Terminate (0xebfd0886 -> nop 0xe1a00000)
-        if (fileSize > 0xe454b)
-        {
-            uint32_t op3 = *(uint32_t*)&rom[0xe4548];
-            if (op3 == 0xebfd0886)
-            {
-                *(uint32_t*)&rom[0xe4548] = 0xe1a00000;
-                patched = true;
-            }
-        }
+        patchAt(0xe4548, 0xebfd0886, 0xe1a00000);
 
         // 4. 0xf5c50: bl OS_Terminate (0xebfcc2c4 -> nop 0xe1a00000)
-        if (fileSize > 0xf5c53)
-        {
-            uint32_t op4 = *(uint32_t*)&rom[0xf5c50];
-            if (op4 == 0xebfcc2c4)
-            {
-                *(uint32_t*)&rom[0xf5c50] = 0xe1a00000;
-                patched = true;
-            }
-        }
+        patchAt(0xf5c50, 0xebfcc2c4, 0xe1a00000);
 
         // 5. 0xf5f0c: bl OS_Terminate (0xebfcc215 -> nop 0xe1a00000)
-        if (fileSize > 0xf5f0f)
-        {
-            uint32_t op5 = *(uint32_t*)&rom[0xf5f0c];
-            if (op5 == 0xebfcc215)
-            {
-                *(uint32_t*)&rom[0xf5f0c] = 0xe1a00000;
-                patched = true;
-            }
-        }
+        patchAt(0xf5f0c, 0xebfcc215, 0xe1a00000);
 
-        // 6. Font path redirect: replace "nand:/sys/TWLFontTable.dat" with "rom:/Arial.NFTR"
-        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
-        const size_t targetLen = sizeof(targetPath) - 1;
-        int pathIdx = IndexOfSequence(rom, fileSize, (const uint8_t*)targetPath, targetLen);
-        if (pathIdx != -1)
+        // 6. Neutralize OS_Terminate entrypoint at 0x26768 with 'bx lr' (0xe12fff1e)
+        if (arm9Off > 0 && arm9Off + 0x26768 + 4 <= fileSize)
         {
-            const char replacementFont[] = "rom:/Arial.NFTR";
-            char replacement[sizeof(targetPath)] = {0};
-            memcpy(replacement, replacementFont, strlen(replacementFont));
-            memcpy(&rom[pathIdx], replacement, targetLen);
+            *(uint32_t*)&rom[arm9Off + 0x26768] = 0xe12fff1e;
+            patched = true;
+        }
+        if (0x26768 + 4 <= fileSize)
+        {
+            *(uint32_t*)&rom[0x26768] = 0xe12fff1e;
             patched = true;
         }
 
-        // 7. Recalculate Secure Area CRC16 if present
+        // 7. Scan ARM9 binary range to neutralize any remaining matching opcodes
+        if (arm9Off > 0 && arm9Off + arm9Size <= fileSize)
+        {
+            for (uint32_t i = arm9Off; i + 4 <= arm9Off + arm9Size; i += 4)
+            {
+                uint32_t op = *(uint32_t*)&rom[i];
+                if (op == 0xebfdb1d3)
+                {
+                    *(uint32_t*)&rom[i] = 0xea00000f;
+                    patched = true;
+                }
+                else if (op == 0xeb0085a3 || op == 0xebfd0886 || op == 0xebfcc2c4 || op == 0xebfcc215)
+                {
+                    *(uint32_t*)&rom[i] = 0xe1a00000;
+                    patched = true;
+                }
+            }
+        }
+
+        // 8. Font path redirect: replace ALL occurrences of "nand:/sys/TWLFontTable.dat" with "rom:/Arial.NFTR"
+        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
+        const size_t targetLen = sizeof(targetPath) - 1;
+        const char replacementFont[] = "rom:/Arial.NFTR";
+        char replacement[sizeof(targetPath)] = {0};
+        memcpy(replacement, replacementFont, strlen(replacementFont));
+
+        size_t searchPos = 0;
+        while (searchPos + targetLen <= fileSize)
+        {
+            int found = IndexOfSequence(rom + searchPos, fileSize - searchPos, (const uint8_t*)targetPath, targetLen);
+            if (found == -1)
+                break;
+            memcpy(&rom[searchPos + found], replacement, targetLen);
+            patched = true;
+            searchPos += found + targetLen;
+        }
+
+        // 9. Recalculate Secure Area CRC16 if present
         if (fileSize >= 0x8000)
         {
             uint16_t secCrc = CalcHeaderCRC16(&rom[0x4000], 0x4000);
             *(uint16_t*)&rom[0x6C] = secCrc;
         }
 
-        // 8. Recalculate Header CRC16
+        // 10. Recalculate Header CRC16
         uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
         *(uint16_t*)&rom[0x15E] = headerCrc;
     }
@@ -645,6 +670,9 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
 {
     if (!rom || fileSize < HEADER_SIZE)
         return false;
+
+    // Unconditionally apply in-memory compatibility patches (AlphaBounce KAL*, etc.)
+    ApplyCompatibilityPatches(rom, fileSize);
 
     // Check if DSi ROM (UnitCode bit 1 or 0x03)
     uint8_t unitCode = rom[OFFSET_UNIT_CODE];

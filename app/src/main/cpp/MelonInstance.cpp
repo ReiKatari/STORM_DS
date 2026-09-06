@@ -1691,7 +1691,8 @@ bool MelonInstance::loadRom(std::string romPath, std::string sramPath)
         .SRAMLength = sramFileLength,
     };
 
-    // In-memory transparent Modcrypt decryption for DSi / DSiWare ROMs
+    // In-memory transparent Modcrypt decryption and compatibility patching for DSi / DSiWare ROMs
+    MelonDSAndroid::RomDecryptor::ApplyCompatibilityPatches(romData.get(), (size_t) romFileLength);
     MelonDSAndroid::RomDecryptor::DecryptRomBuffer(romData.get(), (size_t) romFileLength);
 
     auto cart = NDSCart::ParseROM(std::move(romData), romFileLength, this, std::move(cartargs));

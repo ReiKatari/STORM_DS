@@ -38,6 +38,9 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback);
 // Decrypt a ROM buffer in-place in RAM
 bool DecryptRomBuffer(uint8_t* romData, size_t romLength);
 
+// Apply game-specific compatibility patches (AlphaBounce, etc.)
+bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize);
+
 } // namespace RomDecryptor
 } // namespace MelonDSAndroid
 

@@ -4,6 +4,6 @@ object AppConfig {
     const val minSdkVersion = 24
     const val ndkVersion = "28.0.13004108"
 
-    const val versionCode = 429
-    const val versionName = "4.2.9"
+    const val versionCode = 430
+    const val versionName = "4.3.0"
 }
