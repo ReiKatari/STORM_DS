@@ -117,9 +117,11 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
 
     private fun loadIconFromDisk(rom: Rom): Bitmap? {
         rom.installedDsiWareIcon?.let { icon ->
-            return createBitmap(32, 32).apply {
+            val bmp = createBitmap(32, 32).apply {
                 copyPixelsFromBuffer(ByteBuffer.wrap(icon))
             }
+            saveRomIcon(rom, bmp)
+            return bmp
         }
 
         val keys = getCandidateKeys(rom)

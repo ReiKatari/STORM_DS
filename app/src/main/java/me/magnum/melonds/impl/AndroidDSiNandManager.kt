@@ -102,8 +102,22 @@ class AndroidDSiNandManager(
             if (!mapped.isFailure()) {
                 isNandOpen.set(true)
                 nandUsageCount.set(1)
+                ensureSystemFontTableOnNand()
             }
             mapped
+        }
+    }
+
+    private fun ensureSystemFontTableOnNand() {
+        runCatching {
+            context.assets.open("bios/dsi/TWLFontTable.dat").use { input ->
+                val fontBytes = input.readBytes()
+                if (fontBytes.isNotEmpty()) {
+                    MelonDSiNand.ensureSystemFontTable(fontBytes)
+                }
+            }
+        }.onFailure {
+            Log.w(TAG, "ensureSystemFontTableOnNand: unable to load TWLFontTable.dat from assets", it)
         }
     }
 
