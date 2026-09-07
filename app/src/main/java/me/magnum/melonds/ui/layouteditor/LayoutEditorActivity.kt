@@ -213,19 +213,22 @@ class LayoutEditorActivity : AppCompatActivity() {
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var lastOrientation: LayoutConfiguration.LayoutOrientation? = null
+                var lastSystemOrientation: Orientation? = null
                 viewModel.currentLayout.collect {
                     if (it == null) {
                         layoutEditorManager.layoutEditorView.destroyLayout()
                         externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.destroyLayout()
                         lastOrientation = null
+                        lastSystemOrientation = null
                     } else {
                         handler.removeCallbacksAndMessages(null)
                         handler.post {
-                            val orientationChanged = lastOrientation != it.orientation
+                            val orientationChanged = lastOrientation != it.orientation || lastSystemOrientation != it.systemOrientation
                             if (!layoutEditorManager.layoutEditorView.isModifiedByUser() || orientationChanged) {
                                 layoutEditorManager.layoutEditorView.instantiateLayout(it.layout)
                                 externalLayoutEditorPresentation?.instantiateLayout(it.layout)
                                 lastOrientation = it.orientation
+                                lastSystemOrientation = it.systemOrientation
                             }
                             setLayoutOrientation(it.orientation)
                         }

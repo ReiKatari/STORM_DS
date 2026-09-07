@@ -1099,38 +1099,41 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
     if (len < 0x200) return false;
     if (len > 0x8000000) return false;
 
+    const u16 sectorsize = 0x200; // 512 bytes per sector
+    const u32 totsec = len / sectorsize;
+    const u16 totsec16 = (u16)(totsec < 0x10000 ? totsec : 0);
+    const u8 clustersize = (totsec > (8 << 10)) ? 8 : (totsec > (1 << 10) ? 4 : 1);
+    const u16 rootDirEntries = (len <= 0x20000) ? 64 : 128;
+    const u16 rootDirSectors = (rootDirEntries * 32 + sectorsize - 1) / sectorsize;
+    const u32 totalClusters = (totsec > 1 + rootDirSectors) ? ((totsec - 1 - rootDirSectors) / clustersize) : 0;
+    const bool isFat16 = (totalClusters >= 4085 || len > 0x80000);
+    const u32 fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
+    const u16 sectorsPerFat = (u16)((fatBytes + sectorsize - 1) / sectorsize);
+
     FF_FILINFO existingInfo;
     if (f_stat(path, &existingInfo) == FR_OK && existingInfo.fsize == len)
     {
         FF_FIL ef;
         if (f_open(&ef, path, FA_READ) == FR_OK)
         {
-            u8 bootSec[1024];
+            u8 bootSec[512];
             u32 nr = 0;
             f_read(&ef, bootSec, sizeof(bootSec), &nr);
             f_close(&ef);
-            u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
-            bool isValid = (nr == sizeof(bootSec) &&
+            bool isValid = (nr >= 512 &&
                             bootSec[0x1FE] == 0x55 && bootSec[0x1FF] == 0xAA &&
                             (bootSec[0] == 0xEB || bootSec[0] == 0xE9) &&
                             bootSec[0x010] >= 1 &&
-                            rootEntries >= 16 &&
-                            bootSec[0x200] == 0xF8);
+                            bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02);
             if (isValid)
             {
                 f_chmod(path, 0, AM_RDO);
                 Log(LogLevel::Info, "CreateSaveFile: %s already exists with valid FAT format, keeping existing file\n", path);
                 return true;
             }
-            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT media descriptor / boot signature, reformatting\n", path);
+            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT boot signature, reformatting\n", path);
         }
     }
-
-    const u16 sectorsize = 0x200; // 512 bytes per sector
-    const u16 totsec16 = (u16)(len / sectorsize);
-    const u8 clustersize = (totsec16 > (8 << 10)) ? 8 : (totsec16 > (1 << 10) ? 4 : 1);
-    const u16 rootDirEntries = (len <= 0x20000) ? 64 : 128;
-    const u16 sectorsPerFat = (len <= 0x80000) ? 1 : 2;
 
     FF_FIL file;
     FRESULT res;
@@ -1152,20 +1155,24 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
     data[0x002] = 0x90;
     memcpy(&data[0x003], "MSDOS5.0", 8);
     *(u16*)&data[0x00B] = sectorsize;     // 512
-    data[0x00D] = clustersize;            // 1
+    data[0x00D] = clustersize;            // sectors per cluster
     *(u16*)&data[0x00E] = 1;              // 1 reserved sector (boot sector)
     data[0x010] = 2;                      // 2 FAT tables
-    *(u16*)&data[0x011] = rootDirEntries; // 64 entries for TWL-SDK
-    *(u16*)&data[0x013] = totsec16;       // Total sectors strictly = len / 512
+    *(u16*)&data[0x011] = rootDirEntries; // entries for TWL-SDK
+    *(u16*)&data[0x013] = totsec16;       // Total sectors (16-bit)
+    if (totsec >= 0x10000)
+    {
+        *(u32*)&data[0x020] = totsec;     // Total sectors (32-bit)
+    }
     data[0x015] = 0xF8;                   // Media descriptor (Fixed/Flash disk)
     *(u16*)&data[0x016] = sectorsPerFat;  // Sectors per FAT
-    *(u16*)&data[0x018] = 0;              // Sectors per track
-    *(u16*)&data[0x01A] = 0;              // Heads
-    data[0x024] = 0x80;                   // Drive number
+    *(u16*)&data[0x018] = 32;             // Sectors per track
+    *(u16*)&data[0x01A] = 2;              // Heads
+    data[0x024] = isFat16 ? 0x80 : 0x00;  // Drive number
     data[0x026] = 0x29;                   // Extended boot signature
     *(u32*)&data[0x027] = 0x12345678;     // Volume ID
     memcpy(&data[0x02B], "NO NAME    ", 11);
-    memcpy(&data[0x036], (len <= 0x80000) ? "FAT12   " : "FAT16   ", 8);
+    memcpy(&data[0x036], isFat16 ? "FAT16   " : "FAT12   ", 8);
     data[0x1FE] = 0x55;
     data[0x1FF] = 0xAA;
 
@@ -1176,6 +1183,8 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
         data[fat1Offset + 0] = 0xF8;
         data[fat1Offset + 1] = 0xFF;
         data[fat1Offset + 2] = 0xFF;
+        if (isFat16 && fat1Offset + 4 <= len)
+            data[fat1Offset + 3] = 0xFF;
     }
 
     // FAT2 begins at sector 1 + sectorsPerFat
@@ -1185,6 +1194,8 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
         data[fat2Offset + 0] = 0xF8;
         data[fat2Offset + 1] = 0xFF;
         data[fat2Offset + 2] = 0xFF;
+        if (isFat16 && fat2Offset + 4 <= len)
+            data[fat2Offset + 3] = 0xFF;
     }
 
     f_write(&file, data, len, &nwrite);

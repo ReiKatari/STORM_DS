@@ -114,7 +114,7 @@ class LayoutEditorViewModel @Inject constructor(
                     val (variant, layout) = it
                     val currentLayoutConfig = _currentLayoutConfiguration.value ?: return@collect
                     currentLayoutVariant = variant
-                    _currentLayout.value = CurrentLayoutState(layout, currentLayoutConfig.orientation)
+                    _currentLayout.value = CurrentLayoutState(layout, currentLayoutConfig.orientation, variant.orientation)
                 }
             }
         }

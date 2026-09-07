@@ -93,9 +93,9 @@ static constexpr uint32_t OFFSET_ARM9_OVERLAY_HASH    = 0x38C;
 static constexpr uint32_t OFFSET_DSI_ARM9_NOSEC_HASH  = 0x3A0;
 static constexpr uint32_t HEADER_SIZE                 = 0x1000;
 
-static bool isBufferPlaintext(const uint8_t* data, size_t size)
+static int ScoreBuffer(const uint8_t* data, size_t size, size_t* outZeros = nullptr, size_t* outArmE = nullptr, size_t* outThumb = nullptr)
 {
-    if (!data || size < 16) return false;
+    if (!data || size < 16) return 0;
 
     size_t sampleLen = std::min<size_t>(size, 1024);
     size_t zeros = 0;
@@ -105,37 +105,44 @@ static bool isBufferPlaintext(const uint8_t* data, size_t size)
     }
 
     size_t checkWords = sampleLen / 4;
-    size_t armMatches = 0;
-    size_t thumbMatches = 0;
+    size_t armE = 0;
+    size_t thumb = 0;
     for (size_t i = 0; i < checkWords; i++)
     {
         uint32_t w = *(const uint32_t*)&data[i * 4];
-        uint32_t cond = w >> 28;
-        if (w == 0 || (w >= 0x02000000 && w < 0x04000000) || w < 0x10000)
-        {
-            armMatches++;
-        }
-        else if (cond <= 0xE)
-        {
-            uint32_t group = (w >> 25) & 0x7;
-            if (group <= 5 && w != 0xE7FFDEFF)
-                armMatches++;
-        }
-        else if (cond == 0xF)
-        {
-            if ((w & 0xFE000000) == 0xFA000000 || (w & 0xFE000000) == 0xF4000000)
-                armMatches++;
-        }
+        if ((w >> 28) == 0xE)
+            armE++;
 
         uint16_t hw0 = (uint16_t)w;
         uint16_t hw1 = (uint16_t)(w >> 16);
-        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 || hw0 == 0)
-            thumbMatches++;
-        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 || hw1 == 0)
-            thumbMatches++;
+        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 ||
+            (hw0 & 0xFF00) == 0xBD00 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 ||
+            (hw0 & 0xFF00) == 0xDF00 || (hw0 & 0xFF80) == 0x4700 || hw0 == 0)
+            thumb++;
+        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 ||
+            (hw1 & 0xFF00) == 0xBD00 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 ||
+            (hw1 & 0xFF00) == 0xDF00 || (hw1 & 0xFF80) == 0x4700 || hw1 == 0)
+            thumb++;
     }
 
-    return (zeros >= sampleLen / 20) || (checkWords >= 8 && (armMatches >= (checkWords * 5) / 10 || thumbMatches >= (checkWords * 2 * 5) / 10));
+    if (outZeros) *outZeros = zeros;
+    if (outArmE) *outArmE = armE;
+    if (outThumb) *outThumb = thumb;
+
+    return (int)(armE * 3 + thumb + zeros);
+}
+
+static bool isBufferPlaintext(const uint8_t* data, size_t size)
+{
+    if (!data || size < 16) return false;
+    size_t sampleLen = std::min<size_t>(size, 1024);
+    size_t zeros = 0, armE = 0, thumb = 0;
+    int score = ScoreBuffer(data, sampleLen, &zeros, &armE, &thumb);
+
+    if (score >= 350 || zeros >= 40 || (armE >= 60 && zeros >= 20))
+        return true;
+
+    return false;
 }
 
 static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
@@ -143,7 +150,7 @@ static bool IsModcryptAreaEncrypted(FILE* f, uint32_t offset, uint32_t size)
     if (offset == 0 || size == 0) return false;
     if (fseek(f, offset, SEEK_SET) != 0) return false;
 
-    uint8_t buffer[256];
+    uint8_t buffer[1024];
     size_t sampleRead = fread(buffer, 1, sizeof(buffer), f);
     if (sampleRead < 16) return false;
 
@@ -157,7 +164,8 @@ static bool TryDeriveAndTestKey(
     uint32_t modcryptSize,
     uint32_t ivOffset,
     bool devKey,
-    uint8_t* outNormalKey
+    uint8_t* outNormalKey,
+    int* outScore = nullptr
 )
 {
     if (devKey)
@@ -165,6 +173,7 @@ static bool TryDeriveAndTestKey(
         uint8_t tmp[16];
         memcpy(tmp, &rom[0], 16);
         Bswap128(outNormalKey, tmp);
+        if (outScore) *outScore = 1000;
         return true;
     }
 
@@ -193,7 +202,7 @@ static bool TryDeriveAndTestKey(
 
     if (modcryptOffset == 0 || modcryptSize == 0) return true;
 
-    size_t testLen = std::min<size_t>(modcryptSize, 256);
+    size_t testLen = std::min<size_t>(modcryptSize, 1024);
     std::vector<uint8_t> testBuf(testLen);
     memcpy(testBuf.data(), &rom[modcryptOffset], testLen);
 
@@ -213,6 +222,17 @@ static bool TryDeriveAndTestKey(
         Bswap128(block, swapped);
         memcpy(&testBuf[i], block, blockLen);
     }
+
+    size_t zeros = 0, armE = 0, thumb = 0;
+    int score = ScoreBuffer(testBuf.data(), testLen, &zeros, &armE, &thumb);
+    if (outScore) *outScore = score;
+
+    size_t rawZeros = 0;
+    int rawScore = ScoreBuffer(&rom[modcryptOffset], testLen, &rawZeros);
+
+    bool isStandardCartKey = (keyYOffset == OFFSET_DSI_ARM9I_HASH);
+    if (score > rawScore + 15 && (zeros >= 8 || (armE >= 16 && zeros >= 4) || (thumb >= 20 && zeros >= 2) || (isStandardCartKey && (score >= 15 || zeros >= 8))))
+        return true;
 
     return isBufferPlaintext(testBuf.data(), testLen);
 }
@@ -273,8 +293,8 @@ EncryptionStatus CheckEncryptionFd(int fd)
     if (!isEncrypted && mod2Off > 0 && mod2Size > 0 && mod2Size != 0xFFFFFFFF)
         isEncrypted = IsModcryptAreaEncrypted(f, mod2Off, mod2Size);
 
-    // If data itself is decrypted OR modcrypt flag is not set:
-    if (!isEncrypted || !(cryptoFlags & 0x03))
+    // If data itself is decrypted:
+    if (!isEncrypted)
     {
         fclose(f);
         return EncryptionStatus::NOT_ENCRYPTED;
@@ -306,25 +326,23 @@ EncryptionStatus CheckEncryption(const char* romPath)
         return EncryptionStatus::ERROR_NOT_DSI_ROM;
     }
 
-    uint8_t cryptoFlags = header[OFFSET_DSI_CRYPTO_FLAGS];
-    if (!(cryptoFlags & 0x03))
-    {
-        fclose(f);
-        return EncryptionStatus::NOT_ENCRYPTED;
-    }
-
     uint32_t mod1Off  = *(uint32_t*)&header[OFFSET_MODCRYPT1_OFF];
     uint32_t mod1Size = *(uint32_t*)&header[OFFSET_MODCRYPT1_SIZE];
     uint32_t mod2Off  = *(uint32_t*)&header[OFFSET_MODCRYPT2_OFF];
     uint32_t mod2Size = *(uint32_t*)&header[OFFSET_MODCRYPT2_SIZE];
 
+    if ((mod1Size == 0 || mod1Size == 0xFFFFFFFF) && (mod2Size == 0 || mod2Size == 0xFFFFFFFF))
+    {
+        fclose(f);
+        return EncryptionStatus::NOT_ENCRYPTED;
+    }
+
     bool isEncrypted = false;
-    if (mod1Off > 0 && mod1Size > 0)
+    if (mod1Off > 0 && mod1Size > 0 && mod1Size != 0xFFFFFFFF)
         isEncrypted = IsModcryptAreaEncrypted(f, mod1Off, mod1Size);
-    if (!isEncrypted && mod2Off > 0 && mod2Size > 0)
+    if (!isEncrypted && mod2Off > 0 && mod2Size > 0 && mod2Size != 0xFFFFFFFF)
         isEncrypted = IsModcryptAreaEncrypted(f, mod2Off, mod2Size);
 
-    // If data itself is decrypted:
     if (!isEncrypted)
     {
         fclose(f);
@@ -422,7 +440,7 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     if (!mod1Encrypted && !mod2Encrypted)
     {
         bool patched = ApplyCompatibilityPatches(rom.data(), fileSize);
-        rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+        rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
         if (patched)
         {
             uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
@@ -461,17 +479,32 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
 
     uint8_t normalKey[16];
     bool key1Found = false;
+    int bestScore1 = -1;
+    uint8_t bestKey1[16];
     for (uint32_t cand : keyCandidates)
     {
-        if (TryDeriveAndTestKey(rom.data(), cand, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH, devKey, normalKey))
+        int candScore = 0;
+        if (TryDeriveAndTestKey(rom.data(), cand, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH, devKey, normalKey, &candScore))
         {
             key1Found = true;
             break;
         }
+        if (candScore > bestScore1)
+        {
+            bestScore1 = candScore;
+            memcpy(bestKey1, normalKey, 16);
+        }
     }
     if (!key1Found)
     {
-        TryDeriveAndTestKey(rom.data(), OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM9_HASH, devKey, normalKey);
+        if (bestScore1 >= 15)
+        {
+            memcpy(normalKey, bestKey1, 16);
+        }
+        else
+        {
+            TryDeriveAndTestKey(rom.data(), OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM9_HASH, devKey, normalKey);
+        }
     }
 
     // --- Decrypt Modcrypt Area 1 (ARM9i) ---
@@ -504,17 +537,32 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     {
         uint8_t normalKey2[16];
         bool key2Found = false;
+        int bestScore2 = -1;
+        uint8_t bestKey2[16];
         for (uint32_t cand : keyCandidates)
         {
-            if (TryDeriveAndTestKey(rom.data(), cand, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH, devKey, normalKey2))
+            int candScore = 0;
+            if (TryDeriveAndTestKey(rom.data(), cand, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH, devKey, normalKey2, &candScore))
             {
                 key2Found = true;
                 break;
             }
+            if (candScore > bestScore2)
+            {
+                bestScore2 = candScore;
+                memcpy(bestKey2, normalKey2, 16);
+            }
         }
         if (!key2Found)
         {
-            TryDeriveAndTestKey(rom.data(), OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM7_HASH, devKey, normalKey2);
+            if (bestScore2 >= 15)
+            {
+                memcpy(normalKey2, bestKey2, 16);
+            }
+            else
+            {
+                TryDeriveAndTestKey(rom.data(), OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM7_HASH, devKey, normalKey2);
+            }
         }
 
         AES_ctx ctx;
@@ -542,8 +590,8 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     // Apply compatibility patches if needed
     ApplyCompatibilityPatches(rom.data(), fileSize);
 
-    // Set Modcrypt decrypted flags (bits 0 and 1: 03h=both decrypted) and recalculate header CRC16
-    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+    // Clear Modcrypt encrypted flags (bits 0 and 1: 0=decrypted/plaintext) and recalculate header CRC16
+    rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
     uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
     *(uint16_t*)&rom[0x15E] = headerCrc;
 
@@ -610,7 +658,7 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     if (!mod1Encrypted && !mod2Encrypted)
     {
         bool patched = ApplyCompatibilityPatches(rom, fileSize);
-        rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+        rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
         if (patched)
         {
             uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
@@ -636,17 +684,32 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
 
     uint8_t normalKey[16];
     bool key1Found = false;
+    int bestScore1 = -1;
+    uint8_t bestKey1[16];
     for (uint32_t cand : keyCandidates)
     {
-        if (TryDeriveAndTestKey(rom, cand, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH, devKey, normalKey))
+        int candScore = 0;
+        if (TryDeriveAndTestKey(rom, cand, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH, devKey, normalKey, &candScore))
         {
             key1Found = true;
             break;
         }
+        if (candScore > bestScore1)
+        {
+            bestScore1 = candScore;
+            memcpy(bestKey1, normalKey, 16);
+        }
     }
     if (!key1Found)
     {
-        TryDeriveAndTestKey(rom, OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM9_HASH, devKey, normalKey);
+        if (bestScore1 >= 15)
+        {
+            memcpy(normalKey, bestKey1, 16);
+        }
+        else
+        {
+            TryDeriveAndTestKey(rom, OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM9_HASH, devKey, normalKey);
+        }
     }
 
     // --- Decrypt Modcrypt Area 1 (ARM9i) ---
@@ -675,17 +738,32 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     {
         uint8_t normalKey2[16];
         bool key2Found = false;
+        int bestScore2 = -1;
+        uint8_t bestKey2[16];
         for (uint32_t cand : keyCandidates)
         {
-            if (TryDeriveAndTestKey(rom, cand, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH, devKey, normalKey2))
+            int candScore = 0;
+            if (TryDeriveAndTestKey(rom, cand, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH, devKey, normalKey2, &candScore))
             {
                 key2Found = true;
                 break;
             }
+            if (candScore > bestScore2)
+            {
+                bestScore2 = candScore;
+                memcpy(bestKey2, normalKey2, 16);
+            }
         }
         if (!key2Found)
         {
-            TryDeriveAndTestKey(rom, OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM7_HASH, devKey, normalKey2);
+            if (bestScore2 >= 15)
+            {
+                memcpy(normalKey2, bestKey2, 16);
+            }
+            else
+            {
+                TryDeriveAndTestKey(rom, OFFSET_DSI_ARM9I_HASH, 0, 0, OFFSET_DSI_ARM7_HASH, devKey, normalKey2);
+            }
         }
 
         AES_ctx ctx;
@@ -707,7 +785,7 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     }
 
     ApplyCompatibilityPatches(rom, fileSize);
-    rom[OFFSET_DSI_CRYPTO_FLAGS] |= 0x03;
+    rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
     uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
     *(uint16_t*)&rom[0x15E] = headerCrc;
     return true;

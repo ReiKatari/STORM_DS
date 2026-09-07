@@ -38,14 +38,18 @@ class DefaultLayoutProvider(
         val mainDisplayInsets = variant.uiInsets
 
         if (secondaryDisplay == null) {
-            if (layoutId == LayoutConfiguration.UNEVEN_LANDSCAPE_ID) {
-                return UILayout(buildUnevenLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
-            } else if (layoutId == LayoutConfiguration.PROPORTIONAL_LANDSCAPE_ID) {
-                return UILayout(buildProportionalLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
-            } else if (layoutId == LayoutConfiguration.FULLSCREEN_LANDSCAPE_ID) {
-                return UILayout(buildFullscreenLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
-            } else if (layoutId == LayoutConfiguration.EVEN_PORTRAIT_ID) {
-                return UILayout(buildDefaultPortraitLayout(width, height, mainDisplayInsets), ScreenLayout())
+            if (orientation == Orientation.LANDSCAPE) {
+                if (layoutId == LayoutConfiguration.UNEVEN_LANDSCAPE_ID) {
+                    return UILayout(buildUnevenLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
+                } else if (layoutId == LayoutConfiguration.PROPORTIONAL_LANDSCAPE_ID) {
+                    return UILayout(buildProportionalLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
+                } else if (layoutId == LayoutConfiguration.FULLSCREEN_LANDSCAPE_ID) {
+                    return UILayout(buildFullscreenLandscapeLayout(width, height, mainDisplayInsets), ScreenLayout())
+                }
+            } else if (orientation == Orientation.PORTRAIT) {
+                if (layoutId == LayoutConfiguration.EVEN_PORTRAIT_ID) {
+                    return UILayout(buildDefaultPortraitLayout(width, height, mainDisplayInsets), ScreenLayout())
+                }
             }
         }
 

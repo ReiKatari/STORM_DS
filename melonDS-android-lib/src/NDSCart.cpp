@@ -403,7 +403,12 @@ static void formatDsiWareFat12(u8* buf, u32 size)
     const u16 reservedSectors = 1;
     const u8 numFats = 2;
     const u16 rootDirEntries = (size <= 0x20000) ? 64 : 128;
-    const u16 sectorsPerFat = (size <= 0x80000) ? 1 : 2;
+    const u16 rootDirSectors = (rootDirEntries * 32 + bytesPerSector - 1) / bytesPerSector;
+    const u32 totalClusters = (totalSectors > reservedSectors + rootDirSectors) ?
+                              ((totalSectors - reservedSectors - rootDirSectors) / sectorsPerCluster) : 0;
+    const bool isFat16 = (totalClusters >= 4085 || size > 0x80000);
+    const u32 fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
+    const u16 sectorsPerFat = static_cast<u16>((fatBytes + bytesPerSector - 1) / bytesPerSector);
 
     // Boot Sector (Sector 0)
     buf[0x00] = 0xEB; buf[0x01] = 0x3C; buf[0x02] = 0x90;

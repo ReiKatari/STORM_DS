@@ -296,10 +296,10 @@ fun WatermelonRomArt(
 
     val activeModel: Any? = when {
         customCover != null -> customCover
+        isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
         isScraperProEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
         isScraperProEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !failedCoverUrls.contains(gameTdb2dUrl) -> gameTdb2dUrl
         isScraperProEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
-        isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
         else -> null
     }
 
