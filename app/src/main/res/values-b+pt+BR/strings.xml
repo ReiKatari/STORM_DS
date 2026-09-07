@@ -1233,6 +1233,10 @@
     <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
     <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart e High-Res Covers</string>
     <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
+    <string name="enable_gametdb_2d_covers_title">Capas 2D GameTDB</string>
+    <string name="enable_gametdb_2d_covers_summary">Baixar capas planas 2D da base de dados GameTDB</string>
+    <string name="enable_gametdb_3d_covers_title">Capas 3D GameTDB</string>
+    <string name="enable_gametdb_3d_covers_summary">Baixar capas 3D volumétricas da base de dados GameTDB</string>
     <string name="pick_custom_cover">Change Cover from Gallery</string>
     <string name="reset_custom_cover">Reset Custom Cover</string>
     <string name="custom_cover_updated">Cover updated successfully</string>

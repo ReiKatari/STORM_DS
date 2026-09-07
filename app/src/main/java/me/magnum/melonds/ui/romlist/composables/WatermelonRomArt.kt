@@ -222,7 +222,6 @@ fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
 }
 
 fun getGameTdbCover3dUrl(rom: Rom): String? {
-    if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return null
     val code = when {
         rom.gameCode.isNotBlank() && rom.gameCode.length == 4 && rom.gameCode.all { it.isLetterOrDigit() } -> rom.gameCode.uppercase()
         rom.name.length == 4 && rom.name.all { it.isLetterOrDigit() } -> rom.name.uppercase()
@@ -246,7 +245,6 @@ fun getGameTdbCover3dUrl(rom: Rom): String? {
 }
 
 fun getGameTdbCover2dUrl(rom: Rom): String? {
-    if (rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut) return null
     val code = when {
         rom.gameCode.isNotBlank() && rom.gameCode.length == 4 && rom.gameCode.all { it.isLetterOrDigit() } -> rom.gameCode.uppercase()
         rom.name.length == 4 && rom.name.all { it.isLetterOrDigit() } -> rom.name.uppercase()
@@ -291,15 +289,32 @@ fun WatermelonRomArt(
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember { prefs.getBoolean("rom_ra_covers_enabled", false) }
+    var isScraperEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_covers_enabled", false)) }
+    var isGameTdb2dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_2d_covers_enabled", false)) }
+    var isGameTdb3dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_3d_covers_enabled", false)) }
+    var isRaCoversEnabled by remember { mutableStateOf(prefs.getBoolean("rom_ra_covers_enabled", false)) }
+
+    androidx.compose.runtime.DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+            when (key) {
+                "rom_gametdb_covers_enabled" -> isScraperEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_2d_covers_enabled" -> isGameTdb2dEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_3d_covers_enabled" -> isGameTdb3dEnabled = sp.getBoolean(key, false)
+                "rom_ra_covers_enabled" -> isRaCoversEnabled = sp.getBoolean(key, false)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
 
     val activeModel: Any? = when {
         customCover != null -> customCover
         isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
-        isScraperProEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
-        isScraperProEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !failedCoverUrls.contains(gameTdb2dUrl) -> gameTdb2dUrl
-        isScraperProEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
+        isGameTdb3dEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
+        isGameTdb2dEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !failedCoverUrls.contains(gameTdb2dUrl) -> gameTdb2dUrl
+        isScraperEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
         else -> null
     }
 

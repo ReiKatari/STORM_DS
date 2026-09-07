@@ -2164,7 +2164,27 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isGameTdbCoversEnabled(): Boolean {
-        return preferences.getBoolean("rom_gametdb_covers_enabled", false)
+        return isGameTdb2dCoversEnabled() || isGameTdb3dCoversEnabled()
+    }
+
+    override fun isGameTdb2dCoversEnabled(): Boolean {
+        return preferences.getBoolean("rom_gametdb_2d_covers_enabled", false)
+    }
+
+    override fun observeGameTdb2dCoversEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("rom_gametdb_2d_covers_enabled") {
+            isGameTdb2dCoversEnabled()
+        }
+    }
+
+    override fun isGameTdb3dCoversEnabled(): Boolean {
+        return preferences.getBoolean("rom_gametdb_3d_covers_enabled", false)
+    }
+
+    override fun observeGameTdb3dCoversEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("rom_gametdb_3d_covers_enabled") {
+            isGameTdb3dCoversEnabled()
+        }
     }
 
     override fun is3dWidescreenEnabled(): Boolean {

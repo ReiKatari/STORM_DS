@@ -1446,6 +1446,10 @@
     <!-- Scraper Pro & Covers -->
     <string name="enable_gametdb_covers_title">Scraper Pro: 3D-боксы и HD-обложки</string>
     <string name="enable_gametdb_covers_summary">Автоматическая загрузка объемных 3D-боксов и обложек высокого разрешения с GameTDB</string>
+    <string name="enable_gametdb_2d_covers_title">Обложки 2D GameTDB</string>
+    <string name="enable_gametdb_2d_covers_summary">Загружать плоские 2D-обложки игр из базы GameTDB</string>
+    <string name="enable_gametdb_3d_covers_title">Обложки 3D GameTDB</string>
+    <string name="enable_gametdb_3d_covers_summary">Загружать объемные 3D-боксы игр из базы GameTDB</string>
     <string name="pick_custom_cover">Сменить обложку из галереи</string>
     <string name="reset_custom_cover">Сбросить кастомную обложку</string>
     <string name="custom_cover_updated">Обложка успешно обновлена</string>

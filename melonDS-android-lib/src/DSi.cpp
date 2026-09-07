@@ -1151,98 +1151,90 @@ void DSi::SetupDirectBoot()
             static_assert(sizeof(DeviceListEntry) == 0x54, "DeviceListEntry must be 0x54 bytes");
 
             DeviceListEntry* entries = (DeviceListEntry*)&devList[0];
+            int count = 0;
 
             // Entry 0 ('A'): Internal eMMC Partition 1 ("nand") -> "/"
-            entries[0].DriveLetter = 'A';
-            entries[0].Flags = 0x81;
-            entries[0].AccessRights = 0x06;
-            entries[0].Zero = 0;
-            strncpy(entries[0].Name, "nand", 16);
-            strncpy(entries[0].Path, "/", 64);
+            entries[count].DriveLetter = 'A';
+            entries[count].Flags = 0x81;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "nand", 16);
+            strncpy(entries[count].Path, "/", 64);
+            count++;
 
             // Entry 1 ('B'): Internal eMMC Partition 2 ("nand2") -> "/"
-            entries[1].DriveLetter = 'B';
-            entries[1].Flags = 0xA1;
-            entries[1].AccessRights = 0x06;
-            entries[1].Zero = 0;
-            strncpy(entries[1].Name, "nand2", 16);
-            strncpy(entries[1].Path, "/", 64);
+            entries[count].DriveLetter = 'B';
+            entries[count].Flags = 0xA1;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "nand2", 16);
+            strncpy(entries[count].Path, "/", 64);
+            count++;
 
             // Entry 2 ('C'): Content directory ("content") -> "nand:/title/%08x/%08x/content"
-            entries[2].DriveLetter = 'C';
-            entries[2].Flags = 0x11;
-            entries[2].AccessRights = 0x04;
-            entries[2].Zero = 0;
-            strncpy(entries[2].Name, "content", 16);
-            snprintf(entries[2].Path, 64, "nand:/title/%08x/%08x/content", titleId0, titleId1);
+            entries[count].DriveLetter = 'C';
+            entries[count].Flags = 0x11;
+            entries[count].AccessRights = 0x04;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "content", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/content", titleId0, titleId1);
+            count++;
 
             // Entry 3 ('D'): Shared1 ("shared1") -> "nand:/shared1"
-            entries[3].DriveLetter = 'D';
-            entries[3].Flags = 0x11;
-            entries[3].AccessRights = 0x04;
-            entries[3].Zero = 0;
-            strncpy(entries[3].Name, "shared1", 16);
-            strncpy(entries[3].Path, "nand:/shared1", 64);
+            entries[count].DriveLetter = 'D';
+            entries[count].Flags = 0x11;
+            entries[count].AccessRights = 0x04;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "shared1", 16);
+            strncpy(entries[count].Path, "nand:/shared1", 64);
+            count++;
 
             // Entry 4 ('E'): Shared2 ("shared2") -> "nand:/shared2"
-            entries[4].DriveLetter = 'E';
-            entries[4].Flags = 0x11;
-            entries[4].AccessRights = 0x06;
-            entries[4].Zero = 0;
-            strncpy(entries[4].Name, "shared2", 16);
-            strncpy(entries[4].Path, "nand:/shared2", 64);
+            entries[count].DriveLetter = 'E';
+            entries[count].Flags = 0x11;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "shared2", 16);
+            strncpy(entries[count].Path, "nand:/shared2", 64);
+            count++;
 
             // Entry 5 ('F'): Photo ("photo") -> "nand2:/photo"
-            entries[5].DriveLetter = 'F';
-            entries[5].Flags = 0x31;
-            entries[5].AccessRights = 0x06;
-            entries[5].Zero = 0;
-            strncpy(entries[5].Name, "photo", 16);
-            strncpy(entries[5].Path, "nand2:/photo", 64);
-
-            u32 pubSavSize = header.DSiPublicSavSize;
-            if (pubSavSize == 0 && header.IsDSiWare())
-                pubSavSize = 0x10000;
+            entries[count].DriveLetter = 'F';
+            entries[count].Flags = 0x31;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "photo", 16);
+            strncpy(entries[count].Path, "nand2:/photo", 64);
+            count++;
 
             // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
-            entries[6].DriveLetter = 'G';
-            entries[6].Flags = (header.DSiPrivateSavSize > 0) ? 0x09 : 0x00;
-            entries[6].AccessRights = 0x06;
-            entries[6].Zero = 0;
-            strncpy(entries[6].Name, "dataPrv", 16);
-            snprintf(entries[6].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+            entries[count].DriveLetter = 'G';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPrv", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+            count++;
 
             // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
-            entries[7].DriveLetter = 'H';
-            entries[7].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
-            entries[7].AccessRights = 0x06;
-            entries[7].Zero = 0;
-            strncpy(entries[7].Name, "dataPub", 16);
-            snprintf(entries[7].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+            entries[count].DriveLetter = 'H';
+            entries[count].Flags = 0x09;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "dataPub", 16);
+            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+            count++;
 
             // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
-            entries[8].DriveLetter = 'I';
-            entries[8].Flags = 0x00;
-            entries[8].AccessRights = 0x06;
-            entries[8].Zero = 0;
-            strncpy(entries[8].Name, "sdmc", 16);
-            strncpy(entries[8].Path, "/", 64);
+            entries[count].DriveLetter = 'I';
+            entries[count].Flags = 0x00;
+            entries[count].AccessRights = 0x06;
+            entries[count].Zero = 0;
+            strncpy(entries[count].Name, "sdmc", 16);
+            strncpy(entries[count].Path, "/", 64);
+            count++;
 
-            // Entry 9 ('J'): Other Public Save ("otherPub") -> series companion public save alias
-            entries[9].DriveLetter = 'J';
-            entries[9].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
-            entries[9].AccessRights = 0x06;
-            entries[9].Zero = 0;
-            strncpy(entries[9].Name, "otherPub", 16);
-            snprintf(entries[9].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
-
-            // Entry 10 ('K'): Other Private Save ("otherPrv")
-            entries[10].DriveLetter = 'K';
-            entries[10].Flags = (header.DSiPrivateSavSize > 0) ? 0x09 : 0x00;
-            entries[10].AccessRights = 0x06;
-            entries[10].Zero = 0;
-            strncpy(entries[10].Name, "otherPrv", 16);
-            snprintf(entries[10].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+            // Slots 9 and 10 remain ZERO (DriveLetter = 0) for dynamic system mounts
 
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
@@ -1268,8 +1260,7 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x027FFC0A, header.SecureAreaCRC16);
         ARM9Write16(0x027FFC10, 0x5835);
         ARM9Write16(0x027FFC30, 0xFFFF);
-        u16 bootIndicator = header.IsDSiWare() ? 0x0003 : 0x0001;
-        ARM9Write16(0x027FFC40, bootIndicator);
+        ARM9Write16(0x027FFC40, 0x0001);
 
         ARM9Write32(0x02FFFC00, cartid);
         ARM9Write32(0x02FFFC04, cartid);
@@ -1281,7 +1272,7 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x02FFFC28, 0x0001);
         ARM9Write16(0x02FFFC2C, 0x0001);
         ARM9Write16(0x02FFFC30, 0xFFFF);
-        ARM9Write16(0x02FFFC40, bootIndicator); // boot indicator (0x0003 = DSiWare / NAND application, 0x0001 = Cartridge)
+        ARM9Write16(0x02FFFC40, 0x0001); // boot indicator
 
         ARM9Write8(0x02FFFDFA, I2C.GetBPTWL()->GetBootFlag() | 0x80);
         ARM9Write8(0x02FFFDFB, 0x01);
@@ -1466,7 +1457,7 @@ void DSi::SetupDirectBoot()
                                 header.DSiModcrypt2Size,
                                 header.DSiARM7Hash);
         }
-        header.DSiCryptoFlags &= ~0x03;
+        header.DSiCryptoFlags |= 0x03;
     }
 
     if (dsmode)
