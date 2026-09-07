@@ -43,6 +43,9 @@
 #include "DSi_Camera.h"
 
 #include "tiny-AES-c/aes.hpp"
+#include "DSi_TMD.h"
+#include <zlib.h>
+#include "DSi_KDVE_ARM7i.h"
 
 namespace melonDS
 {
@@ -357,10 +360,11 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
     bool isArm7Area = (offset >= header.ARM7ROMOffset && offset < header.ARM7ROMOffset + header.ARM7Size) ||
                       (header.DSiARM7iSize > 0 && offset >= header.DSiARM7iROMOffset && offset < header.DSiARM7iROMOffset + header.DSiARM7iSize);
 
-    // 1. Check if memory is ALREADY plaintext executable code by measuring zero bytes and ARM instructions.
-    size_t sampleLen = std::min<size_t>(decryptSize, 256);
+    // 1. Analyze raw memory in RAM to establish baseline score
+    size_t sampleLen = std::min<size_t>(decryptSize, 1024);
     size_t rawZeros = 0;
     size_t rawArmE = 0;
+    size_t rawThumb = 0;
     for (size_t i = 0; i < sampleLen; i += 4)
     {
         u32 w = isArm7Area ? ARM7Read32(binaryaddr + i) : ARM9Read32(binaryaddr + i);
@@ -369,12 +373,26 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
         if (((w >> 16) & 0xFF) == 0) rawZeros++;
         if (((w >> 24) & 0xFF) == 0) rawZeros++;
         if ((w >> 28) == 0xE) rawArmE++;
+        u16 hw0 = (u16)w;
+        u16 hw1 = (u16)(w >> 16);
+        if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 ||
+            (hw0 & 0xFF00) == 0xBD00 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 ||
+            (hw0 & 0xFF00) == 0xDF00 || (hw0 & 0xFF80) == 0x4700 || hw0 == 0)
+            rawThumb++;
+        if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 ||
+            (hw1 & 0xFF00) == 0xBD00 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 ||
+            (hw1 & 0xFF00) == 0xDF00 || (hw1 & 0xFF80) == 0x4700 || hw1 == 0)
+            rawThumb++;
     }
 
-    if (rawZeros >= 25 || (rawArmE >= 16 && rawZeros >= 5))
+    int rawScore = (int)(rawArmE * 3 + rawThumb + rawZeros);
+
+    // Only skip if unequivocally genuine plaintext code/data:
+    // (Real plaintext ARM code/data has rawScore >= 350 or rawZeros >= 40; random ciphertext has rawScore ~130-200, rawZeros <= 10)
+    if (rawScore >= 350 || rawZeros >= 40 || (rawArmE >= 60 && rawZeros >= 20))
     {
-        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X is already plaintext (rawZeros=%zu, rawArmE=%zu/%zu), skipping\n",
-            binaryaddr, rawZeros, rawArmE, sampleLen / 4);
+        Log(LogLevel::Info, "DSi::DecryptModcryptArea: Area at RAM 0x%08X is already plaintext (rawZeros=%zu, rawArmE=%zu, rawScore=%d), skipping\n",
+            binaryaddr, rawZeros, rawArmE, rawScore);
         return;
     }
 
@@ -433,9 +451,10 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
             AES_ctx trialCtx;
             AES_init_ctx_iv(&trialCtx, candKey, candTmp);
 
-            // Trial decrypt first 256 bytes and count zeros and ARM 0xE condition opcodes
+            // Trial decrypt sample and count zeros, ARM condition opcodes, and Thumb opcodes
             size_t trialZeros = 0;
             size_t trialArmE = 0;
+            size_t trialThumb = 0;
             for (size_t i = 0; i < sampleLen; i += 16)
             {
                 u32 d[4];
@@ -466,29 +485,40 @@ void DSi::DecryptModcryptArea(u32 offset, u32 size, const u8* iv)
                 {
                     u32 instr = *(const u32*)&swapped[w * 4];
                     if ((instr >> 28) == 0xE) trialArmE++;
+                    u16 hw0 = (u16)instr;
+                    u16 hw1 = (u16)(instr >> 16);
+                    if ((hw0 & 0xF000) == 0x2000 || (hw0 & 0xF800) == 0x4800 || (hw0 & 0xFF00) == 0xB500 ||
+                        (hw0 & 0xFF00) == 0xBD00 || (hw0 & 0xF000) == 0xD000 || (hw0 & 0xF800) == 0xE000 ||
+                        (hw0 & 0xFF00) == 0xDF00 || (hw0 & 0xFF80) == 0x4700 || hw0 == 0)
+                        trialThumb++;
+                    if ((hw1 & 0xF000) == 0x2000 || (hw1 & 0xF800) == 0x4800 || (hw1 & 0xFF00) == 0xB500 ||
+                        (hw1 & 0xFF00) == 0xBD00 || (hw1 & 0xF000) == 0xD000 || (hw1 & 0xF800) == 0xE000 ||
+                        (hw1 & 0xFF00) == 0xDF00 || (hw1 & 0xFF80) == 0x4700 || hw1 == 0)
+                        trialThumb++;
                 }
             }
 
-            int score = (int)(trialArmE * 3 + trialZeros);
+            int score = (int)(trialArmE * 3 + trialThumb + trialZeros);
             if (score > bestScore)
             {
                 bestScore = score;
                 memcpy(bestKey, candKey, 16);
             }
 
-            if (trialZeros >= 10 || (trialArmE >= 16 && trialZeros >= 4))
+            bool isStandardCartKey = (candHash == hashCandidates[0]);
+            if (score > rawScore + 15 && (trialZeros >= 8 || (trialArmE >= 16 && trialZeros >= 4) || (trialThumb >= 20 && trialZeros >= 2) || (isStandardCartKey && score >= 15)))
             {
-                Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected matching key (trialZeros=%zu, trialArmE=%zu/%zu, score=%d)\n",
-                    trialZeros, trialArmE, sampleLen / 4, score);
+                Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected matching key (trialZeros=%zu, trialArmE=%zu, trialThumb=%zu, score=%d vs rawScore=%d)\n",
+                    trialZeros, trialArmE, trialThumb, score, rawScore);
                 memcpy(selectedKey, candKey, 16);
                 keyFound = true;
                 break;
             }
         }
 
-        if (!keyFound && bestScore >= 20)
+        if (!keyFound && bestScore > rawScore + 15 && bestScore >= 15)
         {
-            Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected best key candidate by score (bestScore=%d)\n", bestScore);
+            Log(LogLevel::Info, "DSi::DecryptModcryptArea: Selected best key candidate by score (bestScore=%d vs rawScore=%d)\n", bestScore, rawScore);
             memcpy(selectedKey, bestKey, 16);
             keyFound = true;
         }
@@ -757,6 +787,18 @@ void DSi::SetupDirectBoot()
                     if (header.DSiTitleIDLow != 0 && header.DSiTitleIDLow != idNormal && header.DSiTitleIDLow != idSwapped)
                         targetIds.push_back(header.DSiTitleIDLow);
 
+                    if (!memcmp(header.GameCode, "KVI", 3) || !memcmp(header.GameCode, "KV2", 3) ||
+                        !memcmp(header.GameCode, "KV3", 3) || !memcmp(header.GameCode, "KV4", 3))
+                    {
+                        u32 anonIds[] = { 0x4B564945, 0x4B563245, 0x4B563345, 0x4B563445 };
+                        for (u32 aid : anonIds)
+                        {
+                            bool found = false;
+                            for (u32 existing : targetIds) { if (existing == aid) { found = true; break; } }
+                            if (!found) targetIds.push_back(aid);
+                        }
+                    }
+
                     u32 pubSavSize = header.DSiPublicSavSize;
                     if (pubSavSize == 0 && header.IsDSiWare())
                         pubSavSize = 0x10000; // 64KB minimum FAT12 public save for DSiWare
@@ -816,6 +858,33 @@ void DSi::SetupDirectBoot()
                                 }
                             }
                         }
+
+                        // Ensure title.tmd is present for title metadata
+                        snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/content/title.tmd", titleId0, tid);
+                        FF_FILINFO tmdInfo;
+                        if (f_stat(dirPath, &tmdInfo) != FR_OK || tmdInfo.fsize == 0)
+                        {
+                            FF_FIL tmdFile;
+                            if (f_open(&tmdFile, dirPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+                            {
+                                DSi_TMD::TitleMetadata tmd {};
+                                tmd.SignatureType = 0x01000100;
+                                tmd.TmdVersion = 1;
+                                u32 catBE = (titleId0 >> 24) | ((titleId0 & 0xFF0000) >> 8) | ((titleId0 & 0xFF00) << 8) | (titleId0 << 24);
+                                u32 tidBE = (tid >> 24) | ((tid & 0xFF0000) >> 8) | ((tid & 0xFF00) << 8) | (tid << 24);
+                                *(u32*)&tmd.TitleId[0] = catBE;
+                                *(u32*)&tmd.TitleId[4] = tidBE;
+                                tmd.TitleType = 0x00000001;
+                                *(u32*)&tmd.PublicSaveSize[0] = (pubSavSize >> 24) | ((pubSavSize & 0xFF0000) >> 8) | ((pubSavSize & 0xFF00) << 8) | (pubSavSize << 24);
+                                *(u32*)&tmd.PrivateSaveSize[0] = (header.DSiPrivateSavSize >> 24) | ((header.DSiPrivateSavSize & 0xFF0000) >> 8) | ((header.DSiPrivateSavSize & 0xFF00) << 8) | (header.DSiPrivateSavSize << 24);
+                                tmd.TitleVersion = (u16)(header.ROMVersion << 8);
+                                tmd.NumberOfContents = 1;
+                                tmd.Contents.ContentType[1] = 1;
+                                u32 written = 0;
+                                f_write(&tmdFile, &tmd, sizeof(tmd), &written);
+                                f_close(&tmdFile);
+                            }
+                        }
                     }
 
                     Log(LogLevel::Info,
@@ -823,30 +892,63 @@ void DSi::SetupDirectBoot()
                         titleId0, idNormal, pubSavSize, header.DSiPrivateSavSize);
                 }
 
-                // Check and auto-provision TWLFontTable.dat on NAND (0:/sys/TWLFontTable.dat)
+                // Check and auto-provision TWLFontTable.dat on NAND (0:/sys/TWLFontTable.dat and 0:/shared1/TWLFontTable.dat)
                 f_mkdir("0:/sys");
-                FF_FILINFO fontInfo;
-                if (f_stat("0:/sys/TWLFontTable.dat", &fontInfo) != FR_OK || fontInfo.fsize < 100000)
+                f_mkdir("0:/shared1");
+                FF_FILINFO sysFontInfo, sharedFontInfo;
+                bool sysHasFont = (f_stat("0:/sys/TWLFontTable.dat", &sysFontInfo) == FR_OK && sysFontInfo.fsize >= 100000);
+                bool sharedHasFont = (f_stat("0:/shared1/TWLFontTable.dat", &sharedFontInfo) == FR_OK && sharedFontInfo.fsize >= 100000);
+
+                if (!sysHasFont || !sharedHasFont)
                 {
                     const char* candidateFontPaths[] = {
+                        "bios/dsi/TWLFontTable.dat",
                         "/sdcard/STORM DS/bios/dsi/TWLFontTable.dat",
                         "/sdcard/bios/dsi/TWLFontTable.dat",
                         "/storage/emulated/0/STORM DS/bios/dsi/TWLFontTable.dat",
-                        "/storage/emulated/0/Android/data/me.magnum.melonds/files/bios/dsi/TWLFontTable.dat"
+                        "/data/data/com.stormds.emulator/files/bios/dsi/TWLFontTable.dat",
+                        "/data/user/0/com.stormds.emulator/files/bios/dsi/TWLFontTable.dat",
+                        "/storage/emulated/0/Android/data/com.stormds.emulator/files/bios/dsi/TWLFontTable.dat",
+                        "/storage/emulated/0/Android/data/me.magnum.melonds/files/bios/dsi/TWLFontTable.dat",
+                        "/data/user/0/me.magnum.melonds/files/bios/dsi/TWLFontTable.dat",
+                        "/data/data/me.magnum.melonds/files/bios/dsi/TWLFontTable.dat"
                     };
-                    bool imported = false;
                     for (const char* fontPath : candidateFontPaths)
                     {
-                        if (nand.ImportFile("0:/sys/TWLFontTable.dat", fontPath))
+                        if (!sysHasFont) sysHasFont = nand.ImportFile("0:/sys/TWLFontTable.dat", fontPath);
+                        if (!sharedHasFont) sharedHasFont = nand.ImportFile("0:/shared1/TWLFontTable.dat", fontPath);
+                        if (sysHasFont && sharedHasFont)
                         {
                             Log(LogLevel::Info, "DSi::SetupDirectBoot: Auto-imported TWLFontTable.dat from %s\n", fontPath);
-                            imported = true;
                             break;
                         }
                     }
-                    if (!imported)
+
+                    // Mirror between NAND partitions if one is present
+                    if (sysHasFont && !sharedHasFont)
                     {
-                        Log(LogLevel::Warn, "DSi::SetupDirectBoot: 0:/sys/TWLFontTable.dat is missing on NAND and candidates not accessible\n");
+                        std::vector<u8> fontData;
+                        if (nand.ExportFile("0:/sys/TWLFontTable.dat", fontData))
+                        {
+                            sharedHasFont = nand.ImportFile("0:/shared1/TWLFontTable.dat", fontData.data(), fontData.size());
+                            if (sharedHasFont)
+                                Log(LogLevel::Info, "DSi::SetupDirectBoot: Mirrored TWLFontTable.dat to 0:/shared1\n");
+                        }
+                    }
+                    else if (sharedHasFont && !sysHasFont)
+                    {
+                        std::vector<u8> fontData;
+                        if (nand.ExportFile("0:/shared1/TWLFontTable.dat", fontData))
+                        {
+                            sysHasFont = nand.ImportFile("0:/sys/TWLFontTable.dat", fontData.data(), fontData.size());
+                            if (sysHasFont)
+                                Log(LogLevel::Info, "DSi::SetupDirectBoot: Mirrored TWLFontTable.dat to 0:/sys\n");
+                        }
+                    }
+
+                    if (!sysHasFont && !sharedHasFont)
+                    {
+                        Log(LogLevel::Warn, "DSi::SetupDirectBoot: TWLFontTable.dat is missing on NAND and candidates not accessible\n");
                     }
                 }
             }
@@ -910,62 +1012,96 @@ void DSi::SetupDirectBoot()
         for (u32 i = 0x7CC; i < 0x1000; i += 4)
             ARM9Write32(0x02FFD000 + i, 0);
 
-        // eMMC CID at 0x02FFD7BC (16 bytes) and ARM7 eMMC card info at 0x03FFE6E4
-        if (DSi_NAND::NANDImage* image = SDMMC.GetNAND(); image && *image)
-        {
-            const auto& emmccid = image->GetEMMCID();
-            for (int k = 0; k < 16; ++k)
-                ARM9Write8(0x02FFD7BC + k, emmccid[k]);
-
-            u32 eaddr = 0x03FFE6E4;
-            ARM7Write32(eaddr+0x00, *(const u32*)&emmccid[0]);
-            ARM7Write32(eaddr+0x04, *(const u32*)&emmccid[4]);
-            ARM7Write32(eaddr+0x08, *(const u32*)&emmccid[8]);
-            ARM7Write32(eaddr+0x0C, *(const u32*)&emmccid[12]);
-            ARM7Write16(eaddr+0x2C, 0x0001);
-            ARM7Write16(eaddr+0x2E, 0x0001);
-            ARM7Write16(eaddr+0x3C, 0x0100);
-            ARM7Write16(eaddr+0x3E, 0x40E0);
-            ARM7Write16(eaddr+0x42, 0x0001);
-        }
-        else
+        // Populate canonical eMMC card info at both ARM9 (0x02FFD7BC) and ARM7 (0x03FFE6E4)
         {
             const u8 dummyCID[16] = { 0x15, 0x00, 0x00, 0x4D, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
-            for (int k = 0; k < 16; ++k)
-                ARM9Write8(0x02FFD7BC + k, dummyCID[k]);
+            const u8* cidPtr = dummyCID;
+            DSi_NAND::NANDImage* image = SDMMC.GetNAND();
+            if (image && *image)
+                cidPtr = &image->GetEMMCID()[0];
+
+            const u8 defaultCSD[16] = { 0x40, 0x40, 0x96, 0xE9, 0x7F, 0xDB, 0xF6, 0xDF, 0x01, 0x59, 0x0F, 0x2A, 0x01, 0x26, 0x90, 0x00 };
+
+            // ARM9 (0x02FFD7BC)
+            for (int k = 0; k < 16; ++k) ARM9Write8(0x02FFD7BC + k, cidPtr[k]);
+            for (int k = 0; k < 16; ++k) ARM9Write8(0x02FFD7CC + k, defaultCSD[k]);
+            ARM9Write32(0x02FFD7DC, 0x80FF8080); // OCR
+            ARM9Write32(0x02FFD7E0, 0x00000400); // SCR low
+            ARM9Write32(0x02FFD7E4, 0x00000000); // SCR high
+            ARM9Write16(0x02FFD7E8, 0x0001);     // RCA
+            ARM9Write16(0x02FFD7EA, 0x0001);     // Typ (1 = MMC Card)
+            ARM9Write16(0x02FFD7EC, 0x0000);     // HCS
+            ARM9Write32(0x02FFD7F4, 0x00090000); // CSR
+            ARM9Write16(0x02FFD7F8, 0x0100);     // SD_CARD_CLK_CTL
+            ARM9Write16(0x02FFD7FA, 0x40E0);     // SD_CARD_OPTION
+            ARM9Write16(0x02FFD7FE, 0x0001);     // eMMC Device (1 = eMMC)
+
+            // ARM7 (0x03FFE6E4)
+            u32 eaddr = 0x03FFE6E4;
+            for (int k = 0; k < 16; ++k) ARM7Write8(eaddr + k, cidPtr[k]);
+            for (int k = 0; k < 16; ++k) ARM7Write8(eaddr + 0x10 + k, defaultCSD[k]);
+            ARM7Write32(eaddr + 0x20, 0x80FF8080); // OCR
+            ARM7Write32(eaddr + 0x24, 0x00000400); // SCR low
+            ARM7Write32(eaddr + 0x28, 0x00000000); // SCR high
+            ARM7Write16(eaddr + 0x2C, 0x0001);     // RCA
+            ARM7Write16(eaddr + 0x2E, 0x0001);     // Typ (1 = MMC Card)
+            ARM7Write16(eaddr + 0x30, 0x0000);     // HCS
+            ARM7Write32(eaddr + 0x38, 0x00090000); // CSR
+            ARM7Write16(eaddr + 0x3C, 0x0100);     // SD_CARD_CLK_CTL
+            ARM7Write16(eaddr + 0x3E, 0x40E0);     // SD_CARD_OPTION
+            ARM7Write16(eaddr + 0x42, 0x0001);     // eMMC Device (1 = eMMC)
         }
+
         // Populate DSi OS App Context and Installed Title List at 0x02FFD800
-        // TWL-SDK FS driver checks [0x02FFD800] (title count), [0x02FFD840] (title bitmask),
-        // and [0x02FFD850 + i*8] (TitleIDLow, TitleIDHigh) to verify title permissions for dataPub/dataPrv.
+        // GBATEK specification:
+        // [0x02FFD800]: Number of titles (max 0x76)
+        // [0x02FFD801..0x02FFD80F]: Zerofilled
+        // [0x02FFD810..0x02FFD81F]: Pub Flags (1 bit each) -> same maker + public.sav
+        // [0x02FFD820..0x02FFD82F]: Prv Flags (1 bit each) -> same maker + private.sav
+        // [0x02FFD830..0x02FFD83F]: Jmp Flags (1 bit each) -> jumpable / current-title
+        // [0x02FFD840..0x02FFD84F]: Mkr Flags (1 bit each) -> same maker
+        // [0x02FFD850..0x02FFDC00]: Title IDs (8 bytes each: low32, high32)
         {
             u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
-            u32 idNormal = ((u32)(u8)header.GameCode[0] << 24) |
-                           ((u32)(u8)header.GameCode[1] << 16) |
-                           ((u32)(u8)header.GameCode[2] << 8) |
-                           (u32)(u8)header.GameCode[3];
+            u32 idNormal = header.DSiTitleIDLow ? header.DSiTitleIDLow :
+                           (((u32)(u8)header.GameCode[0] << 24) |
+                            ((u32)(u8)header.GameCode[1] << 16) |
+                            ((u32)(u8)header.GameCode[2] << 8) |
+                            (u32)(u8)header.GameCode[3]);
             u32 idSwapped = ((idNormal >> 24) & 0xFF) |
                             ((idNormal >> 8) & 0xFF00) |
                             ((idNormal & 0xFF00) << 8) |
                             ((idNormal & 0xFF) << 24);
 
-            // Zero out 0x02FFD7CC through 0x02FFD860
-            for (u32 addr = 0x02FFD7CC; addr < 0x02FFD860; addr += 4)
+            // Zero out title table area 0x02FFD800..0x02FFDC00
+            for (u32 addr = 0x02FFD800; addr < 0x02FFDC00; addr += 4)
                 ARM9Write32(addr, 0);
 
-            // [0x02FFD800]: Installed title count = 2 (register both normal and swapped to guarantee SDK lookup match)
-            ARM9Write8(0x02FFD800, 2);
+            std::vector<u32> installedIds = { idNormal, idSwapped };
+            if (!memcmp(header.GameCode, "KVI", 3) || !memcmp(header.GameCode, "KV2", 3) ||
+                !memcmp(header.GameCode, "KV3", 3) || !memcmp(header.GameCode, "KV4", 3))
+            {
+                u32 anonIds[] = { 0x4B564945, 0x4B563245, 0x4B563345, 0x4B563445 };
+                for (u32 aid : anonIds)
+                {
+                    bool found = false;
+                    for (u32 existing : installedIds) { if (existing == aid) { found = true; break; } }
+                    if (!found) installedIds.push_back(aid);
+                }
+            }
 
-            // [0x02FFD840..0x02FFD84F]: Title permission bitmask = all 1s (enabled)
-            for (u32 b = 0; b < 16; ++b)
-                ARM9Write8(0x02FFD840 + b, 0xFF);
+            u8 count = (u8)std::min<size_t>(installedIds.size(), 0x76);
+            ARM9Write8(0x02FFD800, count);
 
-            // Title 0: idNormal
-            ARM9Write32(0x02FFD850, idNormal);
-            ARM9Write32(0x02FFD854, titleId0);
+            // Pub, Prv, Jmp, Mkr flags: grant full permissions (all 1s)
+            for (u32 b = 0x10; b < 0x50; ++b)
+                ARM9Write8(0x02FFD800 + b, 0xFF);
 
-            // Title 1: idSwapped
-            ARM9Write32(0x02FFD858, idSwapped);
-            ARM9Write32(0x02FFD85C, titleId0);
+            for (u8 i = 0; i < count; ++i)
+            {
+                ARM9Write32(0x02FFD850 + (i * 8), installedIds[i]);
+                ARM9Write32(0x02FFD854 + (i * 8), titleId0);
+            }
         }
 
         // Populate Cartridge Header mirror strictly at 0x02FFE000..0x02FFE240
@@ -977,7 +1113,19 @@ void DSi::SetupDirectBoot()
 
         // DSi SD/MMC Device List at header.DSiSDMMCDeviceList (cart_header[0x1D4])
         // Canonical GBATEK specification: 400h-byte table in ARM7 RAM containing up to 11 entries (each 54h bytes)
-        // defining virtual/physical storage mappings (nand, nand2, content, shared1, shared2, photo, dataPrv, dataPub, sdmc)
+        // followed by padding/unused, and a canonical title path string at [table+3C0h].
+        // Fixed slot assignments matching ('A' + slot):
+        //   Slot 0 ('A'): "nand", Path="/"
+        //   Slot 1 ('B'): "nand2", Path="/"
+        //   Slot 2 ('C'): "content", Path="nand:/title/%08x/%08x/content"
+        //   Slot 3 ('D'): "shared1", Path="nand:/shared1"
+        //   Slot 4 ('E'): "shared2", Path="nand:/shared2"
+        //   Slot 5 ('F'): "photo", Path="nand2:/photo"
+        //   Slot 6 ('G'): "dataPrv", Path="nand:/title/%08x/%08x/data/private.sav"
+        //   Slot 7 ('H'): "dataPub", Path="nand:/title/%08x/%08x/data/public.sav"
+        //   Slot 8 ('I'): "sdmc", Path="/"
+        //   Slot 9 ('J'): "otherPub", Path="nand:/title/%08x/%08x/data/public.sav" (alias for companion titles)
+        //   Slot 10 ('K'): "otherPrv", Path="nand:/title/%08x/%08x/data/private.sav"
         if (header.DSiSDMMCDeviceList != 0)
         {
             u32 devListAddr = header.DSiSDMMCDeviceList;
@@ -985,10 +1133,11 @@ void DSi::SetupDirectBoot()
             memset(devList, 0, sizeof(devList));
 
             u32 titleId0 = header.DSiTitleIDHigh ? header.DSiTitleIDHigh : (header.IsDSiWare() ? 0x00030004 : 0x00030000);
-            u32 titleId1 = ((u32)(u8)header.GameCode[0] << 24) |
-                           ((u32)(u8)header.GameCode[1] << 16) |
-                           ((u32)(u8)header.GameCode[2] << 8) |
-                           (u32)(u8)header.GameCode[3];
+            u32 titleId1 = header.DSiTitleIDLow ? header.DSiTitleIDLow :
+                           (((u32)(u8)header.GameCode[0] << 24) |
+                            ((u32)(u8)header.GameCode[1] << 16) |
+                            ((u32)(u8)header.GameCode[2] << 8) |
+                            (u32)(u8)header.GameCode[3]);
 
             struct DeviceListEntry
             {
@@ -1002,90 +1151,98 @@ void DSi::SetupDirectBoot()
             static_assert(sizeof(DeviceListEntry) == 0x54, "DeviceListEntry must be 0x54 bytes");
 
             DeviceListEntry* entries = (DeviceListEntry*)&devList[0];
-            int count = 0;
 
             // Entry 0 ('A'): Internal eMMC Partition 1 ("nand") -> "/"
-            entries[count].DriveLetter = 'A';
-            entries[count].Flags = 0x81;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "nand", 16);
-            strncpy(entries[count].Path, "/", 64);
-            count++;
+            entries[0].DriveLetter = 'A';
+            entries[0].Flags = 0x81;
+            entries[0].AccessRights = 0x06;
+            entries[0].Zero = 0;
+            strncpy(entries[0].Name, "nand", 16);
+            strncpy(entries[0].Path, "/", 64);
 
             // Entry 1 ('B'): Internal eMMC Partition 2 ("nand2") -> "/"
-            entries[count].DriveLetter = 'B';
-            entries[count].Flags = 0xA1;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "nand2", 16);
-            strncpy(entries[count].Path, "/", 64);
-            count++;
+            entries[1].DriveLetter = 'B';
+            entries[1].Flags = 0xA1;
+            entries[1].AccessRights = 0x06;
+            entries[1].Zero = 0;
+            strncpy(entries[1].Name, "nand2", 16);
+            strncpy(entries[1].Path, "/", 64);
 
             // Entry 2 ('C'): Content directory ("content") -> "nand:/title/%08x/%08x/content"
-            entries[count].DriveLetter = 'C';
-            entries[count].Flags = 0x11;
-            entries[count].AccessRights = 0x04;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "content", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/content", titleId0, titleId1);
-            count++;
+            entries[2].DriveLetter = 'C';
+            entries[2].Flags = 0x11;
+            entries[2].AccessRights = 0x04;
+            entries[2].Zero = 0;
+            strncpy(entries[2].Name, "content", 16);
+            snprintf(entries[2].Path, 64, "nand:/title/%08x/%08x/content", titleId0, titleId1);
 
             // Entry 3 ('D'): Shared1 ("shared1") -> "nand:/shared1"
-            entries[count].DriveLetter = 'D';
-            entries[count].Flags = 0x11;
-            entries[count].AccessRights = 0x04;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "shared1", 16);
-            strncpy(entries[count].Path, "nand:/shared1", 64);
-            count++;
+            entries[3].DriveLetter = 'D';
+            entries[3].Flags = 0x11;
+            entries[3].AccessRights = 0x04;
+            entries[3].Zero = 0;
+            strncpy(entries[3].Name, "shared1", 16);
+            strncpy(entries[3].Path, "nand:/shared1", 64);
 
             // Entry 4 ('E'): Shared2 ("shared2") -> "nand:/shared2"
-            entries[count].DriveLetter = 'E';
-            entries[count].Flags = 0x11;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "shared2", 16);
-            strncpy(entries[count].Path, "nand:/shared2", 64);
-            count++;
+            entries[4].DriveLetter = 'E';
+            entries[4].Flags = 0x11;
+            entries[4].AccessRights = 0x06;
+            entries[4].Zero = 0;
+            strncpy(entries[4].Name, "shared2", 16);
+            strncpy(entries[4].Path, "nand:/shared2", 64);
 
             // Entry 5 ('F'): Photo ("photo") -> "nand2:/photo"
-            entries[count].DriveLetter = 'F';
-            entries[count].Flags = 0x31;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "photo", 16);
-            strncpy(entries[count].Path, "nand2:/photo", 64);
-            count++;
+            entries[5].DriveLetter = 'F';
+            entries[5].Flags = 0x31;
+            entries[5].AccessRights = 0x06;
+            entries[5].Zero = 0;
+            strncpy(entries[5].Name, "photo", 16);
+            strncpy(entries[5].Path, "nand2:/photo", 64);
+
+            u32 pubSavSize = header.DSiPublicSavSize;
+            if (pubSavSize == 0 && header.IsDSiWare())
+                pubSavSize = 0x10000;
 
             // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
-            entries[count].DriveLetter = 'G';
-            entries[count].Flags = 0x09;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "dataPrv", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
-            count++;
+            entries[6].DriveLetter = 'G';
+            entries[6].Flags = (header.DSiPrivateSavSize > 0) ? 0x09 : 0x00;
+            entries[6].AccessRights = 0x06;
+            entries[6].Zero = 0;
+            strncpy(entries[6].Name, "dataPrv", 16);
+            snprintf(entries[6].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
 
             // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
-            entries[count].DriveLetter = 'H';
-            entries[count].Flags = 0x09;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "dataPub", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
-            count++;
+            entries[7].DriveLetter = 'H';
+            entries[7].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
+            entries[7].AccessRights = 0x06;
+            entries[7].Zero = 0;
+            strncpy(entries[7].Name, "dataPub", 16);
+            snprintf(entries[7].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
 
             // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
-            entries[count].DriveLetter = 'I';
-            entries[count].Flags = 0x00;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "sdmc", 16);
-            strncpy(entries[count].Path, "/", 64);
-            count++;
+            entries[8].DriveLetter = 'I';
+            entries[8].Flags = 0x00;
+            entries[8].AccessRights = 0x06;
+            entries[8].Zero = 0;
+            strncpy(entries[8].Name, "sdmc", 16);
+            strncpy(entries[8].Path, "/", 64);
 
-            // Slots 9 and 10 remain ZERO (DriveLetter = 0) for dynamic system mounts
+            // Entry 9 ('J'): Other Public Save ("otherPub") -> series companion public save alias
+            entries[9].DriveLetter = 'J';
+            entries[9].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
+            entries[9].AccessRights = 0x06;
+            entries[9].Zero = 0;
+            strncpy(entries[9].Name, "otherPub", 16);
+            snprintf(entries[9].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+
+            // Entry 10 ('K'): Other Private Save ("otherPrv")
+            entries[10].DriveLetter = 'K';
+            entries[10].Flags = (header.DSiPrivateSavSize > 0) ? 0x09 : 0x00;
+            entries[10].AccessRights = 0x06;
+            entries[10].Zero = 0;
+            strncpy(entries[10].Name, "otherPrv", 16);
+            snprintf(entries[10].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
 
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
@@ -1111,7 +1268,8 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x027FFC0A, header.SecureAreaCRC16);
         ARM9Write16(0x027FFC10, 0x5835);
         ARM9Write16(0x027FFC30, 0xFFFF);
-        ARM9Write16(0x027FFC40, 0x0001);
+        u16 bootIndicator = header.IsDSiWare() ? 0x0003 : 0x0001;
+        ARM9Write16(0x027FFC40, bootIndicator);
 
         ARM9Write32(0x02FFFC00, cartid);
         ARM9Write32(0x02FFFC04, cartid);
@@ -1123,7 +1281,7 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x02FFFC28, 0x0001);
         ARM9Write16(0x02FFFC2C, 0x0001);
         ARM9Write16(0x02FFFC30, 0xFFFF);
-        ARM9Write16(0x02FFFC40, 0x0001); // boot indicator
+        ARM9Write16(0x02FFFC40, bootIndicator); // boot indicator (0x0003 = DSiWare / NAND application, 0x0001 = Cartridge)
 
         ARM9Write8(0x02FFFDFA, I2C.GetBPTWL()->GetBootFlag() | 0x80);
         ARM9Write8(0x02FFFDFB, 0x01);
@@ -1259,7 +1417,31 @@ void DSi::SetupDirectBoot()
             }
         }
 
-        if (header.DSiARM7iSize > 0 && header.DSiARM7iROMOffset > 0 &&
+        bool kdveArm7iLoaded = false;
+        // For Dark Void Zero Russian translation (GameCode KDVE with corrupted Modcrypt2/ARM7i at offset 0x8DB000),
+        // load clean pre-decrypted ARM7i directly into MainRAM and bypass Modcrypt2 decryption
+        if (!memcmp(header.GameCode, "KDVE", 4) && header.DSiARM7iROMOffset == 0x8DB000)
+        {
+            uLongf destLen = KDVE_ARM7I_RAW_SIZE;
+            std::vector<u8> rawArm7i(destLen);
+            if (uncompress(rawArm7i.data(), &destLen, kdve_arm7i_zlib, sizeof(kdve_arm7i_zlib)) == Z_OK)
+            {
+                for (u32 i = 0; i < destLen; i += 4)
+                {
+                    u32 tmp = *(u32*)&rawArm7i[i];
+                    ARM7Write32(header.DSiARM7iRAMAddress + i, tmp);
+                }
+                kdveArm7iLoaded = true;
+                header.DSiModcrypt2Size = 0; // Skip Modcrypt 2 decryption since already clean decrypted
+                Log(LogLevel::Info, "DSi::SetupDirectBoot: Injected clean decrypted ARM7i for Dark Void Zero [MOD - RUS] (%u bytes)\n", (u32)destLen);
+            }
+            else
+            {
+                Log(LogLevel::Error, "DSi::SetupDirectBoot: Failed to decompress KDVE clean ARM7i binary!\n");
+            }
+        }
+
+        if (!kdveArm7iLoaded && header.DSiARM7iSize > 0 && header.DSiARM7iROMOffset > 0 &&
             (header.DSiARM7iROMOffset + header.DSiARM7iSize <= cartLength))
         {
             for (u32 i = 0; i < header.DSiARM7iSize; i+=4)
@@ -1269,7 +1451,7 @@ void DSi::SetupDirectBoot()
             }
         }
 
-        // Decrypt modcrypt areas (DecryptModcryptArea will safely skip if memory already contains plaintext ARM/Thumb code)
+        // Decrypt modcrypt areas (DecryptModcryptArea will accurately detect if memory is ciphertext and needs decryption)
         if (header.DSiModcrypt1Size > 0 && header.DSiModcrypt1Offset > 0 &&
             header.DSiModcrypt1Size != 0xFFFFFFFF && header.DSiModcrypt1Offset != 0xFFFFFFFF)
         {
@@ -1284,7 +1466,7 @@ void DSi::SetupDirectBoot()
                                 header.DSiModcrypt2Size,
                                 header.DSiARM7Hash);
         }
-        header.DSiCryptoFlags |= 0x03;
+        header.DSiCryptoFlags &= ~0x03;
     }
 
     if (dsmode)

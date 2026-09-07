@@ -137,7 +137,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             val mainComponents = resultLayout.mainScreenLayout.components
             val hasScreens = mainComponents?.any { it.isScreen() } == true
             val hasButtons = mainComponents?.any { !it.isScreen() } == true
-            if (hasScreens && !hasButtons) {
+            if (requiresDefaultLayout && hasScreens && !hasButtons) {
                 val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, _currentLayoutConfiguration.value?.id)
                 val defaultButtons = defaultLayout.mainScreenLayout.components?.filter { !it.isScreen() } ?: emptyList()
                 val mergedComponents = (mainComponents ?: emptyList()) + defaultButtons

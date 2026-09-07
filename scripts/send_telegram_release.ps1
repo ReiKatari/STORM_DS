@@ -1,17 +1,20 @@
 # Telegram Uploader Utility for STORM DS
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
 param(
     [string]$Token = "",
     [string]$ChatId = "-5389146045",
     [string]$ApkPath,
     [string]$SetupPath,
     [string]$Caption,
+    [string]$CaptionFile,
     [string]$SetupCaption,
+    [string]$SetupCaptionFile,
     [string]$Announcement,
     [string]$AnnouncementFile
 )
+
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 if (-not $Token) {
     if ($env:STORM_TELEGRAM_BOT_TOKEN) {
@@ -19,7 +22,7 @@ if (-not $Token) {
     } else {
         $localConfigFile = Join-Path $PSScriptRoot "config.local.json"
         if (Test-Path $localConfigFile) {
-            $json = Get-Content $localConfigFile -Raw | ConvertFrom-Json
+            $json = Get-Content $localConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
             $Token = $json.telegram_bot_token
         }
     }
@@ -67,12 +70,11 @@ function Upload-TelegramDocument([string]$filePath, [string]$docCaption) {
     $client.Timeout = [System.TimeSpan]::FromMinutes(10)
     $form = [System.Net.Http.MultipartFormDataContent]::new()
     
-    $chatContent = [System.Net.Http.StringContent]::new($ChatId)
+    $chatContent = [System.Net.Http.StringContent]::new($ChatId, [System.Text.Encoding]::UTF8)
     $form.Add($chatContent, "chat_id")
 
     if ($docCaption) {
-        $captionContent = [System.Net.Http.ByteArrayContent]::new([System.Text.Encoding]::UTF8.GetBytes($docCaption))
-        $captionContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("text/plain; charset=utf-8")
+        $captionContent = [System.Net.Http.StringContent]::new($docCaption, [System.Text.Encoding]::UTF8)
         $form.Add($captionContent, "caption")
     }
 
@@ -93,14 +95,20 @@ if ($Announcement) {
 
 if ($ApkPath) {
     $fileName = [System.IO.Path]::GetFileNameWithoutExtension($ApkPath)
+    if ($CaptionFile -and (Test-Path $CaptionFile)) {
+        $Caption = [System.IO.File]::ReadAllText($CaptionFile, [System.Text.Encoding]::UTF8).Trim()
+    }
     if (-not $Caption) {
-        $Caption = "$fileName (Release • Nintendo DS and DSi Emulator)"
+        $Caption = "$fileName (Релиз • Эмулятор Nintendo DS и DSi)"
     }
     Upload-TelegramDocument $ApkPath $Caption
 }
 
 if ($SetupPath) {
     $setupFileName = [System.IO.Path]::GetFileNameWithoutExtension($SetupPath)
+    if ($SetupCaptionFile -and (Test-Path $SetupCaptionFile)) {
+        $SetupCaption = [System.IO.File]::ReadAllText($SetupCaptionFile, [System.Text.Encoding]::UTF8).Trim()
+    }
     if (-not $SetupCaption) {
         $SetupCaption = "$setupFileName (STORM DSi Decryptor for Windows)"
     }

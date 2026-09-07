@@ -202,6 +202,10 @@ if (MATH_LIBRARY)
     target_link_libraries(core PRIVATE ${MATH_LIBRARY})
 endif()
 
+if (ANDROID)
+    target_link_libraries(core PUBLIC z)
+endif()
+
 if (ENABLE_JIT)
     target_compile_definitions(core PUBLIC JIT_ENABLED)
 

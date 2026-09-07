@@ -2861,7 +2861,7 @@ std::string MelonInstance::getDetailedEmulationDiagnostic()
            << " Size=0x" << header.ARM7Size << " Entry=0x" << header.ARM7EntryAddress << "\n";
         ss << "DSiCryptoFlags=0x" << (int)header.DSiCryptoFlags << " AppFlags=0x" << (int)header.AppFlags
            << " PubSav=0x" << header.DSiPublicSavSize << " PrivSav=0x" << header.DSiPrivateSavSize << "\n";
-        if (header.DSiCryptoFlags & 1) {
+        if (header.DSiARM9iSize > 0) {
             ss << "DSiARM9i: ROMOff=0x" << header.DSiARM9iROMOffset << " RAMAddr=0x" << header.DSiARM9iRAMAddress << " Size=0x" << header.DSiARM9iSize << "\n";
             ss << "DSiARM7i: ROMOff=0x" << header.DSiARM7iROMOffset << " RAMAddr=0x" << header.DSiARM7iRAMAddress << " Size=0x" << header.DSiARM7iSize << "\n";
             ss << "Modcrypt1: Off=0x" << header.DSiModcrypt1Offset << " Size=0x" << header.DSiModcrypt1Size << "\n";

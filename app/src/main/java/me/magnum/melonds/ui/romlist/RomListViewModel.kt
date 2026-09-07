@@ -70,6 +70,7 @@ class RomListViewModel @Inject constructor(
     val boxArtByUri: StateFlow<Map<String, String>> = _boxArtByUri.asStateFlow()
 
     private val boxArtRequestsInFlight = mutableSetOf<String>()
+    private val raCoverRequestsInFlight = mutableSetOf<String>()
     private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(12)
 
     fun requestBoxArt(rom: Rom) {
@@ -77,28 +78,49 @@ class RomListViewModel @Inject constructor(
         val isScraperPro = settingsRepository.isGameTdbCoversEnabled()
         if (!isRaEnabled && !isScraperPro) return
 
-        val key = rom.uri.toString()
-        if (_boxArtByUri.value.containsKey(key)) return
-        synchronized(boxArtRequestsInFlight) {
-            if (!boxArtRequestsInFlight.add(key)) return
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (isRaEnabled && rom.retroAchievementsHash.isNotBlank()) {
-                    if (!raCoverByHash.value.containsKey(rom.retroAchievementsHash)) {
-                        runCatching { retroAchievementsRepository.getUserGameData(rom.retroAchievementsHash, false) }
+        if (isRaEnabled && rom.retroAchievementsHash.isNotBlank()) {
+            val raHash = rom.retroAchievementsHash
+            if (!raCoverByHash.value.containsKey(raHash)) {
+                val shouldFetchRa: Boolean
+                synchronized(raCoverRequestsInFlight) {
+                    shouldFetchRa = raCoverRequestsInFlight.add(raHash)
+                }
+                if (shouldFetchRa) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            runCatching {
+                                retroAchievementsRepository.getUserGameData(raHash, false)
+                            }
+                        } finally {
+                            synchronized(raCoverRequestsInFlight) {
+                                raCoverRequestsInFlight.remove(raHash)
+                            }
+                        }
                     }
                 }
-                val url = if (isScraperPro) {
-                    boxArtSemaphore.withPermit {
-                        runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
-                    }
-                } else null
+            }
+        }
 
-                _boxArtByUri.update { it + (key to (url ?: "")) }
-            } finally {
+        if (isScraperPro) {
+            val key = rom.uri.toString()
+            if (!_boxArtByUri.value.containsKey(key)) {
+                val shouldFetchBoxArt: Boolean
                 synchronized(boxArtRequestsInFlight) {
-                    boxArtRequestsInFlight.remove(key)
+                    shouldFetchBoxArt = boxArtRequestsInFlight.add(key)
+                }
+                if (shouldFetchBoxArt) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            val url = boxArtSemaphore.withPermit {
+                                runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+                            }
+                            _boxArtByUri.update { it + (key to (url ?: "")) }
+                        } finally {
+                            synchronized(boxArtRequestsInFlight) {
+                                boxArtRequestsInFlight.remove(key)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -491,20 +513,17 @@ class RomListViewModel @Inject constructor(
 
     private fun computeAlphabetIndex(entries: List<RomBrowserEntry>, sortingMode: SortingMode): Map<Char, Int> {
         if (sortingMode != SortingMode.ALPHABETICALLY) return emptyMap()
-        // Use insertion-order so the bar mirrors whatever sort order the entries are in
-        // (ascending: A..Z..#, descending: #..Z..A) without re-sorting on our own.
         val map = LinkedHashMap<Char, Int>()
+        var firstRomIndex = -1
+
         entries.forEachIndexed { index, entry ->
             // Folders aren't part of the alphabet; they get a dedicated folder icon at the top.
             if (entry !is RomBrowserEntry.RomItem) return@forEachIndexed
+            if (firstRomIndex == -1) firstRomIndex = index
             val rawName = me.magnum.melonds.ui.romlist.composables.romDisplayName(entry.rom).trim()
-            // NFKD decomposes compatibility chars (e.g. fullwidth Latin → ASCII Latin, ligature
-            // 'ﬁ' → 'fi'). Then strip combining marks so accented "Élite" → "Elite" → 'E'.
             val normalized = java.text.Normalizer.normalize(rawName, java.text.Normalizer.Form.NFKD)
                 .replace(Regex("\\p{Mn}+"), "")
             val firstRaw = normalized.firstOrNull() ?: return@forEachIndexed
-            // Force ASCII uppercase. Both the natural uppercaseChar mapping and a fallback ASCII
-            // arithmetic conversion are applied so that any path lands on a..z producing A..Z.
             val asciiUpper = when {
                 firstRaw in 'a'..'z' -> ('A' + (firstRaw - 'a'))
                 firstRaw in 'A'..'Z' -> firstRaw
@@ -516,6 +535,15 @@ class RomListViewModel @Inject constructor(
                 else -> '#'
             }
             map.putIfAbsent(key, index)
+        }
+
+        if (firstRomIndex != -1) {
+            val resultMap = LinkedHashMap<Char, Int>()
+            resultMap['#'] = firstRomIndex
+            map.forEach { (k, v) ->
+                if (k != '#') resultMap[k] = v
+            }
+            return resultMap
         }
         return map
     }

@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.romlist.composables
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,15 +113,56 @@ fun RomBrowserScreen(
     onDpadDownGateChanged: ((() -> Boolean)?) -> Unit = {},
 ) {
     val colors = watermelon
-    val refreshState = rememberPullRefreshState(
-        refreshing = scanningStatus == RomScanningStatus.SCANNING,
-        onRefresh = onRefresh,
-    )
     val coroutineScope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     val itemFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
     var focusedEntryIndex by remember { mutableIntStateOf(-1) }
+
+    val isGridDragged by gridState.interactionSource.collectIsDraggedAsState()
+    val isListDragged by listState.interactionSource.collectIsDraggedAsState()
+    var userHasScrolledManually by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isGridDragged, isListDragged) {
+        if (isGridDragged || isListDragged) {
+            userHasScrolledManually = true
+        }
+    }
+
+    var initialSettlingDone by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(2500)
+        initialSettlingDone = true
+    }
+
+    // Scroll to top (item 0, offset 0) on initial load and whenever entries update before user manually scrolls
+    LaunchedEffect(state.entries, userHasScrolledManually, initialSettlingDone) {
+        if (!userHasScrolledManually && !initialSettlingDone && state.entries.isNotEmpty()) {
+            focusedEntryIndex = -1
+            gridState.scrollToItem(0, 0)
+            listState.scrollToItem(0, 0)
+        }
+    }
+
+    var pendingRefreshScrollReset by remember { mutableStateOf(false) }
+    var isManualRefreshing by remember { mutableStateOf(false) }
+
+    val handleRefreshWithScrollReset: () -> Unit = {
+        focusedEntryIndex = -1
+        userHasScrolledManually = false
+        isManualRefreshing = true
+        pendingRefreshScrollReset = true
+        coroutineScope.launch {
+            gridState.scrollToItem(0, 0)
+            listState.scrollToItem(0, 0)
+        }
+        onRefresh()
+    }
+
+    val refreshState = rememberPullRefreshState(
+        refreshing = scanningStatus == RomScanningStatus.SCANNING,
+        onRefresh = handleRefreshWithScrollReset,
+    )
 
     val folderCount = remember(state.entries) { state.entries.takeWhile { it is RomBrowserEntry.Folder }.size }
     val hasFolders = folderCount > 0
@@ -133,10 +176,47 @@ fun RomBrowserScreen(
     val gridLeadingItems = if (hasFolders) 1 else 0
     val listLeadingItems = 0
 
-    LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive) {
+    LaunchedEffect(scanningStatus) {
+        if (scanningStatus == RomScanningStatus.SCANNING) {
+            userHasScrolledManually = false
+            isManualRefreshing = true
+            pendingRefreshScrollReset = true
+            focusedEntryIndex = -1
+            repeat(4) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                kotlinx.coroutines.delay(16)
+            }
+        } else if (scanningStatus == RomScanningStatus.NOT_SCANNING) {
+            if (pendingRefreshScrollReset || isManualRefreshing) {
+                focusedEntryIndex = -1
+                repeat(8) {
+                    gridState.scrollToItem(0, 0)
+                    listState.scrollToItem(0, 0)
+                    kotlinx.coroutines.delay(64)
+                }
+                pendingRefreshScrollReset = false
+                isManualRefreshing = false
+            }
+        }
+    }
+
+    LaunchedEffect(state.entries) {
+        if (pendingRefreshScrollReset || isManualRefreshing) {
+            focusedEntryIndex = -1
+            repeat(4) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                kotlinx.coroutines.delay(16)
+            }
+        }
+    }
+
+    LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive, state.sortingMode, state.sortingOrder) {
+        userHasScrolledManually = false
         focusedEntryIndex = -1
-        gridState.scrollToItem(0)
-        listState.scrollToItem(0)
+        gridState.scrollToItem(0, 0)
+        listState.scrollToItem(0, 0)
     }
 
     LaunchedEffect(focusedEntryIndex, state.entries) {
@@ -181,7 +261,7 @@ fun RomBrowserScreen(
                     onBootFirmwareDs = onBootFirmwareDs,
                     onBootFirmwareDsi = onBootFirmwareDsi,
                     onOpenSingleRom = onOpenSingleRom,
-                    onRefresh = onRefresh,
+                    onRefresh = handleRefreshWithScrollReset,
                     onOpenSettings = onOpenSettings,
                 )
 
@@ -492,8 +572,18 @@ fun RomBrowserScreen(
                                     }
                                 }
                             }
-                            val activeLetter by remember(state.alphabetIndex, state.viewMode) {
-                                derivedStateOf { letterForIndex(state.alphabetIndex, activeFirstVis) }
+                            val activeLetter by remember(state.alphabetIndex, state.viewMode, isManualRefreshing) {
+                                derivedStateOf {
+                                    val isAtVeryTop = when (state.viewMode) {
+                                        RomViewMode.GRID -> gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+                                        RomViewMode.LIST -> listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                                    }
+                                    if (isManualRefreshing || isAtVeryTop) {
+                                        state.alphabetIndex.keys.firstOrNull() ?: '#'
+                                    } else {
+                                        letterForIndex(state.alphabetIndex, activeFirstVis)
+                                    }
+                                }
                             }
                             val isInFolderSection by remember(folderCount, state.viewMode) {
                                 derivedStateOf { hasFolders && activeFirstVis < folderCount }
@@ -505,9 +595,10 @@ fun RomBrowserScreen(
                                 isInFolderSection = isInFolderSection,
                                 onFoldersClicked = {
                                     coroutineScope.launch {
+                                        userHasScrolledManually = false
                                         when (state.viewMode) {
-                                            RomViewMode.GRID -> gridState.scrollToItem(0)
-                                            RomViewMode.LIST -> listState.scrollToItem(0)
+                                            RomViewMode.GRID -> gridState.scrollToItem(0, 0)
+                                            RomViewMode.LIST -> listState.scrollToItem(0, 0)
                                         }
                                         requestFirstVisibleRomFocus(
                                             state = state,
@@ -519,21 +610,23 @@ fun RomBrowserScreen(
                                 },
                                 onLetterTouched = { idx, letter ->
                                     coroutineScope.launch {
-                                        val targetItemIndex = when (state.viewMode) {
-                                            RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
-                                            RomViewMode.LIST -> leadingItems + idx
+                                        if (letter == '#' || idx <= 0) {
+                                            userHasScrolledManually = false
+                                            when (state.viewMode) {
+                                                RomViewMode.GRID -> gridState.scrollToItem(0, 0)
+                                                RomViewMode.LIST -> listState.scrollToItem(0, 0)
+                                            }
+                                        } else {
+                                            userHasScrolledManually = true
+                                            val targetItemIndex = when (state.viewMode) {
+                                                RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
+                                                RomViewMode.LIST -> leadingItems + idx
+                                            }
+                                            when (state.viewMode) {
+                                                RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex, 0)
+                                                RomViewMode.LIST -> listState.scrollToItem(targetItemIndex, 0)
+                                            }
                                         }
-                                        when (state.viewMode) {
-                                            RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex)
-                                            RomViewMode.LIST -> listState.scrollToItem(targetItemIndex)
-                                        }
-                                        requestRomFocusAtIndex(
-                                            state = state,
-                                            targetIndex = idx,
-                                            gridState = gridState,
-                                            listState = listState,
-                                            itemFocusRequesters = itemFocusRequesters,
-                                        )
                                     }
                                 },
                                 modifier = Modifier
@@ -891,15 +984,22 @@ private fun RomListOverscrollProvider(
 
 private fun letterForIndex(alphabetIndex: Map<Char, Int>, currentIndex: Int): Char? {
     if (alphabetIndex.isEmpty()) return null
+    if (currentIndex <= 0) return alphabetIndex.keys.firstOrNull() ?: '#'
     var match: Char? = null
     var matchIndex = -1
     alphabetIndex.forEach { (letter, startIndex) ->
-        if (startIndex <= currentIndex && startIndex > matchIndex) {
-            match = letter
-            matchIndex = startIndex
+        if (startIndex <= currentIndex) {
+            if (startIndex > matchIndex) {
+                match = letter
+                matchIndex = startIndex
+            } else if (startIndex == matchIndex && match == '#') {
+                // When currentIndex > 0 and '#' shares startIndex 0 with a real letter (e.g. 'A'),
+                // prefer the real letter once scrolled past 0.
+                match = letter
+            }
         }
     }
-    return match
+    return match ?: alphabetIndex.keys.firstOrNull() ?: '#'
 }
 
 @Composable

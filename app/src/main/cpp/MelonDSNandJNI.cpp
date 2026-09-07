@@ -683,11 +683,12 @@ static bool ensureValidSaveFile(const char* path, u32 expectedSize)
             f_read(&file, bootSec, sizeof(bootSec), &nread);
             f_close(&file);
             u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
+            u16 expectedRoot = (expectedSize <= 0x20000) ? 64 : 128;
             if (nread < sizeof(bootSec) ||
                 bootSec[0x1FE] != 0x55 || bootSec[0x1FF] != 0xAA ||
                 (bootSec[0] != 0xEB && bootSec[0] != 0xE9) ||
                 bootSec[0x010] < 1 ||
-                rootEntries < 16 ||
+                rootEntries != expectedRoot ||
                 bootSec[0x200] != 0xF8)
             {
                 needsFormatting = true;
@@ -733,15 +734,16 @@ Java_me_magnum_melonds_MelonDSiNand_repairTitleSaves(JNIEnv* env, jobject thiz, 
 
     if (version == 0xFFFFFFFF)
     {
-        // Direct ROM launched from storage: preserve existing public.sav size if valid, fallback to 64KB only if absent
+        // Direct ROM launched from storage: preserve existing public.sav size if valid, fallback to header size, then 64KB only if absent
         char pubSavPath[128];
         snprintf(pubSavPath, sizeof(pubSavPath), "0:/title/%08x/%08x/data/public.sav", DSI_NAND_FILE_CATEGORY, (u32) titleId);
+        u32 targetPubSav = header.DSiPublicSavSize > 0 ? header.DSiPublicSavSize : 0x10000;
         FF_FILINFO pinfo;
-        if (f_stat(pubSavPath, &pinfo) == FR_OK && pinfo.fsize > 0)
+        if (f_stat(pubSavPath, &pinfo) == FR_OK && pinfo.fsize == targetPubSav)
         {
             return ensureValidSaveFile(pubSavPath, (u32) pinfo.fsize);
         }
-        return ensureValidSaveFile(pubSavPath, 0x10000);
+        return ensureValidSaveFile(pubSavPath, targetPubSav);
     }
 
     if (header.DSiPublicSavSize > 0)

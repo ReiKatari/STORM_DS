@@ -212,8 +212,8 @@ public class DSiDecryptor
                 BitConverter.ToUInt32(rom, (int)mod2Off + 12)));
         }
 
-        // Mark as decrypted in DSiCryptoFlags
-        rom[0x1C] |= 0x03;
+        // Clear encryption bits in DSiCryptoFlags (0 = decrypted/plaintext)
+        rom[0x1C] = (byte)(rom[0x1C] & ~0x03);
 
         // Recalculate header CRC16
         ushort crc = CalcHeaderCRC16(rom, 0x15E);

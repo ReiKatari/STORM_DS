@@ -250,6 +250,7 @@ target_link_libraries(melonDS-android-frontend
         GLESv3
         librashader
         dl
+        z
 )
 
 if (MELONDS_HAS_ADRENOTOOLS)

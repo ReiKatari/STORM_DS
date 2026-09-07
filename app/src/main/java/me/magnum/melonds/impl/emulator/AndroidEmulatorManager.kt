@@ -596,6 +596,28 @@ class AndroidEmulatorManager(
 
                     dsiNandManager.ensureTitleSaveStructure(titleId, headerBytes, tmdMetadata)
 
+                    // Ensure TWLFontTable.dat is extracted to internal and external storage for melonDS C++ core
+                    runCatching {
+                        val internalFont = File(context.filesDir, "bios/dsi/TWLFontTable.dat")
+                        if (!internalFont.exists() || internalFont.length() < 100000L) {
+                            internalFont.parentFile?.mkdirs()
+                            context.assets.open("bios/dsi/TWLFontTable.dat").use { input ->
+                                internalFont.outputStream().use { output -> input.copyTo(output) }
+                            }
+                            Log.i(TAG, "loadDsiWare: extracted TWLFontTable.dat to internal storage (${internalFont.length()} B)")
+                        }
+                    }
+                    runCatching {
+                        val externalFont = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/bios/dsi/TWLFontTable.dat")
+                        if (!externalFont.exists() || externalFont.length() < 100000L) {
+                            externalFont.parentFile?.mkdirs()
+                            context.assets.open("bios/dsi/TWLFontTable.dat").use { input ->
+                                externalFont.outputStream().use { output -> input.copyTo(output) }
+                            }
+                            Log.i(TAG, "loadDsiWare: extracted TWLFontTable.dat to external storage (${externalFont.length()} B)")
+                        }
+                    }
+
                     // If user has existing .sav in their save folder, sync it into NAND before launching;
                     // otherwise or if corrupted/empty, repair NAND and export valid FAT12 public.sav so user storage immediately has valid FAT12 save
                     try {
