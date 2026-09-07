@@ -182,6 +182,10 @@ interface SettingsRepository {
     fun getRomCardStyle(): String
     fun getArm9Overclock(): Int
     fun isGameTdbCoversEnabled(): Boolean
+    fun isGameTdb2dCoversEnabled(): Boolean
+    fun observeGameTdb2dCoversEnabled(): Flow<Boolean>
+    fun isGameTdb3dCoversEnabled(): Boolean
+    fun observeGameTdb3dCoversEnabled(): Flow<Boolean>
     fun is3dWidescreenEnabled(): Boolean
     fun is60FpsPatchEnabled(): Boolean
     fun isDualScreenCastEnabled(): Boolean

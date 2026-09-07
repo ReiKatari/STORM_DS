@@ -114,35 +114,14 @@ fun RomBrowserScreen(
 ) {
     val colors = watermelon
     val coroutineScope = rememberCoroutineScope()
-    val gridState = rememberLazyGridState()
-    val listState = rememberLazyListState()
+    val gridState = remember { LazyGridState(0, 0) }
+    val listState = remember { LazyListState(0, 0) }
     val itemFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
     var focusedEntryIndex by remember { mutableIntStateOf(-1) }
 
     val isGridDragged by gridState.interactionSource.collectIsDraggedAsState()
     val isListDragged by listState.interactionSource.collectIsDraggedAsState()
     var userHasScrolledManually by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isGridDragged, isListDragged) {
-        if (isGridDragged || isListDragged) {
-            userHasScrolledManually = true
-        }
-    }
-
-    var initialSettlingDone by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(2500)
-        initialSettlingDone = true
-    }
-
-    // Scroll to top (item 0, offset 0) on initial load and whenever entries update before user manually scrolls
-    LaunchedEffect(state.entries, userHasScrolledManually, initialSettlingDone) {
-        if (!userHasScrolledManually && !initialSettlingDone && state.entries.isNotEmpty()) {
-            focusedEntryIndex = -1
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
-        }
-    }
 
     var pendingRefreshScrollReset by remember { mutableStateOf(false) }
     var isManualRefreshing by remember { mutableStateOf(false) }
@@ -153,8 +132,11 @@ fun RomBrowserScreen(
         isManualRefreshing = true
         pendingRefreshScrollReset = true
         coroutineScope.launch {
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
+            repeat(4) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                withFrameNanos { }
+            }
         }
         onRefresh()
     }
@@ -163,6 +145,26 @@ fun RomBrowserScreen(
         refreshing = scanningStatus == RomScanningStatus.SCANNING,
         onRefresh = handleRefreshWithScrollReset,
     )
+
+    LaunchedEffect(isGridDragged, isListDragged) {
+        if ((isGridDragged || isListDragged) && !isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING) {
+            userHasScrolledManually = true
+        }
+    }
+
+    // Pin strictly to top (item 0, offset 0) on initial load across multiple layout frames
+    var initialSettlingDone by remember { mutableStateOf(false) }
+    LaunchedEffect(state.entries) {
+        if (!userHasScrolledManually && !initialSettlingDone && state.entries.isNotEmpty()) {
+            focusedEntryIndex = -1
+            repeat(8) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                withFrameNanos { }
+            }
+            initialSettlingDone = true
+        }
+    }
 
     val folderCount = remember(state.entries) { state.entries.takeWhile { it is RomBrowserEntry.Folder }.size }
     val hasFolders = folderCount > 0
@@ -176,38 +178,39 @@ fun RomBrowserScreen(
     val gridLeadingItems = if (hasFolders) 1 else 0
     val listLeadingItems = 0
 
-    LaunchedEffect(scanningStatus) {
-        if (scanningStatus == RomScanningStatus.SCANNING) {
+    LaunchedEffect(scanningStatus, isManualRefreshing) {
+        val isScanning = scanningStatus == RomScanningStatus.SCANNING || isManualRefreshing
+        if (isScanning) {
             userHasScrolledManually = false
-            isManualRefreshing = true
             pendingRefreshScrollReset = true
             focusedEntryIndex = -1
             repeat(4) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
-                kotlinx.coroutines.delay(16)
+                withFrameNanos { }
             }
-        } else if (scanningStatus == RomScanningStatus.NOT_SCANNING) {
-            if (pendingRefreshScrollReset || isManualRefreshing) {
+        } else {
+            if (pendingRefreshScrollReset) {
+                userHasScrolledManually = false
                 focusedEntryIndex = -1
-                repeat(8) {
+                repeat(10) {
                     gridState.scrollToItem(0, 0)
                     listState.scrollToItem(0, 0)
-                    kotlinx.coroutines.delay(64)
+                    kotlinx.coroutines.delay(32)
                 }
                 pendingRefreshScrollReset = false
-                isManualRefreshing = false
             }
         }
     }
 
     LaunchedEffect(state.entries) {
         if (pendingRefreshScrollReset || isManualRefreshing) {
+            userHasScrolledManually = false
             focusedEntryIndex = -1
-            repeat(4) {
+            repeat(6) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
-                kotlinx.coroutines.delay(16)
+                withFrameNanos { }
             }
         }
     }
@@ -215,8 +218,11 @@ fun RomBrowserScreen(
     LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive, state.sortingMode, state.sortingOrder) {
         userHasScrolledManually = false
         focusedEntryIndex = -1
-        gridState.scrollToItem(0, 0)
-        listState.scrollToItem(0, 0)
+        repeat(6) {
+            gridState.scrollToItem(0, 0)
+            listState.scrollToItem(0, 0)
+            withFrameNanos { }
+        }
     }
 
     LaunchedEffect(focusedEntryIndex, state.entries) {
@@ -612,9 +618,12 @@ fun RomBrowserScreen(
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
                                             userHasScrolledManually = false
-                                            when (state.viewMode) {
-                                                RomViewMode.GRID -> gridState.scrollToItem(0, 0)
-                                                RomViewMode.LIST -> listState.scrollToItem(0, 0)
+                                            repeat(6) {
+                                                when (state.viewMode) {
+                                                    RomViewMode.GRID -> gridState.scrollToItem(0, 0)
+                                                    RomViewMode.LIST -> listState.scrollToItem(0, 0)
+                                                }
+                                                withFrameNanos { }
                                             }
                                         } else {
                                             userHasScrolledManually = true
@@ -673,9 +682,26 @@ private fun GridContent(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
-    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
+    var isScraperEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_covers_enabled", false)) }
+    var isGameTdb2dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_2d_covers_enabled", false)) }
+    var isGameTdb3dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_3d_covers_enabled", false)) }
+    var isRaCoversEnabled by remember { mutableStateOf(prefs.getBoolean("rom_ra_covers_enabled", false)) }
+
+    androidx.compose.runtime.DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+            when (key) {
+                "rom_gametdb_covers_enabled" -> isScraperEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_2d_covers_enabled" -> isGameTdb2dEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_3d_covers_enabled" -> isGameTdb3dEnabled = sp.getBoolean(key, false)
+                "rom_ra_covers_enabled" -> isRaCoversEnabled = sp.getBoolean(key, false)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    val anyCoversEnabled = isScraperEnabled || isGameTdb2dEnabled || isGameTdb3dEnabled || isRaCoversEnabled
 
     RomListOverscrollProvider {
         LazyVerticalGrid(
@@ -779,9 +805,26 @@ private fun ListContent(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
-    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
+    var isScraperEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_covers_enabled", false)) }
+    var isGameTdb2dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_2d_covers_enabled", false)) }
+    var isGameTdb3dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_3d_covers_enabled", false)) }
+    var isRaCoversEnabled by remember { mutableStateOf(prefs.getBoolean("rom_ra_covers_enabled", false)) }
+
+    androidx.compose.runtime.DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+            when (key) {
+                "rom_gametdb_covers_enabled" -> isScraperEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_2d_covers_enabled" -> isGameTdb2dEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_3d_covers_enabled" -> isGameTdb3dEnabled = sp.getBoolean(key, false)
+                "rom_ra_covers_enabled" -> isRaCoversEnabled = sp.getBoolean(key, false)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    val anyCoversEnabled = isScraperEnabled || isGameTdb2dEnabled || isGameTdb3dEnabled || isRaCoversEnabled
 
     RomListOverscrollProvider {
         LazyColumn(

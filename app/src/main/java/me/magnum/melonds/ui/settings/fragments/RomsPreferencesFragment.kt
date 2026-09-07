@@ -55,21 +55,8 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             true
         }
         val raCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_ra_covers_enabled")
-        val gameTdbCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_covers_enabled")
-
-        raCoversPref?.setOnPreferenceChangeListener { _, newValue ->
-            if (newValue as Boolean) {
-                gameTdbCoversPref?.isChecked = false
-            }
-            true
-        }
-
-        gameTdbCoversPref?.setOnPreferenceChangeListener { _, newValue ->
-            if (newValue as Boolean) {
-                raCoversPref?.isChecked = false
-            }
-            true
-        }
+        val gameTdb2dCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_2d_covers_enabled")
+        val gameTdb3dCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_3d_covers_enabled")
 
         clearRomCachePreference.setOnPreferenceClickListener {
             if (!viewModel.clearRomCache()) {

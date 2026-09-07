@@ -569,8 +569,8 @@ class FileSystemRomsRepository(
         try {
             val prefs = context.getSharedPreferences("fs_roms_repo_meta", Context.MODE_PRIVATE)
             val appCacheVersion = prefs.getInt("rom_cache_schema_version", 0)
-            if (appCacheVersion < 261) {
-                prefs.edit().putInt("rom_cache_schema_version", 261).apply()
+            if (appCacheVersion < 262) {
+                prefs.edit().putInt("rom_cache_schema_version", 262).apply()
                 synchronized(directoryStatesLock) {
                     directoryStates.clear()
                     directoryScanStatuses.clear()
@@ -868,6 +868,9 @@ class FileSystemRomsRepository(
             while (cursor.moveToNext()) {
                 val docId = cursor.getString(idIndex) ?: continue
                 val displayName = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
+                val effectiveFileName = displayName.ifBlank {
+                    docId.substringAfterLast('/').substringAfterLast(':')
+                }
                 val mimeType = if (mimeIndex >= 0) cursor.getString(mimeIndex) else null
                 val lastModified = if (modIndex >= 0) cursor.getLong(modIndex).coerceAtLeast(0) else 0L
                 val size = if (sizeIndex >= 0) cursor.getLong(sizeIndex).coerceAtLeast(0) else 0L
@@ -880,11 +883,11 @@ class FileSystemRomsRepository(
                         return false
                     }
                 } else {
-                    val processor = romFileProcessorFactory.getFileRomProcessorForFileName(displayName)
+                    val processor = romFileProcessorFactory.getFileRomProcessorForFileName(effectiveFileName)
 
                     if (processor != null) {
                         val docFile = DocumentFile.fromTreeUri(context, fileUri)
-                            ?: DocumentFile.fromFile(java.io.File(displayName))
+                            ?: DocumentFile.fromFile(java.io.File(effectiveFileName))
                         accumulator.add(
                             DirectoryFileState(
                                 uri = fileUri,
@@ -892,7 +895,7 @@ class FileSystemRomsRepository(
                                 lastModified = lastModified,
                                 size = size,
                                 documentFile = docFile,
-                                displayName = displayName
+                                displayName = effectiveFileName
                             )
                         )
                     }

@@ -1513,6 +1513,10 @@
     <!-- Scraper Pro & Covers -->
     <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart and High-Res Covers</string>
     <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
+    <string name="enable_gametdb_2d_covers_title">GameTDB 2D covers</string>
+    <string name="enable_gametdb_2d_covers_summary">Download flat 2D game covers from GameTDB database</string>
+    <string name="enable_gametdb_3d_covers_title">GameTDB 3D covers</string>
+    <string name="enable_gametdb_3d_covers_summary">Download authentic 3D boxart from GameTDB database</string>
     <string name="pick_custom_cover">Change Cover from Gallery</string>
     <string name="reset_custom_cover">Reset Custom Cover</string>
     <string name="custom_cover_updated">Cover updated successfully</string>

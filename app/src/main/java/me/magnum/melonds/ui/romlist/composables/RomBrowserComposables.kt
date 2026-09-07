@@ -415,9 +415,26 @@ fun ContinuePlayingShelf(
     if (roms.isEmpty()) return
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
-    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
+    var isScraperEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_covers_enabled", false)) }
+    var isGameTdb2dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_2d_covers_enabled", false)) }
+    var isGameTdb3dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_3d_covers_enabled", false)) }
+    var isRaCoversEnabled by remember { mutableStateOf(prefs.getBoolean("rom_ra_covers_enabled", false)) }
+
+    androidx.compose.runtime.DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+            when (key) {
+                "rom_gametdb_covers_enabled" -> isScraperEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_2d_covers_enabled" -> isGameTdb2dEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_3d_covers_enabled" -> isGameTdb3dEnabled = sp.getBoolean(key, false)
+                "rom_ra_covers_enabled" -> isRaCoversEnabled = sp.getBoolean(key, false)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    val anyCoversEnabled = isScraperEnabled || isGameTdb2dEnabled || isGameTdb3dEnabled || isRaCoversEnabled
     var isCollapsed by remember { mutableStateOf(prefs.getBoolean("continue_playing_shelf_collapsed", false)) }
     val colors = watermelon
 
@@ -632,9 +649,26 @@ fun ContinuePlayingLandscapeColumn(
     val colors = watermelon
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    val isScraperProEnabled = remember(prefs) { prefs.getBoolean("rom_gametdb_covers_enabled", false) }
-    val isRaCoversEnabled = remember(prefs) { prefs.getBoolean("rom_ra_covers_enabled", false) }
-    val anyCoversEnabled = isScraperProEnabled || isRaCoversEnabled
+    var isScraperEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_covers_enabled", false)) }
+    var isGameTdb2dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_2d_covers_enabled", false)) }
+    var isGameTdb3dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_3d_covers_enabled", false)) }
+    var isRaCoversEnabled by remember { mutableStateOf(prefs.getBoolean("rom_ra_covers_enabled", false)) }
+
+    androidx.compose.runtime.DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+            when (key) {
+                "rom_gametdb_covers_enabled" -> isScraperEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_2d_covers_enabled" -> isGameTdb2dEnabled = sp.getBoolean(key, false)
+                "rom_gametdb_3d_covers_enabled" -> isGameTdb3dEnabled = sp.getBoolean(key, false)
+                "rom_ra_covers_enabled" -> isRaCoversEnabled = sp.getBoolean(key, false)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    val anyCoversEnabled = isScraperEnabled || isGameTdb2dEnabled || isGameTdb3dEnabled || isRaCoversEnabled
     Column(modifier = modifier.fillMaxSize()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

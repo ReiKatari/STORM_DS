@@ -62,12 +62,11 @@ function Upload-TelegramDocument([string]$filePath, [string]$docCaption) {
         Write-Warning "File not found: $filePath"
         return
     }
-    Write-Host "Uploading $filePath to Telegram..."
-    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
     $fileName = [System.IO.Path]::GetFileName($filePath)
+    Write-Host "Uploading $filePath to Telegram..."
 
     $client = [System.Net.Http.HttpClient]::new()
-    $client.Timeout = [System.TimeSpan]::FromMinutes(10)
+    $client.Timeout = [System.TimeSpan]::FromMinutes(15)
     $form = [System.Net.Http.MultipartFormDataContent]::new()
     
     $chatContent = [System.Net.Http.StringContent]::new($ChatId, [System.Text.Encoding]::UTF8)
@@ -78,11 +77,22 @@ function Upload-TelegramDocument([string]$filePath, [string]$docCaption) {
         $form.Add($captionContent, "caption")
     }
 
+    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
     $byteContent = [System.Net.Http.ByteArrayContent]::new($fileBytes)
+    if ($fileName.EndsWith(".apk")) {
+        $byteContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("application/vnd.android.package-archive")
+    }
     $form.Add($byteContent, "document", $fileName)
 
-    $resp = $client.PostAsync("https://api.telegram.org/bot$Token/sendDocument", $form).Result
-    Write-Host "Done ${fileName}: " ($resp.Content.ReadAsStringAsync().Result)
+    try {
+        $resp = $client.PostAsync("https://api.telegram.org/bot$Token/sendDocument", $form).Result
+        Write-Host "Done ${fileName}: " ($resp.Content.ReadAsStringAsync().Result)
+    } catch {
+        Write-Error "Upload failed for ${fileName}: $_"
+    } finally {
+        $form.Dispose()
+        $client.Dispose()
+    }
 }
 
 if ($AnnouncementFile -and (Test-Path $AnnouncementFile)) {
