@@ -18,10 +18,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import me.magnum.melonds.ui.common.UnifiedBackButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -125,7 +134,8 @@ fun VulkanDriverManagerScreen(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding(),
+            .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         topBar = {
             TopAppBar(
                 title = { Text("Драйверы Vulkan", color = MaterialTheme.colors.onSurface) },
@@ -147,22 +157,7 @@ fun VulkanDriverManagerScreen(
                     .padding(bottom = 16.dp, top = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colors.surface)
-                        .border(1.5.dp, MaterialTheme.colors.primary.copy(alpha = 0.85f), CircleShape)
-                        .clickable { onBackClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colors.onSurface,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                UnifiedBackButton(onClick = onBackClick)
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },

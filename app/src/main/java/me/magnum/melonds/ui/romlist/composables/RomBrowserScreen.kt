@@ -152,17 +152,18 @@ fun RomBrowserScreen(
         }
     }
 
-    // Pin strictly to top (item 0, offset 0) on initial load across multiple layout frames
-    var initialSettlingDone by remember { mutableStateOf(false) }
+    // Always pin strictly to top (item 0, offset 0) whenever entries load/refresh and user hasn't scrolled manually
     LaunchedEffect(state.entries) {
-        if (!userHasScrolledManually && !initialSettlingDone && state.entries.isNotEmpty()) {
+        if (!userHasScrolledManually || pendingRefreshScrollReset || isManualRefreshing) {
+            if (pendingRefreshScrollReset || isManualRefreshing) {
+                userHasScrolledManually = false
+            }
             focusedEntryIndex = -1
             repeat(8) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
             }
-            initialSettlingDone = true
         }
     }
 
@@ -199,18 +200,6 @@ fun RomBrowserScreen(
                     kotlinx.coroutines.delay(32)
                 }
                 pendingRefreshScrollReset = false
-            }
-        }
-    }
-
-    LaunchedEffect(state.entries) {
-        if (pendingRefreshScrollReset || isManualRefreshing) {
-            userHasScrolledManually = false
-            focusedEntryIndex = -1
-            repeat(6) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
             }
         }
     }
@@ -578,13 +567,13 @@ fun RomBrowserScreen(
                                     }
                                 }
                             }
-                            val activeLetter by remember(state.alphabetIndex, state.viewMode, isManualRefreshing) {
+                            val activeLetter by remember(state.alphabetIndex, state.viewMode, isManualRefreshing, userHasScrolledManually) {
                                 derivedStateOf {
                                     val isAtVeryTop = when (state.viewMode) {
-                                        RomViewMode.GRID -> gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
-                                        RomViewMode.LIST -> listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                                        RomViewMode.GRID -> gridState.firstVisibleItemIndex == 0
+                                        RomViewMode.LIST -> listState.firstVisibleItemIndex == 0
                                     }
-                                    if (isManualRefreshing || isAtVeryTop) {
+                                    if (isManualRefreshing || isAtVeryTop || !userHasScrolledManually) {
                                         state.alphabetIndex.keys.firstOrNull() ?: '#'
                                     } else {
                                         letterForIndex(state.alphabetIndex, activeFirstVis)
@@ -1027,22 +1016,19 @@ private fun RomListOverscrollProvider(
 
 private fun letterForIndex(alphabetIndex: Map<Char, Int>, currentIndex: Int): Char? {
     if (alphabetIndex.isEmpty()) return null
-    if (currentIndex <= 0) return alphabetIndex.keys.firstOrNull() ?: '#'
+    val firstLetter = alphabetIndex.keys.firstOrNull() ?: '#'
+    val firstIndex = alphabetIndex.values.firstOrNull() ?: 0
+    if (currentIndex <= firstIndex) return firstLetter
+
     var match: Char? = null
     var matchIndex = -1
     alphabetIndex.forEach { (letter, startIndex) ->
-        if (startIndex <= currentIndex) {
-            if (startIndex > matchIndex) {
-                match = letter
-                matchIndex = startIndex
-            } else if (startIndex == matchIndex && match == '#') {
-                // When currentIndex > 0 and '#' shares startIndex 0 with a real letter (e.g. 'A'),
-                // prefer the real letter once scrolled past 0.
-                match = letter
-            }
+        if (startIndex <= currentIndex && startIndex > matchIndex) {
+            match = letter
+            matchIndex = startIndex
         }
     }
-    return match ?: alphabetIndex.keys.firstOrNull() ?: '#'
+    return match ?: firstLetter
 }
 
 @Composable

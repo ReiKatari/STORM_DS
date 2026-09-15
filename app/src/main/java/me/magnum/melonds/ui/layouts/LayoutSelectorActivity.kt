@@ -28,6 +28,8 @@ class LayoutSelectorActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         setContent {

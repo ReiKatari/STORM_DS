@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Scaffold
@@ -53,28 +59,18 @@ fun WatermelonScreenScaffold(
         backgroundColor = colors.bg,
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            Column(Modifier.background(colors.bg).statusBarsPadding()) {
+            Column(
+                Modifier
+                    .background(colors.bg)
+                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout.only(WindowInsetsSides.Top)))
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onBack),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.navigate_back),
-                            tint = colors.text,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = title,
                         color = colors.text,
@@ -91,10 +87,25 @@ fun WatermelonScreenScaffold(
             }
         },
         bottomBar = {
-            GamepadHintsFooter(
-                modifier = Modifier.background(colors.bg).navigationBarsPadding(),
-                hints = hints,
-            )
+            Column(
+                modifier = Modifier
+                    .background(colors.bg)
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    UnifiedBackButton(onClick = onBack)
+                }
+                GamepadHintsFooter(
+                    modifier = Modifier.background(colors.bg),
+                    hints = hints,
+                )
+            }
         },
         content = content,
     )

@@ -23,6 +23,13 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import me.magnum.melonds.ui.common.UnifiedBackButton
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -122,26 +129,27 @@ fun BackgroundListScreen(
             Column(
                 modifier = Modifier
                     .background(colors.surface)
-                    .statusBarsPadding()
+                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(colors.surface2)
-                            .clickable(onClick = onBackClick),
+                            .border(1.dp, colors.line, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.navigate_back),
-                            tint = colors.text,
+                            painter = painterResource(R.drawable.ic_view_grid),
+                            contentDescription = null,
+                            tint = colors.text2,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -202,6 +210,7 @@ fun BackgroundListScreen(
                 modifier = Modifier
                     .background(colors.surface)
                     .navigationBarsPadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             ) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
                 Row(
@@ -211,33 +220,7 @@ fun BackgroundListScreen(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(colors.surface2)
-                            .border(1.2.dp, colors.line, RoundedCornerShape(12.dp))
-                            .clickable(onClick = onBackClick),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                                tint = colors.text,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "Назад к макету",
-                                color = colors.text,
-                                fontFamily = SpaceGrotesk,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
+                    UnifiedBackButton(onClick = onBackClick)
                 }
             }
         },
