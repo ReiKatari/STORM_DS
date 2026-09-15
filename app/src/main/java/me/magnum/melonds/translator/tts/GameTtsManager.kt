@@ -238,6 +238,8 @@ class GameTtsManager(private val context: Context) {
     private var availableVoices: List<Voice> = emptyList()
     private val scope = CoroutineScope(Dispatchers.IO)
     private var mediaPlayer: MediaPlayer? = null
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
 
     // Per-Speaker persistent persona assignments
     private val speakerPersonaMap = mutableMapOf<String, CharacterPersona>()
@@ -252,6 +254,43 @@ class GameTtsManager(private val context: Context) {
         LocalAiVoiceActorStudio.installBundledModelsIfPresent(context)
     }
 
+    private fun requestAudioDucking() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val req = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(false)
+                    .setWillPauseWhenDucked(false)
+                    .build()
+                audioFocusRequest = req
+                audioManager?.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.requestAudioFocus(
+                    null,
+                    android.media.AudioManager.STREAM_MUSIC,
+                    android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                )
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun abandonAudioDucking() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.abandonAudioFocus(null)
+            }
+        } catch (_: Throwable) {}
+    }
+
     private fun initTts() {
         if (tts != null) return
         tts = TextToSpeech(context.applicationContext) { status ->
@@ -264,6 +303,17 @@ class GameTtsManager(private val context: Context) {
                 } catch (e: Throwable) {
                     Log.w(TAG, "Cannot query voices: ${e.message}")
                 }
+                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        requestAudioDucking()
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        abandonAudioDucking()
+                    }
+                    override fun onError(utteranceId: String?) {
+                        abandonAudioDucking()
+                    }
+                })
             } else {
                 Log.w(TAG, "TextToSpeech init failed with code: $status")
             }
@@ -575,8 +625,17 @@ class GameTtsManager(private val context: Context) {
                                 playbackParams = params
                             } catch (_: Throwable) {}
                         }
+                        requestAudioDucking()
                         start()
-                        setOnCompletionListener { tempFile.delete() }
+                        setOnCompletionListener {
+                            abandonAudioDucking()
+                            tempFile.delete()
+                        }
+                        setOnErrorListener { _, _, _ ->
+                            abandonAudioDucking()
+                            tempFile.delete()
+                            false
+                        }
                     }
                 }
             } catch (e: Throwable) {
@@ -663,6 +722,7 @@ class GameTtsManager(private val context: Context) {
 
     fun stop() {
         try {
+            abandonAudioDucking()
             mediaPlayer?.stop()
             mediaPlayer?.release()
             mediaPlayer = null
@@ -672,6 +732,7 @@ class GameTtsManager(private val context: Context) {
 
     fun destroy() {
         try {
+            abandonAudioDucking()
             mediaPlayer?.stop()
             mediaPlayer?.release()
             mediaPlayer = null

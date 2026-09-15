@@ -569,7 +569,7 @@ std::optional<std::unique_ptr<NDSArgs>> BuildArgsFromConfiguration(const Emulato
 {
 #ifdef JIT_ENABLED
     JITArgs _jitArgs {
-        .MaxBlockSize = 32,
+        .MaxBlockSize = 64,
         .LiteralOptimizations = true,
         .BranchOptimizations = true,
         .FastMemory = true,

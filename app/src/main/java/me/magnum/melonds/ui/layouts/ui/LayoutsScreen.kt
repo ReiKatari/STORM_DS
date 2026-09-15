@@ -21,10 +21,16 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.Dashboard
+import me.magnum.melonds.ui.common.UnifiedBackButton
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.ContentAlpha
@@ -196,27 +202,27 @@ private fun LayoutsScreenContent(
             Column(
                 modifier = Modifier
                     .background(colors.surface)
-                    .statusBarsPadding()
+                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout.only(WindowInsetsSides.Top)))
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .clip(CircleShape)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(colors.surface2)
-                            .border(1.dp, colors.line, CircleShape)
-                            .bouncingClickable(onClick = onBackClick),
+                            .border(1.dp, colors.line, RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.navigate_back),
-                            tint = colors.text,
+                            imageVector = Icons.Filled.Dashboard,
+                            contentDescription = null,
+                            tint = colors.green,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -288,6 +294,25 @@ private fun LayoutsScreenContent(
                     }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+            }
+        },
+        bottomBar = {
+            Column(
+                modifier = Modifier
+                    .background(colors.surface)
+                    .navigationBarsPadding()
+            ) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    UnifiedBackButton(
+                        onClick = onBackClick,
+                    )
+                }
             }
         },
     ) { padding ->

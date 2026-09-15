@@ -17,14 +17,14 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import androidx.compose.ui.Alignment
+import me.magnum.melonds.ui.common.UnifiedBackButton
 import androidx.compose.material.Scaffold
-import androidx.compose.material.TopAppBar
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,9 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -79,7 +77,26 @@ fun BackgroundPreviewScreen(
         }
     }
 
-    Scaffold(backgroundColor = Color.Black) {
+    Scaffold(
+        backgroundColor = Color.Black,
+        bottomBar = {
+            AnimatedVisibility(
+                visible = isWindowDecorVisible,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(bottom = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    UnifiedBackButton(onClick = onBackClick)
+                }
+            }
+        }
+    ) {
         with(sharedTransitionScope) {
             AsyncImage(
                 modifier = Modifier
@@ -100,40 +117,6 @@ fun BackgroundPreviewScreen(
                 contentDescription = null
             )
         }
-
-        AnimatedVisibility(
-            modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility),
-            visible = isWindowDecorVisible,
-            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
-        ) {
-            AppBar(onBackClick = onBackClick)
-        }
     }
 }
-
-@Composable
-private fun AppBar(onBackClick: () -> Unit) {
-    TopAppBar(
-        modifier = Modifier.background(
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color.Black,
-                    Color.Transparent,
-                )
-            )
-        ),
-        title = { },
-        navigationIcon = {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    painter = rememberVectorPainter(Icons.AutoMirrored.Filled.ArrowBack),
-                    contentDescription = null,
-                )
-            }
-        },
-        elevation = 0.dp,
-        backgroundColor = Color.Transparent,
-        contentColor = Color.White,
-    )
-}
+
