@@ -54,8 +54,9 @@ android {
         }
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -Wno-write-strings")
-                arguments("-DENABLE_LTO_RELEASE=OFF", "-DENABLE_LTO=OFF")
+                cppFlags("-std=c++17 -O3 -fvectorize -fomit-frame-pointer -fno-semantic-interposition -Wno-write-strings")
+                cFlags("-O3 -fvectorize -fomit-frame-pointer -fno-semantic-interposition")
+                arguments("-DENABLE_LTO_RELEASE=OFF", "-DENABLE_LTO=OFF", "-DANDROID_ARM_NEON=TRUE")
             }
         }
         vectorDrawables.useSupportLibrary = true
@@ -510,7 +511,7 @@ val copyLibrashaderAbiArtifacts = librashaderAbiTargets.map { abiTarget ->
         environment("CXX_${abiTarget.rustTarget.replace("-", "_")}", clangCpp.absolutePath)
         environment("AR_${abiTarget.rustTarget.replace("-", "_")}", llvmAr.absolutePath)
         environment("CARGO_TARGET_${targetEnvKey}_LINKER", clang.absolutePath)
-        environment("CARGO_TARGET_${targetEnvKey}_RUSTFLAGS", "-C link-arg=-Wl,-soname,liblibrashader.so")
+        environment("CARGO_TARGET_${targetEnvKey}_RUSTFLAGS", "-C link-arg=-Wl,-soname,liblibrashader.so -C opt-level=3 -C codegen-units=1 -C panic=abort -C strip=symbols")
         environment("PATH", augmentedLibrashaderPath())
 
         doFirst {

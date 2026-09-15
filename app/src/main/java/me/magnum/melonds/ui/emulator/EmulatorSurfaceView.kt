@@ -66,6 +66,21 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            try {
+                val currentDisplay = display
+                if (currentDisplay != null) {
+                    val maxRate = currentDisplay.supportedModes.maxOfOrNull { it.refreshRate } ?: currentDisplay.mode.refreshRate
+                    val targetRate = if (maxRate >= 85f) maxRate else 60f
+                    holder.surface.setFrameRate(
+                        targetRate,
+                        Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+                        Surface.CHANGE_FRAME_RATE_ALWAYS
+                    )
+                }
+            } catch (_: Throwable) {
+            }
+        }
         val listener: SurfaceLifecycleListener?
         val currentSurface: Surface?
         synchronized(surfaceLock) {

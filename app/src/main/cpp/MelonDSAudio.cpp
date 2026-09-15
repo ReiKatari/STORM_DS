@@ -77,12 +77,19 @@ namespace MelonDSAndroid
         streamBuilder.setFormatConversionAllowed(true);
         streamBuilder.setDirection(oboe::Direction::Output);
         streamBuilder.setPerformanceMode(performanceMode);
-        streamBuilder.setSharingMode(oboe::SharingMode::Shared);
         streamBuilder.setUsage(oboe::Usage::Media);
         streamBuilder.setDataCallback(stabilizedOutputCallback);
         streamBuilder.setErrorCallback(stabilizedOutputCallback);
 
-        oboe::Result result = streamBuilder.openStream(audioStream);
+        oboe::Result result = oboe::Result::ErrorInternal;
+        if (performanceMode == oboe::PerformanceMode::LowLatency) {
+            streamBuilder.setSharingMode(oboe::SharingMode::Exclusive);
+            result = streamBuilder.openStream(audioStream);
+        }
+        if (result != oboe::Result::OK || !audioStream) {
+            streamBuilder.setSharingMode(oboe::SharingMode::Shared);
+            result = streamBuilder.openStream(audioStream);
+        }
         if (result != oboe::Result::OK || !audioStream) {
             Log(Error, "Failed to init audio stream");
             outputCallback = nullptr;

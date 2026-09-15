@@ -812,6 +812,8 @@
     <string name="input_microphone">Toggle Microphone</string>
     <string name="input_translate">Translate Screen</string>
     <string name="input_lock_rotation">Lock Screen Orientation</string>
+    <string name="toast_screens_swapped">Écrans inversés</string>
+    <string name="toast_screens_restored">Disposition d\'origine des écrans</string>
     <string name="toast_rotation_locked">Screen orientation locked</string>
     <string name="toast_rotation_unlocked">Screen orientation unlocked (Auto-rotate)</string>
     <string name="screen_layout">Screen Layout</string>

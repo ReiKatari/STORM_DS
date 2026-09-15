@@ -33,6 +33,16 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
             MotionEvent.AXIS_BRAKE,
             MotionEvent.AXIS_GAS,
         )
+        private val r2Axes = intArrayOf(
+            MotionEvent.AXIS_RTRIGGER,
+            MotionEvent.AXIS_GAS,
+            MotionEvent.AXIS_RZ,
+        )
+        private val l2Axes = intArrayOf(
+            MotionEvent.AXIS_LTRIGGER,
+            MotionEvent.AXIS_BRAKE,
+            MotionEvent.AXIS_Z,
+        )
     }
 
     private val axisStates: Map<Axis, AxisState>
@@ -44,19 +54,46 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
     private var slot2DigitalDownPressed = false
 
     init {
-        val axis = controllerConfiguration.inputMapper.flatMap { inputConfig ->
+        val configuredAxes = controllerConfiguration.inputMapper.flatMap { inputConfig ->
             listOf(inputConfig.assignment, inputConfig.altAssignment)
         }.mapNotNull { assignment ->
             (assignment as? InputConfig.Assignment.Axis)?.let {
                 Axis(it.deviceId, it.axisCode, it.direction)
             }
+        }.toMutableList()
+
+        // Ambernic RG406V and Android Gamepads: Ensure R2/L2 physical triggers are monitored
+        // even if assigned as digital keycodes (KEYCODE_BUTTON_R2/L2) or alternative axis codes
+        val hasR2Mapped = controllerConfiguration.keyToInput(KeyEvent.KEYCODE_BUTTON_R2) != null ||
+            r2Axes.any { axisCode -> controllerConfiguration.axisToInput(axisCode, InputConfig.Assignment.Axis.Direction.POSITIVE) != null }
+        if (hasR2Mapped) {
+            for (axisCode in r2Axes) {
+                if (configuredAxes.none { it.axisCode == axisCode }) {
+                    configuredAxes.add(Axis(null, axisCode, InputConfig.Assignment.Axis.Direction.POSITIVE))
+                }
+            }
         }
 
-        axisStates = axis.associateWith { AxisState(0f, false) }
+        val hasL2Mapped = controllerConfiguration.keyToInput(KeyEvent.KEYCODE_BUTTON_L2) != null ||
+            l2Axes.any { axisCode -> controllerConfiguration.axisToInput(axisCode, InputConfig.Assignment.Axis.Direction.POSITIVE) != null }
+        if (hasL2Mapped) {
+            for (axisCode in l2Axes) {
+                if (configuredAxes.none { it.axisCode == axisCode }) {
+                    configuredAxes.add(Axis(null, axisCode, InputConfig.Assignment.Axis.Direction.POSITIVE))
+                }
+            }
+        }
+
+        axisStates = configuredAxes.distinct().associateWith { AxisState(0f, false) }
     }
 
     override fun onKeyEvent(keyEvent: KeyEvent): Boolean {
-        val input = controllerConfiguration.keyToInput(keyEvent.keyCode) ?: return false
+        var input = controllerConfiguration.keyToInput(keyEvent.keyCode)
+        if (input == null) {
+            input = resolveTriggerKeyFallback(keyEvent.keyCode)
+        }
+        if (input == null) return false
+
         val fromController = keyEvent.isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)
             || keyEvent.isFromSource(InputDevice.SOURCE_JOYSTICK)
             || keyEvent.isFromSource(InputDevice.SOURCE_GAMEPAD)
@@ -93,7 +130,7 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
                 }
 
                 if (axisState.shouldToggleFor(newValue = clampedValue)) {
-                    controllerConfiguration.axisToInput(axis.axisCode, axis.direction)?.let { input ->
+                    resolveAxisInput(axis.axisCode, axis.direction)?.let { input ->
                         if (axisState.active) {
                             axisState.active = false
                             dispatchInputReleased(input, fromController = true)
@@ -109,6 +146,51 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
         } else {
             return false
         }
+    }
+
+    private fun resolveTriggerKeyFallback(keyCode: Int): Input? {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_BUTTON_R2 -> {
+                for (axisCode in r2Axes) {
+                    val input = controllerConfiguration.axisToInput(axisCode, InputConfig.Assignment.Axis.Direction.POSITIVE)
+                    if (input != null) return input
+                }
+                null
+            }
+            KeyEvent.KEYCODE_BUTTON_L2 -> {
+                for (axisCode in l2Axes) {
+                    val input = controllerConfiguration.axisToInput(axisCode, InputConfig.Assignment.Axis.Direction.POSITIVE)
+                    if (input != null) return input
+                }
+                null
+            }
+            else -> null
+        }
+    }
+
+    private fun resolveAxisInput(axisCode: Int, direction: InputConfig.Assignment.Axis.Direction): Input? {
+        val direct = controllerConfiguration.axisToInput(axisCode, direction)
+        if (direct != null) return direct
+
+        if (direction == InputConfig.Assignment.Axis.Direction.POSITIVE) {
+            if (axisCode in r2Axes) {
+                for (altAxis in r2Axes) {
+                    val altInput = controllerConfiguration.axisToInput(altAxis, direction)
+                    if (altInput != null) return altInput
+                }
+                val keyInput = controllerConfiguration.keyToInput(KeyEvent.KEYCODE_BUTTON_R2)
+                if (keyInput != null) return keyInput
+            }
+            if (axisCode in l2Axes) {
+                for (altAxis in l2Axes) {
+                    val altInput = controllerConfiguration.axisToInput(altAxis, direction)
+                    if (altInput != null) return altInput
+                }
+                val keyInput = controllerConfiguration.keyToInput(KeyEvent.KEYCODE_BUTTON_L2)
+                if (keyInput != null) return keyInput
+            }
+        }
+        return null
     }
 
     override fun onMotionEventSlot2(motionEvent: MotionEvent): Boolean {
