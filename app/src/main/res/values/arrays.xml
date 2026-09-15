@@ -429,24 +429,28 @@
         <item>🌐 System Default / По умолчанию</item>
         <item>🇷🇺 Русский</item>
         <item>🇬🇧 English</item>
-        <item>🇪🇸 Español</item>
+        <item>🇩🇪 Deutsch</item>
         <item>🇫🇷 Français</item>
+        <item>🇨🇳 简体中文</item>
+        <item>🇯🇵 日本語</item>
+        <item>🇪🇸 Español</item>
         <item>🇮🇹 Italiano</item>
         <item>🇵🇹 Português (Brasil)</item>
         <item>🇮🇩 Bahasa Indonesia</item>
-        <item>🇨🇳 简体中文</item>
     </string-array>
 
     <string-array name="app_language_values">
         <item>default</item>
         <item>ru</item>
         <item>en</item>
-        <item>es</item>
+        <item>de</item>
         <item>fr</item>
+        <item>zh-Hans</item>
+        <item>ja</item>
+        <item>es</item>
         <item>it</item>
         <item>pt-BR</item>
         <item>id</item>
-        <item>zh-Hans</item>
     </string-array>
 
     <string-array name="dsiware_boot_mode_entries">

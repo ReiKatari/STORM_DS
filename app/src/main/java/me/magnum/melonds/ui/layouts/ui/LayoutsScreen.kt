@@ -238,7 +238,7 @@ private fun LayoutsScreenContent(
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = "Настройка и выбор расположения экранов и кнопок",
+                            text = stringResource(R.string.layouts_subtitle),
                             color = colors.text3,
                             fontFamily = me.magnum.melonds.ui.theme.Manrope,
                             fontSize = 11.sp,
@@ -284,7 +284,7 @@ private fun LayoutsScreenContent(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "Создать",
+                                text = stringResource(R.string.action_layouts_new),
                                 color = colors.green,
                                 fontFamily = me.magnum.melonds.ui.theme.Manrope,
                                 fontSize = 13.sp,
@@ -299,14 +299,14 @@ private fun LayoutsScreenContent(
         bottomBar = {
             Column(
                 modifier = Modifier
-                    .background(colors.surface)
+                    .background(colors.bg)
                     .navigationBarsPadding()
             ) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 12.dp),
+                        .padding(top = 12.dp, bottom = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     UnifiedBackButton(
@@ -420,7 +420,7 @@ private fun LayoutItem(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = if (isCustomLayout) "Пользовательский профиль" else "Стандартный макет",
+                text = stringResource(if (isCustomLayout) R.string.layout_profile_custom else R.string.layout_profile_standard),
                 color = colors.text3,
                 fontFamily = me.magnum.melonds.ui.theme.Manrope,
                 fontSize = 11.sp,
@@ -463,7 +463,7 @@ private fun LayoutItem(
                     },
                 ) {
                     Text(
-                        text = if (isCustomLayout) stringResource(R.string.edit) else "Редактировать копию",
+                        text = if (isCustomLayout) stringResource(R.string.edit) else stringResource(R.string.layout_action_edit_copy),
                         fontFamily = me.magnum.melonds.ui.theme.Manrope,
                     )
                 }

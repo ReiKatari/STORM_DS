@@ -101,24 +101,24 @@
     <string name="settings_category_system">System</string>
     <string name="settings_category_retroachievements">RetroAchievements</string>
 
-    <string name="pref_cat_appearance">Appearance &amp; Themes</string>
-    <string name="pref_cat_emulation_speed">Emulation Speed &amp; Performance</string>
-    <string name="pref_cat_backup_restore">Backup &amp; Restore</string>
-    <string name="pref_cat_renderer_3d">Renderer &amp; 3D Graphics</string>
-    <string name="pref_cat_enhancements">Enhancements &amp; Upscaling</string>
+    <string name="pref_cat_appearance">Appearance and Themes</string>
+    <string name="pref_cat_emulation_speed">Emulation Speed and Performance</string>
+    <string name="pref_cat_backup_restore">Backup and Restore</string>
+    <string name="pref_cat_renderer_3d">Renderer and 3D Graphics</string>
+    <string name="pref_cat_enhancements">Enhancements and Upscaling</string>
     <string name="pref_cat_retroarch_shaders">RetroArch Shaders</string>
-    <string name="pref_cat_display_layout">Display, Skins &amp; HUD</string>
-    <string name="pref_cat_audio_output">Audio Output &amp; Quality</string>
-    <string name="pref_cat_microphone">Microphone &amp; Recording</string>
-    <string name="pref_cat_input_layouts">Layouts &amp; Behavior</string>
-    <string name="pref_cat_touch_controls">On-Screen Controls &amp; Haptics</string>
-    <string name="pref_cat_gamepads_sensors">Motion Sensors &amp; Macros</string>
-    <string name="pref_cat_system_misc">System &amp; Logs</string>
-    <string name="pref_cat_core_compiler">CPU &amp; Compilers</string>
-    <string name="pref_cat_bios_firmware">BIOS &amp; Firmware</string>
+    <string name="pref_cat_display_layout">Display, Skins and HUD</string>
+    <string name="pref_cat_audio_output">Audio Output and Quality</string>
+    <string name="pref_cat_microphone">Microphone and Recording</string>
+    <string name="pref_cat_input_layouts">Layouts and Behavior</string>
+    <string name="pref_cat_touch_controls">On-Screen Controls and Haptics</string>
+    <string name="pref_cat_gamepads_sensors">Motion Sensors and Macros</string>
+    <string name="pref_cat_system_misc">System and Logs</string>
+    <string name="pref_cat_core_compiler">CPU and Compilers</string>
+    <string name="pref_cat_bios_firmware">BIOS and Firmware</string>
     <string name="pref_cat_sd_cards">Virtual SD Cards</string>
     <string name="pref_cat_network_wfc">Nintendo WFC Network</string>
-    <string name="pref_cat_layout_management">Layouts &amp; Screen Area</string>
+    <string name="pref_cat_layout_management">Layouts and Screen Area</string>
 
     <string name="pref_theme">Theme</string>
     <string name="pref_theme_summary">Choose user interface theme</string>
@@ -158,8 +158,8 @@
 
     <string name="soft_input_behaviour_summary">Hide controls when controller connected</string>
 
-    <string name="firmware_ds_bios">DS BIOS &amp; Firmware</string>
-    <string name="firmware_dsi_bios">DSi BIOS &amp; NAND</string>
+    <string name="firmware_ds_bios">DS BIOS and Firmware</string>
+    <string name="firmware_dsi_bios">DSi BIOS and NAND</string>
     <string name="dsi_sd_card">DSi SD card emulation</string>
     <string name="action_boot_firmware">Boot firmware</string>
     <string name="action_refresh_rom_list">Refresh ROM list</string>
@@ -367,7 +367,7 @@
   <string name="rom_no_favorites">No favorites yet long-press a ROM to mark one</string>
     <string name="rom_action_favorite">Add to favorites</string>
     <string name="rom_action_unfavorite">Remove from favorites</string>
-    <string name="rom_action_details">ROM Config &amp; Details</string>
+    <string name="rom_action_details">ROM Config and Details</string>
     <string name="rom_action_send_save_file">Send save file</string>
     <string name="rom_action_import_save_file">Import save file</string>
     <string name="rom_save_file_share_chooser">Send save file</string>
@@ -563,7 +563,7 @@
     <string name="microphone_source">Microphone source</string>
     <string name="controller_layout">Layouts</string>
     <string name="category_save_files">Save Files</string>
-    <string name="category_save_files_summary">Save file &amp; save state locations</string>
+    <string name="category_save_files_summary">Save file and save state locations</string>
     <string name="save_next_rom">Save next to ROM file</string>
     <string name="save_file_directory">Save file directory</string>
     <string name="save_file_use_srm_extension">Use .srm save extension</string>
@@ -599,7 +599,7 @@
     <string name="vibration_strength">Vibration strength</string>
     <string name="soft_input_opacity">Soft input opacity</string>
     <string name="retroachievements">RetroAchievements</string> <!-- Keep words together because this is the official name -->
-    <string name="retroachievements_summary">Login &amp; manage RetroAchievements integration</string> <!-- Keep words together because this is the official name -->
+    <string name="retroachievements_summary">Login and manage RetroAchievements integration</string> <!-- Keep words together because this is the official name -->
     <string name="enable_retroachievements">Enable RetroAchievements</string>
     <string name="enable_retroachievements_summary">Keep your account signed in, but skip achievement runtime and profile activity while disabled</string>
     <string name="enable_rich_presence">Enable rich presence</string>
@@ -630,7 +630,7 @@
     <string name="show_leaderboard_indicators_summary">Shows on-screen indicators when a leaderboard attempt is in progress</string>
 
     <string name="cheats">Cheats</string>
-    <string name="cheats_summary">Enable &amp; import cheat codes</string>
+    <string name="cheats_summary">Enable and import cheat codes</string>
     <string name="enable_cheats">Enable cheats</string>
     <string name="cheats_database">Cheats database (XML format)</string>
     <string name="import_cheats">Import cheats</string>
@@ -738,7 +738,7 @@
     <string name="layout_open_editor">Layout Editor</string>
     <string name="toast_layout_applied">Layout: %1$s</string>
     <string name="input_group_console">Console Controls</string>
-    <string name="input_group_hotkeys">Hotkeys &amp; Shortcuts</string>
+    <string name="input_group_hotkeys">Hotkeys and Shortcuts</string>
 
     <string name="layouts">Layouts</string>
     <string name="layouts_summary">Manage custom layout configurations</string>
@@ -1269,24 +1269,24 @@
         <item>Fit right</item>
     </string-array>
 
-    <string name="about_app_title">About &amp; Credits</string>
+    <string name="about_app_title">About and Credits</string>
     <string name="about_app_description">High-performance fork of WatermelonDS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
-    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors &amp; open source licenses</string>
+    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors and open source licenses</string>
     <string name="about_fork_info_title">Project Base: WatermelonDS Fork</string>
-    <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite &amp; contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura &amp; team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play &amp; sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
+    <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite and contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play and sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
     <string name="about_version_title">Version</string>
-    <string name="about_credits_title">Credits &amp; Acknowledgements</string>
+    <string name="about_credits_title">Credits and Acknowledgements</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano &amp; contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI &amp; touch controls</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano and contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI and touch controls</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura &amp; melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG &amp; Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
-    <string name="about_credits_drastic_title">DraStic &amp; fastDS Inspirations</string>
-    <string name="about_credits_drastic_summary">Exophase &amp; DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
-    <string name="about_credits_libraries_title">Open Source Libraries &amp; Tools</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG and Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
+    <string name="about_credits_drastic_title">DraStic and fastDS Inspirations</string>
+    <string name="about_credits_drastic_summary">Exophase and DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
+    <string name="about_credits_libraries_title">Open Source Libraries and Tools</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang shaders), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (Adreno/Turnip drivers)</string>
     <string name="about_github_title">STORM DS Repository</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
@@ -1295,25 +1295,25 @@
         <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
         <item>Nintendo DS Classic (Metallic Grey)</item>
         <item>Nintendo DS Lite (Pure White)</item>
-        <item>Nintendo Famicom / NES (Gold &amp; Maroon)</item>
-        <item>Nintendo Game Boy (DMG Retro Grey &amp; Plum)</item>
+        <item>Nintendo Famicom / NES (Gold and Maroon)</item>
+        <item>Nintendo Game Boy (DMG Retro Grey and Plum)</item>
         <item>Nintendo Game Boy Advance (Glacier Indigo)</item>
-        <item>Nintendo GameCube (Indigo &amp; Green/Red)</item>
+        <item>Nintendo GameCube (Indigo and Green/Red)</item>
         <item>Nintendo Super Famicom / SNES (Four Colors)</item>
-        <item>Nintendo Switch Neon (Red &amp; Blue)</item>
+        <item>Nintendo Switch Neon (Red and Blue)</item>
         <item>Nintendo Switch OLED (Matte White)</item>
-        <item>Nintendo Virtual Boy (Laser Red &amp; Void)</item>
-        <item>Nintendo Wii (Crystal White &amp; Blue)</item>
-        <item>Nintendo Wii U (Dark Slate &amp; Cyan)</item>
+        <item>Nintendo Virtual Boy (Laser Red and Void)</item>
+        <item>Nintendo Wii (Crystal White and Blue)</item>
+        <item>Nintendo Wii U (Dark Slate and Cyan)</item>
         <item>STORM Arcade Retro (Classic Arcade Machine / 4 Colors)</item>
         <item>STORM Aurora Spectrum (Four Pastel Colors / Light)</item>
-        <item>STORM Cyber Neon (Cyan &amp; Dark)</item>
+        <item>STORM Cyber Neon (Cyan and Dark)</item>
         <item>STORM Cyberpunk 2077 (Neon / Multi-Color)</item>
         <item>STORM Frost Glacier (Ice Gradient / Light)</item>
-        <item>STORM Gothic Crimson (Ruby Red &amp; Carbon)</item>
+        <item>STORM Gothic Crimson (Ruby Red and Carbon)</item>
         <item>STORM Matrix Emerald (Neon Green)</item>
         <item>STORM Midnight Amethyst (Deep Purple)</item>
-        <item>STORM Royal Gold (Gold &amp; Obsidian)</item>
+        <item>STORM Royal Gold (Gold and Obsidian)</item>
         <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
         <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
     </string-array>
@@ -1349,7 +1349,7 @@
 
     <!-- Auto-Translator Strings -->
     <string name="category_translator">Auto-Translator</string>
-    <string name="category_translator_summary">Smart in-game neural translation &amp; native overlay</string>
+    <string name="category_translator_summary">Smart in-game neural translation and native overlay</string>
     <string name="translator_enabled">Enable Auto-Translator</string>
     <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
     <string name="translator_engine">Translation Engine</string>
@@ -1383,7 +1383,7 @@
     <string name="translator_tts_lang_title">Voice Acting Language</string>
     <string name="translator_tts_multi_voice">Multi-Character Voice Acting</string>
     <string name="translator_tts_multi_voice_summary">Automatically detect male, female, and elder characters to speak with different timbres and pitches</string>
-    <string name="translator_api_keys_category">API Keys &amp; Custom AI Configuration</string>
+    <string name="translator_api_keys_category">API Keys and Custom AI Configuration</string>
     <string name="translator_deepl_key">DeepL API Key</string>
     <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>
     <string name="translator_custom_ai_endpoint">AI Base URL / Endpoint</string>
@@ -1439,7 +1439,7 @@
     <string name="input_gyro_aiming_title">Gyro Aiming</string>
     <string name="input_gyro_aiming_summary">Control aiming in 3D shooters (Metroid, Dementium, Moon) by tilting device</string>
     <string name="input_gyro_sensitivity_title">Gyro Sensitivity</string>
-    <string name="pref_cat_dsp_effects">DSP Sound Effects &amp; Limiter</string>
+    <string name="pref_cat_dsp_effects">DSP Sound Effects and Limiter</string>
     <string name="audio_soft_limiter_title">Soft-Clipping Peak Limiter</string>
     <string name="audio_soft_limiter_summary">Smoothly limits dynamic audio peaks, eliminating clicks, pops, and crackles during frame drops and fast forward</string>
     <string name="audio_bass_boost_title">Dynamic Bass Boost</string>
@@ -1465,7 +1465,7 @@
     <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
     <string name="video_console_skin_title">3D Animated Console Skin</string>
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
-    <string name="video_console_skin_type_title">Console Model &amp; Color</string>
+    <string name="video_console_skin_type_title">Console Model and Color</string>
     <string name="video_oled_battery_saver_title">Smart OLED Battery Saver</string>
     <string name="video_oled_battery_saver_summary">Dynamically optimize refresh rate and power consumption on OLED/AMOLED screens during static scenes (save up to 40% battery)</string>
     <string name="decrypt_rom_title">ROM Encrypted</string>
@@ -1479,9 +1479,9 @@
     <string name="app_language">App Language</string>
     <string name="app_language_summary">Select the interface language for STORM DS</string>
     <string name="dual_screen_info_title">How Dual Screen Presets Work</string>
-    <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area &amp; Alignment: customize vertical alignment and display coverage.</string>
+    <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area and Alignment: customize vertical alignment and display coverage.</string>
 
-    <!-- STORM Theme Studio & Colors -->
+    <!-- STORM Theme Studio and Colors -->
     <string name="theme_accent_color_title">Accent Color</string>
     <string name="theme_accent_color_summary">Select accent neon color for STORM NIGHT theme</string>
     <string name="accent_electric_cyan">💎 Electric Cyan</string>
@@ -1504,7 +1504,7 @@
     <string name="card_style_flat_minimal">Flat Minimal</string>
     <string name="card_style_3d_boxart">3D Boxart</string>
 
-    <!-- JIT Overclock & CPU Tuning -->
+    <!-- JIT Overclock and CPU Tuning -->
     <string name="arm9_overclock_title">ARM9 CPU Clock (Overclock)</string>
     <string name="arm9_overclock_summary">Overclock CPU to eliminate frame drops in demanding 3D games</string>
     <string name="arm9_overclock_1x">67 MHz (Default / 1x)</string>
@@ -1512,7 +1512,7 @@
     <string name="arm9_overclock_3x">200 MHz (3x Overclock)</string>
     <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
 
-    <!-- Scraper Pro & Covers -->
+    <!-- Scraper Pro and Covers -->
     <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart and High-Res Covers</string>
     <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
     <string name="enable_gametdb_2d_covers_title">GameTDB 2D covers</string>
@@ -1524,13 +1524,13 @@
     <string name="custom_cover_updated">Cover updated successfully</string>
     <string name="custom_cover_removed">Custom cover removed</string>
 
-    <!-- Input Macros & Gyro Mic -->
-    <string name="input_turbo_macros_title">Turbo Buttons &amp; Macros</string>
+    <!-- Input Macros and Gyro Mic -->
+    <string name="input_turbo_macros_title">Turbo Buttons and Macros</string>
     <string name="input_turbo_macros_summary">Enable virtual Turbo A/B/X/Y rapid-fire buttons</string>
     <string name="input_gyro_mic_title">Gyro Microphone Emulation</string>
     <string name="input_gyro_mic_summary">Shake or tilt device to blow into virtual microphone</string>
 
-    <!-- Dual-Screen & Soft Patching -->
+    <!-- Dual-Screen and Soft Patching -->
     <string name="video_widescreen_3d_title">3D Widescreen (16:9 Aspect Ratio)</string>
     <string name="video_widescreen_3d_summary">Anamorphic widescreen aspect ratio rendering for 3D games</string>
     <string name="video_60fps_patch_title">60 FPS Unlock Hack</string>
@@ -1542,4 +1542,37 @@
     <string name="layout_open_editor_summary">Edit currently active layout profile (position, scale of screens and controls)</string>
     <string name="pref_touch_dpad_stick_mode_title">Analog Stick instead of D-Pad</string>
     <string name="pref_touch_dpad_stick_mode_summary">Display a virtual analog thumbstick instead of the classic directional pad</string>
+
+    <!-- UI & Subtitles Localization -->
+    <string name="layouts_subtitle">Configure and select screen and button layout</string>
+    <string name="layout_profile_custom">Custom profile</string>
+    <string name="layout_profile_standard">Standard layout</string>
+    <string name="layout_action_edit_copy">Edit copy</string>
+    <string name="backgrounds_subtitle">Choose or add a background for the layout</string>
+    <string name="rewind_dialog_title">Rewind</string>
+    <string name="rewind_dialog_subtitle">Rewind parameters and time intervals</string>
+    <string name="rewind_enable_title">Enable rewind</string>
+    <string name="rewind_status_enabled">Rewind active during gameplay</string>
+    <string name="rewind_status_disabled">Rewind is disabled</string>
+    <string name="rewind_save_interval">Save interval</string>
+    <string name="rewind_history_depth">History depth</string>
+    <string name="rewind_memory_estimate">Estimated RAM usage: ~%1$d MB (max %2$d states)</string>
+    <string name="seconds_short">%d sec.</string>
+    <string name="firmware_birthday_format">Format: Day / Month</string>
+    <string name="day_label">Day</string>
+    <string name="month_label">Month</string>
+    <string name="settings_sub_general">Interface, themes, language and operation mode</string>
+    <string name="settings_sub_roms">Folders, scanning and game library</string>
+    <string name="settings_sub_video">Graphics, 3D rendering and shaders</string>
+    <string name="settings_sub_audio">Audio effects, volume and microphone</string>
+    <string name="settings_sub_input">Gamepads, key mapping and touch controls</string>
+    <string name="settings_sub_ra">Achievements, account and hardcore mode</string>
+    <string name="settings_sub_rewind">Rewind parameters and time intervals</string>
+    <string name="settings_sub_translator">Text translation and translation overlay</string>
+    <string name="settings_sub_firmware">BIOS, NAND, firmware and system settings</string>
+    <string name="settings_sub_save">Save files and backups</string>
+    <string name="settings_sub_cheats">Global cheat codes and databases</string>
+    <string name="settings_sub_about">About STORM DS project and developers</string>
+    <string name="settings_sub_main">Emulator parameters and configuration</string>
+    <string name="settings_sub_default">Parameters and settings</string>
 </resources>

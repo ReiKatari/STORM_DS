@@ -165,7 +165,7 @@ fun BackgroundListScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = "Выберите или добавьте фон для макета",
+                            text = stringResource(R.string.backgrounds_subtitle),
                             color = colors.text3,
                             fontFamily = WatermelonMono,
                             fontSize = 11.sp,
@@ -193,7 +193,7 @@ fun BackgroundListScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "Добавить",
+                                text = stringResource(R.string.action_backgrounds_new),
                                 color = colors.green,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 13.sp,
@@ -208,7 +208,7 @@ fun BackgroundListScreen(
         bottomBar = {
             Column(
                 modifier = Modifier
-                    .background(colors.surface)
+                    .background(colors.bg)
                     .navigationBarsPadding()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             ) {
@@ -216,7 +216,7 @@ fun BackgroundListScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(top = 12.dp, bottom = 16.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
