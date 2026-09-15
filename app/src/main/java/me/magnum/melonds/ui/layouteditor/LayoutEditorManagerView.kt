@@ -35,6 +35,7 @@ import me.magnum.melonds.domain.model.RuntimeBackground
 import me.magnum.melonds.domain.model.consoleAspectRatio
 import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.extensions.setBackgroundMode
+import me.magnum.melonds.impl.dpToPixels
 import me.magnum.melonds.ui.common.component.dialog.TextInputDialog
 import me.magnum.melonds.ui.common.component.dialog.TextInputDialogState
 import me.magnum.melonds.ui.layouteditor.LayoutEditorActivity.MenuOption
@@ -267,21 +268,16 @@ class LayoutEditorManagerView(
                 rightPadding,
                 bottomPadding,
             )
-            binding.layoutControls.setPadding(
-                leftPadding,
-                topPadding,
-                rightPadding,
-                0,
-            )
+            (binding.layoutControls.layoutParams as? MarginLayoutParams)?.let { lp ->
+                lp.topMargin = topPadding + context.dpToPixels(8f).toInt()
+                binding.layoutControls.layoutParams = lp
+            }
 
             binding.viewLayoutEditor.safeAreaInsets = android.graphics.Rect(leftPadding, topPadding, rightPadding, bottomPadding)
 
             WindowInsetsCompat.CONSUMED
         }
 
-        binding.buttonBack.setOnClickListener {
-            handleBackNavigation()
-        }
         binding.buttonAddButton.setOnClickListener {
             openButtonsMenu()
         }
@@ -821,7 +817,6 @@ class LayoutEditorManagerView(
             add(MenuOption.PROPERTIES)
             add(MenuOption.BACKGROUNDS)
             add(MenuOption.REVERT)
-            add(MenuOption.RESET)
             if (viewModel.canSaveLayoutAsNew()) {
                 add(MenuOption.SAVE_AS_NEW)
             }
@@ -838,13 +833,41 @@ class LayoutEditorManagerView(
     }
 
     private fun showBottomControls(animate: Boolean = true) {
-        binding.layoutControls.isVisible = true
+        if (areBottomControlsShown) return
+        binding.layoutControls.animate().cancel()
+        if (animate) {
+            binding.layoutControls.isVisible = true
+            binding.layoutControls.animate()
+                .translationY(0f)
+                .alpha(0.92f)
+                .setDuration(CONTROLS_SLIDE_ANIMATION_DURATION_MS)
+                .start()
+        } else {
+            binding.layoutControls.translationY = 0f
+            binding.layoutControls.alpha = 0.92f
+            binding.layoutControls.isVisible = true
+        }
         areBottomControlsShown = true
     }
 
     private fun hideBottomControls(animate: Boolean = true) {
-        binding.layoutControls.isVisible = true
-        areBottomControlsShown = true
+        if (!areBottomControlsShown) return
+        binding.layoutControls.animate().cancel()
+        val hideDist = -(binding.layoutControls.height.toFloat().takeIf { it > 0 } ?: 120f)
+        if (animate) {
+            binding.layoutControls.animate()
+                .translationY(hideDist)
+                .alpha(0f)
+                .setDuration(CONTROLS_SLIDE_ANIMATION_DURATION_MS)
+                .withEndAction {
+                    binding.layoutControls.isInvisible = true
+                }
+                .start()
+        } else {
+            binding.layoutControls.translationY = hideDist
+            binding.layoutControls.isInvisible = true
+        }
+        areBottomControlsShown = false
     }
 
     private fun showScalingControls(
@@ -991,6 +1014,7 @@ class LayoutEditorManagerView(
         }
 
         areScalingControlsShown = false
+        showBottomControls(animate)
     }
 
     private fun enforceAspectRatio(aspectRatio: ScreenAspectRatio, priority: AspectRatioEnforcementPriority) {
