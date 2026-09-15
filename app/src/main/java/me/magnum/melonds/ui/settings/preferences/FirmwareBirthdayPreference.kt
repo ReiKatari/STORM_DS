@@ -56,7 +56,7 @@ class FirmwareBirthdayPreference(context: Context, attrs: AttributeSet?) : Prefe
 
             SettingsDialogScaffold(
                 title = title?.toString() ?: stringResource(R.string.firmware_birthday),
-                subtitle = "Формат: День / Месяц",
+                subtitle = stringResource(R.string.firmware_birthday_format),
                 icon = Icons.Filled.Cake,
                 onDismiss = dismiss,
             ) {
@@ -78,7 +78,7 @@ class FirmwareBirthdayPreference(context: Context, attrs: AttributeSet?) : Prefe
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "День",
+                                text = stringResource(R.string.day_label),
                                 color = colors.text3,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 12.sp,
@@ -135,7 +135,7 @@ class FirmwareBirthdayPreference(context: Context, attrs: AttributeSet?) : Prefe
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "Месяц",
+                                text = stringResource(R.string.month_label),
                                 color = colors.text3,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 12.sp,

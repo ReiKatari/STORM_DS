@@ -543,8 +543,8 @@ fun SettingsRewindDialogContent(
     val approxMemoryMb = maxStates * 20
 
     SettingsDialogScaffold(
-        title = "Перемотка назад",
-        subtitle = "Параметры и интервалы перемотки времени",
+        title = stringResource(R.string.rewind_dialog_title),
+        subtitle = stringResource(R.string.rewind_dialog_subtitle),
         icon = Icons.Filled.Schedule,
         onDismiss = onDismiss,
     ) {
@@ -571,14 +571,14 @@ fun SettingsRewindDialogContent(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Включить перемотку назад",
+                        text = stringResource(R.string.rewind_enable_title),
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = if (isRewindEnabled) "Перемотка активна во время игры" else "Функция перемотки отключена",
+                        text = if (isRewindEnabled) stringResource(R.string.rewind_status_enabled) else stringResource(R.string.rewind_status_disabled),
                         color = colors.text3,
                         fontFamily = WatermelonMono,
                         fontSize = 10.sp,
@@ -614,14 +614,14 @@ fun SettingsRewindDialogContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Интервал сохранения",
+                            text = stringResource(R.string.rewind_save_interval),
                             color = colors.text,
                             fontFamily = SpaceGrotesk,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = "$rewindPeriod сек.",
+                            text = stringResource(R.string.seconds_short, rewindPeriod),
                             color = colors.green,
                             fontFamily = WatermelonMono,
                             fontSize = 13.sp,
@@ -659,14 +659,14 @@ fun SettingsRewindDialogContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Глубина истории",
+                            text = stringResource(R.string.rewind_history_depth),
                             color = colors.text,
                             fontFamily = SpaceGrotesk,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = "${rewindWindow * 10} сек.",
+                            text = stringResource(R.string.seconds_short, rewindWindow * 10),
                             color = colors.green,
                             fontFamily = WatermelonMono,
                             fontSize = 13.sp,
@@ -707,7 +707,7 @@ fun SettingsRewindDialogContent(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "Оценочный расход RAM: ~$approxMemoryMb МБ (макс. $maxStates снимков)",
+                        text = stringResource(R.string.rewind_memory_estimate, approxMemoryMb, maxStates),
                         color = colors.text2,
                         fontFamily = SpaceGrotesk,
                         fontSize = 11.sp,

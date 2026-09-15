@@ -152,14 +152,37 @@ fun RomBrowserScreen(
         }
     }
 
-    // Always pin strictly to top (item 0, offset 0) whenever entries load/refresh and user hasn't scrolled manually
-    LaunchedEffect(state.entries) {
-        if (!userHasScrolledManually || pendingRefreshScrollReset || isManualRefreshing) {
+    val firstEntryKey = remember(state.entries) {
+        state.entries.firstOrNull()?.let { entry ->
+            when (entry) {
+                is RomBrowserEntry.Folder -> "folder:${entry.docId}"
+                is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        userHasScrolledManually = false
+        focusedEntryIndex = -1
+        repeat(10) {
+            gridState.scrollToItem(0, 0)
+            listState.scrollToItem(0, 0)
+            withFrameNanos { }
+        }
+    }
+
+    // Always pin strictly to top (item 0, offset 0) whenever entries or top item load/refresh
+    LaunchedEffect(firstEntryKey, state.entries.size) {
+        val isNearTop = when (state.viewMode) {
+            RomViewMode.GRID -> gridState.firstVisibleItemIndex <= 4
+            RomViewMode.LIST -> listState.firstVisibleItemIndex <= 4
+        }
+        if (!userHasScrolledManually || isNearTop || pendingRefreshScrollReset || isManualRefreshing) {
             if (pendingRefreshScrollReset || isManualRefreshing) {
                 userHasScrolledManually = false
             }
             focusedEntryIndex = -1
-            repeat(8) {
+            repeat(10) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
@@ -607,7 +630,7 @@ fun RomBrowserScreen(
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
                                             userHasScrolledManually = false
-                                            repeat(6) {
+                                            repeat(10) {
                                                 when (state.viewMode) {
                                                     RomViewMode.GRID -> gridState.scrollToItem(0, 0)
                                                     RomViewMode.LIST -> listState.scrollToItem(0, 0)

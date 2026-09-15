@@ -96,15 +96,11 @@ fun WatermelonScreenScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(top = 12.dp, bottom = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     UnifiedBackButton(onClick = onBack)
                 }
-                GamepadHintsFooter(
-                    modifier = Modifier.background(colors.bg),
-                    hints = hints,
-                )
             }
         },
         content = content,

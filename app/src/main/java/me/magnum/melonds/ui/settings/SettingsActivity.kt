@@ -230,55 +230,55 @@ class SettingsActivity :
         val lower = title.lowercase()
         return when (fragment) {
             is me.magnum.melonds.ui.settings.fragments.GeneralPreferencesFragment ->
-                R.drawable.ic_settings to "Интерфейс, темы, язык и режим работы"
+                R.drawable.ic_settings to getString(R.string.settings_sub_general)
             is me.magnum.melonds.ui.settings.fragments.RomsPreferencesFragment ->
-                R.drawable.ic_folder to "Папки, сканирование и список игр"
+                R.drawable.ic_folder to getString(R.string.settings_sub_roms)
             is me.magnum.melonds.ui.settings.fragments.VideoPreferencesFragment ->
-                R.drawable.ic_video to "Графика, рендеринг 3D и шейдеры"
+                R.drawable.ic_video to getString(R.string.settings_sub_video)
             is me.magnum.melonds.ui.settings.fragments.AudioPreferencesFragment ->
-                R.drawable.ic_audio to "Звуковые эффекты, громкость и микрофон"
+                R.drawable.ic_audio to getString(R.string.settings_sub_audio)
             is me.magnum.melonds.ui.settings.fragments.InputPreferencesFragment,
             is me.magnum.melonds.ui.settings.fragments.SoftInputBehaviourPreferencesFragment ->
-                R.drawable.ic_input to "Геймпады, маппинг клавиш и сенсорные кнопки"
+                R.drawable.ic_input to getString(R.string.settings_sub_input)
             is me.magnum.melonds.ui.settings.fragments.RetroAchievementsPreferencesFragment ->
-                R.drawable.ic_trophy to "Достижения, учетная запись и хардкор"
+                R.drawable.ic_trophy to getString(R.string.settings_sub_ra)
             is me.magnum.melonds.ui.settings.fragments.RewindPreferencesFragment ->
-                R.drawable.ic_clock to "Параметры и интервалы перемотки времени"
+                R.drawable.ic_clock to getString(R.string.settings_sub_rewind)
             is me.magnum.melonds.ui.settings.fragments.TranslatorPreferencesFragment ->
-                R.drawable.ic_translate to "Перевод текста и оверлей перевода"
+                R.drawable.ic_translate to getString(R.string.settings_sub_translator)
             is me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment,
             is me.magnum.melonds.ui.settings.fragments.FirmwarePreferencesFragment,
             is me.magnum.melonds.ui.settings.fragments.SystemPreferencesFragment ->
-                R.drawable.ic_firmware to "BIOS, NAND, прошивка и системные настройки"
+                R.drawable.ic_firmware to getString(R.string.settings_sub_firmware)
             is me.magnum.melonds.ui.settings.fragments.SaveFilesPreferencesFragment ->
-                R.drawable.ic_file to "Файлы сохранений и резервные копии"
+                R.drawable.ic_file to getString(R.string.settings_sub_save)
             is me.magnum.melonds.ui.settings.fragments.CheatsPreferencesFragment ->
-                R.drawable.ic_cheat to "Глобальные чит-коды и базы данных"
+                R.drawable.ic_cheat to getString(R.string.settings_sub_cheats)
             is me.magnum.melonds.ui.settings.fragments.AboutPreferencesFragment ->
-                R.drawable.ic_info to "О проекте STORM DS и разработчиках"
+                R.drawable.ic_info to getString(R.string.settings_sub_about)
             is me.magnum.melonds.ui.settings.fragments.MainPreferencesFragment ->
-                R.drawable.ic_settings to "Параметры и конфигурация эмулятора"
+                R.drawable.ic_settings to getString(R.string.settings_sub_main)
             else -> when {
                 lower.contains("видео") || lower.contains("video") || lower.contains("график") ->
-                    R.drawable.ic_video to "Графика, рендеринг 3D и шейдеры"
+                    R.drawable.ic_video to getString(R.string.settings_sub_video)
                 lower.contains("звук") || lower.contains("audio") || lower.contains("микрофон") ->
-                    R.drawable.ic_audio to "Звуковые эффекты, громкость и микрофон"
+                    R.drawable.ic_audio to getString(R.string.settings_sub_audio)
                 lower.contains("управлен") || lower.contains("input") || lower.contains("клавиш") || lower.contains("расклад") ->
-                    R.drawable.ic_input to "Геймпады, маппинг клавиш и сенсорные кнопки"
+                    R.drawable.ic_input to getString(R.string.settings_sub_input)
                 lower.contains("папк") || lower.contains("rom") || lower.contains("игр") ->
-                    R.drawable.ic_folder to "Папки, сканирование и список игр"
+                    R.drawable.ic_folder to getString(R.string.settings_sub_roms)
                 lower.contains("достижен") || lower.contains("achievement") ->
-                    R.drawable.ic_trophy to "Достижения, учетная запись и хардкор"
+                    R.drawable.ic_trophy to getString(R.string.settings_sub_ra)
                 lower.contains("перемотк") || lower.contains("rewind") ->
-                    R.drawable.ic_clock to "Параметры и интервалы перемотки времени"
+                    R.drawable.ic_clock to getString(R.string.settings_sub_rewind)
                 lower.contains("перевод") || lower.contains("translat") ->
-                    R.drawable.ic_translate to "Перевод текста и оверлей перевода"
+                    R.drawable.ic_translate to getString(R.string.settings_sub_translator)
                 lower.contains("bios") || lower.contains("firmware") || lower.contains("nand") || lower.contains("систем") ->
-                    R.drawable.ic_firmware to "BIOS, NAND, прошивка и системные настройки"
+                    R.drawable.ic_firmware to getString(R.string.settings_sub_firmware)
                 lower.contains("чит") || lower.contains("cheat") ->
-                    R.drawable.ic_cheat to "Глобальные чит-коды и базы данных"
+                    R.drawable.ic_cheat to getString(R.string.settings_sub_cheats)
                 else ->
-                    R.drawable.ic_settings to "Параметры и настройки"
+                    R.drawable.ic_settings to getString(R.string.settings_sub_default)
             }
         }
     }
