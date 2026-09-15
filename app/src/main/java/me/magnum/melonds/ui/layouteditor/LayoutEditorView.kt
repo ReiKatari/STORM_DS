@@ -109,14 +109,50 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     override fun instantiateLayout(layoutConfiguration: UILayout, layoutTarget: LayoutTarget) {
         selectedView = null
         super.instantiateLayout(layoutConfiguration, layoutTarget)
+        if (width > 0 && height > 0) {
+            clampComponentsToCanvasBounds(width, height, 0, 0)
+        }
         modifiedByUser = false
         notifyLayoutChanged()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (w > 0 && h > 0 && (w != oldw || h != oldh)) {
+        if (w > 0 && h > 0) {
+            clampComponentsToCanvasBounds(w, h, oldw, oldh)
             notifyLayoutChanged()
+        }
+    }
+
+    private fun clampComponentsToCanvasBounds(w: Int, h: Int, oldw: Int, oldh: Int) {
+        val shouldScale = oldw > 0 && oldh > 0 && (oldw != w || oldh != h)
+        val scaleX = if (shouldScale) w.toFloat() / oldw else 1f
+        val scaleY = if (shouldScale) h.toFloat() / oldh else 1f
+
+        views.values.forEach { compView ->
+            val rect = compView.getRect()
+            val compWidth = rect.width.coerceIn(minComponentSize, w)
+            val compHeight = rect.height.coerceIn(minComponentSize, h)
+            val maxX = (w - compWidth).coerceAtLeast(0)
+            val maxY = (h - compHeight).coerceAtLeast(0)
+
+            val newX = if (shouldScale && !compView.component.isScreen()) {
+                (rect.x * scaleX).toInt()
+            } else {
+                rect.x
+            }
+            val newY = if (shouldScale && !compView.component.isScreen()) {
+                (rect.y * scaleY).toInt()
+            } else {
+                rect.y
+            }
+
+            val clampedX = newX.coerceIn(0, maxX)
+            val clampedY = newY.coerceIn(0, maxY)
+
+            if (clampedX != rect.x || clampedY != rect.y) {
+                compView.setPosition(Point(clampedX, clampedY))
+            }
         }
     }
 

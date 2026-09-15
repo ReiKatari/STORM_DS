@@ -222,13 +222,13 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             it.key.orientation == variant.orientation && it.key.uiSize == variant.uiSize
         } ?: layoutConfiguration.layoutVariants.entries.firstOrNull {
             it.key.orientation == variant.orientation
-        }
+        } ?: layoutConfiguration.layoutVariants.entries.firstOrNull()
         if (bestVariant != null) {
             val sourceVariant = bestVariant.key
             val sourceLayout = bestVariant.value
             val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant)
 
-            if (sourceVariant.uiSize == variant.uiSize && sourceVariant.uiInsets == variant.uiInsets) {
+            if (sourceVariant.orientation == variant.orientation && sourceVariant.uiSize == variant.uiSize && sourceVariant.uiInsets == variant.uiInsets) {
                 // Ensure screen components are valid and not corrupted
                 var hasCorruptedScreen = false
                 val sanitizedComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
@@ -249,7 +249,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
                 }
                 return sourceLayout
             }
-            if (sourceVariant.uiSize == variant.uiSize) {
+            if (sourceVariant.orientation == variant.orientation && sourceVariant.uiSize == variant.uiSize) {
                 val rotatedInsets = with(sourceVariant.uiInsets) {
                     Insets(left = right, top = bottom, right = left, bottom = top)
                 }
@@ -263,29 +263,35 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
                 return sourceLayout
             }
 
-            // Proportional scaling so user customizations are never lost on window resizing or backgrounding
+            // Proportional scaling and bounds clamping so user customizations and buttons are never lost on rotation
+            val isSameOrientation = sourceVariant.orientation == variant.orientation
             val scaleX = if (sourceVariant.uiSize.x > 0) variant.uiSize.x.toFloat() / sourceVariant.uiSize.x else 1f
             val scaleY = if (sourceVariant.uiSize.y > 0) variant.uiSize.y.toFloat() / sourceVariant.uiSize.y else 1f
+            val targetW = variant.uiSize.x.coerceAtLeast(100)
+            val targetH = variant.uiSize.y.coerceAtLeast(100)
+
             val scaledComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
                 if (comp.isScreen()) {
                     val defaultScreenComp = defaultLayout.mainScreenLayout.components?.firstOrNull { it.component == comp.component }
-                    if (defaultScreenComp != null) {
+                    if (defaultScreenComp != null && !isSameOrientation) {
                         comp.copy(rect = defaultScreenComp.rect)
                     } else {
-                        val scaledWidth = (comp.rect.width * scaleX).toInt()
-                        val scaledHeight = (scaledWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
-                        val scaledX = (comp.rect.x * scaleX).toInt()
-                        val scaledY = (comp.rect.y * scaleY).toInt()
+                        val scaledWidth = (comp.rect.width * scaleX).toInt().coerceIn(100, targetW)
+                        val scaledHeight = (scaledWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceIn(75, targetH)
+                        val maxX = (targetW - scaledWidth).coerceAtLeast(0)
+                        val maxY = (targetH - scaledHeight).coerceAtLeast(0)
+                        val scaledX = (comp.rect.x * scaleX).toInt().coerceIn(0, maxX)
+                        val scaledY = (comp.rect.y * scaleY).toInt().coerceIn(0, maxY)
                         comp.copy(rect = Rect(scaledX, scaledY, scaledWidth, scaledHeight))
                     }
                 } else {
-                    val scaledRect = Rect(
-                        (comp.rect.x * scaleX).toInt(),
-                        (comp.rect.y * scaleY).toInt(),
-                        (comp.rect.width * scaleX).toInt(),
-                        (comp.rect.height * scaleY).toInt()
-                    )
-                    comp.copy(rect = scaledRect)
+                    val compW = comp.rect.width.coerceIn(20, targetW)
+                    val compH = comp.rect.height.coerceIn(20, targetH)
+                    val maxX = (targetW - compW).coerceAtLeast(0)
+                    val maxY = (targetH - compH).coerceAtLeast(0)
+                    val scaledX = (comp.rect.x * scaleX).toInt().coerceIn(0, maxX)
+                    val scaledY = (comp.rect.y * scaleY).toInt().coerceIn(0, maxY)
+                    comp.copy(rect = Rect(scaledX, scaledY, compW, compH))
                 }
             }
             return sourceLayout.copy(mainScreenLayout = sourceLayout.mainScreenLayout.copy(components = scaledComponents))

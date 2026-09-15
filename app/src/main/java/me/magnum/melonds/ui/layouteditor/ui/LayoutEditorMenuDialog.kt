@@ -45,7 +45,6 @@ fun LayoutEditorMenuDialog(
         LayoutMenuItem(MenuOption.PROPERTIES, R.string.properties, Icons.Filled.Settings),
         LayoutMenuItem(MenuOption.BACKGROUNDS, R.string.background, Icons.Filled.Image),
         LayoutMenuItem(MenuOption.REVERT, R.string.revert_changes, Icons.Filled.Undo),
-        LayoutMenuItem(MenuOption.RESET, R.string.reset_default, Icons.Filled.Refresh),
         LayoutMenuItem(MenuOption.SAVE_AS_NEW, R.string.save_as_new, Icons.Filled.Add),
         LayoutMenuItem(MenuOption.SAVE_AND_EXIT, R.string.save_and_exit, Icons.Filled.Check),
         LayoutMenuItem(MenuOption.EXIT_WITHOUT_SAVING, R.string.exit_without_saving, Icons.Filled.Close),
@@ -127,7 +126,7 @@ fun LayoutEditorMenuDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         items(menuItems) { item ->
-                            val isDestructive = item.option == MenuOption.EXIT_WITHOUT_SAVING || item.option == MenuOption.RESET
+                            val isDestructive = item.option == MenuOption.EXIT_WITHOUT_SAVING || item.option == MenuOption.REVERT
                             val isPrimary = item.option == MenuOption.SAVE_AND_EXIT || item.option == MenuOption.SAVE_AS_NEW
                             val tintColor = when {
                                 isDestructive -> colors.red

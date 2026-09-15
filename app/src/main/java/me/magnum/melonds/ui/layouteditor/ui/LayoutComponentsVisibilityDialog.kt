@@ -130,12 +130,12 @@ fun LayoutComponentsVisibilityDialog(
                             }
 
                             val description = when (component) {
-                                LayoutComponent.TOP_SCREEN -> "Верхний игровой экран Nintendo DS"
-                                LayoutComponent.BOTTOM_SCREEN -> "Нижний сенсорный экран (Touch Screen)"
+                                LayoutComponent.TOP_SCREEN -> "Основной верхний экран Nintendo DS"
+                                LayoutComponent.BOTTOM_SCREEN -> "Нижний сенсорный экран Nintendo DS"
                                 LayoutComponent.HYBRID_SCREEN -> "Основной большой экран с миниатюрой второго экрана сбоку"
                                 LayoutComponent.DPAD -> "Крестовина управления (D-Pad) или аналоговый стик"
                                 LayoutComponent.BUTTONS -> "Основные кнопки действия (A, B, X, Y)"
-                                LayoutComponent.BUTTON_START -> "Кнопка Start (Пауза / Меню в игре)"
+                                LayoutComponent.BUTTON_START -> "Кнопка Start (Пауза и меню в игре)"
                                 LayoutComponent.BUTTON_SELECT -> "Кнопка Select"
                                 LayoutComponent.BUTTON_L -> "Левый шифт (L)"
                                 LayoutComponent.BUTTON_R -> "Правый шифт (R)"
@@ -143,14 +143,14 @@ fun LayoutComponentsVisibilityDialog(
                                 LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> "Включение и отключение ускоренной перемотки (Fast Forward)"
                                 LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> "Скрыть или показать виртуальные кнопки на экране"
                                 LayoutComponent.BUTTON_RESET -> "Сброс и перезапуск текущей игры"
-                                LayoutComponent.BUTTON_PAUSE -> "Приостановка / возобновление эмуляции"
+                                LayoutComponent.BUTTON_PAUSE -> "Приостановка и возобновление эмуляции"
                                 LayoutComponent.BUTTON_SWAP_SCREENS -> "Мгновенное переключение верхнего и нижнего экранов местами"
                                 LayoutComponent.BUTTON_QUICK_SAVE -> "Быстрое сохранение состояния в текущий слот"
                                 LayoutComponent.BUTTON_QUICK_LOAD -> "Быстрая загрузка состояния из текущего слота"
                                 LayoutComponent.BUTTON_REWIND -> "Перемотка игрового процесса назад во времени"
                                 LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> "Активация микрофона (шум или голос)"
                                 LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> "Панель дополнительных быстрых кнопок"
-                                LayoutComponent.BUTTON_LOCK_ROTATION -> "Фиксация ориентации экрана (портретная / альбомная)"
+                                LayoutComponent.BUTTON_LOCK_ROTATION -> "Фиксация ориентации экрана (портретная или альбомная)"
                                 LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> "Переключение между D-Pad и аналоговым стиком"
                                 else -> null
                             }
@@ -175,12 +175,30 @@ fun LayoutComponentsVisibilityDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Icon(
-                                        imageVector = when {
-                                            isScreen -> Icons.Filled.Tv
-                                            component == LayoutComponent.DPAD -> Icons.Filled.Gamepad
-                                            component == LayoutComponent.BUTTONS -> Icons.Filled.RadioButtonChecked
-                                            component == LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> Icons.Filled.ChangeCircle
-                                            else -> Icons.Filled.TouchApp
+                                        imageVector = when (component) {
+                                            LayoutComponent.TOP_SCREEN -> Icons.Filled.Tv
+                                            LayoutComponent.BOTTOM_SCREEN -> Icons.Filled.SmartDisplay
+                                            LayoutComponent.HYBRID_SCREEN -> Icons.Filled.PictureInPicture
+                                            LayoutComponent.DPAD -> Icons.Filled.Gamepad
+                                            LayoutComponent.BUTTONS -> Icons.Filled.RadioButtonChecked
+                                            LayoutComponent.BUTTON_START -> Icons.Filled.PlayArrow
+                                            LayoutComponent.BUTTON_SELECT -> Icons.Filled.Menu
+                                            LayoutComponent.BUTTON_L -> Icons.Filled.ChevronLeft
+                                            LayoutComponent.BUTTON_R -> Icons.Filled.ChevronRight
+                                            LayoutComponent.BUTTON_HINGE -> Icons.Filled.Laptop
+                                            LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> Icons.Filled.FastForward
+                                            LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> Icons.Filled.Edit
+                                            LayoutComponent.BUTTON_RESET -> Icons.Filled.RestartAlt
+                                            LayoutComponent.BUTTON_PAUSE -> Icons.Filled.Pause
+                                            LayoutComponent.BUTTON_SWAP_SCREENS -> Icons.Filled.SwapVert
+                                            LayoutComponent.BUTTON_QUICK_SAVE -> Icons.Filled.Save
+                                            LayoutComponent.BUTTON_QUICK_LOAD -> Icons.Filled.Restore
+                                            LayoutComponent.BUTTON_REWIND -> Icons.Filled.FastRewind
+                                            LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> Icons.Filled.Mic
+                                            LayoutComponent.BUTTON_TRANSLATE -> Icons.Filled.Translate
+                                            LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> Icons.Filled.MoreHoriz
+                                            LayoutComponent.BUTTON_LOCK_ROTATION -> Icons.Filled.ScreenLockRotation
+                                            LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> Icons.Filled.ChangeCircle
                                         },
                                         contentDescription = null,
                                         tint = if (isChecked) colors.green else colors.text3,

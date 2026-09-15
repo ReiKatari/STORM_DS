@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewList
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -108,6 +109,13 @@ fun WatermelonLibraryHeader(
 ) {
     val colors = watermelon
     var searchOpen by remember { mutableStateOf(isSearchActive) }
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) searchOpen = true
+    }
+    BackHandler(enabled = searchOpen) {
+        searchOpen = false
+        onSearchQueryChanged(null)
+    }
     var overflowOpen by remember { mutableStateOf(false) }
     var bootModeMenuOpen by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
@@ -158,10 +166,22 @@ fun WatermelonLibraryHeader(
                     runCatching { searchFocusRequester.requestFocus() }
                 }
                 IconButton(
-                    onClick = { onSearchQueryChanged("") },
+                    onClick = {
+                        if (searchQuery.isNotEmpty()) {
+                            onSearchQueryChanged("")
+                        } else {
+                            searchOpen = false
+                            onSearchQueryChanged(null)
+                        }
+                    },
                     modifier = Modifier.size(38.dp),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = null, tint = colors.text2, modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.close),
+                        tint = colors.text2,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             } else {
                 Row(
