@@ -263,5 +263,7 @@ if (NOT MELONDS_ANDROID_DEBUG_BUILD)
         -fomit-frame-pointer
         -fvisibility-inlines-hidden
         -finline-functions
+        -fvectorize
+        -fno-semantic-interposition
     )
 endif()

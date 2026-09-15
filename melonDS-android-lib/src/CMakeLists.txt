@@ -189,6 +189,14 @@ if (NOT MSVC)
     target_compile_options(core PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>")
     # These warnings are excessive, and are only triggered in the ARMJIT code
     # (which is fundamentally non-portable, so this is fine)
+    if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_options(core PRIVATE
+            -O3
+            -fomit-frame-pointer
+            -fvectorize
+            -fno-semantic-interposition
+        )
+    endif()
 endif()
 
 # Fix xxhash compile errors when using -Og

@@ -2144,6 +2144,15 @@ class EmulatorActivity : AppCompatActivity() {
 
         updateRendererScreenAreas()
         scheduleStartupPresentationRefreshes()
+
+        try {
+            window.decorView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        } catch (_: Throwable) {
+        }
+
+        val isSwapped = binding.viewLayoutControls.areScreensSwapped()
+        val text = if (isSwapped) getString(R.string.toast_screens_swapped) else getString(R.string.toast_screens_restored)
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     }
 
     private var isRotationLocked = false
@@ -2405,25 +2414,60 @@ class EmulatorActivity : AppCompatActivity() {
                 val rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
                 val rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
 
-                // Compute authoritative default layout rects for the current orientation if no views exist
-                val defLayout = if (isLandscape) {
-                    val sWidth = surfaceW / 2
-                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
-                    val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
-                    Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
+                if (rawTop != null && rawBottom == null) {
+                    // Single-screen layout with only TOP_SCREEN placed (e.g. Ambernic RG406V full screen)
+                    if (areScreensSwapped) {
+                        topRect = null
+                        bottomRect = rawTop
+                        topAlpha = 0f
+                        bottomAlpha = topView.baseAlpha
+                    } else {
+                        topRect = rawTop
+                        bottomRect = null
+                        topAlpha = topView.baseAlpha
+                        bottomAlpha = 0f
+                    }
+                } else if (rawBottom != null && rawTop == null) {
+                    // Single-screen layout with only BOTTOM_SCREEN placed
+                    if (areScreensSwapped) {
+                        topRect = rawBottom
+                        bottomRect = null
+                        topAlpha = bottomView.baseAlpha
+                        bottomAlpha = 0f
+                    } else {
+                        topRect = null
+                        bottomRect = rawBottom
+                        topAlpha = 0f
+                        bottomAlpha = bottomView.baseAlpha
+                    }
                 } else {
-                    val sWidth = surfaceW
-                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
-                    Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
+                    // Two screens placed or fallback default layout
+                    val defLayout = if (isLandscape) {
+                        val sWidth = surfaceW / 2
+                        val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH)
+                        val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
+                        Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
+                    } else {
+                        val sWidth = surfaceW
+                        val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                        Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
+                    }
+
+                    val rTop = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
+                    val rBottom = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
+
+                    if (areScreensSwapped) {
+                        topRect = rBottom
+                        bottomRect = rTop
+                        topAlpha = bottomView?.baseAlpha ?: 1f
+                        bottomAlpha = topView?.baseAlpha ?: 1f
+                    } else {
+                        topRect = rTop
+                        bottomRect = rBottom
+                        topAlpha = topView?.baseAlpha ?: 1f
+                        bottomAlpha = bottomView?.baseAlpha ?: 1f
+                    }
                 }
-
-                val rTop = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
-                val rBottom = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
-
-                topRect = rTop
-                bottomRect = rBottom
-                topAlpha = topView?.baseAlpha ?: 1f
-                bottomAlpha = bottomView?.baseAlpha ?: 1f
             }
         }
 
@@ -2435,8 +2479,8 @@ class EmulatorActivity : AppCompatActivity() {
             bottomScreenRect = bottomRect,
             topAlpha = topAlpha,
             bottomAlpha = bottomAlpha,
-            topOnTop = topView?.onTop ?: false,
-            bottomOnTop = bottomView?.onTop ?: false,
+            topOnTop = if (areScreensSwapped) (bottomView?.onTop ?: false) else (topView?.onTop ?: false),
+            bottomOnTop = if (areScreensSwapped) (topView?.onTop ?: false) else (bottomView?.onTop ?: false),
             hybridTopScreenRect = hybridTopRect,
             hybridBottomScreenRect = hybridBottomRect,
             hybridAlpha = hybridView?.baseAlpha ?: 1f,

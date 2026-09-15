@@ -209,6 +209,8 @@
   <string name="input_quick_load">Быстрая загрузка</string>
   <string name="input_translate">Перевод экрана</string>
   <string name="input_lock_rotation">Блокировка поворота экрана</string>
+  <string name="toast_screens_swapped">Экраны переключены</string>
+  <string name="toast_screens_restored">Исходное положение экранов</string>
   <string name="toast_rotation_locked">Поворот экрана заблокирован</string>
   <string name="toast_rotation_unlocked">Поворот экрана разблокирован (Автоповорот)</string>
   <string name="screen_layout">Экранная раскладка</string>
