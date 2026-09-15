@@ -52,8 +52,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.ui.common.bouncingClickable
@@ -207,16 +207,17 @@ private fun LayoutsScreenContent(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(CircleShape)
                             .background(colors.surface2)
-                            .border(1.dp, colors.line, RoundedCornerShape(10.dp)),
+                            .border(1.dp, colors.line, CircleShape)
+                            .bouncingClickable(onClick = onBackClick),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Dashboard,
-                            contentDescription = null,
-                            tint = colors.green,
-                            modifier = Modifier.size(22.dp),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.navigate_back),
+                            tint = colors.text,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
 
@@ -289,26 +290,6 @@ private fun LayoutsScreenContent(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
             }
         },
-        bottomBar = {
-            Column(
-                modifier = Modifier
-                    .background(colors.surface)
-                    .navigationBarsPadding()
-            ) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    me.magnum.melonds.ui.common.UnifiedBackButton(
-                        onClick = onBackClick,
-                    )
-                }
-            }
-        },
     ) { padding ->
         val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
         LazyColumn(
@@ -319,7 +300,7 @@ private fun LayoutsScreenContent(
                 start = 16.dp + safeInsets.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
                 end = 16.dp + safeInsets.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
                 top = padding.calculateTopPadding() + 12.dp,
-                bottom = padding.calculateBottomPadding() + 12.dp,
+                bottom = padding.calculateBottomPadding() + 16.dp,
             ),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
         ) {

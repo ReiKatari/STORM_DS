@@ -12,8 +12,6 @@ import me.magnum.melonds.ui.layouts.ui.LayoutsScreen
 import me.magnum.melonds.ui.layouts.viewmodel.LayoutsViewModel
 import me.magnum.melonds.ui.theme.MelonTheme
 
-import me.magnum.melonds.extensions.applyImmersiveFullscreen
-
 @AndroidEntryPoint
 class LayoutListActivity : AppCompatActivity() {
 
@@ -23,7 +21,6 @@ class LayoutListActivity : AppCompatActivity() {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        window.applyImmersiveFullscreen()
         setContent {
             MelonTheme {
                 LayoutsScreen(
@@ -31,18 +28,6 @@ class LayoutListActivity : AppCompatActivity() {
                     onNavigateBack = ::finish,
                 )
             }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        window.applyImmersiveFullscreen()
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
-            window.applyImmersiveFullscreen()
         }
     }
 }
