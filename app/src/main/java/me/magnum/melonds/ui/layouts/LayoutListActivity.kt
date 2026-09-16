@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import me.magnum.melonds.ui.layouts.ui.LayoutsScreen
 import me.magnum.melonds.ui.layouts.viewmodel.LayoutsViewModel
 import me.magnum.melonds.ui.theme.MelonTheme
@@ -19,13 +20,10 @@ class LayoutListActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-        insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-        insetsController.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         super.onCreate(savedInstanceState)
+        window.applyImmersiveFullscreen()
+
         setContent {
             MelonTheme {
                 LayoutsScreen(
@@ -36,12 +34,15 @@ class LayoutListActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        window.applyImmersiveFullscreen()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-            insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-            insetsController.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            window.applyImmersiveFullscreen()
         }
     }
 }
