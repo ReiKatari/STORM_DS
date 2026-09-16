@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import me.magnum.melonds.ui.layouts.model.SelectedLayout
 import me.magnum.melonds.ui.layouts.ui.LayoutsScreen
 import me.magnum.melonds.ui.layouts.viewmodel.LayoutSelectorViewModel
@@ -28,13 +29,10 @@ class LayoutSelectorActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-        insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-        insetsController.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         super.onCreate(savedInstanceState)
+        window.applyImmersiveFullscreen()
+
         setContent {
             MelonTheme {
                 LayoutsScreen(
@@ -60,12 +58,15 @@ class LayoutSelectorActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        window.applyImmersiveFullscreen()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-            insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-            insetsController.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            window.applyImmersiveFullscreen()
         }
     }
 }

@@ -725,7 +725,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 && (pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
-                if (belowIs3DSlot || compMode == 4 || (compMode == 1 && structured2DAbove)) \
+                if (compMode <= 4 || belowIs3DSlot) \
                 { \
                     composed = pixel3D; \
                     if (compMode == 4) \
@@ -736,13 +736,14 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                         composed.g = clampColor6(((pixel3D.g * eva) + (below2D.g * evb) + 0x10) >> 5); \
                         composed.b = clampColor6(((pixel3D.b * eva) + (below2D.b * evb) + 0x10) >> 5); \
                     } \
-                    else if (compMode == 1 && structured2DAbove) \
+                    else if (compMode == 1) \
                     { \
                         int eva = val3.g; \
                         int evb = val3.b; \
-                        composed.r = clampColor6(((above2D.r * eva) + (pixel3D.r * evb) + 0x8) >> 4); \
-                        composed.g = clampColor6(((above2D.g * eva) + (pixel3D.g * evb) + 0x8) >> 4); \
-                        composed.b = clampColor6(((above2D.b * eva) + (pixel3D.b * evb) + 0x8) >> 4); \
+                        Rgba6 layer2D = structured2DAbove ? above2D : below2D; \
+                        composed.r = clampColor6(((layer2D.r * eva) + (pixel3D.r * evb) + 0x8) >> 4); \
+                        composed.g = clampColor6(((layer2D.g * eva) + (pixel3D.g * evb) + 0x8) >> 4); \
+                        composed.b = clampColor6(((layer2D.b * eva) + (pixel3D.b * evb) + 0x8) >> 4); \
                     } \
                     else if (compMode == 2) \
                     { \
