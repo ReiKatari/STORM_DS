@@ -726,38 +726,42 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
                 if (belowIs3DSlot || compMode == 4 || (compMode == 1 && structured2DAbove)) \
+                { \
                     composed = pixel3D; \
-                else \
-                    composed = below2D; \
-                if (compMode == 4) \
-                { \
-                    int eva = (pixel3D.a & 0x1F) + 1; \
-                    int evb = 32 - eva; \
-                    composed.r = clampColor6(((pixel3D.r * eva) + (below2D.r * evb) + 0x10) >> 5); \
-                    composed.g = clampColor6(((pixel3D.g * eva) + (below2D.g * evb) + 0x10) >> 5); \
-                    composed.b = clampColor6(((pixel3D.b * eva) + (below2D.b * evb) + 0x10) >> 5); \
-                } \
-                else if (compMode == 1 && structured2DAbove) \
-                { \
-                    int eva = val3.g; \
-                    int evb = val3.b; \
-                    composed.r = clampColor6(((above2D.r * eva) + (pixel3D.r * evb) + 0x8) >> 4); \
-                    composed.g = clampColor6(((above2D.g * eva) + (pixel3D.g * evb) + 0x8) >> 4); \
-                    composed.b = clampColor6(((above2D.b * eva) + (pixel3D.b * evb) + 0x8) >> 4); \
-                } \
-                else if (compMode == 2) \
-                { \
-                    if (!preserveStructuredPair3DFromBrightness) \
+                    if (compMode == 4) \
                     { \
-                        int evy = val3.g; \
-                        composed.r = clampColor6(composed.r + ((((63 - composed.r) * evy) + 0x8) >> 4)); \
-                        composed.g = clampColor6(composed.g + ((((63 - composed.g) * evy) + 0x8) >> 4)); \
-                        composed.b = clampColor6(composed.b + ((((63 - composed.b) * evy) + 0x8) >> 4)); \
+                        int eva = (pixel3D.a & 0x1F) + 1; \
+                        int evb = 32 - eva; \
+                        composed.r = clampColor6(((pixel3D.r * eva) + (below2D.r * evb) + 0x10) >> 5); \
+                        composed.g = clampColor6(((pixel3D.g * eva) + (below2D.g * evb) + 0x10) >> 5); \
+                        composed.b = clampColor6(((pixel3D.b * eva) + (below2D.b * evb) + 0x10) >> 5); \
+                    } \
+                    else if (compMode == 1 && structured2DAbove) \
+                    { \
+                        int eva = val3.g; \
+                        int evb = val3.b; \
+                        composed.r = clampColor6(((above2D.r * eva) + (pixel3D.r * evb) + 0x8) >> 4); \
+                        composed.g = clampColor6(((above2D.g * eva) + (pixel3D.g * evb) + 0x8) >> 4); \
+                        composed.b = clampColor6(((above2D.b * eva) + (pixel3D.b * evb) + 0x8) >> 4); \
+                    } \
+                    else if (compMode == 2) \
+                    { \
+                        if (!preserveStructuredPair3DFromBrightness) \
+                        { \
+                            int evy = val3.g; \
+                            composed.r = clampColor6(composed.r + ((((63 - composed.r) * evy) + 0x8) >> 4)); \
+                            composed.g = clampColor6(composed.g + ((((63 - composed.g) * evy) + 0x8) >> 4)); \
+                            composed.b = clampColor6(composed.b + ((((63 - composed.b) * evy) + 0x8) >> 4)); \
+                        } \
+                    } \
+                    else if (compMode == 3) \
+                    { \
+                        applyBrightnessDown(composed, val3.g, 0x7); \
                     } \
                 } \
-                else if (compMode == 3) \
+                else \
                 { \
-                    applyBrightnessDown(composed, val3.g, 0x7); \
+                    composed = below2D; \
                 } \
                 if (compMode == 7 \
                     && structuredFullRegularCapture3d \
