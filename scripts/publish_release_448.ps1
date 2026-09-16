@@ -108,12 +108,19 @@ function Upload-Asset([string]$filePath, [string]$contentType) {
     Write-Host "Uploading asset: $name from $filePath ..."
     $uploadUri = "https://uploads.github.com/repos/$repo/releases/$($release.id)/assets?name=$name"
     
-    $resAsset = & curl.exe -s -X POST `
-        -H "Authorization: Bearer $token" `
-        -H "Content-Type: $contentType" `
-        -H "User-Agent: STORM-Release-Manager" `
-        --data-binary "@$filePath" `
-        $uploadUri
+    $parentDir = [System.IO.Path]::GetDirectoryName((Resolve-Path $filePath).Path)
+    $fileName = [System.IO.Path]::GetFileName($filePath)
+    Push-Location $parentDir
+    try {
+        $resAsset = & curl.exe -s -S -X POST `
+            -H "Authorization: Bearer $token" `
+            -H "Content-Type: $contentType" `
+            -H "User-Agent: STORM-Release-Manager" `
+            --data-binary "@$fileName" `
+            $uploadUri
+    } finally {
+        Pop-Location
+    }
 
     $assetObj = $resAsset | ConvertFrom-Json
     if ($assetObj -and $assetObj.id) {
