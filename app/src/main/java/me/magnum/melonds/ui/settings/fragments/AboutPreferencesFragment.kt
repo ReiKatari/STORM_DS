@@ -23,7 +23,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 @Suppress("DEPRECATION")
                 pInfo.versionCode.toLong()
             }
-            findPreference<Preference>("about_version")?.summary = "v$vName (Build $vCode)"
+            findPreference<Preference>("about_version")?.summary = vName
         }
 
         findPreference<Preference>("about_fork_info")?.setOnPreferenceClickListener {

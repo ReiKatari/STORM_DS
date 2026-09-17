@@ -549,6 +549,13 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
                     settings.Language = Firmware::Language::English;
                 else
                     settings.Language = static_cast<Firmware::Language>(firmcfg.language);
+
+                settings.TouchCalibrationADC1 = {0, 0};
+                settings.TouchCalibrationPixel1 = {0, 0};
+                settings.TouchCalibrationADC2 = {255 << 4, 191 << 4};
+                settings.TouchCalibrationPixel2 = {255, 191};
+                settings.UpdateHash();
+                mount.ApplyUserData(settings);
             }
         }
         else

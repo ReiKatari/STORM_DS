@@ -55,6 +55,9 @@ fun TextInputDialog(
                             dialogState.textField = it
                             hasError = !textValidator(it.text)
                         },
+                        singleLine = true,
+                        maxLines = 1,
+                        textStyle = MaterialTheme.typography.body1,
                         isError = hasError,
                         colors = melonOutlinedTextFieldColors(),
                         keyboardOptions = dialogState.keyboardOptions,

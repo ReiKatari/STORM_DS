@@ -2090,11 +2090,11 @@ class EmulatorViewModel @Inject constructor(
                     RomPauseMenuOption.ROM_SETTINGS -> {
                         (_emulatorState.value as? EmulatorState.RunningRom)?.rom?.let { rom ->
                             sessionCoroutineScope.launch {
-                                val renderConfiguration = settingsRepository.getEmulatorConfiguration(rom.config).rendererConfiguration
+                                val effectiveRenderer = settingsRepository.getEffectiveVideoRenderer(rom.config)
                                 _uiEvent.emit(
                                     EmulatorUiEvent.ShowRomSettings(
                                         rom = rom,
-                                        renderer = renderConfiguration.renderer,
+                                        renderer = effectiveRenderer,
                                         menuState = buildInGameRomSettingsMenuState(rom),
                                     ),
                                 )
@@ -6391,8 +6391,8 @@ class EmulatorViewModel @Inject constructor(
         val inputModeOptions = context.resources.getStringArray(R.array.rom_input_mode_options)
         val filteringOptions = context.resources.getStringArray(R.array.video_filtering_options)
         val micOptions = context.resources.getStringArray(R.array.game_runtime_mic_source_options)
-        val effectiveConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val effectiveVideoFiltering = effectiveConfiguration.rendererConfiguration.videoFiltering
+        val effectiveRenderer = settingsRepository.getEffectiveVideoRenderer(rom.config)
+        val effectiveVideoFiltering = settingsRepository.getEffectiveVideoFiltering(rom.config)
 
         val globalLayoutDeferred = async {
             val id = settingsRepository.getSelectedLayoutId()
@@ -6412,9 +6412,13 @@ class EmulatorViewModel @Inject constructor(
         val useGlobalWithValue = { value: String ->
             context.getString(R.string.use_global_preference_with_value, value)
         }
-        val effectiveMicSource = RuntimeMicSource.entries.firstOrNull { it.micSource == effectiveConfiguration.micSource }
-            ?: RuntimeMicSource.DEFAULT
-        val showRetroArchSettings = effectiveConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN &&
+        val effectiveMicSource = if (rom.config.runtimeMicSource != RuntimeMicSource.DEFAULT) {
+            rom.config.runtimeMicSource
+        } else {
+            RuntimeMicSource.entries.firstOrNull { it.micSource == settingsRepository.getMicSource() }
+                ?: RuntimeMicSource.DEFAULT
+        }
+        val showRetroArchSettings = effectiveRenderer == VideoRenderer.VULKAN &&
             effectiveVideoFiltering == VideoFiltering.RETROARCH &&
             hasValidRetroArchShaderRoot
 
