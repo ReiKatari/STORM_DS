@@ -26,7 +26,7 @@ jobs:
           distribution: zulu
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
