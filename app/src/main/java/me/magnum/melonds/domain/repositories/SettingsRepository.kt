@@ -74,6 +74,8 @@ interface SettingsRepository {
     fun removeCustomVulkanDriver(id: String)
     fun clearCustomVulkanDrivers()
     fun getVideoInternalResolutionScaling(): Flow<Int>
+    fun getCurrentVideoFiltering(): VideoFiltering
+    fun getEffectiveVideoFiltering(romConfig: RomConfig): VideoFiltering
     fun getVideoFiltering(): Flow<VideoFiltering>
     fun isThreadedRenderingEnabled(): Flow<Boolean>
     fun isVulkanFastPathEnabled(): Flow<Boolean>

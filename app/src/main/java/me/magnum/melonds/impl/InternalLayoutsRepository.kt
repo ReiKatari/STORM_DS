@@ -142,24 +142,52 @@ class InternalLayoutsRepository(
         }
     }
 
-    private fun loadLayouts(): List<LayoutConfiguration> {
-        val dataFile = File(context.filesDir, DATA_FILE)
-        if (!dataFile.isFile) {
-            return emptyList()
+    private fun getExternalSettingsDir(): File {
+        return File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/settings").apply {
+            runCatching { mkdirs() }
         }
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        val sanitized = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+        return sanitized.ifEmpty { "layout" }
+    }
+
+    private fun loadLayouts(): List<LayoutConfiguration> {
+        val externalSettingsDir = getExternalSettingsDir()
+        val externalDataFile = File(externalSettingsDir, DATA_FILE)
+        val internalDataFile = File(context.filesDir, DATA_FILE)
+
+        val candidateFile = when {
+            externalDataFile.isFile && externalDataFile.length() > 0 -> externalDataFile
+            internalDataFile.isFile && internalDataFile.length() > 0 -> internalDataFile
+            else -> null
+        } ?: return emptyList()
 
         return try {
-            val layouts = gson.fromJson<List<LayoutConfigurationDto>>(FileReader(dataFile), layoutListType)?.map {
+            val layouts = gson.fromJson<List<LayoutConfigurationDto>>(FileReader(candidateFile), layoutListType)?.map {
                 it.toModel()
+            } ?: emptyList()
+
+            // If loaded from internal but external is missing, mirror to external immediately
+            if (candidateFile == internalDataFile && externalSettingsDir.exists()) {
+                runCatching {
+                    OutputStreamWriter(externalDataFile.outputStream()).use { writer ->
+                        writer.write(candidateFile.readText())
+                    }
+                }
             }
-            layouts ?: emptyList()
+
+            layouts
         } catch (_: Exception) {
             emptyList()
         }
     }
 
     private suspend fun saveLayouts() = withContext(Dispatchers.IO) {
-        val dataFile = File(context.filesDir, DATA_FILE)
+        val internalDataFile = File(context.filesDir, DATA_FILE)
+        val externalSettingsDir = getExternalSettingsDir()
+        val externalDataFile = File(externalSettingsDir, DATA_FILE)
 
         try {
             val customLayoutsDtos = layouts.value.mapNotNull {
@@ -172,9 +200,30 @@ class InternalLayoutsRepository(
             }
             val layoutsJson = gson.toJson(customLayoutsDtos)
 
-            OutputStreamWriter(dataFile.outputStream()).use {
-                it.write(layoutsJson)
+            // Save internally
+            runCatching {
+                OutputStreamWriter(internalDataFile.outputStream()).use {
+                    it.write(layoutsJson)
+                }
             }
+
+            // Save directly to [Корневая папка]/STORM DS/settings/layouts.json
+            runCatching {
+                if (externalSettingsDir.exists() || externalSettingsDir.mkdirs()) {
+                    OutputStreamWriter(externalDataFile.outputStream()).use {
+                        it.write(layoutsJson)
+                    }
+
+                    // Also save individual custom layouts into STORM DS/settings/
+                    for (dto in customLayoutsDtos) {
+                        val singleLayoutFile = File(externalSettingsDir, "${sanitizeFileName(dto.name.orEmpty())}.layout.json")
+                        OutputStreamWriter(singleLayoutFile.outputStream()).use { writer ->
+                            writer.write(gson.toJson(dto))
+                        }
+                    }
+                }
+            }
+
             settingsBackupManager.requestMirrorWrite()
         } catch (e: Exception) {
             e.printStackTrace()

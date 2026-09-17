@@ -989,11 +989,19 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    override fun getCurrentVideoFiltering(): VideoFiltering {
+        val filteringPreference = preferences.getString("video_filtering", "quilez") ?: "quilez"
+        return runCatching { VideoFiltering.valueOf(filteringPreference.uppercase()) }
+            .getOrDefault(VideoFiltering.QUILEZ)
+    }
+
+    override fun getEffectiveVideoFiltering(romConfig: RomConfig): VideoFiltering {
+        return romConfig.videoFiltering ?: getCurrentVideoFiltering()
+    }
+
     override fun getVideoFiltering(): Flow<VideoFiltering> {
         return getOrCreatePreferenceSharedFlow("video_filtering") {
-            val filteringPreference = preferences.getString("video_filtering", "quilez") ?: "quilez"
-            runCatching { VideoFiltering.valueOf(filteringPreference.uppercase()) }
-                .getOrDefault(VideoFiltering.QUILEZ)
+            getCurrentVideoFiltering()
         }
     }
 
