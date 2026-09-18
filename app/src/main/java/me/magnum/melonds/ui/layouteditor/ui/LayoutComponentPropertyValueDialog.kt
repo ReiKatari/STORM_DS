@@ -52,6 +52,7 @@ fun LayoutComponentPropertyValueDialog(
             LayoutComponentEditableProperty.HEIGHT -> stringResource(R.string.label_height)
         },
         onDismiss = onCancel,
+        allowContentScroll = false,
         content = { padding ->
             Column(
                 modifier = Modifier

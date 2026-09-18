@@ -74,8 +74,8 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     private fun getRomConfigurationDirectoryResult(rom: Rom): ConfigurationDirResult {
-        val isDsiTitle = rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut || rom.isDsiEnhanced
-        val romTargetConsoleType = if (isDsiTitle) ConsoleType.DSi else ConsoleType.DS
+        val isDsiWare = rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut || (rom.config.runtimeConsoleType == RuntimeConsoleType.DSi)
+        val romTargetConsoleType = if (isDsiWare) ConsoleType.DSi else ConsoleType.DS
 
         if (!settingsRepository.useCustomBios() && romTargetConsoleType == ConsoleType.DS) {
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
