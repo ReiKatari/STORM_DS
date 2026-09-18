@@ -68,6 +68,7 @@ fun LayoutComponentPositionDialog(
             stringResource(getLayoutComponentName(positionEditorState.component)),
         ),
         onDismiss = onDismiss,
+        allowContentScroll = false,
         content = { padding ->
             Column(
                 modifier = Modifier

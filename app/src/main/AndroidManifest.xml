@@ -149,6 +149,7 @@
             android:name=".ui.layouteditor.LayoutEditorActivity"
             android:theme="@style/EmulatorTheme"
             android:label="@string/layout_editor"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode" >
         </activity>
         <activity

@@ -38,6 +38,7 @@ fun TextInputDialog(
         BaseDialog(
             title = title,
             onDismiss = dialogState::cancel,
+            allowContentScroll = false,
             content = { padding ->
                 CompositionLocalProvider(
                     LocalTextSelectionColors provides TextSelectionColors(

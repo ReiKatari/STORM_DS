@@ -140,7 +140,7 @@ void DSi::Reset()
 
     // The SOUNDBIAS register does nothing on DSi
     SPU.SetApplyBias(false);
-    KeyInput |= (1 << (16+6));
+    KeyInput &= ~(1 << (16+6));
     MapSharedWRAM(3);
 
     NDMACnt[0] = 0; NDMACnt[1] = 0;
@@ -756,11 +756,6 @@ void DSi::SetupDirectBoot()
             {
                 DSi_NAND::DSiFirmwareSystemSettings userdata {};
                 nand.ReadUserData(userdata);
-                userdata.TouchCalibrationADC1 = {0, 0};
-                userdata.TouchCalibrationPixel1 = {0, 0};
-                userdata.TouchCalibrationADC2 = {255 << 4, 191 << 4};
-                userdata.TouchCalibrationPixel2 = {255, 191};
-                userdata.UpdateHash();
                 for (u32 i = 0; i < 0x128; i+=4)
                     ARM9Write32(0x02000400+i, *(u32*)&userdata.Bytes[0x88+i]);
 
