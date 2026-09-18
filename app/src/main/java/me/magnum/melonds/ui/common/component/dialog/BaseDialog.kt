@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Card
@@ -21,7 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import me.magnum.melonds.ui.common.DetachedDialog
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import me.magnum.melonds.ui.common.melonTextButtonColors
 
 @Composable
@@ -32,11 +33,15 @@ fun BaseDialog(
     buttons: (@Composable () -> Unit)? = null,
     allowContentScroll: Boolean = true,
 ) {
-    DetachedDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        //properties = DialogProperties(decorFitsSystemWindows = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Card(Modifier.fillMaxWidth().safeDrawingPadding()) {
+        Card(
+            modifier = Modifier
+                .widthIn(max = 450.dp)
+                .fillMaxWidth(0.85f),
+        ) {
             Column(Modifier.fillMaxWidth()) {
                 Box(
                     modifier = Modifier
@@ -53,11 +58,11 @@ fun BaseDialog(
                     )
                 }
 
-                Column(modifier = if (allowContentScroll) Modifier.verticalScroll(rememberScrollState()) else Modifier) {
+                Column(modifier = if (allowContentScroll) Modifier.verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth()) {
                     if (allowContentScroll) {
                         content(PaddingValues(horizontal = 24.dp))
                     } else {
-                        Box(Modifier.weight(1f, fill = false)) {
+                        Box(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                             content(PaddingValues(horizontal = 24.dp))
                         }
                     }

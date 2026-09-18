@@ -14,8 +14,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import me.magnum.melonds.R
-import me.magnum.melonds.ui.common.DetachedDialog
 import me.magnum.melonds.ui.common.component.text.CaptionText
 import me.magnum.melonds.ui.common.melonTextButtonColors
 
@@ -76,11 +77,14 @@ private fun SingleChoiceDialog(
     onOptionSelected: (index: Int) -> Unit,
     onDismissRequest: () -> Unit,
 ) {
-    DetachedDialog(
+    Dialog(
         onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .widthIn(max = 450.dp)
+                .fillMaxWidth(0.85f),
         ) {
             Column(Modifier.fillMaxWidth()) {
                 Box(
