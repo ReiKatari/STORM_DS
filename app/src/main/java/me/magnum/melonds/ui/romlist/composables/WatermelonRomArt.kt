@@ -309,9 +309,15 @@ fun WatermelonRomArt(
         }
     }
 
+    val isRaPlaceholder = raCoverUrl != null && (
+        raCoverUrl.contains("/Images/000001") ||
+        raCoverUrl.contains("/Images/000000") ||
+        raCoverUrl.endsWith("000001.png") ||
+        raCoverUrl.endsWith("000000.png")
+    )
     val activeModel: Any? = when {
         customCover != null -> customCover
-        isRaCoversEnabled && raCoverUrl != null && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
+        isRaCoversEnabled && raCoverUrl != null && !isRaPlaceholder && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
         isGameTdb3dEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
         isGameTdb2dEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !failedCoverUrls.contains(gameTdb2dUrl) -> gameTdb2dUrl
         isScraperEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl

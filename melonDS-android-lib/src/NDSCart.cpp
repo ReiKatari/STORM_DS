@@ -756,6 +756,7 @@ u8 CartRetail::SRAMWrite_EEPROM(u8 val, u32 pos, bool last)
         return SRAMStatus;
 
     case 0x02: // write
+    case 0x0A: // page write (used by FRAM/EEPROM chips and CARD_IdentifyBackup)
         if (pos <= addrsize)
         {
             SRAMAddr <<= 8;
@@ -781,6 +782,7 @@ u8 CartRetail::SRAMWrite_EEPROM(u8 val, u32 pos, bool last)
         return 0;
 
     case 0x03: // read
+    case 0x0B: // fast read
         if (pos <= addrsize)
         {
             SRAMAddr <<= 8;

@@ -83,7 +83,14 @@ class AndroidRetroAchievementsRepository(
     override fun observeKnownAchievementHashes() = retroAchievementsDao.observeAllGameHashes()
 
     override fun observeRomCoverIcons() = retroAchievementsDao.observeRomCoverIcons()
-        .map { rows -> rows.associate { it.hash to it.iconUrl } }
+        .map { rows ->
+            rows.filterNot {
+                it.iconUrl.contains("/Images/000001") ||
+                it.iconUrl.contains("/Images/000000") ||
+                it.iconUrl.endsWith("000001.png") ||
+                it.iconUrl.endsWith("000000.png")
+            }.associate { it.hash to it.iconUrl }
+        }
 
     override fun observeUserProfile() = raUserProfileStore.observeUserProfile()
 

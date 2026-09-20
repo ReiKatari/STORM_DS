@@ -57,14 +57,33 @@
 # Migration fields. These rules are required for migrations to work properly
 -keep,allowobfuscation class me.magnum.melonds.migrations.legacy.** { *; }
 
-# Prevent DTOs from being removed
--keep,allowobfuscation class me.magnum.melonds.impl.dtos.**
--keep,allowobfuscation class me.magnum.rcheevosapi.dto.**
+# Prevent DTOs and models from being obfuscated or removed
+-keep class me.magnum.melonds.impl.dtos.** { *; }
+-keep class me.magnum.rcheevosapi.dto.** { *; }
+-keep class me.magnum.melonds.domain.model.rom.** { *; }
+-keep class me.magnum.melonds.domain.model.Background { *; }
+-keep class me.magnum.melonds.domain.model.BackgroundThumbnail { *; }
 
-# Prevent Gson's TypeToken from being removed
--keepattributes Signature
+# Preserve Gson annotations and field names
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
 -keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
+# ROM Icon, Thumbnail, and Processor components
+-keep class me.magnum.melonds.impl.RomIconProvider { *; }
+-keep class me.magnum.melonds.impl.BackgroundThumbnailProvider { *; }
+-keep class me.magnum.melonds.impl.image.** { *; }
+-keep class me.magnum.melonds.utils.RomProcessor { *; }
+-keep class me.magnum.melonds.common.romprocessors.** { *; }
+
+# Coil image loading components
+-keep class coil.** { *; }
+-keep class * implements coil.fetch.Fetcher { *; }
+-keep class * implements coil.fetch.Fetcher$Factory { *; }
+-keepclassmembers class * implements coil.fetch.Fetcher$Factory { *; }
 
 # Google ML Kit Text Recognition
 -keep class com.google.mlkit.** { *; }
@@ -82,8 +101,9 @@
     native <methods>;
 }
 
-# Junrar & SLF4J
+# Junrar, Apache Commons Compress & SLF4J
 -dontwarn org.slf4j.**
 -dontwarn com.github.junrar.**
 -keep class com.github.junrar.** { *; }
 -dontwarn org.apache.commons.compress.**
+-keep class org.apache.commons.compress.** { *; }

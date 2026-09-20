@@ -38,8 +38,8 @@ object CoilModule {
         return ImageLoader.Builder(context)
             .components {
                 add(CoilURLMapper())
-                add(coilBackgroundThumbnailFetcherFactory)
-                add(coilRomIconFetcherFactory)
+                add(coilBackgroundThumbnailFetcherFactory, me.magnum.melonds.domain.model.Background::class.java)
+                add(coilRomIconFetcherFactory, me.magnum.melonds.domain.model.rom.Rom::class.java)
             }
             .memoryCache {
                 coil.memory.MemoryCache.Builder(context)
