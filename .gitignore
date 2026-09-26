@@ -70,4 +70,19 @@ installer/Output/
 config.local.json
 scripts/config.local.json
 
+# Decompiled archives, APK extraction, tools and proprietary dumps
+decompiled_*
+*extracted*
+jadx/
+jadx.zip
+assets/bios/
+app/src/main/assets/bios/
+BIOS/
+run_logs.zip
+Files/*.bat
+Files/*.pfx
+Files/*.cer
+*.jks
+*.keystore
+
 
