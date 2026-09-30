@@ -628,70 +628,55 @@ class GameTextRecognizer {
             val lines = block.lines
             if (lines.isEmpty()) continue
 
-            // If single line in block, emit directly
-            if (lines.size == 1) {
-                val line = lines[0]
-                val lineBox = line.boundingBox ?: block.boundingBox ?: continue
-                val text = line.text.trim()
-                if (text.isBlank()) continue
+            // Process lines into discrete blocks so separate fields/menus have their own boxes
+            var i = 0
+            while (i < lines.size) {
+                val currentLine = lines[i]
+                val currentBox = currentLine.boundingBox ?: block.boundingBox ?: run { i++; continue }
+                var combinedText = currentLine.text.trim()
+                val mergedBox = Rect(currentBox)
+                var j = i + 1
 
-                val correctedText = SmartWordCorrector.correctText(text, sourceLang)
-                if (correctedText.isBlank()) continue
+                // Check if subsequent lines are continuations of a split sentence
+                while (j < lines.size) {
+                    val nextLine = lines[j]
+                    val nextBox = nextLine.boundingBox ?: break
+                    val prevLineText = lines[j - 1].text.trim()
+                    val nextLineText = nextLine.text.trim()
 
-                val relBox = RectF(
-                    (lineBox.left / imgWidth).coerceIn(0f, 1f),
-                    (lineBox.top / imgHeight).coerceIn(0f, 1f),
-                    (lineBox.right / imgWidth).coerceIn(0f, 1f),
-                    (lineBox.bottom / imgHeight).coerceIn(0f, 1f)
-                )
+                    val avgH = max(currentBox.height(), nextBox.height()).toFloat()
+                    val verticalGap = nextBox.top - mergedBox.bottom
+                    val isConsecutive = verticalGap in 0..(avgH * 0.45f).toInt()
+                    val prevEndsSentence = prevLineText.endsWith('.') || prevLineText.endsWith('!') ||
+                                           prevLineText.endsWith('?') || prevLineText.endsWith(':') ||
+                                           prevLineText.endsWith('—') || prevLineText.length < 15
+                    val nextIsContinuation = isConsecutive && !prevEndsSentence &&
+                                             (nextLineText.firstOrNull()?.isLowerCase() == true || prevLineText.endsWith('-') || prevLineText.endsWith(','))
 
-                val sampledBgColor = sampleBackgroundColor(bitmap, lineBox)
-                val textColor = determineBestTextColor(sampledBgColor)
+                    if (nextIsContinuation) {
+                        if (combinedText.endsWith('-')) {
+                            combinedText = combinedText.dropLast(1) + nextLineText
+                        } else {
+                            combinedText += " " + nextLineText
+                        }
+                        mergedBox.union(nextBox)
+                        j++
+                    } else {
+                        break
+                    }
+                }
 
-                resultBlocks.add(
-                    TranslatedTextBlock(
-                        originalText = correctedText,
-                        translatedText = "",
-                        boundingBox = relBox,
-                        backgroundColor = sampledBgColor,
-                        textColor = textColor
-                    )
-                )
-                continue
-            }
+                i = j // Advance to next unmerged line
 
-            // Multi-line block: determine if lines are separate items (e.g. menus, buttons, stats, lists)
-            // or a single continuous dialogue paragraph.
-            val avgLineHeight = lines.mapNotNull { it.boundingBox?.height() }.average().toFloat().coerceAtLeast(10f)
-            val isMenuOrSeparateFields = lines.all { line ->
-                val txt = line.text.trim()
-                txt.length <= 32 && !txt.endsWith(',') && !txt.endsWith("...")
-            } || lines.zipWithNext().any { (a, b) ->
-                val boxA = a.boundingBox
-                val boxB = b.boundingBox
-                if (boxA != null && boxB != null) {
-                    (boxB.top - boxA.bottom) > avgLineHeight * 0.35f
-                } else false
-            }
-
-            if (isMenuOrSeparateFields) {
-                // Every line gets its own output block at its own bounding box!
-                for (line in lines) {
-                    val lineBox = line.boundingBox ?: continue
-                    val text = line.text.trim()
-                    if (text.isBlank()) continue
-
-                    val correctedText = SmartWordCorrector.correctText(text, sourceLang)
-                    if (correctedText.isBlank()) continue
-
+                val correctedText = SmartWordCorrector.correctText(combinedText, sourceLang)
+                if (correctedText.isNotBlank()) {
                     val relBox = RectF(
-                        (lineBox.left / imgWidth).coerceIn(0f, 1f),
-                        (lineBox.top / imgHeight).coerceIn(0f, 1f),
-                        (lineBox.right / imgWidth).coerceIn(0f, 1f),
-                        (lineBox.bottom / imgHeight).coerceIn(0f, 1f)
+                        (mergedBox.left / imgWidth).coerceIn(0f, 1f),
+                        (mergedBox.top / imgHeight).coerceIn(0f, 1f),
+                        (mergedBox.right / imgWidth).coerceIn(0f, 1f),
+                        (mergedBox.bottom / imgHeight).coerceIn(0f, 1f)
                     )
-
-                    val sampledBgColor = sampleBackgroundColor(bitmap, lineBox)
+                    val sampledBgColor = sampleBackgroundColor(bitmap, mergedBox)
                     val textColor = determineBestTextColor(sampledBgColor)
 
                     resultBlocks.add(
@@ -704,34 +689,6 @@ class GameTextRecognizer {
                         )
                     )
                 }
-            } else {
-                // Continuous dialogue paragraph: keep as a single unified dialogue block
-                val blockBox = block.boundingBox ?: continue
-                val text = block.text.trim()
-                if (text.isBlank()) continue
-
-                val correctedText = SmartWordCorrector.correctText(text, sourceLang)
-                if (correctedText.isBlank()) continue
-
-                val relBox = RectF(
-                    (blockBox.left / imgWidth).coerceIn(0f, 1f),
-                    (blockBox.top / imgHeight).coerceIn(0f, 1f),
-                    (blockBox.right / imgWidth).coerceIn(0f, 1f),
-                    (blockBox.bottom / imgHeight).coerceIn(0f, 1f)
-                )
-
-                val sampledBgColor = sampleBackgroundColor(bitmap, blockBox)
-                val textColor = determineBestTextColor(sampledBgColor)
-
-                resultBlocks.add(
-                    TranslatedTextBlock(
-                        originalText = correctedText,
-                        translatedText = "",
-                        boundingBox = relBox,
-                        backgroundColor = sampledBgColor,
-                        textColor = textColor
-                    )
-                )
             }
         }
 
@@ -753,34 +710,30 @@ class GameTextRecognizer {
         val w = bitmap.width
         val h = bitmap.height
 
-        val l = box.left.coerceIn(0, w - 1)
-        val t = box.top.coerceIn(0, h - 1)
-        val r = box.right.coerceIn(0, w - 1)
-        val b = box.bottom.coerceIn(0, h - 1)
+        val padX = max(2, box.width() / 16)
+        val padY = max(2, box.height() / 8)
 
-        val samples = mutableListOf<Int>()
-        val step = max(1, (r - l) / 10)
-        for (x in l..r step step) {
-            samples.add(bitmap.getPixel(x, t))
-            samples.add(bitmap.getPixel(x, b))
-        }
-        val stepY = max(1, (b - t) / 10)
-        for (y in t..b step stepY) {
-            samples.add(bitmap.getPixel(l, y))
-            samples.add(bitmap.getPixel(r, y))
-        }
+        val l = (box.left - padX).coerceIn(0, w - 1)
+        val t = (box.top - padY).coerceIn(0, h - 1)
+        val r = (box.right + padX).coerceIn(0, w - 1)
+        val b = (box.bottom + padY).coerceIn(0, h - 1)
 
-        if (samples.isEmpty()) return Color.parseColor("#E60F172A")
+        val cornerPixels = listOf(
+            bitmap.getPixel(l, t),
+            bitmap.getPixel(r, t),
+            bitmap.getPixel(l, b),
+            bitmap.getPixel(r, b)
+        )
 
         var totalR = 0L
         var totalG = 0L
         var totalB = 0L
-        for (c in samples) {
+        for (c in cornerPixels) {
             totalR += Color.red(c)
             totalG += Color.green(c)
             totalB += Color.blue(c)
         }
-        val count = samples.size
+        val count = cornerPixels.size.coerceAtLeast(1)
         return Color.rgb((totalR / count).toInt(), (totalG / count).toInt(), (totalB / count).toInt())
     }
 

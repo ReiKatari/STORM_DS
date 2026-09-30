@@ -1,5 +1,6 @@
 package me.magnum.melonds.translator.engine
 
+import android.content.Context
 import android.util.Log
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -18,7 +19,7 @@ import kotlin.coroutines.resumeWithException
  * Powered by Google ML Kit on-device neural models (30-40 MB per language pair).
  * Operates completely offline with sub-25ms inference on modern mobile hardware.
  */
-class MlKitOnDeviceTranslateEngine : ITranslationEngine {
+class MlKitOnDeviceTranslateEngine(private val context: Context? = null) : ITranslationEngine {
 
     companion object {
         private const val TAG = "MlKitTranslateEngine"
@@ -53,6 +54,15 @@ class MlKitOnDeviceTranslateEngine : ITranslationEngine {
             if (translated.isNotBlank()) translated else cleanText
         } catch (t: Throwable) {
             Log.w(TAG, "ML Kit translation error for '$cacheKey': ${t.message}")
+            if (context != null) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        context,
+                        "ML Kit: требуется интернет для первой загрузки языкового пакета",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
             cleanText
         }
     }

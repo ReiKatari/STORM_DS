@@ -1,10 +1,10 @@
 package me.magnum.melonds.translator.model
 
 enum class TranslatorEngineType(val preferenceValue: String, val displayName: String) {
-    GOOGLE("google", "Google Translate (Нейросетевой, быстрый)"),
-    MYMEMORY("mymemory", "MyMemory Translated (Международная база)"),
+    GOOGLE("google", "Google Translate (Онлайн, быстрый)"),
+    MLKIT_OFFLINE("mlkit_offline", "Google ML Kit (100% Офлайн нейросеть)"),
     DEEPL("deepl", "DeepL Neural API (Ключ API)"),
-    CUSTOM_AI("custom_ai", "Custom AI (ChatGPT, Gemini, Claude, DeepSeek)");
+    CUSTOM_AI("custom_ai", "Custom AI (ChatGPT, Claude, DeepSeek)");
 
     companion object {
         fun fromPreference(value: String?): TranslatorEngineType {

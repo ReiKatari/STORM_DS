@@ -295,6 +295,13 @@ class GameTranslatorManager(
             return
         }
 
+        if (!isAuto) {
+            // Manual user button tap: guarantee fresh translation with the currently active engine
+            translationCache.clear()
+            lastTranslatedRawText = ""
+            lastFrameDHash = 0L
+        }
+
         overlayView?.isTranslating = true
         val prevShowFloating = overlayView?.showFloatingButton ?: true
         overlayView?.showFloatingButton = false
@@ -638,18 +645,6 @@ class GameTranslatorManager(
                                         null
                                     }
 
-                                    // If engine returned empty/original, fallback to Google if not already using Google
-                                    if ((translated.isNullOrBlank() || translated.equals(preparedText, ignoreCase = true) || translated.equals(block.originalText, ignoreCase = true)) && engine !is GoogleTranslateEngine) {
-                                        translated = try {
-                                            withTimeoutOrNull(4000) {
-                                                val raw = GoogleTranslateEngine(okHttpClient).translate(preparedText, sourceLang, targetLang)
-                                                me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
-                                            }
-                                        } catch (_: Exception) {
-                                            null
-                                        }
-                                    }
-
                                     val finalTranslation = translated?.takeIf { it.isNotBlank() } ?: block.originalText
                                     if (finalTranslation.isNotBlank() && !finalTranslation.equals(preparedText, ignoreCase = true) && !finalTranslation.equals(block.originalText, ignoreCase = true)) {
                                         translationCache[cacheKey] = finalTranslation
@@ -686,12 +681,13 @@ class GameTranslatorManager(
         val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
         return when (type) {
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)
-            TranslatorEngineType.MYMEMORY -> MyMemoryEngine(okHttpClient)
-            TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient) {
+            TranslatorEngineType.MLKIT_OFFLINE -> MlKitOnDeviceTranslateEngine(activity)
+            TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient, context = activity) {
                 preferences.getString(PREF_TRANSLATOR_DEEPL_KEY, "").orEmpty()
             }
             TranslatorEngineType.CUSTOM_AI -> CustomAiEngine(
                 okHttpClient,
+                context = activity,
                 apiKeyProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_KEY, "").orEmpty() },
                 endpointProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT, "https://api.openai.com/v1/chat/completions").orEmpty() },
                 modelProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_MODEL, "gpt-4o-mini").orEmpty() }

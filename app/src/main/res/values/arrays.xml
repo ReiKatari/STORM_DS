@@ -18,13 +18,13 @@
     <!-- Auto-Translator Arrays -->
     <string-array name="translator_engine_options">
         <item>@string/translator_engine_google</item>
-        <item>@string/translator_engine_mymemory</item>
+        <item>@string/translator_engine_offline</item>
         <item>@string/translator_engine_deepl</item>
         <item>@string/translator_engine_custom_ai</item>
     </string-array>
     <string-array name="translator_engine_values">
         <item>google</item>
-        <item>mymemory</item>
+        <item>mlkit_offline</item>
         <item>deepl</item>
         <item>custom_ai</item>
     </string-array>
