@@ -112,6 +112,7 @@ fun TranslatorSettingsContent(
                         val nextIdx = (engines.indexOfFirst { it.first == enginePref } + 1) % engines.size
                         enginePref = engines[nextIdx].first
                         updatePref(GameTranslatorManager.PREF_TRANSLATOR_ENGINE, enginePref)
+                        onSyncOverlay()
                     }
                 )
                 Divider(color = watermelon.line)

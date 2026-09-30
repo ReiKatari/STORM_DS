@@ -431,6 +431,7 @@ class EmulatorActivity : AppCompatActivity() {
         setupSustainedPerformanceMode()
         setupFpsCounter()
         setupResolutionHud()
+        translatorManager.syncOverlaySettings()
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         updateDisplays()
     }
@@ -3024,6 +3025,7 @@ class EmulatorActivity : AppCompatActivity() {
         if (pauseMenuState.value != null) {
             pauseMenuState.value = null
             activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+            translatorManager.syncOverlaySettings()
         }
     }
 

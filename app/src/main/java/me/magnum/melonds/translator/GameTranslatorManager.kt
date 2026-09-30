@@ -88,6 +88,36 @@ class GameTranslatorManager(
     val isEnabled: Boolean
         get() = preferences.getBoolean(PREF_TRANSLATOR_ENABLED, false)
 
+    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            PREF_TRANSLATOR_ENABLED,
+            PREF_TRANSLATOR_SHOW_FLOATING_BUTTON,
+            PREF_TRANSLATOR_OVERLAY_STYLE,
+            PREF_TRANSLATOR_BUBBLE_OPACITY,
+            PREF_TRANSLATOR_FONT_SIZE_SCALE,
+            PREF_TRANSLATOR_TRIGGER_MODE -> {
+                mainHandler.post {
+                    syncOverlaySettings()
+                }
+            }
+            PREF_TRANSLATOR_ENGINE,
+            PREF_TRANSLATOR_SOURCE_LANG,
+            PREF_TRANSLATOR_TARGET_LANG -> {
+                mainHandler.post {
+                    lastTranslatedRawText = ""
+                    lastFrameDHash = 0L
+                    translationCache.clear()
+                    overlayView?.clearTranslations()
+                    syncOverlaySettings()
+                }
+            }
+        }
+    }
+
+    init {
+        preferences.registerOnSharedPreferenceChangeListener(prefChangeListener)
+    }
+
     /**
      * Updates active ROM context to enable per-game OCR regions and speaker context.
      */
@@ -218,8 +248,9 @@ class GameTranslatorManager(
     fun syncOverlaySettings() {
         val overlay = overlayView ?: return
         val enabled = isEnabled
+        val showBtn = enabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
         overlay.visibility = if (enabled) View.VISIBLE else View.GONE
-        overlay.showFloatingButton = enabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
+        overlay.showFloatingButton = showBtn
         overlay.overlayStyle = TranslatorOverlayStyle.fromPreference(preferences.getString(PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match"))
         overlay.bubbleOpacity = preferences.getInt(PREF_TRANSLATOR_BUBBLE_OPACITY, 90) / 100f
         overlay.fontSizeScale = preferences.getInt(PREF_TRANSLATOR_FONT_SIZE_SCALE, 100) / 100f
@@ -228,10 +259,15 @@ class GameTranslatorManager(
         overlay.setSavedRegions(regions)
 
         if (enabled) {
+            overlay.elevation = 850f
+            overlay.bringToFront()
+            overlay.requestLayout()
+            overlay.invalidate()
             startAutoTranslateIfEnabled()
         } else {
             stopAutoTranslate()
             overlay.clearTranslations()
+            overlay.invalidate()
         }
     }
 
@@ -574,7 +610,8 @@ class GameTranslatorManager(
                         blocks.map { block ->
                             async(Dispatchers.IO) {
                                 val preparedText = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
-                                val cacheKey = "$preparedText|$sourceLang|$targetLang"
+                                val engineType = preferences.getString(PREF_TRANSLATOR_ENGINE, "google") ?: "google"
+                                val cacheKey = "$engineType|$preparedText|$sourceLang|$targetLang"
                                 val cached = translationCache[cacheKey]
                                 if (cached != null) {
                                     block.translatedText = cached
@@ -666,6 +703,7 @@ class GameTranslatorManager(
     }
 
     fun onDestroy() {
+        preferences.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         stopAutoTranslate()
         ttsManager.destroy()
         mainScope.cancel()

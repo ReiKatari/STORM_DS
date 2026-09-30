@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -1006,6 +1008,7 @@ fun AlphabetIndexBar(
     onFoldersClicked: () -> Unit,
     onLetterTouched: (entriesIdx: Int, letter: Char) -> Unit,
     modifier: Modifier = Modifier,
+    isInteractive: Boolean = true,
 ) {
     if (alphabetIndex.isEmpty() && !hasFolders) return
     val colors = watermelon
@@ -1018,7 +1021,7 @@ fun AlphabetIndexBar(
     var barHeightPx by remember { mutableStateOf(0) }
 
     fun handleDrag(yPx: Float) {
-        if (barHeightPx <= 0 || totalItems == 0) return
+        if (!isInteractive || barHeightPx <= 0 || totalItems == 0) return
         val itemHeight = barHeightPx.toFloat() / totalItems
         val rawIndex = (yPx / itemHeight).toInt()
         val clamped = rawIndex.coerceIn(0, totalItems - 1)
@@ -1048,25 +1051,26 @@ fun AlphabetIndexBar(
                 .fillMaxHeight()
                 .focusProperties { canFocus = false }
                 .onSizeChanged { barHeightPx = it.height }
-                .pointerInput(letters, hasFolders) {
-                    detectVerticalDragGestures(
-                        onDragStart = {
-                            isTouching = true
-                            handleDrag(it.y)
-                        },
-                        onDragEnd = {
-                            isTouching = false
-                            hoverChar = null
-                            isHoverFolder = false
-                        },
-                        onDragCancel = {
-                            isTouching = false
-                            hoverChar = null
-                            isHoverFolder = false
-                        },
-                    ) { change, _ ->
-                        handleDrag(change.position.y)
-                        change.consume()
+                .pointerInput(letters, hasFolders, isInteractive) {
+                    if (!isInteractive) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        isTouching = true
+                        handleDrag(down.position.y)
+                        val pointerId = down.id
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                            if (!change.pressed) {
+                                change.consume()
+                                break
+                            }
+                            handleDrag(change.position.y)
+                            change.consume()
+                        }
+                        isTouching = false
+                        hoverChar = null
+                        isHoverFolder = false
                     }
                 },
         ) {
@@ -1080,8 +1084,7 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .focusProperties { canFocus = false }
-                            .clickable { onFoldersClicked() },
+                            .focusProperties { canFocus = false },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -1108,8 +1111,7 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .focusProperties { canFocus = false }
-                            .clickable { alphabetIndex[ch]?.let { idx -> onLetterTouched(idx, ch) } },
+                            .focusProperties { canFocus = false },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

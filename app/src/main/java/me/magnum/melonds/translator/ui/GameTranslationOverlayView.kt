@@ -73,9 +73,12 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         }
 
     // Floating Translate Button State
-    private var floatBtnX = 70f
-    private var floatBtnY = 280f
-    private val floatBtnRadius = 65f
+    private val prefs by lazy { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
+    private val density by lazy { context.resources.displayMetrics.density }
+    private val floatBtnRadius: Float
+        get() = max(60f, 26f * density)
+    private var floatBtnX = -1f
+    private var floatBtnY = -1f
     private var isDraggingFloatBtn = false
     private var dragStartX = 0f
     private var dragStartY = 0f
@@ -262,6 +265,21 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         isEditRegionsMode = false
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w <= 0 || h <= 0) return
+        val savedXRatio = prefs.getFloat("pref_translator_float_btn_x_ratio", -1f)
+        val savedYRatio = prefs.getFloat("pref_translator_float_btn_y_ratio", -1f)
+        if (savedXRatio in 0f..1f && savedYRatio in 0f..1f) {
+            floatBtnX = (savedXRatio * w).coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
+            floatBtnY = (savedYRatio * h).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+        } else {
+            floatBtnX = (w - floatBtnRadius - 20f * density).coerceAtLeast(floatBtnRadius)
+            floatBtnY = (h * 0.40f).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+        }
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
@@ -416,8 +434,20 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
         // 6. FLOATING BUTTON
         if (showFloatingButton) {
-            floatBtnX = floatBtnX.coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
-            floatBtnY = floatBtnY.coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+            if (floatBtnX < 0f || floatBtnY < 0f) {
+                val savedXRatio = prefs.getFloat("pref_translator_float_btn_x_ratio", -1f)
+                val savedYRatio = prefs.getFloat("pref_translator_float_btn_y_ratio", -1f)
+                if (savedXRatio in 0f..1f && savedYRatio in 0f..1f) {
+                    floatBtnX = (savedXRatio * w).coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
+                    floatBtnY = (savedYRatio * h).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+                } else {
+                    floatBtnX = (w - floatBtnRadius - 20f * density).coerceAtLeast(floatBtnRadius)
+                    floatBtnY = (h * 0.40f).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+                }
+            } else {
+                floatBtnX = floatBtnX.coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
+                floatBtnY = floatBtnY.coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+            }
 
             canvas.drawCircle(floatBtnX + 2f, floatBtnY + 3f, floatBtnRadius, shadowPaint)
             canvas.drawCircle(floatBtnX, floatBtnY, floatBtnRadius * 1.15f, floatBtnGlowPaint)
@@ -876,7 +906,12 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 if (isDraggingFloatBtn) {
                     longPressHandler.removeCallbacks(longPressRunnable)
                     isDraggingFloatBtn = false
-                    if (!hasMovedFloatBtn) {
+                    if (hasMovedFloatBtn && w > 0f && h > 0f) {
+                        prefs.edit()
+                            .putFloat("pref_translator_float_btn_x_ratio", (floatBtnX / w).coerceIn(0f, 1f))
+                            .putFloat("pref_translator_float_btn_y_ratio", (floatBtnY / h).coerceIn(0f, 1f))
+                            .apply()
+                    } else if (!hasMovedFloatBtn) {
                         val now = System.currentTimeMillis()
                         if (now - lastFloatBtnClickTime <= 350L) {
                             lastFloatBtnClickTime = 0L

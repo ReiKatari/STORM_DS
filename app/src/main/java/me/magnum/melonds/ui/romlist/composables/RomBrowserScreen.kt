@@ -132,10 +132,21 @@ fun RomBrowserScreen(
         isManualRefreshing = true
         pendingRefreshScrollReset = true
         coroutineScope.launch {
-            repeat(4) {
+            repeat(8) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
+            }
+            kotlinx.coroutines.delay(1000)
+            if (isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING) {
+                repeat(8) {
+                    gridState.scrollToItem(0, 0)
+                    listState.scrollToItem(0, 0)
+                    kotlinx.coroutines.delay(32)
+                }
+                userHasScrolledManually = false
+                pendingRefreshScrollReset = false
+                isManualRefreshing = false
             }
         }
         onRefresh()
@@ -202,27 +213,27 @@ fun RomBrowserScreen(
     val gridLeadingItems = if (hasFolders) 1 else 0
     val listLeadingItems = 0
 
-    LaunchedEffect(scanningStatus, isManualRefreshing) {
-        val isScanning = scanningStatus == RomScanningStatus.SCANNING || isManualRefreshing
-        if (isScanning) {
+    LaunchedEffect(scanningStatus) {
+        if (scanningStatus == RomScanningStatus.SCANNING) {
             userHasScrolledManually = false
             pendingRefreshScrollReset = true
             focusedEntryIndex = -1
-            repeat(4) {
+            repeat(6) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
             }
         } else {
-            if (pendingRefreshScrollReset) {
+            if (pendingRefreshScrollReset || isManualRefreshing) {
                 userHasScrolledManually = false
                 focusedEntryIndex = -1
-                repeat(10) {
+                repeat(12) {
                     gridState.scrollToItem(0, 0)
                     listState.scrollToItem(0, 0)
                     kotlinx.coroutines.delay(32)
                 }
                 pendingRefreshScrollReset = false
+                isManualRefreshing = false
             }
         }
     }
@@ -611,12 +622,17 @@ fun RomBrowserScreen(
                                 activeLetter = activeLetter,
                                 hasFolders = hasFolders,
                                 isInFolderSection = isInFolderSection,
+                                isInteractive = !isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING && !pendingRefreshScrollReset,
                                 onFoldersClicked = {
+                                    if (isManualRefreshing || scanningStatus == RomScanningStatus.SCANNING || pendingRefreshScrollReset) return@AlphabetIndexBar
                                     coroutineScope.launch {
                                         userHasScrolledManually = false
-                                        when (state.viewMode) {
-                                            RomViewMode.GRID -> gridState.scrollToItem(0, 0)
-                                            RomViewMode.LIST -> listState.scrollToItem(0, 0)
+                                        repeat(8) {
+                                            when (state.viewMode) {
+                                                RomViewMode.GRID -> gridState.scrollToItem(0, 0)
+                                                RomViewMode.LIST -> listState.scrollToItem(0, 0)
+                                            }
+                                            withFrameNanos { }
                                         }
                                         requestFirstVisibleRomFocus(
                                             state = state,
@@ -627,6 +643,7 @@ fun RomBrowserScreen(
                                     }
                                 },
                                 onLetterTouched = { idx, letter ->
+                                    if (isManualRefreshing || scanningStatus == RomScanningStatus.SCANNING || pendingRefreshScrollReset) return@AlphabetIndexBar
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
                                             userHasScrolledManually = false
