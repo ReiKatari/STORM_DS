@@ -224,7 +224,13 @@ class GameTranslatorManager(
                     me.magnum.melonds.translator.ui.TranslatorSettingsContent(
                         preferences = preferences,
                         onClose = { bottomSheetDialog.dismiss() },
-                        onSyncOverlay = { syncOverlaySettings() },
+                        onSyncOverlay = {
+                            lastTranslatedRawText = ""
+                            lastFrameDHash = 0L
+                            translationCache.clear()
+                            overlayView?.clearTranslations()
+                            syncOverlaySettings()
+                        },
                         onStartAutoTranslate = { startAutoTranslateIfEnabled() },
                         onOpenRegionEditor = {
                             bottomSheetDialog.dismiss()
@@ -259,10 +265,16 @@ class GameTranslatorManager(
         overlay.setSavedRegions(regions)
 
         if (enabled) {
-            overlay.elevation = 850f
+            overlay.elevation = 950f
             overlay.bringToFront()
             overlay.requestLayout()
             overlay.invalidate()
+            (overlay.parent as? View)?.requestLayout()
+            overlay.post {
+                overlay.bringToFront()
+                overlay.requestLayout()
+                overlay.invalidate()
+            }
             startAutoTranslateIfEnabled()
         } else {
             stopAutoTranslate()
@@ -616,17 +628,33 @@ class GameTranslatorManager(
                                 if (cached != null) {
                                     block.translatedText = cached
                                 } else {
-                                    val translated = try {
+                                    var translated = try {
                                         withTimeoutOrNull(5000) {
                                             val raw = engine.translate(preparedText, sourceLang, targetLang)
                                             me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
-                                        } ?: block.originalText
+                                        }
                                     } catch (e: Exception) {
                                         Log.w(TAG, "Translation error for block '${block.originalText}': ${e.message}", e)
-                                        block.originalText
+                                        null
                                     }
-                                    translationCache[cacheKey] = translated
-                                    block.translatedText = translated
+
+                                    // If engine returned empty/original, fallback to Google if not already using Google
+                                    if ((translated.isNullOrBlank() || translated.equals(preparedText, ignoreCase = true) || translated.equals(block.originalText, ignoreCase = true)) && engine !is GoogleTranslateEngine) {
+                                        translated = try {
+                                            withTimeoutOrNull(4000) {
+                                                val raw = GoogleTranslateEngine(okHttpClient).translate(preparedText, sourceLang, targetLang)
+                                                me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
+                                            }
+                                        } catch (_: Exception) {
+                                            null
+                                        }
+                                    }
+
+                                    val finalTranslation = translated?.takeIf { it.isNotBlank() } ?: block.originalText
+                                    if (finalTranslation.isNotBlank() && !finalTranslation.equals(preparedText, ignoreCase = true) && !finalTranslation.equals(block.originalText, ignoreCase = true)) {
+                                        translationCache[cacheKey] = finalTranslation
+                                    }
+                                    block.translatedText = finalTranslation
                                 }
                             }
                         }.awaitAll()
@@ -655,19 +683,13 @@ class GameTranslatorManager(
     }
 
     private fun getActiveTranslationEngine(): ITranslationEngine {
-        val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "mlkit_offline"))
-        val baseEngine = when (type) {
-            TranslatorEngineType.MLKIT_OFFLINE -> MlKitOnDeviceTranslateEngine()
-            TranslatorEngineType.OFFLINE -> OfflineSmartDictionaryEngine()
-            TranslatorEngineType.YANDEX -> YandexTranslateEngine(okHttpClient)
+        val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
+        return when (type) {
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)
-            TranslatorEngineType.MICROSOFT -> MicrosoftEdgeTranslateEngine(okHttpClient)
-            TranslatorEngineType.LINGVA -> LingvaTranslateEngine(okHttpClient)
+            TranslatorEngineType.MYMEMORY -> MyMemoryEngine(okHttpClient)
             TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient) {
                 preferences.getString(PREF_TRANSLATOR_DEEPL_KEY, "").orEmpty()
             }
-            TranslatorEngineType.LIBRE -> LibreTranslateEngine(okHttpClient)
-            TranslatorEngineType.MYMEMORY -> MyMemoryEngine(okHttpClient)
             TranslatorEngineType.CUSTOM_AI -> CustomAiEngine(
                 okHttpClient,
                 apiKeyProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_KEY, "").orEmpty() },
@@ -675,7 +697,6 @@ class GameTranslatorManager(
                 modelProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_MODEL, "gpt-4o-mini").orEmpty() }
             )
         }
-        return if (type == TranslatorEngineType.OFFLINE) baseEngine else ReliableHybridTranslateEngine(baseEngine)
     }
 
     private var lastTranslatedRawText: String = ""

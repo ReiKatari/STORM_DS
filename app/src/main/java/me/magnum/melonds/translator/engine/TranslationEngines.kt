@@ -2,6 +2,7 @@ package me.magnum.melonds.translator.engine
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -9,102 +10,116 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 
 interface ITranslationEngine {
     suspend fun translate(text: String, sourceLang: String, targetLang: String): String
 }
 
-class YandexTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
-
-        val sl = if (sourceLang == "auto" || sourceLang.isBlank()) "" else "$sourceLang-"
-        val langPair = "$sl$targetLang"
-        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
-        val url = "https://translate.yandex.net/api/v1/tr.json/translate?srv=android&lang=$langPair&text=$encodedText"
-
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0")
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@withContext text
-            val responseBody = response.body?.string() ?: return@withContext text
-            val root = JSONObject(responseBody)
-            val textArray = root.optJSONArray("text")
-            if (textArray != null && textArray.length() > 0) {
-                val sb = StringBuilder()
-                for (i in 0 until textArray.length()) {
-                    sb.append(textArray.optString(i)).append(" ")
-                }
-                sb.toString().trim().ifEmpty { text }
-            } else {
-                root.optString("text", text)
-            }
-        }
-    }
-}
-
-class LingvaTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
-    private val mirrors = listOf(
-        "https://lingva.ml",
-        "https://lingva.thedaviddelta.com",
-        "https://translate.plausibility.cloud"
-    )
+/**
+ * Ultra-fast, highly accurate Google Translate Engine.
+ * Multi-tier pipeline:
+ * Tier 1: Google Clients5 Chrome-Extension API (Instant, no rate-limits, returns direct translation)
+ * Tier 2: Google Translate API (Single endpoint via HTTP POST to avoid length/query issues)
+ * Tier 3: MyMemory fallback if Google is unreachable or blocked
+ */
+class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
 
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
-        val sl = if (sourceLang == "auto") "auto" else sourceLang
-        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
+        val clean = text.trim()
+        if (clean.isBlank()) return@withContext text
 
-        for (host in mirrors) {
-            try {
-                val url = "$host/api/v1/$sl/$targetLang/$encodedText"
-                val request = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:128.0)")
-                    .build()
+        val sl = if (sourceLang.isBlank()) "auto" else sourceLang
+        val tl = targetLang.ifBlank { "ru" }
 
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val body = response.body?.string() ?: return@use
-                        val json = JSONObject(body)
-                        val translation = json.optString("translation")
-                        if (translation.isNotBlank()) {
-                            return@withContext translation.replace("+", " ")
-                        }
+        // Tier 1: Clients5 Chrome-Extension endpoint
+        try {
+            val encodedText = URLEncoder.encode(clean, "UTF-8").replace("+", "%20")
+            val url = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$sl&tl=$tl&q=$encodedText"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                .header("Accept", "*/*")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    val parsed = parseClients5Response(body)
+                    if (parsed.isNotBlank() && !parsed.equals(clean, ignoreCase = true)) {
+                        return@withContext parsed
                     }
                 }
-            } catch (_: Throwable) {}
-        }
-        text
-    }
-}
-
-class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
-
-        val sl = if (sourceLang == "auto") "auto" else sourceLang
-        val tl = targetLang
-        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
-        val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$encodedText"
-
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0")
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                return@withContext text
             }
-            val responseBody = response.body?.string() ?: return@withContext text
-            val jsonArray = JSONArray(responseBody)
-            val sentences = jsonArray.optJSONArray(0) ?: return@withContext text
+        } catch (_: Throwable) {}
 
+        // Tier 2: translate.googleapis.com via HTTP POST (bypasses GET captchas)
+        try {
+            val formBody = FormBody.Builder()
+                .add("client", "gtx")
+                .add("sl", sl)
+                .add("tl", tl)
+                .add("dt", "t")
+                .add("q", clean)
+                .build()
+
+            val request = Request.Builder()
+                .url("https://translate.googleapis.com/translate_a/single")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    val parsed = parseGoogleSingleResponse(body)
+                    if (parsed.isNotBlank() && !parsed.equals(clean, ignoreCase = true)) {
+                        return@withContext parsed
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // Tier 3: Seamless MyMemory fallback
+        try {
+            val myMemoryResult = MyMemoryEngine(client).translate(clean, sl, tl)
+            if (myMemoryResult.isNotBlank() && !myMemoryResult.equals(clean, ignoreCase = true)) {
+                return@withContext myMemoryResult
+            }
+        } catch (_: Throwable) {}
+
+        clean
+    }
+
+    private fun parseClients5Response(body: String): String {
+        val trimmed = body.trim()
+        if (!trimmed.startsWith("[")) return ""
+        return try {
+            val jsonArray = JSONArray(trimmed)
+            val sb = StringBuilder()
+            for (i in 0 until jsonArray.length()) {
+                val item = jsonArray.opt(i)
+                when (item) {
+                    is JSONArray -> {
+                        val part = item.optString(0)
+                        if (part.isNotBlank()) sb.append(part)
+                    }
+                    is String -> {
+                        if (item.isNotBlank()) sb.append(item)
+                    }
+                }
+            }
+            sb.toString().trim()
+        } catch (_: Throwable) {
+            ""
+        }
+    }
+
+    private fun parseGoogleSingleResponse(body: String): String {
+        val trimmed = body.trim()
+        if (!trimmed.startsWith("[")) return ""
+        return try {
+            val jsonArray = JSONArray(trimmed)
+            val sentences = jsonArray.optJSONArray(0) ?: return ""
             val sb = StringBuilder()
             for (i in 0 until sentences.length()) {
                 val sentence = sentences.optJSONArray(i)
@@ -113,90 +128,88 @@ class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngi
                     sb.append(part)
                 }
             }
-            val result = sb.toString().trim()
-            if (result.isNotEmpty()) result else text
+            sb.toString().trim()
+        } catch (_: Throwable) {
+            ""
         }
     }
 }
 
-class MicrosoftEdgeTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
-    private var cachedToken: String? = null
-    private var tokenExpiry: Long = 0
-
-    private suspend fun getAuthToken(): String? = withContext(Dispatchers.IO) {
-        if (cachedToken != null && System.currentTimeMillis() < tokenExpiry) {
-            return@withContext cachedToken
-        }
-        try {
-            val request = Request.Builder()
-                .url("https://edge.microsoft.com/translate/auth")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0")
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val token = response.body?.string()?.trim()
-                    if (!token.isNullOrBlank()) {
-                        cachedToken = token
-                        tokenExpiry = System.currentTimeMillis() + 500_000L
-                        return@withContext token
-                    }
-                }
-            }
-        } catch (_: Throwable) {}
-        null
-    }
+/**
+ * MyMemory Translated Engine - International Translation Memory database.
+ */
+class MyMemoryEngine(private val client: OkHttpClient) : ITranslationEngine {
 
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
+        val clean = text.trim()
+        if (clean.isBlank()) return@withContext text
 
-        val token = getAuthToken()
-        val fromParam = if (sourceLang == "auto" || sourceLang.isBlank()) "" else "&from=$sourceLang"
-        val url = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0$fromParam&to=$targetLang"
-
-        val bodyArray = JSONArray().put(JSONObject().put("Text", text))
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .header("Content-Type", "application/json; charset=UTF-8")
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0")
-            .post(bodyArray.toString().toRequestBody("application/json; charset=UTF-8".toMediaType()))
-
-        if (!token.isNullOrBlank()) {
-            requestBuilder.header("Authorization", "Bearer $token")
+        val sl = if (sourceLang == "auto" || sourceLang.isBlank()) {
+            detectLanguage(clean)
+        } else {
+            sourceLang
         }
+        val tl = targetLang.ifBlank { "ru" }
+        val langPair = "$sl|$tl"
+        val encodedText = URLEncoder.encode(clean, "UTF-8").replace("+", "%20")
+        val url = "https://api.mymemory.translated.net/get?q=$encodedText&langpair=$langPair"
+
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .build()
 
         try {
-            client.newCall(requestBuilder.build()).execute().use { response ->
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string() ?: return@withContext text
-                    val jsonArray = JSONArray(responseBody)
-                    val firstObj = jsonArray.optJSONObject(0)
-                    val translations = firstObj?.optJSONArray("translations")
-                    val translatedText = translations?.optJSONObject(0)?.optString("text")
-                    if (!translatedText.isNullOrBlank()) {
-                        return@withContext translatedText
-                    }
-                }
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext clean
+                val responseBody = response.body?.string() ?: return@withContext clean
+                val root = JSONObject(responseBody)
+                val responseData = root.optJSONObject("responseData")
+                val result = responseData?.optString("translatedText") ?: clean
+                val unescaped = result.replace("+", " ").trim()
+                if (unescaped.isNotBlank()) unescaped else clean
             }
-        } catch (_: Throwable) {}
-        text
+        } catch (_: Throwable) {
+            clean
+        }
+    }
+
+    private fun detectLanguage(text: String): String {
+        val hasJapanese = text.any { it in '\u3040'..'\u309F' || it in '\u30A0'..'\u30FF' || it in '\u4E00'..'\u9FAF' }
+        if (hasJapanese) return "ja"
+        val hasCyrillic = text.any { it in '\u0400'..'\u04FF' }
+        if (hasCyrillic) return "ru"
+        return "en"
     }
 }
 
+/**
+ * DeepL Neural Translation Engine (Official DeepL API with free and pro support).
+ * Falls back to GoogleTranslateEngine if key is missing or invalid.
+ */
 class DeepLEngine(
     private val client: OkHttpClient,
     private val apiKeyProvider: () -> String
 ) : ITranslationEngine {
+
+    private val fallbackEngine by lazy { GoogleTranslateEngine(client) }
+
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
+        val clean = text.trim()
+        if (clean.isBlank()) return@withContext text
+
         val apiKey = apiKeyProvider().trim()
-        if (apiKey.isEmpty() || text.isBlank()) return@withContext text
+        if (apiKey.isEmpty()) {
+            return@withContext fallbackEngine.translate(clean, sourceLang, targetLang)
+        }
 
         val isFreeApi = apiKey.endsWith(":fx")
         val endpoint = if (isFreeApi) "https://api-free.deepl.com/v2/translate" else "https://api.deepl.com/v2/translate"
 
         val json = JSONObject().apply {
-            put("text", JSONArray().put(text))
+            put("text", JSONArray().put(clean))
             put("target_lang", targetLang.uppercase())
-            if (sourceLang != "auto") {
+            if (sourceLang != "auto" && sourceLang.isNotBlank()) {
                 put("source_lang", sourceLang.uppercase())
             }
         }
@@ -208,91 +221,49 @@ class DeepLEngine(
             .post(requestBody)
             .build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@withContext text
-            val responseBody = response.body?.string() ?: return@withContext text
-            val root = JSONObject(responseBody)
-            val translations = root.optJSONArray("translations")
-            translations?.optJSONObject(0)?.optString("text") ?: text
-        }
-    }
-}
-
-class LibreTranslateEngine(
-    private val client: OkHttpClient,
-    private val serverUrlProvider: () -> String = { "https://translate.terraprint.co/translate" },
-    private val apiKeyProvider: () -> String = { "" }
-) : ITranslationEngine {
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
-
-        val server = serverUrlProvider().ifBlank { "https://translate.terraprint.co/translate" }
-        val json = JSONObject().apply {
-            put("q", text)
-            put("source", if (sourceLang == "auto") "auto" else sourceLang)
-            put("target", targetLang)
-            put("format", "text")
-            val apiKey = apiKeyProvider().trim()
-            if (apiKey.isNotEmpty()) {
-                put("api_key", apiKey)
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext fallbackEngine.translate(clean, sourceLang, targetLang)
+                }
+                val responseBody = response.body?.string() ?: return@withContext fallbackEngine.translate(clean, sourceLang, targetLang)
+                val root = JSONObject(responseBody)
+                val translations = root.optJSONArray("translations")
+                val translated = translations?.optJSONObject(0)?.optString("text")
+                if (!translated.isNullOrBlank()) translated else fallbackEngine.translate(clean, sourceLang, targetLang)
             }
-        }
-
-        val requestBody = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-        val request = Request.Builder()
-            .url(server)
-            .header("Content-Type", "application/json; charset=utf-8")
-            .post(requestBody)
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@withContext text
-            val responseBody = response.body?.string() ?: return@withContext text
-            val root = JSONObject(responseBody)
-            val result = root.optString("translatedText", text)
-            result.replace("+", " ")
+        } catch (_: Throwable) {
+            fallbackEngine.translate(clean, sourceLang, targetLang)
         }
     }
 }
 
-class MyMemoryEngine(private val client: OkHttpClient) : ITranslationEngine {
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
-
-        val sl = if (sourceLang == "auto") "en" else sourceLang
-        val langPair = "$sl|$targetLang"
-        val encodedText = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
-        val url = "https://api.mymemory.translated.net/get?q=$encodedText&langpair=$langPair"
-
-        val request = Request.Builder()
-            .url(url)
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@withContext text
-            val responseBody = response.body?.string() ?: return@withContext text
-            val root = JSONObject(responseBody)
-            val responseData = root.optJSONObject("responseData")
-            val result = responseData?.optString("translatedText") ?: text
-            result.replace("+", " ")
-        }
-    }
-}
-
+/**
+ * Custom AI Translation Engine (OpenAI / Claude / DeepSeek / Local LLM via OpenAI-compatible endpoint).
+ * Falls back to GoogleTranslateEngine if key is missing or request fails.
+ */
 class CustomAiEngine(
     private val client: OkHttpClient,
     private val apiKeyProvider: () -> String,
     private val endpointProvider: () -> String = { "https://api.openai.com/v1/chat/completions" },
     private val modelProvider: () -> String = { "gpt-4o-mini" }
 ) : ITranslationEngine {
+
+    private val fallbackEngine by lazy { GoogleTranslateEngine(client) }
+
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
+        val clean = text.trim()
+        if (clean.isBlank()) return@withContext text
+
         val apiKey = apiKeyProvider().trim()
-        if (apiKey.isEmpty() || text.isBlank()) return@withContext text
+        if (apiKey.isEmpty()) {
+            return@withContext fallbackEngine.translate(clean, sourceLang, targetLang)
+        }
 
         val endpoint = endpointProvider().ifBlank { "https://api.openai.com/v1/chat/completions" }
         val model = modelProvider().ifBlank { "gpt-4o-mini" }
 
-        val systemPrompt = "You are a professional video game localization expert. Translate the provided in-game dialogue/UI text accurately into natural, immersive $targetLang. Output ONLY the translated text without notes or quotes."
+        val systemPrompt = "You are a professional video game localization expert. Translate the provided in-game dialogue/UI text accurately into natural, immersive $targetLang. Output ONLY the translated text without notes, explanations, or quotes."
 
         val json = JSONObject().apply {
             put("model", model)
@@ -303,7 +274,7 @@ class CustomAiEngine(
                 })
                 put(JSONObject().apply {
                     put("role", "user")
-                    put("content", text)
+                    put("content", clean)
                 })
             })
             put("temperature", 0.3)
@@ -316,135 +287,20 @@ class CustomAiEngine(
             .post(requestBody)
             .build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@withContext text
-            val responseBody = response.body?.string() ?: return@withContext text
-            val root = JSONObject(responseBody)
-            val choices = root.optJSONArray("choices")
-            val message = choices?.optJSONObject(0)?.optJSONObject("message")
-            message?.optString("content")?.trim() ?: text
-        }
-    }
-}
-
-/**
- * High-performance 100% Offline Machine & JRPG Dictionary Translation Engine.
- * Translates dialogues, menus, commands, and story sequences with zero internet connection.
- */
-class OfflineSmartDictionaryEngine : ITranslationEngine {
-    private val OFFLINE_DICTIONARY: Map<String, String> = mapOf(
-        "yes" to "Да",
-        "no" to "Нет",
-        "ok" to "ОК",
-        "cancel" to "Отмена",
-        "back" to "Назад",
-        "next" to "Далее",
-        "start" to "Старт",
-        "press start" to "Нажмите START",
-        "new game" to "Новая игра",
-        "continue" to "Продолжить",
-        "load game" to "Загрузить игру",
-        "save game" to "Сохранить игру",
-        "options" to "Настройки",
-        "settings" to "Настройки",
-        "inventory" to "Инвентарь",
-        "equipment" to "Снаряжение",
-        "items" to "Предметы",
-        "item" to "Предмет",
-        "magic" to "Магия",
-        "skills" to "Навыки",
-        "skill" to "Навык",
-        "status" to "Статус",
-        "quest" to "Задание",
-        "quests" to "Задания",
-        "attack" to "Атака",
-        "defend" to "Защита",
-        "escape" to "Побег",
-        "run away" to "Сбежать",
-        "victory" to "Победа!",
-        "game over" to "Игра окончена",
-        "level up" to "Новый уровень!",
-        "experience" to "Опыт",
-        "gold" to "Золото",
-        "money" to "Деньги",
-        "touch the touch screen" to "Коснитесь сенсорного экрана",
-        "touch to start" to "Коснитесь для начала",
-        "tap to begin" to "Нажмите для старта",
-        "press and hold" to "Нажмите и удерживайте",
-        "wake up" to "Просыпайся!",
-        "get up" to "Вставай!",
-        "come on, sleepyhead!" to "Просыпайся, соня!",
-        "it's time to get up!" to "Пора вставать!",
-        "what's going on?" to "Что происходит?",
-        "what happened?" to "Что случилось?",
-        "are you ready?" to "Ты готов?",
-        "let's go!" to "Погнали!",
-        "wait a minute!" to "Минуточку!",
-        "hold on!" to "Погоди-ка!",
-        "good morning!" to "Доброе утро!",
-        "good night!" to "Спокойной ночи!",
-        "thank you very much!" to "Большое спасибо!",
-        "you're welcome!" to "Пожалуйста!",
-        "see you later!" to "Увидимся!",
-        "who are you?" to "Кто ты?",
-        "where are we?" to "Где мы?",
-        "i don't know" to "Я не знаю",
-        "be careful" to "Будь осторожен",
-        "help me" to "Помоги мне",
-        "let's do this" to "Сделаем это",
-        "look over there" to "Посмотри туда"
-    )
-
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.Default) {
-        val clean = text.trim()
-        if (clean.isBlank()) return@withContext text
-
-        // 1. Exact phrase lookup
-        val lower = clean.lowercase()
-        OFFLINE_DICTIONARY[lower]?.let { return@withContext it }
-
-        // 2. Glossary polish replacement
-        val polished = me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(clean, targetLang)
-        if (polished != clean) return@withContext polished
-
-        // 3. Smart word-by-word offline mapping
-        val words = clean.split(Regex("\\s+"))
-        val translatedWords = words.map { word ->
-            val cleanWord = word.trim().trim(',', '.', '!', '?', ':', ';', '"', '\'').lowercase()
-            val match = OFFLINE_DICTIONARY[cleanWord]
-            if (match != null) {
-                // Restore punctuation
-                val trailing = word.takeLastWhile { it in ",.!:;?\"\'" }
-                val leading = word.takeWhile { it in ",.!:;?\"\'" }
-                "$leading$match$trailing"
-            } else {
-                word
-            }
-        }
-
-        val result = translatedWords.joinToString(" ")
-        me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(result, targetLang)
-    }
-}
-
-/**
- * Zero-Failure Hybrid Wrapper: Executes primary online engine with automatic seamless
- * offline fallback upon network disconnects or timeouts.
- */
-class ReliableHybridTranslateEngine(
-    private val primaryEngine: ITranslationEngine,
-    private val offlineFallback: OfflineSmartDictionaryEngine = OfflineSmartDictionaryEngine()
-) : ITranslationEngine {
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String {
-        return try {
-            val result = primaryEngine.translate(text, sourceLang, targetLang)
-            if (result.isNotBlank() && result != text) {
-                result
-            } else {
-                offlineFallback.translate(text, sourceLang, targetLang)
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext fallbackEngine.translate(clean, sourceLang, targetLang)
+                }
+                val responseBody = response.body?.string() ?: return@withContext fallbackEngine.translate(clean, sourceLang, targetLang)
+                val root = JSONObject(responseBody)
+                val choices = root.optJSONArray("choices")
+                val message = choices?.optJSONObject(0)?.optJSONObject("message")
+                val content = message?.optString("content")?.trim()
+                if (!content.isNullOrBlank()) content else fallbackEngine.translate(clean, sourceLang, targetLang)
             }
         } catch (_: Throwable) {
-            offlineFallback.translate(text, sourceLang, targetLang)
+            fallbackEngine.translate(clean, sourceLang, targetLang)
         }
     }
 }

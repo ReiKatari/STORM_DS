@@ -1,20 +1,14 @@
 package me.magnum.melonds.translator.model
 
 enum class TranslatorEngineType(val preferenceValue: String, val displayName: String) {
-    MLKIT_OFFLINE("mlkit_offline", "Google Neural Офлайн (Без интернета, на устройстве)"),
-    OFFLINE("offline", "Автономный словарь (Быстрый оффлайн)"),
-    YANDEX("yandex", "Яндекс Переводчик (Бесплатно, лучший русский)"),
-    GOOGLE("google", "Google Translate (Бесплатно, высокая скорость)"),
-    MICROSOFT("microsoft", "Microsoft Edge / Bing Neural (Бесплатно, без лимитов)"),
-    LINGVA("lingva", "Lingva Neural (Бесплатно, без ограничений)"),
-    DEEPL("deepl", "DeepL Neural API"),
-    LIBRE("libre", "LibreTranslate (Open-Source)"),
-    MYMEMORY("mymemory", "MyMemory Translated"),
-    CUSTOM_AI("custom_ai", "Custom AI (Gemini, OpenAI, Claude)");
+    GOOGLE("google", "Google Translate (Нейросетевой, быстрый)"),
+    MYMEMORY("mymemory", "MyMemory Translated (Международная база)"),
+    DEEPL("deepl", "DeepL Neural API (Ключ API)"),
+    CUSTOM_AI("custom_ai", "Custom AI (ChatGPT, Gemini, Claude, DeepSeek)");
 
     companion object {
         fun fromPreference(value: String?): TranslatorEngineType {
-            return entries.firstOrNull { it.preferenceValue == value } ?: MLKIT_OFFLINE
+            return entries.firstOrNull { it.preferenceValue == value } ?: GOOGLE
         }
     }
 }

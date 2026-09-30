@@ -132,21 +132,10 @@ fun RomBrowserScreen(
         isManualRefreshing = true
         pendingRefreshScrollReset = true
         coroutineScope.launch {
-            repeat(8) {
+            repeat(4) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
-            }
-            kotlinx.coroutines.delay(1000)
-            if (isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING) {
-                repeat(8) {
-                    gridState.scrollToItem(0, 0)
-                    listState.scrollToItem(0, 0)
-                    kotlinx.coroutines.delay(32)
-                }
-                userHasScrolledManually = false
-                pendingRefreshScrollReset = false
-                isManualRefreshing = false
             }
         }
         onRefresh()
@@ -182,22 +171,19 @@ fun RomBrowserScreen(
         }
     }
 
-    // Always pin strictly to top (item 0, offset 0) whenever entries or top item load/refresh
-    LaunchedEffect(firstEntryKey, state.entries.size) {
-        val isNearTop = when (state.viewMode) {
-            RomViewMode.GRID -> gridState.firstVisibleItemIndex <= 4
-            RomViewMode.LIST -> listState.firstVisibleItemIndex <= 4
-        }
-        if (!userHasScrolledManually || isNearTop || pendingRefreshScrollReset || isManualRefreshing) {
-            if (pendingRefreshScrollReset || isManualRefreshing) {
-                userHasScrolledManually = false
-            }
+    var hasInitiallyScrolledToTop by remember { mutableStateOf(false) }
+
+    // Always pin strictly to top (item 0, offset 0) whenever entries load initially or refresh
+    LaunchedEffect(state.entries.size, firstEntryKey) {
+        if (state.entries.isNotEmpty() && (!hasInitiallyScrolledToTop || isManualRefreshing || pendingRefreshScrollReset)) {
+            userHasScrolledManually = false
             focusedEntryIndex = -1
-            repeat(10) {
+            repeat(4) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
             }
+            hasInitiallyScrolledToTop = true
         }
     }
 
@@ -218,7 +204,7 @@ fun RomBrowserScreen(
             userHasScrolledManually = false
             pendingRefreshScrollReset = true
             focusedEntryIndex = -1
-            repeat(6) {
+            repeat(4) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
@@ -227,10 +213,10 @@ fun RomBrowserScreen(
             if (pendingRefreshScrollReset || isManualRefreshing) {
                 userHasScrolledManually = false
                 focusedEntryIndex = -1
-                repeat(12) {
+                repeat(4) {
                     gridState.scrollToItem(0, 0)
                     listState.scrollToItem(0, 0)
-                    kotlinx.coroutines.delay(32)
+                    withFrameNanos { }
                 }
                 pendingRefreshScrollReset = false
                 isManualRefreshing = false
@@ -241,7 +227,7 @@ fun RomBrowserScreen(
     LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive, state.sortingMode, state.sortingOrder) {
         userHasScrolledManually = false
         focusedEntryIndex = -1
-        repeat(6) {
+        repeat(4) {
             gridState.scrollToItem(0, 0)
             listState.scrollToItem(0, 0)
             withFrameNanos { }
@@ -647,7 +633,7 @@ fun RomBrowserScreen(
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
                                             userHasScrolledManually = false
-                                            repeat(10) {
+                                            repeat(4) {
                                                 when (state.viewMode) {
                                                     RomViewMode.GRID -> gridState.scrollToItem(0, 0)
                                                     RomViewMode.LIST -> listState.scrollToItem(0, 0)

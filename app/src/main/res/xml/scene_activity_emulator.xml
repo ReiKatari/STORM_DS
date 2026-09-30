@@ -47,6 +47,12 @@
                     app:applyMotionScene="false"
                     app:visibilityMode="ignore" />
         </Constraint>
+
+        <Constraint android:id="@+id/view_translation_overlay">
+            <PropertySet
+                    app:applyMotionScene="false"
+                    app:visibilityMode="ignore" />
+        </Constraint>
     </ConstraintSet>
 
     <ConstraintSet

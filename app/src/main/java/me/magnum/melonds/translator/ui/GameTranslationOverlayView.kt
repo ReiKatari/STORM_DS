@@ -265,9 +265,25 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         isEditRegionsMode = false
     }
 
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility == VISIBLE) {
+            if (width > 0 && height > 0) {
+                initFloatBtnPosition(width, height)
+            }
+            requestLayout()
+            invalidate()
+        }
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w <= 0 || h <= 0) return
+        initFloatBtnPosition(w, h)
+        invalidate()
+    }
+
+    private fun initFloatBtnPosition(w: Int, h: Int) {
         val savedXRatio = prefs.getFloat("pref_translator_float_btn_x_ratio", -1f)
         val savedYRatio = prefs.getFloat("pref_translator_float_btn_y_ratio", -1f)
         if (savedXRatio in 0f..1f && savedYRatio in 0f..1f) {
@@ -277,7 +293,6 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             floatBtnX = (w - floatBtnRadius - 20f * density).coerceAtLeast(floatBtnRadius)
             floatBtnY = (h * 0.40f).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
         }
-        invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -435,15 +450,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         // 6. FLOATING BUTTON
         if (showFloatingButton) {
             if (floatBtnX < 0f || floatBtnY < 0f) {
-                val savedXRatio = prefs.getFloat("pref_translator_float_btn_x_ratio", -1f)
-                val savedYRatio = prefs.getFloat("pref_translator_float_btn_y_ratio", -1f)
-                if (savedXRatio in 0f..1f && savedYRatio in 0f..1f) {
-                    floatBtnX = (savedXRatio * w).coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
-                    floatBtnY = (savedYRatio * h).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
-                } else {
-                    floatBtnX = (w - floatBtnRadius - 20f * density).coerceAtLeast(floatBtnRadius)
-                    floatBtnY = (h * 0.40f).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
-                }
+                initFloatBtnPosition(w.toInt(), h.toInt())
             } else {
                 floatBtnX = floatBtnX.coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
                 floatBtnY = floatBtnY.coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)

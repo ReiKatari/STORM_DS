@@ -1043,34 +1043,38 @@ fun AlphabetIndexBar(
         }
     }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+            .width(28.dp)
+            .fillMaxHeight(),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
         Box(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(24.dp)
+                .width(28.dp)
                 .fillMaxHeight()
                 .focusProperties { canFocus = false }
                 .onSizeChanged { barHeightPx = it.height }
                 .pointerInput(letters, hasFolders, isInteractive) {
                     if (!isInteractive) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        isTouching = true
-                        handleDrag(down.position.y)
-                        val pointerId = down.id
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                            if (!change.pressed) {
-                                change.consume()
-                                break
-                            }
-                            handleDrag(change.position.y)
-                            change.consume()
-                        }
-                        isTouching = false
-                        hoverChar = null
-                        isHoverFolder = false
+                    detectVerticalDragGestures(
+                        onDragStart = { offset ->
+                            isTouching = true
+                            handleDrag(offset.y)
+                        },
+                        onDragEnd = {
+                            isTouching = false
+                            hoverChar = null
+                            isHoverFolder = false
+                        },
+                        onDragCancel = {
+                            isTouching = false
+                            hoverChar = null
+                            isHoverFolder = false
+                        },
+                    ) { change, _ ->
+                        handleDrag(change.position.y)
+                        change.consume()
                     }
                 },
         ) {
@@ -1084,7 +1088,13 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .focusProperties { canFocus = false },
+                            .focusProperties { canFocus = false }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                onFoldersClicked()
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -1111,7 +1121,13 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .focusProperties { canFocus = false },
+                            .focusProperties { canFocus = false }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                alphabetIndex[ch]?.let { idx -> onLetterTouched(idx, ch) }
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

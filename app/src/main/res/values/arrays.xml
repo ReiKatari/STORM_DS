@@ -17,23 +17,15 @@
 
     <!-- Auto-Translator Arrays -->
     <string-array name="translator_engine_options">
-        <item>@string/translator_engine_offline</item>
-        <item>@string/translator_engine_yandex</item>
         <item>@string/translator_engine_google</item>
-        <item>@string/translator_engine_lingva</item>
-        <item>@string/translator_engine_deepl</item>
-        <item>@string/translator_engine_libre</item>
         <item>@string/translator_engine_mymemory</item>
+        <item>@string/translator_engine_deepl</item>
         <item>@string/translator_engine_custom_ai</item>
     </string-array>
     <string-array name="translator_engine_values">
-        <item>offline</item>
-        <item>yandex</item>
         <item>google</item>
-        <item>lingva</item>
-        <item>deepl</item>
-        <item>libre</item>
         <item>mymemory</item>
+        <item>deepl</item>
         <item>custom_ai</item>
     </string-array>
 
