@@ -23,7 +23,10 @@ interface ITranslationEngine {
  * Tier 1: Google Clients5 Chrome-Extension API (Instant, unthrottled)
  * Tier 2: Google AndroidTranslate Client (client=at, dedicated mobile endpoint)
  */
-class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngine {
+class GoogleTranslateEngine(
+    private val client: OkHttpClient,
+    private val fallbackOffline: ITranslationEngine? = null
+) : ITranslationEngine {
 
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
         val clean = text.trim()
@@ -60,7 +63,7 @@ class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngi
             clean
         }
 
-        // Tier 1: Clients5 Chrome Extension API
+        // Tier 1: Clients5 Chrome Extension API (instant, high speed)
         try {
             val url = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$sl&tl=$tl&q=$encodedText"
             val request = Request.Builder()
@@ -80,7 +83,27 @@ class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngi
             }
         } catch (_: Throwable) {}
 
-        // Tier 2: Google AndroidTranslate Client (client=at)
+        // Tier 2: Google translate.googleapis.com (client=gtx - universally available web API)
+        try {
+            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$encodedText"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                .header("Accept", "*/*")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    val parsed = parseGoogleResponse(body)
+                    if (parsed.isNotBlank() && !parsed.equals(clean, ignoreCase = true)) {
+                        return@withContext parsed
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // Tier 3: Google AndroidTranslate Client (client=at)
         try {
             val url = "https://translate.google.com/translate_a/single?client=at&sl=$sl&tl=$tl&dt=t&q=$encodedText"
             val request = Request.Builder()
@@ -99,6 +122,16 @@ class GoogleTranslateEngine(private val client: OkHttpClient) : ITranslationEngi
                 }
             }
         } catch (_: Throwable) {}
+
+        // Offline Fallback: If online calls fail or network drops, seamlessly fall back to on-device ML Kit
+        if (fallbackOffline != null) {
+            try {
+                val offlineResult = fallbackOffline.translate(clean, sourceLang, targetLang)
+                if (offlineResult.isNotBlank() && !offlineResult.equals(clean, ignoreCase = true)) {
+                    return@withContext offlineResult
+                }
+            } catch (_: Throwable) {}
+        }
 
         clean
     }

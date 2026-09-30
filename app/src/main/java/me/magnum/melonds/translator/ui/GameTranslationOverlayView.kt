@@ -348,8 +348,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
         // 2. NORMAL TRANSLATION MODE (Modern Elevated Cyber Cards & In-place Text Replacement)
         val density = context.resources.displayMetrics.density
-        val padH = 10f * density
-        val padV = 5f * density
+        val padH = 4f * density
+        val padV = 2f * density
 
         for (block in blocks) {
             val left = block.boundingBox.left * w
@@ -362,23 +362,23 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             val origW = right - left
             val origH = bottom - top
 
-            // In-place replacement with graceful expansion for Russian text (which is 15-30% longer)
+            // In-place replacement with graceful expansion for Russian text (which is 15-25% longer)
             val textLenRatio = if (block.originalText.isNotEmpty()) {
-                (displayText.length.toFloat() / block.originalText.length.toFloat()).coerceIn(1.0f, 1.35f)
+                (displayText.length.toFloat() / block.originalText.length.toFloat()).coerceIn(1.0f, 1.25f)
             } else 1.0f
 
             val targetW = max(origW * textLenRatio, origW) + padH * 2
             val targetH = origH + padV * 2
 
-            val boxLeft = (left - padH).coerceIn(4f, (w - targetW - 4f).coerceAtLeast(4f))
-            val boxRight = (boxLeft + targetW).coerceAtMost(w - 4f)
-            val boxTop = (top - padV).coerceIn(4f, (h - targetH - 4f).coerceAtLeast(4f))
-            val boxBottom = (boxTop + targetH).coerceAtMost(h - 4f)
+            val boxLeft = (left - padH).coerceIn(2f, (w - targetW - 2f).coerceAtLeast(2f))
+            val boxRight = (boxLeft + targetW).coerceAtMost(w - 2f)
+            val boxTop = (top - padV).coerceIn(2f, (h - targetH - 2f).coerceAtLeast(2f))
+            val boxBottom = (boxTop + targetH).coerceAtMost(h - 2f)
 
             val rect = RectF(boxLeft, boxTop, boxRight, boxBottom)
             val rx = when (overlayStyle) {
                 TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> rect.height() / 2f
-                else -> 12f * density
+                else -> 6f * density
             }
 
             val alpha = (bubbleOpacity.coerceIn(0.25f, 1.0f) * 255).toInt().coerceIn(70, 255)
@@ -655,13 +655,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
     private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF, color: Int, isOutlineMode: Boolean = false) {
         val density = context.resources.displayMetrics.density
-        val padH = 8f * density
-        val padV = 4f * density
+        val padH = 4f * density
+        val padV = 2f * density
         val maxW = max(10, (bounds.width() - padH * 2).toInt())
         val maxH = max(10, (bounds.height() - padV * 2).toInt())
 
         // Initial font size with comfortable scale for handheld reading
-        var targetSize = (bounds.height() * 0.44f * fontSizeScale).coerceIn(13f, 44f)
+        var targetSize = (bounds.height() * 0.52f * fontSizeScale).coerceIn(11f, 40f)
         val isSingleWordOrButton = !text.contains(' ') && text.length < 15
         val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
 

@@ -56,6 +56,10 @@ class GameTextRecognizer {
 
     private val ocrLruCache = object : android.util.LruCache<Long, List<TranslatedTextBlock>>(32) {}
 
+    fun clearCache() {
+        ocrLruCache.evictAll()
+    }
+
     private fun computeBitmapHash(bitmap: Bitmap): Long {
         val w = bitmap.width
         val h = bitmap.height
@@ -83,7 +87,7 @@ class GameTextRecognizer {
             ocrLruCache.get(bmpHash)?.let { cached ->
                 Log.i(TAG, "OCR Cache hit: returning ${cached.size} cached blocks instantly")
                 if (safeBitmap !== bitmap) safeBitmap.recycle()
-                return@withContext cached
+                return@withContext cached.map { it.copy(translatedText = "") }
             }
         }
 
@@ -628,55 +632,20 @@ class GameTextRecognizer {
             val lines = block.lines
             if (lines.isEmpty()) continue
 
-            // Process lines into discrete blocks so separate fields/menus have their own boxes
-            var i = 0
-            while (i < lines.size) {
-                val currentLine = lines[i]
-                val currentBox = currentLine.boundingBox ?: block.boundingBox ?: run { i++; continue }
-                var combinedText = currentLine.text.trim()
-                val mergedBox = Rect(currentBox)
-                var j = i + 1
+            for (line in lines) {
+                val lineBox = line.boundingBox ?: continue
+                val rawLineText = line.text.trim()
+                if (rawLineText.isBlank()) continue
 
-                // Check if subsequent lines are continuations of a split sentence
-                while (j < lines.size) {
-                    val nextLine = lines[j]
-                    val nextBox = nextLine.boundingBox ?: break
-                    val prevLineText = lines[j - 1].text.trim()
-                    val nextLineText = nextLine.text.trim()
-
-                    val avgH = max(currentBox.height(), nextBox.height()).toFloat()
-                    val verticalGap = nextBox.top - mergedBox.bottom
-                    val isConsecutive = verticalGap in 0..(avgH * 0.45f).toInt()
-                    val prevEndsSentence = prevLineText.endsWith('.') || prevLineText.endsWith('!') ||
-                                           prevLineText.endsWith('?') || prevLineText.endsWith(':') ||
-                                           prevLineText.endsWith('—') || prevLineText.length < 15
-                    val nextIsContinuation = isConsecutive && !prevEndsSentence &&
-                                             (nextLineText.firstOrNull()?.isLowerCase() == true || prevLineText.endsWith('-') || prevLineText.endsWith(','))
-
-                    if (nextIsContinuation) {
-                        if (combinedText.endsWith('-')) {
-                            combinedText = combinedText.dropLast(1) + nextLineText
-                        } else {
-                            combinedText += " " + nextLineText
-                        }
-                        mergedBox.union(nextBox)
-                        j++
-                    } else {
-                        break
-                    }
-                }
-
-                i = j // Advance to next unmerged line
-
-                val correctedText = SmartWordCorrector.correctText(combinedText, sourceLang)
+                val correctedText = SmartWordCorrector.correctText(rawLineText, sourceLang)
                 if (correctedText.isNotBlank()) {
                     val relBox = RectF(
-                        (mergedBox.left / imgWidth).coerceIn(0f, 1f),
-                        (mergedBox.top / imgHeight).coerceIn(0f, 1f),
-                        (mergedBox.right / imgWidth).coerceIn(0f, 1f),
-                        (mergedBox.bottom / imgHeight).coerceIn(0f, 1f)
+                        (lineBox.left / imgWidth).coerceIn(0f, 1f),
+                        (lineBox.top / imgHeight).coerceIn(0f, 1f),
+                        (lineBox.right / imgWidth).coerceIn(0f, 1f),
+                        (lineBox.bottom / imgHeight).coerceIn(0f, 1f)
                     )
-                    val sampledBgColor = sampleBackgroundColor(bitmap, mergedBox)
+                    val sampledBgColor = sampleBackgroundColor(bitmap, lineBox)
                     val textColor = determineBestTextColor(sampledBgColor)
 
                     resultBlocks.add(

@@ -104,6 +104,7 @@ class GameTranslatorManager(
             PREF_TRANSLATOR_SOURCE_LANG,
             PREF_TRANSLATOR_TARGET_LANG -> {
                 mainHandler.post {
+                    textRecognizer.clearCache()
                     lastTranslatedRawText = ""
                     lastFrameDHash = 0L
                     translationCache.clear()
@@ -225,6 +226,7 @@ class GameTranslatorManager(
                         preferences = preferences,
                         onClose = { bottomSheetDialog.dismiss() },
                         onSyncOverlay = {
+                            textRecognizer.clearCache()
                             lastTranslatedRawText = ""
                             lastFrameDHash = 0L
                             translationCache.clear()
@@ -297,9 +299,11 @@ class GameTranslatorManager(
 
         if (!isAuto) {
             // Manual user button tap: guarantee fresh translation with the currently active engine
+            textRecognizer.clearCache()
             translationCache.clear()
             lastTranslatedRawText = ""
             lastFrameDHash = 0L
+            overlayView?.clearTranslations()
         }
 
         overlayView?.isTranslating = true
@@ -629,15 +633,16 @@ class GameTranslatorManager(
                         blocks.map { block ->
                             async(Dispatchers.IO) {
                                 val preparedText = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
+                                val textToTranslate = preparedText.ifBlank { block.originalText.trim() }
                                 val engineType = preferences.getString(PREF_TRANSLATOR_ENGINE, "google") ?: "google"
-                                val cacheKey = "$engineType|$preparedText|$sourceLang|$targetLang"
+                                val cacheKey = "$engineType|$textToTranslate|$sourceLang|$targetLang"
                                 val cached = translationCache[cacheKey]
                                 if (cached != null) {
                                     block.translatedText = cached
                                 } else {
                                     var translated = try {
                                         withTimeoutOrNull(5000) {
-                                            val raw = engine.translate(preparedText, sourceLang, targetLang)
+                                            val raw = engine.translate(textToTranslate, sourceLang, targetLang)
                                             me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
                                         }
                                     } catch (e: Exception) {
@@ -646,7 +651,7 @@ class GameTranslatorManager(
                                     }
 
                                     val finalTranslation = translated?.takeIf { it.isNotBlank() } ?: block.originalText
-                                    if (finalTranslation.isNotBlank() && !finalTranslation.equals(preparedText, ignoreCase = true) && !finalTranslation.equals(block.originalText, ignoreCase = true)) {
+                                    if (finalTranslation.isNotBlank() && !finalTranslation.equals(textToTranslate, ignoreCase = true) && !finalTranslation.equals(block.originalText, ignoreCase = true)) {
                                         translationCache[cacheKey] = finalTranslation
                                     }
                                     block.translatedText = finalTranslation
@@ -680,7 +685,7 @@ class GameTranslatorManager(
     private fun getActiveTranslationEngine(): ITranslationEngine {
         val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
         return when (type) {
-            TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)
+            TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient, MlKitOnDeviceTranslateEngine(activity))
             TranslatorEngineType.MLKIT_OFFLINE -> MlKitOnDeviceTranslateEngine(activity)
             TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient, context = activity) {
                 preferences.getString(PREF_TRANSLATOR_DEEPL_KEY, "").orEmpty()
