@@ -136,19 +136,17 @@ class GameTextRecognizer {
             }
 
             if (safeBitmap !== bitmap) safeBitmap.recycle()
-            val merged = mergeAdjacentBlocks(allRegionBlocks)
-            Log.i(TAG, "OCR finished with ${merged.size} total blocks from ${regions.size} regions")
-            return@withContext merged
+            Log.i(TAG, "OCR finished with ${allRegionBlocks.size} total blocks from ${regions.size} regions")
+            return@withContext allRegionBlocks
         }
 
         // Full Screen OCR: Multi-pass pixel preprocessing pipeline
         val bmpHash = computeBitmapHash(safeBitmap)
         val blocks = recognizeWithMultiPass(safeBitmap, sourceLang)
         if (safeBitmap !== bitmap) safeBitmap.recycle()
-        val merged = mergeAdjacentBlocks(blocks)
-        ocrLruCache.put(bmpHash, merged)
-        Log.i(TAG, "OCR finished fullscreen with ${merged.size} total blocks (cached)")
-        merged
+        ocrLruCache.put(bmpHash, blocks)
+        Log.i(TAG, "OCR finished fullscreen with ${blocks.size} total blocks (cached)")
+        blocks
     }
 
     private suspend fun recognizeWithMultiPass(
@@ -627,32 +625,114 @@ class GameTextRecognizer {
         val imgHeight = bitmap.height.toFloat()
 
         for (block in visionText.textBlocks) {
-            val blockBox = block.boundingBox ?: continue
-            val text = block.text.trim()
-            if (text.isBlank()) continue
+            val lines = block.lines
+            if (lines.isEmpty()) continue
 
-            val correctedText = SmartWordCorrector.correctText(text, sourceLang)
-            if (correctedText.isBlank()) continue
+            // If single line in block, emit directly
+            if (lines.size == 1) {
+                val line = lines[0]
+                val lineBox = line.boundingBox ?: block.boundingBox ?: continue
+                val text = line.text.trim()
+                if (text.isBlank()) continue
 
-            val relBox = RectF(
-                (blockBox.left / imgWidth).coerceIn(0f, 1f),
-                (blockBox.top / imgHeight).coerceIn(0f, 1f),
-                (blockBox.right / imgWidth).coerceIn(0f, 1f),
-                (blockBox.bottom / imgHeight).coerceIn(0f, 1f)
-            )
+                val correctedText = SmartWordCorrector.correctText(text, sourceLang)
+                if (correctedText.isBlank()) continue
 
-            val sampledBgColor = sampleBackgroundColor(bitmap, blockBox)
-            val textColor = determineBestTextColor(sampledBgColor)
-
-            resultBlocks.add(
-                TranslatedTextBlock(
-                    originalText = correctedText,
-                    translatedText = "",
-                    boundingBox = relBox,
-                    backgroundColor = sampledBgColor,
-                    textColor = textColor
+                val relBox = RectF(
+                    (lineBox.left / imgWidth).coerceIn(0f, 1f),
+                    (lineBox.top / imgHeight).coerceIn(0f, 1f),
+                    (lineBox.right / imgWidth).coerceIn(0f, 1f),
+                    (lineBox.bottom / imgHeight).coerceIn(0f, 1f)
                 )
-            )
+
+                val sampledBgColor = sampleBackgroundColor(bitmap, lineBox)
+                val textColor = determineBestTextColor(sampledBgColor)
+
+                resultBlocks.add(
+                    TranslatedTextBlock(
+                        originalText = correctedText,
+                        translatedText = "",
+                        boundingBox = relBox,
+                        backgroundColor = sampledBgColor,
+                        textColor = textColor
+                    )
+                )
+                continue
+            }
+
+            // Multi-line block: determine if lines are separate items (e.g. menus, buttons, stats, lists)
+            // or a single continuous dialogue paragraph.
+            val avgLineHeight = lines.mapNotNull { it.boundingBox?.height() }.average().toFloat().coerceAtLeast(10f)
+            val isMenuOrSeparateFields = lines.all { line ->
+                val txt = line.text.trim()
+                txt.length <= 32 && !txt.endsWith(',') && !txt.endsWith("...")
+            } || lines.zipWithNext().any { (a, b) ->
+                val boxA = a.boundingBox
+                val boxB = b.boundingBox
+                if (boxA != null && boxB != null) {
+                    (boxB.top - boxA.bottom) > avgLineHeight * 0.35f
+                } else false
+            }
+
+            if (isMenuOrSeparateFields) {
+                // Every line gets its own output block at its own bounding box!
+                for (line in lines) {
+                    val lineBox = line.boundingBox ?: continue
+                    val text = line.text.trim()
+                    if (text.isBlank()) continue
+
+                    val correctedText = SmartWordCorrector.correctText(text, sourceLang)
+                    if (correctedText.isBlank()) continue
+
+                    val relBox = RectF(
+                        (lineBox.left / imgWidth).coerceIn(0f, 1f),
+                        (lineBox.top / imgHeight).coerceIn(0f, 1f),
+                        (lineBox.right / imgWidth).coerceIn(0f, 1f),
+                        (lineBox.bottom / imgHeight).coerceIn(0f, 1f)
+                    )
+
+                    val sampledBgColor = sampleBackgroundColor(bitmap, lineBox)
+                    val textColor = determineBestTextColor(sampledBgColor)
+
+                    resultBlocks.add(
+                        TranslatedTextBlock(
+                            originalText = correctedText,
+                            translatedText = "",
+                            boundingBox = relBox,
+                            backgroundColor = sampledBgColor,
+                            textColor = textColor
+                        )
+                    )
+                }
+            } else {
+                // Continuous dialogue paragraph: keep as a single unified dialogue block
+                val blockBox = block.boundingBox ?: continue
+                val text = block.text.trim()
+                if (text.isBlank()) continue
+
+                val correctedText = SmartWordCorrector.correctText(text, sourceLang)
+                if (correctedText.isBlank()) continue
+
+                val relBox = RectF(
+                    (blockBox.left / imgWidth).coerceIn(0f, 1f),
+                    (blockBox.top / imgHeight).coerceIn(0f, 1f),
+                    (blockBox.right / imgWidth).coerceIn(0f, 1f),
+                    (blockBox.bottom / imgHeight).coerceIn(0f, 1f)
+                )
+
+                val sampledBgColor = sampleBackgroundColor(bitmap, blockBox)
+                val textColor = determineBestTextColor(sampledBgColor)
+
+                resultBlocks.add(
+                    TranslatedTextBlock(
+                        originalText = correctedText,
+                        translatedText = "",
+                        boundingBox = relBox,
+                        backgroundColor = sampledBgColor,
+                        textColor = textColor
+                    )
+                )
+            }
         }
 
         return resultBlocks
@@ -710,46 +790,5 @@ class GameTextRecognizer {
         val b = Color.blue(bgColor) / 255.0
         val luminance = 0.299 * r + 0.587 * g + 0.114 * b
         return if (luminance > 0.55) Color.parseColor("#0F172A") else Color.parseColor("#FFFFFF")
-    }
-
-    private fun mergeAdjacentBlocks(blocks: List<TranslatedTextBlock>): List<TranslatedTextBlock> {
-        if (blocks.size <= 1) return blocks
-
-        val merged = mutableListOf<TranslatedTextBlock>()
-        var current: TranslatedTextBlock? = null
-
-        for (block in blocks.sortedBy { it.boundingBox.top }) {
-            if (current == null) {
-                current = block
-                continue
-            }
-
-            val cBox = current.boundingBox
-            val bBox = block.boundingBox
-
-            val verticalGap = bBox.top - cBox.bottom
-            val isHorizontalOverlap = min(cBox.right, bBox.right) - max(cBox.left, bBox.left) > 0
-
-            if (verticalGap in -0.05f..0.08f && isHorizontalOverlap) {
-                val combinedText = "${current.originalText} ${block.originalText}"
-                val combinedBox = RectF(
-                    min(cBox.left, bBox.left),
-                    min(cBox.top, bBox.top),
-                    max(cBox.right, bBox.right),
-                    max(cBox.bottom, bBox.bottom)
-                )
-                current = current.copy(
-                    originalText = combinedText,
-                    boundingBox = combinedBox
-                )
-            } else {
-                merged.add(current)
-                current = block
-            }
-        }
-        if (current != null) {
-            merged.add(current)
-        }
-        return merged
     }
 }

@@ -1038,7 +1038,11 @@ fun AlphabetIndexBar(
             val ch = letters.getOrNull(letterIdx) ?: return
             if (ch != hoverChar) {
                 hoverChar = ch
-                alphabetIndex[ch]?.let { idx -> onLetterTouched(idx, ch) }
+                if (ch == '#' || letterIdx <= 0) {
+                    onLetterTouched(0, '#')
+                } else {
+                    alphabetIndex[ch]?.let { idx -> onLetterTouched(idx, ch) }
+                }
             }
         }
     }
@@ -1057,24 +1061,24 @@ fun AlphabetIndexBar(
                 .onSizeChanged { barHeightPx = it.height }
                 .pointerInput(letters, hasFolders, isInteractive) {
                     if (!isInteractive) return@pointerInput
-                    detectVerticalDragGestures(
-                        onDragStart = { offset ->
-                            isTouching = true
-                            handleDrag(offset.y)
-                        },
-                        onDragEnd = {
-                            isTouching = false
-                            hoverChar = null
-                            isHoverFolder = false
-                        },
-                        onDragCancel = {
-                            isTouching = false
-                            hoverChar = null
-                            isHoverFolder = false
-                        },
-                    ) { change, _ ->
-                        handleDrag(change.position.y)
-                        change.consume()
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        isTouching = true
+                        handleDrag(down.position.y)
+                        val pointerId = down.id
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                            if (!change.pressed) {
+                                change.consume()
+                                break
+                            }
+                            handleDrag(change.position.y)
+                            change.consume()
+                        }
+                        isTouching = false
+                        hoverChar = null
+                        isHoverFolder = false
                     }
                 },
         ) {
@@ -1088,13 +1092,7 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .focusProperties { canFocus = false }
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                onFoldersClicked()
-                            },
+                            .focusProperties { canFocus = false },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -1121,13 +1119,7 @@ fun AlphabetIndexBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .focusProperties { canFocus = false }
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                alphabetIndex[ch]?.let { idx -> onLetterTouched(idx, ch) }
-                            },
+                            .focusProperties { canFocus = false },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

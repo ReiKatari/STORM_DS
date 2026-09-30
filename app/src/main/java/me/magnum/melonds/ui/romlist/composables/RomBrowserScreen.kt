@@ -125,14 +125,16 @@ fun RomBrowserScreen(
 
     var pendingRefreshScrollReset by remember { mutableStateOf(false) }
     var isManualRefreshing by remember { mutableStateOf(false) }
+    var refreshTriggerCount by remember { mutableIntStateOf(0) }
 
     val handleRefreshWithScrollReset: () -> Unit = {
         focusedEntryIndex = -1
         userHasScrolledManually = false
         isManualRefreshing = true
         pendingRefreshScrollReset = true
+        refreshTriggerCount++
         coroutineScope.launch {
-            repeat(4) {
+            repeat(8) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
@@ -147,8 +149,14 @@ fun RomBrowserScreen(
     )
 
     LaunchedEffect(isGridDragged, isListDragged) {
-        if ((isGridDragged || isListDragged) && !isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING) {
-            userHasScrolledManually = true
+        if (isGridDragged || isListDragged) {
+            val isScrolledDown = when (state.viewMode) {
+                RomViewMode.GRID -> gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 25
+                RomViewMode.LIST -> listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 25
+            }
+            if (isScrolledDown && !isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING) {
+                userHasScrolledManually = true
+            }
         }
     }
 
@@ -164,26 +172,22 @@ fun RomBrowserScreen(
     LaunchedEffect(Unit) {
         userHasScrolledManually = false
         focusedEntryIndex = -1
-        repeat(10) {
+        repeat(12) {
             gridState.scrollToItem(0, 0)
             listState.scrollToItem(0, 0)
             withFrameNanos { }
         }
     }
 
-    var hasInitiallyScrolledToTop by remember { mutableStateOf(false) }
-
     // Always pin strictly to top (item 0, offset 0) whenever entries load initially or refresh
-    LaunchedEffect(state.entries.size, firstEntryKey) {
-        if (state.entries.isNotEmpty() && (!hasInitiallyScrolledToTop || isManualRefreshing || pendingRefreshScrollReset)) {
-            userHasScrolledManually = false
+    LaunchedEffect(state.entries.size, firstEntryKey, refreshTriggerCount) {
+        if (state.entries.isNotEmpty() && (!userHasScrolledManually || isManualRefreshing || pendingRefreshScrollReset)) {
             focusedEntryIndex = -1
-            repeat(4) {
+            repeat(8) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
             }
-            hasInitiallyScrolledToTop = true
         }
     }
 
@@ -204,7 +208,7 @@ fun RomBrowserScreen(
             userHasScrolledManually = false
             pendingRefreshScrollReset = true
             focusedEntryIndex = -1
-            repeat(4) {
+            repeat(8) {
                 gridState.scrollToItem(0, 0)
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
@@ -213,7 +217,7 @@ fun RomBrowserScreen(
             if (pendingRefreshScrollReset || isManualRefreshing) {
                 userHasScrolledManually = false
                 focusedEntryIndex = -1
-                repeat(4) {
+                repeat(12) {
                     gridState.scrollToItem(0, 0)
                     listState.scrollToItem(0, 0)
                     withFrameNanos { }
@@ -227,7 +231,7 @@ fun RomBrowserScreen(
     LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive, state.sortingMode, state.sortingOrder) {
         userHasScrolledManually = false
         focusedEntryIndex = -1
-        repeat(4) {
+        repeat(8) {
             gridState.scrollToItem(0, 0)
             listState.scrollToItem(0, 0)
             withFrameNanos { }
@@ -633,7 +637,7 @@ fun RomBrowserScreen(
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
                                             userHasScrolledManually = false
-                                            repeat(4) {
+                                            repeat(10) {
                                                 when (state.viewMode) {
                                                     RomViewMode.GRID -> gridState.scrollToItem(0, 0)
                                                     RomViewMode.LIST -> listState.scrollToItem(0, 0)

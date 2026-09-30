@@ -611,13 +611,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     }
 
     private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF, color: Int) {
-        val padH = 16f
-        val padV = 10f
-        val maxW = max(20, (bounds.width() - padH * 2).toInt())
-        val maxH = max(20, (bounds.height() - padV * 2).toInt())
+        val padH = 6f
+        val padV = 4f
+        val maxW = max(10, (bounds.width() - padH * 2).toInt())
+        val maxH = max(10, (bounds.height() - padV * 2).toInt())
 
         // Initial font size with comfortable scale for handheld reading
-        var targetSize = (bounds.height() * 0.38f * fontSizeScale).coerceIn(22f, 48f)
+        var targetSize = (bounds.height() * 0.42f * fontSizeScale).coerceIn(14f, 48f)
         val isSingleWordOrButton = !text.contains(' ') && text.length < 15
         val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
 
@@ -627,16 +627,16 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
         var layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
             .setAlignment(alignment)
-            .setLineSpacing(3f, 1.18f)
+            .setLineSpacing(2f, 1.15f)
             .setIncludePad(false)
             .build()
 
-        while (layout.height > maxH && targetSize > 16f) {
+        while (layout.height > maxH && targetSize > 12f) {
             targetSize -= 1.0f
             textPaint.textSize = targetSize
             layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
                 .setAlignment(alignment)
-                .setLineSpacing(3f, 1.18f)
+                .setLineSpacing(2f, 1.15f)
                 .setIncludePad(false)
                 .build()
         }

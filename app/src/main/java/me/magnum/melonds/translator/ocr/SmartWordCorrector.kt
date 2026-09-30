@@ -112,7 +112,8 @@ object SmartWordCorrector {
             }
         }
 
-        return prefix + candidate + suffix
+        // If no confirmed match in dictionary, preserve original text as recognized by ML Kit
+        return prefix + core + suffix
     }
 
     private fun applyPixelGlyphSubstitutions(word: String): String {

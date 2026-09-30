@@ -171,9 +171,9 @@ object GameTextCleaner {
         return line.trim()
             // Clean stray leading floating button artifacts e.g. "TR ", "TR: ", "[TR] "
             .replace(Regex("(?i)^\\[?TR\\]?[:\\s]+\\s*"), "")
-            // Clean stray leading OCR artifacts like "l: P. ", "1: P. ", "| ", "> ", "• ", "[l] ", "I: "
-            .replace(Regex("^[lI1|!:\'\"\\s\\.\\,\\-\\_~>•\\[\\]]+(?=[A-ZА-Яa-zа-я])"), "")
-            .replace(Regex("(?i)^([lI1|!:\'\"\\.\\,\\-\\_]+\\s+)+"), "")
+            // Clean stray leading OCR artifacts like "l: P. ", "| ", "> ", "• ", "[l] ", "I: "
+            .replace(Regex("^[lI|!:\'\"\\s\\.\\,\\-\\_~>•\\[\\]]+(?=[A-ZА-Яa-zа-я])"), "")
+            .replace(Regex("(?i)^([lI|!:\'\"\\.\\,\\-\\_]+\\s+)+"), "")
             .replace(Regex("^[|•>~_—\\-]+\\s*"), "")
             .replace(Regex("\\s*[|•>~_—\\-]+$"), "")
             .replace(Regex("\\s+"), " ")
