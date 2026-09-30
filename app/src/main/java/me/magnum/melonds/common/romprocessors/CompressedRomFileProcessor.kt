@@ -30,7 +30,7 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
     private class CouldNotFindExtractedFileException : RomExtractionException("Failed to find extracted NDS ROM file")
 
     private companion object {
-        val SUPPORTED_ROM_EXTENSIONS = listOf("nds", "dsi", "ids")
+        val SUPPORTED_ROM_EXTENSIONS = listOf("nds", "dsi", "ids", "ndz")
     }
 
     override fun getRomFromUri(romUri: Uri, parentUri: Uri?): Rom? {

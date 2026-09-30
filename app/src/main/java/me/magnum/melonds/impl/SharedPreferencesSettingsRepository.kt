@@ -526,6 +526,14 @@ class SharedPreferencesSettingsRepository(
         return speedMultiplierPreference.toFloatOrNull()?.coerceIn(0.25f, 1.0f) ?: 1.0f
     }
 
+    override fun isMuteOnFastForwardEnabled(): Boolean {
+        return preferences.getBoolean("audio_mute_on_fast_forward", true)
+    }
+
+    override fun isDrsEnabled(): Boolean {
+        return preferences.getBoolean("video_drs_enabled", false)
+    }
+
     override fun isRewindEnabled(): Boolean {
         return preferences.getBoolean("enable_rewind", false)
     }

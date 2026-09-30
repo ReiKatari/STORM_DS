@@ -13,6 +13,14 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="true" />
 
+        <SwitchPreference
+                android:key="audio_mute_on_fast_forward"
+                android:title="@string/audio_mute_on_fast_forward_title"
+                android:summary="@string/audio_mute_on_fast_forward_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="true" />
+
         <SeekBarPreference
                 android:key="volume"
                 android:title="@string/volume"

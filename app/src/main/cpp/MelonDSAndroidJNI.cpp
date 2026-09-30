@@ -2458,6 +2458,14 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
 }
 
 JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setMuteOnFastForwardEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
+{
+    (void)env;
+    (void)thiz;
+    MelonDSAndroid::setMuteOnFastForwardActive(enabled);
+}
+
+JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setRewindActive(JNIEnv* env, jobject thiz, jboolean active)
 {
     MelonDSAndroid::setRewindActive(active);

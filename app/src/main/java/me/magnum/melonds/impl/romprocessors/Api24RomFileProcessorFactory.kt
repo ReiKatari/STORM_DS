@@ -15,14 +15,16 @@ class Api24RomFileProcessorFactory(context: Context, uriHandler: UriHandler, nds
 
     init {
         val ndsRomFileProcessor = NdsRomFileProcessor(context, uriHandler)
+        val zipRomFileProcessor = ZipRomFileProcessor(context, uriHandler, ndsRomCache)
         prefixProcessorMap = mapOf(
             "nds" to ndsRomFileProcessor,
             "dsi" to ndsRomFileProcessor,
             "ids" to ndsRomFileProcessor,
             "app" to ndsRomFileProcessor,
-            "zip" to ZipRomFileProcessor(context, uriHandler, ndsRomCache),
+            "zip" to zipRomFileProcessor,
             "7z" to SevenZRomFileProcessor(context, uriHandler, ndsRomCache),
-            "rar" to RarRomFileProcessor(context, uriHandler, ndsRomCache)
+            "rar" to RarRomFileProcessor(context, uriHandler, ndsRomCache),
+            "ndz" to zipRomFileProcessor
         )
     }
 

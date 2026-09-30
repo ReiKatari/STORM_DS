@@ -19,6 +19,8 @@ interface SettingsRepository {
     fun getTheme(): Theme
     fun getFastForwardSpeedMultiplier(): Float
     fun getFrameLimitSpeedMultiplier(): Float
+    fun isMuteOnFastForwardEnabled(): Boolean
+    fun isDrsEnabled(): Boolean
     fun isRewindEnabled(): Boolean
     fun isSustainedPerformanceModeEnabled(): Boolean
     fun isAppLogFileEnabled(): Boolean

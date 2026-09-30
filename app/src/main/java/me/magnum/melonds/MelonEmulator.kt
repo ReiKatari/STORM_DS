@@ -200,6 +200,7 @@ object MelonEmulator {
     external fun takeScreenshot(): Boolean
 
     external fun setFastForwardEnabled(enabled: Boolean)
+    external fun setMuteOnFastForwardEnabled(enabled: Boolean)
 
     external fun setFrameLimitSpeedMultiplier(multiplier: Float)
 

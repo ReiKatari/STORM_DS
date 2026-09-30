@@ -146,6 +146,13 @@
     <string name="audio_bitrate">Audio bitrate</string>
     <string name="audio_bitrate_summary">Audio output resolution</string>
     <string name="audio_latency_summary">Audio output buffer latency</string>
+    <string name="audio_mute_on_fast_forward_title">Mute on fast forward</string>
+    <string name="audio_mute_on_fast_forward_summary">Mutes audio during fast forward to prevent crackles and stutter</string>
+    <string name="video_drs_title">Dynamic resolution scaling (DRS)</string>
+    <string name="video_drs_summary">Automatically scales 3D resolution down under load to maintain 60 FPS</string>
+    <string name="drs_hud_status_active">DRS: Active (auto-scaling)</string>
+    <string name="drs_hud_status_scaled">DRS: Scaled to %1$dx (target %2$dx)</string>
+    <string name="drs_hud_status_disabled">DRS: Disabled</string>
 
     <string name="mic_source">Microphone source</string>
     <string name="mic_source_summary">Select microphone device or simulation</string>
@@ -1119,6 +1126,8 @@
         <item>6x native (1536x1152)</item>
         <item>7x native (1792x1344)</item>
         <item>8x native (2048x1536)</item>
+        <item>12x native (3072x2304)</item>
+        <item>16x native (4096x3072)</item>
     </string-array>
 
     <string-array name="video_filtering_options">

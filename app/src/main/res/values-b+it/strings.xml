@@ -410,6 +410,8 @@
         <item>Nativa x6 (1536x1152)</item>
         <item>Nativa x7 (1792x1344)</item>
         <item>Nativa x8 (2048x1536)</item>
+        <item>Nativa x12 (3072x2304)</item>
+        <item>Nativa x16 (4096x3072)</item>
     </string-array>
     <string-array name="video_filtering_options">
         <item>Nessuno</item>

@@ -3040,6 +3040,29 @@ class EmulatorViewModel @Inject constructor(
         return settingsRepository.getFpsCounterPosition()
     }
 
+    fun isMuteOnFastForwardEnabled(): Boolean {
+        return settingsRepository.isMuteOnFastForwardEnabled()
+    }
+
+    fun isDrsEnabled(): Boolean {
+        return settingsRepository.isDrsEnabled()
+    }
+
+    fun updateRuntimeResolutionScaling(scaling: Int) {
+        val current = _runtimeRendererConfiguration.value ?: return
+        if (current.resolutionScaling == scaling) return
+        _runtimeRendererConfiguration.value = current.copy(resolutionScaling = scaling)
+        sessionCoroutineScope.launch {
+            val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom
+            if (runningRom != null) {
+                val currentConfig = settingsRepository.getEmulatorConfiguration(runningRom.config)
+                val updatedRendererConfig = currentConfig.rendererConfiguration.copy(internalResolutionScaling = scaling)
+                val updatedConfig = currentConfig.copy(rendererConfiguration = updatedRendererConfig)
+                me.magnum.melonds.MelonEmulator.updateEmulatorConfiguration(updatedConfig)
+            }
+        }
+    }
+
     private suspend fun getRomEnabledCheats(romInfo: RomInfo): List<Cheat> {
         if (!settingsRepository.areCheatsEnabled() || !emulatorSession.areCheatsEnabled()) {
             return emptyList()

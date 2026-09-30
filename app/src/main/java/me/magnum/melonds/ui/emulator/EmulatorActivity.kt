@@ -278,6 +278,11 @@ class EmulatorActivity : AppCompatActivity() {
     private var isFrameRenderCoordinatorStopped = false
     private var excludeTouchScreenFromSystemGestures = false
     private var externalDisplayMode = ExternalDisplayMode.MELON_DUAL_DS
+    private var baseInternalResolutionScale = 1
+    private var liveDrsScale = 1
+    private var drsLowFpsCounter = 0
+    private var drsStableFpsCounter = 0
+    private val drsScaleSteps = intArrayOf(16, 12, 8, 6, 4, 3, 2, 1)
     private val frontendInputHandler = object : FrontendInputHandler() {
         var fastForwardEnabled = false
             private set
@@ -378,6 +383,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
 
         private fun updateFastForwardState() {
+            MelonEmulator.setMuteOnFastForwardEnabled(viewModel.isMuteOnFastForwardEnabled())
             MelonEmulator.setFastForwardEnabled(fastForwardEnabled || fastForwardHoldPressed)
         }
     }
@@ -1041,6 +1047,7 @@ class EmulatorActivity : AppCompatActivity() {
                     } else {
                         binding.textFps.text = getString(R.string.info_fps, it)
                     }
+                    handleDrsAndHudUpdate(it)
                 }
             }
         }
@@ -1993,18 +2000,41 @@ class EmulatorActivity : AppCompatActivity() {
 
         val rendererPref = prefs.getString("video_renderer", "opengl") ?: "opengl"
         val renderer = runCatching { VideoRenderer.valueOf(rendererPref.uppercase()) }.getOrDefault(VideoRenderer.OPENGL)
-        val resScaling = (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1).coerceAtLeast(1)
-        val effectiveScale = if (renderer == VideoRenderer.SOFTWARE) 1 else resScaling
+        baseInternalResolutionScale = (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1).coerceAtLeast(1)
+        liveDrsScale = if (renderer == VideoRenderer.SOFTWARE) 1 else baseInternalResolutionScale
+        drsLowFpsCounter = 0
+        drsStableFpsCounter = 0
 
-        val rendererName = when (renderer) {
-            VideoRenderer.SOFTWARE -> "Software"
-            VideoRenderer.OPENGL -> "OpenGL"
-            VideoRenderer.VULKAN -> "Vulkan"
-            else -> "Compute"
+        updateResolutionHudText(fps = null)
+
+        binding.textResolution.setOnClickListener {
+            val drsStatus = if (viewModel.isDrsEnabled()) {
+                if (liveDrsScale < baseInternalResolutionScale) {
+                    getString(R.string.drs_hud_status_scaled, liveDrsScale, baseInternalResolutionScale)
+                } else {
+                    getString(R.string.drs_hud_status_active)
+                }
+            } else {
+                getString(R.string.drs_hud_status_disabled)
+            }
+            val curFps = viewModel.currentFps.value ?: 60
+            val frameTime = if (curFps > 0) String.format(java.util.Locale.US, "%.1f", 1000.0 / curFps) else "16.6"
+            val scale = if (renderer == VideoRenderer.SOFTWARE) 1 else liveDrsScale
+            val width = 256 * scale
+            val height = 384 * scale
+            val rendererName = when (renderer) {
+                VideoRenderer.SOFTWARE -> "Software"
+                VideoRenderer.OPENGL -> "OpenGL"
+                VideoRenderer.VULKAN -> "Vulkan"
+                else -> "Compute"
+            }
+
+            android.widget.Toast.makeText(
+                this,
+                "$rendererName • ${width}x${height} (${scale}x)\n$curFps FPS ($frameTime ms)\n$drsStatus",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
-        val width = 256 * effectiveScale
-        val height = 384 * effectiveScale
-        binding.textResolution.text = "$rendererName | ${width}x${height} (${effectiveScale}x)"
 
         val isSkin = prefs.getBoolean("video_console_skin_enabled", false)
         val density = resources.displayMetrics.density
@@ -2067,6 +2097,99 @@ class EmulatorActivity : AppCompatActivity() {
         binding.textResolution.isVisible = true
         binding.textResolution.bringToFront()
         binding.textResolution.elevation = 999f
+    }
+
+    private fun handleDrsAndHudUpdate(fps: Int?) {
+        if (!bootRomReady.value) return
+        val drsEnabled = viewModel.isDrsEnabled()
+        val renderer = currentRuntimeRendererConfiguration?.renderer ?: viewModel.getConfiguredVideoRenderer()
+        val supportsScaling = renderer != VideoRenderer.SOFTWARE
+
+        if (drsEnabled && supportsScaling && fps != null && fps > 0) {
+            if (fps < 50) {
+                drsStableFpsCounter = 0
+                drsLowFpsCounter++
+                if (drsLowFpsCounter >= 2) {
+                    val currentStepIndex = drsScaleSteps.indexOfFirst { it <= liveDrsScale }.let { if (it == -1) 0 else it }
+                    val nextLowerIndex = drsScaleSteps.indices.firstOrNull { it > currentStepIndex && drsScaleSteps[it] < liveDrsScale }
+                    if (nextLowerIndex != null) {
+                        liveDrsScale = drsScaleSteps[nextLowerIndex]
+                        viewModel.updateRuntimeResolutionScaling(liveDrsScale)
+                    }
+                    drsLowFpsCounter = 0
+                }
+            } else if (fps >= 58) {
+                drsLowFpsCounter = 0
+                if (liveDrsScale < baseInternalResolutionScale) {
+                    drsStableFpsCounter++
+                    if (drsStableFpsCounter >= 4) {
+                        val currentStepIndex = drsScaleSteps.indexOfFirst { it <= liveDrsScale }.let { if (it == -1) drsScaleSteps.lastIndex else it }
+                        val nextHigherIndex = drsScaleSteps.indices.reversed().firstOrNull { it < currentStepIndex && drsScaleSteps[it] <= baseInternalResolutionScale }
+                        if (nextHigherIndex != null) {
+                            liveDrsScale = drsScaleSteps[nextHigherIndex]
+                            viewModel.updateRuntimeResolutionScaling(liveDrsScale)
+                        }
+                        drsStableFpsCounter = 0
+                    }
+                } else {
+                    drsStableFpsCounter = 0
+                }
+            } else {
+                drsLowFpsCounter = 0
+                drsStableFpsCounter = 0
+            }
+        } else if (!drsEnabled && liveDrsScale != baseInternalResolutionScale) {
+            liveDrsScale = baseInternalResolutionScale
+            viewModel.updateRuntimeResolutionScaling(liveDrsScale)
+            drsLowFpsCounter = 0
+            drsStableFpsCounter = 0
+        }
+
+        updateResolutionHudText(fps)
+    }
+
+    private fun updateResolutionHudText(fps: Int?) {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val position = prefs.getString("resolution_hud_position", "hidden") ?: "hidden"
+        if (position == "hidden" || !bootRomReady.value) {
+            binding.textResolution.isGone = true
+            return
+        }
+
+        val renderer = currentRuntimeRendererConfiguration?.renderer ?: runCatching {
+            val rendererPref = prefs.getString("video_renderer", "opengl") ?: "opengl"
+            VideoRenderer.valueOf(rendererPref.uppercase())
+        }.getOrDefault(VideoRenderer.OPENGL)
+
+        val scale = if (renderer == VideoRenderer.SOFTWARE) 1 else liveDrsScale
+        val rendererName = when (renderer) {
+            VideoRenderer.SOFTWARE -> "Software"
+            VideoRenderer.OPENGL -> "OpenGL"
+            VideoRenderer.VULKAN -> "Vulkan"
+            else -> "Compute"
+        }
+        val width = 256 * scale
+        val height = 384 * scale
+
+        val frameTimeStr = if (fps != null && fps > 0) {
+            val ms = 1000.0 / fps
+            String.format(java.util.Locale.US, "%.1fms", ms)
+        } else {
+            "16.6ms"
+        }
+
+        val drsPart = if (viewModel.isDrsEnabled() && renderer != VideoRenderer.SOFTWARE) {
+            if (liveDrsScale < baseInternalResolutionScale) {
+                " • DRS: ${liveDrsScale}x ⚡"
+            } else {
+                " • DRS: AUTO"
+            }
+        } else {
+            ""
+        }
+
+        binding.textResolution.text = "$rendererName | ${width}x${height} (${scale}x) • $frameTimeStr$drsPart"
+        binding.textResolution.isVisible = true
     }
 
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {

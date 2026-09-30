@@ -16,7 +16,7 @@ oboe::DataCallbackResult
 OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) {
     auto currentInstance = activeInstance.lock();
 
-    if (!currentInstance || MelonDSAndroid::isFastForwardActive() || MelonDSAndroid::isRewindActive())
+    if (!currentInstance || (MelonDSAndroid::isFastForwardActive() && MelonDSAndroid::isMuteOnFastForwardActive()) || MelonDSAndroid::isRewindActive())
     {
         if (currentInstance)
         {

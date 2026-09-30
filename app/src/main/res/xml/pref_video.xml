@@ -131,6 +131,13 @@
                 android:defaultValue="false" />
 
         <SwitchPreference
+                android:key="video_drs_enabled"
+                android:title="@string/video_drs_title"
+                android:summary="@string/video_drs_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SwitchPreference
                 android:key="video_ai_upscale_enabled"
                 android:title="@string/video_ai_upscale_title"
                 android:summary="@string/video_ai_upscale_summary"

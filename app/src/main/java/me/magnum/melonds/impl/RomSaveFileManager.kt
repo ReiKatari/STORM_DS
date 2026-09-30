@@ -66,9 +66,29 @@ class RomSaveFileManager @Inject constructor(
             return
         }
 
-        openInputStream(sourceUri).use { input ->
-            openOutputStream(targetUri).use { output ->
-                input.copyTo(output)
+        // Fix #209: Staged save import prevents zeroing/truncation if source stream fails or aborts
+        val tempFile = java.io.File(context.cacheDir, "save_import_stage_${System.currentTimeMillis()}.tmp")
+        try {
+            tempFile.outputStream().use { tempOut ->
+                openInputStream(sourceUri).use { input ->
+                    input.copyTo(tempOut)
+                }
+            }
+
+            require(tempFile.length() > 0) {
+                "Imported save data is empty (0 bytes)"
+            }
+
+            // Write verified non-empty staging data to target destination
+            tempFile.inputStream().use { stageIn ->
+                openOutputStream(targetUri).use { output ->
+                    stageIn.copyTo(output)
+                    output.flush()
+                }
+            }
+        } finally {
+            if (tempFile.exists()) {
+                tempFile.delete()
             }
         }
     }

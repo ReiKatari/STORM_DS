@@ -155,13 +155,13 @@ class GameTextRecognizer {
         inputBitmap: Bitmap,
         sourceLang: String
     ): List<TranslatedTextBlock> {
-        // Base: Point-sampled 4x nearest neighbor scaling for pixel fonts
-        val pixelScaled = createPixelArtUpscaledBitmap(inputBitmap, scaleFactor = 4)
+        // Base: Adaptive resolution scaling for 1x..16x internal emulator resolutions & high-DPI surfaces
+        val pixelScaled = createOptimalOcrScaledBitmap(inputBitmap)
 
-        // Pass 1: Crisp Nearest-Neighbor Upscaled (Captures clean standard pixel text)
+        // Pass 1: Crisp Scaled / Nearest-Neighbor (Captures clean standard pixel text)
         var blocks = recognizeOnBitmap(pixelScaled, sourceLang)
         if (blocks.isNotEmpty()) {
-            Log.i(TAG, "OCR Pass 1 (4x Nearest-Neighbor) matched ${blocks.size} blocks")
+            Log.i(TAG, "OCR Pass 1 (Adaptive Scaled) matched ${blocks.size} blocks")
             if (pixelScaled !== inputBitmap) pixelScaled.recycle()
             return blocks
         }
@@ -245,28 +245,82 @@ class GameTextRecognizer {
     }
 
     /**
+     * Optimizes input bitmap resolution for ML Kit Text Recognition and image binarization.
+     * Takes into account emulator internal resolution scaling (1x, 2x, 3x, 4x, 6x, 8x, 12x, 16x):
+     * - Low resolution (< 450px): Nearest-Neighbor 3x-4x upscaling to turn tiny 8x8 font glyphs into readable contours.
+     * - Medium resolution (450..850px): Nearest-Neighbor 2x upscaling.
+     * - Optimal resolution (851..1400px): Preserved 1:1.
+     * - Ultra-high resolution (> 1400px, e.g. 6x-16x Vulkan/OpenGL or 1440p/4K surface): Smooth bilinear downscaling to ~1080px height to prevent OOM and speed up OCR by 10x.
+     */
+    fun createOptimalOcrScaledBitmap(src: Bitmap): Bitmap {
+        val h = src.height
+        val w = src.width
+        if (h <= 0 || w <= 0) return src
+
+        return try {
+            when {
+                // 1x DS (native 192 or 384) -> 3x or 4x Nearest-Neighbor
+                h < 450 -> {
+                    val scale = if (h < 260) 4 else 3
+                    val dstW = w * scale
+                    val dstH = h * scale
+                    val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(out)
+                    val nnPaint = Paint().apply {
+                        isFilterBitmap = false
+                        isAntiAlias = false
+                        isDither = false
+                    }
+                    canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), nnPaint)
+                    out
+                }
+                // 2x DS (384..768) -> 2x Nearest-Neighbor
+                h in 450..850 -> {
+                    val scale = 2
+                    val dstW = w * scale
+                    val dstH = h * scale
+                    val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(out)
+                    val nnPaint = Paint().apply {
+                        isFilterBitmap = false
+                        isAntiAlias = false
+                        isDither = false
+                    }
+                    canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), nnPaint)
+                    out
+                }
+                // 3x - 4x DS (851..1400) -> 1:1 already perfect for ML Kit
+                h in 851..1400 -> {
+                    src
+                }
+                // 6x - 16x DS, or 1440p/4K capture (> 1400px) -> Bilinear downscale to target height ~1080px
+                else -> {
+                    val targetH = 1080
+                    val factor = targetH.toFloat() / h.toFloat()
+                    val dstW = (w * factor).toInt().coerceAtLeast(1)
+                    val dstH = targetH
+                    val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(out)
+                    val smoothPaint = Paint().apply {
+                        isFilterBitmap = true
+                        isAntiAlias = true
+                        isDither = true
+                    }
+                    canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), smoothPaint)
+                    out
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Adaptive OCR scaling failed, falling back to source bitmap: ${t.message}")
+            src
+        }
+    }
+
+    /**
      * Preserves sharp retro 1-pixel font contours via nearest-neighbor point sampling.
      */
     fun createPixelArtUpscaledBitmap(src: Bitmap, scaleFactor: Int = 4): Bitmap {
-        val minDim = min(src.width, src.height)
-        val scale = if (minDim >= 700) 1 else scaleFactor.coerceIn(2, 4)
-        if (scale == 1) return src
-
-        return try {
-            val dstW = src.width * scale
-            val dstH = src.height * scale
-            val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(out)
-            val nnPaint = Paint().apply {
-                isFilterBitmap = false
-                isAntiAlias = false
-                isDither = false
-            }
-            canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), nnPaint)
-            out
-        } catch (t: Throwable) {
-            src
-        }
+        return createOptimalOcrScaledBitmap(src)
     }
 
     /**
@@ -329,7 +383,7 @@ class GameTextRecognizer {
      * Sauvola Local Adaptive Thresholding with fast O(1) Integral Image (Summed Area Table).
      * Formula: T(x,y) = mean * (1 + k * (std / 128.0 - 1.0))
      */
-    fun createSauvolaBinarizedBitmap(src: Bitmap, windowRadius: Int = 12, k: Float = 0.18f): Bitmap? {
+    fun createSauvolaBinarizedBitmap(src: Bitmap, windowRadius: Int = -1, k: Float = 0.18f): Bitmap? {
         return try {
             val w = src.width
             val h = src.height
@@ -367,7 +421,7 @@ class GameTextRecognizer {
             }
 
             val outPixels = IntArray(w * h)
-            val r = windowRadius
+            val r = if (windowRadius > 0) windowRadius else (h * 0.016f).toInt().coerceIn(6, 28)
 
             for (y in 0 until h) {
                 val y1 = max(0, y - r)

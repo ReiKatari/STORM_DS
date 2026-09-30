@@ -111,7 +111,13 @@
   <string name="fast_forward_speed">Скорость быстрой перемотки</string>
   <string name="fast_forward_speed_summary">Множитель ускорения при нажатии Fast Forward</string>
   <string name="frame_limit_speed">Скорость эмуляции</string>
-  <string name="frame_limit_speed_summary">Множитель замедления / ограничения FPS</string>
+  <string name="audio_mute_on_fast_forward_title">Глушение звука при перемотке</string>
+  <string name="audio_mute_on_fast_forward_summary">Отключает звук при ускорении (Fast Forward) для устранения щелчков и перегрузки</string>
+  <string name="video_drs_title">Динамическое масштабирование разрешения (DRS)</string>
+  <string name="video_drs_summary">Автоматическая плавная регулировка 3D разрешения при падении FPS для поддержания 60 кадров/сек</string>
+  <string name="drs_hud_status_active">DRS: Активен (автомасштабирование)</string>
+  <string name="drs_hud_status_scaled">DRS: Снижено до %1$dx (цель %2$dx)</string>
+  <string name="drs_hud_status_disabled">DRS: Выключен</string>
   <string name="audio_enabled">Включить звук</string>
   <string name="audio_enabled_summary">Воспроизведение звука эмулятора</string>
   <string name="audio_interpolation">Интерполяция аудио</string>
@@ -598,6 +604,8 @@
     <item>6x Нативное (1536x1152)</item>
     <item>7x Нативное (1792x1344)</item>
     <item>8x Нативное (2048x1536)</item>
+    <item>12x Нативное (3072x2304)</item>
+    <item>16x Нативное (4096x3072)</item>
   </string-array>
   <string-array name="video_filtering_options">
     <item>Нет</item>

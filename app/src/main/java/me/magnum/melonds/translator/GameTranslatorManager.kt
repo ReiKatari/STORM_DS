@@ -247,18 +247,6 @@ class GameTranslatorManager(
             return
         }
 
-        if (!mediaProjectionCapturer.hasPermission) {
-            pendingTranslateAfterPermission = true
-            try {
-                val intent = mediaProjectionCapturer.createCaptureIntent()
-                requestMediaProjectionPermission?.invoke(intent)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to launch MediaProjection permission request", e)
-                Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
-
         overlayView?.isTranslating = true
         val prevShowFloating = overlayView?.showFloatingButton ?: true
         overlayView?.showFloatingButton = false
@@ -268,40 +256,55 @@ class GameTranslatorManager(
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
             var capturedBitmap: Bitmap? = null
 
-            // Tier 1: High-res MediaProjection Screen Capture
-            try {
-                capturedBitmap = withTimeoutOrNull(1500) {
-                    mediaProjectionCapturer.captureScreen()
-                }
-                if (capturedBitmap != null && isBitmapBlank(capturedBitmap)) {
-                    capturedBitmap?.recycle()
-                    capturedBitmap = null
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "MediaProjection capture failed", e)
-                capturedBitmap = null
+            // Tier 1: Fast in-process PixelCopy from SurfaceView (0 permissions, <20ms)
+            val pixelCopyResult = captureViaPixelCopy()
+            if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
+                capturedBitmap = pixelCopyResult
+            } else {
+                pixelCopyResult?.recycle()
             }
 
-            // Tier 2: PixelCopy from SurfaceView
-            if (capturedBitmap == null) {
-                val pixelCopyResult = captureViaPixelCopy()
-                capturedBitmap = if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
-                    pixelCopyResult
-                } else {
-                    pixelCopyResult?.recycle()
-                    null
-                }
-            }
-
-            // Tier 3: Native DS Framebuffer (256x384)
+            // Tier 2: Direct DS Framebuffer (native or scaled)
             if (capturedBitmap == null && screenshotProvider != null) {
                 try {
                     capturedBitmap = withTimeoutOrNull(500) {
-                        screenshotProvider?.invoke()
+                        screenshotProvider.invoke()
                     }
                 } catch (_: Throwable) {
                     capturedBitmap = null
                 }
+            }
+
+            // Tier 3: MediaProjection Screen Capture (if permission already granted)
+            if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
+                try {
+                    capturedBitmap = withTimeoutOrNull(1500) {
+                        mediaProjectionCapturer.captureScreen()
+                    }
+                    if (capturedBitmap != null && isBitmapBlank(capturedBitmap)) {
+                        capturedBitmap.recycle()
+                        capturedBitmap = null
+                    }
+                } catch (e: Throwable) {
+                    Log.e(TAG, "MediaProjection capture failed", e)
+                    capturedBitmap = null
+                }
+            }
+
+            // Fallback: If still no capture and MediaProjection not yet granted, request it
+            if (capturedBitmap == null && !mediaProjectionCapturer.hasPermission) {
+                overlayView?.showFloatingButton = prevShowFloating
+                overlayView?.isTranslating = false
+                overlayView?.invalidate()
+                pendingTranslateAfterPermission = true
+                try {
+                    val intent = mediaProjectionCapturer.createCaptureIntent()
+                    requestMediaProjectionPermission?.invoke(intent)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to launch MediaProjection permission request", e)
+                    Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
             }
 
             overlayView?.showFloatingButton = prevShowFloating
@@ -315,8 +318,12 @@ class GameTranslatorManager(
             }
 
             if (capturedBitmap != null) {
-                val isNativeDsBitmap = (capturedBitmap!!.width == 256 && capturedBitmap!!.height == 384)
-                processCapturedFrame(capturedBitmap!!, forceFullscreen = isNativeDsBitmap, isAuto = isAuto)
+                val w = capturedBitmap.width.toFloat()
+                val h = capturedBitmap.height.toFloat()
+                val aspect = w / h
+                val isDsAspect = kotlin.math.abs(aspect - (256f / 384f)) < 0.05f || kotlin.math.abs(aspect - (256f / 192f)) < 0.05f
+                val isNativeDsBitmap = isDsAspect || (capturedBitmap.width == 256 && capturedBitmap.height == 384)
+                processCapturedFrame(capturedBitmap, forceFullscreen = isNativeDsBitmap, isAuto = isAuto)
             } else {
                 overlayView?.isTranslating = false
                 if (isPausedByTranslator) {
@@ -459,19 +466,28 @@ class GameTranslatorManager(
         mainScope.launch {
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
             var capturedBitmap: Bitmap? = null
-            try {
-                capturedBitmap = withTimeoutOrNull(1500) {
-                    mediaProjectionCapturer.captureScreen()
-                }
-            } catch (_: Throwable) {}
 
-            if (capturedBitmap == null) {
-                capturedBitmap = captureViaPixelCopy()
+            // Tier 1: Fast in-process PixelCopy from SurfaceView
+            val pixelCopyResult = captureViaPixelCopy()
+            if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
+                capturedBitmap = pixelCopyResult
+            } else {
+                pixelCopyResult?.recycle()
             }
 
+            // Tier 2: Direct DS Framebuffer
             if (capturedBitmap == null && screenshotProvider != null) {
                 try {
                     capturedBitmap = withTimeoutOrNull(500) { screenshotProvider.invoke() }
+                } catch (_: Throwable) {}
+            }
+
+            // Tier 3: MediaProjection Screen Capture
+            if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
+                try {
+                    capturedBitmap = withTimeoutOrNull(1500) {
+                        mediaProjectionCapturer.captureScreen()
+                    }
                 } catch (_: Throwable) {}
             }
 
@@ -602,8 +618,9 @@ class GameTranslatorManager(
     }
 
     private fun getActiveTranslationEngine(): ITranslationEngine {
-        val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
+        val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "mlkit_offline"))
         val baseEngine = when (type) {
+            TranslatorEngineType.MLKIT_OFFLINE -> MlKitOnDeviceTranslateEngine()
             TranslatorEngineType.OFFLINE -> OfflineSmartDictionaryEngine()
             TranslatorEngineType.YANDEX -> YandexTranslateEngine(okHttpClient)
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient)

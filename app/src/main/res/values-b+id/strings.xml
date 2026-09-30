@@ -514,6 +514,8 @@
         <item>6x asli (1536x1152)</item>
         <item>7x asli (1792x1344)</item>
         <item>8x asli (2048x1536)</item>
+        <item>12x asli (3072x2304)</item>
+        <item>16x asli (4096x3072)</item>
     </string-array>
     <string-array name="video_filtering_options">
         <item>Tidak ada</item>

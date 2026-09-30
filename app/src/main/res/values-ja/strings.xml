@@ -1338,6 +1338,8 @@
         <item>6x (1536x1152)</item>
         <item>7x (1792x1344)</item>
         <item>8x (2048x1536)</item>
+        <item>12x (3072x2304)</item>
+        <item>16x (4096x3072)</item>
     </string-array>
 
     <string-array name="video_filtering_options">

@@ -100,6 +100,7 @@ xz = { module = "org.tukaani:xz", version.ref = "xz" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
 mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-japanese", version = "16.0.1" }
 mlkit-text-recognition-chinese = { module = "com.google.mlkit:text-recognition-chinese", version = "16.0.1" }
+mlkit-translate = { module = "com.google.mlkit:translate", version = "17.0.3" }
 
 # GitHub
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
