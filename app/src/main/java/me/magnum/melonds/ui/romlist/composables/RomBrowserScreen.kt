@@ -126,7 +126,10 @@ fun RomBrowserScreen(
     var shouldScrollToTopOnEntriesLoaded by remember { mutableStateOf(true) }
     var pendingRefreshScrollReset by remember { mutableStateOf(false) }
     var isManualRefreshing by remember { mutableStateOf(false) }
+    var isRefreshInProgress by remember { mutableStateOf(false) }
     var refreshTriggerCount by remember { mutableIntStateOf(0) }
+
+    val isEffectivelyRefreshing = isRefreshInProgress || isManualRefreshing || pendingRefreshScrollReset || scanningStatus == RomScanningStatus.SCANNING
 
     val isCurrentlyAtTop by remember(state.viewMode) {
         derivedStateOf {
@@ -146,6 +149,7 @@ fun RomBrowserScreen(
     val handleRefreshWithScrollReset: () -> Unit = {
         focusedEntryIndex = -1
         userHasScrolledManually = false
+        isRefreshInProgress = true
         isManualRefreshing = true
         pendingRefreshScrollReset = true
         shouldScrollToTopOnEntriesLoaded = true
@@ -161,7 +165,7 @@ fun RomBrowserScreen(
     }
 
     val refreshState = rememberPullRefreshState(
-        refreshing = scanningStatus == RomScanningStatus.SCANNING,
+        refreshing = isEffectivelyRefreshing,
         onRefresh = handleRefreshWithScrollReset,
     )
 
@@ -171,7 +175,7 @@ fun RomBrowserScreen(
                 RomViewMode.GRID -> gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 25
                 RomViewMode.LIST -> listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 25
             }
-            if (isScrolledDown && !isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING && !pendingRefreshScrollReset) {
+            if (isScrolledDown && !isEffectivelyRefreshing) {
                 userHasScrolledManually = true
             }
         }
@@ -199,7 +203,7 @@ fun RomBrowserScreen(
 
     // Always pin strictly to top (item 0, offset 0) whenever entries load initially or refresh
     LaunchedEffect(state.entries, firstEntryKey, refreshTriggerCount, shouldScrollToTopOnEntriesLoaded) {
-        if (state.entries.isNotEmpty() && (shouldScrollToTopOnEntriesLoaded || isManualRefreshing || pendingRefreshScrollReset || !userHasScrolledManually || isCurrentlyAtTop)) {
+        if (state.entries.isNotEmpty() && (shouldScrollToTopOnEntriesLoaded || isEffectivelyRefreshing || !userHasScrolledManually || isCurrentlyAtTop)) {
             userHasScrolledManually = false
             focusedEntryIndex = -1
             repeat(16) {
@@ -228,6 +232,7 @@ fun RomBrowserScreen(
             userHasScrolledManually = false
             pendingRefreshScrollReset = true
             isManualRefreshing = true
+            isRefreshInProgress = true
             shouldScrollToTopOnEntriesLoaded = true
             focusedEntryIndex = -1
             repeat(16) {
@@ -235,18 +240,54 @@ fun RomBrowserScreen(
                 listState.scrollToItem(0, 0)
                 withFrameNanos { }
             }
-        } else {
+        }
+    }
+
+    // Dedicated drag-release synchronization coroutine:
+    // Ensures scroll is reset to item 0 offset 0 strictly AFTER the user lifts their finger and nested-scroll fling settles
+    LaunchedEffect(isGridDragged, isListDragged, isRefreshInProgress, pendingRefreshScrollReset, isManualRefreshing, scanningStatus, refreshTriggerCount) {
+        if (isRefreshInProgress || pendingRefreshScrollReset || isManualRefreshing) {
+            // While finger is actively touching/dragging the list, do not fight the pointer
+            if (isGridDragged || isListDragged) {
+                return@LaunchedEffect
+            }
+            // Once the finger is released (!isGridDragged && !isListDragged):
+            repeat(16) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                withFrameNanos { }
+            }
+            // Settle nested-scroll spring / pull-refresh rebound
+            kotlinx.coroutines.delay(120)
+            repeat(16) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                withFrameNanos { }
+            }
+            // If repository scan is in progress, keep pinned until finished
+            while (scanningStatus == RomScanningStatus.SCANNING) {
+                kotlinx.coroutines.delay(50)
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+            }
+            // Final settle and pinning over multiple frames
+            repeat(20) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                withFrameNanos { }
+            }
+            kotlinx.coroutines.delay(100)
+            repeat(12) {
+                gridState.scrollToItem(0, 0)
+                listState.scrollToItem(0, 0)
+                withFrameNanos { }
+            }
             userHasScrolledManually = false
-            shouldScrollToTopOnEntriesLoaded = true
             focusedEntryIndex = -1
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-            kotlinx.coroutines.delay(300)
-            pendingRefreshScrollReset = false
+            shouldScrollToTopOnEntriesLoaded = false
+            isRefreshInProgress = false
             isManualRefreshing = false
+            pendingRefreshScrollReset = false
         }
     }
 
@@ -472,7 +513,7 @@ fun RomBrowserScreen(
                                     }
                                 }
                                 PullRefreshIndicator(
-                                    refreshing = scanningStatus == RomScanningStatus.SCANNING,
+                                    refreshing = isEffectivelyRefreshing,
                                     state = refreshState,
                                     modifier = Modifier.align(Alignment.TopCenter),
                                     backgroundColor = colors.surface,
@@ -589,7 +630,7 @@ fun RomBrowserScreen(
                             }
                         }
                         PullRefreshIndicator(
-                            refreshing = scanningStatus == RomScanningStatus.SCANNING,
+                            refreshing = isEffectivelyRefreshing,
                             state = refreshState,
                             modifier = Modifier.align(Alignment.TopCenter),
                             backgroundColor = colors.surface,
@@ -614,9 +655,9 @@ fun RomBrowserScreen(
                                     }
                                 }
                             }
-                            val activeLetter by remember(state.alphabetIndex, state.viewMode, isManualRefreshing, userHasScrolledManually, isCurrentlyAtTop, shouldScrollToTopOnEntriesLoaded) {
+                            val activeLetter by remember(state.alphabetIndex, state.viewMode, isEffectivelyRefreshing, userHasScrolledManually, isCurrentlyAtTop, shouldScrollToTopOnEntriesLoaded) {
                                 derivedStateOf {
-                                    if (isManualRefreshing || isCurrentlyAtTop || !userHasScrolledManually || shouldScrollToTopOnEntriesLoaded) {
+                                    if (isEffectivelyRefreshing || isCurrentlyAtTop || !userHasScrolledManually || shouldScrollToTopOnEntriesLoaded) {
                                         state.alphabetIndex.keys.firstOrNull() ?: '#'
                                     } else {
                                         letterForIndex(state.alphabetIndex, activeFirstVis)
@@ -631,9 +672,9 @@ fun RomBrowserScreen(
                                 activeLetter = activeLetter,
                                 hasFolders = hasFolders,
                                 isInFolderSection = isInFolderSection,
-                                isInteractive = !isManualRefreshing && scanningStatus != RomScanningStatus.SCANNING && !pendingRefreshScrollReset,
+                                isInteractive = !isEffectivelyRefreshing,
                                 onFoldersClicked = {
-                                    if (isManualRefreshing || scanningStatus == RomScanningStatus.SCANNING || pendingRefreshScrollReset) return@AlphabetIndexBar
+                                    if (isEffectivelyRefreshing) return@AlphabetIndexBar
                                     coroutineScope.launch {
                                         userHasScrolledManually = false
                                         repeat(16) {
@@ -652,7 +693,7 @@ fun RomBrowserScreen(
                                     }
                                 },
                                 onLetterTouched = { idx, letter ->
-                                    if (isManualRefreshing || scanningStatus == RomScanningStatus.SCANNING || pendingRefreshScrollReset) return@AlphabetIndexBar
+                                    if (isEffectivelyRefreshing) return@AlphabetIndexBar
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
                                             userHasScrolledManually = false
