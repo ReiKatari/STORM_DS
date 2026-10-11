@@ -459,7 +459,7 @@ class EmulatorActivity : AppCompatActivity() {
             }
         }
     }
-    private val backPressedCallback = object : OnBackPressedCallback(false) {
+    private val backPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
             handleBackPressed()
         }
@@ -510,6 +510,7 @@ class EmulatorActivity : AppCompatActivity() {
 
     private val rewindOverlayState = mutableStateOf<me.magnum.melonds.ui.emulator.rewind.model.RewindWindow?>(null)
     private val bootStatus = mutableStateOf<String?>(null)
+    private var romLoadingTimeoutJob: kotlinx.coroutines.Job? = null
 
     private data class SaveStatesOverlayData(
         val slots: List<SaveStateSlot>,
@@ -1303,6 +1304,27 @@ class EmulatorActivity : AppCompatActivity() {
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 viewModel.emulatorState.collectLatest {
+                    if (it is EmulatorState.ValidatingFirmware || it is EmulatorState.ValidatingRom ||
+                        it is EmulatorState.LoadingFirmware || it is EmulatorState.LoadingRom) {
+                        if (romLoadingTimeoutJob == null || romLoadingTimeoutJob?.isActive != true) {
+                            romLoadingTimeoutJob = lifecycleScope.launch {
+                                kotlinx.coroutines.delay(8_000L)
+                                if (!bootRomReady.value && !isFinishing && !isDestroyed) {
+                                    android.util.Log.e("EmulatorActivity", "ROM launch timed out after 8s")
+                                    binding.textLoading.isGone = true
+                                    binding.progressLoading.isGone = true
+                                    binding.textLoadingDetail.isGone = true
+                                    showBootAnimation.value = false
+                                    presentation?.setInfoOverlayContent(null)
+                                    showRomLoadErrorDialog()
+                                }
+                            }
+                        }
+                    } else {
+                        romLoadingTimeoutJob?.cancel()
+                        romLoadingTimeoutJob = null
+                    }
+
                     when (it) {
                         is EmulatorState.Uninitialized -> {
                             binding.viewLayoutControls.isInvisible = true
@@ -1310,6 +1332,8 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
+                            showBootAnimation.value = false
+                            presentation?.setInfoOverlayContent(null)
                         }
                         is EmulatorState.ValidatingFirmware -> {
                             bootIsDsi.value = it.consoleType == me.magnum.melonds.domain.model.ConsoleType.DSi
@@ -1345,6 +1369,8 @@ class EmulatorActivity : AppCompatActivity() {
                                 bootIsDsi.value = running.console == me.magnum.melonds.domain.model.ConsoleType.DSi
                                 bootRomTitle.value = if (running.console == me.magnum.melonds.domain.model.ConsoleType.DSi) "Nintendo DSi" else "Nintendo DS"
                             }
+                            progressLoadingWatchdogJob?.cancel()
+                            progressLoadingWatchdogJob = null
                             bootRomReady.value = true
                             showBootAnimation.value = false
                             presentation?.setInfoOverlayContent(null)
@@ -1432,6 +1458,8 @@ class EmulatorActivity : AppCompatActivity() {
         }
     }
 
+    private var progressLoadingWatchdogJob: kotlinx.coroutines.Job? = null
+
     private fun showLoadingState() {
         if (!bootRomReady.value) {
             binding.viewLayoutControls.isInvisible = true
@@ -1442,6 +1470,17 @@ class EmulatorActivity : AppCompatActivity() {
             binding.textLoading.setText(R.string.info_loading)
             if (bootStatus.value == null) {
                 bootStatus.value = getString(R.string.info_loading)
+            }
+            progressLoadingWatchdogJob?.cancel()
+            progressLoadingWatchdogJob = lifecycleScope.launch {
+                kotlinx.coroutines.delay(4500L)
+                if (!bootRomReady.value && (viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware)) {
+                    bootRomReady.value = true
+                    showBootAnimation.value = false
+                    binding.textLoading.isGone = true
+                    binding.progressLoading.isGone = true
+                    binding.textLoadingDetail.isGone = true
+                }
             }
         }
     }
@@ -2993,6 +3032,10 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun handleBackPressed() {
+        if (!bootRomReady.value) {
+            finish()
+            return
+        }
         if (isRewindWindowOpen()) {
             closeRewindWindow()
         } else {

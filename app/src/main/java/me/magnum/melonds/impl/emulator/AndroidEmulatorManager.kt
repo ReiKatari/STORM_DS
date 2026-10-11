@@ -626,22 +626,17 @@ class AndroidEmulatorManager(
                     // otherwise or if corrupted/empty, repair NAND and export valid FAT12 public.sav so user storage immediately has valid FAT12 save
                     try {
                         val expectedSize = if (pubSav > 0u) pubSav.toInt() else 64 * 1024
-                        val sramDoc = DocumentFile.fromSingleUri(context, sram)
-                        var isUserSaveValid = false
-                        if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
-                            val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
-                            val isSizeMatching = sramBytes != null && (sramBytes.size == expectedSize || pubSav == 0u)
-                            if (isSizeMatching && isValidDsiWareFatSave(sramBytes)) {
-                                isUserSaveValid = true
-                                dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                                Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
-                            } else {
-                                Log.w(TAG, "loadDsiWare: existing save file is corrupt, mismatched size, or invalid FAT12 (${sramDoc.name}, size=${sramDoc.length()}, expected=$expectedSize), auto-repairing...")
-                            }
-                        }
+                        val sramBytes = readUserSaveBytes(sram)
+                        val isSizeMatching = sramBytes != null && (sramBytes.size == expectedSize || pubSav == 0u)
 
-                        if (!isUserSaveValid) {
-                            // User save is missing, mismatched size, or corrupted:
+                        if (isSizeMatching && isValidDsiWareFatSave(sramBytes)) {
+                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
+                        } else if (isSizeMatching) {
+                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            Log.i(TAG, "loadDsiWare: synced existing user save (${sramBytes?.size} B) into NAND title=$titleIdHex")
+                        } else {
+                            // User save is missing or mismatched size:
                             // 1. Generate a valid FAT12 filesystem matching pubSav (or default 64KB)
                             val validFatBytes = createFormattedFat12(expectedSize)
 
@@ -768,23 +763,16 @@ class AndroidEmulatorManager(
         try {
             val installedTitle = dsiNandManager.listTitles().firstOrNull { it.titleId == titleId }
             if (installedTitle != null) {
-                dsiNandManager.repairTitleSaves(titleId)
-
                 // If user has existing .sav in their save folder, sync it into NAND before launching
                 try {
-                    val sramDoc = DocumentFile.fromSingleUri(context, sram)
-                    var isUserSaveValid = false
-                    if (sramDoc != null && sramDoc.exists() && sramDoc.length() >= 512L) {
-                        val sramBytes = context.contentResolver.openInputStream(sram)?.use { it.readBytes() }
-                        if (isValidDsiWareFatSave(sramBytes)) {
-                            isUserSaveValid = true
-                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                            Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
-                        } else {
-                            Log.w(TAG, "loadDsiWare: installed title user save is corrupt/invalid FAT12 (${sramDoc.name}), auto-repairing...")
-                        }
-                    }
-                    if (!isUserSaveValid) {
+                    val sramBytes = readUserSaveBytes(sram)
+                    if (sramBytes != null && isValidDsiWareFatSave(sramBytes)) {
+                        dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                        Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes.size} B) into NAND title=$titleIdHex")
+                    } else if (sramBytes != null) {
+                        dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                        Log.i(TAG, "loadDsiWare: synced existing installed title save (${sramBytes.size} B) into NAND title=$titleIdHex")
+                    } else {
                         dsiNandManager.repairTitleSaves(titleId)
                         dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
                     }
@@ -999,6 +987,21 @@ class AndroidEmulatorManager(
         return (this and 0xFFFFFFFFL).toString(16).padStart(8, '0')
     }
 
+    private fun readUserSaveBytes(uri: Uri): ByteArray? {
+        return runCatching {
+            if (uri.scheme == "file") {
+                val path = uri.path ?: return@runCatching null
+                val file = File(path)
+                if (file.exists() && file.length() >= 512L) file.readBytes() else null
+            } else {
+                val doc = DocumentFile.fromSingleUri(context, uri)
+                if (doc != null && doc.exists() && doc.length() >= 512L) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } else null
+            }
+        }.getOrNull()
+    }
+
     private fun isValidDsiWareFatSave(sramBytes: ByteArray?): Boolean {
         if (sramBytes == null || sramBytes.size < 512) return false
         val boot0 = sramBytes[0].toInt() and 0xFF
@@ -1006,15 +1009,12 @@ class AndroidEmulatorManager(
         val sig1 = sramBytes[0x1FF].toInt() and 0xFF
         if (sig0 != 0x55 || sig1 != 0xAA) return false
         if (boot0 != 0xEB && boot0 != 0xE9) return false
+        val bytesPerSector = (sramBytes[0x0B].toInt() and 0xFF) or ((sramBytes[0x0C].toInt() and 0xFF) shl 8)
+        if (bytesPerSector != 512) return false
         val numFats = sramBytes[0x10].toInt() and 0xFF
         if (numFats < 1) return false
         val rootEntries = (sramBytes[0x11].toInt() and 0xFF) or ((sramBytes[0x12].toInt() and 0xFF) shl 8)
-        val rootValid = if (sramBytes.size <= 0x8000) (rootEntries == 16) else (rootEntries >= 64)
-        if (!rootValid) return false
-        if (sramBytes.size > 0x200) {
-            val mediaDesc = sramBytes[0x200].toInt() and 0xFF
-            if (mediaDesc != 0xF8) return false
-        }
+        if (rootEntries <= 0) return false
         val firstByte = sramBytes[0]
         return sramBytes.any { it != firstByte }
     }

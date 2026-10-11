@@ -1263,48 +1263,48 @@ void DSi::SetupDirectBoot()
             if (pubSavSize == 0 && header.IsDSiWare())
                 pubSavSize = 0x10000;
 
-            if (header.DSiPrivateSavSize > 0)
-            {
-                // Entry ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
-                entries[count].DriveLetter = 'G';
-                entries[count].Flags = 0x09;
-                entries[count].AccessRights = 0x06;
-                entries[count].Zero = 0;
-                strncpy(entries[count].Name, "dataPrv", 16);
-                snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
-                count++;
-            }
+            // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
+            entries[6].DriveLetter = 'G';
+            entries[6].Flags = (header.DSiPrivateSavSize > 0) ? 0x09 : 0x00;
+            entries[6].AccessRights = 0x06;
+            entries[6].Zero = 0;
+            strncpy(entries[6].Name, "dataPrv", 16);
+            snprintf(entries[6].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
 
-            // Entry ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
-            entries[count].DriveLetter = 'H';
-            entries[count].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "dataPub", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
-            count++;
+            // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            entries[7].DriveLetter = 'H';
+            entries[7].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
+            entries[7].AccessRights = 0x06;
+            entries[7].Zero = 0;
+            strncpy(entries[7].Name, "dataPub", 16);
+            snprintf(entries[7].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
 
-            // Entry ('I'): External SD/MMC ("sdmc") -> "/"
-            entries[count].DriveLetter = 'I';
-            entries[count].Flags = 0x00;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "sdmc", 16);
-            strncpy(entries[count].Path, "/", 64);
-            count++;
+            // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
+            entries[8].DriveLetter = 'I';
+            entries[8].Flags = 0x00;
+            entries[8].AccessRights = 0x06;
+            entries[8].Zero = 0;
+            strncpy(entries[8].Name, "sdmc", 16);
+            strncpy(entries[8].Path, "/", 64);
 
-            // Entry ('J'): Other Public Save ("otherPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            // Entry 9 ('J'): Other Public Save ("otherPub") -> "nand:/title/%08x/%08x/data/public.sav"
             // Required by games like Anonymous Notes and the Absolute series that query otherPub:
-            if (pubSavSize > 0)
-            {
-                entries[count].DriveLetter = 'J';
-                entries[count].Flags = 0x09;
-                entries[count].AccessRights = 0x06;
-                entries[count].Zero = 0;
-                strncpy(entries[count].Name, "otherPub", 16);
-                snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
-                count++;
-            }
+            entries[9].DriveLetter = 'J';
+            entries[9].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
+            entries[9].AccessRights = 0x06;
+            entries[9].Zero = 0;
+            strncpy(entries[9].Name, "otherPub", 16);
+            snprintf(entries[9].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+
+            // Entry 10 ('K'): Other Private Save ("otherPrv") -> "nand:/title/%08x/%08x/data/private.sav"
+            entries[10].DriveLetter = 'K';
+            entries[10].Flags = (header.DSiPrivateSavSize > 0) ? 0x09 : 0x00;
+            entries[10].AccessRights = 0x06;
+            entries[10].Zero = 0;
+            strncpy(entries[10].Name, "otherPrv", 16);
+            snprintf(entries[10].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+
+            count = 11;
 
             // Remaining slots remain ZERO (DriveLetter = 0) for dynamic system mounts / unused
 
@@ -1326,13 +1326,15 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x027FF80A, header.SecureAreaCRC16);
         ARM9Write16(0x027FF850, 0x5835);
 
+        u16 bootIndicator = 0x0001; // Slot-1 direct-boot for both DS and DSiWare so TWL-SDK CARD_Init / FS_Init can mount ROM
+
         ARM9Write32(0x027FFC00, cartid);
         ARM9Write32(0x027FFC04, cartid);
         ARM9Write16(0x027FFC08, header.HeaderCRC16);
         ARM9Write16(0x027FFC0A, header.SecureAreaCRC16);
         ARM9Write16(0x027FFC10, 0x5835);
         ARM9Write16(0x027FFC30, 0xFFFF);
-        ARM9Write16(0x027FFC40, 0x0001); // OS_IsRunOnTwl flag (0x0001 = TWL mode, 0x0000 = NTR mode)
+        ARM9Write16(0x027FFC40, bootIndicator); // OS_IsRunOnTwl / OS_BOOTTYPE flag (0x0001 = TWL mode)
 
         ARM9Write32(0x02FFFC00, cartid);
         ARM9Write32(0x02FFFC04, cartid);
@@ -1344,7 +1346,7 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x02FFFC28, 0x0001);
         ARM9Write16(0x02FFFC2C, 0x0001);
         ARM9Write16(0x02FFFC30, 0xFFFF);
-        ARM9Write16(0x02FFFC40, 0x0001); // OS_IsRunOnTwl flag (0x0001 = TWL mode, 0x0000 = NTR mode)
+        ARM9Write16(0x02FFFC40, bootIndicator); // OS_IsRunOnTwl / OS_BOOTTYPE flag (0x0001 = TWL mode)
 
         ARM9Write8(0x02FFFDFA, I2C.GetBPTWL()->GetBootFlag() | 0x80);
         ARM9Write8(0x02FFFDFB, 0x01);
@@ -1530,6 +1532,47 @@ void DSi::SetupDirectBoot()
                                 header.DSiARM7Hash);
         }
         header.DSiCryptoFlags &= ~0x03;
+
+        // For The Legend of Zelda: Four Swords Anniversary Edition (KQ9E / KQ9P / KQ9J),
+        // the save file manager checks OS_GetBootType() == 3 before accessing "dataPub:/savedata/all.dat".
+        // In direct boot mode, OS_GetBootType() must be 1 for Slot-1 ROM/CARD access (FS_Init / CARD_Init).
+        // Patching Zelda's save functions to accept boot type 1 enables clean dataPub: access without save corruption.
+        if (!memcmp(header.GameCode, "KQ9", 3))
+        {
+            bool patchedRead = false;
+            bool patchedWrite = false;
+            if (ARM9Read32(0x02056658) == 0xE3570003)
+            {
+                ARM9Write32(0x02056658, 0xE3570001); // cmp r7, #1
+                patchedRead = true;
+            }
+            if (ARM9Read32(0x02056748) == 0xE3500003)
+            {
+                ARM9Write32(0x02056748, 0xE3500001); // cmp r0, #1
+                patchedWrite = true;
+            }
+
+            // Fallback scan across ARM9 executable for non-USA regions (KQ9P / KQ9J)
+            if (!patchedRead || !patchedWrite)
+            {
+                u32 arm9End = header.ARM9RAMAddress + header.ARM9Size;
+                for (u32 addr = header.ARM9RAMAddress; addr < arm9End - 4; addr += 4)
+                {
+                    if (!patchedRead && ARM9Read32(addr) == 0xE3570003 && ARM9Read32(addr + 4) == 0x1A000018)
+                    {
+                        ARM9Write32(addr, 0xE3570001);
+                        patchedRead = true;
+                    }
+                    if (!patchedWrite && ARM9Read32(addr) == 0xE3500003 && ARM9Read32(addr + 4) == 0x1A000043)
+                    {
+                        ARM9Write32(addr, 0xE3500001);
+                        patchedWrite = true;
+                    }
+                }
+            }
+            Log(LogLevel::Info, "DSi::SetupDirectBoot: Zelda Four Swords save patch applied (read=%d, write=%d)\n",
+                patchedRead, patchedWrite);
+        }
     }
 
     if (dsmode)

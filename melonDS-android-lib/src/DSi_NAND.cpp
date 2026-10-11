@@ -1121,7 +1121,7 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
             f_read(&ef, bootSec, sizeof(bootSec), &nr);
             f_close(&ef);
             u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
-            bool rootMatches = (len <= 0x8000) ? (rootEntries == 16) : (rootEntries >= 64);
+            bool rootMatches = rootEntries > 0;
             bool isValid = (nr >= 512 &&
                             bootSec[0x1FE] == 0x55 && bootSec[0x1FF] == 0xAA &&
                             (bootSec[0] == 0xEB || bootSec[0] == 0xE9) &&
@@ -1134,7 +1134,7 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
                 Log(LogLevel::Info, "CreateSaveFile: %s already exists with valid FAT format (rootEntries=%u), keeping existing file\n", path, (u32)rootEntries);
                 return true;
             }
-            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT boot signature or root entries mismatch (%u != %u), reformatting\n", path, (u32)rootEntries, (u32)rootDirEntries);
+            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT boot signature (rootEntries=%u), reformatting\n", path, (u32)rootEntries);
         }
     }
 

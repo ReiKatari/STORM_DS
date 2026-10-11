@@ -684,7 +684,7 @@ static bool ensureValidSaveFile(const char* path, u32 expectedSize)
             f_close(&file);
             u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
             u16 bytesPerSec = (u16)bootSec[0x00B] | ((u16)bootSec[0x00C] << 8);
-            bool rootValid = (expectedSize <= 0x8000) ? (rootEntries == 16) : (rootEntries >= 64);
+            bool rootValid = rootEntries > 0;
             if (nread < 512 ||
                 bootSec[0x1FE] != 0x55 || bootSec[0x1FF] != 0xAA ||
                 (bootSec[0] != 0xEB && bootSec[0] != 0xE9) ||

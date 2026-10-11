@@ -34,6 +34,14 @@ fun DsBootOverlay(
             onFinished()
         }
     }
+    // Safety watchdog: prevent infinite loading animation under any circumstances
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(3500L)
+        if (!romReady) {
+            exit.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
+            onFinished()
+        }
+    }
 
     val contentAlpha = (intro.value * (1f - smooth(exit.value))).coerceIn(0f, 1f)
     val consoleType = if (isDsi) ConsoleType.DSi else ConsoleType.DS

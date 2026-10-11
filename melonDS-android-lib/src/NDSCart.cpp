@@ -542,6 +542,16 @@ CartRetail::CartRetail(std::unique_ptr<u8[]>&& rom, u32 len, u32 chipid, bool ba
     case 10: SRAMType = 4; break; // NAND
     default: SRAMType = 0; break; // ...whatever else
     }
+
+    if (Header.IsDSiWare() && SRAMType == 0 && SRAMLength > 0)
+    {
+        if (SRAMLength <= 65536)
+            SRAMType = 2; // EEPROM, regular (up to 64KB, e.g. Zelda Four Swords)
+        else if (SRAMLength <= 1024 * 1024)
+            SRAMType = 3; // FLASH (up to 1MB)
+        else
+            SRAMType = 4; // NAND
+    }
 }
 
 CartRetail::~CartRetail() = default;
