@@ -209,7 +209,9 @@ class SharedPreferencesSettingsRepository(
     @OptIn(ExperimentalSerializationApi::class)
     private val controllerConfiguration by lazy {
         val initialConfiguration = try {
-            val configFile = File(context.filesDir, CONTROLLER_CONFIG_FILE)
+            val rootSettingsDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/settings")
+            val storageConfig = File(rootSettingsDir, CONTROLLER_CONFIG_FILE)
+            val configFile = if (storageConfig.exists() && storageConfig.length() > 0) storageConfig else File(context.filesDir, CONTROLLER_CONFIG_FILE)
             configFile.inputStream().use {
                 val loadedConfiguration = json.decodeFromStream<ControllerConfigurationDto>(it)
                 loadedConfiguration.toControllerConfiguration()
@@ -463,7 +465,7 @@ class SharedPreferencesSettingsRepository(
             dsiBios9,
             dsiFirmware,
             dsiNand,
-            context.filesDir.absolutePath,
+            File(stormDsBase, "system").apply { mkdirs() }.absolutePath,
             getFastForwardSpeedMultiplier(),
             getFrameLimitSpeedMultiplier(),
             isRewindEnabled(),
@@ -1966,10 +1968,17 @@ class SharedPreferencesSettingsRepository(
         this.controllerConfiguration.value = controllerConfiguration
 
         try {
-            val configFile = File(context.filesDir, CONTROLLER_CONFIG_FILE)
             val dto = ControllerConfigurationDto.fromControllerConfiguration(controllerConfiguration)
+            val configFile = File(context.filesDir, CONTROLLER_CONFIG_FILE)
             configFile.outputStream().use {
                 json.encodeToStream(dto, it)
+            }
+            runCatching {
+                val rootSettingsDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/settings").apply { mkdirs() }
+                val storageConfig = File(rootSettingsDir, CONTROLLER_CONFIG_FILE)
+                storageConfig.outputStream().use {
+                    json.encodeToStream(dto, it)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to save controller configuration", e)

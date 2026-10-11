@@ -74,7 +74,24 @@ class SettingsBackupManager @Inject constructor(
         preferences.registerOnSharedPreferenceChangeListener(this)
     }
 
+    private fun getStorageSettingsDir(): File {
+        val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+        return File(rootBase, "settings").apply { mkdirs() }
+    }
+
     fun initializeMirror() {
+        runCatching {
+            val storageSettingsDir = getStorageSettingsDir()
+            val storageOptions = File(storageSettingsDir, STORM_DS_OPTIONS_FILE)
+            val storageSettings = File(storageSettingsDir, SETTINGS_FILE)
+            if (preferences.all.isEmpty()) {
+                if (storageOptions.exists() && storageOptions.length() > 0L) {
+                    restoreBackupJson(JSONObject(storageOptions.readText()))
+                } else if (storageSettings.exists() && storageSettings.length() > 0L) {
+                    restoreSettingsJson(JSONObject(storageSettings.readText()))
+                }
+            }
+        }
         requestMirrorWrite()
     }
 
@@ -148,6 +165,11 @@ class SettingsBackupManager @Inject constructor(
 
     private fun writeInternalMirror() {
         val mirrorJson = createBackupJson().toString()
+        runCatching {
+            val storageSettingsDir = getStorageSettingsDir()
+            writeTextAtomically(File(storageSettingsDir, STORM_DS_OPTIONS_FILE), mirrorJson)
+            writeTextAtomically(File(storageSettingsDir, SETTINGS_FILE), createSettingsJson().toString())
+        }
         writeTextAtomically(File(context.filesDir, STORM_DS_OPTIONS_FILE), mirrorJson)
         val mirrorDirectory = getConfiguredMirrorDirectory()
         if (mirrorDirectory != null) {
@@ -228,7 +250,8 @@ class SettingsBackupManager @Inject constructor(
     }
 
     private fun readJsonFile(fileName: String): Any? {
-        val file = File(context.filesDir, fileName)
+        val storageFile = File(getStorageSettingsDir(), fileName)
+        val file = if (storageFile.exists() && storageFile.length() > 0L) storageFile else File(context.filesDir, fileName)
         if (!file.exists()) {
             return null
         }
@@ -388,7 +411,11 @@ class SettingsBackupManager @Inject constructor(
             Log.w(TAG, "Skipping invalid backup value for $key")
             return
         }
-        writeTextAtomically(File(context.filesDir, fileName), value.toString())
+        val text = value.toString()
+        writeTextAtomically(File(context.filesDir, fileName), text)
+        runCatching {
+            writeTextAtomically(File(getStorageSettingsDir(), fileName), text)
+        }
     }
 
     private fun restoreRomsJson(root: JSONObject) {

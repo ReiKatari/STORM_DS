@@ -84,5 +84,6 @@ Files/*.pfx
 Files/*.cer
 *.jks
 *.keystore
+!app/storm_release.keystore
 
 

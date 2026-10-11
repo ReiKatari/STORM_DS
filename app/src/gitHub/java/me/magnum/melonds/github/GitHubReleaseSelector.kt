@@ -53,7 +53,7 @@ object GitHubReleaseSelector {
     fun isProductionApk(asset: AssetDto): Boolean {
         val lowerName = asset.name.lowercase()
         return isRepositoryDownload(asset) &&
-            asset.contentType == APK_CONTENT_TYPE &&
+            (asset.contentType == APK_CONTENT_TYPE || asset.contentType == "application/octet-stream" || asset.contentType.isEmpty()) &&
             lowerName.endsWith(".apk") &&
             ("storm" in lowerName || "melondualds" in lowerName || "app" in lowerName) &&
             "nightly" !in lowerName
@@ -62,7 +62,7 @@ object GitHubReleaseSelector {
     fun isNightlyApk(asset: AssetDto): Boolean {
         val lowerName = asset.name.lowercase()
         return isRepositoryDownload(asset) &&
-            asset.contentType == APK_CONTENT_TYPE &&
+            (asset.contentType == APK_CONTENT_TYPE || asset.contentType == "application/octet-stream" || asset.contentType.isEmpty()) &&
             lowerName.endsWith(".apk") &&
             ("storm" in lowerName || "melondualds" in lowerName || "app" in lowerName) &&
             "nightly" in lowerName

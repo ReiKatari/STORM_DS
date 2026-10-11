@@ -47,8 +47,15 @@ object CoilModule {
                     .build()
             }
             .diskCache {
+                val rootBase = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+                val storageCacheDir = java.io.File(rootBase, "cache/image_cache").apply { mkdirs() }
+                val targetDir = if (storageCacheDir.exists() && (storageCacheDir.canWrite() || rootBase.canWrite())) {
+                    storageCacheDir
+                } else {
+                    context.cacheDir.resolve("image_cache")
+                }
                 coil.disk.DiskCache.Builder()
-                    .directory(context.cacheDir.resolve("image_cache"))
+                    .directory(targetDir)
                     .maxSizeBytes(96L * 1024 * 1024)
                     .build()
             }

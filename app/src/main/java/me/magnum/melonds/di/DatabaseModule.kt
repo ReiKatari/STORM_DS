@@ -33,7 +33,29 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context, callbacks: Set<@JvmSuppressWildcards RoomDatabase.Callback>): MelonDatabase {
-        return Room.databaseBuilder(context, MelonDatabase::class.java, "melon-database")
+        val rootBase = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+        val dbDir = java.io.File(rootBase, "database").apply { mkdirs() }
+        val dbFile = java.io.File(dbDir, "melon-database")
+
+        // Migrate existing database from internal storage if it exists and external does not yet
+        val internalDb = context.getDatabasePath("melon-database")
+        if (internalDb != null && internalDb.exists() && !dbFile.exists()) {
+            runCatching {
+                internalDb.copyTo(dbFile, overwrite = false)
+                val shm = java.io.File(internalDb.parentFile, "melon-database-shm")
+                if (shm.exists()) shm.copyTo(java.io.File(dbDir, "melon-database-shm"), overwrite = false)
+                val wal = java.io.File(internalDb.parentFile, "melon-database-wal")
+                if (wal.exists()) wal.copyTo(java.io.File(dbDir, "melon-database-wal"), overwrite = false)
+            }
+        }
+
+        val dbPath = if (dbDir.exists() && (dbDir.canWrite() || rootBase.canWrite())) {
+            dbFile.absolutePath
+        } else {
+            "melon-database"
+        }
+
+        return Room.databaseBuilder(context, MelonDatabase::class.java, dbPath)
             .apply {
                 callbacks.forEach {
                     addCallback(it)

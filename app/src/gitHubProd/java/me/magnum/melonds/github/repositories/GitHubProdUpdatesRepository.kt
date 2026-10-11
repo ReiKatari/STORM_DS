@@ -27,7 +27,7 @@ class GitHubProdUpdatesRepository(
     companion object {
         private const val KEY_SKIP_VERSION = "github_updates_skip_version"
         private const val KEY_LAST_UPDATE_CHECK = "github_updates_last_check"
-        private const val UPDATE_CHECK_DELAY_HOURS = 22
+        private const val UPDATE_CHECK_DELAY_HOURS = 1
     }
 
     override suspend fun checkNewUpdate(): Result<AppUpdate?> {

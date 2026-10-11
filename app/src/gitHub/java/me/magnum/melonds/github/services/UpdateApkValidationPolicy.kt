@@ -18,7 +18,8 @@ enum class UpdateApkRejectionReason {
 }
 
 object UpdateApkValidationPolicy {
-    const val EXPECTED_PACKAGE = "me.magnum.melondualds"
+    const val EXPECTED_PACKAGE = "com.stormds.emulator"
+    private val ALLOWED_PACKAGES = setOf("com.stormds.emulator", "me.magnum.melondualds", "me.magnum.melonds")
 
     fun validate(
         candidate: UpdateApkMetadata,
@@ -31,7 +32,7 @@ object UpdateApkValidationPolicy {
         if (expectedSize > 0L && expectedSize != actualSize) {
             return UpdateApkRejectionReason.SIZE_MISMATCH
         }
-        if (candidate.packageName != EXPECTED_PACKAGE || installed.packageName != EXPECTED_PACKAGE) {
+        if (candidate.packageName !in ALLOWED_PACKAGES || installed.packageName !in ALLOWED_PACKAGES || candidate.packageName != installed.packageName) {
             return UpdateApkRejectionReason.PACKAGE_MISMATCH
         }
         if (candidate.versionCode <= installed.versionCode) {

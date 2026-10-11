@@ -250,8 +250,15 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     .build()
             }
             .diskCache {
+                val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+                val storageCoversCache = File(rootBase, "cache/covers_cache").apply { mkdirs() }
+                val targetDir = if (storageCoversCache.exists() && (storageCoversCache.canWrite() || rootBase.canWrite())) {
+                    storageCoversCache
+                } else {
+                    File(cacheDir, "covers_cache")
+                }
                 coil.disk.DiskCache.Builder()
-                    .directory(File(cacheDir, "covers_cache"))
+                    .directory(targetDir)
                     .maxSizeBytes(256L * 1024 * 1024)
                     .build()
             }

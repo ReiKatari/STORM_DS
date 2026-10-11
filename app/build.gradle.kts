@@ -23,10 +23,19 @@ android {
     signingConfigs {
         create("release") {
             val props = gradleLocalProperties(rootDir, providers)
-            (props["MELONDS_KEYSTORE"] as String?)?.let { storeFile = file(it) }
-            storePassword = props["MELONDS_KEYSTORE_PASSWORD"] as String? ?: ""
-            keyAlias = props["MELONDS_KEY_ALIAS"] as String? ?: ""
-            keyPassword = props["MELONDS_KEY_PASSWORD"] as String? ?: ""
+            val customKeystore = (props["MELONDS_KEYSTORE"] as String?)?.let { file(it) }
+            val projectKeystore = file("storm_release.keystore")
+            if (customKeystore != null && customKeystore.exists()) {
+                storeFile = customKeystore
+                storePassword = props["MELONDS_KEYSTORE_PASSWORD"] as String? ?: ""
+                keyAlias = props["MELONDS_KEY_ALIAS"] as String? ?: ""
+                keyPassword = props["MELONDS_KEY_PASSWORD"] as String? ?: ""
+            } else if (projectKeystore.exists()) {
+                storeFile = projectKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true

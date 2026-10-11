@@ -7,7 +7,7 @@ object GitHubUpdateCheckPolicy {
         enabled: Boolean,
         lastCheckMillis: Long,
         nowMillis: Long,
-        delayHours: Long = 22L,
+        delayHours: Long = 1L,
     ): Boolean {
         if (!enabled) return false
         if (lastCheckMillis == -1L) return true

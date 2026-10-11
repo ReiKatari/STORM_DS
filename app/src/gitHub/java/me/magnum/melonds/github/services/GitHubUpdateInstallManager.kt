@@ -45,10 +45,9 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
             return@flow
         }
 
-        val destinationUri = UpdateContentProvider.getUpdateFileUri(context, destinationFile)
         val downloadManager = context.getSystemService<DownloadManager>()!!
         val request = DownloadManager.Request(update.downloadUri).apply {
-            setDestinationUri(destinationUri)
+            setDestinationUri(Uri.fromFile(destinationFile))
             setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             setMimeType(APK_MIME)
             setTitle("Downloading update ${update.newVersion}...")
@@ -79,7 +78,7 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
                     }
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
                         if (validateDownloadedApk(update, destinationFile)) {
-                            openInstaller(downloadManager, downloadId)
+                            openInstaller(destinationFile)
                             channel.trySend(DownloadProgress.DownloadComplete)
                         } else {
                             channel.trySend(DownloadProgress.DownloadFailed)
@@ -128,8 +127,10 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
             update.downloadUri.toString().startsWith("${GITHUB_RELEASE_URL_PREFIX}download/")
     }
 
-    private fun openInstaller(downloadManager: DownloadManager, downloadId: Long) {
-        val fileUri = downloadManager.getUriForDownloadedFile(downloadId)
+    private fun openInstaller(destinationFile: File) {
+        val fileUri = runCatching {
+            UpdateContentProvider.getUpdateFileUri(context, destinationFile)
+        }.getOrNull() ?: Uri.fromFile(destinationFile)
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(fileUri, APK_MIME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
