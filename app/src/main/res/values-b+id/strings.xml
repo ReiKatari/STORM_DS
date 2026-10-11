@@ -472,7 +472,6 @@
         <item>Italia</item>
         <item>Spanyol</item>
         <item>Jepang</item>
-        <item>Rusia</item>
     </string-array>
     <string-array name="game_runtime_mic_source_options">
         <item>Bawaan</item>
@@ -485,6 +484,7 @@
         <item>ROM GBA</item>
         <item>Pak Getaran</item>
         <item>Ekspansi memori</item>
+        <item>Masukan analog</item>
     </string-array>
     <string-array name="console_type_options">
         <item>@string/console_ds</item>
@@ -576,6 +576,7 @@
         <item>Direktori berkas penyimpanan</item>
         <item>Direktori ROM</item>
         <item>Direktori internal</item>
+        <item>Kustom</item>
     </string-array>
     <string-array name="layout_orientation_options">
         <item>Mengikuti sistem</item>
@@ -1211,6 +1212,15 @@
     <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
     <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
     <string name="translator_region_badge">Area #%d</string>
+    <string name="translator_lasso_hint">Tarik kotak di layar untuk menerjemahkan</string>
+    <string name="translator_lasso_translate">Terjemahkan area</string>
+    <string name="translator_dict_title">Kamus dan penguraian kalimat</string>
+    <string name="translator_speak_action">Dengarkan ▶️</string>
+    <string name="translator_preview_voice">Uji suara ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24 kHz)</string>
+    <string name="translator_voice_engine_local_multi">Studio Suara AI Lokal (Piper INT8, offline)</string>
+    <string name="translator_voice_engine_system">Sistem Android TTS</string>
+    <string name="resolution_hud_position_title">Tampilan resolusi rendering</string>
     <string name="button_translate">Translate Screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>

@@ -61,9 +61,38 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
             }
             true
         }
+
+        // The region editor is only reachable in-game (translator overlay -> settings sheet),
+        // there is no entry point from the settings screen, so do not show a dead item here.
+        findPreference<androidx.preference.Preference>("pref_translator_regions")?.isVisible = false
+
+        SECRET_KEYS.forEach { key ->
+            findPreference<androidx.preference.EditTextPreference>(key)?.apply {
+                summaryProvider = androidx.preference.Preference.SummaryProvider<androidx.preference.EditTextPreference> { pref ->
+                    maskSecret(pref.text) ?: pref.context.getString(R.string.not_set)
+                }
+                setOnBindEditTextListener { editText ->
+                    editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                }
+            }
+        }
+    }
+
+    override fun isPasswordPreference(preference: androidx.preference.EditTextPreference): Boolean {
+        return preference.key in SECRET_KEYS
+    }
+
+    private fun maskSecret(value: String?): String? {
+        val secret = value?.trim().orEmpty()
+        if (secret.isEmpty()) return null
+        return if (secret.length <= 4) "••••" else "••••" + secret.takeLast(4)
     }
 
     override fun getTitle(): String {
         return getString(R.string.category_translator)
+    }
+
+    private companion object {
+        val SECRET_KEYS = setOf("translator_deepl_key", "translator_custom_ai_key")
     }
 }

@@ -20,6 +20,8 @@
 #include <assert.h>
 #include <string.h>
 #include <inttypes.h>
+#include <algorithm>
+#include <vector>
 #include "Args.h"
 #include "NDS.h"
 #include "DSi.h"
@@ -790,7 +792,13 @@ void DSi::SetupDirectBoot()
                     if (!memcmp(header.GameCode, "KVI", 3) || !memcmp(header.GameCode, "KV2", 3) ||
                         !memcmp(header.GameCode, "KV3", 3) || !memcmp(header.GameCode, "KV4", 3))
                     {
-                        u32 anonIds[] = { 0x4B564945, 0x4B563245, 0x4B563345, 0x4B563445 };
+                        u8 reg = (u8)header.GameCode[3];
+                        u32 anonIds[] = {
+                            (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'I' << 8 | reg),
+                            (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'2' << 8 | reg),
+                            (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'3' << 8 | reg),
+                            (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'4' << 8 | reg)
+                        };
                         for (u32 aid : anonIds)
                         {
                             bool found = false;
@@ -880,9 +888,47 @@ void DSi::SetupDirectBoot()
                                 tmd.TitleVersion = (u16)(header.ROMVersion << 8);
                                 tmd.NumberOfContents = 1;
                                 tmd.Contents.ContentType[1] = 1;
+                                u64 actualSize = NDSCartSlot.GetCart()->GetRawROMLength();
+                                for (int s = 7; s >= 0; --s)
+                                {
+                                    tmd.Contents.ContentSize[s] = (u8)(actualSize & 0xFF);
+                                    actualSize >>= 8;
+                                }
                                 u32 written = 0;
                                 f_write(&tmdFile, &tmd, sizeof(tmd), &written);
                                 f_close(&tmdFile);
+                            }
+                        }
+
+                        // Provision executable 00000000.app for the booted DSiWare title so TWL-SDK content: filesystem finds ROM assets
+                        if (header.IsDSiWare() && (tid == idNormal || (header.DSiTitleIDLow != 0 && tid == header.DSiTitleIDLow)))
+                        {
+                            u32 rawLen = NDSCartSlot.GetCart()->GetRawROMLength();
+                            snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/content/00000000.app", titleId0, tid);
+                            FF_FILINFO appInfo;
+                            if (f_stat(dirPath, &appInfo) != FR_OK || appInfo.fsize != rawLen)
+                            {
+                                FF_FIL appFile;
+                                if (f_open(&appFile, dirPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
+                                {
+                                    const u32 chunkSize = 64 * 1024;
+                                    for (u32 offset = 0; offset < rawLen; offset += chunkSize)
+                                    {
+                                        u32 toWrite = std::min(chunkSize, rawLen - offset);
+                                        u32 writtenApp = 0;
+                                        f_write(&appFile, &cartrom[offset], toWrite, &writtenApp);
+                                    }
+                                    f_close(&appFile);
+                                    Log(LogLevel::Info,
+                                        "DSi::SetupDirectBoot: Auto-provisioned 00000000.app (%u bytes) to %s\n",
+                                        rawLen, dirPath);
+                                }
+                                else
+                                {
+                                    Log(LogLevel::Warn,
+                                        "DSi::SetupDirectBoot: Failed to open %s for writing executable\n",
+                                        dirPath);
+                                }
                             }
                         }
                     }
@@ -1081,7 +1127,13 @@ void DSi::SetupDirectBoot()
             if (!memcmp(header.GameCode, "KVI", 3) || !memcmp(header.GameCode, "KV2", 3) ||
                 !memcmp(header.GameCode, "KV3", 3) || !memcmp(header.GameCode, "KV4", 3))
             {
-                u32 anonIds[] = { 0x4B564945, 0x4B563245, 0x4B563345, 0x4B563445 };
+                u8 reg = (u8)header.GameCode[3];
+                u32 anonIds[] = {
+                    (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'I' << 8 | reg),
+                    (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'2' << 8 | reg),
+                    (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'3' << 8 | reg),
+                    (u32)((u8)'K' << 24 | (u8)'V' << 16 | (u8)'4' << 8 | reg)
+                };
                 for (u32 aid : anonIds)
                 {
                     bool found = false;
@@ -1207,25 +1259,32 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "nand2:/photo", 64);
             count++;
 
-            // Entry 6 ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
-            entries[count].DriveLetter = 'G';
-            entries[count].Flags = 0x09;
-            entries[count].AccessRights = 0x06;
-            entries[count].Zero = 0;
-            strncpy(entries[count].Name, "dataPrv", 16);
-            snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
-            count++;
+            u32 pubSavSize = header.DSiPublicSavSize;
+            if (pubSavSize == 0 && header.IsDSiWare())
+                pubSavSize = 0x10000;
 
-            // Entry 7 ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            if (header.DSiPrivateSavSize > 0)
+            {
+                // Entry ('G'): Private Save ("dataPrv") -> "nand:/title/%08x/%08x/data/private.sav"
+                entries[count].DriveLetter = 'G';
+                entries[count].Flags = 0x09;
+                entries[count].AccessRights = 0x06;
+                entries[count].Zero = 0;
+                strncpy(entries[count].Name, "dataPrv", 16);
+                snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/private.sav", titleId0, titleId1);
+                count++;
+            }
+
+            // Entry ('H'): Public Save ("dataPub") -> "nand:/title/%08x/%08x/data/public.sav"
             entries[count].DriveLetter = 'H';
-            entries[count].Flags = 0x09;
+            entries[count].Flags = (pubSavSize > 0) ? 0x09 : 0x00;
             entries[count].AccessRights = 0x06;
             entries[count].Zero = 0;
             strncpy(entries[count].Name, "dataPub", 16);
             snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
             count++;
 
-            // Entry 8 ('I'): External SD/MMC ("sdmc") -> "/"
+            // Entry ('I'): External SD/MMC ("sdmc") -> "/"
             entries[count].DriveLetter = 'I';
             entries[count].Flags = 0x00;
             entries[count].AccessRights = 0x06;
@@ -1234,7 +1293,20 @@ void DSi::SetupDirectBoot()
             strncpy(entries[count].Path, "/", 64);
             count++;
 
-            // Slots 9 and 10 remain ZERO (DriveLetter = 0) for dynamic system mounts
+            // Entry ('J'): Other Public Save ("otherPub") -> "nand:/title/%08x/%08x/data/public.sav"
+            // Required by games like Anonymous Notes and the Absolute series that query otherPub:
+            if (pubSavSize > 0)
+            {
+                entries[count].DriveLetter = 'J';
+                entries[count].Flags = 0x09;
+                entries[count].AccessRights = 0x06;
+                entries[count].Zero = 0;
+                strncpy(entries[count].Name, "otherPub", 16);
+                snprintf(entries[count].Path, 64, "nand:/title/%08x/%08x/data/public.sav", titleId0, titleId1);
+                count++;
+            }
+
+            // Remaining slots remain ZERO (DriveLetter = 0) for dynamic system mounts / unused
 
             // Offset 0x3C0: Canonical application path string
             snprintf((char*)&devList[0x3C0], 0x40, "nand:/title/%08x/%08x/content/00000000.app", titleId0, titleId1);
@@ -1243,8 +1315,8 @@ void DSi::SetupDirectBoot()
                 ARM7Write8(devListAddr + k, devList[k]);
 
             Log(LogLevel::Info,
-                "DSi::SetupDirectBoot: Populated SD/MMC Device List at ARM7 RAM 0x%08X (TitleID=%08x/%08x, dataPub=%s)\n",
-                devListAddr, titleId0, titleId1, entries[7].Path);
+                "DSi::SetupDirectBoot: Populated SD/MMC Device List (%d entries) at ARM7 RAM 0x%08X (TitleID=%08x/%08x)\n",
+                count, devListAddr, titleId0, titleId1);
         }
 
         // ARM7 and ARM9 IPC / crt0 handshake tables in both 4MB DS mirror and 16MB DSi mirror
@@ -1260,7 +1332,7 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x027FFC0A, header.SecureAreaCRC16);
         ARM9Write16(0x027FFC10, 0x5835);
         ARM9Write16(0x027FFC30, 0xFFFF);
-        ARM9Write16(0x027FFC40, 0x0001);
+        ARM9Write16(0x027FFC40, 0x0001); // OS_IsRunOnTwl flag (0x0001 = TWL mode, 0x0000 = NTR mode)
 
         ARM9Write32(0x02FFFC00, cartid);
         ARM9Write32(0x02FFFC04, cartid);
@@ -1272,7 +1344,7 @@ void DSi::SetupDirectBoot()
         ARM9Write16(0x02FFFC28, 0x0001);
         ARM9Write16(0x02FFFC2C, 0x0001);
         ARM9Write16(0x02FFFC30, 0xFFFF);
-        ARM9Write16(0x02FFFC40, 0x0001); // boot indicator
+        ARM9Write16(0x02FFFC40, 0x0001); // OS_IsRunOnTwl flag (0x0001 = TWL mode, 0x0000 = NTR mode)
 
         ARM9Write8(0x02FFFDFA, I2C.GetBPTWL()->GetBootFlag() | 0x80);
         ARM9Write8(0x02FFFDFB, 0x01);
@@ -1457,7 +1529,7 @@ void DSi::SetupDirectBoot()
                                 header.DSiModcrypt2Size,
                                 header.DSiARM7Hash);
         }
-        header.DSiCryptoFlags |= 0x03;
+        header.DSiCryptoFlags &= ~0x03;
     }
 
     if (dsmode)

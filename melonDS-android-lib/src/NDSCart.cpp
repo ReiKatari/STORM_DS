@@ -402,7 +402,7 @@ static void formatDsiWareFat12(u8* buf, u32 size)
     const u8 sectorsPerCluster = 1;
     const u16 reservedSectors = 1;
     const u8 numFats = 2;
-    const u16 rootDirEntries = (size <= 0x20000) ? 64 : 128;
+    const u16 rootDirEntries = (size <= 0x8000) ? 16 : ((size <= 0x20000) ? 64 : 128);
     const u16 rootDirSectors = (rootDirEntries * 32 + bytesPerSector - 1) / bytesPerSector;
     const u32 totalClusters = (totalSectors > reservedSectors + rootDirSectors) ?
                               ((totalSectors - reservedSectors - rootDirSectors) / sectorsPerCluster) : 0;
@@ -659,6 +659,14 @@ u8 CartRetail::SPIWrite(u8 val, u32 pos, bool last)
 
 void CartRetail::ReadROM_B7(u32 addr, u32 len, u8* data, u32 offset) const
 {
+    static int readLogCount = 0;
+    if (readLogCount < 30)
+    {
+        readLogCount++;
+        Log(LogLevel::Warn, "ReadROM_B7: raw_addr=%08X len=%08X IsDSi=%d DSiMode=%d DSiBase=%08X ROMLength=%08X\n",
+            addr, len, IsDSi, DSiMode, DSiBase, ROMLength);
+    }
+
     addr &= (ROMLength-1);
 
     if (addr < 0x8000)
@@ -1808,6 +1816,9 @@ std::unique_ptr<CartCommon> ParseROM(std::unique_ptr<u8[]>&& romdata, u32 romlen
     else
         cart = std::make_unique<CartRetail>(std::move(cartrom), cartromsize, cartid, badDSiDump, romparams, std::move(sram), sramlen, userdata);
 
+    if (cart)
+        cart->SetRawROMLength(romlen);
+
     args = std::nullopt;
     return cart;
 }
@@ -1970,8 +1981,16 @@ void NDSCartSlot::WriteROMCnt(u32 val) noexcept
         Log(LogLevel::Debug, "key2 Y: %02X%08X\n", (u32)(Key2_Y>>32), (u32)Key2_Y);
     }
 
-    // transfers will only start when bit31 changes from 0 to 1
-    // and if AUXSPICNT is configured correctly
+    static int romcntLogCount = 0;
+    if (romcntLogCount < 20)
+    {
+        romcntLogCount++;
+        Log(LogLevel::Warn, "NDSCartSlot::WriteROMCnt val=%08X xferstart=%d SPICnt=%04X cmd=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+            val, xferstart, SPICnt,
+            ROMCommand[0], ROMCommand[1], ROMCommand[2], ROMCommand[3],
+            ROMCommand[4], ROMCommand[5], ROMCommand[6], ROMCommand[7]);
+    }
+
     if (xferstart && !(SPICnt & (1<<15)))
     {
         // Direct boot / hardware compatibility: ensure slot is enabled when transfer initiated

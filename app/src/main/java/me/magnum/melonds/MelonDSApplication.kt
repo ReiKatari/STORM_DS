@@ -255,6 +255,16 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     .maxSizeBytes(256L * 1024 * 1024)
                     .build()
             }
+            .okHttpClient {
+                okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                    .retryOnConnectionFailure(false)
+                    .build()
+            }
+            // Box art never changes: reuse the disk copy without revalidating it over the network.
+            .respectCacheHeaders(false)
             .crossfade(true)
             .build()
     }

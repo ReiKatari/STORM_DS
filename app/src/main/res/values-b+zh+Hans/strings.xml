@@ -700,7 +700,6 @@
         <item>意大利语</item>
         <item>西班牙语</item>
         <item>日语</item>
-        <item>俄语</item>
     </string-array>
     <string-array name="game_runtime_mic_source_options">
         <item>默认</item>
@@ -779,7 +778,6 @@
     <string-array name="external_display_screen_options">
         <item>@string/top_screen</item>
         <item>@string/bottom_screen</item>
-        <item>@string/custom_layout</item>
     </string-array>
     <string-array name="audio_interpolation_options">
         <item>无</item>
@@ -818,6 +816,7 @@
         <item>存档文件目录</item>
         <item>ROM 目录</item>
         <item>内部目录</item>
+        <item>自定义</item>
     </string-array>
     <string-array name="layout_orientation_options">
         <item>跟随系统</item>
@@ -900,7 +899,7 @@
     <string name="input_haptic_feedback_strength">Vibration strength</string>
     <string name="soft_input_behaviour_summary">Hide controls when controller connected</string>
     <string name="firmware_ds_bios">DS BIOS 与 Firmware</string>
-    <string name="firmware_dsi_bios">DSi BIOS &amp; NAND</string>
+    <string name="firmware_dsi_bios">DSi BIOS 与 NAND</string>
     <string name="dsi_sd_card">DSi SD card emulation</string>
     <string name="dsiware_manager_import_title_error_title_limit_reached">The DSi Menu already has 39 launcher entries. Delete another title before installing this one.</string>
     <string name="dsiware_manager_import_title_error_dsi_memory_full">The DSi system memory is full. Delete another DSiWare title before installing this one.</string>
@@ -1044,7 +1043,7 @@
     <string name="layout_open_editor">Layout Editor</string>
     <string name="toast_layout_applied">Layout: %1$s</string>
     <string name="input_group_console">Console Controls</string>
-    <string name="input_group_hotkeys">Hotkeys &amp; Shortcuts</string>
+    <string name="input_group_hotkeys">热键与快捷方式</string>
     <string name="label_position">Position</string>
     <string name="dual_screen_presets_disabled_hint">Presets disabled. Select a preset to enable the options below.</string>
     <string name="label_button_scale">Button size</string>
@@ -1152,24 +1151,24 @@
     <string name="shader_compatibility_report_save_failed">Could not write librashader.log to the ROMs folder.</string>
     <string name="shader_compatibility_report_no_rom_folder">No ROMs folder is configured to save into.</string>
     <string name="shader_compatibility_report_clear">Clear</string>
-    <string name="about_app_title">About &amp; Credits</string>
+    <string name="about_app_title">关于与致谢</string>
     <string name="about_app_description">High-performance fork of WatermelonDS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
-    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors &amp; open source licenses</string>
+    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, 作者与开源许可</string>
     <string name="about_fork_info_title">Project Base: WatermelonDS Fork</string>
-    <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite &amp; contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura &amp; team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play &amp; sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
+    <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite 与贡献者), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与团队). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play 和 sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
     <string name="about_version_title">Version</string>
-    <string name="about_credits_title">Credits &amp; Acknowledgements</string>
+    <string name="about_credits_title">致谢与鸣谢</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano &amp; contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI &amp; touch controls</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano 与 contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI 和触控</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura &amp; melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与 melonDS 团队 — original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG &amp; Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
-    <string name="about_credits_drastic_title">DraStic &amp; fastDS Inspirations</string>
-    <string name="about_credits_drastic_summary">Exophase &amp; DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
-    <string name="about_credits_libraries_title">Open Source Libraries &amp; Tools</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG 与 Libretro 团队 — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
+    <string name="about_credits_drastic_title">DraStic 与 fastDS Inspirations</string>
+    <string name="about_credits_drastic_summary">Exophase 与 DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
+    <string name="about_credits_libraries_title">开源库与工具</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang shaders), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (Adreno/Turnip drivers)</string>
     <string name="about_github_title">STORM DS Repository</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
@@ -1177,59 +1176,68 @@
     <string name="rom_display_name_mode">Game Title Display</string>
     <string name="rom_display_name_mode_file_name">File name (without extension)</string>
     <string name="rom_display_name_mode_internal">Internal game title (from ROM/Database)</string>
-    <string name="category_translator">Auto-Translator</string>
-    <string name="category_translator_summary">Smart in-game neural translation &amp; native overlay</string>
-    <string name="translator_enabled">Enable Auto-Translator</string>
-    <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
-    <string name="translator_engine">Translation Engine</string>
-    <string name="translator_engine_offline">Offline Hybrid (On-Device / No Internet Required)</string>
-    <string name="translator_engine_yandex">Yandex Translate (Free / Best Russian)</string>
-    <string name="translator_engine_google">Google Translate (Free / Fast)</string>
-    <string name="translator_engine_lingva">Lingva Neural (Free / No Rate Limits)</string>
-    <string name="translator_engine_deepl">DeepL Neural API</string>
-    <string name="translator_engine_libre">LibreTranslate (Open-Source)</string>
+    <string name="category_translator">自动翻译</string>
+    <string name="category_translator_summary">智能游戏内神经网络翻译与原生图层覆盖</string>
+    <string name="translator_enabled">启用自动翻译</string>
+    <string name="translator_enabled_summary">识别并翻译屏幕上的游戏对话</string>
+    <string name="translator_engine">翻译引擎</string>
+    <string name="translator_engine_offline">Google ML Kit (100% 本地离线神经网络)</string>
+    <string name="translator_engine_yandex">Yandex Translate (免费 / 最佳俄语支持)</string>
+    <string name="translator_engine_google">Google Translate (在线 / 快速)</string>
+    <string name="translator_engine_lingva">Lingva Neural (免费 / 无速率限制)</string>
+    <string name="translator_engine_deepl">DeepL Neural API (API 密钥)</string>
+    <string name="translator_engine_libre">LibreTranslate (开源引擎)</string>
     <string name="translator_engine_mymemory">MyMemory Translated</string>
-    <string name="translator_engine_custom_ai">Custom AI (Gemini / OpenAI / Claude)</string>
-    <string name="translator_source_lang">Source Language</string>
-    <string name="translator_target_lang">Target Language</string>
-    <string name="translator_trigger_mode">Translation Trigger</string>
-    <string name="translator_trigger_mode_on_demand">On-Demand (Button or Hotkey)</string>
-    <string name="translator_trigger_mode_auto">Auto-Detect on Screen Change</string>
-    <string name="translator_pause_on_translate">Pause Game During Translation</string>
-    <string name="translator_pause_on_translate_summary">Temporarily suspend gameplay while text overlay is visible</string>
-    <string name="translator_overlay_style">Overlay Appearance</string>
-    <string name="translator_style_smart_match">Smart Game Background Inpainting</string>
-    <string name="translator_style_semi_transparent">Semi-transparent Dark</string>
-    <string name="translator_style_neon_bubble">Translucent Neon Bubble</string>
-    <string name="translator_style_outline_only">Outline Only (No Background)</string>
-    <string name="translator_bubble_opacity">Background Opacity</string>
-    <string name="translator_font_size_scale">Font Size Scale</string>
-    <string name="translator_show_floating_button">Show Floating Translate Button</string>
-    <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
-    <string name="category_translator_tts">Dialogue Voice Acting (Text-to-Speech)</string>
-    <string name="translator_tts_enabled">Enable Speech Synthesis (TTS)</string>
-    <string name="translator_tts_enabled_summary">Read translated game dialogues aloud automatically</string>
-    <string name="translator_tts_lang_title">Voice Acting Language</string>
-    <string name="translator_tts_multi_voice">Multi-Character Voice Acting</string>
-    <string name="translator_tts_multi_voice_summary">Automatically detect male, female, and elder characters to speak with different timbres and pitches</string>
-    <string name="translator_api_keys_category">API Keys &amp; Custom AI Configuration</string>
-    <string name="translator_deepl_key">DeepL API Key</string>
-    <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>
-    <string name="translator_custom_ai_endpoint">AI Base URL / Endpoint</string>
-    <string name="translator_custom_ai_model">AI Model Name</string>
-    <string name="translator_disabled_hint">Auto-Translator is disabled in Settings</string>
-    <string name="translator_capture_failed">Failed to capture emulator screen</string>
-    <string name="translator_no_text_found">No readable text found on screen</string>
-    <string name="translator_regions_title">Translation Regions</string>
-    <string name="translator_regions_summary">Targeted translation areas on screen</string>
-    <string name="translator_add_region">+ Area</string>
-    <string name="translator_clear_regions">Clear All</string>
-    <string name="translator_save_regions">Save</string>
-    <string name="translator_close_regions">Close</string>
-    <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
-    <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
-    <string name="translator_region_badge">Area #%d</string>
-    <string name="button_translate">Translate Screen</string>
+    <string name="translator_engine_custom_ai">自定义 AI (ChatGPT / Claude / DeepSeek)</string>
+    <string name="translator_source_lang">源语言</string>
+    <string name="translator_target_lang">目标语言</string>
+    <string name="translator_trigger_mode">翻译触发方式</string>
+    <string name="translator_trigger_mode_on_demand">按需触发 (悬浮按钮或快捷键)</string>
+    <string name="translator_trigger_mode_auto">屏幕画面变化时自动翻译</string>
+    <string name="translator_pause_on_translate">翻译时暂停游戏</string>
+    <string name="translator_pause_on_translate_summary">显示翻译覆盖层时临时挂起游戏模拟</string>
+    <string name="translator_overlay_style">覆盖样式</string>
+    <string name="translator_style_smart_match">智能游戏背景融合修复</string>
+    <string name="translator_style_semi_transparent">半透明深色卡片</string>
+    <string name="translator_style_neon_bubble">霓虹气泡框</string>
+    <string name="translator_style_outline_only">仅轮廓描边 (无背景底色)</string>
+    <string name="translator_bubble_opacity">背景不透明度</string>
+    <string name="translator_font_size_scale">字体缩放比例</string>
+    <string name="translator_show_floating_button">显示悬浮翻译按钮</string>
+    <string name="translator_show_floating_button_summary">在模拟器屏幕上显示可拖动的 \"TR\" 悬浮球</string>
+    <string name="category_translator_tts">对话语音合成 (Text-to-Speech)</string>
+    <string name="translator_tts_enabled">启用语音朗读 (TTS)</string>
+    <string name="translator_tts_enabled_summary">自动朗读翻译后的游戏对话内容</string>
+    <string name="translator_tts_lang_title">朗读语言</string>
+    <string name="translator_tts_multi_voice">多角色声线分配</string>
+    <string name="translator_tts_multi_voice_summary">自动识别人性角色、女性、长者等角色，使用不同音色与音调进行配音</string>
+    <string name="translator_api_keys_category">API 密钥与自定义 AI 配置</string>
+    <string name="translator_deepl_key">DeepL API 密钥</string>
+    <string name="translator_custom_ai_key">AI API 密钥 (Gemini / OpenAI / Claude)</string>
+    <string name="translator_custom_ai_endpoint">AI API 基础服务地址</string>
+    <string name="translator_custom_ai_model">AI 模型名称</string>
+    <string name="translator_disabled_hint">自动翻译功能已在设置中关闭</string>
+    <string name="translator_capture_failed">抓取模拟器画面失败</string>
+    <string name="translator_no_text_found">屏幕上未识别到清晰文本</string>
+    <string name="translator_regions_title">翻译区域管理</string>
+    <string name="translator_regions_summary">屏幕上的指定局部翻译区域</string>
+    <string name="translator_add_region">+ 区域</string>
+    <string name="translator_clear_regions">清空所有</string>
+    <string name="translator_save_regions">保存</string>
+    <string name="translator_close_regions">关闭</string>
+    <string name="translator_regions_saved_toast">已保存翻译区域: %d 处</string>
+    <string name="translator_edit_regions_hint">在屏幕上拖拽以创建或调整区域大小</string>
+    <string name="translator_region_badge">区域 #%d</string>
+    <string name="translator_lasso_hint">在屏幕上拖动画框进行翻译</string>
+    <string name="translator_lasso_translate">翻译所选区域</string>
+    <string name="translator_dict_title">词典与语句解析</string>
+    <string name="translator_speak_action">朗读 ▶️</string>
+    <string name="translator_preview_voice">试听语音 ▶️</string>
+    <string name="translator_voice_engine_neural">Edge 神经云端语音 (24kHz)</string>
+    <string name="translator_voice_engine_local_multi">本地 AI Studio (Piper INT8, 离线)</string>
+    <string name="translator_voice_engine_system">系统 Android TTS</string>
+    <string name="resolution_hud_position_title">渲染分辨率显示</string>
+    <string name="button_translate">翻译屏幕</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>
     <string name="lang_en">English</string>
@@ -1272,7 +1280,7 @@
     <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
     <string name="video_console_skin_title">3D Animated Console Skin</string>
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
-    <string name="video_console_skin_type_title">Console Model &amp; Color</string>
+    <string name="video_console_skin_type_title">掌机型号与外观颜色</string>
     <string name="video_oled_battery_saver_title">Smart OLED Battery Saver</string>
     <string name="video_oled_battery_saver_summary">Dynamically optimize refresh rate and power consumption on OLED/AMOLED screens during static scenes (save up to 40% battery)</string>
     <string name="decrypt_rom_title">ROM Encrypted</string>
@@ -1286,7 +1294,7 @@
     <string name="app_language">App Language</string>
     <string name="app_language_summary">Select the interface language for STORM DS</string>
     <string name="dual_screen_info_title">How Dual Screen Presets Work</string>
-    <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area &amp; Alignment: customize vertical alignment and display coverage.</string>
+    <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 填充区域与对齐方式: customize vertical alignment and display coverage.</string>
     <string name="theme_accent_color_title">Accent Color</string>
     <string name="theme_accent_color_summary">Select accent neon color for STORM NIGHT theme</string>
     <string name="accent_electric_cyan">💎 Electric Cyan</string>
@@ -1322,7 +1330,7 @@
     <string name="reset_custom_cover">Reset Custom Cover</string>
     <string name="custom_cover_updated">Cover updated successfully</string>
     <string name="custom_cover_removed">Custom cover removed</string>
-    <string name="input_turbo_macros_title">Turbo Buttons &amp; Macros</string>
+    <string name="input_turbo_macros_title">连发按键与宏指令</string>
     <string name="input_turbo_macros_summary">Enable virtual Turbo A/B/X/Y rapid-fire buttons</string>
     <string name="input_gyro_mic_title">Gyro Microphone Emulation</string>
     <string name="input_gyro_mic_summary">Shake or tilt device to blow into virtual microphone</string>
@@ -1418,4 +1426,18 @@
     <string name="input_gyro_deadzone_y_summary">过滤垂直轴方向的手部微颤</string>
     <string name="input_gyro_recenter_quick_action">快速校准居中</string>
 
+    <!-- Translator Error Strings -->
+    <string name="translator_error_mlkit_model">离线翻译模型不可用或加载失败</string>
+    <string name="translator_error_network">翻译时网络错误</string>
+    <string name="translator_error_deepl_key_missing">DeepL API 密钥未配置</string>
+    <string name="translator_error_http">%1$s：HTTP 错误 %2$d</string>
+    <string name="translator_error_ai_key_missing">AI API 密钥未配置</string>
+    <string name="translator_tts_voice_engine_title">语音合成引擎</string>
+    <string name="translator_local_voice_category">本地配音工作室</string>
+    <string name="translator_local_voice_studio_title">神经配音工作室 (Piper TTS)</string>
+    <string name="translator_local_voice_studio_summary">高速设备端神经语音模型，支持独立角色配音</string>
+    <string name="translator_local_voice_model_title">语音模型</string>
+    <string name="translator_local_voice_pitch_variance_title">角色间音调变化</string>
+    <string name="translator_voice_model_dialog_title">语音模型包</string>
+    <string name="translator_action_all_settings">所有设置 ⚙️</string>
 </resources>

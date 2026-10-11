@@ -82,8 +82,8 @@ class GameTranslatorManager(
     var currentGameHash: String? = null
         private set
 
-    // Cache of recent translations to avoid redundant network hits
-    private val translationCache = mutableMapOf<String, String>()
+    // Two-tier persistent translation cache (memory LRU + ROM disk JSON)
+    private val translationCache = TranslationCache(activity)
 
     val isEnabled: Boolean
         get() = preferences.getBoolean(PREF_TRANSLATOR_ENABLED, false)
@@ -107,7 +107,7 @@ class GameTranslatorManager(
                     textRecognizer.clearCache()
                     lastTranslatedRawText = ""
                     lastFrameDHash = 0L
-                    translationCache.clear()
+                    translationCache.clearMemory()
                     overlayView?.clearTranslations()
                     syncOverlaySettings()
                 }
@@ -127,6 +127,7 @@ class GameTranslatorManager(
         currentGameCode = gameCode
         currentGameHash = gameHash
         Log.i(TAG, "Active ROM set: title='$romTitle', code='$gameCode', hash='$gameHash'")
+        translationCache.setGameKey(getGameStorageKey())
         loadRegionsForCurrentGame()
     }
 
@@ -298,9 +299,8 @@ class GameTranslatorManager(
         }
 
         if (!isAuto) {
-            // Manual user button tap: guarantee fresh translation with the currently active engine
+            // Manual user button tap: guarantee fresh OCR scan
             textRecognizer.clearCache()
-            translationCache.clear()
             lastTranslatedRawText = ""
             lastFrameDHash = 0L
             overlayView?.clearTranslations()
@@ -635,8 +635,7 @@ class GameTranslatorManager(
                                 val preparedText = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
                                 val textToTranslate = preparedText.ifBlank { block.originalText.trim() }
                                 val engineType = preferences.getString(PREF_TRANSLATOR_ENGINE, "google") ?: "google"
-                                val cacheKey = "$engineType|$textToTranslate|$sourceLang|$targetLang"
-                                val cached = translationCache[cacheKey]
+                                val cached = translationCache.get(engineType, sourceLang, targetLang, textToTranslate)
                                 if (cached != null) {
                                     block.translatedText = cached
                                 } else {
@@ -652,7 +651,7 @@ class GameTranslatorManager(
 
                                     val finalTranslation = translated?.takeIf { it.isNotBlank() } ?: block.originalText
                                     if (finalTranslation.isNotBlank() && !finalTranslation.equals(textToTranslate, ignoreCase = true) && !finalTranslation.equals(block.originalText, ignoreCase = true)) {
-                                        translationCache[cacheKey] = finalTranslation
+                                        translationCache.put(engineType, sourceLang, targetLang, textToTranslate, finalTranslation)
                                     }
                                     block.translatedText = finalTranslation
                                 }
@@ -728,6 +727,7 @@ class GameTranslatorManager(
         preferences.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         stopAutoTranslate()
         ttsManager.destroy()
+        translationCache.flush()
         mainScope.cancel()
         mediaProjectionCapturer.onDestroy()
     }

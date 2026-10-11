@@ -368,7 +368,6 @@
         <item>Italiano</item>
         <item>Spagnolo</item>
         <item>Giapponese</item>
-        <item>Russo</item>
     </string-array>
     <string-array name="game_runtime_mic_source_options">
         <item>Predefinita</item>
@@ -381,6 +380,7 @@
         <item>ROM GBA</item>
         <item>Rumble Pak</item>
         <item>Espansione di memoria</item>
+        <item>Input analogico</item>
     </string-array>
     <string-array name="console_type_options">
         <item>@string/console_ds</item>
@@ -456,6 +456,7 @@
         <item>Cartella dei file di salvataggio</item>
         <item>Cartella della ROM</item>
         <item>Cartella interna</item>
+        <item>Personalizzata</item>
     </string-array>
     <string-array name="layout_orientation_options">
         <item>Segui sistema</item>
@@ -1182,6 +1183,15 @@
     <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
     <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
     <string name="translator_region_badge">Area #%d</string>
+    <string name="translator_lasso_hint">Trascina un riquadro sullo schermo per tradurre</string>
+    <string name="translator_lasso_translate">Traduci area</string>
+    <string name="translator_dict_title">Dizionario e analisi della frase</string>
+    <string name="translator_speak_action">Ascolta ▶️</string>
+    <string name="translator_preview_voice">Prova voce ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24 kHz)</string>
+    <string name="translator_voice_engine_local_multi">Studio vocale IA locale (Piper INT8, offline)</string>
+    <string name="translator_voice_engine_system">Sistema Android TTS</string>
+    <string name="resolution_hud_position_title">Visualizzazione della risoluzione di rendering</string>
     <string name="button_translate">Translate Screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>

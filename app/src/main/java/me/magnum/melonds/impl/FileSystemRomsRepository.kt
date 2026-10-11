@@ -32,6 +32,7 @@ import me.magnum.melonds.R
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.RomScanningStatus
+import kotlinx.coroutines.sync.withLock
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.repositories.RomsRepository
@@ -88,6 +89,7 @@ class FileSystemRomsRepository(
     @Volatile private var currentDirectoryUris: Map<String, Uri> = emptyMap()
     @Volatile private var hasUnavailableSearchDirectories = false
     private val skipNextRomDataSave = AtomicBoolean(false)
+    private val scanMutex = kotlinx.coroutines.sync.Mutex()
 
     init {
         runCatching {
@@ -138,9 +140,21 @@ class FileSystemRomsRepository(
 
         if (addedDirectoryStrings.isNotEmpty()) {
             coroutineScope.launch {
-                scanningStatusSubject.emit(RomScanningStatus.SCANNING)
+                runSerialisedScan(targetDirectories = addedDirectoryStrings)
+            }
+        }
+    }
+
+    /**
+     * Runs a ROM directory scan. Scans are serialised (no overlapping scans fighting over the same list)
+     * and the scanning status is always reset in `finally`, so the UI can never stay in the scanning state.
+     */
+    private suspend fun runSerialisedScan(targetDirectories: Set<String>? = null) {
+        scanMutex.withLock {
+            scanningStatusSubject.emit(RomScanningStatus.SCANNING)
+            try {
                 val buffer = mutableListOf<Rom>()
-                scanForNewRoms(targetDirectories = addedDirectoryStrings).collect {
+                scanForNewRoms(targetDirectories = targetDirectories).collect {
                     buffer.add(it)
                     if (buffer.size >= 25) {
                         addRoms(buffer)
@@ -152,7 +166,12 @@ class FileSystemRomsRepository(
                     buffer.clear()
                 }
                 purgeNonExistentRoms()
-                scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during ROM scan", e)
+            } finally {
+                scanningStatusSubject.value = RomScanningStatus.NOT_SCANNING
             }
         }
     }
@@ -175,10 +194,24 @@ class FileSystemRomsRepository(
     }
 
     override suspend fun getRomAtPath(path: String): Rom? {
-        return getRoms().first().find { rom ->
+        val allRoms = getRoms().first()
+        val targetFile = java.io.File(path)
+        val targetName = targetFile.name
+
+        allRoms.find { rom ->
             val romPath = FileUtils.getAbsolutePathFromSAFUri(context, rom.uri)
             romPath == path
-        }?.let { refreshRomConfigFromOptions(it) }
+        }?.let { return refreshRomConfigFromOptions(it) }
+
+        allRoms.find { rom ->
+            rom.fileName.equals(targetName, ignoreCase = true)
+        }?.let { return refreshRomConfigFromOptions(it) }
+
+        if (targetFile.exists() && targetFile.canRead()) {
+            return getRomAtUri(android.net.Uri.fromFile(targetFile))
+        }
+
+        return null
     }
 
     override suspend fun getRomAtUri(uri: Uri): Rom? {
@@ -283,22 +316,7 @@ class FileSystemRomsRepository(
         }
 
         coroutineScope.launch {
-            scanningStatusSubject.emit(RomScanningStatus.SCANNING)
-            purgeNonExistentRoms()
-            val buffer = mutableListOf<Rom>()
-            scanForNewRoms().collect {
-                buffer.add(it)
-                if (buffer.size >= 25) {
-                    addRoms(buffer)
-                    buffer.clear()
-                }
-            }
-            if (buffer.isNotEmpty()) {
-                addRoms(buffer)
-                buffer.clear()
-            }
-            purgeNonExistentRoms()
-            scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
+            runSerialisedScan()
         }
     }
 
@@ -351,8 +369,12 @@ class FileSystemRomsRepository(
                     gameCode = incomingRom.gameCode.takeIf { it.isNotEmpty() } ?: existingRom.gameCode,
                     installedDsiWareTitleId = incomingRom.installedDsiWareTitleId ?: existingRom.installedDsiWareTitleId,
                 )
-                roms.remove(existingRom)
-                roms.add(updatedRom)
+                val existingIndex = roms.indexOf(existingRom)
+                if (existingIndex >= 0) {
+                    roms[existingIndex] = updatedRom
+                } else {
+                    roms.add(updatedRom)
+                }
                 hasChanges = true
             } else {
                 roms.add(incomingRom)
@@ -564,7 +586,7 @@ class FileSystemRomsRepository(
         romsChannel.tryEmit(roms.toList())
     }
 
-    private suspend fun loadCachedRoms() {
+    private suspend fun loadCachedRoms(): Unit = scanMutex.withLock {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
         try {
             val prefs = context.getSharedPreferences("fs_roms_repo_meta", Context.MODE_PRIVATE)
@@ -713,8 +735,7 @@ class FileSystemRomsRepository(
             .filter { rom ->
                 val uriStr = rom.uri.toString()
                 val docId = runCatching { DocumentsContract.getDocumentId(rom.uri) }.getOrNull()
-                val isPresent = (currentUriStrings.contains(uriStr) || (docId != null && currentDocIds.contains(docId))) &&
-                    doesRomFileExist(rom)
+                val isPresent = currentUriStrings.contains(uriStr) || (docId != null && currentDocIds.contains(docId))
                 !isPresent
             }
             .map { it.uri.toString() }

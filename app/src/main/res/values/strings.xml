@@ -1074,7 +1074,6 @@
         <item>Italian</item>
         <item>Spanish</item>
         <item>Japanese</item>
-        <item>Russian (Русский)</item>
     </string-array>
 
     <string-array name="game_runtime_mic_source_options">
@@ -1209,7 +1208,6 @@
     <string-array name="external_display_screen_options">
         <item>@string/top_screen</item>
         <item>@string/bottom_screen</item>
-        <item>@string/custom_layout</item>
     </string-array>
 
     <string-array name="external_display_mode_options">
@@ -1409,6 +1407,15 @@
     <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
     <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
     <string name="translator_region_badge">Area #%d</string>
+    <string name="translator_lasso_hint">Drag a box on screen to translate</string>
+    <string name="translator_lasso_translate">Translate area</string>
+    <string name="translator_dict_title">Dictionary and phrase breakdown</string>
+    <string name="translator_speak_action">Speak ▶️</string>
+    <string name="translator_preview_voice">Test voice ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24kHz)</string>
+    <string name="translator_voice_engine_local_multi">Local AI Studio (Piper INT8, offline)</string>
+    <string name="translator_voice_engine_system">System Android TTS</string>
+    <string name="resolution_hud_position_title">Current Resolution Display</string>
     <string name="button_translate">Translate Screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>
@@ -1584,4 +1591,19 @@
     <string name="settings_sub_about">About STORM DS project and developers</string>
     <string name="settings_sub_main">Emulator parameters and configuration</string>
     <string name="settings_sub_default">Parameters and settings</string>
+
+    <!-- Translator Error Strings -->
+    <string name="translator_error_mlkit_model">Offline translation model is unavailable or failed to load</string>
+    <string name="translator_error_network">Network error during translation</string>
+    <string name="translator_error_deepl_key_missing">DeepL API key is not configured</string>
+    <string name="translator_error_http">%1$s: HTTP error %2$d</string>
+    <string name="translator_error_ai_key_missing">AI API key is not configured</string>
+    <string name="translator_tts_voice_engine_title">Voice synthesis engine</string>
+    <string name="translator_local_voice_category">Local voice actor studio</string>
+    <string name="translator_local_voice_studio_title">Neural actor studio (Piper TTS)</string>
+    <string name="translator_local_voice_studio_summary">High-speed on-device neural voice models with distinct character acting</string>
+    <string name="translator_local_voice_model_title">Voice model</string>
+    <string name="translator_local_voice_pitch_variance_title">Pitch variance between characters</string>
+    <string name="translator_voice_model_dialog_title">Voice model pack</string>
+    <string name="translator_action_all_settings">All settings ⚙️</string>
 </resources>

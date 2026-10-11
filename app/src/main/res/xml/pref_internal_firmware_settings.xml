@@ -25,8 +25,7 @@
             android:summary="%s"
             app:iconSpaceReserved="false"
             android:entries="@array/firmware_settings_language_options"
-            android:entryValues="@array/firmware_settings_language_values"
-            android:defaultValue="1" />
+            android:entryValues="@array/firmware_settings_language_values" />
 
     <me.magnum.melonds.ui.settings.preferences.FirmwareColourPickerPreference
             android:key="firmware_settings_colour"

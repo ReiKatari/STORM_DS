@@ -332,7 +332,6 @@
         <item>Italien</item>
         <item>Espagnol</item>
         <item>Japonais</item>
-        <item>Russe</item>
     </string-array>
     <string-array name="game_runtime_mic_source_options">
         <item>Par défaut</item>
@@ -396,6 +395,7 @@
         <item>Répertoire des fichiers de sauvegarde</item>
         <item>Répertoire des ROMs</item>
         <item>Répertoire interne</item>
+        <item>Personnalisé</item>
     </string-array>
     <string-array name="layout_orientation_options">
         <item>Suivre le système</item>
@@ -1103,59 +1103,68 @@
     <string name="rom_display_name_mode">Game Title Display</string>
     <string name="rom_display_name_mode_file_name">File name (without extension)</string>
     <string name="rom_display_name_mode_internal">Internal game title (from ROM/Database)</string>
-    <string name="category_translator">Auto-Translator</string>
-    <string name="category_translator_summary">Smart in-game neural translation et native overlay</string>
-    <string name="translator_enabled">Enable Auto-Translator</string>
-    <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
-    <string name="translator_engine">Translation Engine</string>
-    <string name="translator_engine_offline">Offline Hybrid (On-Device / No Internet Required)</string>
-    <string name="translator_engine_yandex">Yandex Translate (Free / Best Russian)</string>
-    <string name="translator_engine_google">Google Translate (Free / Fast)</string>
-    <string name="translator_engine_lingva">Lingva Neural (Free / No Rate Limits)</string>
-    <string name="translator_engine_deepl">DeepL Neural API</string>
-    <string name="translator_engine_libre">LibreTranslate (Open-Source)</string>
+    <string name="category_translator">Traducteur automatique</string>
+    <string name="category_translator_summary">Traduction neuronale en jeu et superposition native</string>
+    <string name="translator_enabled">Activer le traducteur automatique</string>
+    <string name="translator_enabled_summary">Reconnaître et traduire les dialogues du jeu à l\'écran</string>
+    <string name="translator_engine">Moteur de traduction</string>
+    <string name="translator_engine_offline">Google ML Kit (100% neuronal local hors-ligne)</string>
+    <string name="translator_engine_yandex">Yandex Translate (Gratuit / Meilleur pour le russe)</string>
+    <string name="translator_engine_google">Google Translate (En ligne / Rapide)</string>
+    <string name="translator_engine_lingva">Lingva Neural (Gratuit / Sans limite)</string>
+    <string name="translator_engine_deepl">API DeepL Neural (Clé API)</string>
+    <string name="translator_engine_libre">LibreTranslate (Open source)</string>
     <string name="translator_engine_mymemory">MyMemory Translated</string>
-    <string name="translator_engine_custom_ai">Custom AI (Gemini / OpenAI / Claude)</string>
-    <string name="translator_source_lang">Source Language</string>
-    <string name="translator_target_lang">Target Language</string>
-    <string name="translator_trigger_mode">Translation Trigger</string>
-    <string name="translator_trigger_mode_on_demand">On-Demand (Button or Hotkey)</string>
-    <string name="translator_trigger_mode_auto">Auto-Detect on Screen Change</string>
-    <string name="translator_pause_on_translate">Pause Game During Translation</string>
-    <string name="translator_pause_on_translate_summary">Temporarily suspend gameplay while text overlay is visible</string>
-    <string name="translator_overlay_style">Overlay Appearance</string>
-    <string name="translator_style_smart_match">Smart Game Background Inpainting</string>
-    <string name="translator_style_semi_transparent">Semi-transparent Dark</string>
-    <string name="translator_style_neon_bubble">Translucent Neon Bubble</string>
-    <string name="translator_style_outline_only">Outline Only (No Background)</string>
-    <string name="translator_bubble_opacity">Background Opacity</string>
-    <string name="translator_font_size_scale">Font Size Scale</string>
-    <string name="translator_show_floating_button">Show Floating Translate Button</string>
-    <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
-    <string name="category_translator_tts">Dialogue Voice Acting (Text-to-Speech)</string>
-    <string name="translator_tts_enabled">Enable Speech Synthesis (TTS)</string>
-    <string name="translator_tts_enabled_summary">Read translated game dialogues aloud automatically</string>
-    <string name="translator_tts_lang_title">Voice Acting Language</string>
-    <string name="translator_tts_multi_voice">Multi-Character Voice Acting</string>
-    <string name="translator_tts_multi_voice_summary">Automatically detect male, female, and elder characters to speak with different timbres and pitches</string>
-    <string name="translator_api_keys_category">API Keys et Custom AI Configuration</string>
-    <string name="translator_deepl_key">DeepL API Key</string>
-    <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>
-    <string name="translator_custom_ai_endpoint">AI Base URL / Endpoint</string>
-    <string name="translator_custom_ai_model">AI Model Name</string>
-    <string name="translator_disabled_hint">Auto-Translator is disabled in Settings</string>
-    <string name="translator_capture_failed">Failed to capture emulator screen</string>
-    <string name="translator_no_text_found">No readable text found on screen</string>
-    <string name="translator_regions_title">Translation Regions</string>
-    <string name="translator_regions_summary">Targeted translation areas on screen</string>
-    <string name="translator_add_region">+ Area</string>
-    <string name="translator_clear_regions">Clear All</string>
-    <string name="translator_save_regions">Save</string>
-    <string name="translator_close_regions">Close</string>
-    <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
-    <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
-    <string name="translator_region_badge">Area #%d</string>
-    <string name="button_translate">Translate Screen</string>
+    <string name="translator_engine_custom_ai">IA personnalisée (ChatGPT / Claude / DeepSeek)</string>
+    <string name="translator_source_lang">Langue source</string>
+    <string name="translator_target_lang">Langue cible</string>
+    <string name="translator_trigger_mode">Déclencheur de traduction</string>
+    <string name="translator_trigger_mode_on_demand">À la demande (Bouton ou raccourci)</string>
+    <string name="translator_trigger_mode_auto">Automatique au changement d\'écran</string>
+    <string name="translator_pause_on_translate">Mettre en pause pendant la traduction</string>
+    <string name="translator_pause_on_translate_summary">Suspendre le jeu temporairement pendant l\'affichage du texte</string>
+    <string name="translator_overlay_style">Style de superposition</string>
+    <string name="translator_style_smart_match">Restauration intelligente du fond du jeu</string>
+    <string name="translator_style_semi_transparent">Carte sombre semi-transparente</string>
+    <string name="translator_style_neon_bubble">Bulle néon translucide</string>
+    <string name="translator_style_outline_only">Contour uniquement (Sans fond)</string>
+    <string name="translator_bubble_opacity">Opacité de l\'arrière-plan</string>
+    <string name="translator_font_size_scale">Échelle de police</string>
+    <string name="translator_show_floating_button">Afficher le bouton flottant</string>
+    <string name="translator_show_floating_button_summary">Bouton \"TR\" déplaçable sur l\'écran de jeu</string>
+    <string name="category_translator_tts">Synthèse vocale des dialogues (TTS)</string>
+    <string name="translator_tts_enabled">Activer la synthèse vocale (TTS)</string>
+    <string name="translator_tts_enabled_summary">Lire les dialogues traduits à voix haute automatiquement</string>
+    <string name="translator_tts_lang_title">Langue de la voix</string>
+    <string name="translator_tts_multi_voice">Voix multi-personnages</string>
+    <string name="translator_tts_multi_voice_summary">Détecter automatiquement les personnages masculins, féminins et âgés pour varier les timbres</string>
+    <string name="translator_api_keys_category">Clés API et configuration IA personnalisée</string>
+    <string name="translator_deepl_key">Clé API DeepL</string>
+    <string name="translator_custom_ai_key">Clé API IA (Gemini / OpenAI / Claude)</string>
+    <string name="translator_custom_ai_endpoint">URL de base / Point d\'accès IA</string>
+    <string name="translator_custom_ai_model">Nom du modèle IA</string>
+    <string name="translator_disabled_hint">Le traducteur automatique est désactivé dans les paramètres</string>
+    <string name="translator_capture_failed">Échec de la capture d\'écran de l\'émulateur</string>
+    <string name="translator_no_text_found">Aucun texte lisible détecté à l\'écran</string>
+    <string name="translator_regions_title">Zones de traduction</string>
+    <string name="translator_regions_summary">Zones ciblées à l\'écran pour la reconnaissance</string>
+    <string name="translator_add_region">+ Zone</string>
+    <string name="translator_clear_regions">Tout effacer</string>
+    <string name="translator_save_regions">Enregistrer</string>
+    <string name="translator_close_regions">Fermer</string>
+    <string name="translator_regions_saved_toast">Zones de traduction enregistrées : %d</string>
+    <string name="translator_edit_regions_hint">Faites glisser sur l\'écran pour créer ou ajuster les zones</string>
+    <string name="translator_region_badge">Zone #%d</string>
+    <string name="translator_lasso_hint">Glissez un cadre sur l\'écran pour traduire</string>
+    <string name="translator_lasso_translate">Traduire la zone</string>
+    <string name="translator_dict_title">Dictionnaire et analyse de phrase</string>
+    <string name="translator_speak_action">Écouter ▶️</string>
+    <string name="translator_preview_voice">Tester la voix ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24 kHz)</string>
+    <string name="translator_voice_engine_local_multi">Studio vocal IA local (Piper INT8, hors-ligne)</string>
+    <string name="translator_voice_engine_system">Android TTS système</string>
+    <string name="resolution_hud_position_title">Affichage de la résolution</string>
+    <string name="button_translate">Traduire l\'écran</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>
     <string name="lang_en">English</string>
@@ -1346,4 +1355,18 @@
     <string name="input_gyro_deadzone_y_summary">Ignorer les micro-tremblements sur l\'axe vertical</string>
     <string name="input_gyro_recenter_quick_action">Calibrage rapide « Centrer »</string>
 
+    <!-- Translator Error Strings -->
+    <string name="translator_error_mlkit_model">Le modèle de traduction hors ligne n\'est pas disponible ou n\'a pas pu être chargé</string>
+    <string name="translator_error_network">Erreur réseau pendant la traduction</string>
+    <string name="translator_error_deepl_key_missing">La clé API DeepL n\'est pas configurée</string>
+    <string name="translator_error_http">%1$s : erreur HTTP %2$d</string>
+    <string name="translator_error_ai_key_missing">La clé API IA n\'est pas configurée</string>
+    <string name="translator_tts_voice_engine_title">Moteur de synthèse vocale</string>
+    <string name="translator_local_voice_category">Studio de doublage local</string>
+    <string name="translator_local_voice_studio_title">Studio de doublage neuronal (Piper TTS)</string>
+    <string name="translator_local_voice_studio_summary">Modèles vocaux neuronaux hors ligne haute vitesse avec jeu d\'acteur distinct</string>
+    <string name="translator_local_voice_model_title">Modèle vocal</string>
+    <string name="translator_local_voice_pitch_variance_title">Variation de hauteur entre les personnages</string>
+    <string name="translator_voice_model_dialog_title">Pack de modèles vocaux</string>
+    <string name="translator_action_all_settings">Tous les paramètres ⚙️</string>
 </resources>

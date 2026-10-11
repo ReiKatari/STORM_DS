@@ -331,13 +331,17 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                val isInstalledShortcut = rom.isInstalledDsiWareShortcut ||
-                    rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME
+                val isDsiWare = rom.isInstalledDsiWareShortcut ||
+                    rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME ||
+                    rom.isDsiWareTitle ||
+                    isRealDsiWareTitle(rom)
 
-                if (isInstalledShortcut) {
-                    val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
+                val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
+                Log.w(TAG, "loadRom: CHECK rom='${rom.name}' isDsiWare=$isDsiWare (shortcut=${rom.isInstalledDsiWareShortcut}, isDsiWareTitle=${rom.isDsiWareTitle}, isReal=${isRealDsiWareTitle(rom)}) dsiBios=${dsiBiosResult.status}")
+
+                if (isDsiWare) {
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
-                        Log.i(TAG, "loadRom: Routing installed DSiWare shortcut '${rom.name}' to DSi NAND launch environment")
+                        Log.i(TAG, "loadRom: Routing DSiWare '${rom.name}' to DSi NAND launch environment")
                         return@withContext loadDsiWare(rom, cheats)
                     }
                 }
@@ -1004,6 +1008,9 @@ class AndroidEmulatorManager(
         if (boot0 != 0xEB && boot0 != 0xE9) return false
         val numFats = sramBytes[0x10].toInt() and 0xFF
         if (numFats < 1) return false
+        val rootEntries = (sramBytes[0x11].toInt() and 0xFF) or ((sramBytes[0x12].toInt() and 0xFF) shl 8)
+        val rootValid = if (sramBytes.size <= 0x8000) (rootEntries == 16) else (rootEntries >= 64)
+        if (!rootValid) return false
         if (sramBytes.size > 0x200) {
             val mediaDesc = sramBytes[0x200].toInt() and 0xFF
             if (mediaDesc != 0xF8) return false
@@ -1020,7 +1027,7 @@ class AndroidEmulatorManager(
         val sectorsPerCluster = 1
         val reservedSectors = 1
         val numFats = 2
-        val rootDirEntries = if (targetSize <= 0x20000) 64 else 128
+        val rootDirEntries = if (targetSize <= 0x8000) 16 else if (targetSize <= 0x20000) 64 else 128
         val sectorsPerFat = if (targetSize <= 0x80000) 1 else 2
 
         buf[0x00] = 0xEB.toByte()
@@ -1047,8 +1054,19 @@ class AndroidEmulatorManager(
         buf[0x15] = 0xF8.toByte()
         buf[0x16] = (sectorsPerFat and 0xFF).toByte()
         buf[0x17] = ((sectorsPerFat shr 8) and 0xFF).toByte()
-        buf[0x24] = 0x80.toByte()
+        buf[0x18] = 32.toByte()
+        buf[0x19] = 0.toByte()
+        buf[0x1A] = 2.toByte()
+        buf[0x1B] = 0.toByte()
+        buf[0x24] = if (targetSize > 0x80000) 0x80.toByte() else 0x00.toByte()
         buf[0x26] = 0x29.toByte()
+        buf[0x27] = 0x78.toByte()
+        buf[0x28] = 0x56.toByte()
+        buf[0x29] = 0x34.toByte()
+        buf[0x2A] = 0x12.toByte()
+        System.arraycopy("NO NAME    ".toByteArray(java.nio.charset.StandardCharsets.US_ASCII), 0, buf, 0x2B, 11)
+        val fsType = if (targetSize <= 0x80000) "FAT12   " else "FAT16   "
+        System.arraycopy(fsType.toByteArray(java.nio.charset.StandardCharsets.US_ASCII), 0, buf, 0x36, 8)
         buf[0x1FE] = 0x55.toByte()
         buf[0x1FF] = 0xAA.toByte()
 

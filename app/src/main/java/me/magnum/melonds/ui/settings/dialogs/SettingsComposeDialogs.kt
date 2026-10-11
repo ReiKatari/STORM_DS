@@ -217,7 +217,8 @@ fun SettingsChoiceDialogContent(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             options.forEachIndexed { index, option ->
-                val optVal = values.getOrNull(index)?.toString() ?: option.toString()
+                // Skip entries without a matching value so a label is never saved as the value
+                val optVal = values.getOrNull(index)?.toString() ?: return@forEachIndexed
                 val isSelected = optVal == selectedValue
                 val shape = RoundedCornerShape(12.dp)
 
@@ -270,6 +271,7 @@ fun SettingsEditTextDialogContent(
     subtitle: String? = null,
     icon: ImageVector = Icons.Filled.Edit,
     currentText: String,
+    isPassword: Boolean = false,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -307,6 +309,18 @@ fun SettingsEditTextDialogContent(
                     ),
                     cursorBrush = SolidColor(colors.green),
                     singleLine = true,
+                    visualTransformation = if (isPassword) {
+                        androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    } else {
+                        androidx.compose.ui.text.input.VisualTransformation.None
+                    },
+                    keyboardOptions = if (isPassword) {
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                        )
+                    } else {
+                        androidx.compose.foundation.text.KeyboardOptions.Default
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -366,7 +380,8 @@ fun SettingsMultiChoiceDialogContent(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             options.forEachIndexed { index, option ->
-                val optVal = values.getOrNull(index)?.toString() ?: option.toString()
+                // Skip entries without a matching value so a label is never saved as the value
+                val optVal = values.getOrNull(index)?.toString() ?: return@forEachIndexed
                 val isChecked = currentSelected[optVal] == true
                 val shape = RoundedCornerShape(12.dp)
 

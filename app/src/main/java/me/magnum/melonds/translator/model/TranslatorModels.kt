@@ -44,6 +44,16 @@ data class TranslatedTextBlock(
     val backgroundColor: Int,
     val textColor: Int,
     var isShowingOriginal: Boolean = false,
+    /** DS screen index of the block: 0 = top, 1 = bottom, -1 = unknown (legacy capture). */
+    val screenIndex: Int = -1,
+    /** Block bounds in native DS pixels (inside a 256x192 screen), when known. */
+    val dsRect: android.graphics.Rect? = null,
+    /** True when the source text is Chinese/Japanese/Korean (lines were joined without spaces). */
+    val isCjk: Boolean = false,
+    /** Pre-rendered native-resolution patch (inpainted background + pixel font text). */
+    var nativePatch: android.graphics.Bitmap? = null,
+    /** Destination of [nativePatch] relative to the overlay view (0..1). */
+    var nativePatchRect: android.graphics.RectF? = null,
 )
 
 data class TranslationRegion(

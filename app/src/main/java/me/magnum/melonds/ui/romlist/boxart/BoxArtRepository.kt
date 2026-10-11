@@ -29,6 +29,7 @@ class BoxArtRepository @Inject constructor(
         private const val BASE_URL_DSI = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DSi/Named_Boxarts/"
         private const val INDEX_MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
         private const val NO_MATCH = "-"
+        private const val INDEX_RETRY_BACKOFF_MS = 10L * 60 * 1000
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,8 +39,10 @@ class BoxArtRepository @Inject constructor(
 
     private val mutex = Mutex()
     private val memoryCache = ConcurrentHashMap<String, String>()
-    private var indexEntries: List<IndexEntry>? = null
-    private val exactIndexMap = HashMap<String, IndexEntry>()
+    @Volatile private var indexEntries: List<IndexEntry>? = null
+    private val exactIndexMap = ConcurrentHashMap<String, IndexEntry>()
+    private val indexDownloadInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var lastIndexDownloadFailure = 0L
     private var isMatchesLoaded = false
     private var isDirty = false
 
@@ -146,29 +149,40 @@ class BoxArtRepository @Inject constructor(
                 val entries = parseIndex(raw)
                 indexEntries = entries
                 if (System.currentTimeMillis() - indexFile.lastModified() >= INDEX_MAX_AGE_MS) {
-                    scope.launch {
-                        downloadIndex()?.let { content ->
-                            runCatching {
-                                indexFile.writeText(content)
-                                indexEntries = parseIndex(content)
-                            }
-                        }
-                    }
+                    scheduleIndexDownload()
                 }
                 return entries
             }
         }
 
         // First time - schedule background download without stalling callers
+        scheduleIndexDownload()
+        return null
+    }
+
+    /**
+     * Downloads the libretro index at most once at a time, with a back-off after a failure, so a slow or
+     * blocked connection is not flooded by one download per visible cover.
+     */
+    private fun scheduleIndexDownload() {
+        val now = System.currentTimeMillis()
+        if (now - lastIndexDownloadFailure < INDEX_RETRY_BACKOFF_MS) return
+        if (!indexDownloadInFlight.compareAndSet(false, true)) return
         scope.launch {
-            downloadIndex()?.let { content ->
-                runCatching {
-                    indexFile.writeText(content)
-                    indexEntries = parseIndex(content)
+            try {
+                val content = downloadIndex()
+                if (content != null) {
+                    runCatching {
+                        indexFile.writeText(content)
+                        indexEntries = parseIndex(content)
+                    }
+                } else {
+                    lastIndexDownloadFailure = System.currentTimeMillis()
                 }
+            } finally {
+                indexDownloadInFlight.set(false)
             }
         }
-        return null
     }
 
     private fun parseIndex(raw: String): List<IndexEntry> {

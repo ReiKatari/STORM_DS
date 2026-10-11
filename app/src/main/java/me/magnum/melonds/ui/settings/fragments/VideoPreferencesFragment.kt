@@ -1105,7 +1105,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         if (isSoftware) {
             videoFilteringPreference.isEnabled = false
             videoFilteringPreference.summary = "Шейдерная фильтрация и AI-Upscale недоступны при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
-            videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
         } else {
             videoFilteringPreference.isEnabled = true
             val currentFiltering = videoFilteringOrNone(videoFilteringPreference.value)
@@ -1118,7 +1117,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         // Lock / Unlock HD Custom Textures on Software renderer
         findPreference<androidx.preference.TwoStatePreference>("video_hd_textures_enabled")?.let { customTexturesPref ->
             if (isSoftware) {
-                customTexturesPref.isChecked = false
                 customTexturesPref.isEnabled = false
                 customTexturesPref.summary = "Загрузка HD-текстур доступна только при аппаратном рендеринге (OpenGL / Vulkan)."
             } else {
@@ -1141,7 +1139,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         // Lock / Unlock AI-Upscale 2D option if present
         findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.let { aiSwitch ->
             if (isSoftware) {
-                aiSwitch.isChecked = false
                 aiSwitch.isEnabled = false
                 aiSwitch.summary = "AI-Upscale 2D-спрайтов (Anime4K / xBRZ) недоступен при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
             } else {

@@ -624,44 +624,116 @@ class GameTextRecognizer {
 
         visionText ?: return emptyList()
 
-        val resultBlocks = mutableListOf<TranslatedTextBlock>()
+        val isCjk = sourceLang.startsWith("ja", ignoreCase = true) ||
+                    sourceLang.startsWith("zh", ignoreCase = true) ||
+                    sourceLang.startsWith("ko", ignoreCase = true)
+
+        val rawBlocks = mutableListOf<TranslatedTextBlock>()
         val imgWidth = bitmap.width.toFloat()
         val imgHeight = bitmap.height.toFloat()
 
         for (block in visionText.textBlocks) {
-            val lines = block.lines
-            if (lines.isEmpty()) continue
+            val validLines = block.lines.filter { it.text.trim().isNotBlank() }
+            if (validLines.isEmpty()) continue
 
-            for (line in lines) {
-                val lineBox = line.boundingBox ?: continue
-                val rawLineText = line.text.trim()
-                if (rawLineText.isBlank()) continue
+            val unionBox = Rect()
+            for (line in validLines) {
+                line.boundingBox?.let { unionBox.union(it) }
+            }
+            if (unionBox.isEmpty) continue
 
-                val correctedText = SmartWordCorrector.correctText(rawLineText, sourceLang)
-                if (correctedText.isNotBlank()) {
-                    val relBox = RectF(
-                        (lineBox.left / imgWidth).coerceIn(0f, 1f),
-                        (lineBox.top / imgHeight).coerceIn(0f, 1f),
-                        (lineBox.right / imgWidth).coerceIn(0f, 1f),
-                        (lineBox.bottom / imgHeight).coerceIn(0f, 1f)
+            val joinedRawText = if (isCjk) {
+                validLines.joinToString("") { it.text.trim() }
+            } else {
+                validLines.joinToString(" ") { it.text.trim() }
+            }
+
+            val correctedText = SmartWordCorrector.correctText(joinedRawText, sourceLang)
+            if (correctedText.isNotBlank()) {
+                val relBox = RectF(
+                    (unionBox.left / imgWidth).coerceIn(0f, 1f),
+                    (unionBox.top / imgHeight).coerceIn(0f, 1f),
+                    (unionBox.right / imgWidth).coerceIn(0f, 1f),
+                    (unionBox.bottom / imgHeight).coerceIn(0f, 1f)
+                )
+                val sampledBgColor = sampleBackgroundColor(bitmap, unionBox)
+                val textColor = determineBestTextColor(sampledBgColor)
+
+                rawBlocks.add(
+                    TranslatedTextBlock(
+                        originalText = correctedText,
+                        translatedText = "",
+                        boundingBox = relBox,
+                        backgroundColor = sampledBgColor,
+                        textColor = textColor,
+                        isCjk = isCjk
                     )
-                    val sampledBgColor = sampleBackgroundColor(bitmap, lineBox)
-                    val textColor = determineBestTextColor(sampledBgColor)
-
-                    resultBlocks.add(
-                        TranslatedTextBlock(
-                            originalText = correctedText,
-                            translatedText = "",
-                            boundingBox = relBox,
-                            backgroundColor = sampledBgColor,
-                            textColor = textColor
-                        )
-                    )
-                }
+                )
             }
         }
 
-        return resultBlocks
+        if (rawBlocks.size <= 1) {
+            return rawBlocks
+        }
+
+        // Smart contiguous dialogue block clustering:
+        // Merge vertically adjacent lines belonging to the same speech bubble/dialogue box
+        rawBlocks.sortBy { it.boundingBox.top }
+        val clusteredBlocks = mutableListOf<TranslatedTextBlock>()
+
+        for (curr in rawBlocks) {
+            val prev = clusteredBlocks.lastOrNull()
+            if (prev != null && shouldClusterBlocks(prev, curr, isCjk)) {
+                clusteredBlocks[clusteredBlocks.size - 1] = mergeBlocks(prev, curr, isCjk)
+            } else {
+                clusteredBlocks.add(curr)
+            }
+        }
+
+        return clusteredBlocks
+    }
+
+    private fun shouldClusterBlocks(a: TranslatedTextBlock, b: TranslatedTextBlock, isCjk: Boolean): Boolean {
+        // Vertical adjacency: b must be directly below a with gap <= line height * 0.85
+        val maxLineH = max(a.boundingBox.height(), b.boundingBox.height())
+        val verticalGap = b.boundingBox.top - a.boundingBox.bottom
+        if (verticalGap > maxLineH * 0.85f || verticalGap < -maxLineH * 0.5f) {
+            return false
+        }
+
+        // Horizontal alignment/overlap: must share at least 50% horizontal span
+        val overlapLeft = max(a.boundingBox.left, b.boundingBox.left)
+        val overlapRight = min(a.boundingBox.right, b.boundingBox.right)
+        val overlapW = max(0f, overlapRight - overlapLeft)
+        val minW = min(a.boundingBox.width(), b.boundingBox.width())
+        if (minW <= 0f || (overlapW / minW) < 0.50f) {
+            return false
+        }
+
+        // Background color consistency: dialogue box must have matching background
+        val dr = kotlin.math.abs(Color.red(a.backgroundColor) - Color.red(b.backgroundColor))
+        val dg = kotlin.math.abs(Color.green(a.backgroundColor) - Color.green(b.backgroundColor))
+        val db = kotlin.math.abs(Color.blue(a.backgroundColor) - Color.blue(b.backgroundColor))
+        return (dr + dg + db) < 85
+    }
+
+    private fun mergeBlocks(a: TranslatedTextBlock, b: TranslatedTextBlock, isCjk: Boolean): TranslatedTextBlock {
+        val mergedText = if (isCjk) {
+            "${a.originalText}${b.originalText}"
+        } else {
+            "${a.originalText} ${b.originalText}"
+        }
+        val mergedBox = RectF(
+            min(a.boundingBox.left, b.boundingBox.left),
+            min(a.boundingBox.top, b.boundingBox.top),
+            max(a.boundingBox.right, b.boundingBox.right),
+            max(a.boundingBox.bottom, b.boundingBox.bottom)
+        )
+        return a.copy(
+            originalText = mergedText,
+            boundingBox = mergedBox,
+            isCjk = isCjk
+        )
     }
 
     private suspend fun TextRecognizer.processAsync(image: InputImage): Text =

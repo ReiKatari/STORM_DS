@@ -38,10 +38,17 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         layoutsPreference.isInGameLocked = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_INPUT_LAYOUT, false)
         layoutsPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
 
-        if (!vibrator.supportsVibration()) {
+        val supportsVibe = vibrator.supportsVibration()
+        if (!supportsVibe) {
             touchVibratePreference.isVisible = false
+            vibrationStrengthPreference.isVisible = false
+        } else {
+            vibrationStrengthPreference.isVisible = touchVibratePreference.isChecked
+            touchVibratePreference.setOnPreferenceChangeListener { _, newValue ->
+                vibrationStrengthPreference.isVisible = (newValue as? Boolean) == true
+                true
+            }
         }
-        vibrationStrengthPreference.isVisible = false
 
         vibrationStrengthPreference.setOnPreferenceChangeListener { _, newValue ->
             val strength = newValue as Int

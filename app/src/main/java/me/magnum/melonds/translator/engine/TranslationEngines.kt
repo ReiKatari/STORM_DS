@@ -1,147 +1,290 @@
 package me.magnum.melonds.translator.engine
 
 import android.content.Context
-import android.widget.Toast
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.R
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.IOException
 import java.net.URLEncoder
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+/**
+ * Raised by engines instead of returning error strings as "translations".
+ * [userMessage] is already localized and safe to show in a toast.
+ */
+class TranslationException(
+    val userMessage: String,
+    cause: Throwable? = null,
+) : Exception(userMessage, cause)
 
 interface ITranslationEngine {
+    /** Translates a single text. Throws [TranslationException] on failure. */
     suspend fun translate(text: String, sourceLang: String, targetLang: String): String
+
+    /**
+     * Translates all texts of a frame at once. Returns one entry per input; `null` means that item failed.
+     * Throws [TranslationException] when nothing could be translated.
+     * [context] contains recent dialogue lines ("source => translation") for engines that can use it.
+     */
+    suspend fun translateBatch(
+        texts: List<String>,
+        sourceLang: String,
+        targetLang: String,
+        context: List<String> = emptyList(),
+    ): List<String?> = coroutineScope {
+        var firstError: TranslationException? = null
+        val results = texts.map { text ->
+            async {
+                try {
+                    translate(text, sourceLang, targetLang)
+                } catch (e: TranslationException) {
+                    if (firstError == null) firstError = e
+                    null
+                }
+            }
+        }.awaitAll()
+        val error = firstError
+        if (error != null && results.all { it == null }) throw error
+        results
+    }
+
+    /** Optional warm-up (e.g. offline model download). Never called inside a per-request timeout. */
+    suspend fun prepare(sourceLang: String, targetLang: String) {}
+}
+
+internal data class HttpResult(val code: Int, val body: String)
+
+/** Cancellable OkHttp call: cancelling the coroutine cancels the socket (needed for endpoint races). */
+internal suspend fun OkHttpClient.executeAsync(request: Request): HttpResult = suspendCancellableCoroutine { cont ->
+    val call = newCall(request)
+    cont.invokeOnCancellation { runCatching { call.cancel() } }
+    call.enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            if (cont.isActive) cont.resumeWithException(e)
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            val result = try {
+                response.use { HttpResult(it.code, it.body?.string().orEmpty()) }
+            } catch (t: Throwable) {
+                if (cont.isActive) cont.resumeWithException(t)
+                return
+            }
+            if (cont.isActive) cont.resume(result)
+        }
+    })
+}
+
+internal fun String.hasLetters(): Boolean = any { it.isLetter() }
+
+internal fun String.hasCyrillic(): Boolean = any { it in '\u0400'..'\u04FF' }
+
+internal fun normalizeLangCode(lang: String): String = when (val l = lang.lowercase().trim()) {
+    "", "auto" -> "auto"
+    "japanese" -> "ja"
+    "english" -> "en"
+    "chinese", "zh-cn", "zh_cn", "zh-hans" -> "zh"
+    "korean" -> "ko"
+    "german" -> "de"
+    "french" -> "fr"
+    "spanish" -> "es"
+    "italian" -> "it"
+    "russian" -> "ru"
+    else -> l.take(5)
+}
+
+internal fun languageDisplayName(code: String): String = when (normalizeLangCode(code).take(2)) {
+    "ru" -> "Russian"
+    "en" -> "English"
+    "ja" -> "Japanese"
+    "zh" -> "Simplified Chinese"
+    "ko" -> "Korean"
+    "de" -> "German"
+    "fr" -> "French"
+    "es" -> "Spanish"
+    "it" -> "Italian"
+    "pt" -> "Portuguese"
+    "au" -> "the detected source language"
+    else -> code
 }
 
 /**
- * High-speed, robust Google Translate Engine.
- * Dual-tier Google infrastructure:
- * Tier 1: Google Clients5 Chrome-Extension API (Instant, unthrottled)
- * Tier 2: Google AndroidTranslate Client (client=at, dedicated mobile endpoint)
+ * High-speed Google Translate engine.
+ * All public Google endpoints are raced in parallel and the first non-empty answer wins.
+ * A frame is translated in one request (paragraphs joined with "\n" and split back).
  */
 class GoogleTranslateEngine(
     private val client: OkHttpClient,
-    private val fallbackOffline: ITranslationEngine? = null
+    private val fallbackOffline: ITranslationEngine? = null,
+    private val context: Context? = null,
 ) : ITranslationEngine {
 
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        val clean = text.trim()
-        if (clean.isBlank()) return@withContext text
+    companion object {
+        private const val UA_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        private const val UA_ANDROID = "AndroidTranslate/6.20.0.RC04.379010047"
+        private const val ENDPOINT_COUNT = 3
+        private const val MAX_GET_QUERY = 3500
+    }
 
-        // If text contains only digits, punctuation, or symbols (e.g., "100/100", "???", "1P"), no translation needed
-        if (clean.all { !it.isLetter() }) {
-            return@withContext clean
-        }
+    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String {
+        return translateBatch(listOf(text), sourceLang, targetLang).firstOrNull()
+            ?: throw TranslationException(networkError())
+    }
 
-        val sl = when (sourceLang.lowercase().trim()) {
-            "", "auto" -> "auto"
-            "ja", "japanese" -> "ja"
-            "en", "english" -> "en"
-            "zh", "chinese" -> "zh"
-            "ko", "korean" -> "ko"
-            "de", "german" -> "de"
-            "fr", "french" -> "fr"
-            "es", "spanish" -> "es"
-            "it", "italian" -> "it"
-            else -> sourceLang.lowercase().take(5)
-        }
-        val tl = targetLang.lowercase().ifBlank { "ru" }
-
-        // If text is already in Russian and target is Russian, avoid redundant translation
-        val hasCyrillic = clean.any { it in '\u0400'..'\u04FF' }
-        if (hasCyrillic && (sl == "ru" || tl == "ru")) {
-            return@withContext clean
-        }
-
-        val encodedText = try {
-            URLEncoder.encode(clean, "UTF-8").replace("+", "%20")
-        } catch (_: Throwable) {
-            clean
-        }
-
-        // Tier 1: Clients5 Chrome Extension API (instant, high speed)
-        try {
-            val url = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$sl&tl=$tl&q=$encodedText"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-                .header("Accept", "*/*")
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string().orEmpty()
-                    val parsed = parseGoogleResponse(body)
-                    if (parsed.isNotBlank() && !parsed.equals(clean, ignoreCase = true)) {
-                        return@withContext parsed
-                    }
-                }
+    override suspend fun translateBatch(
+        texts: List<String>,
+        sourceLang: String,
+        targetLang: String,
+        context: List<String>,
+    ): List<String?> = withContext(Dispatchers.IO) {
+        val sl = normalizeLangCode(sourceLang)
+        val tl = normalizeLangCode(targetLang).let { if (it == "auto") "ru" else it }
+        val results = arrayOfNulls<String>(texts.size)
+        val pending = mutableListOf<Int>()
+        texts.forEachIndexed { i, raw ->
+            val clean = raw.replace('\n', ' ').trim()
+            when {
+                clean.isBlank() || !clean.hasLetters() -> results[i] = clean
+                clean.hasCyrillic() && tl == "ru" -> results[i] = clean
+                else -> pending += i
             }
-        } catch (_: Throwable) {}
+        }
+        if (pending.isEmpty()) return@withContext results.toList()
 
-        // Tier 2: Google translate.googleapis.com (client=gtx - universally available web API)
-        try {
-            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$encodedText"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-                .header("Accept", "*/*")
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string().orEmpty()
-                    val parsed = parseGoogleResponse(body)
-                    if (parsed.isNotBlank() && !parsed.equals(clean, ignoreCase = true)) {
-                        return@withContext parsed
-                    }
-                }
+        val cleanPending = pending.map { texts[it].replace('\n', ' ').trim() }
+        val joined = cleanPending.joinToString("\n")
+        val raced = race(joined, sl, tl)
+        if (raced != null) {
+            val parts = raced.split('\n').map { it.trim() }.let { list ->
+                // Drop trailing empty segments produced by a trailing newline.
+                list.dropLastWhile { it.isEmpty() }
             }
-        } catch (_: Throwable) {}
-
-        // Tier 3: Google AndroidTranslate Client (client=at)
-        try {
-            val url = "https://translate.google.com/translate_a/single?client=at&sl=$sl&tl=$tl&dt=t&q=$encodedText"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "AndroidTranslate/6.20.0.RC04.379010047")
-                .header("Accept", "*/*")
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string().orEmpty()
-                    val parsed = parseGoogleResponse(body)
-                    if (parsed.isNotBlank() && !parsed.equals(clean, ignoreCase = true)) {
-                        return@withContext parsed
-                    }
-                }
+            if (parts.size == pending.size && parts.none { it.isEmpty() }) {
+                pending.forEachIndexed { k, idx -> results[idx] = parts[k] }
+                return@withContext results.toList()
             }
-        } catch (_: Throwable) {}
+            // Line count mismatch: translate the paragraphs individually (still raced, in parallel).
+            if (pending.size == 1) {
+                results[pending[0]] = raced.replace('\n', ' ').trim()
+                return@withContext results.toList()
+            }
+            val singles = coroutineScope {
+                cleanPending.map { q -> async { race(q, sl, tl)?.replace('\n', ' ')?.trim() } }.awaitAll()
+            }
+            pending.forEachIndexed { k, idx -> results[idx] = singles[k] }
+            if (singles.any { it != null }) return@withContext results.toList()
+        }
 
-        // Offline Fallback: If online calls fail or network drops, seamlessly fall back to on-device ML Kit
+        // Network failure: fall back to the on-device model if it is already available.
         if (fallbackOffline != null) {
-            try {
-                val offlineResult = fallbackOffline.translate(clean, sourceLang, targetLang)
-                if (offlineResult.isNotBlank() && !offlineResult.equals(clean, ignoreCase = true)) {
-                    return@withContext offlineResult
-                }
-            } catch (_: Throwable) {}
+            val offline = try {
+                fallbackOffline.translateBatch(cleanPending, sourceLang, targetLang, context)
+            } catch (_: TranslationException) {
+                null
+            }
+            if (offline != null && offline.any { it != null }) {
+                pending.forEachIndexed { k, idx -> results[idx] = offline[k] }
+                return@withContext results.toList()
+            }
         }
+        throw TranslationException(networkError())
+    }
 
-        clean
+    private fun networkError(): String =
+        context?.getString(R.string.translator_error_network) ?: "Network error"
+
+    /** Runs all endpoints at once; returns the first non-empty translation or null if all failed. */
+    private suspend fun race(q: String, sl: String, tl: String): String? = coroutineScope {
+        val winner = CompletableDeferred<String?>()
+        val jobs = (0 until ENDPOINT_COUNT).map { index ->
+            launch {
+                val r = try {
+                    requestEndpoint(index, q, sl, tl)
+                } catch (_: Throwable) {
+                    null
+                }
+                if (!r.isNullOrBlank()) winner.complete(r)
+            }
+        }
+        launch {
+            jobs.joinAll()
+            winner.complete(null)
+        }
+        val result = winner.await()
+        coroutineContext.cancelChildren()
+        result
+    }
+
+    private suspend fun requestEndpoint(index: Int, q: String, sl: String, tl: String): String? {
+        val encoded = URLEncoder.encode(q, "UTF-8").replace("+", "%20")
+        val request = when (index) {
+            0 -> {
+                if (encoded.length > MAX_GET_QUERY) return null
+                Request.Builder()
+                    .url("https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$sl&tl=$tl&q=$encoded")
+                    .header("User-Agent", UA_DESKTOP)
+                    .header("Accept", "*/*")
+                    .build()
+            }
+            1 -> {
+                val base = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t"
+                if (encoded.length > MAX_GET_QUERY) {
+                    Request.Builder().url(base)
+                        .header("User-Agent", UA_DESKTOP)
+                        .post(FormBody.Builder().add("q", q).build())
+                        .build()
+                } else {
+                    Request.Builder().url("$base&q=$encoded")
+                        .header("User-Agent", UA_DESKTOP)
+                        .header("Accept", "*/*")
+                        .build()
+                }
+            }
+            else -> {
+                val base = "https://translate.google.com/translate_a/single?client=at&sl=$sl&tl=$tl&dt=t"
+                if (encoded.length > MAX_GET_QUERY) {
+                    Request.Builder().url(base)
+                        .header("User-Agent", UA_ANDROID)
+                        .post(FormBody.Builder().add("q", q).build())
+                        .build()
+                } else {
+                    Request.Builder().url("$base&q=$encoded")
+                        .header("User-Agent", UA_ANDROID)
+                        .header("Accept", "*/*")
+                        .build()
+                }
+            }
+        }
+        val response = client.executeAsync(request)
+        if (response.code !in 200..299) return null
+        return parseGoogleResponse(response.body).takeIf { it.isNotBlank() }
     }
 
     private fun parseGoogleResponse(body: String): String {
         val trimmed = body.trim()
         if (trimmed.isEmpty()) return ""
         return try {
-            val root = JSONTokener(trimmed).nextValue()
-            when (root) {
+            when (val root = JSONTokener(trimmed).nextValue()) {
                 is String -> root.trim()
                 is JSONArray -> extractFromArray(root).trim()
                 else -> ""
@@ -162,8 +305,7 @@ class GoogleTranslateEngine(
                     break
                 }
                 is JSONArray -> {
-                    val first = item.opt(0)
-                    when (first) {
+                    when (val first = item.opt(0)) {
                         is String -> {
                             // 2D format: [["translatedText", "en"]]
                             if (first.isNotBlank()) sb.append(first)
@@ -172,8 +314,8 @@ class GoogleTranslateEngine(
                             // 3D format: [[["sentence 1", "orig 1", ...], ["sentence 2", ...]], null, "en"]
                             for (s in 0 until item.length()) {
                                 val sentence = item.optJSONArray(s)
-                                val transPart = sentence?.optString(0)
-                                if (!transPart.isNullOrBlank()) {
+                                val transPart = sentence?.opt(0) as? String
+                                if (!transPart.isNullOrEmpty()) {
                                     sb.append(transPart)
                                 }
                             }
@@ -189,7 +331,7 @@ class GoogleTranslateEngine(
 
 /**
  * DeepL Neural Translation Engine (Official DeepL API with free and pro support).
- * Requires API key in preferences; warns user if key is missing.
+ * Sends every paragraph of a frame in one request using the `text[]` array.
  */
 class DeepLEngine(
     private val client: OkHttpClient,
@@ -197,59 +339,82 @@ class DeepLEngine(
     private val apiKeyProvider: () -> String
 ) : ITranslationEngine {
 
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        val clean = text.trim()
-        if (clean.isBlank()) return@withContext text
+    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String {
+        return translateBatch(listOf(text), sourceLang, targetLang).firstOrNull()
+            ?: throw TranslationException(httpError(0))
+    }
 
+    override suspend fun translateBatch(
+        texts: List<String>,
+        sourceLang: String,
+        targetLang: String,
+        context: List<String>,
+    ): List<String?> = withContext(Dispatchers.IO) {
         val apiKey = apiKeyProvider().trim()
         if (apiKey.isEmpty()) {
-            withContext(Dispatchers.Main) {
-                context?.let {
-                    Toast.makeText(it, "DeepL: укажите ключ API в настройках", Toast.LENGTH_SHORT).show()
-                }
-            }
-            return@withContext "DeepL: укажите ключ API в настройках"
+            throw TranslationException(
+                this@DeepLEngine.context?.getString(R.string.translator_error_deepl_key_missing)
+                    ?: "DeepL API key is missing"
+            )
         }
+        val clean = texts.map { it.replace('\n', ' ').trim() }
+        val pending = clean.indices.filter { clean[it].hasLetters() }
+        val results = arrayOfNulls<String>(texts.size)
+        clean.indices.filter { it !in pending }.forEach { results[it] = clean[it] }
+        if (pending.isEmpty()) return@withContext results.toList()
 
         val isFreeApi = apiKey.endsWith(":fx")
         val endpoint = if (isFreeApi) "https://api-free.deepl.com/v2/translate" else "https://api.deepl.com/v2/translate"
-
-        val json = JSONObject().apply {
-            put("text", JSONArray().put(clean))
-            put("target_lang", targetLang.uppercase())
-            if (sourceLang != "auto" && sourceLang.isNotBlank()) {
-                put("source_lang", sourceLang.uppercase())
+        val tl = normalizeLangCode(targetLang).uppercase().let {
+            when (it) {
+                "EN" -> "EN-US"
+                "PT" -> "PT-BR"
+                "AUTO" -> "RU"
+                else -> it
             }
         }
+        val sl = normalizeLangCode(sourceLang)
 
-        val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+        val json = JSONObject().apply {
+            put("text", JSONArray().apply { pending.forEach { put(clean[it]) } })
+            put("target_lang", tl)
+            if (sl != "auto") put("source_lang", sl.take(2).uppercase())
+            if (context.isNotEmpty()) put("context", context.joinToString("\n"))
+        }
+
         val request = Request.Builder()
             .url(endpoint)
             .header("Authorization", "DeepL-Auth-Key $apiKey")
-            .post(requestBody)
+            .post(json.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        try {
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val code = response.code
-                    return@withContext "DeepL: ошибка $code"
-                }
-                val responseBody = response.body?.string() ?: return@withContext clean
-                val root = JSONObject(responseBody)
-                val translations = root.optJSONArray("translations")
-                val translated = translations?.optJSONObject(0)?.optString("text")
-                if (!translated.isNullOrBlank()) translated else clean
-            }
-        } catch (t: Throwable) {
-            "DeepL: ${t.message ?: "ошибка сети"}"
+        val response = try {
+            client.executeAsync(request)
+        } catch (e: IOException) {
+            throw TranslationException(
+                this@DeepLEngine.context?.getString(R.string.translator_error_network) ?: "Network error", e
+            )
         }
+        if (response.code !in 200..299) throw TranslationException(httpError(response.code))
+        val translations = try {
+            JSONObject(response.body).optJSONArray("translations")
+        } catch (t: Throwable) {
+            null
+        } ?: throw TranslationException(httpError(response.code))
+
+        pending.forEachIndexed { k, idx ->
+            results[idx] = translations.optJSONObject(k)?.optString("text")?.takeIf { it.isNotBlank() }
+        }
+        results.toList()
     }
+
+    private fun httpError(code: Int): String =
+        context?.getString(R.string.translator_error_http, "DeepL", code) ?: "DeepL: HTTP $code"
 }
 
 /**
  * Custom AI Translation Engine (OpenAI / Claude / DeepSeek via OpenAI-compatible endpoint).
- * Requires API key in preferences; warns user if key is missing.
+ * A frame is sent as a JSON array together with the last dialogue lines as context.
  */
 class CustomAiEngine(
     private val client: OkHttpClient,
@@ -259,25 +424,80 @@ class CustomAiEngine(
     private val modelProvider: () -> String = { "gpt-4o-mini" }
 ) : ITranslationEngine {
 
-    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {
-        val clean = text.trim()
-        if (clean.isBlank()) return@withContext text
+    override suspend fun translate(text: String, sourceLang: String, targetLang: String): String {
+        return translateBatch(listOf(text), sourceLang, targetLang).firstOrNull()
+            ?: throw TranslationException(httpError(0))
+    }
 
+    override suspend fun translateBatch(
+        texts: List<String>,
+        sourceLang: String,
+        targetLang: String,
+        context: List<String>,
+    ): List<String?> = withContext(Dispatchers.IO) {
         val apiKey = apiKeyProvider().trim()
         if (apiKey.isEmpty()) {
-            withContext(Dispatchers.Main) {
-                context?.let {
-                    Toast.makeText(it, "Custom AI: укажите ключ API в настройках", Toast.LENGTH_SHORT).show()
-                }
+            throw TranslationException(
+                this@CustomAiEngine.context?.getString(R.string.translator_error_ai_key_missing)
+                    ?: "AI API key is missing"
+            )
+        }
+        val clean = texts.map { it.replace('\n', ' ').trim() }
+        val pending = clean.indices.filter { clean[it].hasLetters() }
+        val results = arrayOfNulls<String>(texts.size)
+        clean.indices.filter { it !in pending }.forEach { results[it] = clean[it] }
+        if (pending.isEmpty()) return@withContext results.toList()
+
+        val target = languageDisplayName(targetLang)
+        val source = languageDisplayName(sourceLang)
+        val systemPrompt = buildString {
+            append("You are a professional video game localizer for Nintendo DS games. ")
+            append("Translate every string of the JSON array from $source into natural, immersive $target. ")
+            append("Keep character names, item names and terminology consistent with the context. ")
+            append("Keep it short enough to fit the original text box. ")
+            append("Answer ONLY with a JSON array of ${pending.size} translated strings in the same order, without notes.")
+        }
+        val userContent = buildString {
+            if (context.isNotEmpty()) {
+                append("Previous dialogue (context/glossary, do not translate):\n")
+                context.takeLast(6).forEach { append("- ").append(it).append('\n') }
+                append('\n')
             }
-            return@withContext "Custom AI: укажите ключ API в настройках"
+            append("Strings:\n")
+            append(JSONArray().apply { pending.forEach { put(clean[it]) } }.toString())
         }
 
+        val content = chat(apiKey, systemPrompt, userContent)
+        val parsed = parseJsonArray(content)
+        if (parsed != null && parsed.size == pending.size) {
+            pending.forEachIndexed { k, idx -> results[idx] = parsed[k].takeIf { it.isNotBlank() } }
+            return@withContext results.toList()
+        }
+        if (pending.size == 1 && content.isNotBlank()) {
+            results[pending[0]] = content.trim().removeSurrounding("\"")
+            return@withContext results.toList()
+        }
+        // Model ignored the array format: translate one by one in parallel.
+        val singlePrompt = "You are a professional video game localizer. Translate the in-game text into natural $target. Output ONLY the translation."
+        val singles = coroutineScope {
+            pending.map { idx ->
+                async {
+                    try {
+                        chat(apiKey, singlePrompt, clean[idx]).trim().takeIf { it.isNotBlank() }
+                    } catch (_: TranslationException) {
+                        null
+                    }
+                }
+            }.awaitAll()
+        }
+        pending.forEachIndexed { k, idx -> results[idx] = singles[k] }
+        if (singles.all { it == null }) throw TranslationException(httpError(0))
+        results.toList()
+    }
+
+    private suspend fun chat(apiKey: String, systemPrompt: String, userContent: String): String {
         val endpoint = endpointProvider().ifBlank { "https://api.openai.com/v1/chat/completions" }
         val model = modelProvider().ifBlank { "gpt-4o-mini" }
-
-        val systemPrompt = "You are a professional video game localization expert. Translate the provided in-game dialogue/UI text accurately into natural, immersive $targetLang. Output ONLY the translated text without notes, explanations, or quotes."
-
         val json = JSONObject().apply {
             put("model", model)
             put("messages", JSONArray().apply {
@@ -287,34 +507,42 @@ class CustomAiEngine(
                 })
                 put(JSONObject().apply {
                     put("role", "user")
-                    put("content", clean)
+                    put("content", userContent)
                 })
             })
-            put("temperature", 0.3)
+            put("temperature", 0.2)
         }
-
-        val requestBody = json.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(endpoint)
             .header("Authorization", "Bearer $apiKey")
-            .post(requestBody)
+            .post(json.toString().toRequestBody("application/json".toMediaType()))
             .build()
-
-        try {
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val code = response.code
-                    return@withContext "AI: ошибка $code"
-                }
-                val responseBody = response.body?.string() ?: return@withContext clean
-                val root = JSONObject(responseBody)
-                val choices = root.optJSONArray("choices")
-                val message = choices?.optJSONObject(0)?.optJSONObject("message")
-                val content = message?.optString("content")?.trim()
-                if (!content.isNullOrBlank()) content else clean
-            }
-        } catch (t: Throwable) {
-            "AI: ${t.message ?: "ошибка сети"}"
+        val response = try {
+            client.executeAsync(request)
+        } catch (e: IOException) {
+            throw TranslationException(context?.getString(R.string.translator_error_network) ?: "Network error", e)
+        }
+        if (response.code !in 200..299) throw TranslationException(httpError(response.code))
+        return try {
+            JSONObject(response.body).optJSONArray("choices")
+                ?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.trim().orEmpty()
+        } catch (_: Throwable) {
+            ""
         }
     }
+
+    private fun parseJsonArray(content: String): List<String>? {
+        val start = content.indexOf('[')
+        val end = content.lastIndexOf(']')
+        if (start < 0 || end <= start) return null
+        return try {
+            val arr = JSONArray(content.substring(start, end + 1))
+            (0 until arr.length()).map { arr.optString(it).trim() }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun httpError(code: Int): String =
+        context?.getString(R.string.translator_error_http, "AI", code) ?: "AI: HTTP $code"
 }

@@ -142,6 +142,21 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         textSize = 28f
     }
+    private val pixelFont12: Typeface? by lazy {
+        try {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.fusion_pixel_12px)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+    private val pixelFont10: Typeface? by lazy {
+        try {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.fusion_pixel_10px)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
     }
@@ -362,22 +377,26 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             val origW = right - left
             val origH = bottom - top
 
-            // In-place replacement with graceful expansion for Russian text (which is 15-25% longer)
+            // In-place replacement with graceful expansion for Russian/longer text
             val textLenRatio = if (block.originalText.isNotEmpty()) {
-                (displayText.length.toFloat() / block.originalText.length.toFloat()).coerceIn(1.0f, 1.25f)
+                (displayText.length.toFloat() / block.originalText.length.toFloat()).coerceIn(1.0f, 1.30f)
             } else 1.0f
 
             val targetW = max(origW * textLenRatio, origW) + padH * 2
             val targetH = origH + padV * 2
 
-            val boxLeft = (left - padH).coerceIn(2f, (w - targetW - 2f).coerceAtLeast(2f))
+            val centerX = (left + right) / 2f
+            val centerY = (top + bottom) / 2f
+
+            val boxLeft = (centerX - targetW / 2f).coerceIn(2f, (w - targetW - 2f).coerceAtLeast(2f))
             val boxRight = (boxLeft + targetW).coerceAtMost(w - 2f)
-            val boxTop = (top - padV).coerceIn(2f, (h - targetH - 2f).coerceAtLeast(2f))
+            val boxTop = (centerY - targetH / 2f).coerceIn(2f, (h - targetH - 2f).coerceAtLeast(2f))
             val boxBottom = (boxTop + targetH).coerceAtMost(h - 2f)
 
             val rect = RectF(boxLeft, boxTop, boxRight, boxBottom)
             val rx = when (overlayStyle) {
                 TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> rect.height() / 2f
+                TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> 2f * density
                 else -> 6f * density
             }
 
@@ -416,34 +435,52 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                     cardTextColor = Color.WHITE
                 }
                 TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> {
-                    // Smart harmonized blend: blend sampled game color with dark slate so it never looks muddy
+                    // Authentic Game Inpainting: seamless patch using sampled dialogue background color
                     val baseCol = block.backgroundColor
-                    val blendR = ((Color.red(baseCol) * 0.35f) + 15 * 0.65f).toInt().coerceIn(0, 255)
-                    val blendG = ((Color.green(baseCol) * 0.35f) + 23 * 0.65f).toInt().coerceIn(0, 255)
-                    val blendB = ((Color.blue(baseCol) * 0.35f) + 42 * 0.65f).toInt().coerceIn(0, 255)
+                    val r = Color.red(baseCol)
+                    val g = Color.green(baseCol)
+                    val b = Color.blue(baseCol)
+                    val lum = 0.299f * r + 0.587f * g + 0.114f * b
 
-                    shadowPaint.color = Color.argb((alpha * 0.4f).toInt(), 0, 0, 0)
-                    canvas.drawRoundRect(RectF(rect.left + 2f, rect.top + 3f, rect.right + 2f, rect.bottom + 3f), rx, rx, shadowPaint)
-
-                    bgPaint.color = Color.argb((alpha * 0.94f).toInt(), blendR, blendG, blendB)
+                    // Draw inpaint background patch seamlessly over original game text
+                    bgPaint.color = Color.argb(alpha, r, g, b)
                     canvas.drawRoundRect(rect, rx, rx, bgPaint)
 
-                    val borderR = (blendR + 45).coerceIn(0, 255)
-                    val borderG = (blendG + 45).coerceIn(0, 255)
-                    val borderB = (blendB + 55).coerceIn(0, 255)
-                    borderPaint.color = Color.argb((alpha * 0.65f).toInt(), borderR, borderG, borderB)
-                    borderPaint.strokeWidth = 2.0f
+                    // Optional subtle 1px border matching background tone with gentle contrast
+                    val borderDelta = if (lum > 128) -25 else 25
+                    borderPaint.color = Color.argb(
+                        (alpha * 0.40f).toInt(),
+                        (r + borderDelta).coerceIn(0, 255),
+                        (g + borderDelta).coerceIn(0, 255),
+                        (b + borderDelta).coerceIn(0, 255)
+                    )
+                    borderPaint.strokeWidth = 1.0f * density
                     canvas.drawRoundRect(rect, rx, rx, borderPaint)
-                    cardTextColor = Color.WHITE
+
+                    // Dynamic high-contrast text color
+                    cardTextColor = if (lum > 135) {
+                        // Light background (parchment/beige/white) -> crisp dark charcoal
+                        Color.parseColor("#111827")
+                    } else {
+                        // Dark background (navy/slate/black) -> clean white
+                        Color.parseColor("#F9FAFB")
+                    }
                 }
             }
 
-            drawFittedText(canvas, displayText, rect, cardTextColor, isOutlineMode = (overlayStyle == TranslatorOverlayStyle.OUTLINE_ONLY))
+            drawFittedText(
+                canvas,
+                displayText,
+                rect,
+                cardTextColor,
+                isOutlineMode = (overlayStyle == TranslatorOverlayStyle.OUTLINE_ONLY),
+                usePixelFont = true
+            )
         }
 
         // 3. LASSO / BOX DRAG SELECTION OVERLAY
         if (isLassoModeActive) {
-            val bannerText = "👆 Выделите рамку пальцем на экране"
+            val bannerText = context.getString(R.string.translator_lasso_hint)
             val bannerW = min(w * 0.85f, 420f)
             val bannerH = 44f
             val bannerRect = RectF((w - bannerW) / 2f, 24f, (w + bannerW) / 2f, 24f + bannerH)
@@ -456,7 +493,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             canvas.drawRoundRect(lassoRect, 10f, 10f, lassoBgPaint)
             canvas.drawRoundRect(lassoRect, 10f, 10f, lassoBorderPaint)
 
-            val badgeText = "🔍 Перевести область"
+            val badgeText = context.getString(R.string.translator_lasso_translate)
             val badgeW = 200f
             val badgeH = 36f
             val badgeRect = RectF(
@@ -552,7 +589,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             typeface = Typeface.DEFAULT_BOLD
             textSize = 24f
         }
-        canvas.drawText("📖 Словарь и разбор фразы", dictCardRect.left + 20f, dictCardRect.top + 34f, headerPaint)
+        canvas.drawText("📖 ${context.getString(R.string.translator_dict_title)}", dictCardRect.left + 20f, dictCardRect.top + 34f, headerPaint)
 
         var curY = dictCardRect.top + 64f
 
@@ -597,13 +634,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             curY += 28f
         }
 
-        // "Озвучить ▶️" Action Button
+        // Action Button
         dictSpeakRect.set(dictCardRect.left + 20f, dictCardRect.bottom - 52f, dictCardRect.left + 220f, dictCardRect.bottom - 14f)
         topBarBtnPaint.color = Color.parseColor("#10B981")
         canvas.drawRoundRect(dictSpeakRect, 10f, 10f, topBarBtnPaint)
         topBarTextPaint.color = Color.WHITE
         topBarTextPaint.textSize = 20f
-        canvas.drawText("Озвучить ▶️", dictSpeakRect.centerX(), dictSpeakRect.centerY() + 7f, topBarTextPaint)
+        canvas.drawText(context.getString(R.string.translator_speak_action), dictSpeakRect.centerX(), dictSpeakRect.centerY() + 7f, topBarTextPaint)
     }
 
     private fun drawLeftControlDock(canvas: Canvas, w: Float, h: Float) {
@@ -653,42 +690,79 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         canvas.drawText(text, targetRect.centerX(), textY, topBarTextPaint)
     }
 
-    private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF, color: Int, isOutlineMode: Boolean = false) {
+    private fun drawFittedText(
+        canvas: Canvas,
+        text: String,
+        bounds: RectF,
+        color: Int,
+        isOutlineMode: Boolean = false,
+        usePixelFont: Boolean = true
+    ) {
         val density = context.resources.displayMetrics.density
         val padH = 4f * density
         val padV = 2f * density
         val maxW = max(10, (bounds.width() - padH * 2).toInt())
         val maxH = max(10, (bounds.height() - padV * 2).toInt())
 
-        // Initial font size with comfortable scale for handheld reading
-        var targetSize = (bounds.height() * 0.52f * fontSizeScale).coerceIn(11f, 40f)
-        val isSingleWordOrButton = !text.contains(' ') && text.length < 15
-        val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+        val chosenTypeface = if (usePixelFont) {
+            pixelFont12 ?: pixelFont10 ?: Typeface.create("sans-serif-medium", Typeface.BOLD)
+        } else {
+            Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
 
-        textPaint.textSize = targetSize
+        textPaint.typeface = chosenTypeface
         textPaint.color = color
-        textPaint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+
+        val r = Color.red(color)
+        val g = Color.green(color)
+        val b = Color.blue(color)
+        val lum = 0.299f * r + 0.587f * g + 0.114f * b
 
         if (!isOutlineMode) {
-            // Clean text with soft drop shadow for cards
-            textPaint.setShadowLayer(4f, 0f, 2f, Color.argb(160, 0, 0, 0))
+            if (lum > 140) {
+                // Light text on dark card -> soft subtle shadow
+                textPaint.setShadowLayer(3f, 0f, 1.5f, Color.argb(160, 0, 0, 0))
+            } else {
+                // Dark text on light background -> clear shadow to prevent blurry halos
+                textPaint.clearShadowLayer()
+            }
         } else {
             textPaint.clearShadowLayer()
         }
 
+        val isSingleWordOrButton = !text.contains(' ') && text.length < 15
+        val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+
         val lineSpacingExtra = 1f * density
-        val lineSpacingMult = 1.12f
+        val lineSpacingMult = 1.10f
 
-        var layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
-            .setAlignment(alignment)
-            .setLineSpacing(lineSpacingExtra, lineSpacingMult)
-            .setIncludePad(false)
-            .build()
+        // Binary search for ideal font size (O(log N), avoids allocations on each frame)
+        var low = 10f
+        var high = (bounds.height() * 0.70f * fontSizeScale).coerceIn(12f, 44f)
+        var bestSize = low
+        var bestLayout: StaticLayout? = null
 
-        while (layout.height > maxH && targetSize > 11f) {
-            targetSize -= 1.0f
-            textPaint.textSize = targetSize
-            layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
+        for (iter in 0 until 6) {
+            val mid = (low + high) / 2f
+            textPaint.textSize = mid
+            val testLayout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
+                .setAlignment(alignment)
+                .setLineSpacing(lineSpacingExtra, lineSpacingMult)
+                .setIncludePad(false)
+                .build()
+
+            if (testLayout.height <= maxH) {
+                bestSize = mid
+                bestLayout = testLayout
+                low = mid + 0.5f
+            } else {
+                high = mid - 0.5f
+            }
+        }
+
+        val layout = bestLayout ?: run {
+            textPaint.textSize = bestSize
+            StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
                 .setAlignment(alignment)
                 .setLineSpacing(lineSpacingExtra, lineSpacingMult)
                 .setIncludePad(false)
@@ -702,10 +776,10 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         canvas.translate(textX, textY)
 
         if (isOutlineMode) {
-            // Crisp contrast outline for subtitle look with IDENTICAL line spacing
+            // Crisp contrast outline for subtitle look with identical layout
             val strokePaint = TextPaint(textPaint).apply {
                 style = Paint.Style.STROKE
-                strokeWidth = (targetSize * 0.16f).coerceIn(2.5f, 5.0f)
+                strokeWidth = (bestSize * 0.16f).coerceIn(2.5f, 5.0f)
                 strokeCap = Paint.Cap.ROUND
                 strokeJoin = Paint.Join.ROUND
                 this.color = Color.argb(240, 0, 0, 0)

@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -72,7 +73,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.RomFilter
 import me.magnum.melonds.domain.model.RomScanningStatus
@@ -121,15 +124,17 @@ fun RomBrowserScreen(
 
     val isGridDragged by gridState.interactionSource.collectIsDraggedAsState()
     val isListDragged by listState.interactionSource.collectIsDraggedAsState()
-    var userHasScrolledManually by remember { mutableStateOf(false) }
+    val latestScanningStatus = rememberUpdatedState(scanningStatus)
 
-    var shouldScrollToTopOnEntriesLoaded by remember { mutableStateOf(true) }
-    var pendingRefreshScrollReset by remember { mutableStateOf(false) }
-    var isManualRefreshing by remember { mutableStateOf(false) }
-    var isRefreshInProgress by remember { mutableStateOf(false) }
-    var refreshTriggerCount by remember { mutableIntStateOf(0) }
-
-    val isEffectivelyRefreshing = isRefreshInProgress || isManualRefreshing || pendingRefreshScrollReset || scanningStatus == RomScanningStatus.SCANNING
+    // "Pinned to top" model: while pinned, every new list emission (initial load, rescan batches,
+    // re-sorting) is applied with the first game at the very top. requestScrollToItem() is applied in
+    // the same measure pass as the new items (no MutatorMutex, no key re-anchoring), so it cannot be
+    // cancelled by a concurrent scroll and it cannot race with asynchronous list emissions.
+    var pinToTop by remember { mutableStateOf(true) }
+    // The red pull-to-refresh spinner is shown ONLY for a refresh explicitly requested by the user and
+    // is always released (scan finished, scan never started, or safety timeout). Background scans use
+    // the thin linear progress bar under the header.
+    var userRefreshPending by remember { mutableStateOf(false) }
 
     val isCurrentlyAtTop by remember(state.viewMode) {
         derivedStateOf {
@@ -140,78 +145,64 @@ fun RomBrowserScreen(
         }
     }
 
-    LaunchedEffect(isCurrentlyAtTop) {
-        if (isCurrentlyAtTop) {
-            userHasScrolledManually = false
-        }
+    fun snapToTop() {
+        gridState.requestScrollToItem(0, 0)
+        listState.requestScrollToItem(0, 0)
     }
 
     val handleRefreshWithScrollReset: () -> Unit = {
         focusedEntryIndex = -1
-        userHasScrolledManually = false
-        isRefreshInProgress = true
-        isManualRefreshing = true
-        pendingRefreshScrollReset = true
-        shouldScrollToTopOnEntriesLoaded = true
-        refreshTriggerCount++
-        coroutineScope.launch {
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-        }
+        pinToTop = true
+        userRefreshPending = true
+        snapToTop()
         onRefresh()
     }
 
     val refreshState = rememberPullRefreshState(
-        refreshing = isEffectivelyRefreshing,
+        refreshing = userRefreshPending,
         onRefresh = handleRefreshWithScrollReset,
     )
 
+    // Releases the spinner deterministically.
+    LaunchedEffect(userRefreshPending) {
+        if (!userRefreshPending) return@LaunchedEffect
+        val statusFlow = snapshotFlow { latestScanningStatus.value }
+        val started = withTimeoutOrNull(1_500L) {
+            statusFlow.first { it == RomScanningStatus.SCANNING }
+        } != null
+        if (started) {
+            withTimeoutOrNull(60_000L) {
+                statusFlow.first { it == RomScanningStatus.NOT_SCANNING }
+            }
+        }
+        userRefreshPending = false
+    }
+
+    // The user takes control of the scroll position as soon as they drag the list.
     LaunchedEffect(isGridDragged, isListDragged) {
-        if (isGridDragged || isListDragged) {
-            val isScrolledDown = when (state.viewMode) {
-                RomViewMode.GRID -> gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 25
-                RomViewMode.LIST -> listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 25
-            }
-            if (isScrolledDown && !isEffectivelyRefreshing) {
-                userHasScrolledManually = true
-            }
+        if ((isGridDragged || isListDragged) && !userRefreshPending) {
+            pinToTop = false
         }
     }
 
-    val firstEntryKey = remember(state.entries) {
-        state.entries.firstOrNull()?.let { entry ->
-            when (entry) {
-                is RomBrowserEntry.Folder -> "folder:${entry.docId}"
-                is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
-            }
+    // D-pad / controller navigation also counts as the user taking control.
+    LaunchedEffect(focusedEntryIndex) {
+        if (focusedEntryIndex > 0) {
+            pinToTop = false
         }
     }
 
-    LaunchedEffect(Unit) {
-        userHasScrolledManually = false
-        focusedEntryIndex = -1
-        shouldScrollToTopOnEntriesLoaded = true
-        repeat(16) {
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
-            withFrameNanos { }
+    // Apply the pinned position for every new list emission.
+    LaunchedEffect(state.entries, pinToTop) {
+        if (pinToTop) {
+            snapToTop()
         }
     }
 
-    // Always pin strictly to top (item 0, offset 0) whenever entries load initially or refresh
-    LaunchedEffect(state.entries, firstEntryKey, refreshTriggerCount, shouldScrollToTopOnEntriesLoaded) {
-        if (state.entries.isNotEmpty() && (shouldScrollToTopOnEntriesLoaded || isEffectivelyRefreshing || !userHasScrolledManually || isCurrentlyAtTop)) {
-            userHasScrolledManually = false
-            focusedEntryIndex = -1
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-            shouldScrollToTopOnEntriesLoaded = false
+    // A (re)scan started by the system keeps the list pinned only if the user has not scrolled away.
+    LaunchedEffect(scanningStatus) {
+        if (scanningStatus == RomScanningStatus.SCANNING && isCurrentlyAtTop) {
+            pinToTop = true
         }
     }
 
@@ -227,79 +218,11 @@ fun RomBrowserScreen(
     val gridLeadingItems = if (hasFolders) 1 else 0
     val listLeadingItems = 0
 
-    LaunchedEffect(scanningStatus) {
-        if (scanningStatus == RomScanningStatus.SCANNING) {
-            userHasScrolledManually = false
-            pendingRefreshScrollReset = true
-            isManualRefreshing = true
-            isRefreshInProgress = true
-            shouldScrollToTopOnEntriesLoaded = true
-            focusedEntryIndex = -1
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-        }
-    }
-
-    // Dedicated drag-release synchronization coroutine:
-    // Ensures scroll is reset to item 0 offset 0 strictly AFTER the user lifts their finger and nested-scroll fling settles
-    LaunchedEffect(isGridDragged, isListDragged, isRefreshInProgress, pendingRefreshScrollReset, isManualRefreshing, scanningStatus, refreshTriggerCount) {
-        if (isRefreshInProgress || pendingRefreshScrollReset || isManualRefreshing) {
-            // While finger is actively touching/dragging the list, do not fight the pointer
-            if (isGridDragged || isListDragged) {
-                return@LaunchedEffect
-            }
-            // Once the finger is released (!isGridDragged && !isListDragged):
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-            // Settle nested-scroll spring / pull-refresh rebound
-            kotlinx.coroutines.delay(120)
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-            // If repository scan is in progress, keep pinned until finished
-            while (scanningStatus == RomScanningStatus.SCANNING) {
-                kotlinx.coroutines.delay(50)
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-            }
-            // Final settle and pinning over multiple frames
-            repeat(20) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-            kotlinx.coroutines.delay(100)
-            repeat(12) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
-            userHasScrolledManually = false
-            focusedEntryIndex = -1
-            shouldScrollToTopOnEntriesLoaded = false
-            isRefreshInProgress = false
-            isManualRefreshing = false
-            pendingRefreshScrollReset = false
-        }
-    }
-
+    // Changing filter, folder, search or sorting always starts again from the first game.
     LaunchedEffect(state.filter, state.breadcrumbs, state.isSearchActive, state.sortingMode, state.sortingOrder) {
-        userHasScrolledManually = false
-        shouldScrollToTopOnEntriesLoaded = true
         focusedEntryIndex = -1
-        repeat(16) {
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
-            withFrameNanos { }
-        }
+        pinToTop = true
+        snapToTop()
     }
 
     LaunchedEffect(focusedEntryIndex, state.entries) {
@@ -513,7 +436,7 @@ fun RomBrowserScreen(
                                     }
                                 }
                                 PullRefreshIndicator(
-                                    refreshing = isEffectivelyRefreshing,
+                                    refreshing = userRefreshPending,
                                     state = refreshState,
                                     modifier = Modifier.align(Alignment.TopCenter),
                                     backgroundColor = colors.surface,
@@ -630,7 +553,7 @@ fun RomBrowserScreen(
                             }
                         }
                         PullRefreshIndicator(
-                            refreshing = isEffectivelyRefreshing,
+                            refreshing = userRefreshPending,
                             state = refreshState,
                             modifier = Modifier.align(Alignment.TopCenter),
                             backgroundColor = colors.surface,
@@ -655,9 +578,9 @@ fun RomBrowserScreen(
                                     }
                                 }
                             }
-                            val activeLetter by remember(state.alphabetIndex, state.viewMode, isEffectivelyRefreshing, userHasScrolledManually, isCurrentlyAtTop, shouldScrollToTopOnEntriesLoaded) {
+                            val activeLetter by remember(state.alphabetIndex, state.viewMode, pinToTop, isCurrentlyAtTop) {
                                 derivedStateOf {
-                                    if (isEffectivelyRefreshing || isCurrentlyAtTop || !userHasScrolledManually || shouldScrollToTopOnEntriesLoaded) {
+                                    if (pinToTop || isCurrentlyAtTop) {
                                         state.alphabetIndex.keys.firstOrNull() ?: '#'
                                     } else {
                                         letterForIndex(state.alphabetIndex, activeFirstVis)
@@ -672,18 +595,13 @@ fun RomBrowserScreen(
                                 activeLetter = activeLetter,
                                 hasFolders = hasFolders,
                                 isInFolderSection = isInFolderSection,
-                                isInteractive = !isEffectivelyRefreshing,
+                                isInteractive = !userRefreshPending,
                                 onFoldersClicked = {
-                                    if (isEffectivelyRefreshing) return@AlphabetIndexBar
+                                    if (userRefreshPending) return@AlphabetIndexBar
                                     coroutineScope.launch {
-                                        userHasScrolledManually = false
-                                        repeat(16) {
-                                            when (state.viewMode) {
-                                                RomViewMode.GRID -> gridState.scrollToItem(0, 0)
-                                                RomViewMode.LIST -> listState.scrollToItem(0, 0)
-                                            }
-                                            withFrameNanos { }
-                                        }
+                                        pinToTop = true
+                                        snapToTop()
+                                        withFrameNanos { }
                                         requestFirstVisibleRomFocus(
                                             state = state,
                                             gridState = gridState,
@@ -693,19 +611,13 @@ fun RomBrowserScreen(
                                     }
                                 },
                                 onLetterTouched = { idx, letter ->
-                                    if (isEffectivelyRefreshing) return@AlphabetIndexBar
+                                    if (userRefreshPending) return@AlphabetIndexBar
                                     coroutineScope.launch {
                                         if (letter == '#' || idx <= 0) {
-                                            userHasScrolledManually = false
-                                            repeat(16) {
-                                                when (state.viewMode) {
-                                                    RomViewMode.GRID -> gridState.scrollToItem(0, 0)
-                                                    RomViewMode.LIST -> listState.scrollToItem(0, 0)
-                                                }
-                                                withFrameNanos { }
-                                            }
+                                            pinToTop = true
+                                            snapToTop()
                                         } else {
-                                            userHasScrolledManually = true
+                                            pinToTop = false
                                             val targetItemIndex = when (state.viewMode) {
                                                 RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
                                                 RomViewMode.LIST -> leadingItems + idx

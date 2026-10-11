@@ -124,7 +124,6 @@
         <item>4</item>
         <item>5</item>
         <item>0</item>
-        <item>8</item>
     </string-array>
 
     <string-array name="fps_counter_position_values">
@@ -336,9 +335,9 @@
     </string-array>
 
     <string-array name="translator_tts_voice_engine_options">
-        <item>Живая нейросетевая озвучка (Edge Neural HD 24kHz)</item>
-        <item>Многоголосая озвучка персонажей (М/Ж/Злодеи/Дети) [Оффлайн]</item>
-        <item>Стандартный один голос (Системный)</item>
+        <item>@string/translator_voice_engine_neural</item>
+        <item>@string/translator_voice_engine_local_multi</item>
+        <item>@string/translator_voice_engine_system</item>
     </string-array>
 
     <string-array name="translator_tts_voice_engine_values">

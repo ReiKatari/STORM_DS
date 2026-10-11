@@ -64,7 +64,7 @@ class PreferenceFragmentHelper(
                         ?: -1
 
                     val summary = if (index >= 0)
-                        preference.entries[index]
+                        preference.entries?.getOrNull(index) ?: preference.context.getString(R.string.not_set)
                     else
                         preference.context.getString(R.string.not_set)
                     preference.setSummary(summary)

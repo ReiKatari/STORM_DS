@@ -57,3 +57,4 @@ cd STORM_DS
 - **Zenju** — за алгоритм высококачественного масштабирования текстур xBRZ.
 - **SnowflakePowered (librashader)** — за конвейер шейдеров RetroArch Slang.
 - **bylaws (libadrenotools)** — за библиотеку загрузки кастомных видеодрайверов Qualcomm Adreno и Turnip.
+- **TakWolf (Fusion Pixel Font, Ark Pixel Font), Galmuri и Cubic 11** — за пиксельный шрифт с поддержкой кириллицы, латиницы и CJK, используемый для нативной отрисовки перевода в играх (лицензия SIL OFL 1.1).

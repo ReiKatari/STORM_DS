@@ -557,7 +557,6 @@
     <item>Итальянский</item>
     <item>Испанский</item>
     <item>Японский</item>
-    <item>Русский</item>
   </string-array>
   <string-array name="game_runtime_mic_source_options">
     <item>По умолчанию</item>
@@ -681,7 +680,6 @@
   <string-array name="external_display_screen_options">
     <item>@string/top_screen</item>
     <item>@string/bottom_screen</item>
-    <item>@string/custom_layout</item>
   </string-array>
   <string-array name="external_display_mode_options">
     <item>Зеркалирование (Mirror)</item>
@@ -1343,6 +1341,15 @@
     <string name="translator_regions_saved_toast">Сохранено областей перевода: %d</string>
     <string name="translator_edit_regions_hint">Нажмите и тяните по экрану для создания области</string>
     <string name="translator_region_badge">Область #%d</string>
+    <string name="translator_lasso_hint">Выделите рамку пальцем на экране</string>
+    <string name="translator_lasso_translate">Перевести область</string>
+    <string name="translator_dict_title">Словарь и разбор фразы</string>
+    <string name="translator_speak_action">Озвучить ▶️</string>
+    <string name="translator_preview_voice">Проверить голос ▶️</string>
+    <string name="translator_voice_engine_neural">Нейросетевая Edge HD (Облако, 24 кГц)</string>
+    <string name="translator_voice_engine_local_multi">Локальная AI Studio (Piper INT8, оффлайн)</string>
+    <string name="translator_voice_engine_system">Системный Android TTS</string>
+    <string name="resolution_hud_position_title">Отображение разрешения рендера</string>
     <string name="button_translate">Перевод экрана</string>
     <string name="lang_auto">Автоопределение</string>
     <string name="lang_ru">Русский</string>
@@ -1511,4 +1518,19 @@
     <string name="settings_sub_about">О проекте STORM DS и разработчиках</string>
     <string name="settings_sub_main">Параметры и конфигурация эмулятора</string>
     <string name="settings_sub_default">Параметры и настройки</string>
+
+    <!-- Translator Error Strings -->
+    <string name="translator_error_mlkit_model">Офлайн-модель перевода недоступна или не загружена</string>
+    <string name="translator_error_network">Ошибка сети при переводе</string>
+    <string name="translator_error_deepl_key_missing">API-ключ DeepL не настроен</string>
+    <string name="translator_error_http">%1$s: ошибка HTTP %2$d</string>
+    <string name="translator_error_ai_key_missing">API-ключ нейросети не настроен</string>
+    <string name="translator_tts_voice_engine_title">Движок синтеза речи</string>
+    <string name="translator_local_voice_category">Локальная студия озвучки</string>
+    <string name="translator_local_voice_studio_title">Нейросетевая студия озвучки (Piper TTS)</string>
+    <string name="translator_local_voice_studio_summary">Высокоскоростные офлайн-голоса с разделением персонажей по ролям</string>
+    <string name="translator_local_voice_model_title">Голосовая модель</string>
+    <string name="translator_local_voice_pitch_variance_title">Вариативность тональности персонажей</string>
+    <string name="translator_voice_model_dialog_title">Пакет моделей голоса</string>
+    <string name="translator_action_all_settings">Все настройки ⚙️</string>
 </resources>

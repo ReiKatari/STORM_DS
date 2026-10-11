@@ -210,13 +210,19 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
                 values = entryValues.toList(),
                 selectedValue = currentValue,
                 onSelect = { newValue ->
-                    preference.value = newValue
-                    preference.callChangeListener(newValue)
+                    if (preference.callChangeListener(newValue)) {
+                        preference.value = newValue
+                    }
                 },
                 onDismiss = dismiss,
             )
         }
     }
+
+    /**
+     * Whether the given EditText preference holds a secret (e.g. an API key) and must be masked while editing.
+     */
+    protected open fun isPasswordPreference(preference: androidx.preference.EditTextPreference): Boolean = false
 
     protected open fun showStyledEditTextPreferenceDialog(preference: androidx.preference.EditTextPreference) {
         val context = context ?: return
@@ -228,9 +234,11 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
                 subtitle = preference.summary?.toString()?.takeIf { it != "%s" },
                 icon = icon,
                 currentText = preference.text ?: "",
+                isPassword = isPasswordPreference(preference),
                 onConfirm = { newValue ->
-                    preference.text = newValue
-                    preference.callChangeListener(newValue)
+                    if (preference.callChangeListener(newValue)) {
+                        preference.text = newValue
+                    }
                 },
                 onDismiss = dismiss,
             )
@@ -253,8 +261,9 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
                 values = entryValues.toList(),
                 selectedValues = currentValues,
                 onConfirm = { newValues ->
-                    preference.values = newValues
-                    preference.callChangeListener(newValues)
+                    if (preference.callChangeListener(newValues)) {
+                        preference.values = newValues
+                    }
                 },
                 onDismiss = dismiss,
             )
@@ -274,8 +283,9 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
                 minValue = preference.min,
                 maxValue = preference.max,
                 onConfirm = { newValue ->
-                    preference.value = newValue
-                    preference.callChangeListener(newValue)
+                    if (preference.callChangeListener(newValue)) {
+                        preference.value = newValue
+                    }
                 },
                 onDismiss = dismiss,
             )

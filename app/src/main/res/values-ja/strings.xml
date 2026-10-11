@@ -1075,6 +1075,15 @@
     <string name="translator_regions_saved_toast">翻訳領域を保存しました: %d 箇所</string>
     <string name="translator_edit_regions_hint">画面上をドラッグして領域を作成またはリサイズします</string>
     <string name="translator_region_badge">領域 #%d</string>
+    <string name="translator_lasso_hint">画面上で枠をドラッグして翻訳</string>
+    <string name="translator_lasso_translate">選択範囲を翻訳</string>
+    <string name="translator_dict_title">辞書とフレーズ解析</string>
+    <string name="translator_speak_action">読み上げ ▶️</string>
+    <string name="translator_preview_voice">音声を試聴 ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (クラウド, 24kHz)</string>
+    <string name="translator_voice_engine_local_multi">ローカル AI Studio (Piper INT8, オフライン)</string>
+    <string name="translator_voice_engine_system">システム Android TTS</string>
+    <string name="resolution_hud_position_title">レンダリング解像度表示</string>
     <string name="button_translate">画面を翻訳</string>
     <string name="lang_auto">自動検出</string>
     <string name="lang_ru">ロシア語 (Русский)</string>
@@ -1246,29 +1255,24 @@
     </string-array>
 
     <string-array name="frame_limit_speed_multiplier_options">
-        <item>無制限</item>
-        <item>0.25倍</item>
+        <item>1.0倍 (等速)</item>
+        <item>0.75倍</item>
         <item>0.5倍</item>
-        <item>1倍 (等速)</item>
-        <item>1.5倍</item>
-        <item>2倍</item>
-        <item>3倍</item>
-        <item>4倍</item>
-        <item>8倍</item>
+        <item>0.25倍</item>
     </string-array>
 
     <string-array name="dldi_sd_card_image_size_options">
-        <item>128 MB</item>
+        <item>自動</item>
         <item>256 MB</item>
         <item>512 MB</item>
         <item>1 GB</item>
         <item>2 GB</item>
+        <item>4 GB</item>
     </string-array>
 
     <string-array name="rom_icon_filtering_options">
-        <item>なし</item>
-        <item>リニア</item>
-        <item>最近傍</item>
+        <item>なし (ピクセル)</item>
+        <item>リニア (滑らか)</item>
     </string-array>
 
     <string-array name="rom_view_mode_options">
@@ -1282,20 +1286,22 @@
     </string-array>
 
     <string-array name="game_runtime_console_type_options">
-        <item>Nintendo DS</item>
-        <item>Nintendo DSi</item>
+        <item>デフォルト</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
     </string-array>
 
     <string-array name="firmware_settings_language_options">
-        <item>日本語</item>
         <item>英語</item>
         <item>フランス語</item>
         <item>ドイツ語</item>
         <item>イタリア語</item>
         <item>スペイン語</item>
+        <item>日本語</item>
     </string-array>
 
     <string-array name="game_runtime_mic_source_options">
+        <item>デフォルト</item>
         <item>なし</item>
         <item>息を吹き込むシミュレーション</item>
         <item>端末のマイク</item>
@@ -1308,7 +1314,10 @@
 
     <string-array name="gba_slot_options">
         <item>なし</item>
-        <item>GBAカートリッジ</item>
+        <item>GBA ROM</item>
+        <item>振動パック</item>
+        <item>メモリー拡張パック</item>
+        <item>アナログ入力</item>
     </string-array>
 
     <string-array name="console_type_options">
@@ -1317,9 +1326,12 @@
     </string-array>
 
     <string-array name="fps_counter_position_options">
+        <item>非表示</item>
         <item>左上</item>
+        <item>中央上</item>
         <item>右上</item>
         <item>左下</item>
+        <item>中央下</item>
         <item>右下</item>
     </string-array>
 
@@ -1327,6 +1339,7 @@
         <item>ソフトウェア</item>
         <item>OpenGL</item>
         <item>Vulkan</item>
+        <item>Compute</item>
     </string-array>
 
     <string-array name="video_internal_resolution_options">
@@ -1345,6 +1358,15 @@
     <string-array name="video_filtering_options">
         <item>なし</item>
         <item>リニア</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>スキャンライン</item>
+        <item>Scale2x</item>
+        <item>AI-Upscale (Anime4K)</item>
+        <item>RetroArch (.slangp)</item>
     </string-array>
 
     <string-array name="video_vulkan_driver_mode_options">
@@ -1361,7 +1383,6 @@
     <string-array name="external_display_screen_options">
         <item>@string/top_screen</item>
         <item>@string/bottom_screen</item>
-        <item>@string/custom_layout</item>
     </string-array>
 
     <string-array name="external_display_mode_options">
@@ -1483,4 +1504,18 @@
         <item>solar_fusion</item>
     </string-array>
 
+    <!-- Translator Error Strings -->
+    <string name="translator_error_mlkit_model">オフライン翻訳モデルが利用できないか、読み込みに失敗しました</string>
+    <string name="translator_error_network">翻訳中にネットワークエラーが発生しました</string>
+    <string name="translator_error_deepl_key_missing">DeepL APIキーが設定されていません</string>
+    <string name="translator_error_http">%1$s: HTTPエラー %2$d</string>
+    <string name="translator_error_ai_key_missing">AI APIキーが設定されていません</string>
+    <string name="translator_tts_voice_engine_title">音声合成エンジン</string>
+    <string name="translator_local_voice_category">ローカル声優スタジオ</string>
+    <string name="translator_local_voice_studio_title">ニューラル声優スタジオ (Piper TTS)</string>
+    <string name="translator_local_voice_studio_summary">キャラクターごとに演じ分ける高速オンデバイス・ニューラル音声モデル</string>
+    <string name="translator_local_voice_model_title">音声モデル</string>
+    <string name="translator_local_voice_pitch_variance_title">キャラクター間のピッチ変化</string>
+    <string name="translator_voice_model_dialog_title">音声モデルパック</string>
+    <string name="translator_action_all_settings">すべての設定 ⚙️</string>
 </resources>

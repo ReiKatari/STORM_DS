@@ -62,7 +62,16 @@ class RomListViewModel @Inject constructor(
 
     private val _searchQuery = MutableStateFlow("")
 
-    private val _boxArtByUri = MutableStateFlow<Map<String, String>>(boxArtRepository.getAllCachedMatches())
+    private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cached = runCatching { boxArtRepository.getAllCachedMatches() }.getOrDefault(emptyMap())
+            if (cached.isNotEmpty()) {
+                _boxArtByUri.update { current -> cached + current.filterValues { it.isNotEmpty() } }
+            }
+        }
+    }
 
     val isRaCoverEnabled: StateFlow<Boolean> = settingsRepository.observeRaCoverEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, settingsRepository.isRaCoverEnabled())
@@ -761,7 +770,9 @@ class RomListViewModel @Inject constructor(
         return Comparator { o1: Rom, o2: Rom ->
             val name1 = me.magnum.melonds.ui.romlist.composables.romDisplayName(o1)
             val name2 = me.magnum.melonds.ui.romlist.composables.romDisplayName(o2)
-            val result = name1.compareTo(name2, ignoreCase = true)
+            val result = name1.compareTo(name2, ignoreCase = true).takeIf { it != 0 }
+                ?: o1.fileName.compareTo(o2.fileName, ignoreCase = true).takeIf { it != 0 }
+                ?: o1.uri.toString().compareTo(o2.uri.toString())
             if (sortingOrder == SortingOrder.ASCENDING) result else -result
         }
     }

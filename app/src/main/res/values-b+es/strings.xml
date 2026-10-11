@@ -467,7 +467,6 @@
         <item>Italiano</item>
         <item>Español</item>
         <item>Japonés</item>
-        <item>Ruso</item>
     </string-array>
     <string-array name="game_runtime_mic_source_options">
         <item>Por defecto</item>
@@ -535,6 +534,7 @@
         <item>Guardar directorio de archivos</item>
         <item>Directorio de ROMs</item>
         <item>Directorio interno</item>
+        <item>Personalizado</item>
     </string-array>
     <string-array name="layout_orientation_options">
         <item>Seguir sistema</item>
@@ -1177,6 +1177,15 @@
     <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
     <string name="translator_edit_regions_hint">Drag on screen to create or resize areas</string>
     <string name="translator_region_badge">Area #%d</string>
+    <string name="translator_lasso_hint">Arrastra un marco en pantalla para traducir</string>
+    <string name="translator_lasso_translate">Traducir área</string>
+    <string name="translator_dict_title">Diccionario y análisis de frases</string>
+    <string name="translator_speak_action">Reproducir ▶️</string>
+    <string name="translator_preview_voice">Probar voz ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (Nube, 24 kHz)</string>
+    <string name="translator_voice_engine_local_multi">Estudio de voz IA local (Piper INT8, sin conexión)</string>
+    <string name="translator_voice_engine_system">Sistema Android TTS</string>
+    <string name="resolution_hud_position_title">Visualización de resolución de render</string>
     <string name="button_translate">Translate Screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>

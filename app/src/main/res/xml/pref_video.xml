@@ -201,7 +201,7 @@
 
         <ListPreference
                 android:key="resolution_hud_position"
-                android:title="Отображение текущего разрешения"
+                android:title="@string/resolution_hud_position_title"
                 android:summary="%s"
                 app:iconSpaceReserved="false"
                 android:entries="@array/fps_counter_position_options"

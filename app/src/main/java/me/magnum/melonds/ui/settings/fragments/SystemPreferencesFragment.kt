@@ -141,13 +141,11 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             stormCompilerPreference.isChecked = false
             stormCompilerPreference.isVisible = false
         } else {
-            // Ensure only one compiler is enabled on launch (default: STORM-Compiler)
+            // Ensure only one compiler is enabled on launch (default: STORM-Compiler).
+            // Both switches off is a valid state (interpreter mode), so it is not overridden.
             if (stormCompilerPreference.isChecked && jitPreference.isChecked) {
                 jitPreference.isChecked = false
                 preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_jit", false)?.apply()
-            } else if (!stormCompilerPreference.isChecked && !jitPreference.isChecked) {
-                stormCompilerPreference.isChecked = true
-                preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_storm_compiler", true)?.apply()
             }
 
             jitPreference.setOnPreferenceChangeListener { _, newValue ->

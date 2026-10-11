@@ -1103,7 +1103,7 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
     const u32 totsec = len / sectorsize;
     const u16 totsec16 = (u16)(totsec < 0x10000 ? totsec : 0);
     const u8 clustersize = (totsec > (8 << 10)) ? 8 : (totsec > (1 << 10) ? 4 : 1);
-    const u16 rootDirEntries = (len <= 0x20000) ? 64 : 128;
+    const u16 rootDirEntries = (len <= 0x8000) ? 16 : ((len <= 0x20000) ? 64 : 128);
     const u16 rootDirSectors = (rootDirEntries * 32 + sectorsize - 1) / sectorsize;
     const u32 totalClusters = (totsec > 1 + rootDirSectors) ? ((totsec - 1 - rootDirSectors) / clustersize) : 0;
     const bool isFat16 = (totalClusters >= 4085 || len > 0x80000);
@@ -1120,18 +1120,21 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
             u32 nr = 0;
             f_read(&ef, bootSec, sizeof(bootSec), &nr);
             f_close(&ef);
+            u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
+            bool rootMatches = (len <= 0x8000) ? (rootEntries == 16) : (rootEntries >= 64);
             bool isValid = (nr >= 512 &&
                             bootSec[0x1FE] == 0x55 && bootSec[0x1FF] == 0xAA &&
                             (bootSec[0] == 0xEB || bootSec[0] == 0xE9) &&
                             bootSec[0x010] >= 1 &&
-                            bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02);
+                            bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02 &&
+                            rootMatches);
             if (isValid)
             {
                 f_chmod(path, 0, AM_RDO);
-                Log(LogLevel::Info, "CreateSaveFile: %s already exists with valid FAT format, keeping existing file\n", path);
+                Log(LogLevel::Info, "CreateSaveFile: %s already exists with valid FAT format (rootEntries=%u), keeping existing file\n", path, (u32)rootEntries);
                 return true;
             }
-            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT boot signature, reformatting\n", path);
+            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT boot signature or root entries mismatch (%u != %u), reformatting\n", path, (u32)rootEntries, (u32)rootDirEntries);
         }
     }
 

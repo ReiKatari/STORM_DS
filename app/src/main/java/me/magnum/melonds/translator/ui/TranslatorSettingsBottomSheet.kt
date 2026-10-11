@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import me.magnum.melonds.R
 import me.magnum.melonds.translator.GameTranslatorManager
 import me.magnum.melonds.translator.model.TranslatorEngineType
 import me.magnum.melonds.translator.model.TranslatorOverlayStyle
@@ -79,7 +80,7 @@ fun TranslatorSettingsContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Настройки перевода",
+            text = context.getString(R.string.category_translator),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = watermelon.text,
@@ -93,10 +94,10 @@ fun TranslatorSettingsContent(
                 .padding(24.dp)
         ) {
             // General Settings Card
-            SettingsSectionTitle("Основные")
+            SettingsSectionTitle(context.getString(R.string.category_general))
             SettingsCard {
                 SettingsSwitch(
-                    label = "Пауза при переводе",
+                    label = context.getString(R.string.translator_pause_on_translate),
                     checked = pauseOnTranslate,
                     onCheckedChange = { 
                         pauseOnTranslate = it
@@ -105,7 +106,7 @@ fun TranslatorSettingsContent(
                 )
                 Divider(color = watermelon.line)
                 SettingsOption(
-                    label = "Движок перевода",
+                    label = context.getString(R.string.translator_engine),
                     value = TranslatorEngineType.fromPreference(enginePref).displayName.substringBefore(" ("),
                     onClick = {
                         val engines = TranslatorEngineType.entries.map { it.preferenceValue to it.displayName.substringBefore(" (") }
@@ -117,10 +118,10 @@ fun TranslatorSettingsContent(
                 )
                 Divider(color = watermelon.line)
                 SettingsOption(
-                    label = "Режим активации",
+                    label = context.getString(R.string.translator_trigger_mode),
                     value = when (TranslatorTriggerMode.fromPreference(triggerModePref)) {
-                        TranslatorTriggerMode.ON_DEMAND -> "По кнопке"
-                        TranslatorTriggerMode.AUTO_SCREEN_CHANGE -> "Автоматически"
+                        TranslatorTriggerMode.ON_DEMAND -> context.getString(R.string.translator_trigger_mode_on_demand)
+                        TranslatorTriggerMode.AUTO_SCREEN_CHANGE -> context.getString(R.string.translator_trigger_mode_auto)
                     },
                     onClick = {
                         triggerModePref = if (triggerModePref == "on_demand") "auto_screen_change" else "on_demand"
@@ -133,15 +134,15 @@ fun TranslatorSettingsContent(
             Spacer(modifier = Modifier.height(16.dp))
             
             // Visual Settings Card
-            SettingsSectionTitle("Внешний вид")
+            SettingsSectionTitle(context.getString(R.string.translator_overlay_style))
             SettingsCard {
                 SettingsOption(
-                    label = "Стиль наложения",
+                    label = context.getString(R.string.translator_overlay_style),
                     value = when (TranslatorOverlayStyle.fromPreference(overlayStylePref)) {
-                        TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> "С фоном"
-                        TranslatorOverlayStyle.SEMI_TRANSPARENT -> "Полупрозрачный"
-                        TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> "Бабл"
-                        TranslatorOverlayStyle.OUTLINE_ONLY -> "Только контур"
+                        TranslatorOverlayStyle.SMART_BACKGROUND_MATCH -> context.getString(R.string.translator_style_smart_match)
+                        TranslatorOverlayStyle.SEMI_TRANSPARENT -> context.getString(R.string.translator_style_semi_transparent)
+                        TranslatorOverlayStyle.TRANSLUCENT_BUBBLE -> context.getString(R.string.translator_style_neon_bubble)
+                        TranslatorOverlayStyle.OUTLINE_ONLY -> context.getString(R.string.translator_style_outline_only)
                     },
                     onClick = {
                         val styles = TranslatorOverlayStyle.entries.map { it.preferenceValue }
@@ -153,7 +154,7 @@ fun TranslatorSettingsContent(
                 )
                 Divider(color = watermelon.line)
                 SettingsSlider(
-                    label = "Размер шрифта",
+                    label = context.getString(R.string.translator_font_size_scale),
                     value = fontSizeScale,
                     valueRange = 50f..200f,
                     steps = 14,
@@ -166,7 +167,7 @@ fun TranslatorSettingsContent(
                 )
                 Divider(color = watermelon.line)
                 SettingsSlider(
-                    label = "Непрозрачность фона",
+                    label = context.getString(R.string.translator_bubble_opacity),
                     value = bubbleOpacity,
                     valueRange = 0f..100f,
                     steps = 19,
@@ -182,10 +183,10 @@ fun TranslatorSettingsContent(
             Spacer(modifier = Modifier.height(16.dp))
             
             // Voice Settings Card
-            SettingsSectionTitle("Озвучка (TTS)")
+            SettingsSectionTitle(context.getString(R.string.category_translator_tts))
             SettingsCard {
                 SettingsSwitch(
-                    label = "Включить озвучку диалогов",
+                    label = context.getString(R.string.translator_tts_enabled),
                     checked = ttsEnabled || voiceActorStudioEnabled,
                     onCheckedChange = { 
                         ttsEnabled = it
@@ -199,11 +200,11 @@ fun TranslatorSettingsContent(
                 if (ttsEnabled || voiceActorStudioEnabled) {
                     Divider(color = watermelon.line)
                     SettingsOption(
-                        label = "Голос / Движок озвучки",
+                        label = context.getString(R.string.translator_tts_voice_engine_title),
                         value = when(voiceEnginePref) {
-                            "neural_edge" -> "⚡ Нейро-голоса Edge Cloud"
-                            "local_multi" -> "🎙️ Локальный AI Studio (Piper INT8)"
-                            else -> "🤖 Системный Android TTS"
+                            "neural_edge" -> "⚡ ${context.getString(R.string.translator_voice_engine_neural)}"
+                            "local_multi" -> "🎙️ ${context.getString(R.string.translator_voice_engine_local_multi)}"
+                            else -> "🤖 ${context.getString(R.string.translator_voice_engine_system)}"
                         },
                         onClick = {
                             showVoiceEngineDialog = true
@@ -211,16 +212,16 @@ fun TranslatorSettingsContent(
                     )
                     Divider(color = watermelon.line)
                     SettingsOption(
-                        label = "Язык озвучки",
+                        label = context.getString(R.string.translator_tts_lang_title),
                         value = when(ttsLangPref) {
-                            "auto" -> "🌐 Автовыбор (по языку)"
-                            "ru" -> "🇷🇺 Русский"
-                            "en" -> "🇬🇧 Английский"
-                            "ja" -> "🇯🇵 Японский"
-                            "zh" -> "🇨🇳 Китайский"
-                            "de" -> "🇩🇪 Немецкий"
-                            "fr" -> "🇫🇷 Французский"
-                            "es" -> "🇪🇸 Испанский"
+                            "auto" -> "🌐 ${context.getString(R.string.lang_auto)}"
+                            "ru" -> "🇷🇺 ${context.getString(R.string.lang_ru)}"
+                            "en" -> "🇬🇧 ${context.getString(R.string.lang_en)}"
+                            "ja" -> "🇯🇵 ${context.getString(R.string.lang_ja)}"
+                            "zh" -> "🇨🇳 ${context.getString(R.string.lang_zh)}"
+                            "de" -> "🇩🇪 ${context.getString(R.string.lang_de)}"
+                            "fr" -> "🇫🇷 ${context.getString(R.string.lang_fr)}"
+                            "es" -> "🇪🇸 ${context.getString(R.string.lang_es)}"
                             else -> ttsLangPref.uppercase()
                         },
                         onClick = {
@@ -229,7 +230,7 @@ fun TranslatorSettingsContent(
                     )
                     Divider(color = watermelon.line)
                     SettingsOption(
-                        label = "Проверить голос ▶️",
+                        label = context.getString(R.string.translator_preview_voice),
                         value = "",
                         onClick = onPreviewTts
                     )
@@ -239,10 +240,10 @@ fun TranslatorSettingsContent(
             Spacer(modifier = Modifier.height(16.dp))
 
             // AI Voice Actor Studio Card
-            SettingsSectionTitle("AI Voice Actor Studio (Piper INT8)")
+            SettingsSectionTitle(context.getString(R.string.translator_local_voice_studio_title))
             SettingsCard {
                 SettingsSwitch(
-                    label = "AI Voice Actor Studio",
+                    label = context.getString(R.string.translator_local_voice_studio_title),
                     checked = voiceActorStudioEnabled,
                     onCheckedChange = { 
                         voiceActorStudioEnabled = it
@@ -262,7 +263,7 @@ fun TranslatorSettingsContent(
                     val availablePacks = me.magnum.melonds.translator.tts.LocalAiVoiceActorStudio.getAvailableModelPacks(context)
                     val currentPack = availablePacks.firstOrNull { it.id == voiceModelPref } ?: availablePacks.first()
                     SettingsOption(
-                        label = "Пакет нейромоделей",
+                        label = context.getString(R.string.translator_local_voice_model_title),
                         value = currentPack.displayName,
                         onClick = {
                             showVoiceModelDialog = true
@@ -270,7 +271,7 @@ fun TranslatorSettingsContent(
                     )
                     Divider(color = watermelon.line)
                     SettingsSlider(
-                        label = "Вариативность тембра",
+                        label = context.getString(R.string.translator_local_voice_pitch_variance_title),
                         value = voicePitchVariance,
                         valueRange = 0f..100f,
                         steps = 19,
@@ -285,9 +286,9 @@ fun TranslatorSettingsContent(
 
             if (showVoiceEngineDialog) {
                 val engines = listOf(
-                    "neural_edge" to "⚡ Нейро-голоса Edge Cloud (Высокое качество, 24 характера)",
-                    "local_multi" to "🎙️ Локальный AI Voice Actor Studio (Piper INT8 оффлайн)",
-                    "single" to "🤖 Системный Android TTS (Базовый синтезатор)"
+                    "neural_edge" to "⚡ ${context.getString(R.string.translator_voice_engine_neural)}",
+                    "local_multi" to "🎙️ ${context.getString(R.string.translator_voice_engine_local_multi)}",
+                    "single" to "🤖 ${context.getString(R.string.translator_voice_engine_system)}"
                 )
                 AlertDialog(
                     onDismissRequest = { showVoiceEngineDialog = false },
@@ -295,7 +296,7 @@ fun TranslatorSettingsContent(
                     shape = RoundedCornerShape(16.dp),
                     title = {
                         Text(
-                            text = "Движок и режим озвучки",
+                            text = context.getString(R.string.translator_tts_voice_engine_title),
                             color = watermelon.text,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -363,7 +364,7 @@ fun TranslatorSettingsContent(
                             horizontalArrangement = Arrangement.End
                         ) {
                             TextButton(onClick = { showVoiceEngineDialog = false }) {
-                                Text("Закрыть", color = watermelon.green, fontWeight = FontWeight.Bold)
+                                Text(context.getString(R.string.close), color = watermelon.green, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -372,14 +373,14 @@ fun TranslatorSettingsContent(
 
             if (showTtsLangDialog) {
                 val languages = listOf(
-                    "auto" to "🌐 Автовыбор (по языку перевода)",
-                    "ru" to "🇷🇺 Русский (ru)",
-                    "en" to "🇬🇧 Английский (en)",
-                    "ja" to "🇯🇵 Японский (ja)",
-                    "zh" to "🇨🇳 Китайский (zh)",
-                    "de" to "🇩🇪 Немецкий (de)",
-                    "fr" to "🇫🇷 Французский (fr)",
-                    "es" to "🇪🇸 Испанский (es)"
+                    "auto" to "🌐 ${context.getString(R.string.lang_auto)}",
+                    "ru" to "🇷🇺 ${context.getString(R.string.lang_ru)}",
+                    "en" to "🇬🇧 ${context.getString(R.string.lang_en)}",
+                    "ja" to "🇯🇵 ${context.getString(R.string.lang_ja)}",
+                    "zh" to "🇨🇳 ${context.getString(R.string.lang_zh)}",
+                    "de" to "🇩🇪 ${context.getString(R.string.lang_de)}",
+                    "fr" to "🇫🇷 ${context.getString(R.string.lang_fr)}",
+                    "es" to "🇪🇸 ${context.getString(R.string.lang_es)}"
                 )
                 AlertDialog(
                     onDismissRequest = { showTtsLangDialog = false },
@@ -387,7 +388,7 @@ fun TranslatorSettingsContent(
                     shape = RoundedCornerShape(16.dp),
                     title = {
                         Text(
-                            text = "Язык озвучки",
+                            text = context.getString(R.string.translator_tts_lang_title),
                             color = watermelon.text,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -443,7 +444,7 @@ fun TranslatorSettingsContent(
                             horizontalArrangement = Arrangement.End
                         ) {
                             TextButton(onClick = { showTtsLangDialog = false }) {
-                                Text("Закрыть", color = watermelon.green, fontWeight = FontWeight.Bold)
+                                Text(context.getString(R.string.close), color = watermelon.green, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -458,7 +459,7 @@ fun TranslatorSettingsContent(
                     shape = RoundedCornerShape(16.dp),
                     title = {
                         Text(
-                            text = "🎭 Пакет нейромоделей голоса (24 голоса)",
+                            text = "🎭 ${context.getString(R.string.translator_voice_model_dialog_title)}",
                             color = watermelon.text,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -515,7 +516,7 @@ fun TranslatorSettingsContent(
                             horizontalArrangement = Arrangement.End
                         ) {
                             TextButton(onClick = { showVoiceModelDialog = false }) {
-                                Text("Закрыть", color = watermelon.green, fontWeight = FontWeight.Bold)
+                                Text(context.getString(R.string.close), color = watermelon.green, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -533,7 +534,7 @@ fun TranslatorSettingsContent(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.green, contentColor = watermelon.surface)
                 ) {
-                    Text("Зоны OCR", fontWeight = FontWeight.Bold)
+                    Text(context.getString(R.string.translator_regions_title), fontWeight = FontWeight.Bold)
                 }
                 Button(
                     onClick = {
@@ -545,7 +546,7 @@ fun TranslatorSettingsContent(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.surface3, contentColor = watermelon.text)
                 ) {
-                    Text("Все настройки ⚙️", fontWeight = FontWeight.Bold)
+                    Text(context.getString(R.string.translator_action_all_settings), fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))

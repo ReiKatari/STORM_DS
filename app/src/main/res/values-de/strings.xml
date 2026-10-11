@@ -1075,6 +1075,15 @@
     <string name="translator_regions_saved_toast">Übersetzungsbereiche gespeichert: %d</string>
     <string name="translator_edit_regions_hint">Über den Bildschirm ziehen, um Bereiche zu erstellen oder anzupassen</string>
     <string name="translator_region_badge">Bereich #%d</string>
+    <string name="translator_lasso_hint">Rahmen auf dem Bildschirm ziehen</string>
+    <string name="translator_lasso_translate">Bereich übersetzen</string>
+    <string name="translator_dict_title">Wörterbuch und Phrasenanalyse</string>
+    <string name="translator_speak_action">Vorlesen ▶️</string>
+    <string name="translator_preview_voice">Stimme testen ▶️</string>
+    <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24 kHz)</string>
+    <string name="translator_voice_engine_local_multi">Lokales KI-Studio (Piper INT8, offline)</string>
+    <string name="translator_voice_engine_system">System Android TTS</string>
+    <string name="resolution_hud_position_title">Auflösungsanzeige</string>
     <string name="button_translate">Bildschirm übersetzen</string>
     <string name="lang_auto">Automatisch erkennen</string>
     <string name="lang_ru">Russisch (Русский)</string>
@@ -1235,4 +1244,19 @@
     <string name="settings_sub_about">Über das Projekt STORM DS und die Entwickler</string>
     <string name="settings_sub_main">Emulatorparameter und Konfiguration</string>
     <string name="settings_sub_default">Parameter und Einstellungen</string>
+
+    <!-- Translator Error Strings -->
+    <string name="translator_error_mlkit_model">Offline-Übersetzungsmodell nicht verfügbar oder fehlgeschlagen</string>
+    <string name="translator_error_network">Netzwerkfehler bei der Übersetzung</string>
+    <string name="translator_error_deepl_key_missing">DeepL-API-Schlüssel ist nicht konfiguriert</string>
+    <string name="translator_error_http">%1$s: HTTP-Fehler %2$d</string>
+    <string name="translator_error_ai_key_missing">KI-API-Schlüssel ist nicht konfiguriert</string>
+    <string name="translator_tts_voice_engine_title">Sprachsynthese-Engine</string>
+    <string name="translator_local_voice_category">Lokales Synchronsprecher-Studio</string>
+    <string name="translator_local_voice_studio_title">Neuronales Synchronsprecher-Studio (Piper TTS)</string>
+    <string name="translator_local_voice_studio_summary">Schnelle Offline-Stimmenmodelle mit Rollentrennung</string>
+    <string name="translator_local_voice_model_title">Stimmenmodell</string>
+    <string name="translator_local_voice_pitch_variance_title">Tonhöhenvariation zwischen Charakteren</string>
+    <string name="translator_voice_model_dialog_title">Sprachmodellpaket</string>
+    <string name="translator_action_all_settings">Alle Einstellungen ⚙️</string>
 </resources>

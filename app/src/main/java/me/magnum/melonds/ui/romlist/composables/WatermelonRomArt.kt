@@ -361,8 +361,9 @@ fun WatermelonRomArt(
                             artLoaded = true
                             onArtLoadedChanged(true)
                         },
-                        onError = { _, _ ->
-                            if (activeModel is String) {
+                        onError = { _, errorResult ->
+                            val httpCode = (errorResult.throwable as? coil.network.HttpException)?.response?.code
+                            if (activeModel is String && httpCode == 404) {
                                 failedCoverUrls.add(activeModel)
                             }
                             if (activeModel == gameTdbUrl) {

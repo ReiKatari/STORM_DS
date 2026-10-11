@@ -89,7 +89,7 @@
 
         <ListPreference
             android:key="translator_tts_voice_engine"
-            android:title="Режим озвучки"
+            android:title="@string/translator_tts_voice_engine_title"
             android:entries="@array/translator_tts_voice_engine_options"
             android:entryValues="@array/translator_tts_voice_engine_values"
             android:defaultValue="neural_edge"
@@ -109,18 +109,18 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Локальный AI Voice Actor Studio (Piper TTS)">
+        android:title="@string/translator_local_voice_category">
 
         <SwitchPreferenceCompat
             android:key="translator_local_voice_actor_studio"
-            android:title="AI Voice Actor Studio"
-            android:summary="Автономный оффлайн-синтез голосов персонажей (Piper INT8 ONNX) с динамической сменой тембра, формант и ролей (Герои, Злодеи, Мудрецы, Дети)"
+            android:title="@string/translator_local_voice_studio_title"
+            android:summary="@string/translator_local_voice_studio_summary"
             android:defaultValue="false"
             app:iconSpaceReserved="false" />
 
         <ListPreference
             android:key="translator_local_voice_model"
-            android:title="Пакет нейромоделей голоса"
+            android:title="@string/translator_local_voice_model_title"
             android:entries="@array/translator_local_voice_model_options"
             android:entryValues="@array/translator_local_voice_model_values"
             android:defaultValue="piper_ru_dmitri_medium"
@@ -130,8 +130,8 @@
 
         <SeekBarPreference
             android:key="translator_local_voice_pitch_variance"
-            android:title="Вариативность тембра персонажей"
-            android:min="0"
+            android:title="@string/translator_local_voice_pitch_variance_title"
+            app:min="0"
             android:max="100"
             android:defaultValue="65"
             app:showSeekBarValue="true"
@@ -155,7 +155,7 @@
         <SeekBarPreference
             android:key="translator_bubble_opacity"
             android:title="@string/translator_bubble_opacity"
-            android:min="10"
+            app:min="10"
             android:max="100"
             android:defaultValue="90"
             app:showSeekBarValue="true"
@@ -165,7 +165,7 @@
         <SeekBarPreference
             android:key="translator_font_size_scale"
             android:title="@string/translator_font_size_scale"
-            android:min="60"
+            app:min="60"
             android:max="160"
             android:defaultValue="100"
             app:showSeekBarValue="true"
@@ -180,15 +180,11 @@
         <EditTextPreference
             android:key="translator_deepl_key"
             android:title="@string/translator_deepl_key"
-            android:summary="DeepL Free / Pro API key"
-            app:useSimpleSummaryProvider="true"
             app:iconSpaceReserved="false" />
 
         <EditTextPreference
             android:key="translator_custom_ai_key"
             android:title="@string/translator_custom_ai_key"
-            android:summary="API Key (OpenAI / Gemini / Claude)"
-            app:useSimpleSummaryProvider="true"
             app:iconSpaceReserved="false" />
 
         <EditTextPreference

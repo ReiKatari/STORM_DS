@@ -665,6 +665,7 @@ class SharedPreferencesSettingsRepository(
         }
 
         val userConfiguredLang = preferences.getString("firmware_settings_language", null)?.toIntOrNull()
+            ?.let { if (it in 0..7) it else 1 } // DS firmware languages are 0-7; legacy "8" (Russian) -> English
         val effectiveLanguage = userConfiguredLang ?: when {
             effectiveAppLang.startsWith("ru") -> 1 // Default English slot for Russian translated ROMs
             effectiveAppLang.startsWith("ja") -> 0
@@ -1818,7 +1819,7 @@ class SharedPreferencesSettingsRepository(
 
     override fun getSelectedLayoutId(): UUID {
         val id = preferences.getString("input_layout_id", null)
-        return id?.let { UUID.fromString(it) } ?: LayoutConfiguration.DEFAULT_ID
+        return id?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: LayoutConfiguration.DEFAULT_ID
     }
 
     override fun getSoftInputBehaviour(): Flow<SoftInputBehaviour> {
