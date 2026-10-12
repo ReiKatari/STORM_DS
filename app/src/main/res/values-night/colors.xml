@@ -3,6 +3,7 @@
     <!-- STORM NIGHT Palette (STORM Suite OLED Cyber Black Theme) -->
     <color name="colorPrimary">#00E5FF</color>
     <color name="colorPrimaryDark">#000000</color>
+    <color name="launcherBackground">#000000</color>
     <color name="colorAccent">#00E5FF</color>
     <color name="colorSecondary">#7B2CBF</color>
     <color name="colorSurface">#0D0D10</color>
