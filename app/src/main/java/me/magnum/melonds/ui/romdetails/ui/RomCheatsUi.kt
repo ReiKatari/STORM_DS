@@ -231,11 +231,6 @@ fun RomCheatsUi(
                             FileOutputStream(targetCheatFile).use { fos ->
                                 fos.write(bytes)
                             }
-                            // Also save to internal app storage
-                            val internalCheat = File(context.filesDir, "cheats/usrcheat.dat").apply { parentFile?.mkdirs() }
-                            FileOutputStream(internalCheat).use { fos ->
-                                fos.write(bytes)
-                            }
 
                             cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
                             downloaded = true

@@ -17,7 +17,14 @@ class AndroidOfflineLedgerStorage @Inject constructor(
     @ApplicationContext context: Context,
 ) : OfflineLedgerStorage {
 
-    private val baseDir = File(context.noBackupFilesDir, "ra_offline/ledger")
+    private val baseDir: File by lazy {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        if (extRoot != null) {
+            File(extRoot, "STORM DS/cache/ra_offline/ledger")
+        } else {
+            File(context.noBackupFilesDir, "ra_offline/ledger")
+        }
+    }
 
     override suspend fun exists(userId: String, contentId: String): Boolean {
         return ledgerFile(userId, contentId).exists()

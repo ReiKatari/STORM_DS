@@ -85,5 +85,5 @@ Files/*.cer
 *.jks
 *.keystore
 !app/storm_release.keystore
-
-
+.repowise/
+.om-project

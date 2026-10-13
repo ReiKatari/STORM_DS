@@ -75,8 +75,12 @@ class SettingsBackupManager @Inject constructor(
     }
 
     private fun getStorageSettingsDir(): File {
-        val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-        return File(rootBase, "settings").apply { mkdirs() }
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        return if (extRoot != null) {
+            File(extRoot, "STORM DS/settings").apply { mkdirs() }
+        } else {
+            context.filesDir
+        }
     }
 
     fun initializeMirror() {
@@ -96,7 +100,7 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun isMirrorEnabled(): Boolean {
-        return preferences.getBoolean(SETTINGS_MIRROR_ENABLED, false)
+        return preferences.getBoolean(SETTINGS_MIRROR_ENABLED, true)
     }
 
     fun requestMirrorWrite() {
@@ -170,7 +174,6 @@ class SettingsBackupManager @Inject constructor(
             writeTextAtomically(File(storageSettingsDir, STORM_DS_OPTIONS_FILE), mirrorJson)
             writeTextAtomically(File(storageSettingsDir, SETTINGS_FILE), createSettingsJson().toString())
         }
-        writeTextAtomically(File(context.filesDir, STORM_DS_OPTIONS_FILE), mirrorJson)
         val mirrorDirectory = getConfiguredMirrorDirectory()
         if (mirrorDirectory != null) {
             writeMirrorToTree(mirrorDirectory, mirrorJson)
@@ -330,9 +333,10 @@ class SettingsBackupManager @Inject constructor(
             }
         }
 
+        val storageSettingsDir = getStorageSettingsDir()
         val controllerDoc = root.findFile(CONTROLLER_FILE)
         controllerDoc?.uri?.let { uri ->
-            val dest = File(context.filesDir, CONTROLLER_FILE)
+            val dest = File(storageSettingsDir, CONTROLLER_FILE)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 writeBytesAtomically(dest, input.readBytes())
             }
@@ -340,7 +344,7 @@ class SettingsBackupManager @Inject constructor(
 
         val layoutsDoc = root.findFile(LAYOUTS_FILE)
         layoutsDoc?.uri?.let { uri ->
-            val dest = File(context.filesDir, LAYOUTS_FILE)
+            val dest = File(storageSettingsDir, LAYOUTS_FILE)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 writeBytesAtomically(dest, input.readBytes())
             }
@@ -351,7 +355,7 @@ class SettingsBackupManager @Inject constructor(
             context.contentResolver.openInputStream(uri)?.use { input ->
                 val text = input.reader().readText()
                 JSONArray(text)
-                writeTextAtomically(File(context.filesDir, ROM_DATA_FILE), text)
+                writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), text)
             }
         }
     }
@@ -412,7 +416,6 @@ class SettingsBackupManager @Inject constructor(
             return
         }
         val text = value.toString()
-        writeTextAtomically(File(context.filesDir, fileName), text)
         runCatching {
             writeTextAtomically(File(getStorageSettingsDir(), fileName), text)
         }
@@ -420,14 +423,15 @@ class SettingsBackupManager @Inject constructor(
 
     private fun restoreRomsJson(root: JSONObject) {
         val roms = root.optJSONArray("roms") ?: return
+        val storageSettingsDir = getStorageSettingsDir()
         for (i in 0 until roms.length()) {
             val rom = roms.optJSONObject(i) ?: return
             if (!rom.has("uri")) {
-                writeTextAtomically(File(context.filesDir, ROM_METADATA_MIRROR_FILE), roms.toString())
+                writeTextAtomically(File(storageSettingsDir, ROM_METADATA_MIRROR_FILE), roms.toString())
                 return
             }
         }
-        writeTextAtomically(File(context.filesDir, ROM_DATA_FILE), roms.toString())
+        writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), roms.toString())
     }
 
     private fun createCheatsJson(): JSONObject {
@@ -522,7 +526,8 @@ class SettingsBackupManager @Inject constructor(
     private fun backupUnifiedLayout(treeUri: Uri, fileName: String) {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
 
-        val layoutsText = File(context.filesDir, LAYOUTS_FILE)
+        val storageLayoutsFile = File(getStorageSettingsDir(), LAYOUTS_FILE)
+        val layoutsText = storageLayoutsFile
             .takeIf { it.exists() }
             ?.let { runCatching { it.readText() }.getOrNull() }
             ?: "[]"
@@ -541,7 +546,7 @@ class SettingsBackupManager @Inject constructor(
         val layouts = context.contentResolver.openInputStream(src.uri)?.use { input ->
             runCatching { JSONArray(input.reader().readText()) }.getOrNull()
         } ?: return
-        writeTextAtomically(File(context.filesDir, LAYOUTS_FILE), layouts.toString())
+        writeTextAtomically(File(getStorageSettingsDir(), LAYOUTS_FILE), layouts.toString())
     }
 
     private fun writeTextAtomically(file: File, text: String) {

@@ -64,6 +64,13 @@ class SaveStateScreenshotProvider(
     }
 
     private fun getScreenshotsDir(): File {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        if (extRoot != null) {
+            val dir = File(extRoot, "STORM DS/screenshots/savestates")
+            if (dir.isDirectory || dir.mkdirs()) {
+                return dir
+            }
+        }
         return File(context.filesDir, SAVE_STATE_SCREENSHOTS_DIR)
     }
 

@@ -190,7 +190,7 @@ fun VulkanDriverManagerScreen(
                     isInstalled = isInstalled,
                     isActive = isActive,
                     onActionClick = {
-                        if (isInstalled && installedMatch != null) {
+                        if (installedMatch != null) {
                             viewModel.selectDriver(installedMatch.id)
                         } else {
                             viewModel.downloadAndInstall(recommended)

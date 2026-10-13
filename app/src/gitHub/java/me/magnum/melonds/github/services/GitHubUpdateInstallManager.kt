@@ -1,33 +1,42 @@
 package me.magnum.melonds.github.services
 
-import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.util.Log
-import androidx.core.content.getSystemService
-import androidx.core.net.toUri
-import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import me.magnum.melonds.common.providers.UpdateContentProvider
 import me.magnum.melonds.domain.model.DownloadProgress
-import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.services.UpdateInstallManager
 import me.magnum.melonds.github.GITHUB_RELEASE_URL_PREFIX
 import me.magnum.melonds.utils.PackageManagerCompat
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.security.MessageDigest
 
 class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallManager {
+    private fun getUpdatesDirectory(): File {
+        val extRoot = runCatching { Environment.getExternalStorageDirectory() }.getOrNull()
+        if (extRoot != null) {
+            val stormUpdates = File(extRoot, "STORM DS/updates")
+            if (stormUpdates.isDirectory || stormUpdates.mkdirs()) {
+                return stormUpdates
+            }
+        }
+        return File(context.cacheDir, "updates").apply { mkdirs() }
+    }
+
     override fun downloadAndInstallUpdate(update: AppUpdate): Flow<DownloadProgress> = flow {
-        val updatesFolder = context.externalCacheDir?.let { File(it, "updates") }
-            ?: return@flow
+        val updatesFolder = getUpdatesDirectory()
         if (!updatesFolder.isDirectory && !updatesFolder.mkdirs()) {
             emit(DownloadProgress.DownloadFailed)
             return@flow
@@ -45,65 +54,85 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
             return@flow
         }
 
-        val downloadManager = context.getSystemService<DownloadManager>()!!
-        val request = DownloadManager.Request(update.downloadUri).apply {
-            setDestinationUri(Uri.fromFile(destinationFile))
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setMimeType(APK_MIME)
-            setTitle("Downloading update ${update.newVersion}...")
-        }
-        val downloadId = downloadManager.enqueue(request)
-        observeDownload(downloadManager, downloadId, update, destinationFile).collect(this)
-    }
-
-    private fun observeDownload(
-        downloadManager: DownloadManager,
-        downloadId: Long,
-        update: AppUpdate,
-        destinationFile: File,
-    ): Flow<DownloadProgress> = callbackFlow {
-        val observer = object : android.database.ContentObserver(null) {
-            override fun onChange(selfChange: Boolean, uri: Uri?) {
-                val cursor = downloadManager.query(
-                    DownloadManager.Query().setFilterById(downloadId),
-                )
-                cursor.use {
-                    if (!it.moveToNext()) return
-                    val size = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                    val downloaded = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                    val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-
-                    if (size >= 0) {
-                        channel.trySend(DownloadProgress.DownloadUpdate(size, downloaded))
+        try {
+            var currentUrl = update.downloadUri.toString()
+            var connection: HttpURLConnection? = null
+            var redirects = 0
+            while (redirects < 10) {
+                val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = false
+                    connectTimeout = 20_000
+                    readTimeout = 30_000
+                    setRequestProperty("User-Agent", "STORM-DS-Updater")
+                    setRequestProperty("Accept", "application/octet-stream, */*")
+                }
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    val location = conn.getHeaderField("Location")
+                    conn.disconnect()
+                    if (location.isNullOrBlank()) {
+                        emit(DownloadProgress.DownloadFailed)
+                        return@flow
                     }
-                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                        if (validateDownloadedApk(update, destinationFile)) {
-                            openInstaller(destinationFile)
-                            channel.trySend(DownloadProgress.DownloadComplete)
-                        } else {
-                            channel.trySend(DownloadProgress.DownloadFailed)
-                        }
-                        channel.close()
-                    } else if (status == DownloadManager.STATUS_FAILED) {
-                        channel.trySend(DownloadProgress.DownloadFailed)
-                        channel.close()
-                    }
+                    currentUrl = URL(URL(currentUrl), location).toString()
+                    redirects++
+                } else {
+                    connection = conn
+                    break
                 }
             }
+
+            val activeConnection = connection
+            if (activeConnection == null || activeConnection.responseCode !in 200..299) {
+                activeConnection?.disconnect()
+                emit(DownloadProgress.DownloadFailed)
+                return@flow
+            }
+
+            try {
+                val totalSize = activeConnection.contentLengthLong.takeIf { it > 0L } ?: update.binarySize
+                var downloaded = 0L
+                emit(DownloadProgress.DownloadUpdate(totalSize, 0L))
+
+                activeConnection.inputStream.use { input ->
+                    destinationFile.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                            downloaded += read
+                            if (totalSize > 0L) {
+                                emit(DownloadProgress.DownloadUpdate(totalSize, downloaded))
+                            }
+                        }
+                        output.flush()
+                    }
+                }
+            } finally {
+                activeConnection.disconnect()
+            }
+
+            if (validateDownloadedApk(update, destinationFile)) {
+                openInstaller(destinationFile)
+                emit(DownloadProgress.DownloadComplete)
+            } else {
+                emit(DownloadProgress.DownloadFailed)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to download update APK", e)
+            emit(DownloadProgress.DownloadFailed)
         }
+    }.flowOn(Dispatchers.IO)
 
-        val downloadUri = "content://downloads/my_downloads/$downloadId".toUri()
-        context.contentResolver.registerContentObserver(downloadUri, false, observer)
-        observer.onChange(false, downloadUri)
-
-        awaitClose {
-            context.contentResolver.unregisterContentObserver(observer)
-        }
-    }
-
+    @Suppress("DEPRECATION")
     internal fun validateDownloadedApk(update: AppUpdate, apkFile: File): Boolean {
         if (!apkFile.isFile || apkFile.length() <= 0L) return reject("missing_apk")
-        val flags = PackageManager.GET_SIGNING_CERTIFICATES
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
         val archive = getArchivePackageInfo(apkFile, flags) ?: return reject("unreadable_apk")
         val installed = PackageManagerCompat.getPackageInfo(
             context.packageManager,

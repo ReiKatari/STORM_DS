@@ -31,8 +31,17 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
             .map { calculateCacheSize() }
     }
 
+    private fun getRomCacheDir(): File? {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        return if (extRoot != null) {
+            File(extRoot, "STORM DS/cache/$ROMS_CACHE_DIR")
+        } else {
+            context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) }
+        }
+    }
+
     fun clearCache(): Boolean {
-        val romCacheDir = context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) } ?: return false
+        val romCacheDir = getRomCacheDir() ?: return false
         val result = romCacheDir.deleteRecursively()
         cacheModifiedSubject.trySend(Unit)
 
@@ -41,7 +50,7 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
 
     fun getCachedRomFile(rom: Rom, forUse: Boolean = false): Uri? {
         val romHash = rom.uri.hashCode().toString()
-        val romCacheDir = context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) }
+        val romCacheDir = getRomCacheDir()
         if (romCacheDir == null || !romCacheDir.isDirectory) {
             return null
         }
@@ -66,7 +75,7 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
      * or false if a problem occurred or the operation was interrupted. If false is returned, the cached file is deleted
      */
     fun cacheRom(rom: Rom, romExtractor: RomExtractor) {
-        val romCacheDir = context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) }
+        val romCacheDir = getRomCacheDir()
         if (romCacheDir == null || !(romCacheDir.isDirectory || romCacheDir.mkdirs())) {
             throw CouldNotCreateRomCacheDirectoryException()
         }
@@ -95,7 +104,7 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
     }
 
     private fun calculateCacheSize(): SizeUnit {
-        val romCacheDir = context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) }
+        val romCacheDir = getRomCacheDir()
         val cacheSize = romCacheDir?.listFiles()?.sumOf { file: File -> file.length() } ?: 0L
         return SizeUnit.Bytes(cacheSize)
     }
@@ -111,7 +120,7 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
     }
 
     private fun freeCacheSpace(sizeToFree: SizeUnit) {
-        val romCacheDir = context.externalCacheDir?.let { File(it, ROMS_CACHE_DIR) }
+        val romCacheDir = getRomCacheDir()
         // Use the last modified timestamp to determine the last time the ROM was used. The timestamp must be updated whenever the ROM is requested for use
         val romFilesByCreationDate = romCacheDir?.listFiles()?.sortedBy { file: File -> file.lastModified() } ?: return
         var freedBytes = SizeUnit.Bytes(0)

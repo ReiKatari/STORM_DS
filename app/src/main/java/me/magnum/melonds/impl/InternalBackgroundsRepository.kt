@@ -100,8 +100,28 @@ class InternalBackgroundsRepository(
         }
     }
 
+    private fun getBackgroundsDataFile(): File {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val settingsDir = if (extRoot != null) {
+            File(extRoot, "STORM DS/settings").apply { mkdirs() }
+        } else {
+            context.filesDir
+        }
+        val target = File(settingsDir, DATA_FILE)
+        if (!target.exists() && settingsDir != context.filesDir) {
+            val legacy = File(context.filesDir, DATA_FILE)
+            if (legacy.isFile && legacy.length() > 0L) {
+                runCatching {
+                    legacy.copyTo(target, overwrite = false)
+                    legacy.delete()
+                }
+            }
+        }
+        return target
+    }
+
     private fun loadBackgrounds(): List<Background> {
-        val dataFile = File(context.filesDir, DATA_FILE)
+        val dataFile = getBackgroundsDataFile()
         if (!dataFile.isFile) {
             return emptyList()
         }
@@ -115,7 +135,7 @@ class InternalBackgroundsRepository(
     }
 
     private suspend fun saveBackgrounds() = withContext(Dispatchers.IO) {
-        val dataFile = File(context.filesDir, DATA_FILE)
+        val dataFile = getBackgroundsDataFile()
 
         try {
             // Exclude deleted backgrounds

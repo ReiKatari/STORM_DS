@@ -43,7 +43,12 @@ class BackgroundThumbnailProvider(private val context: Context) {
     }
 
     private fun getThumbnailFile(background: Background): File? {
-        val cacheDir = context.externalCacheDir?.let { File(it, THUMBNAIL_CACHE_DIR) } ?: return null
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val cacheDir = if (extRoot != null) {
+            File(extRoot, "STORM DS/cache/$THUMBNAIL_CACHE_DIR")
+        } else {
+            context.externalCacheDir?.let { File(it, THUMBNAIL_CACHE_DIR) } ?: return null
+        }
         return if (cacheDir.isDirectory || cacheDir.mkdirs()) {
             File(cacheDir, background.id.toString())
         } else {

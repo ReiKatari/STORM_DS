@@ -70,10 +70,21 @@ class RetroArchShaderLibraryManager @Inject constructor(
         data object Finalizing : InstallProgress
     }
 
-    private val shaderRoot = File(context.filesDir, "retroarch-shaders")
-    private val installedRoot = File(shaderRoot, "installed")
-    private val manifestFile = File(shaderRoot, "installed.json")
-    private val downloadFile = File(File(context.cacheDir, "retroarch-shaders"), "shaders_slang.zip.part")
+    private val shaderRoot: File by lazy {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        if (extRoot != null) {
+            File(extRoot, "STORM DS/shaders/retroarch-shaders")
+        } else {
+            File(context.filesDir, "retroarch-shaders")
+        }
+    }
+    private val installedRoot: File get() = File(shaderRoot, "installed")
+    private val manifestFile: File get() = File(shaderRoot, "installed.json")
+    private val downloadFile: File get() {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val cacheDir = if (extRoot != null) File(extRoot, "STORM DS/cache/retroarch-shaders") else File(context.cacheDir, "retroarch-shaders")
+        return File(cacheDir, "shaders_slang.zip.part")
+    }
 
     val libraryRoot: File?
         get() {

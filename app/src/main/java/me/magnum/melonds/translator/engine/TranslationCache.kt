@@ -33,7 +33,13 @@ class TranslationCache(
     private var isDirty = false
 
     private val cacheDir: File by lazy {
-        File(context.filesDir, "translation_cache").apply { mkdirs() }
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val dir = if (extRoot != null) {
+            File(extRoot, "STORM DS/cache/translation_cache")
+        } else {
+            File(context.filesDir, "translation_cache")
+        }
+        dir.apply { mkdirs() }
     }
 
     fun setGameKey(gameKey: String) {

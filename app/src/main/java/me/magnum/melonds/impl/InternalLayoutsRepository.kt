@@ -143,8 +143,13 @@ class InternalLayoutsRepository(
     }
 
     private fun getExternalSettingsDir(): File {
-        return File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/settings").apply {
-            runCatching { mkdirs() }
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        return if (extRoot != null) {
+            File(extRoot, "STORM DS/settings").apply {
+                runCatching { mkdirs() }
+            }
+        } else {
+            context.filesDir
         }
     }
 
@@ -169,12 +174,13 @@ class InternalLayoutsRepository(
                 it.toModel()
             } ?: emptyList()
 
-            // If loaded from internal but external is missing, mirror to external immediately
-            if (candidateFile == internalDataFile && externalSettingsDir.exists()) {
+            // If loaded from legacy internal file, migrate to external and remove legacy file
+            if (candidateFile == internalDataFile && externalSettingsDir != context.filesDir && externalSettingsDir.exists()) {
                 runCatching {
                     OutputStreamWriter(externalDataFile.outputStream()).use { writer ->
                         writer.write(candidateFile.readText())
                     }
+                    internalDataFile.delete()
                 }
             }
 
@@ -185,7 +191,6 @@ class InternalLayoutsRepository(
     }
 
     private suspend fun saveLayouts() = withContext(Dispatchers.IO) {
-        val internalDataFile = File(context.filesDir, DATA_FILE)
         val externalSettingsDir = getExternalSettingsDir()
         val externalDataFile = File(externalSettingsDir, DATA_FILE)
 
@@ -200,14 +205,7 @@ class InternalLayoutsRepository(
             }
             val layoutsJson = gson.toJson(customLayoutsDtos)
 
-            // Save internally
-            runCatching {
-                OutputStreamWriter(internalDataFile.outputStream()).use {
-                    it.write(layoutsJson)
-                }
-            }
-
-            // Save directly to [Корневая папка]/STORM DS/settings/layouts.json
+            // Save directly to /storage/emulated/0/STORM DS/settings/layouts.json
             runCatching {
                 if (externalSettingsDir.exists() || externalSettingsDir.mkdirs()) {
                     OutputStreamWriter(externalDataFile.outputStream()).use {

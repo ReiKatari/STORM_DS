@@ -18,7 +18,14 @@ class AndroidOfflinePrefetchCacheStorage @Inject constructor(
     @ApplicationContext context: Context,
 ) : OfflinePrefetchCacheStorage {
 
-    private val baseDir = File(context.noBackupFilesDir, "ra_offline/prefetch")
+    private val baseDir: File by lazy {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        if (extRoot != null) {
+            File(extRoot, "STORM DS/cache/ra_offline/prefetch")
+        } else {
+            File(context.noBackupFilesDir, "ra_offline/prefetch")
+        }
+    }
 
     override suspend fun exists(userId: String, contentId: String): Boolean {
         return cacheFile(userId, contentId).exists()

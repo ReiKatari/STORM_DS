@@ -34,25 +34,14 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
     }
     private val romIconLocks = Collections.synchronizedMap(mutableMapOf<String, ReentrantLock>())
 
-    private val internalIconCacheDir: File by lazy {
-        File(context.filesDir, ICON_CACHE_DIR).apply {
-            if (!exists()) {
-                mkdirs()
-                // Seamlessly migrate legacy cached icons from externalCacheDir if present
-                runCatching {
-                    context.externalCacheDir?.let { ext ->
-                        val extDir = File(ext, ICON_CACHE_DIR)
-                        if (extDir.isDirectory) {
-                            extDir.copyRecursively(this, overwrite = false)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private val sharedIconDir: File by lazy {
-        File(Environment.getExternalStorageDirectory(), "STORM DS/icons").apply {
+        val extRoot = runCatching { Environment.getExternalStorageDirectory() }.getOrNull()
+        val dir = if (extRoot != null) {
+            File(extRoot, "STORM DS/icons")
+        } else {
+            File(context.filesDir, ICON_CACHE_DIR)
+        }
+        dir.apply {
             if (!exists()) {
                 mkdirs()
             }
@@ -69,14 +58,9 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
     fun clearIconCache() {
         memoryIconCache.evictAll()
         runCatching {
-            if (internalIconCacheDir.isDirectory) {
-                internalIconCacheDir.deleteRecursively()
-            }
-            context.externalCacheDir?.let { ext ->
-                val extDir = File(ext, ICON_CACHE_DIR)
-                if (extDir.isDirectory) {
-                    extDir.deleteRecursively()
-                }
+            if (sharedIconDir.isDirectory) {
+                sharedIconDir.deleteRecursively()
+                sharedIconDir.mkdirs()
             }
         }
     }
@@ -162,23 +146,13 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
         val keys = getCandidateKeys(rom)
         val gameCode = resolveGameCode(rom)
 
-        // 1. Search persistent internal cache directory
-        for (k in keys) {
-            val file = File(internalIconCacheDir, k)
-            if (file.isFile && file.length() > 0) {
-                val bmp = BitmapFactory.decodeFile(file.absolutePath)
-                if (bmp != null) return bmp
-            }
-        }
-
-        // 2. Search shared icon directory (/sdcard/STORM DS/icons)
+        // 1. Search shared icon directory (/storage/emulated/0/STORM DS/icons)
         if (sharedIconDir.isDirectory) {
             for (k in keys) {
                 val file = File(sharedIconDir, k)
                 if (file.isFile && file.length() > 0) {
                     val bmp = BitmapFactory.decodeFile(file.absolutePath)
                     if (bmp != null) {
-                        saveRomIcon(rom, bmp)
                         return bmp
                     }
                 }
@@ -197,28 +171,12 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
             if (matchedFile != null) {
                 val bmp = BitmapFactory.decodeFile(matchedFile.absolutePath)
                 if (bmp != null) {
-                    saveRomIcon(rom, bmp)
                     return bmp
                 }
             }
         }
 
-        // 3. Fallback: check legacy external cache directory
-        val extCacheDir = context.externalCacheDir?.let { File(it, ICON_CACHE_DIR) }
-        if (extCacheDir?.isDirectory == true) {
-            for (k in keys) {
-                val file = File(extCacheDir, k)
-                if (file.isFile && file.length() > 0) {
-                    val bmp = BitmapFactory.decodeFile(file.absolutePath)
-                    if (bmp != null) {
-                        saveRomIcon(rom, bmp)
-                        return bmp
-                    }
-                }
-            }
-        }
-
-        // 4. Extract icon from ROM binary via processor
+        // 2. Extract icon from ROM binary via processor
         val romProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
             ?: (DocumentFile.fromSingleUri(context, rom.uri)?.let { romFileProcessorFactory.getFileRomProcessorForDocument(it) })
             ?: romFileProcessorFactory.getFileRomProcessorForDocument(rom.uri)
@@ -234,21 +192,10 @@ class RomIconProvider(private val context: Context, private val romFileProcessor
         val keys = getCandidateKeys(rom)
         val gameCode = resolveGameCode(rom)
 
-        // Save to internal cache for fast future lookups
-        if (internalIconCacheDir.isDirectory || internalIconCacheDir.mkdirs()) {
-            for (k in keys) {
-                val iconFile = File(internalIconCacheDir, k)
-                try {
-                    iconFile.outputStream().use {
-                        icon.compress(Bitmap.CompressFormat.PNG, 100, it)
-                    }
-                } catch (_: Exception) {}
-            }
-        }
-
-        // Also persist to shared directory (/sdcard/STORM DS/icons)
+        // Persist to shared directory (/storage/emulated/0/STORM DS/icons)
         if (sharedIconDir.isDirectory || sharedIconDir.mkdirs()) {
             val targets = mutableListOf<String>()
+            targets.addAll(keys)
             if (rom.fileName.isNotBlank()) {
                 targets.add(rom.fileName)
             }

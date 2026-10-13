@@ -99,6 +99,62 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         }
                     }
 
+                    // Migrate remaining JSON and cache directories to /storage/emulated/0/STORM DS/ before purging
+                    val settingsDir = File(rootBase, "settings").apply { mkdirs() }
+                    val iconsDir = File(rootBase, "icons").apply { mkdirs() }
+                    val saveStateScreenshotsDir = File(screenshotsDir, "savestates").apply { mkdirs() }
+                    val cacheRootDir = File(rootBase, "cache").apply { mkdirs() }
+                    val translationCacheDir = File(cacheRootDir, "translation_cache").apply { mkdirs() }
+                    val shadersDir = File(rootBase, "shaders/retroarch-shaders").apply { mkdirs() }
+
+                    listOf(
+                        "rom_data.json",
+                        "rom_directory_state.json",
+                        "rom_metadata_mirror.json",
+                        "layouts.json",
+                        "controller_config.json",
+                        "backgrounds.json",
+                        "STORM_DS.opts",
+                        "settings.json",
+                    ).forEach { jsonName ->
+                        val src = File(context.filesDir, jsonName)
+                        val dst = File(settingsDir, jsonName)
+                        if (src.isFile && src.length() > 0L && (!dst.exists() || dst.length() == 0L)) {
+                            runCatching { src.copyTo(dst, overwrite = false) }
+                        }
+                        runCatching { if (src.exists()) src.delete() }
+                    }
+
+                    runCatching {
+                        val oldIcons = File(context.filesDir, "rom_icons")
+                        if (oldIcons.isDirectory) {
+                            copyDir(oldIcons, iconsDir)
+                            oldIcons.deleteRecursively()
+                        }
+                        val oldScreenshots = File(context.filesDir, "ss_screenshots")
+                        if (oldScreenshots.isDirectory) {
+                            oldScreenshots.copyRecursively(saveStateScreenshotsDir, overwrite = false)
+                            oldScreenshots.deleteRecursively()
+                        }
+                        val oldTranslations = File(context.filesDir, "translation_cache")
+                        if (oldTranslations.isDirectory) {
+                            copyDir(oldTranslations, translationCacheDir)
+                            oldTranslations.deleteRecursively()
+                        }
+                        val oldShaders = File(context.filesDir, "retroarch-shaders")
+                        if (oldShaders.isDirectory) {
+                            oldShaders.copyRecursively(shadersDir, overwrite = false)
+                            oldShaders.deleteRecursively()
+                        }
+                        val oldNandBackup = File(context.filesDir, "nand_golden_backup.bin")
+                        val newNandBackup = File(dsiDir, "nand_golden_backup.bin")
+                        if (oldNandBackup.isFile && oldNandBackup.length() > 0L && !newNandBackup.exists()) {
+                            dsiDir.mkdirs()
+                            oldNandBackup.copyTo(newNandBackup, overwrite = false)
+                        }
+                        if (oldNandBackup.exists()) oldNandBackup.delete()
+                    }
+
                     // Purge legacy internal system directories so deleted files are NEVER resurrected
                     listOf(
                         File(context.filesDir, "bios"),
@@ -109,6 +165,12 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         File(context.filesDir, "saves"),
                         File(context.filesDir, "dsi_sd"),
                         File(context.filesDir, "boxart"),
+                        File(context.filesDir, "logs"),
+                        File(context.filesDir, "cache"),
+                        File(context.cacheDir, "covers_cache"),
+                        File(context.cacheDir, "installed_dsiware"),
+                        File(context.cacheDir, "save_backups"),
+                        File(context.cacheDir, "retroarch-shaders"),
                     ).forEach { legacyDir ->
                         runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
                     }
@@ -122,6 +184,17 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                             File(extFiles, "saves"),
                             File(extFiles, "dsi_sd"),
                             File(extFiles, "boxart"),
+                            File(extFiles, "tts_models"),
+                        ).forEach { legacyDir ->
+                            runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
+                        }
+                    }
+                    context.externalCacheDir?.let { extCache ->
+                        listOf(
+                            File(extCache, "rom_icons"),
+                            File(extCache, "extracted_roms"),
+                            File(extCache, "background_thumbnails"),
+                            File(extCache, "updates"),
                         ).forEach { legacyDir ->
                             runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
                         }
@@ -252,13 +325,8 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
             .diskCache {
                 val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
                 val storageCoversCache = File(rootBase, "cache/covers_cache").apply { mkdirs() }
-                val targetDir = if (storageCoversCache.exists() && (storageCoversCache.canWrite() || rootBase.canWrite())) {
-                    storageCoversCache
-                } else {
-                    File(cacheDir, "covers_cache")
-                }
                 coil.disk.DiskCache.Builder()
-                    .directory(targetDir)
+                    .directory(storageCoversCache)
                     .maxSizeBytes(256L * 1024 * 1024)
                     .build()
             }
@@ -302,7 +370,10 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
         runCatching { applyTheme() }
         runCatching { performMigrations() }
         runCatching { migrateStorageToRoot(this) }
-        runCatching { File(cacheDir, "installed_dsiware").deleteRecursively() }
+        runCatching {
+            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            File(rootBase, "cache/installed_dsiware").deleteRecursively()
+        }
         runCatching { settingsBackupManager.initializeMirror() }
         runCatching { appLogFileRecorder.start() }
         runCatching { recoverUnexpectedHardcoreOfflineLossIfNeeded() }
@@ -334,9 +405,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
                     val crashFile = File(rootBase, "!STORM_INFO.txt")
                     crashFile.appendText("\n\n$report")
-
-                    val internalLogs = File(filesDir, "logs").apply { mkdirs() }
-                    File(internalLogs, "!STORM_INFO.txt").appendText("\n\n$report")
                 }
             }
             previousHandler?.uncaughtException(thread, throwable)
@@ -345,8 +413,10 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
 
     private fun giveLibrashaderACacheDirectory() {
         runCatching {
-            Os.setenv("HOME", filesDir.absolutePath, false)
-            Os.setenv("XDG_CACHE_HOME", File(filesDir, "cache").absolutePath, false)
+            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS").apply { mkdirs() }
+            val cacheDir = File(rootBase, "cache").apply { mkdirs() }
+            Os.setenv("HOME", rootBase.absolutePath, false)
+            Os.setenv("XDG_CACHE_HOME", cacheDir.absolutePath, false)
         }.onFailure {
             Log.w("MelonDSApplication", "Could not point librashader at a cache directory", it)
         }

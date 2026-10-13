@@ -153,7 +153,7 @@ object FileUtils {
                     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         (getPath.invoke(storageVolumeElement) as File?)?.absolutePath
                     } else {
-                        return getPath.invoke(storageVolumeElement) as String?
+                        getPath.invoke(storageVolumeElement) as String?
                     }
                 }
             }

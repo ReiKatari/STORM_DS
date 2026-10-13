@@ -44,15 +44,20 @@ class SramProvider(
             if (sramDocument.length() == 0L) {
                 Log.w("SramProvider", "Detected 0-byte corrupt save stub '$sramFileName', purging and recreating")
                 runCatching { sramDocument.delete() }
-                val recreated = rootDocument.createFile("application/*", sramFileName)?.uri
+                val recreated = rootDocument.createFile("application/octet-stream", sramFileName)?.uri
                 recreated ?: (rootDocument.findFile(sramFileName)?.uri ?: throw SramLoadException("Could not recreate SRAM file at ${rootDocument.uri}"))
             } else {
                 // Remove legacy in-place .bak duplicate to keep user folder clean
                 runCatching { rootDocument.findFile("$sramFileName.bak")?.delete() }
 
-                // Keep emergency recovery copy in private cache directory without cluttering user saves folder
+                // Keep emergency recovery copy in STORM DS cache directory without cluttering user saves folder
                 runCatching {
-                    val cacheBackupDir = File(context.cacheDir, "save_backups").apply { mkdirs() }
+                    val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+                    val cacheBackupDir = if (extRoot != null) {
+                        File(extRoot, "STORM DS/cache/save_backups").apply { mkdirs() }
+                    } else {
+                        File(context.cacheDir, "save_backups").apply { mkdirs() }
+                    }
                     val backupFile = File(cacheBackupDir, "$sramFileName.bak")
                     context.contentResolver.openInputStream(sramDocument.uri)?.use { input ->
                         backupFile.outputStream().use { output ->
@@ -63,7 +68,7 @@ class SramProvider(
                 sramDocument.uri
             }
         } else {
-            val newSramUri = rootDocument.createFile("application/*", sramFileName)?.uri
+            val newSramUri = rootDocument.createFile("application/octet-stream", sramFileName)?.uri
             if (newSramUri == null) {
                 rootDocument.findFile(sramFileName)?.uri ?: throw SramLoadException("Could not create temporary SRAM file at ${rootDocument.uri}")
             } else {

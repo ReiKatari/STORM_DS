@@ -91,13 +91,27 @@ class FileSystemRomsRepository(
     private val skipNextRomDataSave = AtomicBoolean(false)
     private val scanMutex = kotlinx.coroutines.sync.Mutex()
 
-    init {
-        runCatching {
-            val syncDir = File(context.filesDir, "dsi_sd/sync")
-            if (syncDir.exists()) {
-                syncDir.deleteRecursively()
+    private fun getStorageSettingsFile(fileName: String): File {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val settingsDir = if (extRoot != null) {
+            File(extRoot, "STORM DS/settings").apply { mkdirs() }
+        } else {
+            context.filesDir
+        }
+        val target = File(settingsDir, fileName)
+        if (!target.exists() && settingsDir != context.filesDir) {
+            val legacy = File(context.filesDir, fileName)
+            if (legacy.isFile && legacy.length() > 0L) {
+                runCatching {
+                    legacy.copyTo(target, overwrite = false)
+                    legacy.delete()
+                }
             }
         }
+        return target
+    }
+
+    init {
         loadDirectoryStates()
 
         coroutineScope.launch {
@@ -310,7 +324,7 @@ class FileSystemRomsRepository(
             directoryScanStatuses.clear()
             emitDirectoryScanStatusesLocked()
         }
-        val directoryCacheFile = File(context.filesDir, ROM_DIRECTORY_STATE_FILE)
+        val directoryCacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
         if (directoryCacheFile.isFile) {
             directoryCacheFile.delete()
         }
@@ -325,12 +339,12 @@ class FileSystemRomsRepository(
             roms.clear()
         }
 
-        val cacheFile = File(context.filesDir, ROM_DATA_FILE)
+        val cacheFile = getStorageSettingsFile(ROM_DATA_FILE)
         if (cacheFile.isFile) {
             cacheFile.delete()
         }
 
-        val directoryCacheFile = File(context.filesDir, ROM_DIRECTORY_STATE_FILE)
+        val directoryCacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
         if (directoryCacheFile.isFile) {
             directoryCacheFile.delete()
         }
@@ -1136,7 +1150,7 @@ class FileSystemRomsRepository(
     }
 
     private fun loadDirectoryStates() {
-        val cacheFile = File(context.filesDir, ROM_DIRECTORY_STATE_FILE)
+        val cacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
         if (!cacheFile.isFile) {
             return
         }
@@ -1176,7 +1190,7 @@ class FileSystemRomsRepository(
             directoryStates.values.map { it.toDto() }
         }
 
-        val cacheFile = File(context.filesDir, ROM_DIRECTORY_STATE_FILE)
+        val cacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
         try {
             val json = gson.toJson(directoryStateDtos)
             writeTextAtomically(cacheFile, json)
@@ -1186,7 +1200,7 @@ class FileSystemRomsRepository(
     }
 
     private fun getCachedRoms(): RomCacheReadResult {
-        val cacheFile = File(context.filesDir, ROM_DATA_FILE)
+        val cacheFile = getStorageSettingsFile(ROM_DATA_FILE)
         if (!cacheFile.isFile) {
             return RomCacheReadResult(emptyList(), true)
         }
@@ -1205,7 +1219,7 @@ class FileSystemRomsRepository(
     }
 
     private fun saveRomData(romData: List<Rom>) {
-        val cacheFile = File(context.filesDir, ROM_DATA_FILE)
+        val cacheFile = getStorageSettingsFile(ROM_DATA_FILE)
 
         try {
             val romDtos = romData.map {
@@ -1222,7 +1236,7 @@ class FileSystemRomsRepository(
     }
 
     private fun saveRomMetadataMirror(romData: List<Rom>) {
-        val metadataFile = File(context.filesDir, ROM_METADATA_MIRROR_FILE)
+        val metadataFile = getStorageSettingsFile(ROM_METADATA_MIRROR_FILE)
         val metadata = romData.map {
             RomMetadataMirrorDto(
                 name = it.name,

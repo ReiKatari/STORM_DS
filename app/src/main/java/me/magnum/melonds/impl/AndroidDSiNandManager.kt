@@ -44,10 +44,28 @@ class AndroidDSiNandManager(
     private val nandUsageCount = AtomicInteger(0)
     private val isNandOpen = AtomicBoolean(false)
 
+    private fun getNandGoldenBackupFile(): File {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        return if (extRoot != null) {
+            File(extRoot, "STORM DS/bios/dsi/nand_golden_backup.bin").apply { parentFile?.mkdirs() }
+        } else {
+            File(context.filesDir, "nand_golden_backup.bin")
+        }
+    }
+
+    private fun getTempCacheDir(): File {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        return if (extRoot != null) {
+            File(extRoot, "STORM DS/cache").apply { mkdirs() }
+        } else {
+            context.cacheDir
+        }
+    }
+
     private fun backupNandFileIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration) {
         val nandUri = config.dsiNandUri ?: return
         try {
-            val backupFile = File(context.filesDir, "nand_golden_backup.bin")
+            val backupFile = getNandGoldenBackupFile()
             if (!backupFile.exists() || backupFile.length() < 512 * 1024) {
                 context.contentResolver.openInputStream(nandUri)?.use { input ->
                     backupFile.outputStream().use { output ->
@@ -64,7 +82,7 @@ class AndroidDSiNandManager(
     private fun restoreNandFileFromBackupIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration): Boolean {
         val nandUri = config.dsiNandUri ?: return false
         try {
-            val backupFile = File(context.filesDir, "nand_golden_backup.bin")
+            val backupFile = getNandGoldenBackupFile()
             if (backupFile.exists() && backupFile.length() >= 512 * 1024) {
                 context.contentResolver.openOutputStream(nandUri, "wt")?.use { output ->
                     backupFile.inputStream().use { input ->
@@ -159,7 +177,7 @@ class AndroidDSiNandManager(
             var fileSize: Long = 0L
             var sha1Bytes: ByteArray? = null
 
-            val tempFile = File(context.cacheDir, "dsiware_import_${System.currentTimeMillis()}.nds")
+            val tempFile = File(getTempCacheDir(), "dsiware_import_${System.currentTimeMillis()}.nds")
             val titleReadResult = suspendRunCatching {
                 context.contentResolver.openInputStream(titleUri)?.use { input ->
                     FileOutputStream(tempFile).use { fileOut ->
@@ -346,7 +364,7 @@ class AndroidDSiNandManager(
             return false
         }
 
-        val tempFile = File(context.cacheDir, "dsiware_import_${System.currentTimeMillis()}.bin")
+        val tempFile = File(getTempCacheDir(), "dsiware_import_${System.currentTimeMillis()}.bin")
         val copyResult = runCatching {
             context.contentResolver.openInputStream(fileUri)?.use { input ->
                 tempFile.outputStream().use { output ->
@@ -374,7 +392,7 @@ class AndroidDSiNandManager(
             return false
         }
 
-        val tempFile = File(context.cacheDir, "dsiware_export_${System.currentTimeMillis()}.bin")
+        val tempFile = File(getTempCacheDir(), "dsiware_export_${System.currentTimeMillis()}.bin")
         val exported = MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
         if (exported && tempFile.exists() && tempFile.length() > 0L) {
             runCatching {

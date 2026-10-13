@@ -228,10 +228,6 @@ object StormDeviceSystemInfoReporter {
             val infoFile = File(rootLogsDir, INFO_FILE_NAME)
             infoFile.writeText(report, Charsets.UTF_8)
 
-            // Also copy to internal app logs for reliability
-            val internalLogsDir = File(context.filesDir, "logs").apply { mkdirs() }
-            File(internalLogsDir, INFO_FILE_NAME).writeText(report, Charsets.UTF_8)
-
             if (rom == null) {
                 // Application startup: clean up stale game logs from previous sessions
                 rootLogsDir.listFiles()?.forEach { file ->
@@ -239,22 +235,9 @@ object StormDeviceSystemInfoReporter {
                         file.delete()
                     }
                 }
-                internalLogsDir.listFiles()?.forEach { file ->
-                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
-                        file.delete()
-                    }
-                }
             } else {
                 // Clean up old legacy suffix files (*_DIRECT.txt, *_AUTO.txt, *_NAND.txt)
                 rootLogsDir.listFiles()?.forEach { file ->
-                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
-                        val base = file.name.substringBeforeLast(".txt")
-                        if (base.endsWith("_DIRECT") || base.endsWith("_AUTO") || base.endsWith("_NAND")) {
-                            file.delete()
-                        }
-                    }
-                }
-                internalLogsDir.listFiles()?.forEach { file ->
                     if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
                         val base = file.name.substringBeforeLast(".txt")
                         if (base.endsWith("_DIRECT") || base.endsWith("_AUTO") || base.endsWith("_NAND")) {
@@ -332,13 +315,6 @@ object StormDeviceSystemInfoReporter {
 
             val gameLogFile = File(rootLogsDir, logFileName)
             gameLogFile.writeText(gameReport, Charsets.UTF_8)
-
-            val internalLogsDir = File(context.filesDir, "logs").apply { mkdirs() }
-            File(internalLogsDir, "${cleanFileName}_DIRECT.txt").delete()
-            File(internalLogsDir, "${cleanFileName}_AUTO.txt").delete()
-            File(internalLogsDir, "${cleanFileName}_NAND.txt").delete()
-
-            File(internalLogsDir, logFileName).writeText(gameReport, Charsets.UTF_8)
 
             Log.i(TAG, "Successfully saved single game log to ${gameLogFile.absolutePath}")
         }.onFailure {

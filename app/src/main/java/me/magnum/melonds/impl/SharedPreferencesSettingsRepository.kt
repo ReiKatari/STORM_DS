@@ -1191,6 +1191,15 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    private fun getRetroArchShaderCurrentDir(): File {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        return if (extRoot != null) {
+            File(extRoot, "STORM DS/shaders/retroarch-shaders/current")
+        } else {
+            File(context.filesDir, "retroarch-shaders/current")
+        }
+    }
+
     private fun useLocalRetroArchShader(
         rootDir: File,
         relativePath: String,
@@ -1200,7 +1209,7 @@ class SharedPreferencesSettingsRepository(
         if (cachedRetroArchShaderRoot != null || cachedRetroArchShaderImportKey != null) {
             cachedRetroArchShaderRoot = null
             cachedRetroArchShaderImportKey = null
-            File(context.filesDir, "retroarch-shaders/current").deleteRecursively()
+            getRetroArchShaderCurrentDir().deleteRecursively()
         }
 
         val presetFile = File(rootDir, relativePath)
@@ -1233,7 +1242,7 @@ class SharedPreferencesSettingsRepository(
         parameterOverrides: Map<String, Float>,
         clearHistory: Boolean,
     ): RetroArchShaderConfiguration {
-        val importRoot = File(context.filesDir, "retroarch-shaders/current")
+        val importRoot = getRetroArchShaderCurrentDir()
         val rootDocument = DocumentFile.fromTreeUri(context, rootUri)
         if (rootDocument == null || !rootDocument.exists() || !rootDocument.isDirectory) {
             Log.w(TAG, "Invalid RetroArch shader root: $rootUri")
@@ -1969,16 +1978,15 @@ class SharedPreferencesSettingsRepository(
 
         try {
             val dto = ControllerConfigurationDto.fromControllerConfiguration(controllerConfiguration)
-            val configFile = File(context.filesDir, CONTROLLER_CONFIG_FILE)
-            configFile.outputStream().use {
-                json.encodeToStream(dto, it)
+            val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+            val targetDir = if (extRoot != null) {
+                File(extRoot, "STORM DS/settings").apply { mkdirs() }
+            } else {
+                context.filesDir
             }
-            runCatching {
-                val rootSettingsDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/settings").apply { mkdirs() }
-                val storageConfig = File(rootSettingsDir, CONTROLLER_CONFIG_FILE)
-                storageConfig.outputStream().use {
-                    json.encodeToStream(dto, it)
-                }
+            val storageConfig = File(targetDir, CONTROLLER_CONFIG_FILE)
+            storageConfig.outputStream().use {
+                json.encodeToStream(dto, it)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to save controller configuration", e)

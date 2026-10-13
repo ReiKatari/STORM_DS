@@ -57,9 +57,12 @@ object LocalAiVoiceActorStudio {
     }
 
     fun getModelsDirectory(context: Context): File {
-        val externalDir = context.getExternalFilesDir("tts_models")
-        if (externalDir != null && (externalDir.exists() || externalDir.mkdirs())) {
-            return externalDir
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        if (extRoot != null) {
+            val stormTtsDir = File(extRoot, "STORM DS/tts_models")
+            if (stormTtsDir.exists() || stormTtsDir.mkdirs()) {
+                return stormTtsDir
+            }
         }
         val appDir = File(context.filesDir, "tts_models")
         if (!appDir.exists()) appDir.mkdirs()
