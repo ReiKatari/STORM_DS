@@ -88,11 +88,29 @@ class SettingsBackupManager @Inject constructor(
             val storageSettingsDir = getStorageSettingsDir()
             val storageOptions = File(storageSettingsDir, STORM_DS_OPTIONS_FILE)
             val storageSettings = File(storageSettingsDir, SETTINGS_FILE)
-            if (preferences.all.isEmpty()) {
+            val hasCoreUserPrefs = preferences.contains("theme") || preferences.contains("rom_search_dirs")
+            if (!hasCoreUserPrefs) {
+                if (storageSettings.exists() && storageSettings.length() > 0L) {
+                    restoreSettingsJson(JSONObject(storageSettings.readText()), includeLocalKeys = true)
+                }
                 if (storageOptions.exists() && storageOptions.length() > 0L) {
                     restoreBackupJson(JSONObject(storageOptions.readText()))
-                } else if (storageSettings.exists() && storageSettings.length() > 0L) {
-                    restoreSettingsJson(JSONObject(storageSettings.readText()))
+                }
+            }
+            if (preferences.getStringSet("rom_search_dirs", null).isNullOrEmpty()) {
+                val dirStateFile = File(storageSettingsDir, "rom_directory_state.json")
+                if (dirStateFile.exists() && dirStateFile.length() > 0L) {
+                    val stateArray = JSONArray(dirStateFile.readText())
+                    val recoveredDirs = mutableSetOf<String>()
+                    for (i in 0 until stateArray.length()) {
+                        val dirUri = stateArray.optJSONObject(i)?.optString("directoryUri")?.takeIf { it.isNotBlank() }
+                        if (dirUri != null) {
+                            recoveredDirs.add(dirUri)
+                        }
+                    }
+                    if (recoveredDirs.isNotEmpty()) {
+                        preferences.edit().putStringSet("rom_search_dirs", recoveredDirs).apply()
+                    }
                 }
             }
         }
@@ -104,9 +122,6 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun requestMirrorWrite() {
-        if (!isMirrorEnabled()) {
-            return
-        }
         if (!mirrorWriteQueued.compareAndSet(false, true)) {
             return
         }
@@ -172,13 +187,15 @@ class SettingsBackupManager @Inject constructor(
         runCatching {
             val storageSettingsDir = getStorageSettingsDir()
             writeTextAtomically(File(storageSettingsDir, STORM_DS_OPTIONS_FILE), mirrorJson)
-            writeTextAtomically(File(storageSettingsDir, SETTINGS_FILE), createSettingsJson().toString())
+            writeTextAtomically(File(storageSettingsDir, SETTINGS_FILE), createSettingsJson(includeLocalKeys = true).toString())
         }
-        val mirrorDirectory = getConfiguredMirrorDirectory()
-        if (mirrorDirectory != null) {
-            writeMirrorToTree(mirrorDirectory, mirrorJson)
+        if (isMirrorEnabled()) {
+            val mirrorDirectory = getConfiguredMirrorDirectory()
+            if (mirrorDirectory != null) {
+                writeMirrorToTree(mirrorDirectory, mirrorJson)
+            }
+            pruneStaleMirrors(mirrorDirectory)
         }
-        pruneStaleMirrors(mirrorDirectory)
     }
 
     private fun getConfiguredMirrorDirectory(): Uri? {
@@ -232,10 +249,10 @@ class SettingsBackupManager @Inject constructor(
         }
     }
 
-    private fun createSettingsJson(): JSONObject {
+    private fun createSettingsJson(includeLocalKeys: Boolean = false): JSONObject {
         val json = JSONObject()
         for ((key, value) in preferences.all) {
-            if (key in EXCLUDED_PREF_KEYS) continue
+            if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
             when (value) {
                 is Boolean, is Int, is Long, is Float, is String -> json.put(key, value)
                 is Set<*> -> {
@@ -370,10 +387,10 @@ class SettingsBackupManager @Inject constructor(
         requestMirrorWrite()
     }
 
-    private fun restoreSettingsJson(json: JSONObject) {
+    private fun restoreSettingsJson(json: JSONObject, includeLocalKeys: Boolean = false) {
         val editor = preferences.edit()
         for (key in json.keys()) {
-            if (key in EXCLUDED_PREF_KEYS) continue
+            if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
             val value = json.get(key)
             when (value) {
                 is Boolean -> editor.putBoolean(key, value)

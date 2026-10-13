@@ -71,14 +71,37 @@ object FileUtils {
     }
 
     fun getAbsolutePathFromSingleUri(context: Context, uri: Uri): String? {
-        return try {
+        try {
             context.contentResolver.openFileDescriptor(uri, "r")?.use {
                 val file = File("/proc/self/fd/${it.fd}")
-                Os.readlink(file.absolutePath)
+                return Os.readlink(file.absolutePath)
             }
         } catch (_: Exception) {
-            null
         }
+        return resolveDirectFileFromExternalStorageUri(uri)?.takeIf { it.exists() }?.absolutePath
+    }
+
+    fun resolveDirectFileFromExternalStorageUri(uri: Uri?): File? {
+        if (uri == null) return null
+        if (uri.scheme == "file" || uri.scheme == null) {
+            val path = uri.path ?: return null
+            return File(path)
+        }
+        if (uri.authority != "com.android.externalstorage.documents") return null
+        val docId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+            ?: runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+            ?: return null
+        if (docId.startsWith("primary:")) {
+            val relPath = docId.removePrefix("primary:").trimStart('/')
+            val root = Environment.getExternalStorageDirectory()
+            return if (relPath.isEmpty()) root else File(root, relPath)
+        }
+        val parts = docId.split(':', limit = 2)
+        if (parts.size == 2 && parts[0].isNotBlank()) {
+            val candidate = File("/storage/${parts[0]}", parts[1].trimStart('/'))
+            if (candidate.exists()) return candidate
+        }
+        return null
     }
 
     private fun getAbsolutePathFromTreeUri(context: Context, treeUri: Uri?): String? {

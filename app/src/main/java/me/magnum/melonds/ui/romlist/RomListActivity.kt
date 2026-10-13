@@ -114,17 +114,26 @@ class RomListActivity : AppCompatActivity() {
         supportActionBar?.hide()
         applyImmersiveMode()
 
+        fun applyLaunchTransition() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, android.R.anim.fade_in, android.R.anim.fade_out)
+            } else {
+                @Suppress("DEPRECATION")
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
+        }
+
         emulatorLauncherValidatorDelegate = EmulatorLaunchValidatorDelegate(this, object : EmulatorLaunchValidatorDelegate.Callback {
             override fun onRomValidated(rom: Rom) {
                 val intent = EmulatorActivity.getRomEmulatorActivityIntent(this@RomListActivity, rom)
                 startActivity(intent)
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                applyLaunchTransition()
             }
 
             override fun onFirmwareValidated(consoleType: ConsoleType) {
                 val intent = EmulatorActivity.getFirmwareEmulatorActivityIntent(this@RomListActivity, consoleType)
                 startActivity(intent)
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                applyLaunchTransition()
             }
 
             override fun onValidationAborted() {
@@ -378,8 +387,8 @@ class RomListActivity : AppCompatActivity() {
         val btnLater = dialogView.findViewById<android.widget.Button>(R.id.btn_update_later)
         val btnSkip = dialogView.findViewById<android.widget.Button>(R.id.btn_skip_version)
 
-        tvCurrentVersion?.text = "v$currentVersionStr"
-        tvNewVersion?.text = "v$newVersionStr"
+        tvCurrentVersion?.text = currentVersionStr.removePrefix("v").removePrefix("V")
+        tvNewVersion?.text = newVersionStr.removePrefix("v").removePrefix("V")
         tvChangelog?.text = message
 
         val dialog = AlertDialog.Builder(this)
@@ -532,8 +541,27 @@ class RomListActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         applyImmersiveMode()
+        enablePhoneGameBoosterIntegration()
         checkAndRequestStoragePermission()
         me.magnum.melonds.MelonDSApplication.migrateStorageToRoot(this)
+    }
+
+    private fun enablePhoneGameBoosterIntegration() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display?.supportedModes?.maxByOrNull { it.refreshRate }?.let { maxMode ->
+                    window.attributes = window.attributes.apply {
+                        preferredDisplayModeId = maxMode.modeId
+                    }
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val gameManager = getSystemService(android.app.GameManager::class.java)
+                gameManager?.setGameState(
+                    android.app.GameState(false, android.app.GameState.MODE_GAMEPLAY_UNINTERRUPTIBLE)
+                )
+            }
+        } catch (_: Throwable) {}
     }
 
     private fun checkAndRequestStoragePermission() {
@@ -542,7 +570,39 @@ class RomListActivity : AppCompatActivity() {
                 val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = android.net.Uri.parse("package:$packageName")
                 }
-                runCatching { startActivity(intent) }
+                if (runCatching { startActivity(intent) }.isFailure) {
+                    runCatching {
+                        startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                    }
+                }
+            }
+        } else {
+            val writeGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!writeGranted) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(
+                        android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    ),
+                    1001
+                )
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val notifGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!notifGranted) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    1002
+                )
             }
         }
     }

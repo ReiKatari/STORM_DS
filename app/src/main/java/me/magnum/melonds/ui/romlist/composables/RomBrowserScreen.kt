@@ -1,6 +1,13 @@
 package me.magnum.melonds.ui.romlist.composables
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -149,15 +156,19 @@ fun RomBrowserScreen(
         }
     }
 
+    suspend fun resetScrollToTop() {
+        gridState.requestScrollToItem(0, 0)
+        listState.requestScrollToItem(0, 0)
+        withFrameNanos { }
+        gridState.scrollToItem(0, 0)
+        listState.scrollToItem(0, 0)
+    }
+
     fun snapToTop() {
         gridState.requestScrollToItem(0, 0)
         listState.requestScrollToItem(0, 0)
         coroutineScope.launch {
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
+            resetScrollToTop()
         }
     }
 
@@ -168,11 +179,7 @@ fun RomBrowserScreen(
         userRefreshPending = true
         refreshEpoch++
         coroutineScope.launch {
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
+            resetScrollToTop()
         }
         onRefresh()
     }
@@ -182,16 +189,12 @@ fun RomBrowserScreen(
         onRefresh = handleRefreshWithScrollReset,
     )
 
-    // Initial launch: unconditionally anchor to first item (0, 0) across layout frames
+    // Initial launch: unconditionally anchor to first item (0, 0)
     LaunchedEffect(Unit) {
         pinToTop = true
         userHasScrolledManually = false
         focusedEntryIndex = -1
-        repeat(16) {
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
-            withFrameNanos { }
-        }
+        resetScrollToTop()
     }
 
     // Releases the spinner deterministically and anchors back to top upon completion.
@@ -210,11 +213,7 @@ fun RomBrowserScreen(
         userHasScrolledManually = false
         pinToTop = true
         refreshEpoch++
-        repeat(16) {
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
-            withFrameNanos { }
-        }
+        resetScrollToTop()
     }
 
     // The user takes control of the scroll position only when they actively drag away from top.
@@ -251,11 +250,7 @@ fun RomBrowserScreen(
     LaunchedEffect(state.entries, refreshEpoch, pinToTop) {
         if ((pinToTop || !userHasScrolledManually || userRefreshPending) && state.entries.isNotEmpty()) {
             focusedEntryIndex = -1
-            repeat(16) {
-                gridState.scrollToItem(0, 0)
-                listState.scrollToItem(0, 0)
-                withFrameNanos { }
-            }
+            resetScrollToTop()
         }
     }
 
@@ -284,11 +279,7 @@ fun RomBrowserScreen(
         focusedEntryIndex = -1
         userHasScrolledManually = false
         pinToTop = true
-        repeat(10) {
-            gridState.scrollToItem(0, 0)
-            listState.scrollToItem(0, 0)
-            withFrameNanos { }
-        }
+        resetScrollToTop()
     }
 
     LaunchedEffect(focusedEntryIndex, state.entries) {
@@ -444,7 +435,19 @@ fun RomBrowserScreen(
                                     }
                                 } else {
                                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                                        Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
+                                        AnimatedContent(
+                                            targetState = state.viewMode,
+                                            transitionSpec = {
+                                                (fadeIn(animationSpec = tween(180)) + scaleIn(
+                                                    initialScale = 0.96f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMediumLow
+                                                    )
+                                                )) togetherWith fadeOut(animationSpec = tween(130))
+                                            },
+                                            label = "view_mode"
+                                        ) { mode ->
                                             when (mode) {
                                                 RomViewMode.GRID -> GridContent(
                                                     state = state,
@@ -561,7 +564,19 @@ fun RomBrowserScreen(
                             }
                         } else {
                             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                                Crossfade(targetState = state.viewMode, label = "view_mode") { mode ->
+                                AnimatedContent(
+                                    targetState = state.viewMode,
+                                    transitionSpec = {
+                                        (fadeIn(animationSpec = tween(180)) + scaleIn(
+                                            initialScale = 0.96f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMediumLow
+                                            )
+                                        )) togetherWith fadeOut(animationSpec = tween(130))
+                                    },
+                                    label = "view_mode"
+                                ) { mode ->
                                     when (mode) {
                                         RomViewMode.GRID -> GridContent(
                                             state = state,
@@ -808,6 +823,7 @@ private fun GridContent(
             itemsIndexed(
                 items = roms,
                 key = { _, entry -> "rom:${entry.rom.uri}" },
+                contentType = { _, _ -> "rom" },
             ) { romIdx, entry ->
                 val entryIndex = folderCount + romIdx
                 LaunchedEffect(entry.rom.uri) {
@@ -907,6 +923,12 @@ private fun ListContent(
                     when (entry) {
                         is RomBrowserEntry.Folder -> "folder:${entry.docId}"
                         is RomBrowserEntry.RomItem -> "rom:${entry.rom.uri}"
+                    }
+                },
+                contentType = { _, entry ->
+                    when (entry) {
+                        is RomBrowserEntry.Folder -> "folder"
+                        is RomBrowserEntry.RomItem -> "rom"
                     }
                 },
             ) { index, entry ->

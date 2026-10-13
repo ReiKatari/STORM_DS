@@ -732,3 +732,289 @@ fun SettingsRewindDialogContent(
         }
     }
 }
+
+@Composable
+fun SettingsRetroAchievementsLoginDialogContent(
+    existingUsername: String?,
+    onLogin: (username: String, password: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = LocalWatermelonColors.current
+    var username by remember { mutableStateOf(existingUsername.orEmpty()) }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    SettingsDialogScaffold(
+        title = stringResource(R.string.login_with_retro_achievements),
+        subtitle = stringResource(R.string.retroachievements_login_summary),
+        icon = Icons.Filled.EmojiEvents,
+        onDismiss = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Username Field
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = stringResource(R.string.username),
+                    color = colors.text2,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surface2)
+                        .border(
+                            width = 1.2.dp,
+                            color = if (username.isNotEmpty()) colors.green.copy(alpha = 0.65f) else colors.line,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = colors.green,
+                        modifier = Modifier.size(19.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (username.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.username),
+                                color = colors.text3,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 14.5.sp,
+                            )
+                        }
+                        BasicTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            textStyle = TextStyle(
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            cursorBrush = SolidColor(colors.green),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            // Password Field
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = stringResource(R.string.password),
+                    color = colors.text2,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surface2)
+                        .border(
+                            width = 1.2.dp,
+                            color = if (password.isNotEmpty()) colors.green.copy(alpha = 0.65f) else colors.line,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = colors.green,
+                        modifier = Modifier.size(19.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (password.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.password),
+                                color = colors.text3,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 14.5.sp,
+                            )
+                        }
+                        BasicTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            textStyle = TextStyle(
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            cursorBrush = SolidColor(colors.green),
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) {
+                                androidx.compose.ui.text.input.VisualTransformation.None
+                            } else {
+                                androidx.compose.ui.text.input.PasswordVisualTransformation()
+                            },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = null,
+                        tint = colors.text3,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable { passwordVisible = !passwordVisible },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Action Buttons Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surface2)
+                        .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                        .clickable { onDismiss() }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = colors.text2,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.green)
+                        .clickable {
+                            onLogin(username.trim(), password)
+                            onDismiss()
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.login),
+                        color = colors.bg,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsConfirmDialogContent(
+    title: String,
+    message: String,
+    confirmText: String,
+    cancelText: String? = null,
+    icon: ImageVector = Icons.Filled.EmojiEvents,
+    isDestructive: Boolean = false,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = LocalWatermelonColors.current
+    val actionColor = if (isDestructive) colors.red else colors.green
+
+    SettingsDialogScaffold(
+        title = title,
+        icon = icon,
+        onDismiss = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = message,
+                color = colors.text2,
+                fontFamily = SpaceGrotesk,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (cancelText != null) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                            .clickable { onDismiss() }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = cancelText,
+                            color = colors.text2,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(actionColor)
+                        .clickable {
+                            onConfirm()
+                            onDismiss()
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = confirmText,
+                        color = if (isDestructive) Color.White else colors.bg,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}

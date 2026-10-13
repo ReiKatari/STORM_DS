@@ -23,3 +23,4 @@ tokens; behavior and exit code are unchanged.
 - `rtk proxy <cmd>` — run a command unfiltered, still tracked.
 - `RTK_DISABLED=1 <cmd>` — skip RTK for one command.
 - `rtk discover` — find past commands RTK could have condensed.
+

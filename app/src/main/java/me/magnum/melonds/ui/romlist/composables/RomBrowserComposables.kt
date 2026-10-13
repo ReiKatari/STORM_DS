@@ -59,10 +59,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -266,10 +267,27 @@ fun WatermelonChip(
     val shape = RoundedCornerShape(cornerRadius)
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+        ),
+        label = "chip_press",
+    )
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) selectedBg else if (colors.isDark) colors.surface2 else colors.surface3,
+        label = "chip_bg",
+    )
     Box(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .clip(shape)
-            .background(if (selected) selectedBg else if (colors.isDark) colors.surface2 else colors.surface3)
+            .background(bgColor)
             .let { if (isFocused) it.border(1.dp, colors.red, shape) else it }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
     ) {
@@ -566,7 +584,7 @@ private fun ContinuePlayingCard(
         targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = androidx.compose.animation.core.spring(
             dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-            stiffness = 4000f,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
         ),
         label = "press",
     )
@@ -574,7 +592,10 @@ private fun ContinuePlayingCard(
     Column(
         modifier = Modifier
             .width(116.dp)
-            .scale(pressScale)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -869,7 +890,10 @@ private fun ContinuePlayingLandscapeCard(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .scale(pressScale)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .clip(shape)
             .background(if (isFocused) colors.surface2 else colors.surface)
             .border(
@@ -1124,7 +1148,10 @@ fun AlphabetIndexBar(
                     ) {
                         Text(
                             text = ch.toString(),
-                            modifier = Modifier.scale(scale),
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            },
                             fontFamily = WatermelonMono,
                             fontSize = 8.5.sp,
                             lineHeight = 11.sp,

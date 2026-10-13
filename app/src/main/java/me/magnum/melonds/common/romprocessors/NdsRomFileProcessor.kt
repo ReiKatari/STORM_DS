@@ -9,6 +9,7 @@ import me.magnum.melonds.domain.model.RomMetadata
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.extensions.isBlank
+import me.magnum.melonds.utils.FileUtils
 import me.magnum.melonds.utils.RomProcessor
 import java.io.BufferedInputStream
 import java.io.File
@@ -54,21 +55,19 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     override fun getRomIcon(rom: Rom): Bitmap? {
-        if (rom.uri.scheme == android.content.ContentResolver.SCHEME_FILE) {
-            val file = rom.uri.path?.let(::File)
-            if (file != null && file.exists() && file.canRead()) {
-                try {
-                    java.io.FileInputStream(file).channel.use { channel ->
-                        val icon = RomProcessor.getRomIcon(channel)
-                        if (icon != null) return icon
-                    }
-                } catch (_: Throwable) {}
-            }
+        val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(rom.uri)
+        if (directFile != null && directFile.exists() && directFile.canRead()) {
+            try {
+                FileInputStream(directFile).channel.use { channel ->
+                    val icon = RomProcessor.getRomIcon(channel)
+                    if (icon != null) return icon
+                }
+            } catch (_: Throwable) {}
         }
 
         try {
             context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
-                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                FileInputStream(pfd.fileDescriptor).channel.use { channel ->
                     val icon = RomProcessor.getRomIcon(channel)
                     if (icon != null) return icon
                 }
@@ -86,21 +85,19 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     override fun getRomInfo(rom: Rom): RomInfo? {
-        if (rom.uri.scheme == android.content.ContentResolver.SCHEME_FILE) {
-            val file = rom.uri.path?.let(::File)
-            if (file != null && file.exists() && file.canRead()) {
-                try {
-                    java.io.FileInputStream(file).channel.use { channel ->
-                        val info = RomProcessor.getRomInfo(rom, channel)
-                        if (info != null) return info
-                    }
-                } catch (_: Throwable) {}
-            }
+        val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(rom.uri)
+        if (directFile != null && directFile.exists() && directFile.canRead()) {
+            try {
+                FileInputStream(directFile).channel.use { channel ->
+                    val info = RomProcessor.getRomInfo(rom, channel)
+                    if (info != null) return info
+                }
+            } catch (_: Throwable) {}
         }
 
         try {
             context.contentResolver.openFileDescriptor(rom.uri, "r")?.use { pfd ->
-                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                FileInputStream(pfd.fileDescriptor).channel.use { channel ->
                     val info = RomProcessor.getRomInfo(rom, channel)
                     if (info != null) return info
                 }
@@ -122,21 +119,19 @@ class NdsRomFileProcessor(private val context: Context, private val uriHandler: 
     }
 
     private fun getRomMetadata(uri: Uri): RomMetadata? {
-        if (uri.scheme == android.content.ContentResolver.SCHEME_FILE) {
-            val file = uri.path?.let(::File)
-            if (file != null && file.exists() && file.canRead()) {
-                try {
-                    java.io.FileInputStream(file).channel.use { channel ->
-                        val metadata = RomProcessor.getRomMetadata(channel)
-                        if (metadata != null) return metadata
-                    }
-                } catch (_: Throwable) {}
-            }
+        val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(uri)
+        if (directFile != null && directFile.exists() && directFile.canRead()) {
+            try {
+                FileInputStream(directFile).channel.use { channel ->
+                    val metadata = RomProcessor.getRomMetadata(channel)
+                    if (metadata != null) return metadata
+                }
+            } catch (_: Throwable) {}
         }
 
         try {
             context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                FileInputStream(pfd.fileDescriptor).channel.use { channel ->
                     val metadata = RomProcessor.getRomMetadata(channel)
                     if (metadata != null) return metadata
                 }

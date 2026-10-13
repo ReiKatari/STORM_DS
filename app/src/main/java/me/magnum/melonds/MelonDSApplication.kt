@@ -362,6 +362,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
         runCatching { System.setProperty("http.agent", "melonDS/0.9.5") }
         installCrashHandler()
         runCatching { giveLibrashaderACacheDirectory() }
+        runCatching { settingsBackupManager.initializeMirror() }
         runCatching { ButtonThemeManager.init(this) }
         runCatching { AppThemeManager.init(this) }
         runCatching { RomDisplayNameManager.init(this) }
@@ -374,7 +375,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
             val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
             File(rootBase, "cache/installed_dsiware").deleteRecursively()
         }
-        runCatching { settingsBackupManager.initializeMirror() }
         runCatching { appLogFileRecorder.start() }
         runCatching { recoverUnexpectedHardcoreOfflineLossIfNeeded() }
         runCatching {

@@ -1,5 +1,6 @@
 import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -20,27 +21,52 @@ data class LibrashaderAbiTarget(
 android {
     testBuildType = "release"
 
+    val stormSigningProps = Properties().apply {
+        val centralProps = file("F:/STORM ALL PROJECTS/.storm-secrets/storm_signing.properties")
+        val envProps = System.getenv("STORM_SIGNING_PROPS")?.let { file(it) }
+        val activePropsFile = listOfNotNull(envProps, centralProps).firstOrNull { it.exists() }
+        if (activePropsFile != null) {
+            activePropsFile.inputStream().use { load(it) }
+        }
+    }
+    val localProps = gradleLocalProperties(rootDir, providers)
+    val unifiedCertFile = (
+        System.getenv("STORM_CERT_FILE")
+            ?: localProps.getProperty("STORM_CERT_FILE")
+            ?: stormSigningProps.getProperty("STORM_CERT_FILE")
+        )?.let { file(it) }?.takeIf { it.exists() }
+    val unifiedCertPassword = System.getenv("STORM_CERT_PASSWORD")
+        ?: localProps.getProperty("STORM_CERT_PASSWORD")
+        ?: stormSigningProps.getProperty("STORM_CERT_PASSWORD")
+        ?: ""
+    val unifiedKeyAlias = System.getenv("STORM_KEY_ALIAS")
+        ?: localProps.getProperty("STORM_KEY_ALIAS")
+        ?: stormSigningProps.getProperty("STORM_KEY_ALIAS")
+        ?: ""
+    val unifiedKeyPassword = System.getenv("STORM_KEY_PASSWORD")
+        ?: localProps.getProperty("STORM_KEY_PASSWORD")
+        ?: stormSigningProps.getProperty("STORM_KEY_PASSWORD")
+        ?: ""
+
     signingConfigs {
         create("release") {
-            val props = gradleLocalProperties(rootDir, providers)
-            val customKeystore = (props["MELONDS_KEYSTORE"] as String?)?.let { file(it) }
-            val projectKeystore = file("storm_release.keystore")
-            if (customKeystore != null && customKeystore.exists()) {
-                storeFile = customKeystore
-                storePassword = props["MELONDS_KEYSTORE_PASSWORD"] as String? ?: ""
-                keyAlias = props["MELONDS_KEY_ALIAS"] as String? ?: ""
-                keyPassword = props["MELONDS_KEY_PASSWORD"] as String? ?: ""
-            } else if (projectKeystore.exists()) {
-                storeFile = projectKeystore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+            if (unifiedCertFile != null) {
+                storeFile = unifiedCertFile
+                storePassword = unifiedCertPassword
+                keyAlias = unifiedKeyAlias
+                keyPassword = unifiedKeyPassword
             }
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
         }
         getByName("debug") {
+            if (unifiedCertFile != null) {
+                storeFile = unifiedCertFile
+                storePassword = unifiedCertPassword
+                keyAlias = unifiedKeyAlias
+                keyPassword = unifiedKeyPassword
+            }
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true

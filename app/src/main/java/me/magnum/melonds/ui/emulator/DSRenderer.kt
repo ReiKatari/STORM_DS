@@ -1,9 +1,15 @@
 package me.magnum.melonds.ui.emulator
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.opengl.GLES30
 import android.opengl.GLUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import me.magnum.melonds.common.opengl.Shader
 import me.magnum.melonds.common.opengl.ShaderFactory
 import me.magnum.melonds.common.opengl.ShaderProgramSource
@@ -23,6 +29,9 @@ import kotlin.math.roundToInt
 
 class DSRenderer(private val context: Context) : EmulatorRenderer {
 
+    private val backgroundDecodeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var backgroundDecodeJob: Job? = null
+
     private val configurationLock = Any()
     private var rendererConfiguration: RuntimeRendererConfiguration? = null
     private var mustUpdateConfiguration = false
@@ -30,6 +39,8 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     private var isBackgroundLoaded = false
 
     private var backgroundTexture = 0
+    private var lastBoundScreenTextureId = -1
+    private var lastAppliedTextureFilter = -1
 
     private var screenShader: Shader? = null
     private lateinit var backgroundShader: Shader
@@ -44,6 +55,7 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     // Lock used when manipulating background properties
     private val backgroundLock = Any()
     private var background: RuntimeBackground? = null
+    private var pendingDecodedBackground: Bitmap? = null
     private var mustLoadBackground = false
     private var topScreenRect: Rect? = null
     private var bottomScreenRect: Rect? = null
@@ -100,11 +112,48 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     }
 
     fun setBackground(background: RuntimeBackground) {
+        val targetWidth: Int
+        val targetHeight: Int
+        synchronized(configurationLock) {
+            targetWidth = width.roundToInt()
+            targetHeight = height.roundToInt()
+        }
         synchronized(backgroundLock) {
             this.background = background
+            pendingDecodedBackground?.recycle()
+            pendingDecodedBackground = null
             mustLoadBackground = true
             isBackgroundPositionDirty = true
             isBackgroundLoaded = false
+        }
+        scheduleBackgroundDecode(background, targetWidth, targetHeight)
+    }
+
+    private fun scheduleBackgroundDecode(background: RuntimeBackground, targetWidth: Int, targetHeight: Int) {
+        backgroundDecodeJob?.cancel()
+        val uri = background.background?.uri ?: return
+        val sampleWidth = if (targetWidth > 0) targetWidth else 1080
+        val sampleHeight = if (targetHeight > 0) targetHeight else 1920
+        backgroundDecodeJob = backgroundDecodeScope.launch {
+            val backgroundSampleSize = BitmapUtils.calculateMinimumSampleSize(context, uri, sampleWidth, sampleHeight)
+            val decoded = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = backgroundSampleSize
+                    }
+                    BitmapFactory.decodeStream(stream, null, options)
+                }
+            }.getOrNull() ?: return@launch
+
+            synchronized(backgroundLock) {
+                if (this@DSRenderer.background === background) {
+                    pendingDecodedBackground?.recycle()
+                    pendingDecodedBackground = decoded
+                    mustLoadBackground = true
+                } else {
+                    decoded.recycle()
+                }
+            }
         }
     }
 
@@ -122,6 +171,9 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         GLES30.glDisable(GLES30.GL_CULL_FACE)
+
+        lastBoundScreenTextureId = -1
+        lastAppliedTextureFilter = -1
 
         // Setup textures
         val textures = IntArray(1)
@@ -150,6 +202,13 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
 
         synchronized(configurationLock) {
             mustUpdateConfiguration = true
+        }
+        synchronized(backgroundLock) {
+            background?.let { bg ->
+                if (!isBackgroundLoaded && pendingDecodedBackground == null) {
+                    scheduleBackgroundDecode(bg, width.roundToInt(), height.roundToInt())
+                }
+            }
         }
     }
 
@@ -265,6 +324,7 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         val filtering = rendererConfiguration?.videoFiltering ?: VideoFiltering.NONE
         val shaderSource = VideoFilterShaderProvider.getShaderSource(filtering)
         screenShader = ShaderFactory.createShaderProgram(shaderSource)
+        lastAppliedTextureFilter = -1
     }
 
     override fun onSurfaceChanged(width: Int, height: Int) {
@@ -276,6 +336,11 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
 
         synchronized(backgroundLock) {
             isBackgroundPositionDirty = true
+            background?.let { bg ->
+                if (!isBackgroundLoaded && pendingDecodedBackground == null && width > 0 && height > 0) {
+                    scheduleBackgroundDecode(bg, width, height)
+                }
+            }
         }
     }
 
@@ -312,8 +377,12 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
 
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, presentFrameWrapper.textureId)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+            if (presentFrameWrapper.textureId != lastBoundScreenTextureId || shader.textureFiltering != lastAppliedTextureFilter) {
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, shader.textureFiltering)
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, shader.textureFiltering)
+                lastBoundScreenTextureId = presentFrameWrapper.textureId
+                lastAppliedTextureFilter = shader.textureFiltering
+            }
 
             GLES30.glVertexAttribPointer(shader.attribPos, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 0)
             GLES30.glVertexAttribPointer(shader.attribUv, 2, GLES30.GL_FLOAT, false, 5 * Float.SIZE_BYTES, 2 * Float.SIZE_BYTES)
@@ -327,7 +396,7 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     }
 
     private fun renderBackground() {
-        if (mustLoadBackground) {
+        if (mustLoadBackground && pendingDecodedBackground != null) {
             loadBackground()
             mustLoadBackground = false
         }
@@ -356,33 +425,18 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
     }
 
     private fun loadBackground() {
-        val background = background ?: return
+        val bitmap = pendingDecodedBackground ?: return
+        pendingDecodedBackground = null
 
-        background.background?.uri?.let {
-            val backgroundSampleSize = BitmapUtils.calculateMinimumSampleSize(context, it, width.roundToInt(), height.roundToInt())
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, backgroundTexture)
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
 
-            val bitmapResult = runCatching {
-                context.contentResolver.openInputStream(it)?.let { stream ->
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = backgroundSampleSize
-                    }
+        backgroundWidth = bitmap.width
+        backgroundHeight = bitmap.height
+        bitmap.recycle()
 
-                    BitmapFactory.decodeStream(stream, null, options)
-                }
-            }
-
-            val bitmap = bitmapResult.getOrNull() ?: return
-
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, backgroundTexture)
-            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
-            bitmap.recycle()
-
-            backgroundWidth = bitmap.width
-            backgroundHeight = bitmap.height
-
-            isBackgroundLoaded = true
-            isBackgroundPositionDirty = true
-        }
+        isBackgroundLoaded = true
+        isBackgroundPositionDirty = true
     }
 
     private fun updateBackgroundPosition() {

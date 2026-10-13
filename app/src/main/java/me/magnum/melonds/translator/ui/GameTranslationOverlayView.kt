@@ -240,6 +240,54 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
     private var progressAngle = 0f
 
+    private data class LayoutCacheKey(
+        val text: String,
+        val maxW: Int,
+        val maxH: Int,
+        val color: Int,
+        val isOutlineMode: Boolean,
+        val usePixelFont: Boolean,
+        val fontSizeScaleBits: Int
+    )
+
+    private class CachedBlockLayout(
+        val fillLayout: StaticLayout,
+        val strokeLayout: StaticLayout?
+    )
+
+    private val layoutCache = android.util.LruCache<LayoutCacheKey, CachedBlockLayout>(64)
+
+    // Pre-allocated Dictionary Card Paints (avoids allocations in onDraw)
+    private val dictHeaderPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00E5FF")
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = 24f
+    }
+    private val dictOrigPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = 28f
+    }
+    private val dictTransPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#94A3B8")
+        typeface = Typeface.DEFAULT
+        textSize = 22f
+    }
+    private val dictLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#334155")
+        strokeWidth = 1.5f
+    }
+    private val dictTokenPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#38BDF8")
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = 22f
+    }
+    private val dictPosPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#F59E0B")
+        typeface = Typeface.DEFAULT
+        textSize = 18f
+    }
+
     // Top action bar button bounding boxes
     private val btnAddRect = RectF()
     private val btnClearRect = RectF()
@@ -262,6 +310,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
     fun clearTranslations() {
         blocks.clear()
+        layoutCache.evictAll()
         activeDictionaryResult = null
         isTranslating = false
         invalidate()
@@ -294,6 +343,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w <= 0 || h <= 0) return
+        layoutCache.evictAll()
         initFloatBtnPosition(w, h)
         invalidate()
     }
@@ -524,7 +574,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             progressAngle = (progressAngle + 12f) % 360f
             val spinnerRect = RectF(cx - spinnerRadius, cy - spinnerRadius, cx + spinnerRadius, cy + spinnerRadius)
             canvas.drawArc(spinnerRect, progressAngle, 260f, false, progressPaint)
-            postInvalidateDelayed(16)
+            val dirtyR = (spinnerRadius * 1.6f).toInt()
+            postInvalidateOnAnimation(
+                (cx - dirtyR).toInt(),
+                (cy - dirtyR).toInt(),
+                (cx + dirtyR).toInt(),
+                (cy + dirtyR).toInt()
+            )
         }
 
         // 6. FLOATING BUTTON
@@ -584,53 +640,28 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         canvas.drawText("✕", dictCloseRect.centerX(), dictCloseRect.centerY() + 7f, closeBtnTextPaint)
 
         // Header Title
-        val headerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#00E5FF")
-            typeface = Typeface.DEFAULT_BOLD
-            textSize = 24f
-        }
-        canvas.drawText("📖 ${context.getString(R.string.translator_dict_title)}", dictCardRect.left + 20f, dictCardRect.top + 34f, headerPaint)
+        canvas.drawText("📖 ${context.getString(R.string.translator_dict_title)}", dictCardRect.left + 20f, dictCardRect.top + 34f, dictHeaderPaint)
 
         var curY = dictCardRect.top + 64f
 
         // Original Text
-        val origPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            typeface = Typeface.DEFAULT_BOLD
-            textSize = 28f
-        }
-        canvas.drawText(dict.query.take(45), dictCardRect.left + 20f, curY, origPaint)
+        canvas.drawText(dict.query.take(45), dictCardRect.left + 20f, curY, dictOrigPaint)
         curY += 34f
 
         // Full Translation
-        val transPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#94A3B8")
-            typeface = Typeface.DEFAULT
-            textSize = 22f
-        }
-        canvas.drawText(dict.fullTranslation.take(55), dictCardRect.left + 20f, curY, transPaint)
+        canvas.drawText(dict.fullTranslation.take(55), dictCardRect.left + 20f, curY, dictTransPaint)
         curY += 36f
 
         // Divider
-        val linePaint = Paint().apply { color = Color.parseColor("#334155"); strokeWidth = 1.5f }
-        canvas.drawLine(dictCardRect.left + 20f, curY, dictCardRect.right - 20f, curY, linePaint)
+        canvas.drawLine(dictCardRect.left + 20f, curY, dictCardRect.right - 20f, curY, dictLinePaint)
         curY += 24f
 
         // Word tokens breakdown
         for (word in dict.words.take(3)) {
-            val tokenPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#38BDF8")
-                typeface = Typeface.DEFAULT_BOLD
-                textSize = 22f
-            }
-            val posPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#F59E0B")
-                typeface = Typeface.DEFAULT
-                textSize = 18f
-            }
             val romajiStr = if (word.romaji.isNotBlank()) " [${word.romaji}]" else ""
-            canvas.drawText("• ${word.original}$romajiStr", dictCardRect.left + 20f, curY, tokenPaint)
-            canvas.drawText(" (${word.partOfSpeech})", dictCardRect.left + 20f + tokenPaint.measureText("• ${word.original}$romajiStr"), curY, posPaint)
+            val tokenStr = "• ${word.original}$romajiStr"
+            canvas.drawText(tokenStr, dictCardRect.left + 20f, curY, dictTokenPaint)
+            canvas.drawText(" (${word.partOfSpeech})", dictCardRect.left + 20f + dictTokenPaint.measureText(tokenStr), curY, dictPosPaint)
             curY += 28f
         }
 
@@ -710,90 +741,99 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
 
-        textPaint.typeface = chosenTypeface
-        textPaint.color = color
-
         val r = Color.red(color)
         val g = Color.green(color)
         val b = Color.blue(color)
         val lum = 0.299f * r + 0.587f * g + 0.114f * b
 
-        if (!isOutlineMode) {
-            if (lum > 140) {
-                // Light text on dark card -> soft subtle shadow
-                textPaint.setShadowLayer(3f, 0f, 1.5f, Color.argb(160, 0, 0, 0))
-            } else {
-                // Dark text on light background -> clear shadow to prevent blurry halos
-                textPaint.clearShadowLayer()
+        val cacheKey = LayoutCacheKey(
+            text = text,
+            maxW = maxW,
+            maxH = maxH,
+            color = color,
+            isOutlineMode = isOutlineMode,
+            usePixelFont = usePixelFont,
+            fontSizeScaleBits = fontSizeScale.toBits()
+        )
+
+        val cached = layoutCache.get(cacheKey) ?: run {
+            val fillPaint = TextPaint(textPaint).apply {
+                typeface = chosenTypeface
+                this.color = color
+                if (!isOutlineMode && lum > 140) {
+                    setShadowLayer(3f, 0f, 1.5f, Color.argb(160, 0, 0, 0))
+                } else {
+                    clearShadowLayer()
+                }
             }
-        } else {
-            textPaint.clearShadowLayer()
-        }
 
-        val isSingleWordOrButton = !text.contains(' ') && text.length < 15
-        val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+            val isSingleWordOrButton = !text.contains(' ') && text.length < 15
+            val alignment = if (isSingleWordOrButton) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+            val lineSpacingExtra = 1f * density
+            val lineSpacingMult = 1.10f
 
-        val lineSpacingExtra = 1f * density
-        val lineSpacingMult = 1.10f
+            var low = 10f
+            var high = (bounds.height() * 0.70f * fontSizeScale).coerceIn(12f, 44f)
+            var bestSize = low
+            var bestLayout: StaticLayout? = null
 
-        // Binary search for ideal font size (O(log N), avoids allocations on each frame)
-        var low = 10f
-        var high = (bounds.height() * 0.70f * fontSizeScale).coerceIn(12f, 44f)
-        var bestSize = low
-        var bestLayout: StaticLayout? = null
+            for (iter in 0 until 6) {
+                val mid = (low + high) / 2f
+                fillPaint.textSize = mid
+                val testLayout = StaticLayout.Builder.obtain(text, 0, text.length, fillPaint, maxW)
+                    .setAlignment(alignment)
+                    .setLineSpacing(lineSpacingExtra, lineSpacingMult)
+                    .setIncludePad(false)
+                    .build()
 
-        for (iter in 0 until 6) {
-            val mid = (low + high) / 2f
-            textPaint.textSize = mid
-            val testLayout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
-                .setAlignment(alignment)
-                .setLineSpacing(lineSpacingExtra, lineSpacingMult)
-                .setIncludePad(false)
-                .build()
-
-            if (testLayout.height <= maxH) {
-                bestSize = mid
-                bestLayout = testLayout
-                low = mid + 0.5f
-            } else {
-                high = mid - 0.5f
+                if (testLayout.height <= maxH) {
+                    bestSize = mid
+                    bestLayout = testLayout
+                    low = mid + 0.5f
+                } else {
+                    high = mid - 0.5f
+                }
             }
-        }
 
-        val layout = bestLayout ?: run {
-            textPaint.textSize = bestSize
-            StaticLayout.Builder.obtain(text, 0, text.length, textPaint, maxW)
-                .setAlignment(alignment)
-                .setLineSpacing(lineSpacingExtra, lineSpacingMult)
-                .setIncludePad(false)
-                .build()
+            val finalLayout = bestLayout ?: run {
+                fillPaint.textSize = bestSize
+                StaticLayout.Builder.obtain(text, 0, text.length, fillPaint, maxW)
+                    .setAlignment(alignment)
+                    .setLineSpacing(lineSpacingExtra, lineSpacingMult)
+                    .setIncludePad(false)
+                    .build()
+            }
+
+            val strokeLayout = if (isOutlineMode) {
+                val strokePaint = TextPaint(fillPaint).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = (bestSize * 0.16f).coerceIn(2.5f, 5.0f)
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                    this.color = Color.argb(240, 0, 0, 0)
+                    clearShadowLayer()
+                }
+                StaticLayout.Builder.obtain(text, 0, text.length, strokePaint, maxW)
+                    .setAlignment(alignment)
+                    .setLineSpacing(lineSpacingExtra, lineSpacingMult)
+                    .setIncludePad(false)
+                    .build()
+            } else {
+                null
+            }
+
+            CachedBlockLayout(finalLayout, strokeLayout).also {
+                layoutCache.put(cacheKey, it)
+            }
         }
 
         val textX = bounds.left + padH
-        val textY = bounds.top + max(padV, (bounds.height() - layout.height) / 2f)
+        val textY = bounds.top + max(padV, (bounds.height() - cached.fillLayout.height) / 2f)
 
         canvas.save()
         canvas.translate(textX, textY)
-
-        if (isOutlineMode) {
-            // Crisp contrast outline for subtitle look with identical layout
-            val strokePaint = TextPaint(textPaint).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = (bestSize * 0.16f).coerceIn(2.5f, 5.0f)
-                strokeCap = Paint.Cap.ROUND
-                strokeJoin = Paint.Join.ROUND
-                this.color = Color.argb(240, 0, 0, 0)
-                clearShadowLayer()
-            }
-            val strokeLayout = StaticLayout.Builder.obtain(text, 0, text.length, strokePaint, maxW)
-                .setAlignment(alignment)
-                .setLineSpacing(lineSpacingExtra, lineSpacingMult)
-                .setIncludePad(false)
-                .build()
-            strokeLayout.draw(canvas)
-        }
-
-        layout.draw(canvas)
+        cached.strokeLayout?.draw(canvas)
+        cached.fillLayout.draw(canvas)
         canvas.restore()
     }
 

@@ -13,7 +13,10 @@ import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.extensions.isBlank
 import me.magnum.melonds.extensions.nameWithoutExtension
 import me.magnum.melonds.impl.NdsRomCache
+import me.magnum.melonds.utils.FileUtils
 import me.magnum.melonds.utils.RomProcessor
+import java.io.BufferedInputStream
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.FilterInputStream
 import java.io.IOException
@@ -33,6 +36,14 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
         val SUPPORTED_ROM_EXTENSIONS = listOf("nds", "dsi", "ids", "ndz")
     }
 
+    private fun openRomUriInputStream(uri: Uri): InputStream? {
+        val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(uri)
+        if (directFile != null && directFile.exists() && directFile.canRead()) {
+            runCatching { return BufferedInputStream(FileInputStream(directFile), 131072) }
+        }
+        return runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
+    }
+
     override fun getRomFromUri(romUri: Uri, parentUri: Uri?): Rom? {
         return try {
             val romDocument = uriHandler.getUriDocument(romUri)
@@ -40,7 +51,7 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
                 ?: romUri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
                 ?: "Compressed Game"
             val fileName = romDocument?.name ?: fallbackName
-            val metadata = context.contentResolver.openInputStream(romUri)?.use { stream ->
+            val metadata = openRomUriInputStream(romUri)?.use { stream ->
                 getNdsEntryStreamInFileStream(stream)?.use { romFileStream ->
                     getRomMetadataInZipEntry(romFileStream)
                 }
@@ -115,9 +126,9 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
     private fun getBestRomInputStream(rom: Rom): InputStream? {
         val cachedRomUri = ndsRomCache.getCachedRomFile(rom)
         return if (cachedRomUri != null) {
-            context.contentResolver.openInputStream(cachedRomUri)
+            openRomUriInputStream(cachedRomUri)
         } else {
-            context.contentResolver.openInputStream(rom.uri)?.let {
+            openRomUriInputStream(rom.uri)?.let {
                 getNdsEntryStreamInFileStream(it)
             }
         }
@@ -128,7 +139,7 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
     }
 
     private suspend fun extractRomFile(rom: Rom): Uri? = suspendCoroutine { continuation ->
-        context.contentResolver.openInputStream(rom.uri)?.use {
+        openRomUriInputStream(rom.uri)?.use {
             getNdsEntryStreamInFileStream(it)?.use { romFileStream ->
                 ndsRomCache.cacheRom(rom, object : NdsRomCache.RomExtractor {
                     override fun getExtractedRomFileSize(): SizeUnit {

@@ -5,8 +5,8 @@ import android.content.ContentResolver
 import android.os.ParcelFileDescriptor
 import androidx.core.net.toUri
 import me.magnum.melonds.common.uridelegates.UriHandler
+import me.magnum.melonds.utils.FileUtils
 import java.io.File
-import java.io.FileNotFoundException
 
 class UriFileHandler(private val context: Context, private val uriHandler: UriHandler) {
     companion object {
@@ -34,7 +34,7 @@ class UriFileHandler(private val context: Context, private val uriHandler: UriHa
             } ?: FILE_NOT_FOUND
         }
 
-        return if (isWriteMode) {
+        val safFd = if (isWriteMode) {
             if (uriHandler.fileExists(uri)) {
                 try {
                     context.contentResolver.openFileDescriptor(uri, mode)?.detachFd()
@@ -56,6 +56,21 @@ class UriFileHandler(private val context: Context, private val uriHandler: UriHa
             } catch (_: Exception) {
                 null
             }
-        } ?: FILE_NOT_FOUND
+        }
+        if (safFd != null) return safFd
+
+        val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(uri)
+        if (directFile != null) {
+            return try {
+                if (isWriteMode) {
+                    directFile.parentFile?.mkdirs()
+                }
+                ParcelFileDescriptor.open(directFile, ParcelFileDescriptor.parseMode(mode))?.detachFd()
+            } catch (_: Exception) {
+                null
+            } ?: FILE_NOT_FOUND
+        }
+
+        return FILE_NOT_FOUND
     }
 }

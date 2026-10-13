@@ -233,29 +233,20 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
     }
 
     private fun showLoginDialog(existingUsername: String?) {
-        val themedDialogContext = ContextThemeWrapper(requireContext(), R.style.MaterialDialog)
-        val binding = DialogRetroachievementsLoginBinding.inflate(LayoutInflater.from(themedDialogContext))
-        if (existingUsername != null) {
-            binding.textUsername.setText(existingUsername)
+        val ctx = context ?: return
+        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+            me.magnum.melonds.ui.settings.dialogs.SettingsRetroAchievementsLoginDialogContent(
+                existingUsername = existingUsername,
+                onLogin = { username, password ->
+                    viewModel.login(username, password)
+                },
+                onDismiss = dismiss,
+            )
         }
-
-        AlertDialog.Builder(themedDialogContext)
-            .setTitle(R.string.login_with_retro_achievements)
-            .setView(binding.root)
-            .setPositiveButton(R.string.login) { dialog, _ ->
-                viewModel.login(
-                    binding.textUsername.text?.toString() ?: "",
-                    binding.textPassword.text?.toString() ?: "",
-                )
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.cancel) { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
     }
 
     private fun showLogoutConfirmationDialog() {
+        val ctx = context ?: return
         val inGameRuntimeIdentityLocked =
             requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false) &&
                 requireActivity().intent.getBooleanExtra(
@@ -272,39 +263,45 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
             showInGameAccountChangeBlockedDialog()
             return
         }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.retroachievements_logout)
-            .setMessage(
-                if (inGameLogoutSupported) {
-                    R.string.retroachievements_logout_confirmation_in_game
-                } else {
-                    R.string.retroachievements_logout_confirmation
+        val messageRes = if (inGameLogoutSupported) {
+            R.string.retroachievements_logout_confirmation_in_game
+        } else {
+            R.string.retroachievements_logout_confirmation
+        }
+        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+            me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent(
+                title = getString(R.string.retroachievements_logout),
+                message = getString(messageRes),
+                confirmText = getString(R.string.retroachievements_logout),
+                cancelText = getString(R.string.cancel),
+                isDestructive = true,
+                onConfirm = {
+                    if (inGameLogoutSupported) {
+                        requireActivity().setResult(
+                            Activity.RESULT_OK,
+                            Intent().putExtra(SettingsActivity.KEY_RA_LOGOUT_REQUESTED, true),
+                        )
+                        requireActivity().finish()
+                    } else {
+                        viewModel.logoutFromRetroAchievements()
+                    }
                 },
+                onDismiss = dismiss,
             )
-            .setPositiveButton(R.string.retroachievements_logout) { dialog, _ ->
-                if (inGameLogoutSupported) {
-                    requireActivity().setResult(
-                        Activity.RESULT_OK,
-                        Intent().putExtra(SettingsActivity.KEY_RA_LOGOUT_REQUESTED, true),
-                    )
-                    requireActivity().finish()
-                } else {
-                    viewModel.logoutFromRetroAchievements()
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.cancel) { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
+        }
     }
 
     private fun showInGameAccountChangeBlockedDialog() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.retroachievements)
-            .setMessage(R.string.retroachievements_account_change_blocked_in_game)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        val ctx = context ?: return
+        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+            me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent(
+                title = getString(R.string.retroachievements),
+                message = getString(R.string.retroachievements_account_change_blocked_in_game),
+                confirmText = getString(android.R.string.ok),
+                onConfirm = {},
+                onDismiss = dismiss,
+            )
+        }
     }
 
     override fun getTitle() = getString(R.string.retroachievements)

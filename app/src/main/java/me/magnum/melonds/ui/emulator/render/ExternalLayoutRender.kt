@@ -1,11 +1,17 @@
 package me.magnum.melonds.ui.emulator.render
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import me.magnum.melonds.common.opengl.Shader
 import me.magnum.melonds.common.opengl.ShaderFactory
 import me.magnum.melonds.common.opengl.ShaderProgramSource
@@ -62,6 +68,9 @@ class ExternalLayoutRender(
         private const val TOTAL_SCREEN_HEIGHT = 384
     }
 
+    private val backgroundDecodeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var backgroundDecodeJob: Job? = null
+
     private lateinit var shader: Shader
 
     private var posTop: FloatBuffer? = null
@@ -80,6 +89,7 @@ class ExternalLayoutRender(
     private lateinit var backgroundPosBuffer: FloatBuffer
     private lateinit var backgroundUvBuffer: FloatBuffer
     private val backgroundLock = Any()
+    private var pendingDecodedBackground: Bitmap? = null
     private var mustLoadBackground = false
     private var isBackgroundLoaded = false
     private var isBackgroundPositionDirty = false
@@ -188,9 +198,40 @@ class ExternalLayoutRender(
     fun setBackground(background: RuntimeBackground) {
         synchronized(backgroundLock) {
             this.background = background
+            pendingDecodedBackground?.recycle()
+            pendingDecodedBackground = null
             mustLoadBackground = true
             isBackgroundLoaded = false
             isBackgroundPositionDirty = true
+        }
+        scheduleBackgroundDecode(background, viewWidth, viewHeight)
+    }
+
+    private fun scheduleBackgroundDecode(background: RuntimeBackground, targetWidth: Int, targetHeight: Int) {
+        backgroundDecodeJob?.cancel()
+        val uri = background.background?.uri ?: return
+        val sampleWidth = if (targetWidth > 0) targetWidth else 1080
+        val sampleHeight = if (targetHeight > 0) targetHeight else 1920
+        backgroundDecodeJob = backgroundDecodeScope.launch {
+            val sample = BitmapUtils.calculateMinimumSampleSize(context, uri, sampleWidth, sampleHeight)
+            val decoded = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = sample
+                    }
+                    BitmapFactory.decodeStream(stream, null, options)
+                }
+            }.getOrNull() ?: return@launch
+
+            synchronized(backgroundLock) {
+                if (this@ExternalLayoutRender.background === background) {
+                    pendingDecodedBackground?.recycle()
+                    pendingDecodedBackground = decoded
+                    mustLoadBackground = true
+                } else {
+                    decoded.recycle()
+                }
+            }
         }
     }
 
@@ -251,6 +292,12 @@ class ExternalLayoutRender(
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .put(bottomUvs)
+
+        synchronized(backgroundLock) {
+            if (!isBackgroundLoaded && pendingDecodedBackground == null) {
+                scheduleBackgroundDecode(background, viewWidth, viewHeight)
+            }
+        }
     }
 
     override fun onSurfaceChanged(width: Int, height: Int) {
@@ -259,6 +306,9 @@ class ExternalLayoutRender(
         updateBuffers()
         synchronized(backgroundLock) {
             isBackgroundPositionDirty = true
+            if (!isBackgroundLoaded && pendingDecodedBackground == null && width > 0 && height > 0) {
+                scheduleBackgroundDecode(background, width, height)
+            }
         }
     }
 
@@ -356,7 +406,7 @@ class ExternalLayoutRender(
     }
 
     private fun renderBackground() {
-        if (mustLoadBackground) {
+        if (mustLoadBackground && pendingDecodedBackground != null) {
             loadBackground()
             mustLoadBackground = false
         }
@@ -383,45 +433,32 @@ class ExternalLayoutRender(
     }
 
     private fun loadBackground() {
-        background.background?.uri?.let {
-            val sample = BitmapUtils.calculateMinimumSampleSize(context, it, viewWidth, viewHeight)
+        val bitmap = pendingDecodedBackground ?: return
+        pendingDecodedBackground = null
 
-            val bitmapResult = runCatching {
-                context.contentResolver.openInputStream(it)?.let { stream ->
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = sample
-                    }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, backgroundTexture)
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
 
-                    BitmapFactory.decodeStream(stream, null, options)
-                }
-            }
+        backgroundWidth = bitmap.width
+        backgroundHeight = bitmap.height
+        bitmap.recycle()
 
-            val bitmap = bitmapResult.getOrNull() ?: return
+        val uvs = arrayOf(
+            0f, 1f,
+            0f, 0f,
+            1f, 0f,
+            0f, 1f,
+            1f, 0f,
+            1f, 1f,
+        )
 
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, backgroundTexture)
-            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
-            bitmap.recycle()
+        backgroundUvBuffer = ByteBuffer.allocateDirect(4 * uvs.size)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .put(uvs.toFloatArray())
 
-            backgroundWidth = bitmap.width
-            backgroundHeight = bitmap.height
-
-            val uvs = arrayOf(
-                0f, 1f,
-                0f, 0f,
-                1f, 0f,
-                0f, 1f,
-                1f, 0f,
-                1f, 1f,
-            )
-
-            backgroundUvBuffer = ByteBuffer.allocateDirect(4 * uvs.size)
-                .order(ByteOrder.nativeOrder())
-                .asFloatBuffer()
-                .put(uvs.toFloatArray())
-
-            isBackgroundLoaded = true
-            isBackgroundPositionDirty = true
-        }
+        isBackgroundLoaded = true
+        isBackgroundPositionDirty = true
     }
 
     private fun updateBackgroundPosition() {

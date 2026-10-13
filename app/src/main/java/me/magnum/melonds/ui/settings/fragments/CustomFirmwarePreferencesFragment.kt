@@ -64,20 +64,47 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             true
         }
 
-        autoDownloadDsPreference?.setOnPreferenceClickListener {
-            val progressDialog = android.app.ProgressDialog(requireContext()).apply {
-                setTitle(getString(R.string.auto_download_ds_bios_title))
-                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, sd_card.bin...")
-                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
-                max = 100
-                setCancelable(false)
-                show()
+        fun createDownloadProgressDialog(title: String, message: String): Pair<AlertDialog, android.widget.ProgressBar> {
+            val ctx = requireContext()
+            val density = ctx.resources.displayMetrics.density
+            val padH = (24 * density).toInt()
+            val padV = (16 * density).toInt()
+
+            val container = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(padH, padV, padH, padV)
             }
+            val msgView = android.widget.TextView(ctx).apply {
+                text = message
+                setPadding(0, 0, 0, (12 * density).toInt())
+            }
+            val progressBar = android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
+                max = 100
+                progress = 0
+                isIndeterminate = false
+            }
+            container.addView(msgView)
+            container.addView(progressBar)
+
+            val dialog = AlertDialog.Builder(ctx)
+                .setTitle(title)
+                .setView(container)
+                .setCancelable(false)
+                .create()
+            dialog.show()
+            return dialog to progressBar
+        }
+
+        autoDownloadDsPreference?.setOnPreferenceClickListener {
+            val (progressDialog, progressBar) = createDownloadProgressDialog(
+                title = getString(R.string.auto_download_ds_bios_title),
+                message = "Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, sd_card.bin..."
+            )
 
             lifecycleScope.launch {
                 val result = biosDownloadManager.downloadAndSetupDsBios { progress ->
                     activity?.runOnUiThread {
-                        progressDialog.progress = progress
+                        progressBar.progress = progress
                     }
                 }
                 progressDialog.dismiss()
@@ -104,19 +131,15 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
         }
 
         autoDownloadDsiPreference?.setOnPreferenceClickListener {
-            val progressDialog = android.app.ProgressDialog(requireContext()).apply {
-                setTitle(getString(R.string.auto_download_dsi_bios_title))
-                setMessage("Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin, sd_card.bin...")
-                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
-                max = 100
-                setCancelable(false)
-                show()
-            }
+            val (progressDialog, progressBar) = createDownloadProgressDialog(
+                title = getString(R.string.auto_download_dsi_bios_title),
+                message = "Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin, sd_card.bin..."
+            )
 
             lifecycleScope.launch {
                 val result = biosDownloadManager.downloadAndSetupDsiBios { progress ->
                     activity?.runOnUiThread {
-                        progressDialog.progress = progress
+                        progressBar.progress = progress
                     }
                 }
                 progressDialog.dismiss()

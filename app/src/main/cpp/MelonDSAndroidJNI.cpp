@@ -57,18 +57,18 @@ pthread_t emuThread;
 pthread_mutex_t emuThreadMutex;
 pthread_cond_t emuThreadCond;
 
-bool started = false;
-bool stop;
-bool paused;
-bool frameStepRequested = false;
-std::atomic_bool isThreadReallyPaused = false;
+std::atomic<bool> started{false};
+std::atomic<bool> stop{false};
+std::atomic<bool> paused{false};
+std::atomic<bool> frameStepRequested{false};
+std::atomic_bool isThreadReallyPaused{false};
 int observedFrames = 0;
-float fps = 0;
-int targetFps;
-float fastForwardSpeedMultiplier;
-float frameLimitSpeedMultiplier = 1.0f;
-bool limitFps = true;
-bool isFastForwardEnabled = false;
+std::atomic<float> fps{0.0f};
+std::atomic<int> targetFps{60};
+std::atomic<float> fastForwardSpeedMultiplier{0.0f};
+std::atomic<float> frameLimitSpeedMultiplier{1.0f};
+std::atomic<bool> limitFps{true};
+std::atomic<bool> isFastForwardEnabled{false};
 
 jobject globalCameraManager;
 MelonDSAndroidCameraHandler* androidCameraHandler;
@@ -169,204 +169,6 @@ bool getEnumOrdinal(JNIEnv* env, jobject enumObject, jint* ordinalOut)
         return false;
 
     *ordinalOut = env->CallIntMethod(enumObject, ordinalMethod);
-    if (env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        return false;
-    }
-
-    return true;
-}
-
-bool setAccessibleOnField(JNIEnv* env, jobject fieldObject)
-{
-    if (fieldObject == nullptr)
-        return false;
-
-    jclass accessibleObjectClass = env->FindClass("java/lang/reflect/AccessibleObject");
-    if (accessibleObjectClass == nullptr)
-        return false;
-
-    jmethodID setAccessibleMethod = env->GetMethodID(accessibleObjectClass, "setAccessible", "(Z)V");
-    env->DeleteLocalRef(accessibleObjectClass);
-    if (setAccessibleMethod == nullptr)
-        return false;
-
-    env->CallVoidMethod(fieldObject, setAccessibleMethod, JNI_TRUE);
-    if (env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        return false;
-    }
-
-    return true;
-}
-
-jobject getDeclaredFieldObject(JNIEnv* env, jobject targetObject, const char* fieldName)
-{
-    if (targetObject == nullptr || fieldName == nullptr)
-        return nullptr;
-
-    jclass classClass = env->FindClass("java/lang/Class");
-    if (classClass == nullptr)
-        return nullptr;
-
-    jmethodID getDeclaredFieldMethod = env->GetMethodID(classClass, "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;");
-    env->DeleteLocalRef(classClass);
-    if (getDeclaredFieldMethod == nullptr)
-        return nullptr;
-
-    jclass targetClass = env->GetObjectClass(targetObject);
-    if (targetClass == nullptr)
-        return nullptr;
-
-    jstring fieldNameString = env->NewStringUTF(fieldName);
-    jobject fieldObject = env->CallObjectMethod(targetClass, getDeclaredFieldMethod, fieldNameString);
-    env->DeleteLocalRef(fieldNameString);
-    env->DeleteLocalRef(targetClass);
-    if (fieldObject == nullptr || env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        return nullptr;
-    }
-
-    if (!setAccessibleOnField(env, fieldObject))
-    {
-        env->DeleteLocalRef(fieldObject);
-        return nullptr;
-    }
-
-    return fieldObject;
-}
-
-jobject getObjectFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName)
-{
-    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
-    if (fieldObject == nullptr)
-        return nullptr;
-
-    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
-    if (fieldClass == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return nullptr;
-    }
-
-    jmethodID getMethod = env->GetMethodID(fieldClass, "get", "(Ljava/lang/Object;)Ljava/lang/Object;");
-    env->DeleteLocalRef(fieldClass);
-    if (getMethod == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return nullptr;
-    }
-
-    jobject valueObject = env->CallObjectMethod(fieldObject, getMethod, targetObject);
-    env->DeleteLocalRef(fieldObject);
-    if (env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        return nullptr;
-    }
-
-    return valueObject;
-}
-
-bool getFloatFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName, float* valueOut)
-{
-    if (valueOut == nullptr)
-        return false;
-
-    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
-    if (fieldObject == nullptr)
-        return false;
-
-    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
-    if (fieldClass == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return false;
-    }
-
-    jmethodID getFloatMethod = env->GetMethodID(fieldClass, "getFloat", "(Ljava/lang/Object;)F");
-    env->DeleteLocalRef(fieldClass);
-    if (getFloatMethod == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return false;
-    }
-
-    *valueOut = env->CallFloatMethod(fieldObject, getFloatMethod, targetObject);
-    env->DeleteLocalRef(fieldObject);
-    if (env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        return false;
-    }
-
-    return true;
-}
-
-bool getBooleanFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName, bool* valueOut)
-{
-    if (valueOut == nullptr)
-        return false;
-
-    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
-    if (fieldObject == nullptr)
-        return false;
-
-    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
-    if (fieldClass == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return false;
-    }
-
-    jmethodID getBooleanMethod = env->GetMethodID(fieldClass, "getBoolean", "(Ljava/lang/Object;)Z");
-    env->DeleteLocalRef(fieldClass);
-    if (getBooleanMethod == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return false;
-    }
-
-    *valueOut = env->CallBooleanMethod(fieldObject, getBooleanMethod, targetObject);
-    env->DeleteLocalRef(fieldObject);
-    if (env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        return false;
-    }
-
-    return true;
-}
-
-bool getIntFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName, int* valueOut)
-{
-    if (valueOut == nullptr)
-        return false;
-
-    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
-    if (fieldObject == nullptr)
-        return false;
-
-    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
-    if (fieldClass == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return false;
-    }
-
-    jmethodID getIntMethod = env->GetMethodID(fieldClass, "getInt", "(Ljava/lang/Object;)I");
-    env->DeleteLocalRef(fieldClass);
-    if (getIntMethod == nullptr)
-    {
-        env->DeleteLocalRef(fieldObject);
-        return false;
-    }
-
-    *valueOut = env->CallIntMethod(fieldObject, getIntMethod, targetObject);
-    env->DeleteLocalRef(fieldObject);
     if (env->ExceptionCheck())
     {
         clearPendingJniException(env);
@@ -2238,7 +2040,9 @@ Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv* env, jobject thiz)
     MelonDSAndroid::pause();
 
     // Make sure the emulation thread is stopped before releasing one frame.
-    while (started && !stop && !isThreadReallyPaused);
+    while (started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire) && !isThreadReallyPaused.load(std::memory_order_acquire)) {
+        sched_yield();
+    }
 
     pthread_mutex_lock(&emuThreadMutex);
     if (!stop)
@@ -2264,7 +2068,9 @@ Java_me_magnum_melonds_MelonEmulator_resetEmulation(JNIEnv* env, jobject thiz) {
         }
 
         // Make sure that the thread is really paused to avoid data corruption
-        while (!isThreadReallyPaused);
+        while (started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire) && !isThreadReallyPaused.load(std::memory_order_acquire)) {
+            sched_yield();
+        }
         MelonDSAndroid::reset();
         Java_me_magnum_melonds_MelonEmulator_resumeEmulation(env, thiz);
     } else {
@@ -2318,7 +2124,9 @@ Java_me_magnum_melonds_MelonEmulator_loadRewindState(JNIEnv* env, jobject thiz, 
         jint frame = (int) env->GetIntField(rewindSaveState, frameField);
 
         // Make sure that the thread is really paused to avoid data corruption
-        while (!isThreadReallyPaused);
+        while (started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire) && !isThreadReallyPaused.load(std::memory_order_acquire)) {
+            sched_yield();
+        }
 
         melonDS::RewindSaveState state = melonDS::RewindSaveState {
             .buffer = (u8*) env->GetDirectBufferAddress(buffer),
@@ -2574,6 +2382,7 @@ void* emulate(void*)
         pthread_mutex_lock(&emuThreadMutex);
         if (paused) {
             isThreadReallyPaused = true;
+            pthread_cond_broadcast(&emuThreadCond);
             while (paused && !stop)
                 pthread_cond_wait(&emuThreadCond, &emuThreadMutex);
 
@@ -2600,11 +2409,11 @@ void* emulate(void*)
         if (performanceHintSession != nullptr)
             performanceHintSession->reportActualWorkDuration(std::chrono::nanoseconds(frameDuration).count());
 
-        const int currentTargetFps = (targetFps > 0) ? targetFps : 60;
+        const int currentTargetFps = (targetFps.load(std::memory_order_relaxed) > 0) ? targetFps.load(std::memory_order_relaxed) : 60;
         const double linesRatio = (nLines > 0 && nLines <= 263) ? (static_cast<double>(nLines) / 263.0) : 1.0;
         const int64_t targetFrameDurationNs = static_cast<int64_t>((1000000000.0 / static_cast<double>(currentTargetFps)) * linesRatio);
 
-        if (limitFps && targetFrameDurationNs > 0)
+        if (limitFps.load(std::memory_order_relaxed) && targetFrameDurationNs > 0)
         {
             nextFrameTimeNs += targetFrameDurationNs;
             int64_t nowNs = getMonotonicNanos();
@@ -2617,9 +2426,9 @@ void* emulate(void*)
             else if (nowNs < nextFrameTimeNs)
             {
                 int64_t sleepNs = nextFrameTimeNs - nowNs;
-                if (sleepNs > 350000LL)
+                if (sleepNs > 120000LL)
                 {
-                    int64_t sleepTargetNs = nextFrameTimeNs - 150000LL;
+                    int64_t sleepTargetNs = nextFrameTimeNs - 60000LL;
                     timespec targetTs = {
                         .tv_sec = static_cast<time_t>(sleepTargetNs / 1000000000LL),
                         .tv_nsec = static_cast<long>(sleepTargetNs % 1000000000LL),
@@ -2644,7 +2453,7 @@ void* emulate(void*)
         if (observedFrames >= 30) {
             int64_t elapsedNs = currentNowNs - lastMeasureFpsTimeNs;
             if (elapsedNs > 0) {
-                fps = (static_cast<double>(observedFrames) * 1000000000.0) / static_cast<double>(elapsedNs);
+                fps.store(static_cast<float>((static_cast<double>(observedFrames) * 1000000000.0) / static_cast<double>(elapsedNs)), std::memory_order_relaxed);
             }
             lastMeasureFpsTimeNs = currentNowNs;
             observedFrames = 0;

@@ -53,13 +53,17 @@ class GameTranslatorManager(
         const val PREF_TRANSLATOR_CUSTOM_AI_KEY = "translator_custom_ai_key"
         const val PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT = "translator_custom_ai_endpoint"
         const val PREF_TRANSLATOR_CUSTOM_AI_MODEL = "translator_custom_ai_model"
+
+        private val sharedOkHttpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .build()
+        }
     }
 
     private val preferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(activity)
-    private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val okHttpClient: OkHttpClient = sharedOkHttpClient
 
     private val textRecognizer = GameTextRecognizer()
     private val mediaProjectionCapturer = MediaProjectionCapturer(activity)
