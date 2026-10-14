@@ -25,13 +25,19 @@
 
 #include <libslirp.h>
 
+#include <atomic>
 #ifdef __WIN32__
 	#include <ws2tcpip.h>
+	#define close_socket closesocket
 #else
 	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <unistd.h>
 	#include <netdb.h>
 	#include <poll.h>
 	#include <time.h>
+	#define close_socket close
 #endif
 
 namespace melonDS
@@ -44,8 +50,32 @@ const u32 kSubnet   = 0x0A400000;
 const u32 kServerIP = kSubnet | 0x01;
 const u32 kDNSIP    = kSubnet | 0x02;
 const u32 kClientIP = kSubnet | 0x10;
+const u32 kDefaultWfcDnsIP = (178u << 24) | (62u << 16) | (43u << 8) | 212u; // Kaeru / Wiimmfi DNS 178.62.43.212
+const u32 kSecondaryWfcDnsIP = (167u << 24) | (235u << 16) | (229u << 8) | 36u; // Wiimmfi primary 167.235.229.36
+
+static std::atomic<u32> gCustomPrimaryDnsIP{0};
+static std::atomic<u32> gCustomSecondaryDnsIP{0};
 
 const u8 kServerMAC[6] = {0x00, 0xAB, 0x33, 0x28, 0x99, 0x44};
+
+void Net_Slirp::SetCustomDNS(u32 primaryDnsIp, u32 secondaryDnsIp) noexcept
+{
+    gCustomPrimaryDnsIP.store(primaryDnsIp, std::memory_order_relaxed);
+    gCustomSecondaryDnsIP.store(secondaryDnsIp != 0 ? secondaryDnsIp : primaryDnsIp, std::memory_order_relaxed);
+    Log(LogLevel::Info, "Net_Slirp: SetCustomDNS primary=%u.%u.%u.%u secondary=%u.%u.%u.%u\n",
+        (primaryDnsIp >> 24) & 0xFF, (primaryDnsIp >> 16) & 0xFF, (primaryDnsIp >> 8) & 0xFF, primaryDnsIp & 0xFF,
+        (secondaryDnsIp >> 24) & 0xFF, (secondaryDnsIp >> 16) & 0xFF, (secondaryDnsIp >> 8) & 0xFF, secondaryDnsIp & 0xFF);
+}
+
+u32 Net_Slirp::GetCustomPrimaryDNS() noexcept
+{
+    return gCustomPrimaryDnsIP.load(std::memory_order_relaxed);
+}
+
+u32 Net_Slirp::GetCustomSecondaryDNS() noexcept
+{
+    return gCustomSecondaryDnsIP.load(std::memory_order_relaxed);
+}
 
 #ifdef __WIN32__
 
@@ -102,17 +132,50 @@ int64_t SlirpCbClockGetNS(void* opaque)
     return ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
-void* SlirpCbTimerNew(SlirpTimerCb cb, void* cb_opaque, void* opaque)
+void* Net_Slirp::SlirpCbTimerNew(SlirpTimerCb cb, void* cb_opaque, void* opaque) noexcept
 {
+    if (!opaque) return nullptr;
+    Net_Slirp& self = *static_cast<Net_Slirp*>(opaque);
+    for (auto& timer : self.Timers)
+    {
+        if (!timer.cb)
+        {
+            timer.cb = cb;
+            timer.cb_opaque = cb_opaque;
+            timer.expire_time_ms = -1;
+            return &timer;
+        }
+    }
     return nullptr;
 }
 
-void SlirpCbTimerFree(void* timer, void* opaque)
+void Net_Slirp::SlirpCbTimerFree(void* timer, void* opaque) noexcept
 {
+    if (!timer) return;
+    auto* t = static_cast<SlirpTimer*>(timer);
+    t->cb = nullptr;
+    t->cb_opaque = nullptr;
+    t->expire_time_ms = -1;
 }
 
-void SlirpCbTimerMod(void* timer, int64_t expire_time, void* opaque)
+void Net_Slirp::SlirpCbTimerMod(void* timer, int64_t expire_time, void* opaque) noexcept
 {
+    if (!timer) return;
+    auto* t = static_cast<SlirpTimer*>(timer);
+    t->expire_time_ms = expire_time;
+}
+
+void Net_Slirp::TickTimers() noexcept
+{
+    const int64_t now_ms = SlirpCbClockGetNS(this) / 1000000LL;
+    for (auto& timer : Timers)
+    {
+        if (timer.cb && timer.expire_time_ms >= 0 && now_ms >= timer.expire_time_ms)
+        {
+            timer.expire_time_ms = -1;
+            timer.cb(timer.cb_opaque);
+        }
+    }
 }
 
 void SlirpCbRegisterPollFD(int fd, void* opaque)
@@ -208,13 +271,63 @@ void FinishUDPFrame(u8* data, int len)
     *(u16*)&udpheader[6] = htons(tmp);
 }
 
+static int QueryUpstreamDNS(u32 dnsServerHostOrder, const u8* dnsQuery, int dnsQueryLen, u8* dnsReplyOut, int maxReplyLen) noexcept
+{
+    if (dnsServerHostOrder == 0 || dnsQueryLen <= 12) return -1;
+
+    int sock = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) return -1;
+
+    struct sockaddr_in serverAddr {};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(53);
+    serverAddr.sin_addr.s_addr = htonl(dnsServerHostOrder);
+
+    int sent = (int)sendto(sock, (const char*)dnsQuery, dnsQueryLen, 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    if (sent != dnsQueryLen)
+    {
+        close_socket(sock);
+        return -1;
+    }
+
+    pollfd pfd {};
+    pfd.fd = sock;
+    pfd.events = POLLIN;
+    int pollRes = poll(&pfd, 1, 1500);
+    if (pollRes <= 0 || !(pfd.revents & POLLIN))
+    {
+        close_socket(sock);
+        return -1;
+    }
+
+    struct sockaddr_in fromAddr {};
+    socklen_t fromLen = sizeof(fromAddr);
+    int recvd = (int)recvfrom(sock, (char*)dnsReplyOut, maxReplyLen, 0, (struct sockaddr*)&fromAddr, &fromLen);
+    close_socket(sock);
+    return recvd >= 12 ? recvd : -1;
+}
+
+static bool IsNintendoWfcDomain(const char* domain) noexcept
+{
+    if (!domain || !domain[0]) return false;
+    return strstr(domain, "nintendowifi.net") != nullptr
+        || strstr(domain, "gamespy.com") != nullptr
+        || strstr(domain, "wiimmfi.de") != nullptr
+        || strstr(domain, "Nintendo.com") != nullptr
+        || strstr(domain, "nintendo.com") != nullptr;
+}
+
 void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
 {
+    if (len < 0x2A + 12) return;
+
     u8* ipheader = &data[0xE];
     u8* udpheader = &data[0x22];
     u8* dnsbody = &data[0x2A];
+    int dnslen = len - 0x2A;
 
     u32 srcip = ntohl(*(u32*)&ipheader[12]);
+    u32 dstip = ntohl(*(u32*)&ipheader[16]);
     u16 srcport = ntohs(*(u16*)&udpheader[0]);
 
     u16 id = ntohs(*(u16*)&dnsbody[0]);
@@ -227,9 +340,49 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     Log(LogLevel::Debug, "DNS: ID=%04X, flags=%04X, Q=%d, A=%d, auth=%d, add=%d\n",
            id, flags, numquestions, numanswers, numauth, numadd);
 
-    // for now we only take 'simple' DNS requests
     if (flags & 0x8000) return;
-    if (numquestions != 1 || numanswers != 0) return;
+    if (numquestions < 1 || numanswers != 0) return;
+
+    // Extract first queried domain name to check if it's a WFC domain
+    char firstDomain[256] = "";
+    {
+        u32 tmpOffset = 12;
+        int o = 0;
+        u8 labelLen = 0;
+        while (tmpOffset < (u32)dnslen && (labelLen = dnsbody[tmpOffset++]) != 0)
+        {
+            if (tmpOffset + labelLen > (u32)dnslen || (o + labelLen) >= 255) break;
+            memcpy(&firstDomain[o], &dnsbody[tmpOffset], labelLen);
+            o += labelLen;
+            tmpOffset += labelLen;
+            if (tmpOffset < (u32)dnslen && dnsbody[tmpOffset] != 0)
+                firstDomain[o++] = '.';
+        }
+        firstDomain[o] = '\0';
+    }
+
+    const u32 customPrimary = GetCustomPrimaryDNS();
+    const u32 customSecondary = GetCustomSecondaryDNS();
+    const bool isExplicitGuestDns = (dstip != kDNSIP && dstip != kServerIP && dstip != 0);
+    const bool isWfcDomain = IsNintendoWfcDomain(firstDomain);
+
+    u32 primaryUpstream = 0;
+    u32 secondaryUpstream = 0;
+    if (customPrimary != 0)
+    {
+        primaryUpstream = customPrimary;
+        secondaryUpstream = customSecondary != 0 ? customSecondary : kSecondaryWfcDnsIP;
+    }
+    else if (isExplicitGuestDns)
+    {
+        primaryUpstream = dstip;
+        secondaryUpstream = kDefaultWfcDnsIP;
+    }
+    else if (isWfcDomain)
+    {
+        primaryUpstream = kDefaultWfcDnsIP;
+        secondaryUpstream = kSecondaryWfcDnsIP;
+    }
 
     u8 resp[1024];
     u8* out = &resp[0];
@@ -240,7 +393,6 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     *(u16*)out = htons(0x0800); out += 2;
 
     // IP
-    u8* resp_ipheader = out;
     *out++ = 0x45;
     *out++ = 0x00;
     *(u16*)out = 0; out += 2; // total length
@@ -250,20 +402,42 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     *out++ = 0x80; // TTL
     *out++ = 0x11; // protocol (UDP)
     *(u16*)out = 0; out += 2; // checksum
-    *(u32*)out = htonl(kDNSIP); out += 4; // source IP
+    *(u32*)out = htonl(dstip); out += 4; // source IP matches the DNS server IP queried by the DS
     *(u32*)out = htonl(srcip); out += 4; // destination IP
 
     // UDP
-    u8* resp_udpheader = out;
     *(u16*)out = htons(53); out += 2; // source port
     *(u16*)out = htons(srcport); out += 2; // destination port
     *(u16*)out = 0; out += 2; // length
     *(u16*)out = 0; out += 2; // checksum
 
-    // DNS
-    u8* resp_body = out;
+    // If an upstream WFC / custom DNS server is applicable, forward the raw DNS query via UDP
+    if (primaryUpstream != 0)
+    {
+        int replyLen = QueryUpstreamDNS(primaryUpstream, dnsbody, dnslen, out, (int)(sizeof(resp) - (out - &resp[0]) - 2));
+        if (replyLen < 0 && secondaryUpstream != 0 && secondaryUpstream != primaryUpstream)
+        {
+            replyLen = QueryUpstreamDNS(secondaryUpstream, dnsbody, dnslen, out, (int)(sizeof(resp) - (out - &resp[0]) - 2));
+        }
+        if (replyLen >= 12)
+        {
+            out += replyLen;
+            u32 framelen = (u32)(out - &resp[0]);
+            if (framelen & 1) { *out++ = 0; framelen++; }
+            FinishUDPFrame(resp, framelen);
+            if (Callback)
+                Callback(resp, framelen);
+            return;
+        }
+    }
+
+    if (numquestions != 1) return;
+
+    // Fallback to host OS getaddrinfo for standard domains
+    u8* resp_flags_ptr = out + 2;
+    u8* resp_ancount_ptr = out + 6;
     *(u16*)out = htons(id); out += 2; // ID
-    *(u16*)out = htons(0x8000); out += 2; // flags
+    *(u16*)out = htons(0x8180); out += 2; // flags (Standard query response, No error)
     *(u16*)out = htons(numquestions); out += 2; // num questions
     *(u16*)out = htons(numquestions); out += 2; // num answers
     *(u16*)out = 0; out += 2; // num authority
@@ -272,89 +446,75 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     u32 curoffset = 12;
     for (u16 i = 0; i < numquestions; i++)
     {
-        if (curoffset >= (len-0x2A)) return;
+        if (curoffset >= (u32)dnslen) return;
 
         u8 bitlength = 0;
-        while ((bitlength = dnsbody[curoffset++]) != 0)
+        while (curoffset < (u32)dnslen && (bitlength = dnsbody[curoffset++]) != 0)
             curoffset += bitlength;
 
         curoffset += 4;
     }
 
-    u32 qlen = curoffset-12;
-    if (qlen > 512) return;
+    u32 qlen = curoffset - 12;
+    if (qlen > 512 || 12 + qlen > (u32)dnslen) return;
     memcpy(out, &dnsbody[12], qlen); out += qlen;
 
     curoffset = 12;
-	for (u16 i = 0; i < numquestions; i++)
-	{
-		// assemble the requested domain name
-		u8 bitlength = 0;
-		char domainname[256] = ""; int o = 0;
-		while ((bitlength = dnsbody[curoffset++]) != 0)
-		{
-		    if ((o+bitlength) >= 255)
+    for (u16 i = 0; i < numquestions; i++)
+    {
+        u8 bitlength = 0;
+        char domainname[256] = ""; int o = 0;
+        while (curoffset < (u32)dnslen && (bitlength = dnsbody[curoffset++]) != 0)
+        {
+            if ((o + bitlength) >= 255 || curoffset + bitlength > (u32)dnslen)
             {
-                // welp. atleast try not to explode.
                 domainname[o++] = '\0';
                 break;
             }
 
-			strncpy(&domainname[o], (const char *)&dnsbody[curoffset], bitlength);
-			o += bitlength;
+            strncpy(&domainname[o], (const char *)&dnsbody[curoffset], bitlength);
+            o += bitlength;
 
-			curoffset += bitlength;
-			if (dnsbody[curoffset] != 0)
-				domainname[o++] = '.';
+            curoffset += bitlength;
+            if (dnsbody[curoffset] != 0)
+                domainname[o++] = '.';
             else
                 domainname[o++] = '\0';
-		}
+        }
 
-		u16 type = ntohs(*(u16*)&dnsbody[curoffset]);
-		u16 cls = ntohs(*(u16*)&dnsbody[curoffset+2]);
+        u16 type = ntohs(*(u16*)&dnsbody[curoffset]);
+        u16 cls = ntohs(*(u16*)&dnsbody[curoffset+2]);
 
-		printf("- q%d: %04X %04X %s", i, type, cls, domainname);
+        struct addrinfo dns_hint;
+        struct addrinfo* dns_res = nullptr;
+        u32 addr_res = 0;
 
-		// get answer
-		struct addrinfo dns_hint;
-		struct addrinfo* dns_res;
-		u32 addr_res;
-
-		memset(&dns_hint, 0, sizeof(dns_hint));
-		dns_hint.ai_family = AF_INET; // TODO: other address types (INET6, etc)
-		if (getaddrinfo(domainname, "0", &dns_hint, &dns_res) == 0)
+        memset(&dns_hint, 0, sizeof(dns_hint));
+        dns_hint.ai_family = AF_INET;
+        if (getaddrinfo(domainname, "0", &dns_hint, &dns_res) == 0 && dns_res)
         {
-            struct addrinfo* p = dns_res;
-            while (p)
-            {
-                struct sockaddr_in* addr = (struct sockaddr_in*)p->ai_addr;
-                addr_res = *(u32*)&addr->sin_addr;
+            struct sockaddr_in* addr = (struct sockaddr_in*)dns_res->ai_addr;
+            addr_res = *(u32*)&addr->sin_addr;
+            freeaddrinfo(dns_res);
+        }
 
-                printf(" -> %d.%d.%d.%d",
-                       addr_res & 0xFF, (addr_res >> 8) & 0xFF,
-                       (addr_res >> 16) & 0xFF, addr_res >> 24);
+        curoffset += 4;
 
-                break;
-                p = p->ai_next;
-            }
+        if (addr_res != 0)
+        {
+            *(u16*)out = htons(0xC00C); out += 2;
+            *(u16*)out = htons(type); out += 2;
+            *(u16*)out = htons(cls); out += 2;
+            *(u32*)out = htonl(3600); out += 4;
+            *(u16*)out = htons(4); out += 2;
+            *(u32*)out = addr_res; out += 4;
         }
         else
         {
-            printf(" shat itself :(");
-            addr_res = 0;
+            // Return NXDOMAIN (RCODE=3) with 0 answers instead of fake 0.0.0.0 IP
+            *(u16*)resp_flags_ptr = htons(0x8183);
+            *(u16*)resp_ancount_ptr = htons(0);
         }
-
-		printf("\n");
-		curoffset += 4;
-
-		// TODO: betterer support
-		// (under which conditions does the C00C marker work?)
-		*(u16*)out = htons(0xC00C); out += 2;
-		*(u16*)out = htons(type); out += 2;
-		*(u16*)out = htons(cls); out += 2;
-		*(u32*)out = htonl(3600); out += 4; // TTL (hardcoded for now)
-		*(u16*)out = htons(4); out += 2; // address length
-		*(u32*)out = addr_res; out += 4; // address
     }
 
     u32 framelen = (u32)(out - &resp[0]);
@@ -375,18 +535,20 @@ int Net_Slirp::SendPacket(u8* data, int len) noexcept
         return 0;
     }
 
-    u16 ethertype = ntohs(*(u16*)&data[0xC]);
-
-    if (ethertype == 0x800)
+    if (len >= 0x2A)
     {
-        u8 protocol = data[0x17];
-        if (protocol == 0x11) // UDP
+        u16 ethertype = ntohs(*(u16*)&data[0xC]);
+        if (ethertype == 0x800)
         {
-            u16 dstport = ntohs(*(u16*)&data[0x24]);
-            if (dstport == 53 && htonl(*(u32*)&data[0x1E]) == kDNSIP) // DNS
+            u8 protocol = data[0x17];
+            if (protocol == 0x11) // UDP
             {
-                HandleDNSFrame(data, len);
-                return len;
+                u16 dstport = ntohs(*(u16*)&data[0x24]);
+                if (dstport == 53) // Intercept all DNS requests (both DHCP 10.64.0.2 and explicit custom DNS IPs)
+                {
+                    HandleDNSFrame(data, len);
+                    return len;
+                }
             }
         }
     }
@@ -448,14 +610,13 @@ void Net_Slirp::RecvCheck() noexcept
 {
     if (!Ctx) return;
 
-    //if (PollListSize > 0)
-    {
-        u32 timeout = 0;
-        PollListSize = 0;
-        slirp_pollfds_fill(Ctx, &timeout, SlirpCbAddPoll, this);
-        int res = poll(PollList, PollListSize, timeout);
-        slirp_pollfds_poll(Ctx, res<0, SlirpCbGetREvents, this);
-    }
+    TickTimers();
+
+    u32 timeout = 0;
+    PollListSize = 0;
+    slirp_pollfds_fill(Ctx, &timeout, SlirpCbAddPoll, this);
+    int res = poll(PollList, PollListSize, 0);
+    slirp_pollfds_poll(Ctx, res < 0, SlirpCbGetREvents, this);
 }
 
 }

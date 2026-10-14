@@ -24,6 +24,7 @@ class ExternalScreenRender(
     private var verticalAlignment: ScreenAlignment,
     private var fillHeight: Boolean,
     private var fillWidth: Boolean,
+    private val isTopScreen: Boolean = true,
 ) : EmulatorRenderer {
 
     private var shader: Shader? = null
@@ -31,6 +32,7 @@ class ExternalScreenRender(
     private var screensVao = 0
 
     private var videoFiltering: VideoFiltering = VideoFiltering.NONE
+    private var resolutionScaling: Int = 1
 
     private var surfaceWidth = 0
     private var surfaceHeight = 0
@@ -44,8 +46,14 @@ class ExternalScreenRender(
     override fun updateRendererConfiguration(newRendererConfiguration: RuntimeRendererConfiguration?) {
         synchronized(viewportLock) {
             val newFiltering = newRendererConfiguration?.videoFiltering ?: VideoFiltering.NONE
-            if (videoFiltering != newFiltering) {
+            val newScale = if (newRendererConfiguration?.renderer == me.magnum.melonds.domain.model.VideoRenderer.SOFTWARE) {
+                1
+            } else {
+                (newRendererConfiguration?.resolutionScaling ?: 1).coerceAtLeast(1)
+            }
+            if (videoFiltering != newFiltering || resolutionScaling != newScale) {
                 videoFiltering = newFiltering
+                resolutionScaling = newScale
                 areRenderSettingsDirty = true
             }
         }
@@ -60,7 +68,7 @@ class ExternalScreenRender(
 
     override fun onSurfaceCreated() {
         shader = ShaderFactory.createShaderProgram(
-            VideoFilterShaderProvider.getShaderSource(videoFiltering)
+            VideoFilterShaderProvider.getShaderSource(videoFiltering, resolutionScaling)
         )
 
         val buffers = IntArray(2)
@@ -92,7 +100,7 @@ class ExternalScreenRender(
 
     private fun uploadVertices(coords: FloatArray) {
         val lineRelativeSize = 1f / (SCREEN_HEIGHT * 2 + 2).toFloat()
-        val uvs = if (true /*screen == DsExternalScreen.TOP*/) {
+        val uvs = if (isTopScreen) {
             floatArrayOf(
                 0f, 0.5f - lineRelativeSize,
                 0f, 0f,
@@ -222,7 +230,7 @@ class ExternalScreenRender(
         // Delete previous shader
         shader?.delete()
 
-        val shaderSource = VideoFilterShaderProvider.getShaderSource(videoFiltering)
+        val shaderSource = VideoFilterShaderProvider.getShaderSource(videoFiltering, resolutionScaling)
         shader = ShaderFactory.createShaderProgram(shaderSource)
         lastScreenTextureFiltering = Int.MIN_VALUE
     }

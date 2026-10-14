@@ -3055,10 +3055,10 @@ class EmulatorViewModel @Inject constructor(
         sessionCoroutineScope.launch {
             val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom
             if (runningRom != null) {
-                val currentConfig = settingsRepository.getEmulatorConfiguration(runningRom.config)
-                val updatedRendererConfig = currentConfig.rendererConfiguration.copy(internalResolutionScaling = scaling)
-                val updatedConfig = currentConfig.copy(rendererConfiguration = updatedRendererConfig)
-                me.magnum.melonds.MelonEmulator.updateEmulatorConfiguration(updatedConfig)
+                val updatedRom = runningRom.copy(
+                    config = runningRom.config.copy(internalResolutionScaling = scaling)
+                )
+                emulatorManager.updateRomEmulatorConfiguration(updatedRom)
             }
         }
     }
@@ -6441,7 +6441,7 @@ class EmulatorViewModel @Inject constructor(
             RuntimeMicSource.entries.firstOrNull { it.micSource == settingsRepository.getMicSource() }
                 ?: RuntimeMicSource.DEFAULT
         }
-        val showRetroArchSettings = effectiveRenderer == VideoRenderer.VULKAN &&
+        val showRetroArchSettings = effectiveRenderer != VideoRenderer.SOFTWARE &&
             effectiveVideoFiltering == VideoFiltering.RETROARCH &&
             hasValidRetroArchShaderRoot
 

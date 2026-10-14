@@ -450,7 +450,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 else -> 6f * density
             }
 
-            val alpha = (bubbleOpacity.coerceIn(0.25f, 1.0f) * 255).toInt().coerceIn(70, 255)
+            val alpha = (bubbleOpacity.coerceIn(0.10f, 1.0f) * 255).toInt().coerceIn(25, 255)
             var cardTextColor = Color.WHITE
 
             when (overlayStyle) {

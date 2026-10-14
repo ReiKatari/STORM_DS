@@ -209,4 +209,16 @@ object MelonEmulator {
     external fun getDetailedEmulationDiagnostic(): String
 
     external fun updateEmulatorConfiguration(emulatorConfiguration: EmulatorConfiguration)
+
+    external fun startLanHost(playerName: String, maxPlayers: Int): Boolean
+
+    external fun startLanClient(playerName: String, hostIp: String): Boolean
+
+    external fun stopLanSession()
+
+    external fun startLanDiscovery(): Boolean
+
+    external fun stopLanDiscovery()
+
+    external fun getLanDiscoveredSessions(): Array<String>
 }

@@ -7034,11 +7034,11 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                 makeBlendAttachment(colorWriteNone, false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD),
                 makeBlendAttachment(colorWriteNone, false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD),
             };
-            const bool useDirectWBufferTextureIndexing =
-                wMode != 0u && VulkanContext::Get().SupportsDynamicTextureIndexing();
+            const bool useDirectZBufferTextureIndexing =
+                wMode == 0u && VulkanContext::Get().SupportsDynamicTextureIndexing();
             VkShaderModule opaqueFragModule = rasterFragModule;
-            if (wMode != 0u)
-                opaqueFragModule = useDirectWBufferTextureIndexing ? rasterNoFragDepthDirectFragModule : rasterNoFragDepthFragModule;
+            if (wMode == 0u)
+                opaqueFragModule = useDirectZBufferTextureIndexing ? rasterNoFragDepthDirectFragModule : rasterNoFragDepthFragModule;
 
             if (!createRasterPipeline(
                     opaqueFragModule,
@@ -7190,7 +7190,7 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                 Log(LogLevel::Error, "VulkanRenderer3D: failed to create graphics opaque UI overlay pipeline");
                 return false;
             }
-            if (useDirectWBufferTextureIndexing)
+            if (useDirectZBufferTextureIndexing)
             {
                 if (!createRasterPipeline(
                         rasterNoFragDepthDirectFastModulateFragModule,
@@ -7213,7 +7213,7 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                         rasterNoFragDepthDirectFastModulateFragModule,
                         &opaqueSpecializationInfo,
                         opaqueNoAttrBlendAttachments,
-                        false,
+                        true,
                         depthCompareMode != 0u ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS,
                         true,
                         VK_STENCIL_OP_KEEP,
@@ -7263,7 +7263,7 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                         rasterNoFragDepthDirectFastModulateToonFragModule,
                         &opaqueSpecializationInfo,
                         opaqueNoAttrBlendAttachments,
-                        false,
+                        true,
                         depthCompareMode != 0u ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS,
                         true,
                         VK_STENCIL_OP_KEEP,
@@ -7363,7 +7363,7 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                         rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule,
                         &opaqueSpecializationInfo,
                         opaqueNoAttrBlendAttachments,
-                        false,
+                        true,
                         depthCompareMode != 0u ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS,
                         true,
                         VK_STENCIL_OP_KEEP,
@@ -7430,7 +7430,7 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                         rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrFragModule,
                         &opaqueSpecializationInfo,
                         opaqueNoAttrBlendAttachments,
-                        false,
+                        true,
                         depthCompareMode != 0u ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS,
                         true,
                         VK_STENCIL_OP_KEEP,
@@ -13192,48 +13192,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
         return !clearFogFlag && !drawFogFlag;
     };
     std::vector<u8> colorOnlyOpaqueDrawSelected(GraphicsPolygons.size(), 0u);
-    u32 colorOnlyOpaqueDrawCount = 0u;
-    bool colorOnlyDepthWriteSeen = false;
-    constexpr bool kEnableColorOnlyOpaquePrepass = false;
-    if (fastPathResourceGraph && kEnableColorOnlyOpaquePrepass && !useBitmapClear)
-    {
-        for (u32 drawIndex : GraphicsOpaqueDrawIndices)
-        {
-            if (drawIndex >= GraphicsPolygons.size())
-                continue;
-
-            const GraphicsPolygonDraw& draw = GraphicsPolygons[drawIndex];
-            const bool drawDepthWriteEnabled = (draw.polyAttr & (1u << 11u)) != 0u;
-            const TriangleGpu* firstTriangle = draw.firstTriangle < Triangles.size() ? &Triangles[draw.firstTriangle] : nullptr;
-            const u32 firstTriangleFlags = firstTriangle != nullptr ? firstTriangle->flags : 0u;
-            const bool colorOnlyCandidate =
-                preCanSkipOpaqueAttrWrite(draw)
-                && !colorOnlyDepthWriteSeen
-                && !drawDepthWriteEnabled
-                && firstTriangle != nullptr
-                && (firstTriangleFlags & kTriangleFlagWBuffer) != 0u
-                && (firstTriangleFlags & kTriangleFlagTextured) != 0u
-                && (firstTriangleFlags & kTriangleFlagDecal) == 0u
-                && (firstTriangleFlags & kTriangleFlagLinear) == 0u
-                && ((draw.polyAttr >> 16u) & 0x1Fu) == 0x1Fu
-                && ((draw.polyAttr >> 4u) & 0x3u) == 0u;
-            if (colorOnlyCandidate)
-            {
-                const bool wBuffer = (firstTriangleFlags & kTriangleFlagWBuffer) != 0u;
-                const u32 wMode = wBuffer ? 1u : 0u;
-                const u32 depthCompareMode = (draw.polyAttr & (1u << 14u)) != 0u ? 1u : 0u;
-                const u32 pipelineIndex = (wMode * GraphicsDepthCompareModeCount) + depthCompareMode;
-                if (pipelineIndex < GraphicsOpaqueFastModulateOpaqueAlphaPlainColorOnlyPipelines.size()
-                    && GraphicsOpaqueFastModulateOpaqueAlphaPlainColorOnlyPipelines[pipelineIndex] != VK_NULL_HANDLE)
-                {
-                    colorOnlyOpaqueDrawSelected[drawIndex] = 1u;
-                    colorOnlyOpaqueDrawCount++;
-                }
-            }
-            if (drawDepthWriteEnabled)
-                colorOnlyDepthWriteSeen = true;
-        }
-    }
+    const u32 colorOnlyOpaqueDrawCount = 0u;
 
     VkRenderPassBeginInfo rasterBeginInfo{};
     rasterBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -13562,82 +13521,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
 
         const TriangleGpu& firstTriangle = Triangles[draw.firstTriangle];
         const u32 flags = firstTriangle.flags;
-        if (rasterDispatchPolicy.wBufferFragmentDepthRule
-            == WBufferFragmentDepthRule::HistoricalReciprocalW)
-        {
-            if ((flags & kTriangleFlagWBuffer) == 0u
-                || (flags & kTriangleFlagTextured) == 0u
-                || (flags & kTriangleFlagDecal) != 0u
-                || (flags & kTriangleFlagLinear) != 0u)
-            {
-                return false;
-            }
-
-            const u32 alpha5 = (draw.polyAttr >> 16u) & 0x1Fu;
-            const u32 blendMode = (draw.polyAttr >> 4u) & 0x3u;
-            const bool depthWriteEnabled = (draw.polyAttr & (1u << 11u)) != 0u;
-            const bool repeatOrMirror =
-                (firstTriangle.texParam & ((1u << 16u) | (1u << 17u) | (1u << 18u) | (1u << 19u))) != 0u;
-            if (!depthWriteEnabled || alpha5 != 0x1Fu || blendMode != 0u || !repeatOrMirror)
-                return false;
-
-            if (draw.firstVertex >= GraphicsSceneVertices.size())
-                return false;
-
-            const u32 vertexEnd = std::min<u32>(
-                static_cast<u32>(GraphicsSceneVertices.size()),
-                draw.firstVertex + draw.vertexCount);
-            if (vertexEnd <= draw.firstVertex + 1u)
-                return false;
-
-            const float firstReciprocalW = GraphicsSceneVertices[draw.firstVertex].reciprocalW;
-            for (u32 vertexIndex = draw.firstVertex + 1u; vertexIndex < vertexEnd; vertexIndex++)
-            {
-                if (std::abs(GraphicsSceneVertices[vertexIndex].reciprocalW - firstReciprocalW) > 0.0000001f)
-                    return true;
-            }
-            return false;
-        }
-
-        if ((flags & kTriangleFlagWBuffer) == 0u
-            || (flags & kTriangleFlagTextured) == 0u
-            || (flags & kTriangleFlagDecal) != 0u
-            || (flags & kTriangleFlagLinear) != 0u)
-        {
-            return false;
-        }
-
-        const u32 alpha5 = (draw.polyAttr >> 16u) & 0x1Fu;
-        const u32 blendMode = (draw.polyAttr >> 4u) & 0x3u;
-        const bool repeatOrMirror =
-            (firstTriangle.texParam & ((1u << 16u) | (1u << 17u) | (1u << 18u) | (1u << 19u))) != 0u;
-        if (alpha5 != 0x1Fu || blendMode != 0u || !repeatOrMirror)
-            return false;
-
-        if (draw.firstVertex >= GraphicsSceneVertices.size())
-            return false;
-
-        const u32 vertexEnd = std::min<u32>(
-            static_cast<u32>(GraphicsSceneVertices.size()),
-            draw.firstVertex + draw.vertexCount);
-        if (vertexEnd <= draw.firstVertex + 1u)
-            return false;
-
-        const u32 triangleEnd = std::min<u32>(
-            static_cast<u32>(Triangles.size()),
-            draw.firstTriangle + draw.triangleCount);
-        const float firstRawW = firstTriangle.w0;
-        for (u32 triangleIndex = draw.firstTriangle; triangleIndex < triangleEnd; triangleIndex++)
-        {
-            const TriangleGpu& triangle = Triangles[triangleIndex];
-            if (triangle.w0 != firstRawW
-                || triangle.w1 != firstRawW
-                || triangle.w2 != firstRawW)
-            {
-                return true;
-            }
-        }
-        return false;
+        return (flags & kTriangleFlagWBuffer) != 0u;
     };
     const auto opaquePipelineFor = [&](const GraphicsPolygonDraw& draw, u32 pipelineIndex, bool noAttr) -> VkPipeline {
         if (requiresWBufferFragmentDepth(draw))
@@ -13717,7 +13601,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
                     return fogFlagEnabledFor(draw);
                 }));
     const auto canSkipOpaqueAttrWrite = [&](const GraphicsPolygonDraw& draw) -> bool {
-        constexpr bool kEnableOpaqueNoAttrFastPath = true;
+        constexpr bool kEnableOpaqueNoAttrFastPath = false;
         if (!fastPathResourceGraph || !kEnableOpaqueNoAttrFastPath)
             return false;
 
@@ -13757,6 +13641,11 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     };
     bool graphicsFogWriteObserved = false;
     const auto fastOpaqueModulatePipelineFor = [&](const GraphicsPolygonDraw& draw, u32 pipelineIndex, bool noAttr, bool noDepthNoAttr = false) -> VkPipeline {
+        (void)draw;
+        (void)pipelineIndex;
+        (void)noAttr;
+        (void)noDepthNoAttr;
+        return VK_NULL_HANDLE;
         if ((dispCnt & (1u << 0u)) == 0u
             || draw.firstTriangle >= Triangles.size()
             || pipelineIndex >= GraphicsOpaqueFastModulatePipelines.size())
@@ -13958,22 +13847,10 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
         return true;
     };
     const auto isNoDepthNoAttrFastOpaqueCandidate = [&](const GraphicsPolygonDraw& draw, bool noAttr, bool opaqueDepthWriteAlreadySeen) -> bool {
-        const bool drawDepthWriteEnabled = (draw.polyAttr & (1u << 11u)) != 0u;
-        const TriangleGpu* firstTriangle = draw.firstTriangle < Triangles.size() ? &Triangles[draw.firstTriangle] : nullptr;
-        const u32 firstTriangleFlags = firstTriangle != nullptr ? firstTriangle->flags : 0u;
-        const u32 firstTexParam = firstTriangle != nullptr ? firstTriangle->texParam : 0u;
-        return noAttr
-            && !frameHasAttrDependentPostPasses
-            && !opaqueDepthWriteAlreadySeen
-            && !drawDepthWriteEnabled
-            && firstTriangle != nullptr
-            && (firstTriangleFlags & kTriangleFlagWBuffer) != 0u
-            && (firstTriangleFlags & kTriangleFlagTextured) != 0u
-            && (firstTriangleFlags & kTriangleFlagTextureOpaque) != 0u
-            && (firstTriangleFlags & kTriangleFlagDecal) == 0u
-            && (firstTexParam & ((1u << 16u) | (1u << 17u) | (1u << 18u) | (1u << 19u))) != 0u
-            && ((draw.polyAttr >> 16u) & 0x1Fu) == 0x1Fu
-            && ((draw.polyAttr >> 4u) & 0x3u) == 0u;
+        (void)draw;
+        (void)noAttr;
+        (void)opaqueDepthWriteAlreadySeen;
+        return false;
     };
     const auto fastOpaqueDrawsCanBatch = [&](const GraphicsPolygonDraw& firstDraw,
                                              VkPipeline firstPipeline,
@@ -14383,6 +14260,8 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
         return false;
     }();
     const auto shouldReplayOpaquePaletteUiDraw = [&](const GraphicsPolygonDraw& draw) -> bool {
+        (void)draw;
+        return false;
         if (!clearPlaneAlphaZero
             || !alphaBlendEnabled
             || draw.firstTriangle >= Triangles.size()
@@ -14608,7 +14487,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     std::vector<u8> opaqueFragmentDepthPrepassSelected(GraphicsPolygons.size(), 0u);
     std::array<u32, 64> opaqueFragmentDepthCandidatePolyIdCounts{};
     u32 opaqueFragmentDepthCandidateCount = 0;
-    if (rasterDispatchPolicy.enableOpaqueFragmentDepthPrepass)
+    if (false && rasterDispatchPolicy.enableOpaqueFragmentDepthPrepass)
     {
         for (u32 drawIndex : GraphicsOpaqueDrawIndices)
         {
@@ -14664,10 +14543,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     u32 paletteUiOpaqueReplayFirstDraw = 0xFFFFFFFFu;
     u32 paletteUiOpaqueReplayFirstPolyId = 0xFFFFFFFFu;
     u32 paletteUiOpaqueReplayFirstTexParam = 0u;
-    const bool enableReverseOpaqueOcclusion =
-        fastPathResourceGraph
-        && !useBitmapClear
-        && !alphaBlendEnabled;
+    const bool enableReverseOpaqueOcclusion = false;
     const auto reverseOpaqueOcclusionPipelineFor = [&](const GraphicsPolygonDraw& draw, u32 pipelineIndex) -> VkPipeline {
         const bool noDepth = (draw.polyAttr & (1u << 11u)) == 0u;
         VkPipeline pipeline = fastOpaqueModulateOcclusionNoAttrPipelineFor(draw, pipelineIndex, noDepth);
@@ -17157,7 +17033,7 @@ void VulkanRenderer3D::buildGraphicsTriangleListCompatibility(GPU& gpu)
     sceneBuildConfig.CoverageFix.ApplyRepeat = CoverageFixApplyRepeat;
     sceneBuildConfig.CoverageFix.ApplyClamp = CoverageFixApplyClamp;
     sceneBuildConfig.CoverageFix.PassiveRepeatPx = PassiveCoverageFixRepeatPx;
-    sceneBuildConfig.CoverageFix.DisablePassiveRepeat = disablePassiveRepeatCoverageExpand;
+    sceneBuildConfig.CoverageFix.DisablePassiveRepeat = true;
     sceneBuildConfig.CoverageFix.PaletteUiClampEnabled = false;
     sceneBuildConfig.CoverageFix.PaletteUiClampPx = 0.5f;
 
@@ -17748,7 +17624,7 @@ void VulkanRenderer3D::buildGraphicsTriangleListCompatibility(GPU& gpu)
             const float inverseLineLength = 1.0f / std::sqrt(lineLengthSquared);
             const float lineDirX = deltaX * inverseLineLength;
             const float lineDirY = deltaY * inverseLineLength;
-            const float halfLineWidth = 0.5f;
+            const float halfLineWidth = 0.5f * static_cast<float>(std::max(1, ScaleFactor));
             const float perpX = -deltaY * inverseLineLength * halfLineWidth;
             const float perpY = deltaX * inverseLineLength * halfLineWidth;
             const float startX = lineX0 - (lineDirX * endpointExtend);
@@ -18398,7 +18274,7 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
     sceneBuildConfig.CoverageFix.ApplyRepeat = CoverageFixApplyRepeat;
     sceneBuildConfig.CoverageFix.ApplyClamp = CoverageFixApplyClamp;
     sceneBuildConfig.CoverageFix.PassiveRepeatPx = PassiveCoverageFixRepeatPx;
-    sceneBuildConfig.CoverageFix.DisablePassiveRepeat = disablePassiveRepeatCoverageExpand;
+    sceneBuildConfig.CoverageFix.DisablePassiveRepeat = true;
     sceneBuildConfig.CoverageFix.PaletteUiClampEnabled = false;
     sceneBuildConfig.CoverageFix.PaletteUiClampPx = 0.5f;
 
@@ -19154,7 +19030,7 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
             const float inverseLineLength = 1.0f / std::sqrt(lineLengthSquared);
             const float lineDirX = deltaX * inverseLineLength;
             const float lineDirY = deltaY * inverseLineLength;
-            const float halfLineWidth = 0.5f;
+            const float halfLineWidth = 0.5f * static_cast<float>(std::max(1, ScaleFactor));
             const float perpX = -deltaY * inverseLineLength * halfLineWidth;
             const float perpY = deltaX * inverseLineLength * halfLineWidth;
             const float startX = lineX0 - (lineDirX * endpointExtend);
@@ -20548,7 +20424,7 @@ void VulkanRenderer3D::buildTriangleList(GPU& gpu)
                 continue;
 
             const float inverseLineLength = 1.0f / std::sqrt(lineLengthSquared);
-            const float halfLineWidth = 0.5f;
+            const float halfLineWidth = 0.5f * static_cast<float>(std::max(1, ScaleFactor));
             const float perpX = -deltaY * inverseLineLength * halfLineWidth;
             const float perpY = deltaX * inverseLineLength * halfLineWidth;
 

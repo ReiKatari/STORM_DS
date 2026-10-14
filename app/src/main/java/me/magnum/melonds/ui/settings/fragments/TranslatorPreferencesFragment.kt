@@ -1,8 +1,16 @@
 package me.magnum.melonds.ui.settings.fragments
 
 import android.os.Bundle
+import android.widget.Toast
+import androidx.preference.EditTextPreference
+import androidx.preference.ListPreference
+import androidx.preference.Preference
+import androidx.preference.SeekBarPreference
+import androidx.preference.SwitchPreferenceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.R
+import me.magnum.melonds.translator.engine.TranslationCache
+import me.magnum.melonds.translator.tts.GameTtsManager
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 
 @AndroidEntryPoint
@@ -11,64 +19,143 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_translator, rootKey)
 
-        val translatorEnabledPref = findPreference<androidx.preference.SwitchPreferenceCompat>("translator_enabled")
-        val ttsEnabledPref = findPreference<androidx.preference.SwitchPreferenceCompat>("translator_tts_enabled")
-        val voiceEnginePref = findPreference<androidx.preference.ListPreference>(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE)
-        val localVoiceStudioPref = findPreference<androidx.preference.SwitchPreferenceCompat>("translator_local_voice_actor_studio")
+        val lang = resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
+
+        val translatorEnabledPref = findPreference<SwitchPreferenceCompat>("translator_enabled")
+        val ttsEnabledPref = findPreference<SwitchPreferenceCompat>("translator_tts_enabled")
+        val voiceEnginePref = findPreference<ListPreference>(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE)
+        val voiceModelPref = findPreference<ListPreference>("translator_local_voice_model")
+        val pitchVariancePref = findPreference<SeekBarPreference>(GameTtsManager.PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE)
+        val ttsSpeedPref = findPreference<SeekBarPreference>(GameTtsManager.PREF_TRANSLATOR_TTS_SPEED)
+
+        ttsSpeedPref?.apply {
+            title = when (lang) {
+                "ru" -> "Скорость речи озвучки (%)"
+                "de" -> "Sprechgeschwindigkeit (%)"
+                "fr" -> "Vitesse de parole (%)"
+                "zh" -> "语音朗读语速 (%)"
+                "ja" -> "音声読み上げ速度 (%)"
+                else -> "Speech rate (%)"
+            }
+            summary = when (lang) {
+                "ru" -> "Темп произношения переведённых реплик (100% — стандартный)"
+                "de" -> "Sprechtempo für übersetzte Dialoge (100% ist Standard)"
+                "fr" -> "Cadence de lecture des dialogues traduits (100% par défaut)"
+                "zh" -> "调整已翻译对话的朗读速度（100% 为标准语速）"
+                "ja" -> "翻訳されたセリフの読み上げテンポ（100%が標準）"
+                else -> "Playback speed for translated dialogue (100% is normal)"
+            }
+        }
+
+        fun updateMultiVoiceControlsState(engineValue: String?, ttsActive: Boolean) {
+            val isMultiVoice = (engineValue ?: "neural_edge") != "single"
+            voiceModelPref?.isVisible = isMultiVoice
+            voiceModelPref?.isEnabled = isMultiVoice && ttsActive
+            pitchVariancePref?.isVisible = isMultiVoice
+            pitchVariancePref?.isEnabled = isMultiVoice && ttsActive
+        }
+
+        updateMultiVoiceControlsState(voiceEnginePref?.value, ttsEnabledPref?.isChecked == true)
 
         translatorEnabledPref?.setOnPreferenceChangeListener { _, newValue ->
             val isEnabled = newValue as? Boolean ?: false
             if (!isEnabled) {
                 ttsEnabledPref?.isChecked = false
+                updateMultiVoiceControlsState(voiceEnginePref?.value, false)
             }
+            true
+        }
+
+        ttsEnabledPref?.setOnPreferenceChangeListener { _, newValue ->
+            val isTtsEnabled = newValue as? Boolean ?: false
+            updateMultiVoiceControlsState(voiceEnginePref?.value, isTtsEnabled)
             true
         }
 
         voiceEnginePref?.setOnPreferenceChangeListener { _, newValue ->
             val chosen = newValue as? String ?: "neural_edge"
-            val isNeural = chosen == "neural_edge"
-            val isMulti = chosen != "single"
-            val isLocalMulti = chosen == "local_multi"
-
-            localVoiceStudioPref?.isChecked = isLocalMulti
-
-            preferenceManager.sharedPreferences?.edit()
-                ?.putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, isNeural)
-                ?.putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, isMulti)
-                ?.putBoolean("translator_local_voice_actor_studio", isLocalMulti)
-                ?.apply()
+            updateMultiVoiceControlsState(chosen, ttsEnabledPref?.isChecked == true)
             true
         }
 
-        localVoiceStudioPref?.setOnPreferenceChangeListener { _, newValue ->
-            val isEnabled = newValue as? Boolean ?: false
-            if (isEnabled) {
-                voiceEnginePref?.value = "local_multi"
-                preferenceManager.sharedPreferences?.edit()
-                    ?.putString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "local_multi")
-                    ?.putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
-                    ?.putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
-                    ?.apply()
-            } else {
-                if (voiceEnginePref?.value == "local_multi") {
-                    voiceEnginePref.value = "neural_edge"
-                    preferenceManager.sharedPreferences?.edit()
-                        ?.putString(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge")
-                        ?.putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, true)
-                        ?.putBoolean(me.magnum.melonds.translator.tts.GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
-                        ?.apply()
-                }
+        findPreference<Preference>("pref_translator_regions")?.apply {
+            isVisible = true
+            title = when (lang) {
+                "ru" -> "Сбросить зоны OCR и позицию кнопки"
+                "de" -> "OCR-Bereiche und Tastenposition zurücksetzen"
+                "fr" -> "Réinitialiser les zones OCR et la position du bouton"
+                "zh" -> "重置 OCR 区域与悬浮按钮位置"
+                "ja" -> "OCR領域とボタン位置をリセット"
+                else -> "Reset OCR regions and button position"
             }
-            true
+            summary = when (lang) {
+                "ru" -> "Очистить сохранённые области захвата текста и вернуть кнопку TR на место по умолчанию"
+                "de" -> "Gespeicherte Erfassungsbereiche löschen und TR-Taste zurücksetzen"
+                "fr" -> "Effacer les zones de capture enregistrées et replacer le bouton TR par défaut"
+                "zh" -> "清除已保存的屏幕识别区域并将 TR 按钮恢复到默认位置"
+                "ja" -> "保存されたテキスト認識領域を消去し、TRボタンを初期位置に戻します"
+                else -> "Clear saved capture areas and restore the floating TR button to its default position"
+            }
+            setOnPreferenceClickListener {
+                val prefs = preferenceManager.sharedPreferences
+                if (prefs != null) {
+                    val editor = prefs.edit()
+                    prefs.all.keys
+                        .filter { it == "translator_saved_regions" || it.startsWith("translator_saved_regions_") }
+                        .forEach { editor.remove(it) }
+                    editor.remove("pref_translator_float_btn_x_ratio")
+                    editor.remove("pref_translator_float_btn_y_ratio")
+                    editor.apply()
+                }
+                val toastText = when (lang) {
+                    "ru" -> "Зоны захвата OCR и позиция кнопки сброшены"
+                    "de" -> "OCR-Erfassungsbereiche und Tastenposition zurückgesetzt"
+                    "fr" -> "Zones OCR et position du bouton réinitialisées"
+                    "zh" -> "OCR 识别区域和按钮位置已重置"
+                    "ja" -> "OCR領域とボタンの位置をリセットしました"
+                    else -> "OCR capture regions and button position reset"
+                }
+                Toast.makeText(requireContext(), toastText, Toast.LENGTH_SHORT).show()
+                true
+            }
         }
 
-        // The region editor is only reachable in-game (translator overlay -> settings sheet),
-        // there is no entry point from the settings screen, so do not show a dead item here.
-        findPreference<androidx.preference.Preference>("pref_translator_regions")?.isVisible = false
+        findPreference<Preference>("pref_translator_clear_cache")?.apply {
+            isVisible = true
+            title = when (lang) {
+                "ru" -> "Очистить кэш переводов"
+                "de" -> "Übersetzungscache leeren"
+                "fr" -> "Vider le cache de traduction"
+                "zh" -> "清除翻译缓存"
+                "ja" -> "翻訳キャッシュを消去"
+                else -> "Clear translation cache"
+            }
+            summary = when (lang) {
+                "ru" -> "Удалить сохранённые переводы диалогов из памяти и с диска"
+                "de" -> "Gespeicherte Dialogübersetzungen aus Speicher und Datenträger löschen"
+                "fr" -> "Supprimer les traductions de dialogues mises en cache en mémoire et sur le disque"
+                "zh" -> "删除内存和磁盘中已缓存的游戏对话翻译"
+                "ja" -> "メモリとディスクに保存された翻訳キャッシュを削除します"
+                else -> "Remove cached dialogue translations from memory and disk"
+            }
+            setOnPreferenceClickListener {
+                TranslationCache(requireContext()).clear()
+                val toastText = when (lang) {
+                    "ru" -> "Кэш переводов очищен"
+                    "de" -> "Übersetzungscache geleert"
+                    "fr" -> "Cache de traduction vidé"
+                    "zh" -> "翻译缓存已清除"
+                    "ja" -> "翻訳キャッシュを消去しました"
+                    else -> "Translation cache cleared"
+                }
+                Toast.makeText(requireContext(), toastText, Toast.LENGTH_SHORT).show()
+                true
+            }
+        }
 
         SECRET_KEYS.forEach { key ->
-            findPreference<androidx.preference.EditTextPreference>(key)?.apply {
-                summaryProvider = androidx.preference.Preference.SummaryProvider<androidx.preference.EditTextPreference> { pref ->
+            findPreference<EditTextPreference>(key)?.apply {
+                summaryProvider = Preference.SummaryProvider<EditTextPreference> { pref ->
                     maskSecret(pref.text) ?: pref.context.getString(R.string.not_set)
                 }
                 setOnBindEditTextListener { editText ->
@@ -78,7 +165,7 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
         }
     }
 
-    override fun isPasswordPreference(preference: androidx.preference.EditTextPreference): Boolean {
+    override fun isPasswordPreference(preference: EditTextPreference): Boolean {
         return preference.key in SECRET_KEYS
     }
 

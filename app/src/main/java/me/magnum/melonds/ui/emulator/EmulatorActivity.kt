@@ -282,7 +282,7 @@ class EmulatorActivity : AppCompatActivity() {
     private var liveDrsScale = 1
     private var drsLowFpsCounter = 0
     private var drsStableFpsCounter = 0
-    private val drsScaleSteps = intArrayOf(16, 12, 8, 6, 4, 3, 2, 1)
+    private val drsScaleSteps = intArrayOf(16, 12, 8, 7, 6, 5, 4, 3, 2, 1)
     private val frontendInputHandler = object : FrontendInputHandler() {
         var fastForwardEnabled = false
             private set
@@ -399,7 +399,12 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private val motionSensorManager by lazy {
-        me.magnum.melonds.ui.emulator.input.MotionSensorManager(this)
+        me.magnum.melonds.ui.emulator.input.MotionSensorManager(
+            context = this,
+            onShakeDetected = { active ->
+                MelonEmulator.setMicrophoneEnabled(active || frontendInputHandler.microphoneEnabled)
+            }
+        )
     }
 
     private val screenCaptureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -675,8 +680,15 @@ class EmulatorActivity : AppCompatActivity() {
         updateOrientation(resources.configuration)
         disableScreenTimeOut()
 
-        val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
-        val skinType = PreferenceManager.getDefaultSharedPreferences(this).getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
+        val defaultPrefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val oledBatterySaver = defaultPrefs.getBoolean("video_oled_battery_saver", false)
+        val consoleSkinEnabled = !oledBatterySaver && defaultPrefs.getBoolean("video_console_skin_enabled", false)
+        val skinType = defaultPrefs.getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
+
+        if (oledBatterySaver) {
+            binding.layoutRoot.setBackgroundColor(android.graphics.Color.BLACK)
+            window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
+        }
 
         if (consoleSkinEnabled) {
             binding.layoutConsoleSkin.visibility = View.VISIBLE
@@ -1899,7 +1911,10 @@ class EmulatorActivity : AppCompatActivity() {
         translatorManager.syncOverlaySettings()
 
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        melonTouchHandler.turboMacrosEnabled = prefs.getBoolean("input_turbo_macros_enabled", false)
         val gyroEnabled = prefs.getBoolean("input_gyro_aiming_enabled", false) || prefs.getBoolean("pref_motion_gyro_enabled", false)
+        val gyroMicEnabled = prefs.getBoolean("input_gyro_mic_enabled", false)
+        motionSensorManager.shakeMicEnabled = gyroMicEnabled
         if (gyroEnabled) {
             val modeStr = prefs.getString("pref_motion_gyro_mode", "touch_aim")
             motionSensorManager.gyroMode = when (modeStr) {
@@ -1920,7 +1935,11 @@ class EmulatorActivity : AppCompatActivity() {
             motionSensorManager.startListening()
         } else {
             motionSensorManager.gyroMode = me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
-            motionSensorManager.stopListening()
+            if (gyroMicEnabled) {
+                motionSensorManager.startListening()
+            } else {
+                motionSensorManager.stopListening()
+            }
         }
 
         if (
@@ -2032,18 +2051,23 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun setupResolutionHud() {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val rendererPref = prefs.getString("video_renderer", "opengl") ?: "opengl"
+        val fallbackRenderer = runCatching { VideoRenderer.valueOf(rendererPref.uppercase()) }.getOrDefault(VideoRenderer.OPENGL)
+        val renderer = currentRuntimeRendererConfiguration?.renderer ?: fallbackRenderer
+        val configuredScale = currentRuntimeRendererConfiguration?.resolutionScaling
+            ?: (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1)
+        baseInternalResolutionScale = configuredScale.coerceIn(1, 16)
+        if (liveDrsScale <= 1 || liveDrsScale > baseInternalResolutionScale) {
+            liveDrsScale = if (renderer == VideoRenderer.SOFTWARE) 1 else baseInternalResolutionScale
+        }
+        drsLowFpsCounter = 0
+        drsStableFpsCounter = 0
+
         val position = prefs.getString("resolution_hud_position", "hidden") ?: "hidden"
         if (position == "hidden" || !bootRomReady.value) {
             binding.textResolution.isGone = true
             return
         }
-
-        val rendererPref = prefs.getString("video_renderer", "opengl") ?: "opengl"
-        val renderer = runCatching { VideoRenderer.valueOf(rendererPref.uppercase()) }.getOrDefault(VideoRenderer.OPENGL)
-        baseInternalResolutionScale = (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1).coerceAtLeast(1)
-        liveDrsScale = if (renderer == VideoRenderer.SOFTWARE) 1 else baseInternalResolutionScale
-        drsLowFpsCounter = 0
-        drsStableFpsCounter = 0
 
         updateResolutionHudText(fps = null)
 

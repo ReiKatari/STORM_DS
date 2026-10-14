@@ -67,6 +67,25 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             startActivity(intent)
             true
         }
+
+        findPreference<Preference>("credits_libraries")?.setOnPreferenceClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.about_credits_libraries_title)
+                .setMessage(
+                    "• melonDS Core (Arisotura & melonDS team)\n" +
+                    "• DraStic Open-Source Replacement BIOS\n" +
+                    "• Librashader (SnowflakePowered — RetroArch Slang Shaders)\n" +
+                    "• rcheevos (RetroAchievements C Library)\n" +
+                    "• Google ML Kit Text Recognition & Translation\n" +
+                    "• Jetpack Compose, Material 3 & AndroidX\n" +
+                    "• Dagger Hilt, Kotlin Coroutines & Serialization\n" +
+                    "• OkHttp, Retrofit, Room & Markwon\n" +
+                    "• Picasso & Coil Image Loaders"
+                )
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            true
+        }
     }
 
     override fun getTitle(): String = getString(R.string.about_app_title)

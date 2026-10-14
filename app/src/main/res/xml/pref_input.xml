@@ -85,6 +85,13 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
+        <ListPreference
+                android:key="pref_motion_gyro_mode"
+                android:dependency="input_gyro_aiming_enabled"
+                android:defaultValue="touch_aim"
+                app:useSimpleSummaryProvider="true"
+                app:iconSpaceReserved="false" />
+
         <SeekBarPreference
                 android:key="input_gyro_sensitivity_x"
                 android:title="@string/input_gyro_sensitivity_x_title"

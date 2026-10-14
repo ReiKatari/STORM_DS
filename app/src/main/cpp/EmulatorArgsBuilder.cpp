@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <codecvt>
 #include <optional>
+#include <random>
 #include <vector>
 #include <string>
 #include "Args.h"
@@ -11,6 +12,7 @@
 #include "PlatformAndroid.h"
 #include "SDCardArgsBuilder.h"
 #include "SPU.h"
+#include "net/Net_Slirp.h"
 
 using namespace melonDS;
 using namespace melonDS::Platform;
@@ -166,13 +168,14 @@ void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& fir
     MacAddress configuredMac;
     if (firmwareConfig.randomizeMacAddress)
     {
+        std::random_device rd;
         configuredMac = mac;
-        configuredMac[3] = rand() % 256;
-        configuredMac[4] = rand() % 256;
-        configuredMac[5] = rand() % 256;
+        configuredMac[3] = static_cast<u8>(rd() & 0xFF);
+        configuredMac[4] = static_cast<u8>(rd() & 0xFF);
+        configuredMac[5] = static_cast<u8>(rd() & 0xFF);
         replaceMac = true;
     }
-    else if (isInternalFirmware)
+    else if (isInternalFirmware || firmwareConfig.macAddress[0] != '\0')
     {
         replaceMac = parseMacAddress(firmwareConfig.macAddress, &configuredMac);
     }
@@ -195,6 +198,25 @@ void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& fir
         header.UpdateChecksum();
     }
 
+    // Configure WFC DNS override in Net_Slirp and in firmware's melonAP slot
+    melonDS::Net_Slirp::SetCustomDNS(configuration.wfcDnsIp);
+    if (configuration.wfcDnsIp != 0)
+    {
+        std::array<u8, 4> dnsBytes = {
+            static_cast<u8>((configuration.wfcDnsIp >> 24) & 0xFF),
+            static_cast<u8>((configuration.wfcDnsIp >> 16) & 0xFF),
+            static_cast<u8>((configuration.wfcDnsIp >> 8) & 0xFF),
+            static_cast<u8>(configuration.wfcDnsIp & 0xFF)
+        };
+        auto& accessPoints = firmware.GetAccessPoints();
+        if (!accessPoints.empty())
+        {
+            accessPoints[0].PrimaryDns = dnsBytes;
+            accessPoints[0].SecondaryDns = dnsBytes;
+            accessPoints[0].UpdateChecksum();
+        }
+    }
+
     firmware.UpdateChecksums();
 }
 
@@ -203,46 +225,67 @@ Firmware generateFirmware(const EmulatorConfiguration& configuration, int type, 
     const std::string kWifiSettingsPath = "wfcsettings.bin";
 
     // Construct the default firmware...
-    std::string settingspath;
     Firmware firmware = Firmware(type);
     assert(firmware.Buffer() != nullptr);
 
-    // If using generated firmware, we keep the wi-fi settings on the host disk separately.
-    // Wi-fi access point data includes Nintendo WFC settings,
-    // and if we didn't keep them then the player would have to reset them in each session.
-    // We don't need to save the whole firmware, just the part that may actually change.
     if (FileHandle* f = OpenInternalFile(kWifiSettingsPath, Read))
-    {// If we have Wi-fi settings to load...
+    {
         constexpr unsigned TOTAL_WFC_SETTINGS_SIZE = 3 * (sizeof(Firmware::WifiAccessPoint) + sizeof(Firmware::ExtendedWifiAccessPoint));
+        const u64 fileLen = FileLength(f);
+        const u32 wfcOffset = firmware.GetExtendedAccessPointOffset();
 
-        if (!FileRead(firmware.GetExtendedAccessPointPosition(), TOTAL_WFC_SETTINGS_SIZE, 1, f))
-        { // If we couldn't read the Wi-fi settings from this file...
-            Log(Warn, "Failed to read Wi-fi settings from \"%s\"; using defaults instead\n", kWifiSettingsPath.c_str());
+        bool seekOk = true;
+        if (fileLen >= wfcOffset + TOTAL_WFC_SETTINGS_SIZE)
+        {
+            // Full firmware blob saved by SaveManager: seek to the WFC settings region
+            seekOk = FileSeek(f, wfcOffset, FileSeekOrigin::Start);
+        }
+        else if (fileLen < TOTAL_WFC_SETTINGS_SIZE)
+        {
+            seekOk = false;
+        }
 
-            // The access point and extended access point segments might
-            // be in different locations depending on the firmware revision,
-            // but our generated firmware always keeps them next to each other.
-            // (Extended access points first, then regular ones.)
-            firmware.GetAccessPoints() = {
-                Firmware::WifiAccessPoint(type),
-                Firmware::WifiAccessPoint(),
-                Firmware::WifiAccessPoint(),
-            };
+        const bool readOk = seekOk && (FileRead(firmware.GetExtendedAccessPointPosition(), TOTAL_WFC_SETTINGS_SIZE, 1, f) == 1);
+        CloseFile(f);
 
-            firmware.GetExtendedAccessPoints() = {
-                Firmware::ExtendedWifiAccessPoint(),
-                Firmware::ExtendedWifiAccessPoint(),
-                Firmware::ExtendedWifiAccessPoint(),
-            };
+        auto& aps = firmware.GetAccessPoints();
+        // Also heal previously corrupted wfcsettings.bin where slot 0 (melonAP) was overwritten with 0xFF/header bytes
+        const bool slot0Corrupted = aps.empty()
+            || aps[0].Status == Firmware::AccessPointStatus::NotConfigured
+            || static_cast<u8>(aps[0].Status) == 0xFF
+            || aps[0].SSID[0] == '\0'
+            || static_cast<u8>(aps[0].SSID[0]) == 0xFF;
+
+        if (!readOk || slot0Corrupted)
+        {
+            if (!readOk)
+                Log(Warn, "Failed to read Wi-fi settings from \"%s\"; using defaults instead\n", kWifiSettingsPath.c_str());
+            else
+                Log(Info, "Restoring default melonAP in Wi-fi settings slot 0\n");
+
+            if (!readOk)
+            {
+                firmware.GetAccessPoints() = {
+                    Firmware::WifiAccessPoint(type),
+                    Firmware::WifiAccessPoint(),
+                    Firmware::WifiAccessPoint(),
+                };
+                firmware.GetExtendedAccessPoints() = {
+                    Firmware::ExtendedWifiAccessPoint(),
+                    Firmware::ExtendedWifiAccessPoint(),
+                    Firmware::ExtendedWifiAccessPoint(),
+                };
+            }
+            else
+            {
+                aps[0] = Firmware::WifiAccessPoint(type);
+            }
             firmware.UpdateChecksums();
-            CloseFile(f);
         }
     }
 
     customizeFirmware(configuration, firmware, true, instanceId);
 
-    // If we don't have Wi-fi settings to load,
-    // then the defaults will have already been populated by the constructor.
     return firmware;
 }
 
@@ -549,6 +592,7 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
                     settings.Language = Firmware::Language::English;
                 else
                     settings.Language = static_cast<Firmware::Language>(firmcfg.language);
+                mount.ApplyUserData(settings);
             }
         }
         else

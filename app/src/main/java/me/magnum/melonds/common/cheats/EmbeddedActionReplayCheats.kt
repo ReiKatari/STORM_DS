@@ -53,6 +53,48 @@ object EmbeddedActionReplayCheats {
         return@withContext true
     }
 
+    suspend fun populateAllStandardGames(database: MelonDatabase): Int = withContext(Dispatchers.IO) {
+        val standardGames = listOf(
+            Triple("IPKE", "Pokémon HeartGold Version", "E4B0DC73"),
+            Triple("IPGE", "Pokémon SoulSilver Version", ""),
+            Triple("CPUE", "Pokémon Platinum Version", ""),
+            Triple("ADAE", "Pokémon Diamond Version", ""),
+            Triple("APAE", "Pokémon Pearl Version", ""),
+            Triple("IRBO", "Pokémon Black Version", ""),
+            Triple("IRAE", "Pokémon White Version", ""),
+            Triple("IREO", "Pokémon Black Version 2", ""),
+            Triple("IRDO", "Pokémon White Version 2", ""),
+            Triple("UBTE", "Batman: The Brave and the Bold", "08D5D422"),
+            Triple("A2DE", "New Super Mario Bros.", ""),
+            Triple("ASME", "Super Mario 64 DS", ""),
+            Triple("AMCE", "Mario Kart DS", ""),
+            Triple("AZEE", "The Legend of Zelda: Phantom Hourglass", ""),
+            Triple("BKIE", "The Legend of Zelda: Spirit Tracks", ""),
+            Triple("ACVE", "Castlevania: Dawn of Sorrow", ""),
+            Triple("BQRE", "Castlevania: Portrait of Ruin", ""),
+            Triple("YC3E", "Castlevania: Order of Ecclesia", ""),
+            Triple("AGQE", "Phoenix Wright: Ace Attorney", ""),
+            Triple("AL5E", "Professor Layton and the Curious Village", ""),
+            Triple("YDQE", "Dragon Quest IX: Sentinels of the Starry Skies", ""),
+            Triple("YQTE", "Chrono Trigger", ""),
+            Triple("CLTE", "Kingdom Hearts: 358/2 Days", ""),
+            Triple("ADME", "Animal Crossing: Wild World", ""),
+            Triple("AWLE", "The World Ends with You", ""),
+            Triple("YAKE", "Kirby Super Star Ultra", ""),
+            Triple("ASCE", "Sonic Rush", ""),
+            Triple("AMHE", "Metroid Prime Hunters", ""),
+            Triple("BO5E", "Golden Sun: Dark Dawn", ""),
+            Triple("BEBE", "Inazuma Eleven", ""),
+        )
+        var count = 0
+        for ((code, title, checksum) in standardGames) {
+            if (populateIfEmpty(database, code, title, checksum)) {
+                count++
+            }
+        }
+        count
+    }
+
     private suspend fun insertCheatsToDatabase(
         database: MelonDatabase,
         gameCode: String,

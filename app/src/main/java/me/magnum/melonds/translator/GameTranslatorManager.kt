@@ -109,6 +109,7 @@ class GameTranslatorManager(
             PREF_TRANSLATOR_TARGET_LANG -> {
                 mainHandler.post {
                     textRecognizer.clearCache()
+                    ocrContextGraph.clearDialogueHistory()
                     lastTranslatedRawText = ""
                     lastFrameDHash = 0L
                     translationCache.clearMemory()
@@ -131,6 +132,7 @@ class GameTranslatorManager(
         currentGameCode = gameCode
         currentGameHash = gameHash
         Log.i(TAG, "Active ROM set: title='$romTitle', code='$gameCode', hash='$gameHash'")
+        ocrContextGraph.clearDialogueHistory()
         translationCache.setGameKey(getGameStorageKey())
         loadRegionsForCurrentGame()
     }
@@ -177,9 +179,25 @@ class GameTranslatorManager(
         Log.i(TAG, "Saved ${regions.size} OCR regions under key [$perGameKey]")
     }
 
+    private val ocrContextGraph = me.magnum.melonds.translator.context.OcrContextGraph
+    private var lastErrorToastTimeMs: Long = 0L
+
+    fun getSourceLang(): String {
+        return preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
+    }
+
+    private fun showThrottledErrorToast(message: String?, isAuto: Boolean) {
+        val cleanMsg = message?.takeIf { it.isNotBlank() } ?: activity.getString(R.string.translator_error_network)
+        val now = System.currentTimeMillis()
+        if (isAuto && now - lastErrorToastTimeMs < 5000L) return
+        lastErrorToastTimeMs = now
+        mainHandler.post {
+            Toast.makeText(activity, cleanMsg, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun speakTts(text: String, targetLang: String = "ru") {
-        val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false) ||
-                    preferences.getBoolean("translator_local_voice_actor_studio", false)
+        val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
         if (!ttsOn) return
         ttsManager.speak(text, targetLang)
     }
@@ -198,7 +216,8 @@ class GameTranslatorManager(
             translateSpecificRegion(lassoRegion)
         }
         overlay.onSpeakWordRequested = { queryWord ->
-            speakTts(queryWord)
+            val src = getSourceLang()
+            speakTts(queryWord, if (src == "auto") "en" else src)
         }
         overlay.onDismissRequested = {
             dismissTranslation()
@@ -629,44 +648,78 @@ class GameTranslatorManager(
                 }
                 lastTranslatedRawText = currentMerged
 
-                val engine = getActiveTranslationEngine()
+                val engine = resolveEngine()
+                val engineType = preferences.getString(PREF_TRANSLATOR_ENGINE, "google") ?: "google"
                 Log.i(TAG, "Translating ${blocks.size} blocks with ${engine.javaClass.simpleName} ($sourceLang -> $targetLang)")
 
-                withTimeoutOrNull(8000) {
-                    coroutineScope {
-                        blocks.map { block ->
-                            async(Dispatchers.IO) {
-                                val preparedText = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
-                                val textToTranslate = preparedText.ifBlank { block.originalText.trim() }
-                                val engineType = preferences.getString(PREF_TRANSLATOR_ENGINE, "google") ?: "google"
-                                val cached = translationCache.get(engineType, sourceLang, targetLang, textToTranslate)
-                                if (cached != null) {
-                                    block.translatedText = cached
-                                } else {
-                                    var translated = try {
-                                        withTimeoutOrNull(5000) {
-                                            val raw = engine.translate(textToTranslate, sourceLang, targetLang)
-                                            me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.w(TAG, "Translation error for block '${block.originalText}': ${e.message}", e)
-                                        null
-                                    }
+                val preparedTexts = blocks.map { block ->
+                    val prepared = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
+                    prepared.ifBlank { block.originalText.trim() }
+                }
 
-                                    val finalTranslation = translated?.takeIf { it.isNotBlank() } ?: block.originalText
-                                    if (finalTranslation.isNotBlank() && !finalTranslation.equals(textToTranslate, ignoreCase = true) && !finalTranslation.equals(block.originalText, ignoreCase = true)) {
-                                        translationCache.put(engineType, sourceLang, targetLang, textToTranslate, finalTranslation)
-                                    }
-                                    block.translatedText = finalTranslation
-                                }
+                val uncachedBlocks = mutableListOf<Int>()
+                val uncachedTexts = mutableListOf<String>()
+                for (i in blocks.indices) {
+                    val textToTranslate = preparedTexts[i]
+                    val cached = translationCache.get(engineType, sourceLang, targetLang, textToTranslate)
+                    if (cached != null) {
+                        blocks[i].translatedText = cached
+                        ocrContextGraph.recordDialogueTurn(textToTranslate, cached)
+                    } else {
+                        uncachedBlocks.add(i)
+                        uncachedTexts.add(textToTranslate)
+                    }
+                }
+
+                if (uncachedBlocks.isNotEmpty()) {
+                    try {
+                        if (engine is MlKitOnDeviceTranslateEngine) {
+                            val prepared = withTimeoutOrNull(30_000L) {
+                                engine.prepare(sourceLang, targetLang)
+                                true
                             }
-                        }.awaitAll()
+                            if (prepared == null) {
+                                throw TranslationException(activity.getString(R.string.translator_error_mlkit_model))
+                            }
+                        }
+
+                        val contextPrompt = ocrContextGraph.buildTranslationContextPrompt()
+                        val batchResults = withTimeoutOrNull(12_000L) {
+                            engine.translateBatch(uncachedTexts, sourceLang, targetLang, contextPrompt)
+                        } ?: throw TranslationException(activity.getString(R.string.translator_error_network))
+
+                        for (k in uncachedBlocks.indices) {
+                            val blockIdx = uncachedBlocks[k]
+                            val block = blocks[blockIdx]
+                            val textToTranslate = uncachedTexts[k]
+                            val rawTranslated = batchResults.getOrNull(k)
+                            val sanitized = rawTranslated?.let { raw ->
+                                val polished = me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
+                                ocrContextGraph.sanitizeTranslation(polished, targetLang)
+                            }
+                            val finalTranslation = sanitized?.takeIf { it.isNotBlank() } ?: block.originalText
+                            if (finalTranslation.isNotBlank() &&
+                                !finalTranslation.equals(textToTranslate, ignoreCase = true) &&
+                                !finalTranslation.equals(block.originalText, ignoreCase = true)
+                            ) {
+                                translationCache.put(engineType, sourceLang, targetLang, textToTranslate, finalTranslation)
+                            }
+                            block.translatedText = finalTranslation
+                            ocrContextGraph.recordDialogueTurn(textToTranslate, finalTranslation)
+                        }
+                    } catch (e: TranslationException) {
+                        Log.w(TAG, "Translation failed: ${e.message}", e)
+                        showThrottledErrorToast(e.userMessage.ifBlank { e.message }, isAuto)
+                        for (idx in uncachedBlocks) {
+                            if (blocks[idx].translatedText.isBlank()) {
+                                blocks[idx].translatedText = blocks[idx].originalText
+                            }
+                        }
                     }
                 }
 
                 overlayView?.setTranslatedBlocks(blocks)
-                val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false) ||
-                            preferences.getBoolean("translator_local_voice_actor_studio", false)
+                val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
                 if (ttsOn) {
                     val speechText = blocks.joinToString(". ") { it.translatedText }
                     speakTts(speechText, targetLang)
@@ -674,7 +727,7 @@ class GameTranslatorManager(
             } catch (t: Throwable) {
                 Log.e(TAG, "Process captured frame failed", t)
                 val msg = t.message?.takeIf { it.isNotBlank() } ?: activity.getString(R.string.translator_no_text_found)
-                Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+                showThrottledErrorToast(msg, isAuto)
                 if (isPausedByTranslator) {
                     isPausedByTranslator = false
                     try { onResumeEmulator() } catch (_: Throwable) {}
@@ -685,10 +738,16 @@ class GameTranslatorManager(
         }
     }
 
-    private fun getActiveTranslationEngine(): ITranslationEngine {
+    private fun getActiveTranslationEngine(): ITranslationEngine = resolveEngine()
+
+    private fun resolveEngine(): ITranslationEngine {
         val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
         return when (type) {
-            TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(okHttpClient, MlKitOnDeviceTranslateEngine(activity))
+            TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(
+                okHttpClient,
+                MlKitOnDeviceTranslateEngine(activity, downloadIfMissing = false),
+                activity
+            )
             TranslatorEngineType.MLKIT_OFFLINE -> MlKitOnDeviceTranslateEngine(activity)
             TranslatorEngineType.DEEPL -> DeepLEngine(okHttpClient, context = activity) {
                 preferences.getString(PREF_TRANSLATOR_DEEPL_KEY, "").orEmpty()

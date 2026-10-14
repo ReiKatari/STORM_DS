@@ -11,10 +11,15 @@ import javax.inject.Inject
 @HiltViewModel
 class CheatsPreferencesViewModel @Inject constructor(
     private val cheatsRepository: CheatsRepository,
+    private val database: me.magnum.melonds.database.MelonDatabase,
 ) : ViewModel() {
 
     fun importCheatsDatabase(databaseUri: Uri) {
         cheatsRepository.importCheats(databaseUri)
+    }
+
+    suspend fun populateBuiltInAndOnlineCheats(): Int {
+        return me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats.populateAllStandardGames(database)
     }
 
     fun areCheatsBeingImported(): Boolean {

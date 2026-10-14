@@ -75,6 +75,7 @@ const uint kFilterQuilez = 5u;
 const uint kFilterLcd = 6u;
 const uint kFilterScanlines = 7u;
 const uint kFilterScale2x = 8u;
+const uint kFilterAiUpscale = 10u;
 const uint kPackedScreenWidth = 256u;
 const uint kPackedScreenHeight = 192u;
 
@@ -2078,7 +2079,7 @@ vec2 uvFromScreenTexel(vec2 texelCoord, bool topScreen)
 
 vec3 filterQuilez(vec2 uv, bool topScreen)
 {
-    vec2 size = vec2(256.0, 192.0);
+    vec2 size = vec2(256.0, 192.0) * float(max(pushConstants.scale, 1u));
     vec2 local = screenLocalCoord(uv, topScreen);
     vec2 p = (local * size) + vec2(0.5);
     vec2 i = floor(p);
@@ -2113,9 +2114,9 @@ vec3 filterLcd(vec2 uv, bool topScreen)
 
 vec3 filterXbr2(vec2 uv, bool topScreen)
 {
-    vec2 texel = compositeDsTexelSize();
+    vec2 texel = compositeTexelSize();
     vec2 local = screenLocalCoord(uv, topScreen);
-    vec2 fp = fract(local * vec2(256.0, 192.0));
+    vec2 fp = fract(local * vec2(256.0, 192.0) * float(max(pushConstants.scale, 1u)));
     vec2 g1 = vec2(0.0, -texel.y) * (step(0.5, fp.x) + step(0.5, fp.y) - 1.0)
         + vec2(-texel.x, 0.0) * (step(0.5, fp.x) - step(0.5, fp.y));
     vec2 g2 = vec2(0.0, -texel.y) * (step(0.5, fp.y) - step(0.5, fp.x))
@@ -2133,7 +2134,7 @@ vec3 filterXbr2(vec2 uv, bool topScreen)
 
 vec3 filterHq2x(vec2 uv, bool topScreen)
 {
-    vec2 dg1 = 0.5 * compositeDsTexelSize();
+    vec2 dg1 = 0.5 * compositeTexelSize();
     vec2 dg2 = vec2(-dg1.x, dg1.y);
     vec2 dx = vec2(dg1.x, 0.0);
     vec2 dy = vec2(0.0, dg1.y);
@@ -2173,7 +2174,7 @@ vec3 filterHq2x(vec2 uv, bool topScreen)
 
 vec3 filterHq4x(vec2 uv, bool topScreen)
 {
-    vec2 dg1 = 0.5 * compositeDsTexelSize();
+    vec2 dg1 = 0.5 * compositeTexelSize();
     vec2 dg2 = vec2(-dg1.x, dg1.y);
     vec2 sd1 = dg1 * 0.5;
     vec2 sd2 = dg2 * 0.5;
@@ -2230,7 +2231,8 @@ vec3 filterHq4x(vec2 uv, bool topScreen)
 
 vec3 filterScale2x(vec2 uv, bool topScreen)
 {
-    vec2 texSize = vec2(float(kPackedScreenWidth), float(kPackedScreenHeight));
+    uint safeScale = max(pushConstants.scale, 1u);
+    vec2 texSize = vec2(float(256u * safeScale), float((384u + 2u) * safeScale));
     vec2 pixelCoord = uv * texSize;
     vec2 fp = fract(pixelCoord);
     vec2 centerUv = (floor(pixelCoord) + 0.5) / texSize;
@@ -2256,6 +2258,64 @@ vec3 filterScale2x(vec2 uv, bool topScreen)
     return (hf && bh && df) ? F : E;
 }
 
+vec2 compositeSize()
+{
+    uint safeScale = max(pushConstants.scale, 1u);
+    return vec2(
+        float(256u * safeScale),
+        float((384u + 2u) * safeScale)
+    );
+}
+
+vec3 filterAiUpscale(vec2 uv, bool topScreen)
+{
+    vec2 texSize = compositeSize();
+    vec2 texel = vec2(1.0) / texSize;
+
+    vec3 c00 = sampleCompositeRgb(uv + vec2(-texel.x, -texel.y), topScreen);
+    vec3 c10 = sampleCompositeRgb(uv + vec2(0.0, -texel.y), topScreen);
+    vec3 c20 = sampleCompositeRgb(uv + vec2(texel.x, -texel.y), topScreen);
+    vec3 c01 = sampleCompositeRgb(uv + vec2(-texel.x, 0.0), topScreen);
+    vec3 c11 = sampleCompositeRgb(uv, topScreen);
+    vec3 c21 = sampleCompositeRgb(uv + vec2(texel.x, 0.0), topScreen);
+    vec3 c02 = sampleCompositeRgb(uv + vec2(-texel.x, texel.y), topScreen);
+    vec3 c12 = sampleCompositeRgb(uv + vec2(0.0, texel.y), topScreen);
+    vec3 c22 = sampleCompositeRgb(uv + vec2(texel.x, texel.y), topScreen);
+
+    const vec3 lumaWeights = vec3(0.299, 0.587, 0.114);
+    float l00 = dot(c00, lumaWeights);
+    float l10 = dot(c10, lumaWeights);
+    float l20 = dot(c20, lumaWeights);
+    float l01 = dot(c01, lumaWeights);
+    float l11 = dot(c11, lumaWeights);
+    float l21 = dot(c21, lumaWeights);
+    float l02 = dot(c02, lumaWeights);
+    float l12 = dot(c12, lumaWeights);
+    float l22 = dot(c22, lumaWeights);
+
+    float gx = (l20 + 2.0 * l21 + l22) - (l00 + 2.0 * l01 + l02);
+    float gy = (l02 + 2.0 * l12 + l22) - (l00 + 2.0 * l10 + l20);
+    vec2 grad = vec2(gx, gy);
+    float gradLen = length(grad);
+
+    vec3 minCol = min(min(min(c00, c10), min(c20, c01)), min(min(c11, c21), min(c02, min(c12, c22))));
+    vec3 maxCol = max(max(max(c00, c10), max(c20, c01)), max(max(c11, c21), max(c02, max(c12, c22))));
+
+    vec2 pushDir = (gradLen > 0.0001) ? (grad / gradLen) : vec2(0.0);
+    float pushStrength = clamp(gradLen * 0.35, 0.0, 0.45);
+    vec3 pushedSample = sampleCompositeRgb(uv + pushDir * texel * pushStrength, topScreen);
+    vec3 edgeRefined = clamp(mix(c11, pushedSample, 0.5), minCol, maxCol);
+
+    vec3 blur = (c10 + c01 + c21 + c12) * 0.15 + (c00 + c20 + c02 + c22) * 0.05 + c11 * 0.20;
+    float localContrast = max(max(maxCol.r - minCol.r, maxCol.g - minCol.g), maxCol.b - minCol.b);
+    float casStrength = mix(0.65, 0.25, clamp(localContrast, 0.0, 1.0));
+    vec3 sharpened = clamp(edgeRefined + (edgeRefined - blur) * casStrength, minCol - vec3(0.02), maxCol + vec3(0.02));
+
+    float outLuma = dot(sharpened, lumaWeights);
+    vec3 result = mix(vec3(outLuma), sharpened, 1.08);
+    return clamp(result, 0.0, 1.0);
+}
+
 vec3 applyCompositePostFilter(vec2 uv, bool topScreen)
 {
     if (pushConstants.filtering == kFilterQuilez)
@@ -2272,6 +2332,8 @@ vec3 applyCompositePostFilter(vec2 uv, bool topScreen)
         return filterScanlines(uv, topScreen);
     if (pushConstants.filtering == kFilterScale2x)
         return filterScale2x(uv, topScreen);
+    if (pushConstants.filtering == kFilterAiUpscale)
+        return filterAiUpscale(uv, topScreen);
     return sampleCompositeRgb(uv, topScreen);
 }
 

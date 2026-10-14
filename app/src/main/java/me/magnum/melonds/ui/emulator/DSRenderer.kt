@@ -322,7 +322,12 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
         screenShader?.delete()
 
         val filtering = rendererConfiguration?.videoFiltering ?: VideoFiltering.NONE
-        val shaderSource = VideoFilterShaderProvider.getShaderSource(filtering)
+        val scale = if (rendererConfiguration?.renderer == me.magnum.melonds.domain.model.VideoRenderer.SOFTWARE) {
+            1
+        } else {
+            (rendererConfiguration?.resolutionScaling ?: 1).coerceAtLeast(1)
+        }
+        val shaderSource = VideoFilterShaderProvider.getShaderSource(filtering, scale)
         screenShader = ShaderFactory.createShaderProgram(shaderSource)
         lastAppliedTextureFilter = -1
     }

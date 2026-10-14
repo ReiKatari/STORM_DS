@@ -168,6 +168,7 @@ fun SaveActionsButton(
 fun NetplayLobbyButton(
     size: Dp,
     rom: Rom,
+    onLaunchRom: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var dialogOpen by remember { mutableStateOf(false) }
@@ -179,7 +180,10 @@ fun NetplayLobbyButton(
         NetplayLobbyDialog(
             rom = rom,
             onDismiss = { dialogOpen = false },
-            onJoinRoom = { dialogOpen = false },
+            onJoinRoom = {
+                dialogOpen = false
+                onLaunchRom()
+            },
         )
     }
 
@@ -510,7 +514,7 @@ fun RomHeroVertical(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
-                NetplayLobbyButton(size = 50.dp, rom = rom)
+                NetplayLobbyButton(size = 50.dp, rom = rom, onLaunchRom = onLaunchRom)
                 Spacer(Modifier.width(8.dp))
                 SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
             }
@@ -648,7 +652,7 @@ fun RomHeroSidePanel(
                     focusRequester = initialFocusRequester,
                     modifier = Modifier.weight(1f),
                 )
-                NetplayLobbyButton(size = 50.dp, rom = rom)
+                NetplayLobbyButton(size = 50.dp, rom = rom, onLaunchRom = onLaunchRom)
                 SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
             }
         }

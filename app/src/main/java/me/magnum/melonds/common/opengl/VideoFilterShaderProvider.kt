@@ -17,7 +17,9 @@ object VideoFilterShaderProvider {
         VideoFiltering.RETROARCH to ShaderProgramSource.RetroArchPassthroughShader,
     )
 
-    fun getShaderSource(filtering: VideoFiltering): ShaderProgramSource {
-        return FILTERING_SHADER_MAP[filtering] ?: ShaderProgramSource.NoFilterShader
+    fun getShaderSource(filtering: VideoFiltering, resolutionScaling: Int = 1): ShaderProgramSource {
+        val base = FILTERING_SHADER_MAP[filtering] ?: ShaderProgramSource.NoFilterShader
+        val scalePixelGrid = filtering != VideoFiltering.LCD && filtering != VideoFiltering.SCANLINES
+        return ShaderProgramSource.withResolutionScale(base, resolutionScaling, scalePixelGrid)
     }
 }

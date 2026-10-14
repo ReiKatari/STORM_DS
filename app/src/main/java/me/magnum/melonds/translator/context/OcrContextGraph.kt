@@ -214,10 +214,54 @@ object OcrContextGraph {
         return persona
     }
 
-    fun sanitizeTranslation(translatedText: String): String {
+    private const val MAX_DIALOGUE_HISTORY = 6
+    private val dialogueHistory = ArrayDeque<String>()
+
+    fun recordDialogueTurn(originalText: String, translatedText: String) {
+        val cleanOrig = originalText.replace('\n', ' ').trim()
+        val cleanTrans = translatedText.replace('\n', ' ').trim()
+        if (cleanOrig.isBlank() || cleanTrans.isBlank()) return
+
+        val entity = findEntity(cleanOrig) ?: findEntity(cleanTrans)
+        if (entity != null) {
+            recordSpeaker(entity)
+        }
+
+        val entry = "$cleanOrig => $cleanTrans"
+        synchronized(dialogueHistory) {
+            if (dialogueHistory.lastOrNull() != entry) {
+                if (dialogueHistory.size >= MAX_DIALOGUE_HISTORY) {
+                    dialogueHistory.removeFirst()
+                }
+                dialogueHistory.addLast(entry)
+            }
+        }
+    }
+
+    fun buildTranslationContextPrompt(): List<String> {
+        val list = mutableListOf<String>()
+        lastActiveSpeaker?.let { speaker ->
+            list.add("Active speaker: ${speaker.name} (${speaker.gender.name.lowercase()}, ${speaker.role})")
+        }
+        synchronized(dialogueHistory) {
+            list.addAll(dialogueHistory)
+        }
+        return list
+    }
+
+    fun clearDialogueHistory() {
+        synchronized(dialogueHistory) {
+            dialogueHistory.clear()
+        }
+        lastActiveSpeaker = null
+    }
+
+    fun sanitizeTranslation(translatedText: String, targetLang: String = "ru"): String {
         var result = translatedText
-        glossary.forEach { (en, ru) ->
-            result = result.replace(Regex("(?i)\\b$en\\b"), ru)
+        if (targetLang.lowercase().startsWith("ru")) {
+            glossary.forEach { (en, ru) ->
+                result = result.replace(Regex("(?i)\\b${Regex.escape(en)}\\b"), ru)
+            }
         }
         return result
     }

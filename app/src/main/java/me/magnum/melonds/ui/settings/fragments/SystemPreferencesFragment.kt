@@ -135,28 +135,24 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             true
         }
 
+        jitPreference.isVisible = false
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             jitPreference.isChecked = false
-            jitPreference.isVisible = false
             stormCompilerPreference.isChecked = false
             stormCompilerPreference.isVisible = false
         } else {
-            // Ensure only one compiler is enabled on launch (default: STORM-Compiler).
-            // Both switches off is a valid state (interpreter mode), so it is not overridden.
-            if (stormCompilerPreference.isChecked && jitPreference.isChecked) {
+            if (jitPreference.isChecked && !stormCompilerPreference.isChecked) {
+                stormCompilerPreference.isChecked = true
+                preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_storm_compiler", true)?.apply()
+            }
+            if (jitPreference.isChecked) {
                 jitPreference.isChecked = false
                 preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_jit", false)?.apply()
             }
-
-            jitPreference.setOnPreferenceChangeListener { _, newValue ->
-                if (newValue == true) {
-                    stormCompilerPreference.isChecked = false
-                }
-                true
-            }
             stormCompilerPreference.setOnPreferenceChangeListener { _, newValue ->
-                if (newValue == true) {
+                if (newValue == false && jitPreference.isChecked) {
                     jitPreference.isChecked = false
+                    preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_jit", false)?.apply()
                 }
                 true
             }
@@ -240,6 +236,19 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         }
         findPreference<Preference>("restore_external_layout")?.setOnPreferenceClickListener {
             restoreExternalLayoutLauncher.launch(null)
+            true
+        }
+
+        val wfcServerPref = findPreference<ListPreference>("system_wfc_server")
+        val wfcCustomDnsPref = findPreference<Preference>("system_wfc_custom_dns")
+        val updateCustomDnsVisibility = { serverVal: String? ->
+            val isCustom = serverVal == "custom"
+            wfcCustomDnsPref?.isVisible = isCustom
+            wfcCustomDnsPref?.isEnabled = isCustom
+        }
+        updateCustomDnsVisibility(wfcServerPref?.value)
+        wfcServerPref?.setOnPreferenceChangeListener { _, newValue ->
+            updateCustomDnsVisibility(newValue as? String)
             true
         }
     }

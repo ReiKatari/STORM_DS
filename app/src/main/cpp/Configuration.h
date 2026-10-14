@@ -130,6 +130,7 @@ struct EmulatorConfiguration
     int arm9OverclockMultiplier = 1;
     bool enable3dWidescreen = false;
     bool enable60FpsPatch = false;
+    uint32_t wfcDnsIp = 0;
 };
 
 }

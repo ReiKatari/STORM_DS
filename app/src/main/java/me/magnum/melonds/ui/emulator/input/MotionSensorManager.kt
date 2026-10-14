@@ -25,7 +25,8 @@ import kotlin.math.sign
 class MotionSensorManager(
     context: Context,
     private val onMotionTilt: ((x: Float, y: Float, z: Float) -> Unit)? = null,
-    private val onDirectionalTilt: ((input: Input, pressed: Boolean) -> Unit)? = null
+    private val onDirectionalTilt: ((input: Input, pressed: Boolean) -> Unit)? = null,
+    private val onShakeDetected: ((active: Boolean) -> Unit)? = null
 ) : SensorEventListener {
 
     enum class GyroMode {
@@ -37,6 +38,7 @@ class MotionSensorManager(
 
     // Configurable parameters
     var gyroMode: GyroMode = GyroMode.OFF
+    var shakeMicEnabled: Boolean = false
     var gyroSensitivityX: Float = 1.25f
     var gyroSensitivityY: Float = 1.25f
     var invertX: Boolean = false
@@ -47,6 +49,8 @@ class MotionSensorManager(
     var accelerationPower: Float = 1.4f
     var gyroAimButtonRequired: Boolean = false
     var isAimButtonPressed: Boolean = false
+    private var isShakeMicActive: Boolean = false
+    private var lastShakeTimeMs: Long = 0L
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -98,6 +102,10 @@ class MotionSensorManager(
             MelonEmulator.onScreenRelease()
             isTouchingScreen = false
         }
+        if (isShakeMicActive) {
+            isShakeMicActive = false
+            onShakeDetected?.invoke(false)
+        }
         resetDirectionalTilt()
     }
 
@@ -140,6 +148,25 @@ class MotionSensorManager(
 
         onMotionTilt?.invoke(ax, ay, az)
 
+        if (shakeMicEnabled) {
+            val magnitude = kotlin.math.sqrt(ax * ax + ay * ay + az * az)
+            val deltaFromGravity = abs(magnitude - SensorManager.GRAVITY_EARTH)
+            val now = android.os.SystemClock.uptimeMillis()
+            if (deltaFromGravity > 10.5f) {
+                lastShakeTimeMs = now
+                if (!isShakeMicActive) {
+                    isShakeMicActive = true
+                    onShakeDetected?.invoke(true)
+                }
+            } else if (isShakeMicActive && now - lastShakeTimeMs > 600L) {
+                isShakeMicActive = false
+                onShakeDetected?.invoke(false)
+            }
+        } else if (isShakeMicActive) {
+            isShakeMicActive = false
+            onShakeDetected?.invoke(false)
+        }
+
         // Stationary detection for automatic zero-drift calibration
         val motionDelta = abs(ax - lastAccel[0]) + abs(ay - lastAccel[1]) + abs(az - lastAccel[2])
         if (motionDelta < 0.08f) {
@@ -153,6 +180,7 @@ class MotionSensorManager(
     }
 
     private fun processGyroscope(values: FloatArray) {
+        if (gyroMode == GyroMode.OFF) return
         val gx = values[0]
         val gy = values[1]
         val gz = values[2]

@@ -166,6 +166,7 @@ add_subdirectory("${ANDROID_CPP_DIR}/faad2" ./faad2)
 add_subdirectory("${ANDROID_CPP_DIR}/rcheevos" ./rcheevos)
 add_subdirectory("${ANDROID_CPP_DIR}/enet" ./enet)
 target_include_directories(enet INTERFACE "${ANDROID_CPP_DIR}/enet/include")
+set(MELONDS_ENABLE_ENET ON CACHE BOOL "" FORCE)
 list(APPEND CMAKE_MODULE_PATH "${CORE_LIB_DIR}/cmake")
 add_subdirectory("${CORE_LIB_DIR}/src/net" ./net-utils)
 

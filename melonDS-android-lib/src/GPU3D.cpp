@@ -705,6 +705,11 @@ void GPU3D::UpdateClipMatrix() noexcept
     ClipMatrixDirty = false;
 
     memcpy(ClipMatrix, ProjMatrix, 16*4);
+    if (Widescreen3D && ClipMatrix[11] != 0 && ClipMatrix[15] == 0 && ClipMatrix[1] == 0 && ClipMatrix[4] == 0)
+    {
+        // Scale 4:3 horizontal perspective FOV to 16:9 (aspect ratio * 3/4) while preserving 2D ortho matrices
+        ClipMatrix[0] = static_cast<s32>((static_cast<s64>(ClipMatrix[0]) * 3) / 4);
+    }
     MatrixMult4x4(ClipMatrix, PosMatrix);
 }
 

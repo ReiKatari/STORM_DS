@@ -302,13 +302,14 @@ void ARMv5::UpdateRegionTimings(u32 addrstart, u32 addrend)
         u8 pu = PU_Map[i];
         u8* bustimings = NDS.ARM9MemTimings[i >> 2];
 
+        const u32 busClockShift = std::min<u32>(NDS.ARM9ClockShift, 2u);
         if (pu & 0x40)
         {
             MemTimings[i][0] = 0xFF;//kCodeCacheTiming;
         }
         else
         {
-            MemTimings[i][0] = bustimings[2] << NDS.ARM9ClockShift;
+            MemTimings[i][0] = bustimings[2] << busClockShift;
         }
 
         if (pu & 0x10)
@@ -319,9 +320,9 @@ void ARMv5::UpdateRegionTimings(u32 addrstart, u32 addrend)
         }
         else
         {
-            MemTimings[i][1] = bustimings[0] << NDS.ARM9ClockShift;
-            MemTimings[i][2] = bustimings[2] << NDS.ARM9ClockShift;
-            MemTimings[i][3] = bustimings[3] << NDS.ARM9ClockShift;
+            MemTimings[i][1] = bustimings[0] << busClockShift;
+            MemTimings[i][2] = bustimings[2] << busClockShift;
+            MemTimings[i][3] = bustimings[3] << busClockShift;
         }
     }
 }

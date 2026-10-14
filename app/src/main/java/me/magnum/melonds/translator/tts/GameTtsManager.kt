@@ -34,10 +34,7 @@ class GameTtsManager(private val context: Context) {
         private const val TAG = "GameTtsManager"
         const val PREF_TRANSLATOR_TTS_VOICE_ENGINE = "translator_tts_voice_engine"
         const val PREF_TRANSLATOR_TTS_LANG = "translator_tts_lang"
-        const val PREF_TRANSLATOR_TTS_MULTI_VOICE = "translator_tts_multi_voice"
         const val PREF_TRANSLATOR_TTS_SPEED = "translator_tts_speed"
-        const val PREF_TRANSLATOR_TTS_NEURAL_ENABLED = "translator_tts_neural_enabled"
-        const val PREF_TRANSLATOR_LOCAL_STUDIO = "translator_local_voice_actor_studio"
         const val PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE = "translator_local_voice_pitch_variance"
 
         // 1. Dark Vigilantes & Heroes
@@ -183,31 +180,36 @@ class GameTtsManager(private val context: Context) {
         )
     }
 
-    enum class CharacterPersona {
-        PROTAGONIST_MALE,      // Mario, Link, Sonic, Crono, Sora
-        PROTAGONIST_FEMALE,    // Samus, Shanoa, Maya, Aqua
-        HERO_DARK_VIGILANTE,   // Batman, Solid Snake, Kratos, Wesker
-        VILLAIN_BOSS,          // Bowser, Ganondorf, King Dedede, Eggman, Giovanni
-        VILLAIN_MANIC,         // Joker, Fawful, Kefka, Dimentio
-        WISE_ELDER,            // Professor Oak, Rowan, Deckard, The Judge
-        YOUNG_BOY,             // Luke Triton, Tails, Ness, Lucas
-        YOUNG_GIRL,            // Pearl Fey, Nanami, Ema Skye, Flora
-        ROYAL_QUEEN,           // Princess Peach, Zelda, Rosalina
-        MERCHANT,              // Tom Nook, Beedle, Shopkeeper
-        SOLDIER,               // Captain, Guard, Soldier, Commissioner Gordon
-        CYBORG_ROBOT,          // Robo, Omega, Pokedex, System AI
-        NARRATOR,              // Story chronicle & descriptive text
-        TSUNDERE,              // Franziska von Karma, Shiki
-        WHISPER_MYSTERIOUS,    // Soft mysterious ethereal whisper
-        DEEP_DEMON,            // Death, Dracula, Giratina, Mewtwo, Akuma
-        CHEERFUL_FAIRY,        // Navi, Tatl, Starlow, Great Fairy, Celebi
-        PIRATE,                // Captain Syrup, Tetra, Sea Rovers
-        MAD_SCIENTIST,         // Dr. Wily, Dr. Crygor, Eccentric Genius
-        GENTLEMAN_SCHOLAR,     // Professor Layton, Miles Edgeworth, Phoenix Wright, Godot
-        GHOST_ETHEREAL,        // King Boo, Gengar, Phantom Spirit
-        KNIGHT_WARRIOR,        // Meta Knight, Marth, Ike
-        COMEDY_GOOFY,          // Wario, Waluigi, Tingle
-        ANGELIC_DIVINE;        // Palutena, Goddess Hylia, Pit, Arceus
+    enum class CharacterPersona(
+        val pitch: Float,
+        val rateMultiplier: Float,
+        val edgePitchHz: Int,
+        val edgeRatePercent: Int
+    ) {
+        PROTAGONIST_MALE(0.88f, 1.00f, 6, 2),          // Mario, Link, Sonic, Crono, Sora
+        PROTAGONIST_FEMALE(1.22f, 1.02f, 2, 0),        // Samus, Shanoa, Maya, Aqua
+        HERO_DARK_VIGILANTE(0.40f, 0.82f, -18, -8),    // Batman, Solid Snake, Kratos, Wesker
+        VILLAIN_BOSS(0.35f, 0.76f, -28, -14),          // Bowser, Ganondorf, King Dedede, Eggman, Giovanni
+        VILLAIN_MANIC(1.42f, 1.34f, 28, 26),           // Joker, Fawful, Kefka, Dimentio
+        WISE_ELDER(0.55f, 0.80f, -12, -12),            // Professor Oak, Rowan, Deckard, The Judge
+        YOUNG_BOY(1.65f, 1.18f, 25, 14),               // Luke Triton, Tails, Ness, Lucas
+        YOUNG_GIRL(1.75f, 1.15f, 32, 10),              // Pearl Fey, Nanami, Ema Skye, Flora
+        ROYAL_QUEEN(1.15f, 0.95f, 4, -4),              // Princess Peach, Zelda, Rosalina
+        MERCHANT(1.10f, 1.25f, 12, 16),                // Tom Nook, Beedle, Shopkeeper
+        SOLDIER(0.70f, 1.05f, -8, 4),                  // Captain, Guard, Soldier, Commissioner Gordon
+        CYBORG_ROBOT(0.42f, 1.02f, -16, 8),            // Robo, Omega, Pokedex, System AI
+        NARRATOR(1.00f, 1.00f, 0, 0),                  // Story chronicle & descriptive text
+        TSUNDERE(1.35f, 1.22f, 18, 18),                // Franziska von Karma, Shiki
+        WHISPER_MYSTERIOUS(0.90f, 0.70f, -5, -20),     // Soft mysterious ethereal whisper
+        DEEP_DEMON(0.28f, 0.68f, -38, -22),            // Death, Dracula, Giratina, Mewtwo, Akuma
+        CHEERFUL_FAIRY(1.85f, 1.28f, 45, 20),          // Navi, Tatl, Starlow, Great Fairy, Celebi
+        PIRATE(0.85f, 1.12f, -6, 12),                  // Captain Syrup, Tetra, Sea Rovers
+        MAD_SCIENTIST(1.32f, 1.24f, 32, 22),           // Dr. Wily, Dr. Crygor, Eccentric Genius
+        GENTLEMAN_SCHOLAR(0.76f, 0.88f, -4, -4),       // Professor Layton, Miles Edgeworth, Phoenix Wright, Godot
+        GHOST_ETHEREAL(1.15f, 0.68f, 12, -25),         // King Boo, Gengar, Phantom Spirit
+        KNIGHT_WARRIOR(0.80f, 0.95f, -10, -4),         // Meta Knight, Marth, Ike
+        COMEDY_GOOFY(1.45f, 1.32f, 38, 28),            // Wario, Waluigi, Tingle
+        ANGELIC_DIVINE(1.40f, 0.92f, 16, -6);          // Palutena, Goddess Hylia, Pit, Arceus
 
         companion object {
             fun fromString(name: String?): CharacterPersona {
@@ -251,7 +253,6 @@ class GameTtsManager(private val context: Context) {
 
     init {
         initTts()
-        LocalAiVoiceActorStudio.installBundledModelsIfPresent(context)
     }
 
     private fun requestAudioDucking() {
@@ -321,8 +322,17 @@ class GameTtsManager(private val context: Context) {
     }
 
     private fun getSelectedLanguage(): Locale {
-        val langCode = preferences.getString(PREF_TRANSLATOR_TTS_LANG, "ru") ?: "ru"
-        return when (langCode) {
+        val ttsLangPref = preferences.getString(PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
+        val langCode = if (ttsLangPref == "auto" || ttsLangPref.isBlank()) {
+            preferences.getString("translator_target_lang", "ru") ?: "ru"
+        } else {
+            ttsLangPref
+        }
+        return localeForCode(langCode)
+    }
+
+    private fun localeForCode(langCode: String): Locale {
+        return when (langCode.lowercase().take(2)) {
             "en" -> Locale.ENGLISH
             "ja" -> Locale.JAPANESE
             "zh" -> Locale.CHINESE
@@ -346,12 +356,16 @@ class GameTtsManager(private val context: Context) {
     fun speak(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
 
+        val ttsLangPref = preferences.getString(PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
+        val effectiveLang = if (ttsLangPref == "auto" || ttsLangPref.isBlank()) targetLang else ttsLangPref
+
         val (extractedSpeaker, cleanSpeechText) = extractSpeakerAndDialogue(text)
-        val isLocalStudio = preferences.getBoolean(PREF_TRANSLATOR_LOCAL_STUDIO, false)
+        val enginePref = preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
         val modelPref = preferences.getString("translator_local_voice_model", "auto_multi") ?: "auto_multi"
 
-        val activePersona = if (isLocalStudio && modelPref != "auto_multi") {
-            when (modelPref) {
+        val activePersona = when {
+            enginePref == "single" -> CharacterPersona.NARRATOR
+            modelPref != "auto_multi" -> when (modelPref) {
                 "piper_ru_dmitri_medium" -> CharacterPersona.PROTAGONIST_MALE
                 "piper_ru_elena_medium" -> CharacterPersona.PROTAGONIST_FEMALE
                 "piper_ru_hero" -> CharacterPersona.PROTAGONIST_MALE
@@ -378,21 +392,22 @@ class GameTtsManager(private val context: Context) {
                 "piper_ru_angelic" -> CharacterPersona.ANGELIC_DIVINE
                 else -> resolvePersonaForSpeaker(extractedSpeaker, text)
             }
-        } else {
-            resolvePersonaForSpeaker(extractedSpeaker, text)
+            else -> resolvePersonaForSpeaker(extractedSpeaker, text)
         }
 
-        val normalizedText = RussianTtsNormalizer.normalize(cleanSpeechText, targetLang)
-        val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
-        val pitchVariance = (preferences.getInt(PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE, 65) / 50f).coerceIn(0.5f, 1.5f)
+        val normalizedText = RussianTtsNormalizer.normalize(cleanSpeechText, effectiveLang)
+        val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.5f, 2.0f)
+        val pitchVariance = (preferences.getInt(PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE, 65) / 50f).coerceIn(0.0f, 2.0f)
 
-        speakWithPersona(normalizedText, activePersona, targetLang, baseSpeed, pitchVariance)
+        speakWithPersona(normalizedText, activePersona, effectiveLang, baseSpeed, pitchVariance)
     }
 
     fun speakDirect(text: String, targetLang: String = "ru") {
         if (text.isBlank()) return
-        val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.6f, 1.8f)
-        speakWithPersona(text, CharacterPersona.NARRATOR, targetLang, baseSpeed, 1.0f)
+        val ttsLangPref = preferences.getString(PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
+        val effectiveLang = if (ttsLangPref == "auto" || ttsLangPref.isBlank()) targetLang else ttsLangPref
+        val baseSpeed = (preferences.getInt(PREF_TRANSLATOR_TTS_SPEED, 100) / 100f).coerceIn(0.5f, 2.0f)
+        speakWithPersona(text, CharacterPersona.NARRATOR, effectiveLang, baseSpeed, 1.0f)
     }
 
     fun speakWithPersona(
@@ -404,29 +419,32 @@ class GameTtsManager(private val context: Context) {
     ) {
         val enginePref = preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
 
-        if (enginePref == "neural_edge") {
-            speakNeuralCloud(text, targetLang, persona, baseSpeed)
-        } else {
-            speakNativeMultiVoice(text, persona, baseSpeed, targetLang)
+        when (enginePref) {
+            "single" -> speakNativeMultiVoice(text, CharacterPersona.NARRATOR, baseSpeed, targetLang, pitchVariance = 0f, isSingleMode = true)
+            "neural_edge" -> speakNeuralCloud(text, targetLang, persona, baseSpeed, pitchVariance)
+            else -> speakNativeMultiVoice(text, persona, baseSpeed, targetLang, pitchVariance, isSingleMode = false)
         }
     }
 
-    private fun speakNativeMultiVoice(text: String, persona: CharacterPersona, baseSpeed: Float, targetLang: String) {
+    private fun speakNativeMultiVoice(
+        text: String,
+        persona: CharacterPersona,
+        baseSpeed: Float,
+        targetLang: String,
+        pitchVariance: Float = 1.0f,
+        isSingleMode: Boolean = false
+    ) {
         if (tts == null || !isReady) {
             initTts()
         }
-        val locale = when (targetLang.lowercase()) {
-            "en" -> Locale.ENGLISH
-            "ja" -> Locale.JAPANESE
-            "zh" -> Locale.CHINESE
-            "de" -> Locale.GERMAN
-            "fr" -> Locale.FRENCH
-            "es" -> Locale("es")
-            "it" -> Locale.ITALIAN
-            else -> Locale("ru")
-        }
+        val locale = localeForCode(targetLang)
         applyLanguage(locale)
-        applyPersonaVoice(persona, baseSpeed, locale)
+        if (isSingleMode) {
+            tts?.setPitch(1.0f)
+            tts?.setSpeechRate(baseSpeed)
+        } else {
+            applyPersonaVoice(persona, baseSpeed, locale, pitchVariance)
+        }
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "game_tts_multi_${System.currentTimeMillis()}")
     }
 
@@ -523,72 +541,61 @@ class GameTtsManager(private val context: Context) {
         return CharacterPersona.NARRATOR
     }
 
-    private fun speakNeuralCloud(text: String, targetLang: String, persona: CharacterPersona, baseSpeed: Float) {
+    private fun speakNeuralCloud(
+        text: String,
+        targetLang: String,
+        persona: CharacterPersona,
+        baseSpeed: Float,
+        pitchVariance: Float = 1.0f
+    ) {
         scope.launch {
             try {
-                val langCode = if (targetLang.isBlank()) "ru" else targetLang.lowercase()
+                val langCode = if (targetLang.isBlank()) "ru" else targetLang.lowercase().take(2)
+                val isFemalePersona = when (persona) {
+                    CharacterPersona.PROTAGONIST_FEMALE,
+                    CharacterPersona.YOUNG_GIRL,
+                    CharacterPersona.ROYAL_QUEEN,
+                    CharacterPersona.TSUNDERE,
+                    CharacterPersona.CHEERFUL_FAIRY,
+                    CharacterPersona.ANGELIC_DIVINE -> true
+                    else -> false
+                }
 
-                // Edge Neural Voice Actor & SSML Pitch / Rate Mapping for 23 Personas
-                val (voiceName, ssmlPitch, ssmlRate) = when (langCode) {
+                val voiceName = when (langCode) {
                     "ru" -> when (persona) {
-                        CharacterPersona.HERO_DARK_VIGILANTE -> Triple("ru-RU-DmitryNeural", "-18%", "-8%")
-                        CharacterPersona.VILLAIN_BOSS -> Triple("ru-RU-DmitryNeural", "-28%", "-14%")
-                        CharacterPersona.VILLAIN_MANIC -> Triple("ru-RU-DmitryNeural", "+28%", "+26%")
-                        CharacterPersona.DEEP_DEMON -> Triple("ru-RU-DmitryNeural", "-38%", "-22%")
-                        CharacterPersona.WISE_ELDER -> Triple("ru-RU-DmitryNeural", "-12%", "-12%")
-                        CharacterPersona.YOUNG_BOY -> Triple("ru-RU-SvetlanaNeural", "+25%", "+14%")
-                        CharacterPersona.YOUNG_GIRL -> Triple("ru-RU-SvetlanaNeural", "+32%", "+10%")
-                        CharacterPersona.ROYAL_QUEEN -> Triple("ru-RU-SvetlanaNeural", "+4%", "-4%")
-                        CharacterPersona.MERCHANT -> Triple("ru-RU-DmitryNeural", "+12%", "+16%")
-                        CharacterPersona.SOLDIER -> Triple("ru-RU-DmitryNeural", "-8%", "+4%")
-                        CharacterPersona.CYBORG_ROBOT -> Triple("ru-RU-DmitryNeural", "-16%", "+8%")
-                        CharacterPersona.TSUNDERE -> Triple("ru-RU-SvetlanaNeural", "+18%", "+18%")
-                        CharacterPersona.WHISPER_MYSTERIOUS -> Triple("ru-RU-SvetlanaNeural", "-5%", "-20%")
-                        CharacterPersona.CHEERFUL_FAIRY -> Triple("ru-RU-SvetlanaNeural", "+45%", "+20%")
-                        CharacterPersona.PIRATE -> Triple("ru-RU-DmitryNeural", "-6%", "+12%")
-                        CharacterPersona.MAD_SCIENTIST -> Triple("ru-RU-DmitryNeural", "+32%", "+22%")
-                        CharacterPersona.GENTLEMAN_SCHOLAR -> Triple("ru-RU-DmitryNeural", "-4%", "-4%")
-                        CharacterPersona.GHOST_ETHEREAL -> Triple("ru-RU-SvetlanaNeural", "+12%", "-25%")
-                        CharacterPersona.KNIGHT_WARRIOR -> Triple("ru-RU-DmitryNeural", "-10%", "-4%")
-                        CharacterPersona.COMEDY_GOOFY -> Triple("ru-RU-DmitryNeural", "+38%", "+28%")
-                        CharacterPersona.ANGELIC_DIVINE -> Triple("ru-RU-SvetlanaNeural", "+16%", "-6%")
-                        CharacterPersona.PROTAGONIST_FEMALE -> Triple("ru-RU-SvetlanaNeural", "+2%", "0%")
-                        CharacterPersona.PROTAGONIST_MALE -> Triple("ru-RU-DmitryNeural", "+6%", "+2%")
-                        CharacterPersona.NARRATOR -> Triple("ru-RU-DmitryNeural", "0%", "0%")
+                        CharacterPersona.YOUNG_BOY,
+                        CharacterPersona.WHISPER_MYSTERIOUS,
+                        CharacterPersona.GHOST_ETHEREAL -> "ru-RU-SvetlanaNeural"
+                        else -> if (isFemalePersona) "ru-RU-SvetlanaNeural" else "ru-RU-DmitryNeural"
                     }
-                    "ja" -> when (persona) {
-                        CharacterPersona.PROTAGONIST_FEMALE, CharacterPersona.ROYAL_QUEEN, CharacterPersona.YOUNG_GIRL,
-                        CharacterPersona.ANGELIC_DIVINE, CharacterPersona.CHEERFUL_FAIRY, CharacterPersona.TSUNDERE ->
-                            Triple("ja-JP-NanamiNeural", "+2%", "0%")
-                        else -> Triple("ja-JP-KeitaNeural", "0%", "0%")
-                    }
-                    else -> when (persona) { // English / Multilingual
-                        CharacterPersona.HERO_DARK_VIGILANTE -> Triple("en-US-GuyNeural", "-16%", "-10%")
-                        CharacterPersona.VILLAIN_BOSS -> Triple("en-US-RogerNeural", "-22%", "-14%")
-                        CharacterPersona.VILLAIN_MANIC -> Triple("en-US-ChristopherNeural", "+28%", "+24%")
-                        CharacterPersona.DEEP_DEMON -> Triple("en-US-RogerNeural", "-36%", "-20%")
-                        CharacterPersona.WISE_ELDER -> Triple("en-US-RogerNeural", "-12%", "-10%")
-                        CharacterPersona.YOUNG_BOY -> Triple("en-US-AnaNeural", "+22%", "+12%")
-                        CharacterPersona.YOUNG_GIRL -> Triple("en-US-AnaNeural", "+30%", "+10%")
-                        CharacterPersona.ROYAL_QUEEN -> Triple("en-US-JennyNeural", "+4%", "-4%")
-                        CharacterPersona.MERCHANT -> Triple("en-US-GuyNeural", "+10%", "+14%")
-                        CharacterPersona.SOLDIER -> Triple("en-US-GuyNeural", "-8%", "+4%")
-                        CharacterPersona.CYBORG_ROBOT -> Triple("en-US-GuyNeural", "-14%", "+6%")
-                        CharacterPersona.TSUNDERE -> Triple("en-US-JennyNeural", "+16%", "+16%")
-                        CharacterPersona.WHISPER_MYSTERIOUS -> Triple("en-US-AnaNeural", "-4%", "-20%")
-                        CharacterPersona.CHEERFUL_FAIRY -> Triple("en-US-AnaNeural", "+42%", "+18%")
-                        CharacterPersona.PIRATE -> Triple("en-US-GuyNeural", "-6%", "+10%")
-                        CharacterPersona.MAD_SCIENTIST -> Triple("en-US-ChristopherNeural", "+30%", "+20%")
-                        CharacterPersona.GENTLEMAN_SCHOLAR -> Triple("en-US-GuyNeural", "-4%", "-4%")
-                        CharacterPersona.GHOST_ETHEREAL -> Triple("en-US-AnaNeural", "+10%", "-28%")
-                        CharacterPersona.KNIGHT_WARRIOR -> Triple("en-US-RogerNeural", "-10%", "-4%")
-                        CharacterPersona.COMEDY_GOOFY -> Triple("en-US-ChristopherNeural", "+36%", "+26%")
-                        CharacterPersona.ANGELIC_DIVINE -> Triple("en-US-JennyNeural", "+14%", "-6%")
-                        CharacterPersona.PROTAGONIST_FEMALE -> Triple("en-US-JennyNeural", "+2%", "0%")
-                        CharacterPersona.PROTAGONIST_MALE -> Triple("en-US-GuyNeural", "+6%", "+2%")
-                        CharacterPersona.NARRATOR -> Triple("en-US-GuyNeural", "0%", "0%")
+                    "ja" -> if (isFemalePersona) "ja-JP-NanamiNeural" else "ja-JP-KeitaNeural"
+                    "zh" -> if (isFemalePersona) "zh-CN-XiaoxiaoNeural" else "zh-CN-YunxiNeural"
+                    "de" -> if (isFemalePersona) "de-DE-KatjaNeural" else "de-DE-ConradNeural"
+                    "fr" -> if (isFemalePersona) "fr-FR-DeniseNeural" else "fr-FR-HenriNeural"
+                    "es" -> if (isFemalePersona) "es-ES-ElviraNeural" else "es-ES-AlvaroNeural"
+                    "it" -> if (isFemalePersona) "it-IT-ElsaNeural" else "it-IT-DiegoNeural"
+                    "ko" -> if (isFemalePersona) "ko-KR-SunHiNeural" else "ko-KR-InJoonNeural"
+                    "uk" -> if (isFemalePersona) "uk-UA-PolinaNeural" else "uk-UA-OstapNeural"
+                    else -> when (persona) {
+                        CharacterPersona.VILLAIN_BOSS,
+                        CharacterPersona.DEEP_DEMON,
+                        CharacterPersona.WISE_ELDER,
+                        CharacterPersona.KNIGHT_WARRIOR -> "en-US-RogerNeural"
+                        CharacterPersona.VILLAIN_MANIC,
+                        CharacterPersona.MAD_SCIENTIST,
+                        CharacterPersona.COMEDY_GOOFY -> "en-US-ChristopherNeural"
+                        CharacterPersona.YOUNG_BOY,
+                        CharacterPersona.YOUNG_GIRL,
+                        CharacterPersona.WHISPER_MYSTERIOUS,
+                        CharacterPersona.CHEERFUL_FAIRY,
+                        CharacterPersona.GHOST_ETHEREAL -> "en-US-AnaNeural"
+                        else -> if (isFemalePersona) "en-US-JennyNeural" else "en-US-GuyNeural"
                     }
                 }
+
+                val scaledPitchHz = (persona.edgePitchHz * pitchVariance).toInt().coerceIn(-50, 50)
+                val ssmlPitch = "${if (scaledPitchHz >= 0) "+" else ""}${scaledPitchHz}Hz"
+                val ssmlRate = "${if (persona.edgeRatePercent >= 0) "+" else ""}${persona.edgeRatePercent}%"
 
                 val audioBytes = kotlinx.coroutines.withTimeoutOrNull(4500L) {
                     EdgeNeuralTtsClient.synthesize(
@@ -641,13 +648,18 @@ class GameTtsManager(private val context: Context) {
             } catch (e: Throwable) {
                 Log.i(TAG, "Routing [$persona] to local multi-voice synthesis: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    speakNativeMultiVoice(text, persona, baseSpeed, targetLang)
+                    speakNativeMultiVoice(text, persona, baseSpeed, targetLang, pitchVariance, isSingleMode = false)
                 }
             }
         }
     }
 
-    private fun applyPersonaVoice(persona: CharacterPersona, baseSpeed: Float, locale: Locale) {
+    private fun applyPersonaVoice(
+        persona: CharacterPersona,
+        baseSpeed: Float,
+        locale: Locale,
+        pitchVariance: Float = 1.0f
+    ) {
         val isLangMatching = { v: Voice -> v.locale.language == locale.language }
         val langVoices = availableVoices.filter(isLangMatching)
 
@@ -691,33 +703,10 @@ class GameTtsManager(private val context: Context) {
             }
         } catch (_: Throwable) {}
 
-        // Fine-tune pitch & speech rate per persona
-        when (persona) {
-            CharacterPersona.HERO_DARK_VIGILANTE -> { tts?.setPitch(0.40f); tts?.setSpeechRate(baseSpeed * 0.82f) }
-            CharacterPersona.VILLAIN_BOSS -> { tts?.setPitch(0.35f); tts?.setSpeechRate(baseSpeed * 0.76f) }
-            CharacterPersona.VILLAIN_MANIC -> { tts?.setPitch(1.42f); tts?.setSpeechRate(baseSpeed * 1.34f) }
-            CharacterPersona.DEEP_DEMON -> { tts?.setPitch(0.28f); tts?.setSpeechRate(baseSpeed * 0.68f) }
-            CharacterPersona.WISE_ELDER -> { tts?.setPitch(0.55f); tts?.setSpeechRate(baseSpeed * 0.80f) }
-            CharacterPersona.YOUNG_BOY -> { tts?.setPitch(1.65f); tts?.setSpeechRate(baseSpeed * 1.18f) }
-            CharacterPersona.YOUNG_GIRL -> { tts?.setPitch(1.75f); tts?.setSpeechRate(baseSpeed * 1.15f) }
-            CharacterPersona.ROYAL_QUEEN -> { tts?.setPitch(1.15f); tts?.setSpeechRate(baseSpeed * 0.95f) }
-            CharacterPersona.MERCHANT -> { tts?.setPitch(1.10f); tts?.setSpeechRate(baseSpeed * 1.25f) }
-            CharacterPersona.SOLDIER -> { tts?.setPitch(0.70f); tts?.setSpeechRate(baseSpeed * 1.05f) }
-            CharacterPersona.CYBORG_ROBOT -> { tts?.setPitch(0.42f); tts?.setSpeechRate(baseSpeed * 1.02f) }
-            CharacterPersona.TSUNDERE -> { tts?.setPitch(1.35f); tts?.setSpeechRate(baseSpeed * 1.22f) }
-            CharacterPersona.WHISPER_MYSTERIOUS -> { tts?.setPitch(0.90f); tts?.setSpeechRate(baseSpeed * 0.70f) }
-            CharacterPersona.CHEERFUL_FAIRY -> { tts?.setPitch(1.85f); tts?.setSpeechRate(baseSpeed * 1.28f) }
-            CharacterPersona.PIRATE -> { tts?.setPitch(0.85f); tts?.setSpeechRate(baseSpeed * 1.12f) }
-            CharacterPersona.MAD_SCIENTIST -> { tts?.setPitch(1.32f); tts?.setSpeechRate(baseSpeed * 1.24f) }
-            CharacterPersona.GENTLEMAN_SCHOLAR -> { tts?.setPitch(0.76f); tts?.setSpeechRate(baseSpeed * 0.88f) }
-            CharacterPersona.GHOST_ETHEREAL -> { tts?.setPitch(1.15f); tts?.setSpeechRate(baseSpeed * 0.68f) }
-            CharacterPersona.KNIGHT_WARRIOR -> { tts?.setPitch(0.80f); tts?.setSpeechRate(baseSpeed * 0.95f) }
-            CharacterPersona.COMEDY_GOOFY -> { tts?.setPitch(1.45f); tts?.setSpeechRate(baseSpeed * 1.32f) }
-            CharacterPersona.ANGELIC_DIVINE -> { tts?.setPitch(1.40f); tts?.setSpeechRate(baseSpeed * 0.92f) }
-            CharacterPersona.PROTAGONIST_FEMALE -> { tts?.setPitch(1.22f); tts?.setSpeechRate(baseSpeed * 1.02f) }
-            CharacterPersona.PROTAGONIST_MALE -> { tts?.setPitch(0.88f); tts?.setSpeechRate(baseSpeed * 1.00f) }
-            CharacterPersona.NARRATOR -> { tts?.setPitch(0.98f); tts?.setSpeechRate(baseSpeed) }
-        }
+        val adjustedPitch = (1.0f + (persona.pitch - 1.0f) * pitchVariance).coerceIn(0.3f, 2.0f)
+        val adjustedRate = (baseSpeed * persona.rateMultiplier).coerceIn(0.4f, 2.5f)
+        tts?.setPitch(adjustedPitch)
+        tts?.setSpeechRate(adjustedRate)
     }
 
     fun stop() {

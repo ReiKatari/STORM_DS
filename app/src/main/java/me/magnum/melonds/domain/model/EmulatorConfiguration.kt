@@ -40,5 +40,6 @@ data class EmulatorConfiguration(
         val audioBassBoostEnabled: Boolean = false,
         val audioBassBoostStrength: Int = 5,
         val audioSpatialAudioEnabled: Boolean = false,
-        val audioReverbEnabled: Boolean = false
+        val audioReverbEnabled: Boolean = false,
+        val wfcDnsServerIp: String = ""
 )

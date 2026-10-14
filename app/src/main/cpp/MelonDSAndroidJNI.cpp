@@ -35,6 +35,9 @@
 #include "renderer/VulkanFilterMode.h"
 #include "performancehint/ThreadSafePerformanceHintSession.h"
 #include "performancehint/PerformanceHintManagerFactory.h"
+#include "net/MPInterface.h"
+#include "net/LAN.h"
+#include <arpa/inet.h>
 
 #include "Platform.h"
 
@@ -95,7 +98,7 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
         case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
         case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
-        case 9:
+        case 9: return MelonDSAndroid::VulkanFilterMode::AiUpscale;
         case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
@@ -2577,6 +2580,106 @@ Java_me_magnum_melonds_MelonRomDecryptor_decryptRomFdNative(JNIEnv* env, jobject
     }
 
     return static_cast<jint>(result);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_startLanHost(JNIEnv* env, jobject thiz, jstring playerName, jint maxPlayers)
+{
+    const char* name = playerName ? env->GetStringUTFChars(playerName, nullptr) : "Player";
+    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+    {
+        melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+    }
+    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+    lan.EndSession();
+    lan.StartDiscovery();
+    const bool ok = lan.StartHost(name, std::clamp(static_cast<int>(maxPlayers), 2, 16));
+    if (playerName && name)
+        env->ReleaseStringUTFChars(playerName, name);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_startLanClient(JNIEnv* env, jobject thiz, jstring playerName, jstring hostIp)
+{
+    const char* name = playerName ? env->GetStringUTFChars(playerName, nullptr) : "Player";
+    const char* host = hostIp ? env->GetStringUTFChars(hostIp, nullptr) : "";
+    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+    {
+        melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+    }
+    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+    lan.EndSession();
+    const bool ok = (host != nullptr && host[0] != '\0') && lan.StartClient(name, host);
+    if (playerName && name)
+        env->ReleaseStringUTFChars(playerName, name);
+    if (hostIp && host)
+        env->ReleaseStringUTFChars(hostIp, host);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_stopLanSession(JNIEnv* env, jobject thiz)
+{
+    if (melonDS::MPInterface::GetType() == melonDS::MPInterface_LAN)
+    {
+        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+        lan.EndSession();
+        lan.EndDiscovery();
+        melonDS::MPInterface::Set(melonDS::MPInterface_Dummy);
+    }
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_startLanDiscovery(JNIEnv* env, jobject thiz)
+{
+    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+    {
+        melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+    }
+    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+    return lan.StartDiscovery() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_stopLanDiscovery(JNIEnv* env, jobject thiz)
+{
+    if (melonDS::MPInterface::GetType() == melonDS::MPInterface_LAN)
+    {
+        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+        lan.EndDiscovery();
+    }
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_me_magnum_melonds_MelonEmulator_getLanDiscoveredSessions(JNIEnv* env, jobject thiz)
+{
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+    {
+        return env->NewObjectArray(0, stringClass, nullptr);
+    }
+    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+    lan.Process();
+    auto list = lan.GetDiscoveryList();
+    jobjectArray result = env->NewObjectArray(static_cast<jsize>(list.size()), stringClass, nullptr);
+    jsize idx = 0;
+    for (const auto& [addr, data] : list)
+    {
+        struct in_addr inAddr{};
+        inAddr.s_addr = addr;
+        char ipBuf[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &inAddr, ipBuf, sizeof(ipBuf));
+        char sessionName[65] = {0};
+        std::memcpy(sessionName, data.SessionName, 64);
+        std::ostringstream ss;
+        ss << ipBuf << "|" << sessionName << "|" << static_cast<int>(data.NumPlayers)
+           << "|" << static_cast<int>(data.MaxPlayers) << "|" << static_cast<int>(data.Status);
+        jstring item = env->NewStringUTF(ss.str().c_str());
+        env->SetObjectArrayElement(result, idx++, item);
+        env->DeleteLocalRef(item);
+    }
+    return result;
 }
 
 } // extern "C"

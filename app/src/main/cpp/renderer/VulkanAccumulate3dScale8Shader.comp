@@ -206,30 +206,33 @@ void main()
     }
     barrier();
 
-    ivec2 coord = ivec2(
-        int(gl_WorkGroupID.x * pc.scale + gl_LocalInvocationID.x),
-        int(gl_WorkGroupID.y * pc.scale + gl_LocalInvocationID.y));
-    if (gl_LocalInvocationID.x >= pc.scale || gl_LocalInvocationID.y >= pc.scale || pc.scale > kMaxBlockScale)
-        return;
-
     ivec2 size = imageSize(accumulated);
-    if (coord.x >= size.x || coord.y >= size.y)
-        return;
+    for (uint localY = gl_LocalInvocationID.y; localY < pc.scale; localY += kMaxBlockScale)
+    {
+        for (uint localX = gl_LocalInvocationID.x; localX < pc.scale; localX += kMaxBlockScale)
+        {
+            ivec2 coord = ivec2(
+                int(gl_WorkGroupID.x * pc.scale + localX),
+                int(gl_WorkGroupID.y * pc.scale + localY));
+            if (coord.x >= size.x || coord.y >= size.y)
+                continue;
 
-    vec4 newPixel = imageLoad(newSnapshot, coord);
-    bool newPixelVisible = newPixel.a > 0.0 && any(greaterThan(newPixel.rgb, vec3(0.0)));
-    bool newPixelAllowedBlack = newPixel.a > 0.0 && sPackedAllowsOpaqueBlackAccumulator;
-    if (newPixelVisible || newPixelAllowedBlack)
-    {
-        imageStore(accumulated, coord, newPixel);
-    }
-    if ((newPixel.a > 0.0 || pc.authoritativeProtectedBlack != 0u)
-        && sProtectedBlack2D)
-        imageStore(accumulated, coord, vec4(0.0, 0.0, 0.0, 1.0));
-    else if (newPixel.a > 0.0
-        && any(greaterThan(newPixel.rgb, vec3(0.0)))
-        && sLegacyRegularCaptureBlack2D)
-    {
-        imageStore(accumulated, coord, vec4(0.0, 0.0, 0.0, 1.0));
+            vec4 newPixel = imageLoad(newSnapshot, coord);
+            bool newPixelVisible = newPixel.a > 0.0 && any(greaterThan(newPixel.rgb, vec3(0.0)));
+            bool newPixelAllowedBlack = newPixel.a > 0.0 && sPackedAllowsOpaqueBlackAccumulator;
+            if (newPixelVisible || newPixelAllowedBlack)
+            {
+                imageStore(accumulated, coord, newPixel);
+            }
+            if ((newPixel.a > 0.0 || pc.authoritativeProtectedBlack != 0u)
+                && sProtectedBlack2D)
+                imageStore(accumulated, coord, vec4(0.0, 0.0, 0.0, 1.0));
+            else if (newPixel.a > 0.0
+                && any(greaterThan(newPixel.rgb, vec3(0.0)))
+                && sLegacyRegularCaptureBlack2D)
+            {
+                imageStore(accumulated, coord, vec4(0.0, 0.0, 0.0, 1.0));
+            }
+        }
     }
 }

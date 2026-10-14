@@ -217,11 +217,23 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
         case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
         case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
-        case 9:
+        case 9: return MelonDSAndroid::VulkanFilterMode::AiUpscale;
         case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }
+}
+
+uint32_t parseIpv4HostOrder(const char* ipStr)
+{
+    if (!ipStr || !ipStr[0]) return 0;
+    unsigned int a = 0, b = 0, c = 0, d = 0;
+    if (std::sscanf(ipStr, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
+        a <= 255 && b <= 255 && c <= 255 && d <= 255)
+    {
+        return (a << 24) | (b << 16) | (c << 8) | d;
+    }
+    return 0;
 }
 
 }
@@ -340,6 +352,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jfieldID arm9OverclockMultiplierField = getFieldIdOrClear(env, emulatorConfigurationClass, "arm9OverclockMultiplier", "I");
     jfieldID enable3dWidescreenField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable3dWidescreen", "Z");
     jfieldID enable60FpsPatchField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable60FpsPatch", "Z");
+    jfieldID wfcDnsServerIpField = getFieldIdOrClear(env, emulatorConfigurationClass, "wfcDnsServerIp", "Ljava/lang/String;");
 
     finalEmulatorConfiguration.renderer = videoRenderer;
     finalEmulatorConfiguration.dsiWareAutoloadTitleId =
@@ -349,6 +362,18 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.arm9OverclockMultiplier = arm9OverclockMultiplierField != nullptr ? env->GetIntField(emulatorConfiguration, arm9OverclockMultiplierField) : 1;
     finalEmulatorConfiguration.enable3dWidescreen = enable3dWidescreenField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable3dWidescreenField) : false;
     finalEmulatorConfiguration.enable60FpsPatch = enable60FpsPatchField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable60FpsPatchField) : false;
+    finalEmulatorConfiguration.wfcDnsIp = 0;
+    if (wfcDnsServerIpField != nullptr) {
+        jstring dnsString = static_cast<jstring>(env->GetObjectField(emulatorConfiguration, wfcDnsServerIpField));
+        if (dnsString != nullptr) {
+            const char* dnsChars = env->GetStringUTFChars(dnsString, nullptr);
+            if (dnsChars != nullptr) {
+                finalEmulatorConfiguration.wfcDnsIp = parseIpv4HostOrder(dnsChars);
+                env->ReleaseStringUTFChars(dnsString, dnsChars);
+            }
+            env->DeleteLocalRef(dnsString);
+        }
+    }
     return finalEmulatorConfiguration;
 }
 

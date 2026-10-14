@@ -21,12 +21,12 @@ enum class VideoFiltering {
     }
 
     fun isSupportedByOpenGlSurface(): Boolean {
-        return this != SCANLINES
+        return true
     }
 
     fun isSupportedByRenderer(renderer: VideoRenderer): Boolean {
         return when (renderer) {
-            VideoRenderer.SOFTWARE -> this != AI_UPSCALE && this != RETROARCH && this != SCANLINES
+            VideoRenderer.SOFTWARE -> this != RETROARCH
             VideoRenderer.VULKAN -> isSupportedByVulkan()
             else -> isSupportedByOpenGlSurface()
         }

@@ -132,7 +132,7 @@ class TranslationCache(
     }
 
     fun clear() {
-        clearMemory()
+        clearAll()
     }
 
     fun clearMemory() {
@@ -142,6 +142,10 @@ class TranslationCache(
     fun clearAll() {
         lru.evictAll()
         diskCacheMap.clear()
+        runCatching {
+            cacheDir.listFiles { f -> f.isFile && f.name.startsWith("cache_") && f.name.endsWith(".json") }
+                ?.forEach { it.delete() }
+        }
         val file = getCacheFile(activeGameKey)
         if (file.exists()) file.delete()
         isDirty = false

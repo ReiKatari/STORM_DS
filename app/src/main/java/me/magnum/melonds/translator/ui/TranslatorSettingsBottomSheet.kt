@@ -35,24 +35,43 @@ fun TranslatorSettingsContent(
     onPreviewTts: () -> Unit
 ) {
     val context = LocalContext.current
+    val lang = context.resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
     var enginePref by remember { mutableStateOf(preferences.getString(GameTranslatorManager.PREF_TRANSLATOR_ENGINE, "google") ?: "google") }
     var triggerModePref by remember { mutableStateOf(preferences.getString(GameTranslatorManager.PREF_TRANSLATOR_TRIGGER_MODE, "on_demand") ?: "on_demand") }
     var overlayStylePref by remember { mutableStateOf(preferences.getString(GameTranslatorManager.PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match") ?: "smart_background_match") }
-    
+
     var ttsEnabled by remember { mutableStateOf(preferences.getBoolean(GameTranslatorManager.PREF_TRANSLATOR_TTS_ENABLED, false)) }
     var voiceEnginePref by remember { mutableStateOf(preferences.getString(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge") }
     var ttsLangPref by remember { mutableStateOf(preferences.getString(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto") }
-    
-    var voiceActorStudioEnabled by remember { mutableStateOf(preferences.getBoolean("translator_local_voice_actor_studio", false)) }
+
     var voiceModelPref by remember { mutableStateOf(preferences.getString("translator_local_voice_model", "auto_multi") ?: "auto_multi") }
-    var voicePitchVariance by remember { mutableStateOf(preferences.getInt("translator_local_voice_pitch_variance", 65).toFloat()) }
+    var voicePitchVariance by remember { mutableStateOf(preferences.getInt(GameTtsManager.PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE, 65).coerceIn(0, 100).toFloat()) }
+    var ttsSpeed by remember { mutableStateOf(preferences.getInt(GameTtsManager.PREF_TRANSLATOR_TTS_SPEED, 100).coerceIn(50, 200).toFloat()) }
     var showVoiceModelDialog by remember { mutableStateOf(false) }
     var showVoiceEngineDialog by remember { mutableStateOf(false) }
     var showTtsLangDialog by remember { mutableStateOf(false) }
 
-    var fontSizeScale by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_FONT_SIZE_SCALE, 100).toFloat()) }
-    var bubbleOpacity by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_BUBBLE_OPACITY, 90).toFloat()) }
+    var fontSizeScale by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_FONT_SIZE_SCALE, 100).coerceIn(50, 200).toFloat()) }
+    var bubbleOpacity by remember { mutableStateOf(preferences.getInt(GameTranslatorManager.PREF_TRANSLATOR_BUBBLE_OPACITY, 90).coerceIn(10, 100).toFloat()) }
     var pauseOnTranslate by remember { mutableStateOf(preferences.getBoolean(GameTranslatorManager.PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)) }
+    var showFloatingButton by remember { mutableStateOf(preferences.getBoolean(GameTranslatorManager.PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)) }
+
+    val voiceModelOptions = remember(context) {
+        val values = context.resources.getStringArray(R.array.translator_local_voice_model_values)
+        val titles = context.resources.getStringArray(R.array.translator_local_voice_model_options)
+        values.indices.map { i -> values[i] to (titles.getOrNull(i) ?: values[i]) }
+    }
+
+    val ttsSpeedLabel = remember(lang) {
+        when (lang) {
+            "ru" -> "Скорость речи озвучки (%)"
+            "de" -> "Sprechgeschwindigkeit (%)"
+            "fr" -> "Vitesse de parole (%)"
+            "zh" -> "语音朗读语速 (%)"
+            "ja" -> "音声読み上げ速度 (%)"
+            else -> "Speech rate (%)"
+        }
+    }
 
     val updatePref = { key: String, value: Any ->
         when (value) {
@@ -102,6 +121,16 @@ fun TranslatorSettingsContent(
                     onCheckedChange = { 
                         pauseOnTranslate = it
                         updatePref(GameTranslatorManager.PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, it)
+                    }
+                )
+                Divider(color = watermelon.line)
+                SettingsSwitch(
+                    label = context.getString(R.string.translator_show_floating_button),
+                    checked = showFloatingButton,
+                    onCheckedChange = {
+                        showFloatingButton = it
+                        updatePref(GameTranslatorManager.PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, it)
+                        onSyncOverlay()
                     }
                 )
                 Divider(color = watermelon.line)
@@ -169,8 +198,8 @@ fun TranslatorSettingsContent(
                 SettingsSlider(
                     label = context.getString(R.string.translator_bubble_opacity),
                     value = bubbleOpacity,
-                    valueRange = 0f..100f,
-                    steps = 19,
+                    valueRange = 10f..100f,
+                    steps = 17,
                     valueText = "${bubbleOpacity.toInt()}%",
                     onValueChange = { 
                         bubbleOpacity = it
@@ -187,17 +216,13 @@ fun TranslatorSettingsContent(
             SettingsCard {
                 SettingsSwitch(
                     label = context.getString(R.string.translator_tts_enabled),
-                    checked = ttsEnabled || voiceActorStudioEnabled,
+                    checked = ttsEnabled,
                     onCheckedChange = { 
                         ttsEnabled = it
                         updatePref(GameTranslatorManager.PREF_TRANSLATOR_TTS_ENABLED, it)
-                        if (!it && voiceActorStudioEnabled) {
-                            voiceActorStudioEnabled = false
-                            updatePref("translator_local_voice_actor_studio", false)
-                        }
                     }
                 )
-                if (ttsEnabled || voiceActorStudioEnabled) {
+                if (ttsEnabled) {
                     Divider(color = watermelon.line)
                     SettingsOption(
                         label = context.getString(R.string.translator_tts_voice_engine_title),
@@ -228,58 +253,47 @@ fun TranslatorSettingsContent(
                             showTtsLangDialog = true
                         }
                     )
+                    if (voiceEnginePref != "single") {
+                        Divider(color = watermelon.line)
+                        val currentModelLabel = voiceModelOptions.firstOrNull { it.first == voiceModelPref }?.second
+                            ?: voiceModelOptions.firstOrNull()?.second.orEmpty()
+                        SettingsOption(
+                            label = context.getString(R.string.translator_local_voice_model_title),
+                            value = currentModelLabel.substringBefore(" ("),
+                            onClick = {
+                                showVoiceModelDialog = true
+                            }
+                        )
+                        Divider(color = watermelon.line)
+                        SettingsSlider(
+                            label = context.getString(R.string.translator_local_voice_pitch_variance_title),
+                            value = voicePitchVariance,
+                            valueRange = 0f..100f,
+                            steps = 19,
+                            valueText = "${voicePitchVariance.toInt()}%",
+                            onValueChange = {
+                                voicePitchVariance = it
+                                updatePref(GameTtsManager.PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE, it.toInt())
+                            }
+                        )
+                    }
+                    Divider(color = watermelon.line)
+                    SettingsSlider(
+                        label = ttsSpeedLabel,
+                        value = ttsSpeed,
+                        valueRange = 50f..200f,
+                        steps = 14,
+                        valueText = "${ttsSpeed.toInt()}%",
+                        onValueChange = {
+                            ttsSpeed = it
+                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_SPEED, it.toInt())
+                        }
+                    )
                     Divider(color = watermelon.line)
                     SettingsOption(
                         label = context.getString(R.string.translator_preview_voice),
                         value = "",
                         onClick = onPreviewTts
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // AI Voice Actor Studio Card
-            SettingsSectionTitle(context.getString(R.string.translator_local_voice_studio_title))
-            SettingsCard {
-                SettingsSwitch(
-                    label = context.getString(R.string.translator_local_voice_studio_title),
-                    checked = voiceActorStudioEnabled,
-                    onCheckedChange = { 
-                        voiceActorStudioEnabled = it
-                        updatePref("translator_local_voice_actor_studio", it)
-                        if (it) {
-                            ttsEnabled = true
-                            updatePref(GameTranslatorManager.PREF_TRANSLATOR_TTS_ENABLED, true)
-                            voiceEnginePref = "local_multi"
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, "local_multi")
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, false)
-                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, true)
-                        }
-                    }
-                )
-                if (voiceActorStudioEnabled) {
-                    Divider(color = watermelon.line)
-                    val availablePacks = me.magnum.melonds.translator.tts.LocalAiVoiceActorStudio.getAvailableModelPacks(context)
-                    val currentPack = availablePacks.firstOrNull { it.id == voiceModelPref } ?: availablePacks.first()
-                    SettingsOption(
-                        label = context.getString(R.string.translator_local_voice_model_title),
-                        value = currentPack.displayName,
-                        onClick = {
-                            showVoiceModelDialog = true
-                        }
-                    )
-                    Divider(color = watermelon.line)
-                    SettingsSlider(
-                        label = context.getString(R.string.translator_local_voice_pitch_variance_title),
-                        value = voicePitchVariance,
-                        valueRange = 0f..100f,
-                        steps = 19,
-                        valueText = "${voicePitchVariance.toInt()}%",
-                        onValueChange = { 
-                            voicePitchVariance = it
-                            updatePref("translator_local_voice_pitch_variance", it.toInt())
-                        }
                     )
                 }
             }
@@ -317,12 +331,6 @@ fun TranslatorSettingsContent(
                                         .clickable {
                                             voiceEnginePref = id
                                             updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, id)
-                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, id == "neural_edge")
-                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, id != "single")
-                                            if (id == "local_multi") {
-                                                voiceActorStudioEnabled = true
-                                                updatePref("translator_local_voice_actor_studio", true)
-                                            }
                                             showVoiceEngineDialog = false
                                         }
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -341,12 +349,6 @@ fun TranslatorSettingsContent(
                                         onClick = {
                                             voiceEnginePref = id
                                             updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE, id)
-                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_NEURAL_ENABLED, id == "neural_edge")
-                                            updatePref(GameTtsManager.PREF_TRANSLATOR_TTS_MULTI_VOICE, id != "single")
-                                            if (id == "local_multi") {
-                                                voiceActorStudioEnabled = true
-                                                updatePref("translator_local_voice_actor_studio", true)
-                                            }
                                             showVoiceEngineDialog = false
                                         },
                                         colors = RadioButtonDefaults.colors(
@@ -452,7 +454,6 @@ fun TranslatorSettingsContent(
             }
 
             if (showVoiceModelDialog) {
-                val availablePacks = me.magnum.melonds.translator.tts.LocalAiVoiceActorStudio.getAvailableModelPacks(context)
                 AlertDialog(
                     onDismissRequest = { showVoiceModelDialog = false },
                     backgroundColor = watermelon.surface,
@@ -470,16 +471,16 @@ fun TranslatorSettingsContent(
                             modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(availablePacks.size) { index ->
-                                val pack = availablePacks[index]
-                                val isSelected = pack.id == voiceModelPref
+                            items(voiceModelOptions.size) { index ->
+                                val (packId, packDisplayName) = voiceModelOptions[index]
+                                val isSelected = packId == voiceModelPref
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) watermelon.green.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent)
                                         .clickable {
-                                            voiceModelPref = pack.id
+                                            voiceModelPref = packId
                                             updatePref("translator_local_voice_model", voiceModelPref)
                                             showVoiceModelDialog = false
                                         }
@@ -488,7 +489,7 @@ fun TranslatorSettingsContent(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = pack.displayName,
+                                        text = packDisplayName,
                                         color = if (isSelected) watermelon.green else watermelon.text,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         fontSize = 13.sp,
@@ -497,7 +498,7 @@ fun TranslatorSettingsContent(
                                     RadioButton(
                                         selected = isSelected,
                                         onClick = {
-                                            voiceModelPref = pack.id
+                                            voiceModelPref = packId
                                             updatePref("translator_local_voice_model", voiceModelPref)
                                             showVoiceModelDialog = false
                                         },

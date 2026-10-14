@@ -65,6 +65,54 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             startActivity(intent)
             true
         }
+
+        findPreference<androidx.preference.ListPreference>("pref_motion_gyro_mode")?.apply {
+            val lang = resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
+            title = when (lang) {
+                "ru" -> "Режим работы гироскопа"
+                "de" -> "Gyroskop-Modus"
+                "fr" -> "Mode gyroscope"
+                "zh" -> "陀螺仪模式"
+                "ja" -> "ジャイロモード"
+                else -> "Gyroscope mode"
+            }
+            entries = when (lang) {
+                "ru" -> arrayOf(
+                    "Прицеливание стилусом (FPS / Шутеры)",
+                    "Наклон руля D-Pad (Гонки)",
+                    "Аналоговый сенсор Slot-2"
+                )
+                "de" -> arrayOf(
+                    "Stylus-Zielen (FPS / Shooter)",
+                    "D-Pad-Lenkung (Rennspiele)",
+                    "Slot-2-Analogsensor"
+                )
+                "fr" -> arrayOf(
+                    "Visée au stylet (FPS / Tir)",
+                    "Direction D-Pad (Course)",
+                    "Capteur analogique Slot-2"
+                )
+                "zh" -> arrayOf(
+                    "触控笔瞄准 (FPS / 射击)",
+                    "十字键倾斜转向 (赛车)",
+                    "Slot-2 模拟传感器"
+                )
+                "ja" -> arrayOf(
+                    "タッチペン照準 (FPS / シューティング)",
+                    "十字キー傾きステアリング (レース)",
+                    "スロット2アナログセンサー"
+                )
+                else -> arrayOf(
+                    "Touchscreen stylus aiming (FPS)",
+                    "D-Pad tilt steering (Racing)",
+                    "Slot-2 analog motion sensor"
+                )
+            }
+            entryValues = arrayOf("touch_aim", "dpad_steer", "slot2_analog")
+            if (value == null) {
+                value = "touch_aim"
+            }
+        }
     }
 
     override fun onResume() {

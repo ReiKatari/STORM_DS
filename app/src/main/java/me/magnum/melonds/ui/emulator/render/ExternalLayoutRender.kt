@@ -80,6 +80,7 @@ class ExternalLayoutRender(
     private lateinit var uvBottom: FloatBuffer
 
     private var videoFiltering: VideoFiltering = VideoFiltering.NONE
+    private var resolutionScaling: Int = 1
 
     private var viewWidth = 0
     private var viewHeight = 0
@@ -237,7 +238,12 @@ class ExternalLayoutRender(
 
     override fun updateRendererConfiguration(newRendererConfiguration: RuntimeRendererConfiguration?) {
         val newFiltering = newRendererConfiguration?.videoFiltering ?: VideoFiltering.NONE
-        updateVideoFiltering(newFiltering)
+        val newScale = if (newRendererConfiguration?.renderer == me.magnum.melonds.domain.model.VideoRenderer.SOFTWARE) {
+            1
+        } else {
+            (newRendererConfiguration?.resolutionScaling ?: 1).coerceAtLeast(1)
+        }
+        updateVideoFiltering(newFiltering, newScale)
     }
 
     override fun setLeftRotationEnabled(enabled: Boolean) {
@@ -253,7 +259,7 @@ class ExternalLayoutRender(
 
     override fun onSurfaceCreated() {
         shader = ShaderFactory.createShaderProgram(
-            VideoFilterShaderProvider.getShaderSource(videoFiltering)
+            VideoFilterShaderProvider.getShaderSource(videoFiltering, resolutionScaling)
         )
         lastScreenTextureFiltering = Int.MIN_VALUE
 
@@ -393,13 +399,14 @@ class ExternalLayoutRender(
      *
      * @param videoFiltering The new [VideoFiltering] setting to apply.
      */
-    fun updateVideoFiltering(videoFiltering: VideoFiltering) {
-        val shouldRecreate = this.videoFiltering != videoFiltering
+    fun updateVideoFiltering(videoFiltering: VideoFiltering, resolutionScaling: Int = this.resolutionScaling) {
+        val shouldRecreate = this.videoFiltering != videoFiltering || this.resolutionScaling != resolutionScaling
         this.videoFiltering = videoFiltering
+        this.resolutionScaling = resolutionScaling
         if (shouldRecreate && this::shader.isInitialized) {
             shader.delete()
             shader = ShaderFactory.createShaderProgram(
-                VideoFilterShaderProvider.getShaderSource(videoFiltering)
+                VideoFilterShaderProvider.getShaderSource(videoFiltering, resolutionScaling)
             )
             lastScreenTextureFiltering = Int.MIN_VALUE
         }

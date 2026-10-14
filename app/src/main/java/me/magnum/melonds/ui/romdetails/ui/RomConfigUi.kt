@@ -103,6 +103,7 @@ private fun Content(
 ) {
     val context = LocalContext.current
     val renameDialogState = rememberTextInputDialogState()
+    val runtimeConsoleDialogState = rememberSingleChoiceDialogState<me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType>()
     val micDialogState = rememberSingleChoiceDialogState<RuntimeMicSource>()
     val inputModeDialogState = rememberSingleChoiceDialogState<RomInputMode>()
     val gbaSlotDialogState = rememberSingleChoiceDialogState<RomGbaSlotConfigUiModel.Type>()
@@ -130,6 +131,7 @@ private fun Content(
         if (result != null) onConfigUpdate(RomConfigUpdateEvent.GbaSavePathUpdate(result))
     }
 
+    val runtimeConsoleOptions = stringArrayResource(id = R.array.game_runtime_console_type_options)
     val micOptions = stringArrayResource(id = R.array.game_runtime_mic_source_options)
     val inputModeOptions = stringArrayResource(id = R.array.rom_input_mode_options)
     val gbaSlotOptions = stringArrayResource(id = R.array.gba_slot_options)
@@ -159,6 +161,7 @@ private fun Content(
     fun useGlobalWithValue(value: String): String {
         return context.getString(R.string.use_global_preference_with_value, value)
     }
+    val globalConsoleLabel = runtimeConsoleOptions.getOrNull(romConfig.globalRuntimeConsoleType.ordinal + 1) ?: romConfig.globalRuntimeConsoleType.name
     val globalMicLabel = micOptions.getOrNull(romConfig.globalRuntimeMicSource.ordinal + 1) ?: micOptions.firstOrNull().orEmpty()
     val globalInputModeLabel = context.getString(R.string.global_controller_mapping)
     val globalLayoutLabel = romConfig.globalLayoutName ?: context.getString(R.string.not_set)
@@ -199,6 +202,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_custom_name),
                 value = romConfig.customName ?: rom.name,
+                showDivider = !rom.isDsiWareTitle,
                 onClick = {
                     renameDialogState.show(
                         initialText = romConfig.customName ?: rom.name,
@@ -206,6 +210,31 @@ private fun Content(
                     )
                 },
             )
+            if (!rom.isDsiWareTitle) {
+                ConfigRow(
+                    title = stringResource(R.string.console_type),
+                    value = if (romConfig.runtimeConsoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT) {
+                        useGlobalWithValue(globalConsoleLabel)
+                    } else {
+                        runtimeConsoleOptions.getOrNull(romConfig.runtimeConsoleType.ordinal) ?: romConfig.runtimeConsoleType.name
+                    },
+                    onClick = {
+                        runtimeConsoleDialogState.show(
+                            title = context.getString(R.string.console_type),
+                            items = me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.entries.toList(),
+                            labelOf = { consoleType ->
+                                if (consoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT) {
+                                    useGlobalWithValue(globalConsoleLabel)
+                                } else {
+                                    runtimeConsoleOptions.getOrNull(consoleType.ordinal) ?: consoleType.name
+                                }
+                            },
+                            selected = romConfig.runtimeConsoleType,
+                            onSelect = { onConfigUpdate(RomConfigUpdateEvent.RuntimeConsoleUpdate(it)) },
+                        )
+                    },
+                )
+            }
         }
 
         ConfigSection(title = stringResource(R.string.audio)) {
@@ -281,7 +310,7 @@ private fun Content(
                     },
                 )
             }
-            AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.OPENGL || effectiveRenderer == VideoRenderer.VULKAN) {
+            AnimatedVisibility(visible = effectiveRenderer != VideoRenderer.SOFTWARE) {
                 ConfigRow(
                     title = stringResource(R.string.internal_resolution),
                     value = romConfig.internalResolutionScaling?.let { internalResolutionOptions[(it - 1).coerceIn(internalResolutionOptions.indices)] }
@@ -303,27 +332,19 @@ private fun Content(
             }
             ConfigRow(
                 title = stringResource(R.string.filter),
-                value = if (effectiveRenderer == VideoRenderer.SOFTWARE) {
-                    "Недоступно в Software (Выкл)"
-                } else {
-                    selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel)
-                },
-                showDivider = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH,
+                value = selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel),
+                showDivider = effectiveRenderer != VideoRenderer.SOFTWARE && effectiveFiltering == VideoFiltering.RETROARCH,
                 onClick = {
-                    if (effectiveRenderer == VideoRenderer.SOFTWARE) {
-                        android.widget.Toast.makeText(context, "Шейдерная фильтрация и AI-Upscale недоступны при программном (Software) рендеринге.", android.widget.Toast.LENGTH_SHORT).show()
-                    } else {
-                        videoFilteringDialogState.show(
-                            title = context.getString(R.string.filter),
-                            items = filteringItems,
-                            labelOf = { filtering -> filtering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel) },
-                            selected = selectedFiltering,
-                            onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoFilteringUpdate(it)) },
-                        )
-                    }
+                    videoFilteringDialogState.show(
+                        title = context.getString(R.string.filter),
+                        items = filteringItems,
+                        labelOf = { filtering -> filtering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel) },
+                        selected = selectedFiltering,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.VideoFilteringUpdate(it)) },
+                    )
                 },
             )
-            AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.VULKAN && effectiveFiltering == VideoFiltering.RETROARCH) {
+            AnimatedVisibility(visible = effectiveRenderer != VideoRenderer.SOFTWARE && effectiveFiltering == VideoFiltering.RETROARCH) {
                 Column {
                     ConfigRow(
                         title = stringResource(R.string.video_retroarch_shader_preset_title),
@@ -475,6 +496,7 @@ private fun Content(
         textValidator = { true },
         onDelete = { onConfigUpdate(RomConfigUpdateEvent.CustomNameUpdate(null)) },
     )
+    SingleChoiceDialog(runtimeConsoleDialogState)
     SingleChoiceDialog(micDialogState)
     SingleChoiceDialog(inputModeDialogState)
     SingleChoiceDialog(gbaSlotDialogState)

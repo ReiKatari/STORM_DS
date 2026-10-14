@@ -112,6 +112,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                     val targetDir = result.getOrThrow()
                     val targetUri = Uri.fromFile(targetDir)
                     preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
+                    findPreference<androidx.preference.SwitchPreference>("use_custom_bios")?.isChecked = true
                     dsBiosDirPreference.onDirectoryPicked(targetUri)
                     dsBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())
@@ -147,6 +148,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                     val targetDir = result.getOrThrow()
                     val targetUri = Uri.fromFile(targetDir)
                     preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
+                    findPreference<androidx.preference.SwitchPreference>("use_custom_bios")?.isChecked = true
                     dsiBiosDirPreference.onDirectoryPicked(targetUri)
                     dsiBiosDirPreference.summary = targetDir.absolutePath
                     AlertDialog.Builder(requireContext())

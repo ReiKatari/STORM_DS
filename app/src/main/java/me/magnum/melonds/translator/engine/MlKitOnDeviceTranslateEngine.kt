@@ -42,11 +42,20 @@ class MlKitOnDeviceTranslateEngine(
         private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 
-    override suspend fun prepare(sourceLang: String, targetLang: String) {
+    override suspend fun prepare(sourceLang: String, targetLang: String) = withContext(Dispatchers.IO) {
         val target = resolveLanguageCode("", targetLang)
         val source = if (normalizeLangCode(sourceLang) == "auto") TranslateLanguage.ENGLISH else resolveLanguageCode("", sourceLang)
-        if (source == target) return
-        ensureDownloadStarted(source, target)
+        if (source == target) return@withContext
+        val ready = if (downloadIfMissing) {
+            ensureDownloadStarted(source, target).await()
+        } else {
+            isPairDownloaded(source, target)
+        }
+        if (!ready) {
+            throw TranslationException(
+                context?.getString(R.string.translator_error_mlkit_model) ?: "Offline model is not downloaded"
+            )
+        }
     }
 
     override suspend fun translate(text: String, sourceLang: String, targetLang: String): String = withContext(Dispatchers.IO) {

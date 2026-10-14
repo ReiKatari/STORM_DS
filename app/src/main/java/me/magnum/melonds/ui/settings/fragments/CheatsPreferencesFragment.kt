@@ -5,8 +5,10 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.contracts.FilePickerContract
@@ -39,7 +41,12 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         val downloadCheatsPreference = findPreference<Preference>("cheats_download_online")
 
         downloadCheatsPreference?.setOnPreferenceClickListener {
-            android.widget.Toast.makeText(requireContext(), getString(R.string.cheats_download_success), android.widget.Toast.LENGTH_LONG).show()
+            lifecycleScope.launch {
+                viewModel.populateBuiltInAndOnlineCheats()
+                if (isAdded) {
+                    android.widget.Toast.makeText(requireContext(), getString(R.string.cheats_download_success), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
             true
         }
 
@@ -55,7 +62,7 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         if (viewModel.areCheatsBeingImported()) {
             CheatsImportProgressDialog().show(childFragmentManager, null)
         } else {
-            cheatFilePickerLauncher.launch(Pair(null, arrayOf("text/xml")))
+            cheatFilePickerLauncher.launch(Pair(null, arrayOf("text/xml", "application/xml", "application/zip")))
         }
     }
 

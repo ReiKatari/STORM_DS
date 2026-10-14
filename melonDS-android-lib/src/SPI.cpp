@@ -257,7 +257,7 @@ void FirmwareMem::Release()
     { // If the SPI firmware chip just finished a write...
         // We only notify the frontend of changes to the Wi-fi/userdata settings region
         // (although it might still decide to flush the whole thing)
-        u32 wifioffset = FirmwareData.GetWifiAccessPointOffset();
+        u32 wifioffset = FirmwareData.GetExtendedAccessPointOffset();
 
         // Request that the start of the Wi-fi/userdata settings region
         // through the end of the firmware blob be flushed to disk

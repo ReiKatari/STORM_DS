@@ -53,9 +53,37 @@ void main()
     uint colorHeight = max(pc.height, 1u);
     uint captureScale = max(1u, colorWidth / 256u);
     uint captureSampleOffset = captureScale > 1u ? (captureScale / 2u) : 0u;
-    uint sourceX = min(colorWidth - 1u, gid.x * captureScale + captureSampleOffset);
-    uint sourceY = min(colorHeight - 1u, gid.y * captureScale + captureSampleOffset);
+    uint baseX = gid.x * captureScale;
+    uint baseY = gid.y * captureScale;
+    uint sourceX = min(colorWidth - 1u, baseX + captureSampleOffset);
+    uint sourceY = min(colorHeight - 1u, baseY + captureSampleOffset);
 
     vec4 sampledColor = texelFetch(colorTexture[0], ivec2(sourceX, sourceY), 0);
+    if (captureScale > 1u
+        && (sampledColor.a <= 0.0 || !any(greaterThan(sampledColor.rgb, vec3(0.0)))))
+    {
+        for (uint dy = 0u; dy < captureScale; dy++)
+        {
+            uint y = min(colorHeight - 1u, baseY + dy);
+            bool foundVisible = false;
+            for (uint dx = 0u; dx < captureScale; dx++)
+            {
+                uint x = min(colorWidth - 1u, baseX + dx);
+                vec4 candidate = texelFetch(colorTexture[0], ivec2(x, y), 0);
+                if (candidate.a > 0.0 && any(greaterThan(candidate.rgb, vec3(0.0))))
+                {
+                    sampledColor = candidate;
+                    foundVisible = true;
+                    break;
+                }
+                else if (sampledColor.a <= 0.0 && candidate.a > 0.0)
+                {
+                    sampledColor = candidate;
+                }
+            }
+            if (foundVisible)
+                break;
+        }
+    }
     captureLineValues[gid.y * 256u + gid.x] = packColor6A5(sampledColor);
 }

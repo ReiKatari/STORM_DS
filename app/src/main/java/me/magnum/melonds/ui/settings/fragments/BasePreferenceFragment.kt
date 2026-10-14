@@ -296,8 +296,21 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         if (key == null) return Icons.Filled.Tune
         val k = key.lowercase()
         return when {
-            k.contains("theme") || k.contains("color") || k.contains("accent") -> Icons.Filled.Palette
+            k.contains("translator_enabled") -> Icons.Filled.Translate
+            k.contains("opacity") -> Icons.Filled.Opacity
+            k.contains("font") || k.contains("scale") -> Icons.Filled.FormatSize
+            k.contains("key") || k.contains("api") -> Icons.Filled.Key
+            k.contains("endpoint") || k.contains("url") -> Icons.Filled.Link
+            k.contains("region") || k.contains("crop") -> Icons.Filled.CropFree
+            k.contains("cache") || k.contains("clear") -> Icons.Filled.DeleteSweep
+            k.contains("pause") -> Icons.Filled.PauseCircleOutline
+            k.contains("floating") || k.contains("trigger") -> Icons.Filled.TouchApp
+            k.contains("model") -> Icons.Filled.Psychology
+            k.contains("lang") -> Icons.Filled.Language
             k.contains("card") || k.contains("style") -> Icons.Filled.Dashboard
+            k.contains("tts") || k.contains("voice") || k.contains("pitch") -> Icons.Filled.RecordVoiceOver
+            k.contains("engine") || k.contains("translator") -> Icons.Filled.GTranslate
+            k.contains("theme") || k.contains("color") || k.contains("accent") -> Icons.Filled.Palette
             k.contains("speed") || k.contains("rewind") || k.contains("fast") -> Icons.Filled.FastForward
             k.contains("update") -> Icons.Filled.CloudSync
             k.contains("dir") || k.contains("search") || k.contains("folder") -> Icons.Filled.Folder
@@ -306,7 +319,6 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
             k.contains("view") || k.contains("mode") || k.contains("display") -> Icons.Filled.GridView
             k.contains("save") || k.contains("state") -> Icons.Filled.Save
             k.contains("dsiware") || k.contains("dsi") -> Icons.Filled.SportsEsports
-            k.contains("lang") -> Icons.Filled.Language
             k.contains("cpu") || k.contains("arm") || k.contains("overclock") || k.contains("jit") -> Icons.Filled.Memory
             k.contains("sd") || k.contains("dldi") || k.contains("nand") -> Icons.Filled.SdCard
             k.contains("wfc") || k.contains("dns") || k.contains("server") || k.contains("wifi") -> Icons.Filled.Wifi

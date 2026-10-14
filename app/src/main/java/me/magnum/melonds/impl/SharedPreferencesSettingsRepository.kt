@@ -327,19 +327,22 @@ class SharedPreferencesSettingsRepository(
             observeRetroArchShaderConfiguration(),
             observeAiUpscaleEnabled(),
         ) { renderInputs, retroArchShader, aiEnabled ->
+            val requestedFiltering = if (aiEnabled && !preferences.contains("video_filtering")) {
+                VideoFiltering.AI_UPSCALE
+            } else {
+                renderInputs.core.filtering
+            }
             val effectiveFiltering = when {
-                renderInputs.core.renderer == VideoRenderer.VULKAN && !renderInputs.core.filtering.isSupportedByVulkan() -> VideoFiltering.NONE
-                renderInputs.core.renderer != VideoRenderer.VULKAN && !renderInputs.core.filtering.isSupportedByOpenGlSurface() -> VideoFiltering.NONE
-                aiEnabled && !retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.RETROARCH
-                renderInputs.core.filtering == VideoFiltering.RETROARCH &&
-                    retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.NONE
-                else -> renderInputs.core.filtering
+                !requestedFiltering.isSupportedByRenderer(renderInputs.core.renderer) -> VideoFiltering.NONE
+                requestedFiltering == VideoFiltering.RETROARCH &&
+                    retroArchShader.presetPath.isNullOrBlank() -> if (aiEnabled) VideoFiltering.AI_UPSCALE else VideoFiltering.NONE
+                else -> requestedFiltering
             }
             val effectiveThreadedRendering = resolveThreadedRendering(
                 renderInputs.core.renderer,
                 renderInputs.core.threadedRenderingEnabled,
             )
-            val coverageFixEnabled = renderInputs.core.renderer == VideoRenderer.OPENGL && renderInputs.coverageFix.enabled
+            val coverageFixEnabled = (renderInputs.core.renderer == VideoRenderer.OPENGL || renderInputs.core.renderer == VideoRenderer.VULKAN) && renderInputs.coverageFix.enabled
             RendererConfiguration(
                 renderInputs.core.renderer,
                 effectiveFiltering,
@@ -381,6 +384,16 @@ class SharedPreferencesSettingsRepository(
         val macAddress = MacAddress.randomDsAddress()
         preferences.edit {
             putString("internal_mac_address", macAddress.toString())
+        }
+    }
+
+    private fun getWfcDnsServerIp(): String {
+        return when (preferences.getString("system_wfc_server", "none")) {
+            "wiimmfi" -> "167.235.229.36"
+            "altwfc" -> "172.104.88.237"
+            "kaeru" -> "178.62.43.212"
+            "custom" -> preferences.getString("system_wfc_custom_dns", "178.62.43.212")?.trim() ?: "178.62.43.212"
+            else -> ""
         }
     }
 
@@ -498,6 +511,7 @@ class SharedPreferencesSettingsRepository(
             audioBassBoostStrength = preferences.getInt("audio_bass_boost_strength", 5),
             audioSpatialAudioEnabled = preferences.getBoolean("audio_spatial_audio_enabled", false),
             audioReverbEnabled = preferences.getBoolean("audio_reverb_enabled", false),
+            wfcDnsServerIp = getWfcDnsServerIp(),
         )
     }
 
@@ -718,6 +732,17 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    private fun hasValidBiosFiles(dir: File, isDsi: Boolean): Boolean {
+        val files = dir.listFiles() ?: return false
+        if (files.isEmpty()) return false
+        val expectedNames = if (isDsi) {
+            setOf("bios7i.bin", "dsi_bios7.bin", "arm7i.bin", "dsi_arm7.bin", "bios9i.bin", "dsi_bios9.bin", "arm9i.bin", "dsi_arm9.bin", "dsi_firmware.bin", "firmware_dsi.bin", "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
+        } else {
+            setOf("bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin", "bios9.bin", "ds_bios9.bin", "arm9.bin", "bios9_ds.bin", "firmware.bin", "ds_firmware.bin", "firmware_ds.bin")
+        }
+        return files.any { f -> f.isFile && f.length() > 0 && expectedNames.any { it.equals(f.name, ignoreCase = true) } }
+    }
+
     override fun getDsBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("bios_dir", null)?.firstOrNull()
         if (dirPreference != null && !dirPreference.contains("data/user/0") && !dirPreference.contains("files/bios")) {
@@ -725,7 +750,7 @@ class SharedPreferencesSettingsRepository(
         }
         val rootBase = getEmulatorBaseDirectory()
         val rootDir = File(rootBase, "bios/ds")
-        if (rootDir.exists()) {
+        if (rootDir.exists() && hasValidBiosFiles(rootDir, isDsi = false)) {
             return Uri.fromFile(rootDir)
         }
         return null
@@ -738,7 +763,7 @@ class SharedPreferencesSettingsRepository(
         }
         val rootBase = getEmulatorBaseDirectory()
         val rootDir = File(rootBase, "bios/dsi")
-        if (rootDir.exists()) {
+        if (rootDir.exists() && hasValidBiosFiles(rootDir, isDsi = true)) {
             return Uri.fromFile(rootDir)
         }
         return null
@@ -1035,7 +1060,14 @@ class SharedPreferencesSettingsRepository(
         }
         val cleanScale = scale.filter { it.isDigit() }.ifEmpty { "4" }
         val candidates = listOf(
+            "edge-smoothing/xbrz/${cleanScale}xbrz-linear.slangp",
+            "edge-smoothing/xbrz/xbrz-freescale.slangp",
+            "edge-smoothing/xbrz/4xbrz-linear.slangp",
+            "edge-smoothing/xbrz/6xbrz-linear.slangp",
+            "edge-smoothing/scalefx/scalefx.slangp",
+            "edge-smoothing/scalefx/scalefx-hybrid.slangp",
             "xbrz/${cleanScale}xbrz-freescale.slangp",
+            "xbrz/${cleanScale}xbrz-linear.slangp",
             "xbrz/${cleanScale}xbrz.slangp",
             "xbrz/4xbrz-freescale.slangp",
             "anime4k/anime4k-all-in-one.slangp",
@@ -1073,7 +1105,7 @@ class SharedPreferencesSettingsRepository(
             observeRetroArchShaderClearHistory(),
             observeAiUpscaleConfiguration(),
         ) { root, presetRelativePath, parameters, clearHistory, (aiEnabled, aiScale) ->
-            val effectivePreset = if (aiEnabled && (presetRelativePath.isNullOrBlank() || presetRelativePath == "none")) {
+            val effectivePreset = if (aiEnabled) {
                 findAiUpscalePreset(root, aiScale) ?: presetRelativePath
             } else {
                 presetRelativePath
@@ -2130,14 +2162,23 @@ class SharedPreferencesSettingsRepository(
         globalParameterText: String?,
     ): RendererConfiguration {
         val renderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = baseConfiguration.renderer)
-        val requestedFiltering = romConfig.videoFiltering ?: baseConfiguration.videoFiltering
+        val aiEnabled = preferences.getBoolean("video_ai_upscale_enabled", false) && !preferences.contains("video_filtering")
+        val requestedFiltering = romConfig.videoFiltering ?: if (aiEnabled) {
+            VideoFiltering.AI_UPSCALE
+        } else {
+            baseConfiguration.videoFiltering
+        }
+        val cleanRomPresetPath = romConfig.retroArchShaderPresetPath
+            ?.removePrefix("internal:")
+            ?.removePrefix("folder:")
+            ?.takeIf { it.isNotBlank() && it != "none" }
         val retroArchShader = if (requestedFiltering == VideoFiltering.RETROARCH) {
-            if (romConfig.retroArchShaderPresetPath == null && romConfig.retroArchShaderParameters == null) {
+            if (cleanRomPresetPath == null && romConfig.retroArchShaderParameters == null) {
                 baseConfiguration.retroArchShader
             } else {
                 importRetroArchShader(
                     root = root,
-                    presetRelativePath = romConfig.retroArchShaderPresetPath ?: globalPresetRelativePath,
+                    presetRelativePath = cleanRomPresetPath ?: globalPresetRelativePath,
                     parameterOverrides = parseRetroArchShaderParameters(romConfig.retroArchShaderParameters ?: globalParameterText),
                     clearHistory = false,
                 )
@@ -2146,10 +2187,9 @@ class SharedPreferencesSettingsRepository(
             EmptyRetroArchShaderConfiguration
         }
         val effectiveFiltering = when {
-            renderer == VideoRenderer.VULKAN && !requestedFiltering.isSupportedByVulkan() -> VideoFiltering.NONE
-            renderer != VideoRenderer.VULKAN && !requestedFiltering.isSupportedByOpenGlSurface() -> VideoFiltering.NONE
+            !requestedFiltering.isSupportedByRenderer(renderer) -> VideoFiltering.NONE
             requestedFiltering == VideoFiltering.RETROARCH &&
-                retroArchShader.presetPath.isNullOrBlank() -> VideoFiltering.NONE
+                retroArchShader.presetPath.isNullOrBlank() -> if (aiEnabled) VideoFiltering.AI_UPSCALE else VideoFiltering.NONE
             else -> requestedFiltering
         }
         val threadedRendering = resolveThreadedRendering(

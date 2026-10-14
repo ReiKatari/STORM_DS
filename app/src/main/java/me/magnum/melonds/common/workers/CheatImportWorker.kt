@@ -50,7 +50,11 @@ class CheatImportWorker @AssistedInject constructor(
         val uri = inputData.getString(KEY_URI)?.toUri() ?: return Result.failure()
 
         try {
-            val databaseDocument = DocumentFile.fromSingleUri(applicationContext, uri)
+            val databaseDocument = if (uri.scheme == "file") {
+                uri.path?.let { DocumentFile.fromFile(java.io.File(it)) }
+            } else {
+                DocumentFile.fromSingleUri(applicationContext, uri)
+            }
             if (databaseDocument?.isFile != true) {
                 return Result.failure()
             }

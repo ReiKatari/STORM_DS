@@ -377,16 +377,54 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             allFilteringValues = allFilteringValues,
             allFilteringEntries = allFilteringEntries,
         )
+        val aiUpscaleSwitch = findPreference<SwitchPreference>("video_ai_upscale_enabled")
+        val isInitialAiUpscale = videoFilteringPreference.value.equals("ai_upscale", ignoreCase = true)
+        if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != isInitialAiUpscale) {
+            aiUpscaleSwitch.isChecked = isInitialAiUpscale
+            preferenceManager.sharedPreferences?.edit()?.putBoolean("video_ai_upscale_enabled", isInitialAiUpscale)?.apply()
+        }
+        aiUpscaleSwitch?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as? Boolean ?: false
+            if (enabled && !videoFilteringPreference.value.equals("ai_upscale", ignoreCase = true)) {
+                videoFilteringPreference.value = "ai_upscale"
+                updateShaderPickerPreferences(
+                    renderer = enumValueOfIgnoreCase(rendererPreference.value),
+                    filteringValue = "ai_upscale",
+                    retroArchShaderRootPreference = retroArchShaderRootPreference,
+                    retroArchShaderPresetPreference = retroArchShaderPresetPreference,
+                    retroArchShaderParametersPreference = retroArchShaderParametersPreference,
+                    retroArchShaderClearHistoryPreference = retroArchShaderClearHistoryPreference,
+                )
+            } else if (!enabled && videoFilteringPreference.value.equals("ai_upscale", ignoreCase = true)) {
+                videoFilteringPreference.value = "quilez"
+                updateShaderPickerPreferences(
+                    renderer = enumValueOfIgnoreCase(rendererPreference.value),
+                    filteringValue = "quilez",
+                    retroArchShaderRootPreference = retroArchShaderRootPreference,
+                    retroArchShaderPresetPreference = retroArchShaderPresetPreference,
+                    retroArchShaderParametersPreference = retroArchShaderParametersPreference,
+                    retroArchShaderClearHistoryPreference = retroArchShaderClearHistoryPreference,
+                )
+            }
+            true
+        }
+
         videoFilteringPreference.setOnPreferenceChangeListener { _, newValue ->
+            val newFilteringValue = newValue as String
+            val aiSelected = newFilteringValue.equals("ai_upscale", ignoreCase = true)
+            if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != aiSelected) {
+                aiUpscaleSwitch.isChecked = aiSelected
+                preferenceManager.sharedPreferences?.edit()?.putBoolean("video_ai_upscale_enabled", aiSelected)?.apply()
+            }
             updateShaderPickerPreferences(
                 renderer = enumValueOfIgnoreCase(rendererPreference.value),
-                filteringValue = newValue as String,
+                filteringValue = newFilteringValue,
                 retroArchShaderRootPreference = retroArchShaderRootPreference,
                 retroArchShaderPresetPreference = retroArchShaderPresetPreference,
                 retroArchShaderParametersPreference = retroArchShaderParametersPreference,
                 retroArchShaderClearHistoryPreference = retroArchShaderClearHistoryPreference,
             )
-            if (videoFilteringOrNone(newValue) == VideoFiltering.RETROARCH && resolveShaderSource() == null) {
+            if (videoFilteringOrNone(newFilteringValue) == VideoFiltering.RETROARCH && resolveShaderSource() == null) {
                 showShaderSourceDialog()
             }
             true
@@ -1032,7 +1070,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     it.isVisible = true
                 }
                 coverageFixPreferences.forEach {
-                    it.isVisible = false
+                    it.isVisible = true
                 }
                 rendererDebugPreferences.forEach {
                     it.isVisible = true
@@ -1102,28 +1140,12 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         videoFilteringPreference.entryValues = filteredPairs.map { it.first }.toTypedArray()
         videoFilteringPreference.entries = filteredPairs.map { it.second }.toTypedArray()
 
-        if (isSoftware) {
-            videoFilteringPreference.isEnabled = false
-            videoFilteringPreference.summary = "Шейдерная фильтрация и AI-Upscale недоступны при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
-        } else {
-            videoFilteringPreference.isEnabled = true
-            val currentFiltering = videoFilteringOrNone(videoFilteringPreference.value)
-            if (!currentFiltering.isSupportedByRenderer(renderer)) {
-                videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
-            }
-            videoFilteringPreference.summary = "%s"
+        videoFilteringPreference.isEnabled = true
+        val currentFiltering = videoFilteringOrNone(videoFilteringPreference.value)
+        if (!currentFiltering.isSupportedByRenderer(renderer)) {
+            videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
         }
-
-        // Lock / Unlock HD Custom Textures on Software renderer
-        findPreference<androidx.preference.TwoStatePreference>("video_hd_textures_enabled")?.let { customTexturesPref ->
-            if (isSoftware) {
-                customTexturesPref.isEnabled = false
-                customTexturesPref.summary = "Загрузка HD-текстур доступна только при аппаратном рендеринге (OpenGL / Vulkan)."
-            } else {
-                customTexturesPref.isEnabled = true
-                customTexturesPref.summary = getString(R.string.video_hd_textures_summary)
-            }
-        }
+        videoFilteringPreference.summary = "%s"
 
         // Lock / Unlock 3D Internal Resolution on Software renderer
         findPreference<ListPreference>("video_internal_resolution")?.let { internalResPref ->
@@ -1136,41 +1158,14 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
 
-        // Lock / Unlock AI-Upscale 2D option if present
         findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.let { aiSwitch ->
-            if (isSoftware) {
-                aiSwitch.isEnabled = false
-                aiSwitch.summary = "AI-Upscale 2D-спрайтов (Anime4K / xBRZ) недоступен при программном (Software) рендеринге. Переключите рендерер на OpenGL или Vulkan."
-            } else {
-                aiSwitch.isEnabled = true
-                aiSwitch.summary = getString(R.string.video_ai_upscale_summary)
-                aiSwitch.setOnPreferenceChangeListener { _, newValue ->
-                    val enabled = newValue as Boolean
-                    if (enabled && !shaderLibraryManager.isInstalled()) {
-                        AlertDialog.Builder(requireContext())
-                            .setTitle(R.string.video_ai_upscale_title)
-                            .setMessage("Для работы AI-Upscale 2D-спрайтов (Anime4K / xBRZ) требуется загрузить пакет шейдеров RetroArch.\n\nСкачать и установить сейчас?")
-                            .setPositiveButton("Скачать") { _, _ ->
-                                persistShaderSource(RetroArchShaderSource.INTERNAL)
-                                startShaderInstall()
-                            }
-                            .setNegativeButton(R.string.cancel, null)
-                            .show()
-                        true
-                    } else {
-                        true
-                    }
-                }
-            }
+            aiSwitch.isEnabled = true
+            aiSwitch.summary = getString(R.string.video_ai_upscale_summary)
         }
 
         findPreference<Preference>("video_ai_upscale_scale")?.let { aiUpscalePref ->
-            aiUpscalePref.isEnabled = !isSoftware
-            if (isSoftware) {
-                aiUpscalePref.summary = "AI-Upscale 2D недоступен в Software режиме."
-            } else {
-                aiUpscalePref.summary = "%s"
-            }
+            aiUpscalePref.isEnabled = true
+            aiUpscalePref.summary = "%s"
         }
 
         updateShaderPickerPreferences(
@@ -1201,6 +1196,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 showShaderCompatibilityReport()
                 true
             }
+        }
+        findPreference<EditTextPreference>("video_retroarch_shader_parameters")?.let {
+            helper.bindPreferenceSummaryToValue(it)
         }
         val rootPreference = findPreference<StoragePickerPreference>("video_retroarch_shader_root")
         if (rootPreference != null) {

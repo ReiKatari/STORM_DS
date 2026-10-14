@@ -574,5 +574,25 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
                     "    gl_FragColor = vec4(clamp(finalRgb, 0.0, 1.0), alpha);\n" +
                     "}"
         )
+
+        fun withResolutionScale(base: ShaderProgramSource, scale: Int, scalePixelGrid: Boolean = true): ShaderProgramSource {
+            val safeScale = scale.coerceIn(1, 16)
+            if (safeScale <= 1 || !scalePixelGrid) {
+                return base
+            }
+            val scaledWidth = TEXTURE_WIDTH * safeScale
+            val scaledHeight = TEXTURE_HEIGHT * safeScale
+            val replaceDims = { src: String ->
+                src.replace("vec2($TEXTURE_WIDTH, $TEXTURE_HEIGHT)", "vec2($scaledWidth, $scaledHeight)")
+                    .replace("vec2($TEXTURE_WIDTH.0, $TEXTURE_HEIGHT.0)", "vec2($scaledWidth.0, $scaledHeight.0)")
+                    .replace("float($TEXTURE_WIDTH)", "float($scaledWidth)")
+                    .replace("float($TEXTURE_HEIGHT)", "float($scaledHeight)")
+            }
+            return ShaderProgramSource(
+                base.textureFiltering,
+                replaceDims(base.vertexShaderSource),
+                replaceDims(base.fragmentShaderSource),
+            )
+        }
     }
 }

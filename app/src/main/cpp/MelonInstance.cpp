@@ -28,6 +28,7 @@
 #include "NDS.h"
 #include "NDSCart.h"
 #include "VulkanContext.h"
+#include "net/MPInterface.h"
 #include "net/Net_Slirp.h"
 #include "Platform.h"
 #include "RomDecryptor.h"
@@ -1329,11 +1330,7 @@ int getConfiguredVulkanScale(const VulkanRenderSettings& renderSettings)
 
 int getEffectiveVulkanRenderScale(const VulkanRenderSettings& renderSettings)
 {
-    const int configuredScale = getConfiguredVulkanScale(renderSettings);
-    if (!isFastForwardActive() || configuredScale <= kVulkanFastForwardHighResolutionScaleCap)
-        return configuredScale;
-
-    return kVulkanFastForwardHighResolutionScaleCap;
+    return getConfiguredVulkanScale(renderSettings);
 }
 
 VulkanRenderer3D::BackendMode getConfiguredVulkanBackendMode(const VulkanRenderSettings& renderSettings)
@@ -1599,6 +1596,8 @@ MelonInstance::MelonInstance(int instanceId, std::shared_ptr<EmulatorConfigurati
         nds = new NDS(std::move(*args), this);
     }
 
+    nds->GPU.GPU3D.SetWidescreen3D(configuration->enable3dWidescreen);
+
     if (vulkanSessionProfile.usesVulkanStrategy()
         && !UsesVulkanFastPath(vulkanSessionProfile.get()))
     {
@@ -1627,6 +1626,7 @@ MelonInstance::MelonInstance(int instanceId, std::shared_ptr<EmulatorConfigurati
     retroAchievementsManager = std::make_unique<RetroAchievements::RetroAchievementsManager>(nds);
 
     nds->Reset();
+    nds->SetARM9OverclockMultiplier(configuration->arm9OverclockMultiplier);
     setBatteryLevels();
     setDateTime();
 }
@@ -2619,6 +2619,10 @@ u32 MelonInstance::runFrame()
     {
         if (auto* renderer2D = dynamic_cast<GPU2D::SoftRenderer*>(&nds->GPU.GetRenderer2D()))
             renderer2D->BeginStructuredVulkan2DFrame();
+    }
+    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_Dummy)
+    {
+        melonDS::MPInterface::Get().Process();
     }
     u32 nLines = nds->RunFrame();
     if (measuringVulkan)
@@ -5097,7 +5101,10 @@ void MelonInstance::updateConfiguration(std::shared_ptr<EmulatorConfiguration> n
     {
         nds->SPU.SetInterpolation(static_cast<AudioInterpolation>(newConfiguration->audioSettings.audioInterpolation));
         nds->SPU.SetDegrade10Bit(static_cast<AudioBitDepth>(newConfiguration->audioSettings.audioBitrate));
+        nds->GPU.GPU3D.SetWidescreen3D(newConfiguration->enable3dWidescreen);
+        nds->SetARM9OverclockMultiplier(newConfiguration->arm9OverclockMultiplier);
     }
+    melonDS::Net_Slirp::SetCustomDNS(newConfiguration->wfcDnsIp);
 
     rewindManager.UpdateRewindSettings(newConfiguration->rewindEnabled, newConfiguration->rewindLengthSeconds, newConfiguration->rewindCaptureSpacingSeconds);
 

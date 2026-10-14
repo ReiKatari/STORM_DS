@@ -132,6 +132,15 @@ public:
     [[nodiscard]] Renderer3D& GetCurrentRenderer() noexcept { return *CurrentRenderer; }
     [[nodiscard]] const Renderer3D& GetCurrentRenderer() const noexcept { return *CurrentRenderer; }
     void SetCurrentRenderer(std::unique_ptr<Renderer3D>&& renderer) noexcept;
+    void SetWidescreen3D(bool enabled) noexcept
+    {
+        if (Widescreen3D != enabled)
+        {
+            Widescreen3D = enabled;
+            ClipMatrixDirty = true;
+        }
+    }
+    [[nodiscard]] bool IsWidescreen3D() const noexcept { return Widescreen3D; }
 
     u8 Read8(u32 addr) noexcept;
     u16 Read16(u32 addr) noexcept;
@@ -236,6 +245,7 @@ public:
 
     s32 ClipMatrix[16] {};
     bool ClipMatrixDirty = false;
+    bool Widescreen3D = false;
 
     u32 Viewport[6] {};
 

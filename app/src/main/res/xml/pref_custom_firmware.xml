@@ -4,6 +4,21 @@
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <SwitchPreference
+            android:key="use_custom_bios"
+            android:title="@string/use_custom_bios"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
+    <ListPreference
+            android:key="console_type"
+            android:title="@string/console_type"
+            android:entries="@array/console_type_options"
+            android:entryValues="@array/console_type_values"
+            android:defaultValue="ds"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+    <SwitchPreference
             android:key="show_bios"
             android:title="@string/show_boot_screen"
             app:iconSpaceReserved="false"

@@ -450,12 +450,12 @@ void NDS::Reset()
     {
         // BIOS files are now loaded by the frontend
 
-        ARM9ClockShift = 2;
+        ARM9ClockShift = std::min<u32>(3u, 2u + ARM9OverclockShift);
         MainRAMMask = 0xFFFFFF;
     }
     else
     {
-        ARM9ClockShift = 1;
+        ARM9ClockShift = std::min<u32>(3u, 1u + ARM9OverclockShift);
         MainRAMMask = 0x3FFFFF;
     }
     // has to be called before InitTimings
@@ -1104,6 +1104,28 @@ void NDS::Reschedule(u64 target)
     {
         if (target < ARM7Target)
             ARM7Target = target;
+    }
+}
+
+void NDS::SetARM9OverclockMultiplier(int multiplier)
+{
+    u32 newOverclockShift = 0;
+    if (multiplier >= 4)
+        newOverclockShift = 2;
+    else if (multiplier >= 2)
+        newOverclockShift = 1;
+    ARM9OverclockShift = newOverclockShift;
+
+    const u32 baseShift = (ConsoleType == 1) ? 2u : 1u;
+    const u32 targetShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
+    if (ARM9ClockShift != targetShift)
+    {
+        ARM9Timestamp >>= ARM9ClockShift;
+        ARM9Target    >>= ARM9ClockShift;
+        ARM9ClockShift = targetShift;
+        ARM9Timestamp <<= ARM9ClockShift;
+        ARM9Target    <<= ARM9ClockShift;
+        ARM9.UpdateRegionTimings(0x00000, 0x100000);
     }
 }
 
