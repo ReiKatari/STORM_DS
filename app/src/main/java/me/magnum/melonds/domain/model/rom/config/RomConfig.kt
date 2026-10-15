@@ -24,6 +24,7 @@ data class RomConfig(
     val dualScreenPreset: me.magnum.melonds.domain.model.DualScreenPreset? = null,
     val dualScreenKeepAspectRatio: Boolean? = null,
     val dualScreenIntegerScale: Boolean? = null,
+    val translatorSourceLang: String? = null,
 ) {
 
     fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
@@ -57,6 +58,7 @@ data class RomConfig(
                 dualScreenPreset = null,
                 dualScreenKeepAspectRatio = null,
                 dualScreenIntegerScale = null,
+                translatorSourceLang = null,
             )
         }
     }

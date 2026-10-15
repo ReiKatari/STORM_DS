@@ -85,6 +85,8 @@ class GameTranslatorManager(
         private set
     var currentGameHash: String? = null
         private set
+    var currentGameSourceLangOverride: String? = null
+        private set
 
     // Two-tier persistent translation cache (memory LRU + ROM disk JSON)
     private val translationCache = TranslationCache(activity)
@@ -127,11 +129,12 @@ class GameTranslatorManager(
     /**
      * Updates active ROM context to enable per-game OCR regions and speaker context.
      */
-    fun setCurrentGame(romTitle: String?, gameCode: String?, gameHash: String?) {
+    fun setCurrentGame(romTitle: String?, gameCode: String?, gameHash: String?, sourceLangOverride: String? = null) {
         currentGameTitle = romTitle
         currentGameCode = gameCode
         currentGameHash = gameHash
-        Log.i(TAG, "Active ROM set: title='$romTitle', code='$gameCode', hash='$gameHash'")
+        currentGameSourceLangOverride = sourceLangOverride?.takeIf { it.isNotBlank() }
+        Log.i(TAG, "Active ROM set: title='$romTitle', code='$gameCode', hash='$gameHash', langOverride='$currentGameSourceLangOverride'")
         ocrContextGraph.clearDialogueHistory()
         translationCache.setGameKey(getGameStorageKey())
         loadRegionsForCurrentGame()
@@ -183,7 +186,7 @@ class GameTranslatorManager(
     private var lastErrorToastTimeMs: Long = 0L
 
     fun getSourceLang(): String {
-        return preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
+        return currentGameSourceLangOverride ?: preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
     }
 
     private fun showThrottledErrorToast(message: String?, isAuto: Boolean) {
@@ -605,7 +608,7 @@ class GameTranslatorManager(
                     lastFrameDHash = currentDHash
                 }
 
-                val sourceLang = preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
+                val sourceLang = getSourceLang()
                 val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
 
                 val customRegions = when {

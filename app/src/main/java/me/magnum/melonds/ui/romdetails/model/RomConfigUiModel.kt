@@ -39,4 +39,5 @@ data class RomConfigUiModel(
     val dualScreenPreset: me.magnum.melonds.domain.model.DualScreenPreset? = null,
     val dualScreenKeepAspectRatio: Boolean? = null,
     val dualScreenIntegerScale: Boolean? = null,
+    val translatorSourceLang: String? = null,
 )

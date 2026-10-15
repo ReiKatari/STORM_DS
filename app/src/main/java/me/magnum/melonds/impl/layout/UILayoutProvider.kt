@@ -28,23 +28,35 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
     private val currentDisplays = MutableStateFlow<LayoutDisplayPair?>(null)
 
     private val currentLayoutVariant = combine(currentUiSize, currentUiInsets, currentOrientation, currentFolds, currentDisplays) { size, insets, orientation, folds, displays ->
-        val resolvedDisplays = displays ?: size?.let {
-            LayoutDisplayPair(
+        if (size == null || size.x <= 0 || size.y <= 0 || orientation == null) {
+            null
+        } else {
+            val normalizedSize = if (
+                (orientation == Orientation.LANDSCAPE && size.x < size.y) ||
+                (orientation == Orientation.PORTRAIT && size.x > size.y)
+            ) {
+                Point(size.y, size.x)
+            } else {
+                size
+            }
+            val baseDisplays = displays ?: LayoutDisplayPair(
                 mainScreenDisplay = me.magnum.melonds.domain.model.layout.LayoutDisplay(
                     id = 0,
                     type = me.magnum.melonds.domain.model.layout.LayoutDisplay.Type.BUILT_IN,
-                    width = it.x,
-                    height = it.y,
+                    width = normalizedSize.x,
+                    height = normalizedSize.y,
                 ),
                 secondaryScreenDisplay = null,
             )
+            val resolvedDisplays = baseDisplays.copy(
+                mainScreenDisplay = baseDisplays.mainScreenDisplay.copy(
+                    width = normalizedSize.x,
+                    height = normalizedSize.y,
+                )
+            )
+            UILayoutVariant(normalizedSize, insets, orientation, folds, resolvedDisplays)
         }
-        if (size == null || orientation == null || resolvedDisplays == null) {
-            null
-        } else {
-            UILayoutVariant(size, insets, orientation, folds, resolvedDisplays)
-        }
-    }.distinctUntilChanged().debounce(50.milliseconds)
+    }.distinctUntilChanged().debounce(32.milliseconds)
 
     private val _currentLayoutConfiguration = MutableStateFlow<LayoutConfiguration?>(null)
 
@@ -222,7 +234,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             it.key.orientation == variant.orientation && it.key.uiSize == variant.uiSize
         } ?: layoutConfiguration.layoutVariants.entries.firstOrNull {
             it.key.orientation == variant.orientation
-        } ?: layoutConfiguration.layoutVariants.entries.firstOrNull()
+        }
         if (bestVariant != null) {
             val sourceVariant = bestVariant.key
             val sourceLayout = bestVariant.value
@@ -234,7 +246,13 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
                 val sanitizedComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
                     if (comp.isScreen()) {
                         val defScreen = defaultLayout.mainScreenLayout.components?.firstOrNull { it.component == comp.component }
-                        if (defScreen != null && (comp.rect.width < defScreen.rect.width * 0.75f || comp.rect.height < defScreen.rect.height * 0.75f)) {
+                        if (defScreen != null && (
+                                comp.rect.width < defScreen.rect.width * 0.75f ||
+                                comp.rect.height < defScreen.rect.height * 0.75f ||
+                                comp.rect.right > variant.uiSize.x + 4 ||
+                                comp.rect.bottom > variant.uiSize.y + 4
+                            )
+                        ) {
                             hasCorruptedScreen = true
                             comp.copy(rect = defScreen.rect)
                         } else {
@@ -256,15 +274,15 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
                 if (rotatedInsets == variant.uiInsets) {
                     val offset = -sourceVariant.uiInsets.left + sourceVariant.uiInsets.right
                     val offsetComponents = sourceLayout.mainScreenLayout.components?.map {
-                        it.copy(rect = it.rect.copy(x = it.rect.x + offset))
+                        val maxX = (variant.uiSize.x - it.rect.width).coerceAtLeast(0)
+                        it.copy(rect = it.rect.copy(x = (it.rect.x + offset).coerceIn(0, maxX)))
                     }
                     return sourceLayout.copy(mainScreenLayout = sourceLayout.mainScreenLayout.copy(components = offsetComponents))
                 }
                 return sourceLayout
             }
 
-            // Proportional scaling and bounds clamping so user customizations and buttons are never lost on rotation
-            val isSameOrientation = sourceVariant.orientation == variant.orientation
+            // Proportional scaling and bounds clamping within the same orientation
             val scaleX = if (sourceVariant.uiSize.x > 0) variant.uiSize.x.toFloat() / sourceVariant.uiSize.x else 1f
             val scaleY = if (sourceVariant.uiSize.y > 0) variant.uiSize.y.toFloat() / sourceVariant.uiSize.y else 1f
             val targetW = variant.uiSize.x.coerceAtLeast(100)
@@ -272,18 +290,20 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
 
             val scaledComponents = sourceLayout.mainScreenLayout.components?.map { comp ->
                 if (comp.isScreen()) {
-                    val defaultScreenComp = defaultLayout.mainScreenLayout.components?.firstOrNull { it.component == comp.component }
-                    if (defaultScreenComp != null && !isSameOrientation) {
-                        comp.copy(rect = defaultScreenComp.rect)
-                    } else {
-                        val scaledWidth = (comp.rect.width * scaleX).toInt().coerceIn(100, targetW)
-                        val scaledHeight = (scaledWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceIn(75, targetH)
-                        val maxX = (targetW - scaledWidth).coerceAtLeast(0)
-                        val maxY = (targetH - scaledHeight).coerceAtLeast(0)
-                        val scaledX = (comp.rect.x * scaleX).toInt().coerceIn(0, maxX)
-                        val scaledY = (comp.rect.y * scaleY).toInt().coerceIn(0, maxY)
-                        comp.copy(rect = Rect(scaledX, scaledY, scaledWidth, scaledHeight))
+                    var scaledWidth = (comp.rect.width * scaleX).toInt().coerceIn(100, targetW)
+                    var scaledHeight = (scaledWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                    if (scaledHeight > targetH) {
+                        scaledHeight = targetH.coerceAtLeast(75)
+                        scaledWidth = (scaledHeight * me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceIn(100, targetW)
+                    } else if (scaledHeight < 75) {
+                        scaledHeight = 75
+                        scaledWidth = (scaledHeight * me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceIn(100, targetW)
                     }
+                    val maxX = (targetW - scaledWidth).coerceAtLeast(0)
+                    val maxY = (targetH - scaledHeight).coerceAtLeast(0)
+                    val scaledX = (comp.rect.x * scaleX).toInt().coerceIn(0, maxX)
+                    val scaledY = (comp.rect.y * scaleY).toInt().coerceIn(0, maxY)
+                    comp.copy(rect = Rect(scaledX, scaledY, scaledWidth, scaledHeight))
                 } else {
                     val compW = comp.rect.width.coerceIn(20, targetW)
                     val compH = comp.rect.height.coerceIn(20, targetH)

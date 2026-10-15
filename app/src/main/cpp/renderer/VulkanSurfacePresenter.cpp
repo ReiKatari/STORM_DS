@@ -2455,7 +2455,24 @@ bool VulkanSurfacePresenter::ensureSwapchain(
     bool fastPathProfile)
 {
     if (!surfaceState.swapchainDirty && surfaceState.swapchain != VK_NULL_HANDLE)
-        return true;
+    {
+        const u32 liveWinW = surfaceState.window != nullptr
+            ? static_cast<u32>(std::max(0, ANativeWindow_getWidth(surfaceState.window)))
+            : 0u;
+        const u32 liveWinH = surfaceState.window != nullptr
+            ? static_cast<u32>(std::max(0, ANativeWindow_getHeight(surfaceState.window)))
+            : 0u;
+        if (liveWinW > 0u && liveWinH > 0u &&
+            (surfaceState.extent.width != liveWinW || surfaceState.extent.height != liveWinH))
+        {
+            surfaceState.swapchainDirty = true;
+            surfaceState.vertexBufferDirty = true;
+        }
+        else
+        {
+            return true;
+        }
+    }
 
     const u64 ensureStartNs = PerfNowNs();
     const auto logSlowSegment = [&](const char* segment, u64 segmentStartNs) {
@@ -2513,8 +2530,10 @@ bool VulkanSurfacePresenter::ensureSwapchain(
     std::vector<VkPresentModeKHR> rankedPresentModes = rankPresentModes(presentModes);
     const u64 createLoopStartNs = PerfNowNs();
 
-    u32 width = surfaceState.requestedWidth > 0 ? surfaceState.requestedWidth : static_cast<u32>(std::max(1, ANativeWindow_getWidth(surfaceState.window)));
-    u32 height = surfaceState.requestedHeight > 0 ? surfaceState.requestedHeight : static_cast<u32>(std::max(1, ANativeWindow_getHeight(surfaceState.window)));
+    const u32 winWidth = surfaceState.window != nullptr ? static_cast<u32>(std::max(1, ANativeWindow_getWidth(surfaceState.window))) : 1u;
+    const u32 winHeight = surfaceState.window != nullptr ? static_cast<u32>(std::max(1, ANativeWindow_getHeight(surfaceState.window))) : 1u;
+    u32 width = surfaceState.requestedWidth > 0 ? surfaceState.requestedWidth : winWidth;
+    u32 height = surfaceState.requestedHeight > 0 ? surfaceState.requestedHeight : winHeight;
 
     VkExtent2D extent{};
     if (capabilities.currentExtent.width != UINT32_MAX)
@@ -3061,7 +3080,7 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
     std::snprintf(
         cacheFileName,
         sizeof(cacheFileName),
-        "vulkan_presenter_pipeline_cache_v1_%08x_%08x_%08x.bin",
+        "vulkan_presenter_pipeline_cache_v2_%08x_%08x_%08x.bin",
         deviceProperties.vendorID,
         deviceProperties.deviceID,
         deviceProperties.driverVersion

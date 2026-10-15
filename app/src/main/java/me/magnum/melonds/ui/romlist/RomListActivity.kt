@@ -60,6 +60,7 @@ class RomListActivity : AppCompatActivity() {
     }
 
     @Inject lateinit var markwon: Markwon
+    @Inject lateinit var settingsBackupManager: me.magnum.melonds.impl.SettingsBackupManager
     private val viewModel: RomListViewModel by viewModels()
     private val updatesViewModel: UpdatesViewModel by viewModels()
     private lateinit var emulatorLauncherValidatorDelegate: EmulatorLaunchValidatorDelegate
@@ -544,6 +545,9 @@ class RomListActivity : AppCompatActivity() {
         enablePhoneGameBoosterIntegration()
         checkAndRequestStoragePermission()
         me.magnum.melonds.MelonDSApplication.migrateStorageToRoot(this)
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            settingsBackupManager.syncExternalSettingsIfModified(force = false)
+        }
     }
 
     private fun enablePhoneGameBoosterIntegration() {

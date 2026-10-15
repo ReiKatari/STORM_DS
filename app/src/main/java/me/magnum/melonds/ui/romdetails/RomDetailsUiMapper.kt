@@ -60,6 +60,7 @@ class RomDetailsUiMapper(
             dualScreenPreset = romConfig.dualScreenPreset,
             dualScreenKeepAspectRatio = romConfig.dualScreenKeepAspectRatio,
             dualScreenIntegerScale = romConfig.dualScreenIntegerScale,
+            translatorSourceLang = romConfig.translatorSourceLang,
         )
     }
 

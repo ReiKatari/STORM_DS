@@ -1606,4 +1606,18 @@
     <string name="translator_local_voice_pitch_variance_title">Pitch variance between characters</string>
     <string name="translator_voice_model_dialog_title">Voice model pack</string>
     <string name="translator_action_all_settings">All settings ⚙️</string>
+    <string name="pref_cat_updates">Updates</string>
+    <string name="import_storm_folder_settings">Apply settings from STORM DS folder</string>
+    <string name="import_storm_folder_settings_summary">Load settings.json and STORM_DS.opts from STORM DS / settings</string>
+    <string name="manage_setting_snapshots">Settings snapshots and quick rollback</string>
+    <string name="manage_setting_snapshots_summary">Local restore points (dd.MM.yyyy HH:mm) in STORM DS / settings / backups</string>
+    <string name="export_import_stormlayout">Export and import screen layouts (.stormlayout)</string>
+    <string name="export_import_stormlayout_summary">Save and load custom screen layouts in STORM DS / settings</string>
+    <string name="backup_settings_summary">Export all settings, layouts and profiles to a selected folder</string>
+    <string name="restore_settings_summary">Import settings.json or STORM_DS.opts from any folder</string>
+    <string name="label_rom_config_translator_section">Auto-translator</string>
+    <string name="label_rom_config_translator_source_lang">Game source language</string>
+    <string name="label_rom_config_dual_screen_preset">Dual screen layout preset</string>
+    <string name="video_ai_upscale_sharpness_title">AI-Upscale and CAS sharpness (%)</string>
+    <string name="video_ai_upscale_sharpness_summary">Intensity of contrast-adaptive edge and text sharpening</string>
 </resources>

@@ -25,4 +25,6 @@ sealed class RomConfigUpdateEvent {
     data class RetroArchShaderPresetPathUpdate(val presetPath: String?) : RomConfigUpdateEvent()
     data class RetroArchShaderParametersUpdate(val parameters: String?) : RomConfigUpdateEvent()
     data class RetroAchievementsEnabledUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
+    data class DualScreenPresetUpdate(val preset: me.magnum.melonds.domain.model.DualScreenPreset?) : RomConfigUpdateEvent()
+    data class TranslatorSourceLangUpdate(val sourceLang: String?) : RomConfigUpdateEvent()
 }

@@ -47,6 +47,8 @@ data class RomConfigDto(
     val dualScreenKeepAspectRatio: Boolean? = null,
     @SerializedName("dualScreenIntegerScale")
     val dualScreenIntegerScale: Boolean? = null,
+    @SerializedName("translatorSourceLang")
+    val translatorSourceLang: String? = null,
 ) {
 
     companion object {
@@ -70,6 +72,7 @@ data class RomConfigDto(
                 romConfig.dualScreenPreset,
                 romConfig.dualScreenKeepAspectRatio,
                 romConfig.dualScreenIntegerScale,
+                romConfig.translatorSourceLang,
             )
         }
     }
@@ -94,6 +97,7 @@ data class RomConfigDto(
             dualScreenPreset = dualScreenPreset,
             dualScreenKeepAspectRatio = dualScreenKeepAspectRatio,
             dualScreenIntegerScale = dualScreenIntegerScale,
+            translatorSourceLang = translatorSourceLang,
         )
     }
 }

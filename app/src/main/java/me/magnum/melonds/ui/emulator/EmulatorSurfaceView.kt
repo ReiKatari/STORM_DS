@@ -135,7 +135,9 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
             }
 
             glContext.use(windowSurface!!)
-            GLES30.glViewport(0, 0, width, height)
+            val viewportW = if (surfaceWidth > 0) surfaceWidth else width
+            val viewportH = if (surfaceHeight > 0) surfaceHeight else height
+            GLES30.glViewport(0, 0, viewportW, viewportH)
 
             if (surfaceState == SurfaceState.UNINITIALIZED && renderer != null) {
                 renderer?.onSurfaceCreated()

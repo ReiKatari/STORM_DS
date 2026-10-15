@@ -112,6 +112,8 @@ private fun Content(
     val internalResolutionDialogState = rememberSingleChoiceDialogState<Int?>()
     val videoFilteringDialogState = rememberSingleChoiceDialogState<VideoFiltering?>()
     val retroAchievementsDialogState = rememberSingleChoiceDialogState<Boolean?>()
+    val dualScreenPresetDialogState = rememberSingleChoiceDialogState<me.magnum.melonds.domain.model.DualScreenPreset?>()
+    val translatorSourceLangDialogState = rememberSingleChoiceDialogState<String?>()
     val retroArchPresetPathDialogState = rememberTextInputDialogState()
     val retroArchParametersDialogState = rememberTextInputDialogState()
 
@@ -138,6 +140,8 @@ private fun Content(
     val rendererOptions = stringArrayResource(id = R.array.video_renderer_options)
     val internalResolutionOptions = stringArrayResource(id = R.array.video_internal_resolution_options)
     val videoFilteringOptions = stringArrayResource(id = R.array.video_filtering_options)
+    val translatorLangEntries = stringArrayResource(id = R.array.translator_source_lang_options)
+    val translatorLangValues = stringArrayResource(id = R.array.translator_source_lang_values)
     val useGlobal = stringResource(R.string.use_global_preference)
     val activityManager = context.getSystemService(ActivityManager::class.java)
     val supportsOpenGlRenderer = (activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0) >= GLES_3_2
@@ -445,11 +449,54 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.controller_layout),
                 value = romConfig.layoutName ?: useGlobalWithValue(globalLayoutLabel),
+                showDivider = true,
                 onClick = {
                     val intent = Intent(context, LayoutSelectorActivity::class.java).apply {
                         putExtra(LayoutSelectorActivity.KEY_SELECTED_LAYOUT_ID, romConfig.layoutId?.toString())
                     }
                     layoutSelectorLauncher.launch(intent)
+                },
+            )
+            fun dualScreenPresetLabel(preset: me.magnum.melonds.domain.model.DualScreenPreset?): String {
+                return when (preset) {
+                    null -> useGlobal
+                    me.magnum.melonds.domain.model.DualScreenPreset.OFF -> context.getString(R.string.dual_screen_preset_off)
+                    me.magnum.melonds.domain.model.DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> context.getString(R.string.dual_screen_preset_internal_top_external_bottom)
+                    me.magnum.melonds.domain.model.DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> context.getString(R.string.dual_screen_preset_internal_bottom_external_top)
+                }
+            }
+            ConfigRow(
+                title = stringResource(R.string.label_rom_config_dual_screen_preset),
+                value = dualScreenPresetLabel(romConfig.dualScreenPreset),
+                onClick = {
+                    dualScreenPresetDialogState.show(
+                        title = context.getString(R.string.label_rom_config_dual_screen_preset),
+                        items = listOf(null) + me.magnum.melonds.domain.model.DualScreenPreset.entries,
+                        labelOf = { dualScreenPresetLabel(it) },
+                        selected = romConfig.dualScreenPreset,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.DualScreenPresetUpdate(it)) },
+                    )
+                },
+            )
+        }
+
+        ConfigSection(title = stringResource(R.string.label_rom_config_translator_section)) {
+            fun translatorLangLabel(langCode: String?): String {
+                if (langCode.isNullOrBlank()) return useGlobal
+                val idx = translatorLangValues.indexOf(langCode)
+                return if (idx in translatorLangEntries.indices) translatorLangEntries[idx] else langCode
+            }
+            ConfigRow(
+                title = stringResource(R.string.label_rom_config_translator_source_lang),
+                value = translatorLangLabel(romConfig.translatorSourceLang),
+                onClick = {
+                    translatorSourceLangDialogState.show(
+                        title = context.getString(R.string.label_rom_config_translator_source_lang),
+                        items = listOf(null) + translatorLangValues.toList(),
+                        labelOf = { translatorLangLabel(it) },
+                        selected = romConfig.translatorSourceLang,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.TranslatorSourceLangUpdate(it)) },
+                    )
                 },
             )
         }
@@ -505,6 +552,8 @@ private fun Content(
     SingleChoiceDialog(internalResolutionDialogState)
     SingleChoiceDialog(videoFilteringDialogState)
     SingleChoiceDialog(retroAchievementsDialogState)
+    SingleChoiceDialog(dualScreenPresetDialogState)
+    SingleChoiceDialog(translatorSourceLangDialogState)
     TextInputDialog(
         title = stringResource(R.string.video_retroarch_shader_preset_title),
         dialogState = retroArchPresetPathDialogState,

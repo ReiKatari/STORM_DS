@@ -72,18 +72,42 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+            android:key="category_backup_restore"
             android:title="@string/pref_cat_backup_restore"
             app:iconSpaceReserved="false">
 
         <Preference
+                android:key="import_storm_folder_settings"
+                android:title="@string/import_storm_folder_settings"
+                android:summary="@string/import_storm_folder_settings_summary"
+                app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="manage_setting_snapshots"
+                android:title="@string/manage_setting_snapshots"
+                android:summary="@string/manage_setting_snapshots_summary"
+                app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="export_import_stormlayout"
+                android:title="@string/export_import_stormlayout"
+                android:summary="@string/export_import_stormlayout_summary"
+                app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="backup_settings"
                 android:title="@string/backup_settings"
+                android:summary="@string/backup_settings_summary"
                 app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
                 app:iconSpaceReserved="false" />
 
         <Preference
                 android:key="restore_settings"
                 android:title="@string/restore_settings"
+                android:summary="@string/restore_settings_summary"
                 app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
                 app:iconSpaceReserved="false" />
     </PreferenceCategory>

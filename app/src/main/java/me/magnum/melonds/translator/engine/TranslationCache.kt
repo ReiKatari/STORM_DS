@@ -42,9 +42,19 @@ class TranslationCache(
         dir.apply { mkdirs() }
     }
 
+    private val translationsDir: File by lazy {
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val dir = if (extRoot != null) {
+            File(extRoot, "STORM DS/translations")
+        } else {
+            File(context.filesDir, "translations")
+        }
+        dir.apply { mkdirs() }
+    }
+
     fun setGameKey(gameKey: String) {
         val safeKey = gameKey.replace(Regex("[^a-zA-Z0-9_]"), "_").take(32)
-        if (safeKey == activeGameKey) return
+        if (safeKey == activeGameKey && diskCacheMap.isNotEmpty()) return
 
         flush()
         activeGameKey = safeKey
@@ -55,40 +65,51 @@ class TranslationCache(
         return File(cacheDir, "cache_$safeKey.json")
     }
 
+    private fun getStormDictFile(safeKey: String): File {
+        return File(translationsDir, "$safeKey.stormdict.json")
+    }
+
     private fun loadFromDisk(safeKey: String) {
         diskCacheMap.clear()
-        val file = getCacheFile(safeKey)
-        if (!file.exists() || !file.isFile) return
-
-        try {
-            val jsonStr = file.readText(Charsets.UTF_8)
-            val json = JSONObject(jsonStr)
-            val keys = json.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                val v = json.optString(k, "")
-                if (v.isNotBlank()) {
-                    diskCacheMap[k] = v
-                    lru.put(k, v)
+        for (file in listOf(getCacheFile(safeKey), getStormDictFile(safeKey))) {
+            if (!file.exists() || !file.isFile) continue
+            try {
+                val jsonStr = file.readText(Charsets.UTF_8)
+                val json = JSONObject(jsonStr)
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    val v = json.optString(k, "")
+                    if (v.isNotBlank()) {
+                        diskCacheMap[k] = v
+                        lru.put(k, v)
+                    }
                 }
+            } catch (e: Throwable) {
+                Log.w("TranslationCache", "Failed to load translation memory from [${file.name}]: ${e.message}")
             }
+        }
+        if (diskCacheMap.isNotEmpty()) {
             Log.i("TranslationCache", "Loaded ${diskCacheMap.size} persistent translations for game [$safeKey]")
-        } catch (e: Throwable) {
-            Log.w("TranslationCache", "Failed to load persistent translation cache for [$safeKey]: ${e.message}")
         }
     }
 
     fun get(engine: String, sourceLang: String, targetLang: String, text: String): String? {
-        val k = key(engine, sourceLang, targetLang, text)
-        // Check LruCache (Tier 1)
-        val mem = lru.get(k)
-        if (mem != null) return mem
+        val exactKey = key(engine, sourceLang, targetLang, text)
+        val dictKey = dictKey(sourceLang, targetLang, text)
 
-        // Check Disk Cache Map (Tier 2)
-        val disk = diskCacheMap[k]
-        if (disk != null) {
-            lru.put(k, disk)
-            return disk
+        // Check LruCache (Tier 1)
+        lru.get(exactKey)?.let { return it }
+        lru.get(dictKey)?.let { return it }
+
+        // Check Disk Cache Map & .stormdict.json (Tier 2)
+        diskCacheMap[exactKey]?.let {
+            lru.put(exactKey, it)
+            return it
+        }
+        diskCacheMap[dictKey]?.let {
+            lru.put(exactKey, it)
+            return it
         }
 
         return null
@@ -96,9 +117,12 @@ class TranslationCache(
 
     fun put(engine: String, sourceLang: String, targetLang: String, text: String, translation: String) {
         if (translation.isBlank()) return
-        val k = key(engine, sourceLang, targetLang, text)
-        lru.put(k, translation)
-        diskCacheMap[k] = translation
+        val exactKey = key(engine, sourceLang, targetLang, text)
+        val sharedDictKey = dictKey(sourceLang, targetLang, text)
+        lru.put(exactKey, translation)
+        lru.put(sharedDictKey, translation)
+        diskCacheMap[exactKey] = translation
+        diskCacheMap[sharedDictKey] = translation
         isDirty = true
 
         scope.launch {
@@ -118,14 +142,22 @@ class TranslationCache(
         if (!isDirty) return
         try {
             val safeKey = activeGameKey
-            val file = getCacheFile(safeKey)
-            val json = JSONObject()
+            val cacheFile = getCacheFile(safeKey)
+            val dictFile = getStormDictFile(safeKey)
+            val fullJson = JSONObject()
+            val dictJson = JSONObject()
             for ((k, v) in diskCacheMap) {
-                json.put(k, v)
+                fullJson.put(k, v)
+                if (k.contains("->")) {
+                    dictJson.put(k, v)
+                }
             }
-            file.writeText(json.toString(), Charsets.UTF_8)
+            cacheFile.writeText(fullJson.toString(), Charsets.UTF_8)
+            if (dictJson.length() > 0) {
+                dictFile.writeText(dictJson.toString(2), Charsets.UTF_8)
+            }
             isDirty = false
-            Log.i("TranslationCache", "Saved ${diskCacheMap.size} translations to persistent cache [${file.name}]")
+            Log.i("TranslationCache", "Saved ${diskCacheMap.size} entries to persistent cache and ${dictFile.name}")
         } catch (e: Throwable) {
             Log.w("TranslationCache", "Failed to write persistent translation cache: ${e.message}")
         }
@@ -145,9 +177,13 @@ class TranslationCache(
         runCatching {
             cacheDir.listFiles { f -> f.isFile && f.name.startsWith("cache_") && f.name.endsWith(".json") }
                 ?.forEach { it.delete() }
+            translationsDir.listFiles { f -> f.isFile && f.name.endsWith(".stormdict.json") }
+                ?.forEach { it.delete() }
         }
         val file = getCacheFile(activeGameKey)
         if (file.exists()) file.delete()
+        val dictFile = getStormDictFile(activeGameKey)
+        if (dictFile.exists()) dictFile.delete()
         isDirty = false
     }
 
@@ -159,5 +195,8 @@ class TranslationCache(
 
         fun key(engine: String, sourceLang: String, targetLang: String, text: String): String =
             "$engine|$sourceLang|$targetLang|${normalize(text)}"
+
+        fun dictKey(sourceLang: String, targetLang: String, text: String): String =
+            "$sourceLang->$targetLang::${normalize(text)}"
     }
 }

@@ -1858,7 +1858,7 @@ class EmulatorActivity : AppCompatActivity() {
         } else {
             rom.name.filter { it.isLetterOrDigit() }.take(4)
         }
-        translatorManager.setCurrentGame(rom.name, gameCode, rom.retroAchievementsHash)
+        translatorManager.setCurrentGame(rom.name, gameCode, rom.retroAchievementsHash, rom.config.translatorSourceLang)
         lifecycleScope.launch {
             val url = if (settingsRepository.isRaCoverEnabled()) {
                 runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
@@ -2256,6 +2256,8 @@ class EmulatorActivity : AppCompatActivity() {
         binding.textResolution.isVisible = true
     }
 
+    private var instantiatedLayoutIsLandscape: Boolean? = null
+
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {
         if (layoutConfiguration != null) {
             lastKnownGoodTopRect = null
@@ -2265,6 +2267,12 @@ class EmulatorActivity : AppCompatActivity() {
                 instantiateLayout(layoutConfiguration, LayoutTarget.MAIN_SCREEN)
                 setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, frontendInputHandler.fastForwardEnabled)
                 setLayoutComponentToggleState(LayoutComponent.BUTTON_MICROPHONE_TOGGLE, frontendInputHandler.microphoneEnabled)
+            }
+            instantiatedLayoutIsLandscape = when (layoutConfiguration.layoutOrientation) {
+                me.magnum.melonds.domain.model.layout.LayoutConfiguration.LayoutOrientation.PORTRAIT -> false
+                me.magnum.melonds.domain.model.layout.LayoutConfiguration.LayoutOrientation.LANDSCAPE -> true
+                me.magnum.melonds.domain.model.layout.LayoutConfiguration.LayoutOrientation.FOLLOW_SYSTEM ->
+                    resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             }
             presentation?.apply {
                 updateLayout(layoutConfiguration)
@@ -2284,6 +2292,7 @@ class EmulatorActivity : AppCompatActivity() {
                 scheduleStartupPresentationRefreshes()
             }
         } else {
+            instantiatedLayoutIsLandscape = null
             binding.viewLayoutControls.destroyLayout()
             presentation?.layoutView?.destroyLayout()
         }
@@ -2413,10 +2422,6 @@ class EmulatorActivity : AppCompatActivity() {
         }
         val areas = resolveMainScreenPresentationAreas()
         consoleSkinAreasState.value = areas
-        if (currentScreenLayoutMode == null) {
-            areas.topScreenRect?.let { binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, it) }
-            areas.bottomScreenRect?.let { binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, it) }
-        }
         if (areas.hybridTopScreenRect != null && areas.hybridBottomScreenRect != null) {
             val hRect = Rect(
                 areas.hybridTopScreenRect.x,
@@ -2466,6 +2471,36 @@ class EmulatorActivity : AppCompatActivity() {
         }
     }
 
+    private fun resolveActiveMainSurfaceSize(): Pair<Int, Int> {
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val (surfW, surfH) = binding.surfaceMain.getCurrentSurfaceSize()
+        val rawW = when {
+            surfW > 0 -> surfW
+            binding.surfaceMain.width > 0 -> binding.surfaceMain.width
+            binding.viewLayoutControls.width > 0 -> binding.viewLayoutControls.width
+            else -> resources.displayMetrics.widthPixels
+        }
+        val rawH = when {
+            surfH > 0 -> surfH
+            binding.surfaceMain.height > 0 -> binding.surfaceMain.height
+            binding.viewLayoutControls.height > 0 -> binding.viewLayoutControls.height
+            else -> resources.displayMetrics.heightPixels
+        }
+        val realW = if (isLandscape) maxOf(rawW, rawH) else minOf(rawW, rawH)
+        val realH = if (isLandscape) minOf(rawW, rawH) else maxOf(rawW, rawH)
+        return realW to realH
+    }
+
+    private fun isRectValidForSurface(rect: Rect?, surfaceW: Int, surfaceH: Int): Boolean {
+        if (rect == null || rect.width <= 0 || rect.height <= 0) return false
+        if (surfaceW <= 0 || surfaceH <= 0) return true
+        val tolerance = 8
+        return rect.x >= -tolerance &&
+            rect.y >= -tolerance &&
+            rect.right <= surfaceW + tolerance &&
+            rect.bottom <= surfaceH + tolerance
+    }
+
     private fun resolveMainScreenPresentationAreas(): ScreenPresentationAreas {
         val areScreensSwapped = binding.viewLayoutControls.areScreensSwapped()
         val topView = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.TOP_SCREEN)
@@ -2474,17 +2509,13 @@ class EmulatorActivity : AppCompatActivity() {
         val (hybridTopRect, hybridBottomRect) = hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
 
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val displayMetrics = resources.displayMetrics
-        val realW = if (isLandscape) maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else minOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
-        val realH = if (isLandscape) minOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
-
-        val surfaceW = realW
-        val surfaceH = realH
+        val (surfaceW, surfaceH) = resolveActiveMainSurfaceSize()
 
         var topRect: Rect? = null
         var bottomRect: Rect? = null
         var topAlpha = topView?.baseAlpha ?: 1f
         var bottomAlpha = bottomView?.baseAlpha ?: 1f
+        var usedFallbackForStaleOrientation = false
 
         when (currentScreenLayoutMode) {
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_LANDSCAPE -> {
@@ -2598,34 +2629,43 @@ class EmulatorActivity : AppCompatActivity() {
             }
             else -> {
                 // AUTO_ROTATE / Пользовательский профиль раскладки из редактора
-                val rawTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
-                val rawBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val layoutMatchesOrientation = instantiatedLayoutIsLandscape == null || instantiatedLayoutIsLandscape == isLandscape
+                val candidateTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val candidateBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val bothFitSurface = layoutMatchesOrientation &&
+                    (candidateTop == null || isRectValidForSurface(candidateTop, surfaceW, surfaceH)) &&
+                    (candidateBottom == null || isRectValidForSurface(candidateBottom, surfaceW, surfaceH))
+                val rawTop = if (bothFitSurface) candidateTop else null
+                val rawBottom = if (bothFitSurface) candidateBottom else null
+                if (!bothFitSurface) {
+                    usedFallbackForStaleOrientation = true
+                }
 
-                if (rawTop != null && rawBottom == null) {
+                if (rawTop != null && rawBottom == null && bottomView == null) {
                     // Single-screen layout with only TOP_SCREEN placed (e.g. Ambernic RG406V full screen)
                     if (areScreensSwapped) {
                         topRect = null
                         bottomRect = rawTop
                         topAlpha = 0f
-                        bottomAlpha = topView.baseAlpha
+                        bottomAlpha = topView?.baseAlpha ?: 1f
                     } else {
                         topRect = rawTop
                         bottomRect = null
-                        topAlpha = topView.baseAlpha
+                        topAlpha = topView?.baseAlpha ?: 1f
                         bottomAlpha = 0f
                     }
-                } else if (rawBottom != null && rawTop == null) {
+                } else if (rawBottom != null && rawTop == null && topView == null) {
                     // Single-screen layout with only BOTTOM_SCREEN placed
                     if (areScreensSwapped) {
                         topRect = rawBottom
                         bottomRect = null
-                        topAlpha = bottomView.baseAlpha
+                        topAlpha = bottomView?.baseAlpha ?: 1f
                         bottomAlpha = 0f
                     } else {
                         topRect = null
                         bottomRect = rawBottom
                         topAlpha = 0f
-                        bottomAlpha = bottomView.baseAlpha
+                        bottomAlpha = bottomView?.baseAlpha ?: 1f
                     }
                 } else {
                     // Two screens placed or fallback default layout
@@ -2640,8 +2680,10 @@ class EmulatorActivity : AppCompatActivity() {
                         Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
                     }
 
-                    val rTop = rawTop ?: lastKnownGoodTopRect ?: defLayout.first
-                    val rBottom = rawBottom ?: lastKnownGoodBottomRect ?: defLayout.second
+                    val validLastTop = lastKnownGoodTopRect?.takeIf { isRectValidForSurface(it, surfaceW, surfaceH) }
+                    val validLastBottom = lastKnownGoodBottomRect?.takeIf { isRectValidForSurface(it, surfaceW, surfaceH) }
+                    val rTop = rawTop ?: validLastTop ?: defLayout.first
+                    val rBottom = rawBottom ?: validLastBottom ?: defLayout.second
 
                     if (areScreensSwapped) {
                         topRect = rBottom
@@ -2658,8 +2700,10 @@ class EmulatorActivity : AppCompatActivity() {
             }
         }
 
-        lastKnownGoodTopRect = topRect
-        lastKnownGoodBottomRect = bottomRect
+        if (!usedFallbackForStaleOrientation) {
+            lastKnownGoodTopRect = topRect
+            lastKnownGoodBottomRect = bottomRect
+        }
 
         return ScreenPresentationAreas(
             topScreenRect = topRect,
@@ -2724,14 +2768,11 @@ class EmulatorActivity : AppCompatActivity() {
         if (isClosingEmulator) {
             return
         }
-        if (currentPresentationBackend != PresentationBackend.VULKAN) {
-            return
-        }
 
         startupPresentationRefreshAttempts = 0
         val refreshRunnable = object : Runnable {
             override fun run() {
-                if (isDestroyed || currentPresentationBackend != PresentationBackend.VULKAN) {
+                if (isDestroyed || isClosingEmulator) {
                     startupPresentationRefreshRunnable = null
                     return
                 }
@@ -2932,10 +2973,7 @@ class EmulatorActivity : AppCompatActivity() {
             return null
         }
 
-        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val displayMetrics = resources.displayMetrics
-        val realW = if (isLandscape) maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else minOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
-        val realH = if (isLandscape) minOf(displayMetrics.widthPixels, displayMetrics.heightPixels) else maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+        val (realW, realH) = resolveActiveMainSurfaceSize()
 
         val (resolvedTopScreenRect, resolvedBottomScreenRect) = resolveVulkanScreenRects(
             topScreenRect = topScreenRect,
@@ -4856,6 +4894,14 @@ class EmulatorActivity : AppCompatActivity() {
         lastKnownGoodTopRect = null
         lastKnownGoodBottomRect = null
         updateOrientation(newConfig)
+        val isNewLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val curW = binding.viewLayoutControls.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val curH = binding.viewLayoutControls.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        val targetW = if (isNewLandscape) maxOf(curW, curH) else minOf(curW, curH)
+        val targetH = if (isNewLandscape) minOf(curW, curH) else maxOf(curW, curH)
+        if (targetW > 0 && targetH > 0) {
+            viewModel.setUiSize(targetW, targetH)
+        }
         binding.viewLayoutControls.post {
             updateDisplays()
             updateRendererScreenAreas()

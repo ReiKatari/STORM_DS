@@ -1533,4 +1533,18 @@
     <string name="translator_local_voice_pitch_variance_title">Вариативность тональности персонажей</string>
     <string name="translator_voice_model_dialog_title">Пакет моделей голоса</string>
     <string name="translator_action_all_settings">Все настройки ⚙️</string>
+    <string name="pref_cat_updates">Обновления</string>
+    <string name="import_storm_folder_settings">Применить настройки из папки STORM DS</string>
+    <string name="import_storm_folder_settings_summary">Загрузить settings.json и STORM_DS.opts из папки STORM DS / settings</string>
+    <string name="manage_setting_snapshots">Снимки настроек и быстрый откат</string>
+    <string name="manage_setting_snapshots_summary">Локальные точки восстановления (dd.MM.yyyy HH:mm) в папке STORM DS / settings / backups</string>
+    <string name="export_import_stormlayout">Экспорт и импорт раскладок экранов (.stormlayout)</string>
+    <string name="export_import_stormlayout_summary">Отдельное сохранение и загрузка пользовательских раскладок в папке STORM DS / settings</string>
+    <string name="backup_settings_summary">Экспортировать все настройки, раскладки и профили в выбранную папку</string>
+    <string name="restore_settings_summary">Импортировать settings.json или STORM_DS.opts из любой папки</string>
+    <string name="label_rom_config_translator_section">Авто-переводчик</string>
+    <string name="label_rom_config_translator_source_lang">Язык оригинала игры</string>
+    <string name="label_rom_config_dual_screen_preset">Расположение экранов (Dual screen)</string>
+    <string name="video_ai_upscale_sharpness_title">Резкость AI-Upscale и CAS (%)</string>
+    <string name="video_ai_upscale_sharpness_summary">Интенсивность контрастно-адаптивной резкости контуров и текста</string>
 </resources>

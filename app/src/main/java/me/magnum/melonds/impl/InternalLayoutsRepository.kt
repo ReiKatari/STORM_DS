@@ -40,6 +40,8 @@ class InternalLayoutsRepository(
 
     private val layoutsLoadLock = Mutex()
     private var areLayoutsLoaded = false
+    private var lastLoadedFileTimestamp = -1L
+    private var lastLoadedFileLength = -1L
     private val layouts = MutableStateFlow<List<Deletable<LayoutConfiguration>>>(emptyList())
 
     private val mGlobalLayoutPlaceholder by lazy {
@@ -125,7 +127,10 @@ class InternalLayoutsRepository(
 
     private suspend fun ensureLayoutsAreLoaded() = withContext(Dispatchers.IO) {
         layoutsLoadLock.withLock {
-            if (areLayoutsLoaded) {
+            val currentFile = getCandidateDataFile()
+            val currentModified = currentFile?.lastModified() ?: -1L
+            val currentLength = currentFile?.length() ?: -1L
+            if (areLayoutsLoaded && currentModified == lastLoadedFileTimestamp && currentLength == lastLoadedFileLength) {
                 return@withLock
             } else {
                 val deletableLayouts = loadLayouts().map { Deletable(it, false) }
@@ -137,6 +142,9 @@ class InternalLayoutsRepository(
                     add(Deletable(buildFullscreenLandscapeLayout(), false))
                     addAll(deletableLayouts)
                 }
+                val updatedFile = getCandidateDataFile()
+                lastLoadedFileTimestamp = updatedFile?.lastModified() ?: -1L
+                lastLoadedFileLength = updatedFile?.length() ?: -1L
                 areLayoutsLoaded = true
             }
         }
@@ -145,11 +153,26 @@ class InternalLayoutsRepository(
     private fun getExternalSettingsDir(): File {
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
         return if (extRoot != null) {
-            File(extRoot, "STORM DS/settings").apply {
+            val stormRoot = File(extRoot, "STORM DS")
+            val existingSettingsDir = runCatching {
+                stormRoot.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("settings", ignoreCase = true) }
+            }.getOrNull()
+            (existingSettingsDir ?: File(stormRoot, "settings")).apply {
                 runCatching { mkdirs() }
             }
         } else {
             context.filesDir
+        }
+    }
+
+    private fun getCandidateDataFile(): File? {
+        val externalSettingsDir = getExternalSettingsDir()
+        val externalDataFile = File(externalSettingsDir, DATA_FILE)
+        val internalDataFile = File(context.filesDir, DATA_FILE)
+        return when {
+            externalDataFile.isFile && externalDataFile.length() > 0 -> externalDataFile
+            internalDataFile.isFile && internalDataFile.length() > 0 -> internalDataFile
+            else -> null
         }
     }
 
@@ -163,11 +186,7 @@ class InternalLayoutsRepository(
         val externalDataFile = File(externalSettingsDir, DATA_FILE)
         val internalDataFile = File(context.filesDir, DATA_FILE)
 
-        val candidateFile = when {
-            externalDataFile.isFile && externalDataFile.length() > 0 -> externalDataFile
-            internalDataFile.isFile && internalDataFile.length() > 0 -> internalDataFile
-            else -> null
-        } ?: return emptyList()
+        val candidateFile = getCandidateDataFile() ?: return emptyList()
 
         return try {
             val layouts = gson.fromJson<List<LayoutConfigurationDto>>(FileReader(candidateFile), layoutListType)?.map {

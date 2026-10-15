@@ -168,6 +168,8 @@ class RomDetailsViewModel @Inject constructor(
             is RomConfigUpdateEvent.RetroArchShaderPresetPathUpdate -> currentRomConfig.copy(retroArchShaderPresetPath = event.presetPath)
             is RomConfigUpdateEvent.RetroArchShaderParametersUpdate -> currentRomConfig.copy(retroArchShaderParameters = event.parameters)
             is RomConfigUpdateEvent.RetroAchievementsEnabledUpdate -> currentRomConfig.copy(retroAchievementsEnabled = event.enabled)
+            is RomConfigUpdateEvent.DualScreenPresetUpdate -> currentRomConfig.copy(dualScreenPreset = event.preset)
+            is RomConfigUpdateEvent.TranslatorSourceLangUpdate -> currentRomConfig.copy(translatorSourceLang = event.sourceLang)
         }
 
         newRomConfig?.let { newConfig ->

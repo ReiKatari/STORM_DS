@@ -63,7 +63,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                         withContext(Dispatchers.Main) {
                             AlertDialog.Builder(requireContext())
                                 .setMessage(R.string.settings_restore_success)
-                                .setPositiveButton(android.R.string.ok, null)
+                                .setPositiveButton(android.R.string.ok) { _, _ ->
+                                    activity?.recreate()
+                                }
                                 .show()
                         }
                     }
@@ -138,6 +140,32 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
         updateFrameLimitSpeedPreferenceState()
 
+        findPreference<Preference>("import_storm_folder_settings")?.setOnPreferenceClickListener {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val imported = runCatching { settingsBackupManager.syncExternalSettingsIfModified(force = true) }.getOrDefault(false)
+                withContext(Dispatchers.Main) {
+                    if (imported) {
+                        AlertDialog.Builder(requireContext())
+                            .setMessage(R.string.settings_restore_success)
+                            .setPositiveButton(android.R.string.ok) { _, _ ->
+                                activity?.recreate()
+                            }
+                            .show()
+                    } else {
+                        Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            true
+        }
+        findPreference<Preference>("manage_setting_snapshots")?.setOnPreferenceClickListener {
+            showSnapshotsDialog()
+            true
+        }
+        findPreference<Preference>("export_import_stormlayout")?.setOnPreferenceClickListener {
+            showStormLayoutDialog()
+            true
+        }
         findPreference<Preference>("backup_settings")?.setOnPreferenceClickListener {
             backupLauncher.launch(null)
             true
@@ -146,6 +174,108 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             restoreLauncher.launch(null)
             true
         }
+    }
+
+    private fun showSnapshotsDialog() {
+        val isRu = java.util.Locale.getDefault().language.startsWith("ru")
+        lifecycleScope.launch(Dispatchers.IO) {
+            val snapshots = settingsBackupManager.listSnapshots()
+            withContext(Dispatchers.Main) {
+                val createLabel = if (isRu) "➕ Создать снимок настроек сейчас" else "➕ Create settings snapshot now"
+                val items = mutableListOf(createLabel)
+                snapshots.forEach { snap ->
+                    val reasonLabel = when (snap.reason) {
+                        "auto" -> if (isRu) "Авто перед импортом" else "Auto before import"
+                        else -> if (isRu) "Вручную" else "Manual"
+                    }
+                    items.add("📦 ${snap.displayDate} — $reasonLabel")
+                }
+
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.manage_setting_snapshots)
+                    .setItems(items.toTypedArray()) { _, which ->
+                        if (which == 0) {
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val created = settingsBackupManager.createSnapshot("manual")
+                                withContext(Dispatchers.Main) {
+                                    val msg = if (created != null) {
+                                        if (isRu) "Снимок сохранён: ${created.displayDate}" else "Snapshot saved: ${created.displayDate}"
+                                    } else {
+                                        getString(R.string.settings_backup_error)
+                                    }
+                                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            val selected = snapshots.getOrNull(which - 1) ?: return@setItems
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val ok = settingsBackupManager.restoreSnapshot(selected)
+                                withContext(Dispatchers.Main) {
+                                    if (ok) {
+                                        AlertDialog.Builder(requireContext())
+                                            .setMessage(R.string.settings_restore_success)
+                                            .setPositiveButton(android.R.string.ok) { _, _ ->
+                                                activity?.recreate()
+                                            }
+                                            .show()
+                                    } else {
+                                        Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun showStormLayoutDialog() {
+        val isRu = java.util.Locale.getDefault().language.startsWith("ru")
+        val options = if (isRu) {
+            arrayOf(
+                "📤 Экспортировать раскладки (layouts_backup.stormlayout)",
+                "📥 Импортировать раскладки (.stormlayout / layouts.json)"
+            )
+        } else {
+            arrayOf(
+                "📤 Export layouts (layouts_backup.stormlayout)",
+                "📥 Import layouts (.stormlayout / layouts.json)"
+            )
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.export_import_stormlayout)
+            .setItems(options) { _, which ->
+                if (which == 0) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val exported = settingsBackupManager.exportLayoutsToStormFolder()
+                        withContext(Dispatchers.Main) {
+                            val msg = if (exported != null) {
+                                if (isRu) "Раскладки сохранены: ${exported.name}" else "Layouts exported: ${exported.name}"
+                            } else {
+                                getString(R.string.settings_backup_error)
+                            }
+                            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val count = settingsBackupManager.importLayoutsFromStormFolder()
+                        withContext(Dispatchers.Main) {
+                            if (count >= 0) {
+                                val msg = if (isRu) "Импортировано раскладок: $count" else "Imported layouts: $count"
+                                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                                activity?.recreate()
+                            } else {
+                                Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     override fun onResume() {
