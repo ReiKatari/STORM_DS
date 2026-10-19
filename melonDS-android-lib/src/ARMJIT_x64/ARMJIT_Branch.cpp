@@ -239,6 +239,7 @@ void Compiler::T_Comp_B()
 {
     s32 offset = (s32)((CurInstr.Instr & 0x7FF) << 21) >> 20;
     Comp_JumpTo(R15 + offset + 1);
+    Comp_SpecialBranchBehaviour(true);
 }
 
 void Compiler::T_Comp_BranchXchangeReg()

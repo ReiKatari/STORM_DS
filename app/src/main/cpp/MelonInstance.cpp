@@ -3188,9 +3188,8 @@ bool MelonInstance::presentVulkanFrame(
 
         const bool frameReady = vulkanOutput->isFrameReady(frame);
         if (shouldUseAdaptiveTemporalBlocking && !frameReady)
-            vulkanTemporal3dNotReadyFrames = deviceProfile.IsArmMali
-                ? kVulkanTemporal3dNotReadyBlockingFrames
-                : std::min(vulkanTemporal3dNotReadyFrames + 1, kVulkanTemporal3dNotReadyBlockingFrames);
+            vulkanTemporal3dNotReadyFrames =
+                std::min(vulkanTemporal3dNotReadyFrames + 1, kVulkanTemporal3dNotReadyBlockingFrames);
         else
             vulkanTemporal3dNotReadyFrames = 0;
 

@@ -468,10 +468,22 @@ class AndroidEmulatorManager(
                     if (!retryResult.isTerminal && isActive) {
                         messageQueue.start()
                         if (!precompileVulkanPipelines(fallbackConfig)) {
-                            cameraManager.stopCurrentCameraSource()
-                            MelonEmulator.stopEmulation()
+                            writeGameExecutionLog(rom, rom.fileName, true, "Vulkan pipeline precompilation failed in DS fallback; switching renderer to OpenGL", "loadRom (OpenGL Fallback)")
                             messageQueue.stop()
-                            return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                            MelonEmulator.stopEmulation()
+                            val glConfig = fallbackConfig.copy(
+                                rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = VideoRenderer.OPENGL)
+                            )
+                            setupEmulator(glConfig)
+                            MelonEmulator.loadRom(
+                                romUri = romUri,
+                                sramUri = sram,
+                                gbaSlotType = gbaSlotType,
+                                gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
+                                gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
+                            )
+                            messageQueue.start()
+                            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
                         }
                         MelonEmulator.setupCheats(cheats.toTypedArray())
                         MelonEmulator.startEmulation(startPaused = true)
@@ -498,11 +510,27 @@ class AndroidEmulatorManager(
                         val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                         val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
                         val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
-                        cameraManager.stopCurrentCameraSource()
-                        MelonEmulator.stopEmulation()
+                        writeGameExecutionLog(rom, rom.fileName, true, "Vulkan pipeline precompilation failed; automatically falling back to OpenGL\n$fullDiag", "loadRom (OpenGL Fallback)")
                         messageQueue.stop()
-                        writeGameExecutionLog(rom, rom.fileName, false, "Vulkan pipeline precompilation failed\n$fullDiag", "loadRom")
-                        return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
+                        MelonEmulator.stopEmulation()
+                        val glFallbackConfig = emulatorConfiguration.copy(
+                            rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = VideoRenderer.OPENGL)
+                        )
+                        setupEmulator(glFallbackConfig)
+                        val glRetryResult = MelonEmulator.loadRom(
+                            romUri = romUri,
+                            sramUri = sram,
+                            gbaSlotType = gbaSlotType,
+                            gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
+                            gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
+                        )
+                        if (glRetryResult.isTerminal || !isActive) {
+                            cameraManager.stopCurrentCameraSource()
+                            MelonEmulator.stopEmulation()
+                            return@withContext RomLaunchResult.LaunchFailed(glRetryResult)
+                        }
+                        messageQueue.start()
+                        _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
                     }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
                     MelonEmulator.startEmulation(startPaused = true)

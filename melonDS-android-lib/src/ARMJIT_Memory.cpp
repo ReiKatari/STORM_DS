@@ -200,49 +200,51 @@ void ARMJIT_Memory::SigsegvHandler(int sig, siginfo_t* info, void* rawContext)
 {
     if (sig != SIGSEGV && sig != SIGBUS)
     {
-        // We are not interested in other signals - handle it as usual.
         return;
     }
-    if (info->si_code != SEGV_MAPERR && info->si_code != SEGV_ACCERR)
+
+    if (info != nullptr
+        && rawContext != nullptr
+        && (info->si_code == SEGV_MAPERR || info->si_code == SEGV_ACCERR)
+        && NDS::Current != nullptr)
     {
-        // Huh? Return.
-        return;
+        ucontext_t* context = (ucontext_t*)rawContext;
+        u8* curArea = (u8*)(NDS::Current->CurCPU == 0
+            ? NDS::Current->JIT.Memory.FastMem9Start
+            : NDS::Current->JIT.Memory.FastMem7Start);
+
+        if (curArea != nullptr
+            && (u8*)info->si_addr >= curArea
+            && (u8*)info->si_addr < curArea + AddrSpaceSize)
+        {
+            FaultDescription desc {};
+            desc.EmulatedFaultAddr = (u8*)info->si_addr - curArea;
+            desc.FaultPC = (u8*)context->CONTEXT_PC;
+
+            if (FaultHandler(desc, *NDS::Current))
+            {
+                context->CONTEXT_PC = (u64)desc.FaultPC;
+                return;
+            }
+        }
     }
 
-    ucontext_t* context = (ucontext_t*)rawContext;
-
-    FaultDescription desc {};
-    u8* curArea = (u8*)(NDS::Current->CurCPU == 0 ? NDS::Current->JIT.Memory.FastMem9Start : NDS::Current->JIT.Memory.FastMem7Start);
-
-    desc.EmulatedFaultAddr = (u8*)info->si_addr - curArea;
-    desc.FaultPC = (u8*)context->CONTEXT_PC;
-
-    if (FaultHandler(desc, *NDS::Current))
-    {
-        context->CONTEXT_PC = (u64)desc.FaultPC;
-        return;
-    }
-
-    struct sigaction* oldSa;
-    if (sig == SIGSEGV)
-      oldSa = &OldSaSegv;
-    else
-      oldSa = &OldSaBus;
+    struct sigaction* oldSa = (sig == SIGSEGV) ? &OldSaSegv : &OldSaBus;
 
     if (oldSa->sa_flags & SA_SIGINFO)
     {
-      oldSa->sa_sigaction(sig, info, rawContext);
-      return;
+        if (oldSa->sa_sigaction != nullptr)
+            oldSa->sa_sigaction(sig, info, rawContext);
+        return;
     }
     if (oldSa->sa_handler == SIG_DFL)
     {
-      signal(sig, SIG_DFL);
-      return;
+        signal(sig, SIG_DFL);
+        return;
     }
-    if (oldSa->sa_handler == SIG_IGN)
+    if (oldSa->sa_handler == SIG_IGN || oldSa->sa_handler == nullptr)
     {
-      // Ignore signal
-      return;
+        return;
     }
     oldSa->sa_handler(sig);
 }
@@ -793,10 +795,10 @@ void ARMJIT_Memory::RegisterFaultHandler()
         Log(LogLevel::Error, "Could not load new Windows virtual memory functions, fast memory is disabled.\n");
     }
 #else
-    struct sigaction sa;
+    struct sigaction sa{};
     sa.sa_handler = nullptr;
     sa.sa_sigaction = &SigsegvHandler;
-    sa.sa_flags = SA_SIGINFO;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGSEGV, &sa, &OldSaSegv);
 #ifdef __APPLE__
@@ -890,30 +892,43 @@ ARMJIT_Memory::ARMJIT_Memory(melonDS::NDS& nds) : NDS(nds)
         mapViewOfFile3Ptr(MemoryFile, nullptr, MemoryBase, 0, MemoryTotalSize, MEM_REPLACE_PLACEHOLDER, PAGE_READWRITE, nullptr, 0);
 
         VirtmemPlaceholders.push_back({reinterpret_cast<uintptr_t>(MemoryBase)+MemoryTotalSize, AddrSpaceSize*2});
+        FastMem9Start = MemoryBase + MemoryTotalSize;
+        FastMem7Start = static_cast<u8*>(FastMem9Start) + AddrSpaceSize;
     }
     else
     {
         // old Windows version
-        MemoryBase = new u8[MemoryTotalSize];
+        MemoryBase = new u8[MemoryTotalSize]();
+        FastMem9Start = nullptr;
+        FastMem7Start = nullptr;
     }
 #else
-    MemoryBase = (u8*)mmap(nullptr, VirtmemAreaSize, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    void* reservedArea = mmap(nullptr, VirtmemAreaSize, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    MemoryBase = (reservedArea != MAP_FAILED) ? static_cast<u8*>(reservedArea) : nullptr;
+    MemoryFile = -1;
 
 #if defined(__ANDROID__)
     Libandroid = Platform::DynamicLibrary_Load("libandroid.so");
     using type_ASharedMemory_create = int(*)(const char* name, size_t size);
-    auto ASharedMemory_create = reinterpret_cast<type_ASharedMemory_create>(Platform::DynamicLibrary_LoadFunction(Libandroid, "ASharedMemory_create"));
+    auto ASharedMemory_create = Libandroid
+        ? reinterpret_cast<type_ASharedMemory_create>(Platform::DynamicLibrary_LoadFunction(Libandroid, "ASharedMemory_create"))
+        : nullptr;
 
     if (ASharedMemory_create)
     {
         MemoryFile = ASharedMemory_create("melondsfastmem", MemoryTotalSize);
     }
-    else
+    if (MemoryFile < 0)
     {
         int fd = open(ASHMEM_DEVICE, O_RDWR);
-        ioctl(fd, ASHMEM_SET_NAME, "melondsfastmem");
-        ioctl(fd, ASHMEM_SET_SIZE, MemoryTotalSize);
-        MemoryFile = fd;
+        if (fd >= 0)
+        {
+            ioctl(fd, ASHMEM_SET_NAME, "melondsfastmem");
+            if (ioctl(fd, ASHMEM_SET_SIZE, MemoryTotalSize) >= 0)
+                MemoryFile = fd;
+            else
+                close(fd);
+        }
     }
 #else
     char fastmemPidName[snprintf(NULL, 0, "/melondsfastmem%d", getpid()) + 1];
@@ -926,16 +941,45 @@ ARMJIT_Memory::ARMJIT_Memory(melonDS::NDS& nds) : NDS(nds)
     shm_unlink(fastmemPidName);
 #endif
 #if !defined(__ANDROID__)
-    if (ftruncate(MemoryFile, MemoryTotalSize) < 0)
+    if (MemoryFile >= 0 && ftruncate(MemoryFile, MemoryTotalSize) < 0)
     {
         Log(LogLevel::Error, "Failed to allocate memory using ftruncate! (%s)", strerror(errno));
     }
 #endif
 
-    mmap(MemoryBase, MemoryTotalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, MemoryFile, 0);
+    bool fastMemMapped = false;
+    if (MemoryBase != nullptr && MemoryFile >= 0)
+    {
+        void* mappedBase = mmap(MemoryBase, MemoryTotalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, MemoryFile, 0);
+        if (mappedBase != MAP_FAILED)
+        {
+            fastMemMapped = true;
+        }
+    }
+
+    if (fastMemMapped)
+    {
+        FastMem9Start = MemoryBase + MemoryTotalSize;
+        FastMem7Start = static_cast<u8*>(FastMem9Start) + AddrSpaceSize;
+    }
+    else
+    {
+        Log(LogLevel::Warn, "ARMJIT_Memory: FastMem VA mapping unavailable; using direct heap allocation fallback\n");
+        if (MemoryBase != nullptr)
+        {
+            munmap(MemoryBase, VirtmemAreaSize);
+            MemoryBase = nullptr;
+        }
+        if (MemoryFile >= 0)
+        {
+            close(MemoryFile);
+            MemoryFile = -1;
+        }
+        MemoryBase = new u8[MemoryTotalSize]();
+        FastMem9Start = nullptr;
+        FastMem7Start = nullptr;
+    }
 #endif
-    FastMem9Start = MemoryBase+MemoryTotalSize;
-    FastMem7Start = static_cast<u8*>(FastMem9Start)+AddrSpaceSize;
 }
 
 ARMJIT_Memory::~ARMJIT_Memory() noexcept
@@ -985,7 +1029,10 @@ ARMJIT_Memory::~ARMJIT_Memory() noexcept
 #else
     if (MemoryBase)
     {
-        munmap(MemoryBase, VirtmemAreaSize);
+        if (FastMem9Start != nullptr)
+            munmap(MemoryBase, VirtmemAreaSize);
+        else
+            delete[] MemoryBase;
         MemoryBase = nullptr;
         FastMem9Start = nullptr;
         FastMem7Start = nullptr;
@@ -1032,6 +1079,8 @@ void ARMJIT_Memory::Reset() noexcept
 
 bool ARMJIT_Memory::IsFastmemCompatible(int region) const noexcept
 {
+    if (FastMem9Start == nullptr || MemoryFile < 0)
+        return false;
     return OffsetsPerRegion[region] != UINT32_MAX;
 }
 

@@ -194,7 +194,11 @@ if (NOT MSVC)
             -O3
             -fomit-frame-pointer
             -fvectorize
+            -fslp-vectorize
+            -funroll-loops
             -fno-semantic-interposition
+            -fno-math-errno
+            -fno-trapping-math
         )
     endif()
 endif()

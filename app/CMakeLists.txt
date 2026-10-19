@@ -265,6 +265,15 @@ if (NOT MELONDS_ANDROID_DEBUG_BUILD)
         -fvisibility-inlines-hidden
         -finline-functions
         -fvectorize
+        -fslp-vectorize
+        -funroll-loops
         -fno-semantic-interposition
+        -fno-math-errno
+        -fno-trapping-math
+        -ffunction-sections
+        -fdata-sections
+    )
+    target_link_options(melonDS-android-frontend PRIVATE
+        -Wl,-O3,--gc-sections,--icf=safe
     )
 endif()

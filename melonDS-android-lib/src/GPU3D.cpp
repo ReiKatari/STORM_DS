@@ -1149,14 +1149,16 @@ void GPU3D::SubmitPolygon() noexcept
         vtx->FinalPosition[1] = posY & 0xFF;
 
         // hi-res positions
-        // to consider: only do this when using the GL renderer? apply the aforementioned quirk to this?
+        // Clamp to valid [0, 0x1FFF] / [0, 0xFFF] subpixel range instead of bitwise wrapping
+        // so vertices slightly outside [-w, +w] after clipping or w > 0xFFFF do not wrap
+        // across the screen (fixes stretched cutscene geometry in Golden Sun: Dark Dawn).
         if (w != 0)
         {
-            posX = ((((s64)(vtx->Position[0] + w) * Viewport[4]) << 4) / (((s64)w) << 1)) + (Viewport[0] << 4);
-            posY = ((((s64)(-vtx->Position[1] + w) * Viewport[5]) << 4) / (((s64)w) << 1)) + (Viewport[3] << 4);
+            s64 hiresX = ((((s64)(vtx->Position[0] + w) * Viewport[4]) << 4) / (((s64)w) << 1)) + (Viewport[0] << 4);
+            s64 hiresY = ((((s64)(-vtx->Position[1] + w) * Viewport[5]) << 4) / (((s64)w) << 1)) + (Viewport[3] << 4);
 
-            vtx->HiresPosition[0] = posX & 0x1FFF;
-            vtx->HiresPosition[1] = posY & 0xFFF;
+            vtx->HiresPosition[0] = (s16)std::clamp<s64>(hiresX, 0, 0x1FFF);
+            vtx->HiresPosition[1] = (s16)std::clamp<s64>(hiresY, 0, 0xFFF);
         }
         else
         {

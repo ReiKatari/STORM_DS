@@ -1073,7 +1073,7 @@ void VulkanRenderer3D::RenderFrameCompatibilityBackend(GPU& gpu)
             };
         }
 
-        if (Threaded && profile.IsMaliG52Class)
+        if (Threaded && (profile.IsMaliG52Class || profile.IsArmMali))
         {
             return {
                 RasterExecutionProfile::MaliCpuDense,
@@ -1571,7 +1571,7 @@ void VulkanRenderer3D::RenderFrameActiveBackend(GPU& gpu)
             };
         }
 
-        if (Threaded && profile.IsMaliG52Class)
+        if (Threaded && (profile.IsMaliG52Class || profile.IsArmMali))
         {
             return {
                 RasterExecutionProfile::MaliCpuDense,
@@ -3162,7 +3162,8 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
         return false;
 
     const VulkanDeviceProfile& deviceProfile = VulkanContext::Get().GetDeviceProfile();
-    if (ActiveBackendMode == BackendMode::GraphicsHardware && deviceProfile.IsMaliG52Class)
+    if (ActiveBackendMode == BackendMode::GraphicsHardware
+        && (deviceProfile.IsMaliG52Class || deviceProfile.IsArmMali || deviceProfile.IsPowerVR))
     {
         return true;
     }

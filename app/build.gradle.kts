@@ -89,8 +89,8 @@ android {
         }
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -O3 -fvectorize -fomit-frame-pointer -fno-semantic-interposition -Wno-write-strings")
-                cFlags("-O3 -fvectorize -fomit-frame-pointer -fno-semantic-interposition")
+                cppFlags("-std=c++17 -O3 -fvectorize -fslp-vectorize -funroll-loops -fomit-frame-pointer -fno-semantic-interposition -fno-math-errno -fno-trapping-math -Wno-write-strings")
+                cFlags("-O3 -fvectorize -fslp-vectorize -funroll-loops -fomit-frame-pointer -fno-semantic-interposition -fno-math-errno -fno-trapping-math")
                 arguments("-DENABLE_LTO_RELEASE=OFF", "-DENABLE_LTO=OFF", "-DANDROID_ARM_NEON=TRUE")
             }
         }

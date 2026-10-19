@@ -472,7 +472,7 @@ ARMJIT::ARMJIT(melonDS::NDS& nds, std::optional<JITArgs> jit) noexcept :
         NDS(nds),
         Memory(nds),
         JITCompiler(nds),
-        MaxBlockSize(jit.has_value() ? std::clamp(jit->MaxBlockSize, 1u, 32u) : 32),
+        MaxBlockSize(jit.has_value() ? std::clamp(jit->MaxBlockSize, 1u, 128u) : 64),
         LiteralOptimizations(jit.has_value() ? jit->LiteralOptimizations : false),
         BranchOptimizations(jit.has_value() ? jit->BranchOptimizations : false),
         FastMemory((jit.has_value() ? jit->FastMemory : false) && ARMJIT_Memory::IsFastMemSupported()),
@@ -521,7 +521,7 @@ void ARMJIT::RetireJitBlock(JitBlock* block) noexcept
 void ARMJIT::SetJITArgs(JITArgs args) noexcept
 {
     args.FastMemory = args.FastMemory && ARMJIT_Memory::IsFastMemSupported();
-    args.MaxBlockSize = std::clamp(args.MaxBlockSize, 1u, 32u);
+    args.MaxBlockSize = std::clamp(args.MaxBlockSize, 1u, 128u);
 
     if (MaxBlockSize != args.MaxBlockSize
         || LiteralOptimizations != args.LiteralOptimizations
@@ -798,9 +798,10 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
                     }
                 }
 
-                if (cond < 0xE && target < instrs[i].Addr && target >= lastSegmentStart)
+                if (cond <= 0xE && target <= instrs[i].Addr && target >= lastSegmentStart)
                 {
-                    // we might have an idle loop
+                    // Detect both conditional polling idle loops (cond < 0xE) and
+                    // unconditional IRQ wait spinloops (cond == 0xE, e.g. loop: B loop)
                     u32 backwardsOffset = (instrs[i].Addr - target) / (thumb ? 2 : 4);
                     if (IsIdleLoop(thumb, &instrs[i - backwardsOffset], backwardsOffset + 1))
                     {
@@ -1105,14 +1106,6 @@ void ARMJIT::CheckAndInvalidateWVRAM(int bank) noexcept
             }
         }
     }
-}
-
-JitBlockEntry ARMJIT::LookUpBlock(u32 num, u64* entries, u32 offset, u32 addr) noexcept
-{
-    u64* entry = &entries[offset / 2];
-    if (*entry >> 32 == (addr | num))
-        return JITCompiler.AddEntryOffset((u32)*entry);
-    return NULL;
 }
 
 void ARMJIT::blockSanityCheck(u32 num, u32 blockAddr, JitBlockEntry entry) noexcept

@@ -98,13 +98,26 @@ VulkanDeviceProfile makeDeviceProfile(const VkPhysicalDeviceProperties& devicePr
         || containsInsensitive(deviceNameLower, "mali")
         || containsInsensitive(deviceNameLower, "arm");
     profile.IsPowerVR =
-        containsInsensitive(deviceNameLower, "powervr")
+        deviceProperties.vendorID == 0x1010u
+        || containsInsensitive(deviceNameLower, "powervr")
         || containsInsensitive(deviceNameLower, "power vr")
         || containsInsensitive(deviceNameLower, "imgtec")
         || containsInsensitive(deviceNameLower, "imagination");
     profile.IsMaliG52Class =
         profile.IsArmMali
-        && (containsInsensitive(deviceNameLower, "g52") || containsInsensitive(deviceNameLower, "mali-g52"));
+        && (containsInsensitive(deviceNameLower, "g52")
+            || containsInsensitive(deviceNameLower, "mali-g52")
+            || containsInsensitive(deviceNameLower, "g57")
+            || containsInsensitive(deviceNameLower, "mali-g57")
+            || containsInsensitive(deviceNameLower, "g51")
+            || containsInsensitive(deviceNameLower, "g68")
+            || containsInsensitive(deviceNameLower, "g71")
+            || containsInsensitive(deviceNameLower, "g72")
+            || containsInsensitive(deviceNameLower, "g76")
+            || containsInsensitive(deviceNameLower, "g77")
+            || containsInsensitive(deviceNameLower, "g78")
+            || containsInsensitive(deviceNameLower, "g610")
+            || containsInsensitive(deviceNameLower, "g710"));
     return profile;
 }
 
@@ -487,10 +500,13 @@ bool VulkanContext::initializeLocked()
 
         const bool dynamicTextureIndexingFeatureAvailable =
             deviceFeatures2.features.shaderSampledImageArrayDynamicIndexing == VK_TRUE;
-        // Mali-G52-class devices compile the compat-dynamic-uniform graphics_hw
+        // Mali and PowerVR drivers compile the compat-dynamic-uniform graphics_hw
         // shaders unreliably. Force the base single-descriptor path there so
         // graphics_hw remains available instead of falling over during init.
-        const bool forceDynamicTextureIndexingOffForDevice = candidateProfile.IsMaliG52Class;
+        const bool forceDynamicTextureIndexingOffForDevice =
+            candidateProfile.IsMaliG52Class
+            || candidateProfile.IsArmMali
+            || candidateProfile.IsPowerVR;
         const bool enableDynamicTextureIndexing =
             !ForceDisableDynamicTextureIndexing
             && !forceDynamicTextureIndexingOffForDevice
@@ -509,7 +525,7 @@ bool VulkanContext::initializeLocked()
             {
                 Platform::Log(
                     Platform::LogLevel::Warn,
-                    "VulkanContext: forcing dynamic-indexing fallback on '%s' to keep graphics_hw stable on Mali-G52-class devices",
+                    "VulkanContext: forcing dynamic-indexing fallback on '%s' to keep graphics_hw stable on Mali/PowerVR devices",
                     deviceProperties.deviceName
                 );
             }
@@ -633,9 +649,13 @@ bool VulkanContext::initializeLocked()
         TimelineSemaphoresSupported = enableTimelineSemaphores;
         DynamicTextureIndexingSupported = enableDynamicTextureIndexing;
         DeviceProfile = candidateProfile;
-        // Keep Qualcomm/Adreno on the compatibility descriptor path unless we
-        // have explicit proof that non-uniform indexing is stable there.
-        const bool forceCompatTexturePath = DeviceProfile.IsQualcomm || DeviceProfile.IsAdreno;
+        // Keep Qualcomm/Adreno, ARM Mali, and PowerVR on the compatibility descriptor path
+        // unless we have explicit proof that non-uniform indexing is stable there.
+        const bool forceCompatTexturePath =
+            DeviceProfile.IsQualcomm
+            || DeviceProfile.IsAdreno
+            || DeviceProfile.IsArmMali
+            || DeviceProfile.IsPowerVR;
         NonUniformTextureIndexingSupported = enableDescriptorIndexing && !forceCompatTexturePath;
         if (enableDescriptorIndexing && forceCompatTexturePath)
         {

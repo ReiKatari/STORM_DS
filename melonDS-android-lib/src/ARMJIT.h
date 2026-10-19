@@ -62,7 +62,13 @@ public:
         if (CodeMemRegions[region][(localAddr & 0x7FFFFFF) / 512].Code & (1 << ((localAddr & 0x1FF) / 16)))
             InvalidateByAddr(localAddr);
     }
-    JitBlockEntry LookUpBlock(u32 num, u64* entries, u32 offset, u32 addr) noexcept;
+    __attribute__((always_inline)) inline JitBlockEntry LookUpBlock(u32 num, u64* entries, u32 offset, u32 addr) noexcept
+    {
+        u64 entry = entries[offset >> 1];
+        if (__builtin_expect((entry >> 32) == (addr | num), 1))
+            return JITCompiler.AddEntryOffset((u32)entry);
+        return nullptr;
+    }
     bool SetupExecutableRegion(u32 num, u32 blockAddr, u64*& entry, u32& start, u32& size) noexcept;
     u32 LocaliseCodeAddress(u32 num, u32 addr) const noexcept;
 
