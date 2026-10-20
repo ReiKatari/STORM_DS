@@ -17179,39 +17179,8 @@ void VulkanRenderer3D::buildGraphicsTriangleListCompatibility(GPU& gpu)
         return (polygonYTop & 0xFFFFu) | ((polygonYBot & 0xFFFFu) << 16u);
     };
 
-    std::unordered_set<TextureLookupKey, TextureLookupHasher> reservedAlphaTextureKeys{};
-    reservedAlphaTextureKeys.reserve(
-        std::min<size_t>(SharedGraphicsScene.Draws.size(), maxActiveTextureDescriptors));
-    for (const AcceleratedSceneDraw& sceneDraw : SharedGraphicsScene.Draws)
-    {
-        const Polygon* polygon = sceneDraw.SourcePolygon;
-        if (polygon == nullptr)
-            continue;
-
-        const AcceleratedPolygonMeta& polygonMeta = sceneDraw.Meta;
-        const bool polygonTexturedByRegs = textureMapsEnabled && (((polygon->TexParam >> 26u) & 0x7u) != 0u);
-        if (!polygonTexturedByRegs)
-            continue;
-        if (!Renderer3DDebugShouldDrawPolygon(
-                polygonMeta,
-                sceneDraw.PrimitiveType == AcceleratedPrimitiveType::Lines,
-                true,
-                highlightEnabled))
-        {
-            continue;
-        }
-
-        const std::optional<u32> debugYBounds = packSceneDrawYBounds(sceneDraw);
-        if (debugYBounds.has_value() && !Renderer3DDebugYBoundsEnabled(*debugYBounds, targetHeight))
-            continue;
-
-        const u32 alpha5 = polygonMeta.Alpha5;
-        const bool polygonUsesGlTranslucentPass =
-            HasAcceleratedPolygonFlag(polygonMeta, AcceleratedPolygonFlagTranslucent);
-        const bool isTranslucent = polygonUsesGlTranslucentPass || (alpha5 != 0u && alpha5 < 0x1Fu);
-        if (isTranslucent)
-            reservedAlphaTextureKeys.insert(makeTextureLookupKey(polygon->TexParam, polygon->TexPalette));
-    }
+    std::unordered_map<u64, u32> descriptorSlotLookup{};
+    descriptorSlotLookup.reserve(maxActiveTextureDescriptors);
 
     for (const AcceleratedSceneDraw& sceneDraw : SharedGraphicsScene.Draws)
     {
@@ -17317,21 +17286,28 @@ void VulkanRenderer3D::buildGraphicsTriangleListCompatibility(GPU& gpu)
                         }
                     }
 
-                    const auto reservedAlphaTextureIt = reservedAlphaTextureKeys.find(textureKey);
-                    const bool reservedAlphaTexture = reservedAlphaTextureIt != reservedAlphaTextureKeys.end();
-                    const u32 reservedAlphaTextureCount =
-                        std::min<u32>(
-                            static_cast<u32>(reservedAlphaTextureKeys.size()),
-                            maxActiveTextureDescriptors);
-                    const bool descriptorSlotAvailable =
-                        ActiveTextureDescriptorCount < maxActiveTextureDescriptors
-                        && (reservedAlphaTexture
-                            || (ActiveTextureDescriptorCount + reservedAlphaTextureCount) < maxActiveTextureDescriptors);
-                    if (resolvedTextureValid && descriptorSlotAvailable)
+                    u32 resolvedDescriptorSlot = fallbackTextureDescriptorIndex;
+                    bool hasResolvedDescriptorSlot = false;
+                    if (resolvedTextureValid)
                     {
-                        textureDescriptorIndex = ActiveTextureDescriptorCount;
-                        ActiveTextureDescriptors[textureDescriptorIndex] = resolvedTexture.DescriptorInfo;
-                        ActiveTextureDescriptorCount++;
+                        const auto slotIt = descriptorSlotLookup.find(resolvedTexture.Handle);
+                        if (slotIt != descriptorSlotLookup.end())
+                        {
+                            resolvedDescriptorSlot = slotIt->second;
+                            hasResolvedDescriptorSlot = true;
+                        }
+                        else if (ActiveTextureDescriptorCount < maxActiveTextureDescriptors)
+                        {
+                            resolvedDescriptorSlot = ActiveTextureDescriptorCount;
+                            ActiveTextureDescriptors[resolvedDescriptorSlot] = resolvedTexture.DescriptorInfo;
+                            ActiveTextureDescriptorCount++;
+                            descriptorSlotLookup.emplace(resolvedTexture.Handle, resolvedDescriptorSlot);
+                            hasResolvedDescriptorSlot = true;
+                        }
+                    }
+                    if (hasResolvedDescriptorSlot)
+                    {
+                        textureDescriptorIndex = resolvedDescriptorSlot;
                         textureHandle = resolvedTexture.Handle;
                         textureLayer = resolvedTexture.Layer;
                         textureLayerOpaque = resolvedTexture.LayerOpaque;
@@ -17348,8 +17324,6 @@ void VulkanRenderer3D::buildGraphicsTriangleListCompatibility(GPU& gpu)
                                 texWidth,
                                 texHeight,
                             });
-                        if (reservedAlphaTexture)
-                            reservedAlphaTextureKeys.erase(reservedAlphaTextureIt);
                     }
                     else
                     {
@@ -18327,14 +18301,17 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
         }
         return TextureLookupKey{key};
     };
-    const auto textureSamplerForTexParam = [&](u32 texParam) -> VkSampler {
+    const auto textureSamplerIndexForTexParam = [](u32 texParam) -> u32 {
         const bool repeatS = (texParam & (1u << 16u)) != 0u;
         const bool repeatT = (texParam & (1u << 17u)) != 0u;
         const bool mirrorS = (texParam & (1u << 18u)) != 0u;
         const bool mirrorT = (texParam & (1u << 19u)) != 0u;
         const u32 sMode = repeatS ? (mirrorS ? 2u : 1u) : 0u;
         const u32 tMode = repeatT ? (mirrorT ? 2u : 1u) : 0u;
-        const u32 samplerIndex = sMode + (tMode * 3u);
+        return sMode + (tMode * 3u);
+    };
+    const auto textureSamplerForTexParam = [&](u32 texParam) -> VkSampler {
+        const u32 samplerIndex = textureSamplerIndexForTexParam(texParam);
         if (samplerIndex < TextureWrapSamplers.size()
             && TextureWrapSamplers[samplerIndex] != VK_NULL_HANDLE)
         {
@@ -18470,39 +18447,8 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
         return (polygonYTop & 0xFFFFu) | ((polygonYBot & 0xFFFFu) << 16u);
     };
 
-    std::unordered_set<TextureLookupKey, TextureLookupHasher> reservedAlphaTextureKeys{};
-    reservedAlphaTextureKeys.reserve(
-        std::min<size_t>(SharedGraphicsScene.Draws.size(), maxActiveTextureDescriptors));
-    for (const AcceleratedSceneDraw& sceneDraw : SharedGraphicsScene.Draws)
-    {
-        const Polygon* polygon = sceneDraw.SourcePolygon;
-        if (polygon == nullptr)
-            continue;
-
-        const AcceleratedPolygonMeta& polygonMeta = sceneDraw.Meta;
-        const bool polygonTexturedByRegs = textureMapsEnabled && (((polygon->TexParam >> 26u) & 0x7u) != 0u);
-        if (!polygonTexturedByRegs)
-            continue;
-        if (!Renderer3DDebugShouldDrawPolygon(
-                polygonMeta,
-                sceneDraw.PrimitiveType == AcceleratedPrimitiveType::Lines,
-                true,
-                highlightEnabled))
-        {
-            continue;
-        }
-
-        const std::optional<u32> debugYBounds = packSceneDrawYBounds(sceneDraw);
-        if (debugYBounds.has_value() && !Renderer3DDebugYBoundsEnabled(*debugYBounds, targetHeight))
-            continue;
-
-        const u32 alpha5 = polygonMeta.Alpha5;
-        const bool polygonUsesGlTranslucentPass =
-            HasAcceleratedPolygonFlag(polygonMeta, AcceleratedPolygonFlagTranslucent);
-        const bool isTranslucent = polygonUsesGlTranslucentPass || (alpha5 != 0u && alpha5 < 0x1Fu);
-        if (isTranslucent)
-            reservedAlphaTextureKeys.insert(makeTextureLookupKey(polygon->TexParam, polygon->TexPalette));
-    }
+    std::unordered_map<u64, u32> descriptorSlotLookup{};
+    descriptorSlotLookup.reserve(maxActiveTextureDescriptors);
 
     for (const AcceleratedSceneDraw& sceneDraw : SharedGraphicsScene.Draws)
     {
@@ -18620,22 +18566,32 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
                     }
 
                     const u64 textureSlotStartNs = PerfNowNs();
-                    const auto reservedAlphaTextureIt = reservedAlphaTextureKeys.find(textureKey);
-                    const bool reservedAlphaTexture = reservedAlphaTextureIt != reservedAlphaTextureKeys.end();
-                    const u32 reservedAlphaTextureCount =
-                        std::min<u32>(
-                            static_cast<u32>(reservedAlphaTextureKeys.size()),
-                            maxActiveTextureDescriptors);
-                    const bool descriptorSlotAvailable =
-                        ActiveTextureDescriptorCount < maxActiveTextureDescriptors
-                        && (reservedAlphaTexture
-                            || (ActiveTextureDescriptorCount + reservedAlphaTextureCount) < maxActiveTextureDescriptors);
-                    if (resolvedTextureValid && descriptorSlotAvailable)
+                    u32 resolvedDescriptorSlot = fallbackTextureDescriptorIndex;
+                    bool hasResolvedDescriptorSlot = false;
+                    if (resolvedTextureValid)
                     {
-                        textureDescriptorIndex = ActiveTextureDescriptorCount;
-                        ActiveTextureDescriptors[textureDescriptorIndex] = resolvedTexture.DescriptorInfo;
-                        ActiveNormalizedTextureDescriptors[textureDescriptorIndex] = resolvedTexture.NormalizedDescriptorInfo;
-                        ActiveTextureDescriptorCount++;
+                        const u64 descriptorSlotKey =
+                            (resolvedTexture.Handle << 8u)
+                            | static_cast<u64>(textureSamplerIndexForTexParam(polygon->TexParam));
+                        const auto slotIt = descriptorSlotLookup.find(descriptorSlotKey);
+                        if (slotIt != descriptorSlotLookup.end())
+                        {
+                            resolvedDescriptorSlot = slotIt->second;
+                            hasResolvedDescriptorSlot = true;
+                        }
+                        else if (ActiveTextureDescriptorCount < maxActiveTextureDescriptors)
+                        {
+                            resolvedDescriptorSlot = ActiveTextureDescriptorCount;
+                            ActiveTextureDescriptors[resolvedDescriptorSlot] = resolvedTexture.DescriptorInfo;
+                            ActiveNormalizedTextureDescriptors[resolvedDescriptorSlot] = resolvedTexture.NormalizedDescriptorInfo;
+                            ActiveTextureDescriptorCount++;
+                            descriptorSlotLookup.emplace(descriptorSlotKey, resolvedDescriptorSlot);
+                            hasResolvedDescriptorSlot = true;
+                        }
+                    }
+                    if (hasResolvedDescriptorSlot)
+                    {
+                        textureDescriptorIndex = resolvedDescriptorSlot;
                         textureHandle = resolvedTexture.Handle;
                         textureLayer = resolvedTexture.Layer;
                         textureLayerOpaque = resolvedTexture.LayerOpaque;
@@ -18652,8 +18608,6 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
                                 texWidth,
                                 texHeight,
                             });
-                        if (reservedAlphaTexture)
-                            reservedAlphaTextureKeys.erase(reservedAlphaTextureIt);
                     }
                     else
                     {
