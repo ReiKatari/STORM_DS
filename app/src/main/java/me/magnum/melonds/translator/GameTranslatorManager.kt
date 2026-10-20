@@ -122,8 +122,12 @@ class GameTranslatorManager(
         }
     }
 
+    private val ocrContextGraph = me.magnum.melonds.translator.context.OcrContextGraph
+    private var lastErrorToastTimeMs: Long = 0L
+
     init {
         preferences.registerOnSharedPreferenceChangeListener(prefChangeListener)
+        ocrContextGraph.setActiveGame(activity, getGameStorageKey())
     }
 
     /**
@@ -136,7 +140,9 @@ class GameTranslatorManager(
         currentGameSourceLangOverride = sourceLangOverride?.takeIf { it.isNotBlank() }
         Log.i(TAG, "Active ROM set: title='$romTitle', code='$gameCode', hash='$gameHash', langOverride='$currentGameSourceLangOverride'")
         ocrContextGraph.clearDialogueHistory()
-        translationCache.setGameKey(getGameStorageKey())
+        val storageKey = getGameStorageKey()
+        ocrContextGraph.setActiveGame(activity, storageKey)
+        translationCache.setGameKey(storageKey)
         loadRegionsForCurrentGame()
     }
 
@@ -181,9 +187,6 @@ class GameTranslatorManager(
         overlayView?.setSavedRegions(regions)
         Log.i(TAG, "Saved ${regions.size} OCR regions under key [$perGameKey]")
     }
-
-    private val ocrContextGraph = me.magnum.melonds.translator.context.OcrContextGraph
-    private var lastErrorToastTimeMs: Long = 0L
 
     fun getSourceLang(): String {
         return currentGameSourceLangOverride ?: preferences.getString(PREF_TRANSLATOR_SOURCE_LANG, "auto") ?: "auto"
@@ -266,7 +269,10 @@ class GameTranslatorManager(
                             openRegionEditor()
                         },
                         onPreviewTts = {
-                            ttsManager.speak("Бэтмен: Город под защитой. Лейтон: У каждой загадки есть разгадка!", "ru")
+                            ttsManager.speak(
+                                "Бэтмен: Город под защитой! Джокер: Ха-ха-ха, попробуй поймай меня! Майя: Феникс, у нас появилась новая улика!",
+                                "ru"
+                            )
                         }
                     )
                 }
@@ -728,8 +734,7 @@ class GameTranslatorManager(
                 overlayView?.setTranslatedBlocks(blocks)
                 val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
                 if (ttsOn) {
-                    val speechText = blocks.joinToString(". ") { it.translatedText }
-                    speakTts(speechText, targetLang)
+                    ttsManager.speakBlocks(blocks, targetLang)
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "Process captured frame failed", t)

@@ -19,11 +19,12 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
- * High-definition Microsoft Edge Neural & Zero-Failure Neural TTS Engine.
+ * Studio-Grade Microsoft Edge Neural & Multilingual HD 24kHz TTS Engine.
  * Features:
  * - Direct 24kHz HD Edge Neural WebSocket streaming with Sec-MS-GEC token generation.
- * - In-memory LRU audio caching for zero-latency dialogue playback.
- * - Multi-tier failover: Edge Neural WebSocket -> Cognitive Services -> High-speed Google Neural Fallback.
+ * - Multi-Actor voice pool (native + multilingual neural voices) with automatic voice failover.
+ * - Dynamic SSML prosody contours (pitch, rate, volume, and emotional intonation contour).
+ * - 16 MB in-memory LRU audio cache for zero-latency studio dialogue playback.
  */
 object EdgeNeuralTtsClient {
     private const val TAG = "EdgeNeuralTtsClient"
@@ -31,8 +32,8 @@ object EdgeNeuralTtsClient {
     private const val TRUSTED_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
     private const val WIN_EPOCH = 11644473600L
 
-    // In-memory LRU cache: 8MB of compressed MP3 audio
-    private val audioCache = object : LruCache<String, ByteArray>(8 * 1024 * 1024) {
+    // In-memory LRU cache: 16MB of compressed 24kHz MP3 studio audio
+    private val audioCache = object : LruCache<String, ByteArray>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
     }
 
@@ -48,19 +49,22 @@ object EdgeNeuralTtsClient {
         voiceName: String,
         pitch: String = "default",
         rate: String = "default",
-        volume: String = "default"
+        volume: String = "default",
+        contour: String = "",
+        fallbackVoiceName: String? = null,
+        targetLangHint: String = "ru"
     ): ByteArray? {
         val clean = text.trim()
         if (clean.isBlank()) return null
 
-        val cacheKey = "$voiceName|$pitch|$rate|$volume|$clean"
+        val cacheKey = "$voiceName|$pitch|$rate|$volume|$contour|$clean"
         synchronized(audioCache) {
             val cached = audioCache.get(cacheKey)
             if (cached != null) return cached
         }
 
-        // 1. Primary: Edge Neural WebSocket Stream (24kHz HD Studio Quality)
-        val wsAudio = synthesizeViaWebSocket(clean, voiceName, pitch, rate, volume)
+        // 1. Primary: Edge Neural WebSocket Stream (24kHz HD Studio Quality) with requested actor
+        val wsAudio = synthesizeViaWebSocket(clean, voiceName, pitch, rate, volume, contour)
         if (wsAudio != null && wsAudio.isNotEmpty()) {
             synchronized(audioCache) {
                 audioCache.put(cacheKey, wsAudio)
@@ -68,8 +72,20 @@ object EdgeNeuralTtsClient {
             return wsAudio
         }
 
-        // 2. Secondary: Edge Cognitive Voice Endpoint
-        val cognitiveAudio = synthesizeViaCognitiveEdge(clean, voiceName, pitch, rate)
+        // 1b. Secondary Actor Failover: if a Multilingual voice was requested and failed, retry with native voice
+        if (!fallbackVoiceName.isNullOrBlank() && fallbackVoiceName != voiceName) {
+            val fallbackWsAudio = synthesizeViaWebSocket(clean, fallbackVoiceName, pitch, rate, volume, contour)
+            if (fallbackWsAudio != null && fallbackWsAudio.isNotEmpty()) {
+                synchronized(audioCache) {
+                    audioCache.put(cacheKey, fallbackWsAudio)
+                }
+                return fallbackWsAudio
+            }
+        }
+
+        // 2. Secondary Endpoint: Edge Cognitive Voice Endpoint
+        val effectiveVoice = fallbackVoiceName ?: voiceName
+        val cognitiveAudio = synthesizeViaCognitiveEdge(clean, effectiveVoice, pitch, rate)
         if (cognitiveAudio != null && cognitiveAudio.isNotEmpty()) {
             synchronized(audioCache) {
                 audioCache.put(cacheKey, cognitiveAudio)
@@ -78,7 +94,7 @@ object EdgeNeuralTtsClient {
         }
 
         // 3. Tertiary: High-speed Neural Stream Fallback (Zero-Failure)
-        val fallbackAudio = synthesizeViaFallback(clean, voiceName)
+        val fallbackAudio = synthesizeViaFallback(clean, targetLangHint.ifBlank { voiceName })
         if (fallbackAudio != null && fallbackAudio.isNotEmpty()) {
             synchronized(audioCache) {
                 audioCache.put(cacheKey, fallbackAudio)
@@ -103,12 +119,32 @@ object EdgeNeuralTtsClient {
         }
     }
 
+    private fun resolveVoiceLocale(voiceName: String): String {
+        val parts = voiceName.split("-")
+        if (parts.size >= 2 && parts[0].length == 2 && parts[1].length == 2) {
+            return "${parts[0].lowercase()}-${parts[1].uppercase()}"
+        }
+        return when {
+            voiceName.startsWith("ru-") -> "ru-RU"
+            voiceName.startsWith("ja-") -> "ja-JP"
+            voiceName.startsWith("zh-") -> "zh-CN"
+            voiceName.startsWith("de-") -> "de-DE"
+            voiceName.startsWith("fr-") -> "fr-FR"
+            voiceName.startsWith("es-") -> "es-ES"
+            voiceName.startsWith("it-") -> "it-IT"
+            voiceName.startsWith("ko-") -> "ko-KR"
+            voiceName.startsWith("uk-") -> "uk-UA"
+            else -> "en-US"
+        }
+    }
+
     private suspend fun synthesizeViaWebSocket(
         text: String,
         voiceName: String,
         pitch: String,
         rate: String,
-        volume: String
+        volume: String,
+        contour: String
     ): ByteArray? {
         var webSocketRef: WebSocket? = null
         return try {
@@ -141,21 +177,18 @@ object EdgeNeuralTtsClient {
                                 "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}"
                         webSocket.send(configMsg)
 
-                        val cleanText = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
-                        val lang = when {
-                            voiceName.startsWith("ru-") -> "ru-RU"
-                            voiceName.startsWith("ja-") -> "ja-JP"
-                            voiceName.startsWith("zh-") -> "zh-CN"
-                            voiceName.startsWith("de-") -> "de-DE"
-                            voiceName.startsWith("fr-") -> "fr-FR"
-                            voiceName.startsWith("es-") -> "es-ES"
-                            voiceName.startsWith("it-") -> "it-IT"
-                            else -> "en-US"
-                        }
+                        val cleanText = text
+                            .replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                            .replace("\"", "&quot;")
+                            .replace("'", "&apos;")
+                        val lang = resolveVoiceLocale(voiceName)
+                        val contourAttr = if (contour.isNotBlank()) " contour='$contour'" else ""
                         val ssml = "X-RequestId:$requestId\r\nX-Timestamp:$timestamp\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n" +
                                 "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='$lang'>" +
                                 "<voice name='$voiceName'>" +
-                                "<prosody pitch='$pitch' rate='$rate' volume='$volume'>$cleanText</prosody>" +
+                                "<prosody pitch='$pitch' rate='$rate' volume='$volume'$contourAttr>$cleanText</prosody>" +
                                 "</voice></speak>"
                         webSocket.send(ssml)
                     }
@@ -210,16 +243,7 @@ object EdgeNeuralTtsClient {
     private fun synthesizeViaCognitiveEdge(text: String, voiceName: String, pitch: String, rate: String): ByteArray? {
         return try {
             val cleanText = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
-            val lang = when {
-                voiceName.startsWith("ru-") -> "ru-RU"
-                voiceName.startsWith("ja-") -> "ja-JP"
-                voiceName.startsWith("zh-") -> "zh-CN"
-                voiceName.startsWith("de-") -> "de-DE"
-                voiceName.startsWith("fr-") -> "fr-FR"
-                voiceName.startsWith("es-") -> "es-ES"
-                voiceName.startsWith("it-") -> "it-IT"
-                else -> "en-US"
-            }
+            val lang = resolveVoiceLocale(voiceName)
             val ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$lang'>" +
                     "<voice name='$voiceName'>" +
                     "<prosody pitch='$pitch' rate='$rate'>$cleanText</prosody>" +
@@ -246,16 +270,19 @@ object EdgeNeuralTtsClient {
         }
     }
 
-    private fun synthesizeViaFallback(text: String, voiceName: String): ByteArray? {
+    private fun synthesizeViaFallback(text: String, langOrVoice: String): ByteArray? {
         return try {
+            val lower = langOrVoice.lowercase()
             val lang = when {
-                voiceName.startsWith("ru-") -> "ru"
-                voiceName.startsWith("ja-") -> "ja"
-                voiceName.startsWith("zh-") -> "zh"
-                voiceName.startsWith("de-") -> "de"
-                voiceName.startsWith("fr-") -> "fr"
-                voiceName.startsWith("es-") -> "es"
-                voiceName.startsWith("it-") -> "it"
+                lower.startsWith("ru") -> "ru"
+                lower.startsWith("ja") -> "ja"
+                lower.startsWith("zh") -> "zh"
+                lower.startsWith("de") -> "de"
+                lower.startsWith("fr") -> "fr"
+                lower.startsWith("es") -> "es"
+                lower.startsWith("it") -> "it"
+                lower.startsWith("ko") -> "ko"
+                lower.startsWith("uk") -> "uk"
                 else -> "en"
             }
             val clean = text.trim()
