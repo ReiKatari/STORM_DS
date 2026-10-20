@@ -671,27 +671,26 @@ class FileSystemRomsRepository(
             }
 
             val fixedCachedRoms = validCachedRoms.map { rom ->
-                val isExplicitDsiFile = rom.fileName.endsWith(".dsi", ignoreCase = true) ||
+                val gc0 = rom.gameCode.firstOrNull()
+                val isDsiFile = rom.fileName.endsWith(".dsi", ignoreCase = true) ||
                     rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true ||
                     rom.isInstalledDsiWareShortcut ||
-                    rom.installedDsiWareTitleId != null
-                val gc0 = rom.gameCode.getOrNull(0)
-                val looksLikeFalsePositiveDsiWare = rom.isDsiWareTitle &&
-                    !isExplicitDsiFile &&
-                    gc0 != 'K' &&
-                    gc0 != 'H'
-                if (!rom.isDsiWareTitle && isExplicitDsiFile) {
-                    rom.copy(isDsiWareTitle = true, config = RomConfig.forDsiWareTitle())
-                } else if (looksLikeFalsePositiveDsiWare) {
-                    val healedConfig = if (rom.config.runtimeConsoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DSi) {
-                        rom.config.copy(runtimeConsoleType = me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT)
-                    } else {
-                        rom.config
-                    }
-                    rom.copy(isDsiWareTitle = false, config = healedConfig)
+                    rom.installedDsiWareTitleId != null ||
+                    gc0 == 'K' || gc0 == 'H' ||
+                    (!rom.isDsiEnhanced && gc0 == '4')
+                if (isDsiFile && (!rom.isDsiWareTitle || rom.config.runtimeConsoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT)) {
+                    rom.copy(isDsiWareTitle = true, isDsiEnhanced = false, config = RomConfig.forDsiWareTitle())
                 } else {
                     rom
                 }
+            }
+
+            if (fixedCachedRoms.any { it.gameCode.isBlank() && !it.isInstalledDsiWareShortcut }) {
+                Log.w(TAG, "Found cached ROMs without gameCode; clearing directory states to refresh metadata")
+                synchronized(directoryStatesLock) {
+                    directoryStates.clear()
+                }
+                saveDirectoryStates()
             }
 
             roms.clear()

@@ -712,10 +712,13 @@ class SharedPreferencesSettingsRepository(
 
     override fun useCustomBios(): Boolean {
         val dsBiosDir = getDsBiosDirectory()
-        if (dsBiosDir == null || dsBiosDir.toString().isEmpty()) {
+        val dsiBiosDir = getDsiBiosDirectory()
+        val hasAnyBios = (dsBiosDir != null && dsBiosDir.toString().isNotEmpty()) ||
+            (dsiBiosDir != null && dsiBiosDir.toString().isNotEmpty())
+        if (!hasAnyBios) {
             return false
         }
-        return preferences.getBoolean("use_custom_bios", false)
+        return preferences.getBoolean("use_custom_bios", true)
     }
 
     override fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode {
@@ -742,35 +745,9 @@ class SharedPreferencesSettingsRepository(
         if (files.isEmpty()) return false
         val names = files.map { it.name.lowercase() }
         return if (isDsi) {
-            val hasBios7 = names.any { it in setOf("bios7i.bin", "dsi_bios7.bin", "arm7i.bin", "dsi_arm7.bin") || (it.contains("bios7") && it.endsWith(".bin")) }
-            val hasBios9 = names.any { it in setOf("bios9i.bin", "dsi_bios9.bin", "arm9i.bin", "dsi_arm9.bin") || (it.contains("bios9") && it.endsWith(".bin")) }
-            val hasFirmware = names.any { it in setOf("dsi_firmware.bin", "firmware_dsi.bin", "firmware.bin", "firmwarei.bin") || (it.contains("firmware") && it.endsWith(".bin")) }
-            val hasNand = names.any { it in setOf("dsi_nand.bin", "nand.bin", "nand_dsi.bin") || (it.contains("nand") && it.endsWith(".bin")) }
-            hasBios7 && hasBios9 && hasFirmware && hasNand
+            names.any { it.contains("bios7") || it.contains("bios9") || it.contains("firmware") || it.contains("nand") }
         } else {
-            val hasBios7 = names.any { it in setOf("bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin") || (it.contains("bios7") && !it.contains("7i") && !it.contains("dsi") && it.endsWith(".bin")) }
-            val hasBios9 = names.any { it in setOf("bios9.bin", "ds_bios9.bin", "arm9.bin", "bios9_ds.bin") || (it.contains("bios9") && !it.contains("9i") && !it.contains("dsi") && it.endsWith(".bin")) }
-            val hasFirmware = names.any { it in setOf("firmware.bin", "ds_firmware.bin", "firmware_ds.bin") || (it.contains("firmware") && !it.contains("dsi") && it.endsWith(".bin")) }
-            hasBios7 && hasBios9 && hasFirmware
-        }
-    }
-
-    private fun hasValidBiosDocumentFiles(uri: Uri, isDsi: Boolean): Boolean {
-        val docDir = runCatching { androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri) }.getOrNull() ?: return false
-        if (!docDir.exists() || !docDir.isDirectory) return false
-        val names = docDir.listFiles().filter { it.isFile && it.length() > 0L }.mapNotNull { it.name?.lowercase() }
-        if (names.isEmpty()) return false
-        return if (isDsi) {
-            val hasBios7 = names.any { it in setOf("bios7i.bin", "dsi_bios7.bin", "arm7i.bin", "dsi_arm7.bin") || (it.contains("bios7") && it.endsWith(".bin")) }
-            val hasBios9 = names.any { it in setOf("bios9i.bin", "dsi_bios9.bin", "arm9i.bin", "dsi_arm9.bin") || (it.contains("bios9") && it.endsWith(".bin")) }
-            val hasFirmware = names.any { it in setOf("dsi_firmware.bin", "firmware_dsi.bin", "firmware.bin", "firmwarei.bin") || (it.contains("firmware") && it.endsWith(".bin")) }
-            val hasNand = names.any { it in setOf("dsi_nand.bin", "nand.bin", "nand_dsi.bin") || (it.contains("nand") && it.endsWith(".bin")) }
-            hasBios7 && hasBios9 && hasFirmware && hasNand
-        } else {
-            val hasBios7 = names.any { it in setOf("bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin") || (it.contains("bios7") && !it.contains("7i") && !it.contains("dsi") && it.endsWith(".bin")) }
-            val hasBios9 = names.any { it in setOf("bios9.bin", "ds_bios9.bin", "arm9.bin", "bios9_ds.bin") || (it.contains("bios9") && !it.contains("9i") && !it.contains("dsi") && it.endsWith(".bin")) }
-            val hasFirmware = names.any { it in setOf("firmware.bin", "ds_firmware.bin", "firmware_ds.bin") || (it.contains("firmware") && !it.contains("dsi") && it.endsWith(".bin")) }
-            hasBios7 && hasBios9 && hasFirmware
+            names.any { it.contains("bios7") || it.contains("bios9") || it.contains("firmware") }
         }
     }
 
@@ -784,7 +761,7 @@ class SharedPreferencesSettingsRepository(
                 if (dir.exists() && hasValidBiosFiles(dir, isDsi = false)) {
                     return uri
                 }
-            } else if (hasValidBiosDocumentFiles(uri, isDsi = false)) {
+            } else {
                 return uri
             }
         }
@@ -806,7 +783,7 @@ class SharedPreferencesSettingsRepository(
                 if (dir.exists() && hasValidBiosFiles(dir, isDsi = true)) {
                     return uri
                 }
-            } else if (hasValidBiosDocumentFiles(uri, isDsi = true)) {
+            } else {
                 return uri
             }
         }
