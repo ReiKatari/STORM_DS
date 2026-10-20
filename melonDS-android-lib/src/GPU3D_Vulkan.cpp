@@ -3207,45 +3207,79 @@ bool VulkanRenderer3D::ensureInitialized()
     if (InitFailed)
         return false;
 
-    if (!VulkanContext::Get().Acquire())
-    {
-        Log(LogLevel::Error, "VulkanRenderer3D: failed to acquire shared Vulkan context");
-        InitFailed = true;
-        return false;
-    }
+    const auto tryInitOnce = [&](TextureSamplingPath forcedSamplingPath, bool hasForcedSamplingPath) -> bool {
+        if (!VulkanContext::Get().Acquire())
+        {
+            Log(LogLevel::Error, "VulkanRenderer3D: failed to acquire shared Vulkan context");
+            return false;
+        }
 
-    ContextAcquired = true;
-    Instance = VulkanContext::Get().GetInstance();
-    PhysicalDevice = VulkanContext::Get().GetPhysicalDevice();
-    Device = VulkanContext::Get().GetDevice();
-    Queue = VulkanContext::Get().GetQueue();
-    QueueFamilyIndex = VulkanContext::Get().GetQueueFamilyIndex();
-    ResetQueryPool = VulkanContext::Get().GetResetQueryPool();
-    TimestampPeriodNs = VulkanContext::Get().GetTimestampPeriod();
-    TimestampQueriesSupported = VulkanContext::Get().SupportsTimestamps();
-    ActiveTextureSamplingPath = resolveTextureSamplingPath();
+        ContextAcquired = true;
+        Instance = VulkanContext::Get().GetInstance();
+        PhysicalDevice = VulkanContext::Get().GetPhysicalDevice();
+        Device = VulkanContext::Get().GetDevice();
+        Queue = VulkanContext::Get().GetQueue();
+        QueueFamilyIndex = VulkanContext::Get().GetQueueFamilyIndex();
+        ResetQueryPool = VulkanContext::Get().GetResetQueryPool();
+        TimestampPeriodNs = VulkanContext::Get().GetTimestampPeriod();
+        TimestampQueriesSupported = VulkanContext::Get().SupportsTimestamps();
+        ActiveTextureSamplingPath = hasForcedSamplingPath ? forcedSamplingPath : resolveTextureSamplingPath();
+        Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
 
-    if (!createCommandObjects() || !createSyncObjects() || !createDescriptorObjects() || !createComputePipeline())
-    {
-        Log(LogLevel::Error, "VulkanRenderer3D: failed to initialize Vulkan resources");
-        destroyVulkan();
-        InitFailed = true;
-        return false;
-    }
+        if (!createCommandObjects() || !createSyncObjects() || !createDescriptorObjects() || !createComputePipeline())
+        {
+            Log(LogLevel::Warn, "VulkanRenderer3D: failed to initialize Vulkan compute/descriptor resources (profile=%s, path=%s)",
+                VulkanPipelineProfileName(PipelineProfile),
+                textureSamplingPathName(ActiveTextureSamplingPath));
+            destroyVulkan();
+            return false;
+        }
 
-    if (!createGraphicsDescriptorObjects())
+        if (!createGraphicsDescriptorObjects())
+        {
+            Log(LogLevel::Warn, "VulkanRenderer3D: graphics descriptor initialization failed (profile=%s, path=%s)",
+                VulkanPipelineProfileName(PipelineProfile),
+                textureSamplingPathName(ActiveTextureSamplingPath));
+            destroyVulkan();
+            return false;
+        }
+
+        if (!createGraphicsPipelines())
+        {
+            Log(LogLevel::Warn, "VulkanRenderer3D: graphics pipeline initialization failed (profile=%s, path=%s)",
+                VulkanPipelineProfileName(PipelineProfile),
+                textureSamplingPathName(ActiveTextureSamplingPath));
+            destroyVulkan();
+            return false;
+        }
+
+        return true;
+    };
+
+    if (!tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, false))
     {
-        Log(LogLevel::Error, "VulkanRenderer3D: graphics descriptor initialization failed");
-        destroyVulkan();
-        InitFailed = true;
-        return false;
-    }
-    else if (!createGraphicsPipelines())
-    {
-        Log(LogLevel::Error, "VulkanRenderer3D: graphics pipeline initialization failed");
-        destroyVulkan();
-        InitFailed = true;
-        return false;
+        if (PipelineProfile == VulkanPipelineProfile::FastPath)
+        {
+            Log(LogLevel::Warn, "VulkanRenderer3D: FastPath initialization failed; automatically falling back to Compatibility profile");
+            PipelineProfile = VulkanPipelineProfile::Compatibility;
+            Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
+            if (tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, false))
+            {
+                Initialized = true;
+                refreshActiveBackendMode();
+                return true;
+            }
+        }
+
+        Log(LogLevel::Warn, "VulkanRenderer3D: retrying initialization with BaseSingleDescriptor compatibility sampling path");
+        PipelineProfile = VulkanPipelineProfile::Compatibility;
+        Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
+        if (!tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, true))
+        {
+            Log(LogLevel::Error, "VulkanRenderer3D: all initialization paths failed");
+            InitFailed = true;
+            return false;
+        }
     }
 
     Initialized = true;
@@ -5186,29 +5220,32 @@ bool VulkanRenderer3D::createDescriptorObjects()
     VkPhysicalDeviceProperties deviceProperties{};
     vkGetPhysicalDeviceProperties(PhysicalDevice, &deviceProperties);
     const VulkanTextureDescriptorPolicy texturePolicy = getTextureDescriptorPolicy();
+    if (Texcache.GetLoader().GetPipelineProfile() != PipelineProfile)
+    {
+        Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
+    }
     const VulkanPipelineProfile texcacheProfile =
         Texcache.GetLoader().GetPipelineProfile();
-    if (texcacheProfile != PipelineProfile)
-    {
-        Log(
-            LogLevel::Error,
-            "VulkanRenderer3D: Texcache profile mismatch (renderer=%s texcache=%s)",
-            VulkanPipelineProfileName(PipelineProfile),
-            VulkanPipelineProfileName(texcacheProfile));
-        return false;
-    }
     const u32 textureDescriptorBindingCount = texturePolicy.TextureDescriptorCount;
+    const u32 requiredGraphicsCombinedSamplers = texturePolicy.GraphicsCombinedImageSamplerCount();
     const VulkanRenderContextPolicy renderContextPolicy =
         GetVulkanRenderContextPolicy(PipelineProfile);
     if (deviceProperties.limits.maxPerStageDescriptorSampledImages < textureDescriptorBindingCount
-        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount)
+        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount
+        || (UsesVulkanFastPath(PipelineProfile)
+            && (deviceProperties.limits.maxPerStageDescriptorSampledImages < requiredGraphicsCombinedSamplers
+                || deviceProperties.limits.maxPerStageDescriptorSamplers < requiredGraphicsCombinedSamplers
+                || deviceProperties.limits.maxDescriptorSetSampledImages < requiredGraphicsCombinedSamplers
+                || deviceProperties.limits.maxDescriptorSetSamplers < requiredGraphicsCombinedSamplers)))
     {
         Log(
-            LogLevel::Error,
-            "VulkanRenderer3D: descriptor limits too low (per-stage=%u, set=%u, required=%u, profile=%s, path=%s)",
+            LogLevel::Warn,
+            "VulkanRenderer3D: descriptor limits too low (per-stage-images=%u, per-stage-samplers=%u, set-images=%u, required-compute=%u, required-graphics=%u, profile=%s, path=%s)",
             deviceProperties.limits.maxPerStageDescriptorSampledImages,
+            deviceProperties.limits.maxPerStageDescriptorSamplers,
             deviceProperties.limits.maxDescriptorSetSampledImages,
             textureDescriptorBindingCount,
+            requiredGraphicsCombinedSamplers,
             VulkanPipelineProfileName(PipelineProfile),
             textureSamplingPathName(ActiveTextureSamplingPath)
         );
@@ -6393,22 +6430,38 @@ bool VulkanRenderer3D::createGraphicsPipelines()
         return false;
     }
 
+    const bool supportsDirectTextureIndexing =
+        VulkanContext::Get().SupportsDynamicTextureIndexing()
+        && ActiveTextureSamplingPath != TextureSamplingPath::BaseSingleDescriptor;
+
     VkShaderModule rasterVertModule = createShaderModule(Device, melonDS_gpu3d_vulkan_graphics_raster_vert_spv, melonDS_gpu3d_vulkan_graphics_raster_vert_spv_len);
     VkShaderModule rasterFragModule = createShaderModule(Device, rasterShader.bytes, rasterShader.length);
     VkShaderModule rasterNoFragDepthFragModule = createShaderModule(Device, rasterNoFragDepthShader.bytes, rasterNoFragDepthShader.length);
-    VkShaderModule rasterNoFragDepthDirectFragModule = createShaderModule(Device, rasterNoFragDepthDirectShader.bytes, rasterNoFragDepthDirectShader.length);
-    VkShaderModule rasterNoFragDepthDirectFastModulateFragModule = createShaderModule(Device, rasterFastModulateShader.bytes, rasterFastModulateShader.length);
-    VkShaderModule rasterNoFragDepthDirectFastModulateToonFragModule = createShaderModule(Device, rasterFastModulateToonShader.bytes, rasterFastModulateToonShader.length);
-    VkShaderModule rasterNoFragDepthDirectFastModulatePlainFragModule = createShaderModule(Device, rasterFastModulatePlainShader.bytes, rasterFastModulatePlainShader.length);
-    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule = createShaderModule(Device, rasterFastModulateOpaqueAlphaToonShader.bytes, rasterFastModulateOpaqueAlphaToonShader.length);
-    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule = createShaderModule(Device, rasterFastModulateOpaqueAlphaPlainShader.bytes, rasterFastModulateOpaqueAlphaPlainShader.length);
-    VkShaderModule rasterFragmentDepthDirectFastModulateOpaqueAlphaPlainFragModule = fastPathResourceGraph
+    VkShaderModule rasterNoFragDepthDirectFragModule = supportsDirectTextureIndexing
+        ? createShaderModule(Device, rasterNoFragDepthDirectShader.bytes, rasterNoFragDepthDirectShader.length)
+        : VK_NULL_HANDLE;
+    VkShaderModule rasterNoFragDepthDirectFastModulateFragModule = supportsDirectTextureIndexing
+        ? createShaderModule(Device, rasterFastModulateShader.bytes, rasterFastModulateShader.length)
+        : VK_NULL_HANDLE;
+    VkShaderModule rasterNoFragDepthDirectFastModulateToonFragModule = supportsDirectTextureIndexing
+        ? createShaderModule(Device, rasterFastModulateToonShader.bytes, rasterFastModulateToonShader.length)
+        : VK_NULL_HANDLE;
+    VkShaderModule rasterNoFragDepthDirectFastModulatePlainFragModule = supportsDirectTextureIndexing
+        ? createShaderModule(Device, rasterFastModulatePlainShader.bytes, rasterFastModulatePlainShader.length)
+        : VK_NULL_HANDLE;
+    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule = supportsDirectTextureIndexing
+        ? createShaderModule(Device, rasterFastModulateOpaqueAlphaToonShader.bytes, rasterFastModulateOpaqueAlphaToonShader.length)
+        : VK_NULL_HANDLE;
+    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule = supportsDirectTextureIndexing
+        ? createShaderModule(Device, rasterFastModulateOpaqueAlphaPlainShader.bytes, rasterFastModulateOpaqueAlphaPlainShader.length)
+        : VK_NULL_HANDLE;
+    VkShaderModule rasterFragmentDepthDirectFastModulateOpaqueAlphaPlainFragModule = (supportsDirectTextureIndexing && fastPathResourceGraph)
         ? createShaderModule(Device, melonDS_gpu3d_vulkan_graphics_raster_fragment_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv, melonDS_gpu3d_vulkan_graphics_raster_fragment_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv_len)
         : VK_NULL_HANDLE;
-    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrFragModule = fastPathResourceGraph
+    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrFragModule = (supportsDirectTextureIndexing && fastPathResourceGraph)
         ? createShaderModule(Device, melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_no_attr_frag_spv, melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_no_attr_frag_spv_len)
         : VK_NULL_HANDLE;
-    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyFragModule = fastPathResourceGraph
+    VkShaderModule rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyFragModule = (supportsDirectTextureIndexing && fastPathResourceGraph)
         ? createShaderModule(Device, melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_color_only_frag_spv, melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_color_only_frag_spv_len)
         : VK_NULL_HANDLE;
     VkShaderModule noColorFragModule = createShaderModule(Device, noColorShader.bytes, noColorShader.length);
@@ -6421,16 +6474,6 @@ bool VulkanRenderer3D::createGraphicsPipelines()
     if (rasterVertModule == VK_NULL_HANDLE
         || rasterFragModule == VK_NULL_HANDLE
         || rasterNoFragDepthFragModule == VK_NULL_HANDLE
-        || rasterNoFragDepthDirectFragModule == VK_NULL_HANDLE
-        || rasterNoFragDepthDirectFastModulateFragModule == VK_NULL_HANDLE
-        || rasterNoFragDepthDirectFastModulateToonFragModule == VK_NULL_HANDLE
-        || rasterNoFragDepthDirectFastModulatePlainFragModule == VK_NULL_HANDLE
-        || rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule == VK_NULL_HANDLE
-        || rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule == VK_NULL_HANDLE
-        || (fastPathResourceGraph
-            && (rasterFragmentDepthDirectFastModulateOpaqueAlphaPlainFragModule == VK_NULL_HANDLE
-                || rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrFragModule == VK_NULL_HANDLE
-                || rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyFragModule == VK_NULL_HANDLE))
         || noColorFragModule == VK_NULL_HANDLE
         || clearFragModule == VK_NULL_HANDLE
         || finalVertModule == VK_NULL_HANDLE
@@ -6438,7 +6481,7 @@ bool VulkanRenderer3D::createGraphicsPipelines()
         || edgeFogFragModule == VK_NULL_HANDLE
         || fogFragModule == VK_NULL_HANDLE)
     {
-        Log(LogLevel::Error, "VulkanRenderer3D: failed to create graphics shader modules");
+        Log(LogLevel::Error, "VulkanRenderer3D: failed to create core graphics shader modules");
         if (rasterVertModule != VK_NULL_HANDLE) vkDestroyShaderModule(Device, rasterVertModule, nullptr);
         if (rasterFragModule != VK_NULL_HANDLE) vkDestroyShaderModule(Device, rasterFragModule, nullptr);
         if (rasterNoFragDepthFragModule != VK_NULL_HANDLE) vkDestroyShaderModule(Device, rasterNoFragDepthFragModule, nullptr);
@@ -7037,8 +7080,21 @@ bool VulkanRenderer3D::createGraphicsPipelines()
                 makeBlendAttachment(colorWriteNone, false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD),
                 makeBlendAttachment(colorWriteNone, false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD),
             };
+            const bool directFastModulateModulesReady =
+                rasterNoFragDepthDirectFragModule != VK_NULL_HANDLE
+                && rasterNoFragDepthDirectFastModulateFragModule != VK_NULL_HANDLE
+                && rasterNoFragDepthDirectFastModulateToonFragModule != VK_NULL_HANDLE
+                && rasterNoFragDepthDirectFastModulatePlainFragModule != VK_NULL_HANDLE
+                && rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule != VK_NULL_HANDLE
+                && rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule != VK_NULL_HANDLE
+                && (!fastPathResourceGraph
+                    || (rasterFragmentDepthDirectFastModulateOpaqueAlphaPlainFragModule != VK_NULL_HANDLE
+                        && rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrFragModule != VK_NULL_HANDLE
+                        && rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyFragModule != VK_NULL_HANDLE));
             const bool useDirectZBufferTextureIndexing =
-                wMode == 0u && VulkanContext::Get().SupportsDynamicTextureIndexing();
+                wMode == 0u
+                && supportsDirectTextureIndexing
+                && directFastModulateModulesReady;
             VkShaderModule opaqueFragModule = rasterFragModule;
             if (wMode == 0u)
                 opaqueFragModule = useDirectZBufferTextureIndexing ? rasterNoFragDepthDirectFragModule : rasterNoFragDepthFragModule;
@@ -7877,12 +7933,18 @@ bool VulkanRenderer3D::createGraphicsPipelines()
     vkDestroyShaderModule(Device, rasterVertModule, nullptr);
     vkDestroyShaderModule(Device, rasterFragModule, nullptr);
     vkDestroyShaderModule(Device, rasterNoFragDepthFragModule, nullptr);
-    vkDestroyShaderModule(Device, rasterNoFragDepthDirectFragModule, nullptr);
-    vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateFragModule, nullptr);
-    vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateToonFragModule, nullptr);
-    vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulatePlainFragModule, nullptr);
-    vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule, nullptr);
-    vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule, nullptr);
+    if (rasterNoFragDepthDirectFragModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(Device, rasterNoFragDepthDirectFragModule, nullptr);
+    if (rasterNoFragDepthDirectFastModulateFragModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateFragModule, nullptr);
+    if (rasterNoFragDepthDirectFastModulateToonFragModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateToonFragModule, nullptr);
+    if (rasterNoFragDepthDirectFastModulatePlainFragModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulatePlainFragModule, nullptr);
+    if (rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateOpaqueAlphaToonFragModule, nullptr);
+    if (rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule != VK_NULL_HANDLE)
+        vkDestroyShaderModule(Device, rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainFragModule, nullptr);
     if (rasterFragmentDepthDirectFastModulateOpaqueAlphaPlainFragModule != VK_NULL_HANDLE)
         vkDestroyShaderModule(Device, rasterFragmentDepthDirectFastModulateOpaqueAlphaPlainFragModule, nullptr);
     if (rasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrFragModule != VK_NULL_HANDLE)

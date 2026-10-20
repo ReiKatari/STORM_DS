@@ -1905,22 +1905,65 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
         return failPrecompile("missing output");
 
     auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
-    auto vulkanRenderSettings = static_cast<VulkanRenderSettings&>(*currentConfiguration->renderSettings);
+    auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(*currentConfiguration->renderSettings);
     const int vulkanScale = std::max(1, vulkanRenderSettings.scale);
     const u32 validationWidth = static_cast<u32>(256 * vulkanScale);
     const u32 validationHeight = static_cast<u32>((192 + 1) * 2 * vulkanScale);
 
+    auto downgradeToCompatibilityProfile = [&]() -> bool {
+        if (vulkanRenderSettings.pipelineProfile == VulkanPipelineProfile::Compatibility
+            && vulkanRenderSettings.useSimplePipeline)
+            return false;
+
+        Platform::Log(
+            Platform::LogLevel::Warn,
+            "Vulkan precompile: FastPath validation failed; downgrading session to Compatibility profile"
+        );
+        vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
+        vulkanRenderSettings.useSimplePipeline = true;
+        vulkanOutput = std::make_unique<VulkanOutput>(VulkanPipelineProfile::Compatibility);
+        renderer3D.SetRenderSettings(
+            vulkanRenderSettings.threadedRendering,
+            vulkanRenderSettings.betterPolygons,
+            getEffectiveVulkanRenderScale(vulkanRenderSettings),
+            vulkanRenderSettings.useSimplePipeline,
+            vulkanRenderSettings.pipelineProfile,
+            vulkanRenderSettings.conservativeCoverageEnabled,
+            vulkanRenderSettings.conservativeCoveragePx,
+            vulkanRenderSettings.conservativeCoverageDepthBias,
+            vulkanRenderSettings.conservativeCoverageApplyRepeat,
+            vulkanRenderSettings.conservativeCoverageApplyClamp,
+            vulkanRenderSettings.debug3dClearMagenta,
+            nds->GPU
+        );
+        return true;
+    };
+
     emitProgress(kVulkanCompileStageBuildPipelines, 1);
     if (!renderer3D.EnsureVulkanReadyForValidation())
-        return failPrecompile("renderer pipelines");
+    {
+        if (!downgradeToCompatibilityProfile() || !renderer3D.EnsureVulkanReadyForValidation())
+            return failPrecompile("renderer pipelines");
+    }
 
     emitProgress(kVulkanCompileStageInitOutput, 2);
     if (!vulkanOutput->isInitialized() && !vulkanOutput->init())
-        return failPrecompile("output init");
+    {
+        if (!downgradeToCompatibilityProfile() || !vulkanOutput->init())
+            return failPrecompile("output init");
+    }
 
     emitProgress(kVulkanCompileStageWarmupSubmission, 3);
     if (!vulkanOutput->validateRuntimePath(validationWidth, validationHeight, renderer3D, vulkanScale))
-        return failPrecompile("output warm-up");
+    {
+        if (!downgradeToCompatibilityProfile()
+            || !renderer3D.EnsureVulkanReadyForValidation()
+            || (!vulkanOutput->isInitialized() && !vulkanOutput->init())
+            || !vulkanOutput->validateRuntimePath(validationWidth, validationHeight, renderer3D, vulkanScale))
+        {
+            return failPrecompile("output warm-up");
+        }
+    }
 
     if (shouldPrewarmRetroArch)
     {
@@ -5479,6 +5522,26 @@ void MelonInstance::updateRenderer()
             if (!vulkanOutput)
                 vulkanOutput = std::make_unique<VulkanOutput>(
                     vulkanSessionProfile.get());
+
+            if (!vulkanOutput->isInitialized() && !vulkanOutput->init())
+            {
+                if (vulkanSessionProfile.get() != VulkanPipelineProfile::Compatibility)
+                {
+                    Platform::Log(
+                        Platform::LogLevel::Warn,
+                        "VulkanOutput init failed in FastPath; falling back to Compatibility profile"
+                    );
+                    if (currentConfiguration && currentConfiguration->renderSettings)
+                    {
+                        auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(
+                            *currentConfiguration->renderSettings);
+                        vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
+                        vulkanRenderSettings.useSimplePipeline = true;
+                    }
+                    vulkanOutput = std::make_unique<VulkanOutput>(
+                        VulkanPipelineProfile::Compatibility);
+                }
+            }
 
             if (!vulkanOutput->isInitialized() && !vulkanOutput->init())
             {

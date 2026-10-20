@@ -285,9 +285,25 @@ bool VulkanContext::initializeLocked()
 
     if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) != VK_SUCCESS)
     {
-        Platform::Log(Platform::LogLevel::Error, "VulkanContext: vkCreateInstance failed");
-        shutdownLocked();
-        return false;
+        appInfo.apiVersion = VK_API_VERSION_1_0;
+        if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) != VK_SUCCESS)
+        {
+            if (VulkanDispatch::IsUsingCustomDriver() && VulkanDispatch::FallbackToSystemDriver())
+            {
+                appInfo.apiVersion = VK_API_VERSION_1_1;
+                if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) != VK_SUCCESS)
+                {
+                    appInfo.apiVersion = VK_API_VERSION_1_0;
+                    vkCreateInstance(&instanceCreateInfo, nullptr, &Instance);
+                }
+            }
+        }
+        if (Instance == VK_NULL_HANDLE)
+        {
+            Platform::Log(Platform::LogLevel::Error, "VulkanContext: vkCreateInstance failed");
+            shutdownLocked();
+            return false;
+        }
     }
     VulkanDispatch::LoadInstance(Instance);
 
@@ -318,6 +334,11 @@ bool VulkanContext::initializeLocked()
     u32 physicalDeviceCount = 0;
     if (vkEnumeratePhysicalDevices(Instance, &physicalDeviceCount, nullptr) != VK_SUCCESS || physicalDeviceCount == 0)
     {
+        if (VulkanDispatch::IsUsingCustomDriver() && VulkanDispatch::FallbackToSystemDriver())
+        {
+            shutdownLocked();
+            return initializeLocked();
+        }
         Platform::Log(Platform::LogLevel::Error, "VulkanContext: no physical devices found");
         shutdownLocked();
         return false;
@@ -433,20 +454,39 @@ bool VulkanContext::initializeLocked()
 
         const VkQueueFamilyProperties& selectedQueueFamilyProps = queueFamilies[static_cast<u32>(selectedQueueFamily)];
         const bool queueSupportsTimestamps = selectedQueueFamilyProps.timestampValidBits > 0;
+        const bool timelineExtensionAvailable = apiAtLeast12 || hasExtension(kTimelineSemaphoreExtension, deviceExtensions);
+        const bool descriptorIndexingExtensionAvailable =
+            apiAtLeast12 || hasExtension(kDescriptorIndexingExtension, deviceExtensions);
+
         VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeaturesAvailable{};
         timelineFeaturesAvailable.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
 
         VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeaturesAvailable{};
         descriptorIndexingFeaturesAvailable.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-        descriptorIndexingFeaturesAvailable.pNext = &timelineFeaturesAvailable;
 
         VkPhysicalDeviceHostQueryResetFeatures hostQueryResetFeaturesAvailable{};
         hostQueryResetFeaturesAvailable.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
-        hostQueryResetFeaturesAvailable.pNext = &descriptorIndexingFeaturesAvailable;
+
+        void* queryFeatureChainHead = nullptr;
+        if (timelineExtensionAvailable)
+        {
+            timelineFeaturesAvailable.pNext = queryFeatureChainHead;
+            queryFeatureChainHead = &timelineFeaturesAvailable;
+        }
+        if (descriptorIndexingExtensionAvailable)
+        {
+            descriptorIndexingFeaturesAvailable.pNext = queryFeatureChainHead;
+            queryFeatureChainHead = &descriptorIndexingFeaturesAvailable;
+        }
+        if (apiAtLeast12 || hasHostQueryReset)
+        {
+            hostQueryResetFeaturesAvailable.pNext = queryFeatureChainHead;
+            queryFeatureChainHead = &hostQueryResetFeaturesAvailable;
+        }
 
         VkPhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        deviceFeatures2.pNext = &hostQueryResetFeaturesAvailable;
+        deviceFeatures2.pNext = queryFeatureChainHead;
         auto getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
             vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2"));
         if (getPhysicalDeviceFeatures2 == nullptr)
@@ -466,8 +506,7 @@ bool VulkanContext::initializeLocked()
         }
 
         const bool timelineFeatureAvailable = timelineFeaturesAvailable.timelineSemaphore == VK_TRUE;
-        const bool timelineExtensionAvailable = apiAtLeast12 || hasExtension(kTimelineSemaphoreExtension, deviceExtensions);
-        const bool enableTimelineSemaphores =
+        bool enableTimelineSemaphores =
             !ForceDisableTimelineSemaphores && timelineFeatureAvailable && timelineExtensionAvailable;
         if (!enableTimelineSemaphores)
         {
@@ -541,9 +580,7 @@ bool VulkanContext::initializeLocked()
 
         const bool descriptorFeatureAvailable =
             descriptorIndexingFeaturesAvailable.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
-        const bool descriptorIndexingExtensionAvailable =
-            apiAtLeast12 || hasExtension(kDescriptorIndexingExtension, deviceExtensions);
-        const bool enableDescriptorIndexing =
+        bool enableDescriptorIndexing =
             enableDynamicTextureIndexing
             && descriptorFeatureAvailable
             && descriptorIndexingExtensionAvailable;
@@ -613,6 +650,18 @@ bool VulkanContext::initializeLocked()
         if (enableTimelineSemaphores && !apiAtLeast12)
             enabledDeviceExtensions.push_back(kTimelineSemaphoreExtension);
 
+        VkPhysicalDeviceFeatures enabledFeatures{};
+        enabledFeatures.independentBlend = deviceFeatures2.features.independentBlend;
+        enabledFeatures.shaderSampledImageArrayDynamicIndexing =
+            enableDynamicTextureIndexing ? deviceFeatures2.features.shaderSampledImageArrayDynamicIndexing : VK_FALSE;
+        enabledFeatures.fragmentStoresAndAtomics = deviceFeatures2.features.fragmentStoresAndAtomics;
+        enabledFeatures.vertexPipelineStoresAndAtomics = deviceFeatures2.features.vertexPipelineStoresAndAtomics;
+        enabledFeatures.shaderStorageImageExtendedFormats = deviceFeatures2.features.shaderStorageImageExtendedFormats;
+        enabledFeatures.shaderStorageImageReadWithoutFormat = deviceFeatures2.features.shaderStorageImageReadWithoutFormat;
+        enabledFeatures.shaderStorageImageWriteWithoutFormat = deviceFeatures2.features.shaderStorageImageWriteWithoutFormat;
+        enabledFeatures.fullDrawIndexUint32 = deviceFeatures2.features.fullDrawIndexUint32;
+        enabledFeatures.samplerAnisotropy = deviceFeatures2.features.samplerAnisotropy;
+
         float queuePriority = 1.0f;
         VkDeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -627,8 +676,28 @@ bool VulkanContext::initializeLocked()
         deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
         deviceCreateInfo.enabledExtensionCount = static_cast<u32>(enabledDeviceExtensions.size());
         deviceCreateInfo.ppEnabledExtensionNames = enabledDeviceExtensions.data();
+        deviceCreateInfo.pEnabledFeatures = &enabledFeatures;
 
-        const VkResult createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+        VkResult createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+        if (createDeviceResult != VK_SUCCESS)
+        {
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "VulkanContext: vkCreateDevice failed for '%s' (%d); retrying with baseline Vulkan 1.0 device config",
+                deviceProperties.deviceName,
+                static_cast<int>(createDeviceResult)
+            );
+            std::vector<const char*> minimalExtensions(
+                requiredDeviceExtensions.begin(),
+                requiredDeviceExtensions.end());
+            enableTimelineSemaphores = false;
+            enableDescriptorIndexing = false;
+            enableAhbInterop = false;
+            deviceCreateInfo.pNext = nullptr;
+            deviceCreateInfo.enabledExtensionCount = static_cast<u32>(minimalExtensions.size());
+            deviceCreateInfo.ppEnabledExtensionNames = minimalExtensions.data();
+            createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+        }
         if (createDeviceResult != VK_SUCCESS)
         {
             Platform::Log(
@@ -700,6 +769,11 @@ bool VulkanContext::initializeLocked()
 
     if (Device == VK_NULL_HANDLE || Queue == VK_NULL_HANDLE)
     {
+        if (VulkanDispatch::IsUsingCustomDriver() && VulkanDispatch::FallbackToSystemDriver())
+        {
+            shutdownLocked();
+            return initializeLocked();
+        }
         Platform::Log(Platform::LogLevel::Error, "VulkanContext: failed to create logical device");
         shutdownLocked();
         return false;

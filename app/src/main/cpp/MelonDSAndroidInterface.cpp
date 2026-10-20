@@ -277,6 +277,7 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
     const bool forceDisableDynamicTextureIndexing = gForceDisableDynamicTextureIndexing.load(std::memory_order_relaxed);
 
     const bool timelineExtensionAvailable = apiAtLeast12 || hasExtension(kTimelineSemaphoreExtension, extensions);
+    const bool descriptorIndexingExtensionAvailable = apiAtLeast12 || hasExtension(kDescriptorIndexingExtension, extensions);
     if (!timelineExtensionAvailable && !forceDisableTimelineSemaphores)
     {
         melonDS::Platform::Log(
@@ -314,13 +315,27 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
 
     VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures{};
     descriptorFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    descriptorFeatures.pNext = &timelineFeatures;
 
     VkPhysicalDeviceFeatures2 features2{};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features2.pNext = &descriptorFeatures;
-    auto getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-        vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2"));
+    void** nextFeatureChain = &features2.pNext;
+    if (descriptorIndexingExtensionAvailable)
+    {
+        *nextFeatureChain = &descriptorFeatures;
+        nextFeatureChain = &descriptorFeatures.pNext;
+    }
+    if (timelineExtensionAvailable)
+    {
+        *nextFeatureChain = &timelineFeatures;
+        nextFeatureChain = &timelineFeatures.pNext;
+    }
+
+    PFN_vkGetPhysicalDeviceFeatures2 getPhysicalDeviceFeatures2 = nullptr;
+    if (isApiAtLeast(properties.apiVersion, 1, 1))
+    {
+        getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+            vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2"));
+    }
     if (getPhysicalDeviceFeatures2 == nullptr)
     {
         getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
@@ -375,8 +390,7 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
         );
     }
     else if (dynamicTextureIndexingAvailable
-        && !apiAtLeast12
-        && !hasExtension(kDescriptorIndexingExtension, extensions))
+        && !descriptorIndexingExtensionAvailable)
     {
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
@@ -391,51 +405,72 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
 
 bool createVulkanInstance(VkInstance* instance)
 {
-    if (!melonDS::VulkanDispatch::Initialize())
+    auto tryCreateInstance = [&]() -> bool {
+        if (!melonDS::VulkanDispatch::Initialize())
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "MelonDSAndroidInterface: Vulkan support check failed (driver dispatch unavailable)"
+            );
+            return false;
+        }
+
+        if (!hasRequiredInstanceExtensions())
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "MelonDSAndroidInterface: Vulkan support check failed (missing required instance extension)"
+            );
+            return false;
+        }
+
+        VkApplicationInfo appInfo{};
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.pApplicationName = "STORM_DS-android";
+        appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.pEngineName = "STORM_DS";
+        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.apiVersion = VK_API_VERSION_1_1;
+
+        VkInstanceCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        createInfo.pApplicationInfo = &appInfo;
+        createInfo.enabledExtensionCount = sizeof(kRequiredInstanceExtensions) / sizeof(kRequiredInstanceExtensions[0]);
+        createInfo.ppEnabledExtensionNames = kRequiredInstanceExtensions;
+
+        VkResult createResult = vkCreateInstance(&createInfo, nullptr, instance);
+        if (createResult != VK_SUCCESS)
+        {
+            appInfo.apiVersion = VK_API_VERSION_1_0;
+            createResult = vkCreateInstance(&createInfo, nullptr, instance);
+        }
+        if (createResult != VK_SUCCESS)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "MelonDSAndroidInterface: vkCreateInstance failed during support check (%d)",
+                static_cast<int>(createResult)
+            );
+            return false;
+        }
+
+        melonDS::VulkanDispatch::LoadInstance(*instance);
+        return true;
+    };
+
+    if (tryCreateInstance())
+        return true;
+
+    if (melonDS::VulkanDispatch::IsUsingCustomDriver() && melonDS::VulkanDispatch::FallbackToSystemDriver())
     {
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
-            "MelonDSAndroidInterface: Vulkan support check failed (driver dispatch unavailable)"
+            "MelonDSAndroidInterface: custom Vulkan driver failed instance creation; retrying with system Vulkan driver"
         );
-        return false;
+        return tryCreateInstance();
     }
 
-    if (!hasRequiredInstanceExtensions())
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "MelonDSAndroidInterface: Vulkan support check failed (missing required instance extension)"
-        );
-        return false;
-    }
-
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "STORM_DS-android";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "STORM_DS";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_1;
-
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = sizeof(kRequiredInstanceExtensions) / sizeof(kRequiredInstanceExtensions[0]);
-    createInfo.ppEnabledExtensionNames = kRequiredInstanceExtensions;
-
-    const VkResult createResult = vkCreateInstance(&createInfo, nullptr, instance);
-    if (createResult != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "MelonDSAndroidInterface: vkCreateInstance failed during support check (%d)",
-            static_cast<int>(createResult)
-        );
-        return false;
-    }
-
-    melonDS::VulkanDispatch::LoadInstance(*instance);
-    return true;
+    return false;
 }
 
 bool pickGraphicsDevice(VkInstance instance, VkPhysicalDevice* physicalDevice, uint32_t* queueFamilyIndex)
@@ -496,22 +531,45 @@ bool pickGraphicsDevice(VkInstance instance, VkPhysicalDevice* physicalDevice, u
     return hasGraphicsQueue;
 }
 
+void setVulkanCompatibilityOverrides(bool disableTimelineSemaphores, bool disableDynamicTextureIndexing);
+
 bool isVulkanRendererSupported()
 {
+    if (melonDS::VulkanContext::Get().IsReady())
+        return true;
+
     VkInstance instance = VK_NULL_HANDLE;
     if (!createVulkanInstance(&instance))
         return false;
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     uint32_t queueFamilyIndex = 0;
-    const bool result = pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex);
+    bool result = pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex);
     vkDestroyInstance(instance, nullptr);
+
+    if (!result && melonDS::VulkanDispatch::IsUsingCustomDriver() && melonDS::VulkanDispatch::FallbackToSystemDriver())
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "MelonDSAndroidInterface: custom Vulkan driver failed device selection; retrying with system Vulkan driver"
+        );
+        instance = VK_NULL_HANDLE;
+        if (createVulkanInstance(&instance))
+        {
+            result = pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex);
+            vkDestroyInstance(instance, nullptr);
+        }
+    }
+
     return result;
 }
 
 bool canInitializeVulkanRenderer(
     melonDS::VulkanPipelineProfile pipelineProfile)
 {
+    if (melonDS::VulkanContext::Get().IsReady())
+        return true;
+
     constexpr u64 kQuickValidationWaitTimeoutNs = 1'000'000'000ull;
     if (!isVulkanRendererSupported())
     {
@@ -522,31 +580,79 @@ bool canInitializeVulkanRenderer(
         return false;
     }
 
-    MelonDSAndroid::VulkanOutput vulkanOutput(
-        pipelineProfile);
-    if (!vulkanOutput.init())
+    auto tryInitializeWithProfile = [&](melonDS::VulkanPipelineProfile profile) -> bool {
+        MelonDSAndroid::VulkanOutput vulkanOutput(profile);
+        if (!vulkanOutput.init())
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "canInitializeVulkanRenderer: VulkanOutput::init failed for profile=%s",
+                melonDS::VulkanPipelineProfileName(profile)
+            );
+            return false;
+        }
+
+        Frame validationFrame{};
+        validationFrame.backend = FrameBackend::VulkanImage;
+        constexpr uint32_t validationWidth = 64;
+        constexpr uint32_t validationHeight = 64;
+
+        if (!vulkanOutput.ensureFrameResources(&validationFrame, validationWidth, validationHeight))
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "canInitializeVulkanRenderer: ensureFrameResources failed for profile=%s",
+                melonDS::VulkanPipelineProfileName(profile)
+            );
+            return false;
+        }
+
+        if (!vulkanOutput.validateFrameSubmission(&validationFrame, kQuickValidationWaitTimeoutNs))
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "canInitializeVulkanRenderer: validateFrameSubmission failed for profile=%s",
+                melonDS::VulkanPipelineProfileName(profile)
+            );
+            return false;
+        }
+
+        return true;
+    };
+
+    if (tryInitializeWithProfile(pipelineProfile))
+        return true;
+
+    if (pipelineProfile != melonDS::VulkanPipelineProfile::Compatibility)
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "canInitializeVulkanRenderer: VulkanOutput::init failed");
-        return false;
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "canInitializeVulkanRenderer: FastPath failed; falling back to Compatibility profile"
+        );
+        if (tryInitializeWithProfile(melonDS::VulkanPipelineProfile::Compatibility))
+            return true;
     }
 
-    Frame validationFrame{};
-    constexpr uint32_t validationWidth = 64;
-    constexpr uint32_t validationHeight = 64;
-
-    if (!vulkanOutput.ensureFrameResources(&validationFrame, validationWidth, validationHeight))
+    const bool initialDisableTimeline = gForceDisableTimelineSemaphores.load(std::memory_order_relaxed);
+    const bool initialDisableIndexing = gForceDisableDynamicTextureIndexing.load(std::memory_order_relaxed);
+    if (!initialDisableTimeline)
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "canInitializeVulkanRenderer: ensureFrameResources failed");
-        return false;
+        setVulkanCompatibilityOverrides(true, initialDisableIndexing);
+        if (tryInitializeWithProfile(melonDS::VulkanPipelineProfile::Compatibility))
+            return true;
+    }
+    if (!initialDisableIndexing)
+    {
+        setVulkanCompatibilityOverrides(true, true);
+        if (tryInitializeWithProfile(melonDS::VulkanPipelineProfile::Compatibility))
+            return true;
     }
 
-    if (!vulkanOutput.validateFrameSubmission(&validationFrame, kQuickValidationWaitTimeoutNs))
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "canInitializeVulkanRenderer: validateFrameSubmission failed");
-        return false;
-    }
-
-    return true;
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Error,
+        "canInitializeVulkanRenderer: all initialization profiles and compatibility fallbacks failed"
+    );
+    return false;
 }
 
 void setVulkanCompatibilityOverrides(bool disableTimelineSemaphores, bool disableDynamicTextureIndexing)
