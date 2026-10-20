@@ -39,6 +39,10 @@ class MotionSensorManager(
     // Configurable parameters
     var gyroMode: GyroMode = GyroMode.OFF
     var shakeMicEnabled: Boolean = false
+    var threeDParallaxEnabled: Boolean = false
+    var motionPakEnabled: Boolean = false
+    var solarSensorAutoEnabled: Boolean = true
+    var pedometerAutoEnabled: Boolean = true
     var gyroSensitivityX: Float = 1.25f
     var gyroSensitivityY: Float = 1.25f
     var invertX: Boolean = false
@@ -55,8 +59,19 @@ class MotionSensorManager(
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gyroscope = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
+    private val stepCounterSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
     private var isListening = false
+    private var hasTiltCenter = false
+    private var tiltCenterAx = 0f
+    private var tiltCenterAy = 0f
+    private var smoothedTiltX = 0f
+    private var smoothedTiltY = 0f
+    private var lastGyroRawX = 0f
+    private var lastGyroRawY = 0f
+    private var lastGyroRawZ = 0f
+    private var lastStepCounterBaseline: Int? = null
 
     // EMA Filter state (low-pass smoothing)
     private val alphaEMA = 0.65f
@@ -91,6 +106,12 @@ class MotionSensorManager(
         gyroscope?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
+        lightSensor?.let {
+            runCatching { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        }
+        stepCounterSensor?.let {
+            runCatching { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        }
         isListening = true
     }
 
@@ -119,6 +140,12 @@ class MotionSensorManager(
         filteredGyroX = 0f
         filteredGyroY = 0f
         filteredGyroZ = 0f
+        tiltCenterAx = lastAccel[0]
+        tiltCenterAy = lastAccel[1]
+        hasTiltCenter = true
+        smoothedTiltX = 0f
+        smoothedTiltY = 0f
+        runCatching { MelonEmulator.setVulkanGyroTilt(0f, 0f) }
         if (isTouchingScreen) {
             MelonEmulator.onScreenRelease()
             isTouchingScreen = false
@@ -138,7 +165,39 @@ class MotionSensorManager(
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> processAccelerometer(event.values)
             Sensor.TYPE_GYROSCOPE -> processGyroscope(event.values)
+            Sensor.TYPE_LIGHT -> processLightSensor(event.values)
+            Sensor.TYPE_STEP_COUNTER -> processStepCounter(event.values)
         }
+    }
+
+    private fun processLightSensor(values: FloatArray) {
+        if (!solarSensorAutoEnabled || values.isEmpty()) return
+        val lux = values[0].coerceAtLeast(0f)
+        val bars = when {
+            lux < 5f -> 0
+            lux < 25f -> 1
+            lux < 60f -> 2
+            lux < 150f -> 3
+            lux < 350f -> 4
+            lux < 750f -> 5
+            lux < 1500f -> 6
+            lux < 3000f -> 7
+            lux < 6000f -> 8
+            lux < 12000f -> 9
+            else -> 10
+        }
+        runCatching { MelonEmulator.setSolarSensorLightLevel(bars) }
+    }
+
+    private fun processStepCounter(values: FloatArray) {
+        if (!pedometerAutoEnabled || values.isEmpty()) return
+        val totalSteps = values[0].toInt()
+        val prev = lastStepCounterBaseline
+        if (prev != null && totalSteps > prev) {
+            val delta = (totalSteps - prev).coerceIn(1, 500)
+            runCatching { MelonEmulator.addIrPedometerSteps(delta) }
+        }
+        lastStepCounterBaseline = totalSteps
     }
 
     private fun processAccelerometer(values: FloatArray) {
@@ -147,6 +206,33 @@ class MotionSensorManager(
         val az = values[2]
 
         onMotionTilt?.invoke(ax, ay, az)
+
+        if (!hasTiltCenter) {
+            tiltCenterAx = ax
+            tiltCenterAy = ay
+            hasTiltCenter = true
+        } else {
+            // Gently adapt center over long periods so holding posture stays centered
+            tiltCenterAx += (ax - tiltCenterAx) * 0.004f
+            tiltCenterAy += (ay - tiltCenterAy) * 0.004f
+        }
+
+        if (threeDParallaxEnabled) {
+            val relX = ((ax - tiltCenterAx) / 4.5f).coerceIn(-1f, 1f)
+            val relY = ((ay - tiltCenterAy) / 4.5f).coerceIn(-1f, 1f)
+            smoothedTiltX = smoothedTiltX * 0.78f + (-relX) * 0.22f
+            smoothedTiltY = smoothedTiltY * 0.78f + relY * 0.22f
+            runCatching { MelonEmulator.setVulkanGyroTilt(smoothedTiltX, smoothedTiltY) }
+        }
+
+        if (motionPakEnabled) {
+            runCatching {
+                MelonEmulator.setHardwareMotionState(
+                    ax, ay, az,
+                    lastGyroRawX, lastGyroRawY, lastGyroRawZ
+                )
+            }
+        }
 
         if (shakeMicEnabled) {
             val magnitude = kotlin.math.sqrt(ax * ax + ay * ay + az * az)
@@ -180,10 +266,21 @@ class MotionSensorManager(
     }
 
     private fun processGyroscope(values: FloatArray) {
-        if (gyroMode == GyroMode.OFF) return
         val gx = values[0]
         val gy = values[1]
         val gz = values[2]
+        lastGyroRawX = gx - gyroBiasX
+        lastGyroRawY = gy - gyroBiasY
+        lastGyroRawZ = gz - gyroBiasZ
+        if (motionPakEnabled) {
+            runCatching {
+                MelonEmulator.setHardwareMotionState(
+                    lastAccel[0], lastAccel[1], lastAccel[2],
+                    lastGyroRawX, lastGyroRawY, lastGyroRawZ
+                )
+            }
+        }
+        if (gyroMode == GyroMode.OFF) return
 
         // 1. Continuous stationary drift compensation
         if (stationarySamples > 15) {

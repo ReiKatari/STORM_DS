@@ -199,4 +199,14 @@ interface SettingsRepository {
     fun getVulkanCompositorMode(): Int
     fun isVulkanThickHighResEdgesEnabled(): Boolean
     fun isVulkanCompatAutoselectEnabled(): Boolean
+    fun getVulkan3dDepthMode(): Int
+    fun setVulkan3dDepthMode(mode: Int)
+    fun getVulkan3dDepthStrength(): Int
+    fun setVulkan3dDepthStrength(strength: Int)
+    fun isVulkanSsaoEnabled(): Boolean
+    fun setVulkanSsaoEnabled(enabled: Boolean)
+    fun getDisplayColorProfile(): Int
+    fun setDisplayColorProfile(profile: Int)
+    fun getHingeGapPixels(): Int
+    fun setHingeGapPixels(pixels: Int)
 }

@@ -46,6 +46,49 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="true" />
 
+        <ListPreference
+                android:key="video_vulkan_3d_depth_mode"
+                android:title="@string/video_vulkan_3d_depth_mode_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_vulkan_3d_depth_mode_options"
+                android:entryValues="@array/video_vulkan_3d_depth_mode_values"
+                android:defaultValue="off" />
+
+        <ListPreference
+                android:key="video_vulkan_3d_depth_strength"
+                android:title="@string/video_vulkan_3d_depth_strength_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_vulkan_3d_depth_strength_options"
+                android:entryValues="@array/video_vulkan_3d_depth_strength_values"
+                android:defaultValue="50" />
+
+        <SwitchPreferenceCompat
+                android:key="video_vulkan_ssao"
+                android:title="@string/video_vulkan_ssao_title"
+                android:summary="@string/video_vulkan_ssao_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <ListPreference
+                android:key="video_ds_color_profile"
+                android:title="@string/video_ds_color_profile_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_ds_color_profile_options"
+                android:entryValues="@array/video_ds_color_profile_values"
+                android:defaultValue="standard" />
+
+        <ListPreference
+                android:key="video_ds_hinge_gap"
+                android:title="@string/video_ds_hinge_gap_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_ds_hinge_gap_options"
+                android:entryValues="@array/video_ds_hinge_gap_values"
+                android:defaultValue="0" />
+
         <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
                 android:key="video_internal_resolution"
                 android:title="@string/internal_resolution"

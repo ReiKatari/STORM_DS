@@ -233,4 +233,43 @@ object MelonEmulator {
 
     @JvmStatic
     external fun dumpVulkanDebugReport(outputDir: String): Boolean
+
+    @JvmStatic
+    external fun setVulkanDepth3DMode(mode: Int)
+
+    @JvmStatic
+    external fun setVulkanDepth3DStrength(strength: Int)
+
+    @JvmStatic
+    external fun setVulkanSsaoEnabled(enabled: Boolean)
+
+    @JvmStatic
+    external fun setDisplayColorProfile(profile: Int)
+
+    @JvmStatic
+    external fun setHingeGapPixels(pixels: Int)
+
+    @JvmStatic
+    external fun setVulkanGyroTilt(tiltX: Float, tiltY: Float)
+
+    @JvmStatic
+    external fun setSolarSensorLightLevel(level: Int)
+
+    @JvmStatic
+    external fun setGuitarGripKeyState(fretIndex: Int, pressed: Boolean)
+
+    @JvmStatic
+    external fun setHardwareMotionState(ax: Float, ay: Float, az: Float, gx: Float, gy: Float, gz: Float)
+
+    @JvmStatic
+    external fun setIrPedometerStepCount(steps: Int)
+
+    @JvmStatic
+    external fun addIrPedometerSteps(delta: Int)
+
+    @JvmStatic
+    external fun getIrPedometerStepCount(): Int
+
+    @JvmStatic
+    external fun setSlot2AddonType(addonType: Int)
 }

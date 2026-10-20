@@ -559,6 +559,8 @@ class EmulatorActivity : AppCompatActivity() {
     private val saveStatesOverlayState = mutableStateOf<SaveStatesOverlayData?>(null)
     private val isLidClosedState = mutableStateOf(false)
     private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
+    private val activeSlot2AddonState = mutableStateOf(0)
+    private var solarSensorOverrideLevel = -1 // -1 = Auto (phone ambient light sensor), 0..10 = manual bars
 
     private sealed interface ConsoleOverlayNode {
         val title: String
@@ -1021,6 +1023,29 @@ class EmulatorActivity : AppCompatActivity() {
                             onFinished = { showBootAnimation.value = false },
                         )
                     }
+                }
+
+                if (
+                    activeSlot2AddonState.value in listOf(5, 6) &&
+                    pauseMenu == null &&
+                    topConsoleNode == null &&
+                    saveStatesData == null &&
+                    rewindWindow == null &&
+                    !showBootAnimation.value
+                ) {
+                    me.magnum.melonds.ui.emulator.ui.Slot2PeripheralOverlay(
+                        addonType = activeSlot2AddonState.value,
+                        onGuitarFretStateChanged = { fretIndex, pressed ->
+                            runCatching { MelonEmulator.setGuitarGripKeyState(fretIndex, pressed) }
+                        },
+                        onPaddleAnalogDelta = { deltaX ->
+                            runCatching { MelonEmulator.setSlot2AnalogInput(deltaX, 0f) }
+                        },
+                        onDismissOverlay = {
+                            activeSlot2AddonState.value = 0
+                            runCatching { MelonEmulator.setSlot2AddonType(0) }
+                        },
+                    )
                 }
 
                 if (isLidClosedState.value) {
@@ -1959,7 +1984,11 @@ class EmulatorActivity : AppCompatActivity() {
         melonTouchHandler.turboMacrosEnabled = prefs.getBoolean("input_turbo_macros_enabled", false)
         val gyroEnabled = prefs.getBoolean("input_gyro_aiming_enabled", false) || prefs.getBoolean("pref_motion_gyro_enabled", false)
         val gyroMicEnabled = prefs.getBoolean("input_gyro_mic_enabled", false)
+        val threeDParallaxActive = settingsRepository.getVulkan3dDepthMode() == 1
         motionSensorManager.shakeMicEnabled = gyroMicEnabled
+        motionSensorManager.threeDParallaxEnabled = threeDParallaxActive
+        motionSensorManager.motionPakEnabled = activeSlot2AddonState.value == 4
+        motionSensorManager.solarSensorAutoEnabled = solarSensorOverrideLevel < 0
         if (gyroEnabled) {
             val modeStr = prefs.getString("pref_motion_gyro_mode", "touch_aim")
             motionSensorManager.gyroMode = when (modeStr) {
@@ -1980,7 +2009,7 @@ class EmulatorActivity : AppCompatActivity() {
             motionSensorManager.startListening()
         } else {
             motionSensorManager.gyroMode = me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
-            if (gyroMicEnabled) {
+            if (gyroMicEnabled || threeDParallaxActive || motionSensorManager.motionPakEnabled || motionSensorManager.solarSensorAutoEnabled || motionSensorManager.pedometerAutoEnabled) {
                 motionSensorManager.startListening()
             } else {
                 motionSensorManager.stopListening()
@@ -3184,7 +3213,7 @@ class EmulatorActivity : AppCompatActivity() {
         renderer: VideoRenderer,
         menuState: InGameRomSettingsMenuState,
     ) {
-        val entries = buildList {
+        val entries = buildList<Pair<String, () -> Unit>> {
             add(romSettingsMenuLabel(getString(R.string.key_mapping), menuState.controllerMappingValue) to {
                 romInputSettingsLauncher.launch(InputSetupActivity.getRomCustomIntent(this@EmulatorActivity, rom))
             })
@@ -3224,6 +3253,23 @@ class EmulatorActivity : AppCompatActivity() {
                 showRomMicSourceDialog(rom.config.runtimeMicSource)
             })
             if (renderer == VideoRenderer.VULKAN) {
+                add(romSettingsMenuLabel(getString(R.string.video_vulkan_3d_depth_mode_title), vulkan3dDepthModeLabel(settingsRepository.getVulkan3dDepthMode())) to {
+                    showVulkan3dDepthModeChoiceOverlay()
+                })
+                add(romSettingsMenuLabel(getString(R.string.video_vulkan_3d_depth_strength_title), "${settingsRepository.getVulkan3dDepthStrength()}%") to {
+                    showVulkan3dDepthStrengthChoiceOverlay()
+                })
+                val ssaoEnabled = settingsRepository.isVulkanSsaoEnabled()
+                add(romSettingsMenuLabel(getString(R.string.video_vulkan_ssao_title), if (ssaoEnabled) getString(R.string.on) else getString(R.string.off)) to {
+                    settingsRepository.setVulkanSsaoEnabled(!ssaoEnabled)
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                })
+                add(romSettingsMenuLabel(getString(R.string.video_ds_color_profile_title), displayColorProfileLabel(settingsRepository.getDisplayColorProfile())) to {
+                    showDisplayColorProfileChoiceOverlay()
+                })
+                add(romSettingsMenuLabel(getString(R.string.video_ds_hinge_gap_title), hingeGapLabel(settingsRepository.getHingeGapPixels())) to {
+                    showHingeGapChoiceOverlay()
+                })
                 add(romSettingsMenuLabel(getString(R.string.vulkan_debug_view_mode_title), vulkanDebugViewModeLabel(currentVulkanDebugViewMode)) to {
                     showVulkanDebugViewModeChoiceOverlay()
                 })
@@ -3231,6 +3277,16 @@ class EmulatorActivity : AppCompatActivity() {
                     dumpVulkanDebugReportFromMenu()
                 })
             }
+            add(romSettingsMenuLabel("Аксессуар Slot-2 (GBA)", slot2AddonLabel(activeSlot2AddonState.value)) to {
+                showSlot2AddonChoiceOverlay()
+            })
+            add(romSettingsMenuLabel("Датчик солнца (Boktai)", solarSensorLabel(solarSensorOverrideLevel)) to {
+                showSolarSensorChoiceOverlay()
+            })
+            val currentSteps = runCatching { MelonEmulator.getIrPedometerStepCount() }.getOrDefault(1250)
+            add(romSettingsMenuLabel("ИК-шагомер Pokéwalker", "$currentSteps шагов") to {
+                showIrPedometerChoiceOverlay()
+            })
         }
 
         if (entries.isEmpty()) {
@@ -3441,6 +3497,241 @@ class EmulatorActivity : AppCompatActivity() {
             autoselectEnabled = settingsRepository.isVulkanCompatAutoselectEnabled(),
             userCompositorMode = settingsRepository.getVulkanCompositorMode(),
             userThickEdges = settingsRepository.isVulkanThickHighResEdgesEnabled(),
+        )
+        runCatching {
+            MelonEmulator.setVulkanDepth3DMode(settingsRepository.getVulkan3dDepthMode())
+            MelonEmulator.setVulkanDepth3DStrength(settingsRepository.getVulkan3dDepthStrength())
+            MelonEmulator.setVulkanSsaoEnabled(settingsRepository.isVulkanSsaoEnabled())
+            MelonEmulator.setDisplayColorProfile(settingsRepository.getDisplayColorProfile())
+            MelonEmulator.setHingeGapPixels(settingsRepository.getHingeGapPixels())
+        }
+        val titleUpper = (rom.config.customName ?: rom.name).uppercase()
+        val codeUpper = rom.gameCode.uppercase()
+        val autoSlot2 = when {
+            titleUpper.contains("GUITAR HERO") || codeUpper.startsWith("YGH") || codeUpper.startsWith("CHR") || codeUpper.startsWith("BHR") -> 5
+            titleUpper.contains("ARKANOID") || titleUpper.contains("SPACE INVADERS EXTREME") || codeUpper.startsWith("YKR") -> 6
+            titleUpper.contains("BOKTAI") || titleUpper.contains("LUNAR KNIGHTS") || codeUpper.startsWith("ALK") -> 3
+            titleUpper.contains("TONY HAWK'S MOTION") || titleUpper.contains("TONY HAWKS MOTION") -> 4
+            else -> 0
+        }
+        if (autoSlot2 != 0 && activeSlot2AddonState.value == 0) {
+            activeSlot2AddonState.value = autoSlot2
+            motionSensorManager.motionPakEnabled = (autoSlot2 == 4)
+            runCatching { MelonEmulator.setSlot2AddonType(autoSlot2) }
+        }
+    }
+
+    private fun vulkan3dDepthModeLabels(): List<String> = listOf(
+        getString(R.string.video_vulkan_3d_depth_mode_off),
+        getString(R.string.video_vulkan_3d_depth_mode_gyro),
+        getString(R.string.video_vulkan_3d_depth_mode_anaglyph),
+        getString(R.string.video_vulkan_3d_depth_mode_sbs),
+    )
+
+    private fun vulkan3dDepthModeLabel(mode: Int): String {
+        val labels = vulkan3dDepthModeLabels()
+        return labels.getOrElse(mode.coerceIn(0, labels.lastIndex)) { labels.first() }
+    }
+
+    private fun showVulkan3dDepthModeChoiceOverlay() {
+        val labels = vulkan3dDepthModeLabels()
+        val current = settingsRepository.getVulkan3dDepthMode().coerceIn(0, labels.lastIndex)
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_vulkan_3d_depth_mode_title),
+                labels = labels,
+                selectedIndex = current,
+                onSelect = { which ->
+                    val mode = which.coerceIn(0, 3)
+                    settingsRepository.setVulkan3dDepthMode(mode)
+                    motionSensorManager.threeDParallaxEnabled = (mode == 1)
+                    if (mode == 1) {
+                        motionSensorManager.calibrateCenter()
+                        motionSensorManager.startListening()
+                    }
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun showVulkan3dDepthStrengthChoiceOverlay() {
+        val options = listOf(25, 50, 75, 100)
+        val labels = options.map { "$it%" }
+        val currentStrength = settingsRepository.getVulkan3dDepthStrength()
+        val selectedIdx = options.indexOfFirst { it >= currentStrength }.let { if (it < 0) 1 else it }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_vulkan_3d_depth_strength_title),
+                labels = labels,
+                selectedIndex = selectedIdx,
+                onSelect = { which ->
+                    val strength = options.getOrElse(which) { 50 }
+                    settingsRepository.setVulkan3dDepthStrength(strength)
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun displayColorProfileLabels(): List<String> = listOf(
+        getString(R.string.video_ds_color_profile_standard),
+        getString(R.string.video_ds_color_profile_ds_phat),
+        getString(R.string.video_ds_color_profile_ds_lite),
+        getString(R.string.video_ds_color_profile_dsi_xl),
+    )
+
+    private fun displayColorProfileLabel(profile: Int): String {
+        val labels = displayColorProfileLabels()
+        return labels.getOrElse(profile.coerceIn(0, labels.lastIndex)) { labels.first() }
+    }
+
+    private fun showDisplayColorProfileChoiceOverlay() {
+        val labels = displayColorProfileLabels()
+        val current = settingsRepository.getDisplayColorProfile().coerceIn(0, labels.lastIndex)
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_ds_color_profile_title),
+                labels = labels,
+                selectedIndex = current,
+                onSelect = { which ->
+                    settingsRepository.setDisplayColorProfile(which.coerceIn(0, 3))
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun hingeGapOptions(): List<Int> = listOf(0, 32, 64, 90)
+
+    private fun hingeGapLabels(): List<String> = listOf(
+        getString(R.string.video_ds_hinge_gap_0),
+        getString(R.string.video_ds_hinge_gap_32),
+        getString(R.string.video_ds_hinge_gap_64),
+        getString(R.string.video_ds_hinge_gap_90),
+    )
+
+    private fun hingeGapLabel(pixels: Int): String {
+        val idx = hingeGapOptions().indexOf(pixels).let { if (it < 0) 0 else it }
+        return hingeGapLabels()[idx]
+    }
+
+    private fun showHingeGapChoiceOverlay() {
+        val options = hingeGapOptions()
+        val labels = hingeGapLabels()
+        val currentIdx = options.indexOf(settingsRepository.getHingeGapPixels()).let { if (it < 0) 0 else it }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_ds_hinge_gap_title),
+                labels = labels,
+                selectedIndex = currentIdx,
+                onSelect = { which ->
+                    val px = options.getOrElse(which) { 0 }
+                    settingsRepository.setHingeGapPixels(px)
+                    updateRendererScreenAreas()
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun slot2AddonLabels(): List<String> = listOf(
+        "Отключён",
+        "Rumble Pak (Вибропакет DS)",
+        "Memory Expansion Pak (8 МБ ОЗУ)",
+        "Solar Sensor (Датчик солнца Boktai)",
+        "Motion Pak (Гироскоп и акселерометр)",
+        "Guitar Grip (4 клавиши Guitar Hero)",
+        "Paddle Controller (Колесо Arkanoid)",
+    )
+
+    private fun slot2AddonLabel(addonType: Int): String {
+        val labels = slot2AddonLabels()
+        return labels.getOrElse(addonType.coerceIn(0, labels.lastIndex)) { labels.first() }
+    }
+
+    private fun showSlot2AddonChoiceOverlay() {
+        val labels = slot2AddonLabels()
+        val current = activeSlot2AddonState.value.coerceIn(0, labels.lastIndex)
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = "Аксессуар Slot-2 (GBA)",
+                labels = labels,
+                selectedIndex = current,
+                onSelect = { which ->
+                    val addonType = which.coerceIn(0, labels.lastIndex)
+                    activeSlot2AddonState.value = addonType
+                    motionSensorManager.motionPakEnabled = (addonType == 4)
+                    if (addonType == 3 || addonType == 4) {
+                        motionSensorManager.startListening()
+                    }
+                    runCatching { MelonEmulator.setSlot2AddonType(addonType) }
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun solarSensorLabel(level: Int): String {
+        return if (level < 0) "Авто (датчик телефона)" else "$level / 10 делений"
+    }
+
+    private fun showSolarSensorChoiceOverlay() {
+        val values = listOf(-1, 0, 2, 4, 6, 8, 10)
+        val labels = listOf(
+            "Авто (датчик освещённости телефона)",
+            "0 / 10 (Полная темнота)",
+            "2 / 10 (Сумерки)",
+            "4 / 10 (Тень / Облачно)",
+            "6 / 10 (Ясный день)",
+            "8 / 10 (Яркое солнце)",
+            "10 / 10 (Зенит солнца)",
+        )
+        val currentIdx = values.indexOf(solarSensorOverrideLevel).let { if (it < 0) 0 else it }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = "Датчик солнца (Boktai / Lunar Knights)",
+                labels = labels,
+                selectedIndex = currentIdx,
+                onSelect = { which ->
+                    val chosen = values.getOrElse(which) { -1 }
+                    solarSensorOverrideLevel = chosen
+                    motionSensorManager.solarSensorAutoEnabled = (chosen < 0)
+                    if (chosen >= 0) {
+                        runCatching { MelonEmulator.setSolarSensorLightLevel(chosen) }
+                    } else {
+                        motionSensorManager.startListening()
+                    }
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun showIrPedometerChoiceOverlay() {
+        val labels = listOf(
+            "+100 шагов",
+            "+500 шагов",
+            "+1000 шагов",
+            "+5000 шагов",
+            "Сбросить счётчик (0 шагов)",
+        )
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = "ИК-шагомер Pokéwalker (Pokémon HG/SS)",
+                labels = labels,
+                selectedIndex = 0,
+                onSelect = { which ->
+                    when (which) {
+                        0 -> runCatching { MelonEmulator.addIrPedometerSteps(100) }
+                        1 -> runCatching { MelonEmulator.addIrPedometerSteps(500) }
+                        2 -> runCatching { MelonEmulator.addIrPedometerSteps(1000) }
+                        3 -> runCatching { MelonEmulator.addIrPedometerSteps(5000) }
+                        4 -> runCatching { MelonEmulator.setIrPedometerStepCount(0) }
+                    }
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
         )
     }
 

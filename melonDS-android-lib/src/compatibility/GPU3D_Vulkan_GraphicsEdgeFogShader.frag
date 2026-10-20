@@ -103,6 +103,35 @@ vec3 unpackFogColor()
         float((pc.fogColor >> 10u) & 0x1Fu)) * (1.0 / 31.0);
 }
 
+float computeSsaoAlpha(ivec2 coord, float centerDepth)
+{
+    if ((pc.dispCnt & (1u << 17u)) == 0u)
+        return 0.0;
+    float clearDepthNorm = float(pc.clearDepth) * (1.0 / 16777216.0);
+    if (centerDepth >= clearDepthNorm - 0.0002)
+        return 0.0;
+
+    int irScale = max(1, int(pc.width / 256u));
+    int r1 = irScale * 2;
+    int r2 = irScale * 4;
+    float ao = 0.0;
+    const ivec2 offsets[8] = ivec2[8](
+        ivec2(0, -r1), ivec2(0, r1), ivec2(-r1, 0), ivec2(r1, 0),
+        ivec2(-r2, -r2), ivec2(r2, -r2), ivec2(-r2, r2), ivec2(r2, r2)
+    );
+    for (int i = 0; i < 8; i++)
+    {
+        ivec2 sc = clamp(coord + offsets[i], ivec2(0), ivec2(int(pc.width) - 1, int(pc.height) - 1));
+        float sampleDepth = texelFetch(DepthBuffer, sc, 0).r;
+        float diff = centerDepth - sampleDepth;
+        if (diff > 0.00015 && diff < 0.035)
+        {
+            ao += smoothstep(0.035, 0.00015, diff);
+        }
+    }
+    return clamp(ao * 0.075, 0.0, 0.42);
+}
+
 void main()
 {
     ivec2 coord = ivec2(gl_FragCoord.xy);
@@ -117,7 +146,7 @@ void main()
     vec3 edgeColor = vec3(0.0);
     int polyid = int(attr.r * 63.0);
 
-    if (attr.g != 0.0)
+    if (((pc.dispCnt & (1u << 5u)) != 0u) && attr.g != 0.0)
     {
         vec4 depthU = texelFetch(DepthBuffer, coord + ivec2(0, -scale), 0);
         vec4 attrU = texelFetch(AttrBuffer, coord + ivec2(0, -scale), 0);
@@ -135,6 +164,16 @@ void main()
         {
             edgeColor = edgeColorForPolyId(polyid);
             edgeAlpha = ((pc.dispCnt & (1u << 4u)) != 0u) ? 0.5 : 1.0;
+        }
+    }
+
+    if (edgeAlpha == 0.0)
+    {
+        float aoAlpha = computeSsaoAlpha(coord, depth.r);
+        if (aoAlpha > 0.0)
+        {
+            edgeColor = vec3(0.0);
+            edgeAlpha = aoAlpha;
         }
     }
 

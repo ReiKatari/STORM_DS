@@ -728,6 +728,12 @@ namespace MelonDSAndroid
             instance->setSlot2AnalogInput(x, y);
     }
 
+    void setSlot2AddonType(int addonType)
+    {
+        if (instance)
+            instance->setSlot2AddonType(addonType);
+    }
+
     void start()
     {
         startAudio();

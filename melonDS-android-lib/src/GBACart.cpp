@@ -25,6 +25,7 @@
 #include "CRC32.h"
 #include "Platform.h"
 #include "Utils.h"
+#include "VulkanRuntimeControls.h"
 
 namespace melonDS
 {
@@ -644,6 +645,9 @@ void CartGameSolarSensor::SetLightLevel(u8 level) noexcept
 
 void CartGameSolarSensor::ProcessGPIO()
 {
+    const int sensorLux = MelonDSAndroid::VulkanRuntime::GetSolarSensorLuxLevel();
+    if (sensorLux >= 0)
+        LightLevel = static_cast<u8>(sensorLux);
     if (GPIO.data & 4) return; // Boktai chip select
     if (GPIO.data & 2) // Reset
     {

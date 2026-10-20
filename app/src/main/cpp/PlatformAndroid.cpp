@@ -33,6 +33,7 @@
 #include "MelonDS.h"
 #include "MelonDSAudio.h"
 #include "ROMManager.h"
+#include "VulkanRuntimeControls.h"
 #include "PlatformAndroid.h"
 #include "MelonInstance.h"
 #include "MelonLog.h"
@@ -710,7 +711,15 @@ namespace Platform
 
     bool Addon_KeyDown(KeyType type, void* userdata)
     {
-        return false;
+        const u32 mask = MelonDSAndroid::VulkanRuntime::GetGuitarGripKeyMask();
+        switch (type)
+        {
+        case KeyGuitarGripGreen:  return (mask & (1u << 0u)) != 0u;
+        case KeyGuitarGripRed:    return (mask & (1u << 1u)) != 0u;
+        case KeyGuitarGripYellow: return (mask & (1u << 2u)) != 0u;
+        case KeyGuitarGripBlue:   return (mask & (1u << 3u)) != 0u;
+        default:                  return false;
+        }
     }
 
     void Addon_RumbleStart(u32 len, void* userdata)
@@ -725,8 +734,7 @@ namespace Platform
 
     float Addon_MotionQuery(MotionQueryType type, void* userdata)
     {
-        // TODO
-        return 0;
+        return MelonDSAndroid::VulkanRuntime::GetMotionQuery(static_cast<int>(type));
     }
 
     DynamicLibrary* DynamicLibrary_Load(const char* lib)

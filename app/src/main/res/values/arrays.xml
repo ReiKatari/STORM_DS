@@ -518,4 +518,56 @@
         <item>precise</item>
         <item>legacy</item>
     </string-array>
+
+    <string-array name="video_vulkan_3d_depth_mode_options">
+        <item>@string/video_vulkan_3d_depth_mode_off</item>
+        <item>@string/video_vulkan_3d_depth_mode_gyro</item>
+        <item>@string/video_vulkan_3d_depth_mode_anaglyph</item>
+        <item>@string/video_vulkan_3d_depth_mode_sbs</item>
+    </string-array>
+    <string-array name="video_vulkan_3d_depth_mode_values">
+        <item>off</item>
+        <item>gyro_parallax</item>
+        <item>anaglyph</item>
+        <item>sbs_xr</item>
+    </string-array>
+
+    <string-array name="video_vulkan_3d_depth_strength_options">
+        <item>25%</item>
+        <item>50%</item>
+        <item>75%</item>
+        <item>100%</item>
+    </string-array>
+    <string-array name="video_vulkan_3d_depth_strength_values">
+        <item>25</item>
+        <item>50</item>
+        <item>75</item>
+        <item>100</item>
+    </string-array>
+
+    <string-array name="video_ds_color_profile_options">
+        <item>@string/video_ds_color_profile_standard</item>
+        <item>@string/video_ds_color_profile_ds_phat</item>
+        <item>@string/video_ds_color_profile_ds_lite</item>
+        <item>@string/video_ds_color_profile_dsi_xl</item>
+    </string-array>
+    <string-array name="video_ds_color_profile_values">
+        <item>standard</item>
+        <item>ds_phat</item>
+        <item>ds_lite</item>
+        <item>dsi_xl</item>
+    </string-array>
+
+    <string-array name="video_ds_hinge_gap_options">
+        <item>@string/video_ds_hinge_gap_0</item>
+        <item>@string/video_ds_hinge_gap_32</item>
+        <item>@string/video_ds_hinge_gap_64</item>
+        <item>@string/video_ds_hinge_gap_90</item>
+    </string-array>
+    <string-array name="video_ds_hinge_gap_values">
+        <item>0</item>
+        <item>32</item>
+        <item>64</item>
+        <item>90</item>
+    </string-array>
 </resources>

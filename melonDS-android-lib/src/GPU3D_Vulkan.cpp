@@ -12922,7 +12922,8 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     pushConstants.clearDepth = clearDepth;
     pushConstants.triangleCount = static_cast<u32>(Triangles.size());
     pushConstants.dispCnt = (dispCnt & 0xFFFFu)
-        | ((MelonDSAndroid::VulkanRuntime::GetThickHighResEdges() && ScaleFactor > 1) ? (1u << 16u) : 0u);
+        | ((MelonDSAndroid::VulkanRuntime::GetThickHighResEdges() && ScaleFactor > 1) ? (1u << 16u) : 0u)
+        | (MelonDSAndroid::VulkanRuntime::GetSsaoEnabled() ? (1u << 17u) : 0u);
     pushConstants.alphaRef = alphaRef;
     pushConstants.fogColor = fogColor;
     pushConstants.fogOffset = fogOffset;
@@ -15488,8 +15489,9 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     }
 
     const bool runEdgePass =
-        (dispCnt & (1u << 5u)) != 0u
-        && (graphicsPassDebugStats.edge > 0u || GraphicsHiddenAlphaZeroFinalEdgePolyIdOverride < 64u);
+        ((dispCnt & (1u << 5u)) != 0u
+            && (graphicsPassDebugStats.edge > 0u || GraphicsHiddenAlphaZeroFinalEdgePolyIdOverride < 64u))
+        || (MelonDSAndroid::VulkanRuntime::GetSsaoEnabled() && !Triangles.empty());
     const bool fogDensityNonZero =
         fogDensityTable != nullptr
         && std::any_of(fogDensityTable, fogDensityTable + 34, [](u8 density) { return density != 0u; });

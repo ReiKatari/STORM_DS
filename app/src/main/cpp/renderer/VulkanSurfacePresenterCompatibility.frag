@@ -66,7 +66,9 @@ const uint kFilterAiUpscale = 10u;
 const uint kPackedScreenWidth = 256u;
 const uint kPackedScreenHeight = 192u;
 
-layout(location = 0) in vec2 fragUv;
+layout(location = 0) in vec2 inFragUv;
+vec2 fragUv = vec2(0.0);
+bool gAllowCarryStore = true;
 layout(location = 1) in float fragAlpha;
 
 layout(location = 0) out vec4 outColor;
@@ -370,7 +372,7 @@ DEFINE_SAMPLE_PACKED_WITH_BRIGHTNESS(sampleBottomPackedWithBrightness, readBotto
 Rgba6 FUNC_NAME(int sourceX, int sourceY, float sourceXFloat, float sourceYFloat, int layerOffset) \
 { \
     Rgba6 nearest = unpackColor6(READ_PACKED_FUNC(sourceY, layerOffset + sourceX)); \
-    if (pushConstants.filtering != kFilterLinear) \
+    if ((pushConstants.filtering & 0xFFu) != kFilterLinear) \
         return nearest; \
     float sharpX = clamp(sourceXFloat - 0.5, 0.0, 255.0); \
     float sharpY = clamp(sourceYFloat - 0.5, 0.0, 191.0); \
@@ -1210,7 +1212,7 @@ vec4 FUNC_NAME() \
     if (displayMode == 1) \
         return vec4(color6ToRgb01(pixel), fragAlpha); \
  \
-	    if (pushConstants.filtering == kFilterLinear) \
+	    if ((pushConstants.filtering & 0xFFu) == kFilterLinear) \
     { \
         float linearX = clamp(sourceXFloat - 0.5, 0.0, 255.0); \
         float linearY = clamp(sourceYFloat - 0.5, 0.0, 191.0); \
@@ -1534,21 +1536,21 @@ vec3 filterAiUpscale(vec2 uv, bool topScreen)
 
 vec3 applyCompositePostFilter(vec2 uv, bool topScreen)
 {
-    if (pushConstants.filtering == kFilterQuilez)
+    if ((pushConstants.filtering & 0xFFu) == kFilterQuilez)
         return filterQuilez(uv, topScreen);
-    if (pushConstants.filtering == kFilterXbr2)
+    if ((pushConstants.filtering & 0xFFu) == kFilterXbr2)
         return filterXbr2(uv, topScreen);
-    if (pushConstants.filtering == kFilterHq2x)
+    if ((pushConstants.filtering & 0xFFu) == kFilterHq2x)
         return filterHq2x(uv, topScreen);
-    if (pushConstants.filtering == kFilterHq4x)
+    if ((pushConstants.filtering & 0xFFu) == kFilterHq4x)
         return filterHq4x(uv, topScreen);
-    if (pushConstants.filtering == kFilterLcd)
+    if ((pushConstants.filtering & 0xFFu) == kFilterLcd)
         return filterLcd(uv, topScreen);
-    if (pushConstants.filtering == kFilterScanlines)
+    if ((pushConstants.filtering & 0xFFu) == kFilterScanlines)
         return filterScanlines(uv, topScreen);
-    if (pushConstants.filtering == kFilterScale2x)
+    if ((pushConstants.filtering & 0xFFu) == kFilterScale2x)
         return filterScale2x(uv, topScreen);
-    if (pushConstants.filtering == kFilterAiUpscale)
+    if ((pushConstants.filtering & 0xFFu) == kFilterAiUpscale)
         return filterAiUpscale(uv, topScreen);
     return sampleCompositeRgb(uv, topScreen);
 }
@@ -1569,7 +1571,7 @@ vec4 composePreciseScreenColor(bool topScreen, uint debugView)
     int xoffset = int((masterBrightness >> 24u) & 0xFFu)
         - ((((masterBrightness >> 16u) & 0x80u) != 0u) ? 256 : 0);
 
-    bool screenOwnsLive3D = topScreen ? (pushConstants.screenSwap != 0u) : (pushConstants.screenSwap == 0u);
+    bool screenOwnsLive3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
     bool screenHasCapturedHighres3D = !screenOwnsLive3D
         && (topScreen ? (pushConstants.previousTopSourceValid != 0u) : (pushConstants.previousBottomSourceValid != 0u))
         && (dispmode == 2
@@ -1724,7 +1726,7 @@ vec4 composePreciseScreenColor(bool topScreen, uint debugView)
     return vec4(color6ToRgb01(val1), fragAlpha);
 }
 
-void main()
+void runPresenterCore()
 {
     if (pushConstants.drawMode == 0u)
     {
@@ -1767,4 +1769,124 @@ void main()
     }
 
     outColor = composeBottomScreenColor();
+}
+
+vec4 evalPresenterAt(vec2 uv, bool allowCarry)
+{
+    fragUv = clamp(uv, vec2(0.001), vec2(0.999));
+    gAllowCarryStore = allowCarry;
+    runPresenterCore();
+    return outColor;
+}
+
+float estimateSceneDepthFactor(vec2 uv, vec3 baseRgb)
+{
+    bool topScreen = (pushConstants.drawMode == 1u)
+        || (pushConstants.drawMode == 2u)
+        || (pushConstants.drawMode == 4u)
+        || (pushConstants.drawMode == 7u)
+        || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
+            && ((pushConstants.drawMode & 1u) != 0u));
+    int sx = int(clamp(uv.x * 256.0, 0.0, 255.0));
+    int sy = int(clamp((1.0 - uv.y) * 192.0, 0.0, 191.0));
+    Rgba6 v1 = unpackColor6(topScreen ? readTopPacked(sy, sx) : readBottomPacked(sy, sx));
+    Rgba6 v3 = unpackColor6(topScreen ? readTopPacked(sy, 512 + sx) : readBottomPacked(sy, 512 + sx));
+
+    int scaledX = int(clamp(uv.x * float(max(pushConstants.rendererWidth, 1u)), 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
+    int scaledY = int(clamp((1.0 - uv.y) * float(max(pushConstants.rendererHeight, 1u)), 0.0, float(max(pushConstants.rendererHeight, 1u) - 1u)));
+    bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
+    vec4 raw3D = screenOwns3D
+        ? imageLoad(u3dImage, ivec2(scaledX, scaledY))
+        : (topScreen
+            ? imageLoad(u3dPreviousTopImage, ivec2(scaledX, scaledY))
+            : imageLoad(u3dPreviousBottomImage, ivec2(scaledX, scaledY)));
+
+    float luma = dot(baseRgb, vec3(0.299, 0.587, 0.114));
+    if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
+    {
+        return 0.75;
+    }
+    if (raw3D.a > 0.01)
+    {
+        float persp = clamp((1.0 - uv.y) * 0.6 + luma * 0.4, 0.0, 1.0);
+        return mix(-0.35, 0.50, persp);
+    }
+    return mix(-0.65, -0.15, luma);
+}
+
+vec3 applyConsoleColorProfile(vec3 rgb, uint profile)
+{
+    if (profile == 0u)
+        return rgb;
+    vec3 c6 = floor(clamp(rgb, 0.0, 1.0) * 63.0 + 0.5) * (1.0 / 63.0);
+    float luma = dot(c6, vec3(0.299, 0.587, 0.114));
+    if (profile == 1u)
+    {
+        vec3 desaturated = mix(vec3(luma), c6, 0.80);
+        vec3 warm = pow(max(desaturated, vec3(0.0)), vec3(1.14)) * vec3(1.03, 1.00, 0.90);
+        return clamp(warm, 0.0, 1.0);
+    }
+    if (profile == 2u)
+    {
+        vec3 vivid = mix(vec3(luma), c6, 1.18);
+        vec3 contrasted = mix(vivid, smoothstep(0.0, 1.0, vivid), 0.22);
+        return clamp(contrasted * vec3(0.99, 1.01, 1.03), 0.0, 1.0);
+    }
+    if (profile == 3u)
+    {
+        vec3 ips = mix(vec3(luma), pow(max(c6, vec3(0.0)), vec3(0.96)), 1.12);
+        return clamp(ips * vec3(1.03, 1.01, 0.96), 0.0, 1.0);
+    }
+    return rgb;
+}
+
+void main()
+{
+    uint depthMode = (pushConstants.filtering >> 8u) & 0x7u;
+    uint colorProfile = (pushConstants.filtering >> 11u) & 0x7u;
+    float strengthNorm = float((pushConstants.filtering >> 14u) & 0x7Fu) * 0.01;
+
+    vec4 baseColor = evalPresenterAt(inFragUv, true);
+    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u))
+    {
+        outColor = baseColor;
+        return;
+    }
+
+    vec4 finalColor = baseColor;
+    if (depthMode == 1u)
+    {
+        float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
+        float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
+        float depthFactor = estimateSceneDepthFactor(inFragUv, baseColor.rgb);
+        vec2 parallaxUv = inFragUv + vec2(tiltX, -tiltY) * depthFactor * (0.008 + 0.024 * strengthNorm);
+        finalColor = evalPresenterAt(parallaxUv, false);
+        float sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.08 * strengthNorm, -0.04, 0.04);
+        finalColor.rgb = clamp(finalColor.rgb + vec3(sheen * max(depthFactor, 0.0)), 0.0, 1.0);
+    }
+    else if (depthMode == 2u)
+    {
+        float depthFactor = estimateSceneDepthFactor(inFragUv, baseColor.rgb);
+        float shift = (0.003 + 0.014 * strengthNorm) * (depthFactor + 0.15);
+        vec3 leftRgb = evalPresenterAt(inFragUv - vec2(shift, 0.0), false).rgb;
+        vec3 rightRgb = evalPresenterAt(inFragUv + vec2(shift, 0.0), false).rgb;
+        vec3 anaglyph;
+        anaglyph.r = clamp(dot(leftRgb, vec3(0.456, 0.500, 0.176)) + dot(rightRgb, vec3(-0.043, -0.088, -0.002)), 0.0, 1.0);
+        anaglyph.g = clamp(dot(leftRgb, vec3(-0.040, -0.038, -0.016)) + dot(rightRgb, vec3(0.378, 0.734, -0.018)), 0.0, 1.0);
+        anaglyph.b = clamp(dot(leftRgb, vec3(-0.015, -0.021, -0.005)) + dot(rightRgb, vec3(-0.072, -0.113, 1.226)), 0.0, 1.0);
+        finalColor = vec4(anaglyph, baseColor.a);
+    }
+    else if (depthMode == 3u)
+    {
+        bool rightEye = inFragUv.x >= 0.5;
+        float eyeSign = rightEye ? 1.0 : -1.0;
+        vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
+        vec4 sbsCenter = evalPresenterAt(sbsUv, false);
+        float depthFactor = estimateSceneDepthFactor(sbsUv, sbsCenter.rgb);
+        float shift = eyeSign * (0.003 + 0.014 * strengthNorm) * depthFactor;
+        finalColor = evalPresenterAt(vec2(clamp(sbsUv.x + shift, 0.001, 0.999), sbsUv.y), false);
+    }
+
+    finalColor.rgb = applyConsoleColorProfile(finalColor.rgb, colorProfile);
+    outColor = finalColor;
 }

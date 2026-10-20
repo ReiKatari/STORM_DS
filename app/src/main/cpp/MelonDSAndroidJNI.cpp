@@ -2703,6 +2703,93 @@ Java_me_magnum_melonds_MelonEmulator_setVulkanDebugViewMode(JNIEnv*, jclass, jin
     MelonDSAndroid::VulkanRuntime::SetDebugView(static_cast<int>(mode));
 }
 
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanDepth3DMode(JNIEnv*, jclass, jint mode)
+{
+    MelonDSAndroid::VulkanRuntime::SetDepth3DMode(static_cast<int>(mode));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanDepth3DStrength(JNIEnv*, jclass, jint strength)
+{
+    MelonDSAndroid::VulkanRuntime::SetDepth3DStrength(static_cast<int>(strength));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanSsaoEnabled(JNIEnv*, jclass, jboolean enabled)
+{
+    MelonDSAndroid::VulkanRuntime::SetSsaoEnabled(enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setDisplayColorProfile(JNIEnv*, jclass, jint profile)
+{
+    MelonDSAndroid::VulkanRuntime::SetDisplayColorProfile(static_cast<int>(profile));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setHingeGapPixels(JNIEnv*, jclass, jint pixels)
+{
+    MelonDSAndroid::VulkanRuntime::SetHingeGapPixels(static_cast<int>(pixels));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanGyroTilt(JNIEnv*, jclass, jfloat tiltX, jfloat tiltY)
+{
+    MelonDSAndroid::VulkanRuntime::SetGyroTilt(tiltX, tiltY);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setSolarSensorLightLevel(JNIEnv*, jclass, jint level)
+{
+    MelonDSAndroid::VulkanRuntime::SetSolarSensorLuxLevel(static_cast<int>(level));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setGuitarGripKeyState(JNIEnv*, jclass, jint fretIndex, jboolean pressed)
+{
+    MelonDSAndroid::VulkanRuntime::SetGuitarGripKeyState(static_cast<int>(fretIndex), pressed == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setHardwareMotionState(
+    JNIEnv*,
+    jclass,
+    jfloat accelX,
+    jfloat accelY,
+    jfloat accelZ,
+    jfloat gyroX,
+    jfloat gyroY,
+    jfloat gyroZ)
+{
+    MelonDSAndroid::VulkanRuntime::SetHardwareMotionState(accelX, accelY, accelZ, gyroX, gyroY, gyroZ);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setIrPedometerStepCount(JNIEnv*, jclass, jint steps)
+{
+    MelonDSAndroid::VulkanRuntime::SetIrPedometerStepCount(static_cast<u32>(std::max(0, static_cast<int>(steps))));
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_addIrPedometerSteps(JNIEnv*, jclass, jint delta)
+{
+    MelonDSAndroid::VulkanRuntime::AddIrPedometerSteps(static_cast<u32>(std::max(0, static_cast<int>(delta))));
+    return static_cast<jint>(MelonDSAndroid::VulkanRuntime::GetIrPedometerStepCount());
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_getIrPedometerStepCount(JNIEnv*, jclass)
+{
+    return static_cast<jint>(MelonDSAndroid::VulkanRuntime::GetIrPedometerStepCount());
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setSlot2AddonType(JNIEnv*, jclass, jint addonType)
+{
+    MelonDSAndroid::setSlot2AddonType(static_cast<int>(addonType));
+}
+
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_dumpVulkanDebugReport(JNIEnv* env, jclass, jstring outputDir)
 {

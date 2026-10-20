@@ -312,6 +312,7 @@ private:
         bool cachedDirectBottomComposedCarryRequired = false;
         u32 cachedCompositorMode = 0u;
         u32 cachedDebugView = 0u;
+        int cachedHingeGapPixels = 0;
         std::vector<DrawCall> cachedDrawCalls;
         VkQueryPool timestampQueryPool = VK_NULL_HANDLE;
         bool timestampPending = false;

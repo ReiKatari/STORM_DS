@@ -1799,6 +1799,55 @@ void MelonInstance::loadGbaRumblePak()
     nds->SetGBACart(std::move(rumbleCart));
 }
 
+void MelonInstance::setSlot2AddonType(int addonType)
+{
+    if (!nds)
+        return;
+
+    switch (addonType)
+    {
+    case 0: // None / Eject
+        nds->SetGBACart(nullptr);
+        break;
+    case 1: // Rumble Pak
+        nds->SetGBACart(GBACart::LoadAddon(GBAAddon_RumblePak, this));
+        break;
+    case 2: // Memory Expansion Pak
+        nds->SetGBACart(GBACart::LoadAddon(GBAAddon_RAMExpansion, this));
+        break;
+    case 3: // Solar Sensor (Boktai / Lunar Knights)
+    {
+        const auto* ndsCart = nds->GetNDSCart();
+        if (ndsCart != nullptr)
+        {
+            auto solarCart = GBACart::CreateFakeSolarSensorROM("U3IE", *ndsCart, this);
+            if (solarCart)
+                solarCart->Reset();
+            nds->SetGBACart(std::move(solarCart));
+        }
+        else
+        {
+            nds->SetGBACart(GBACart::LoadAddon(GBAAddon_SolarSensorBoktai1, this));
+        }
+        break;
+    }
+    case 4: // Motion Pak (Retail / Tony Hawk / Mario & Luigi)
+        nds->SetGBACart(GBACart::LoadAddon(GBAAddon_MotionPakRetail, this));
+        break;
+    case 5: // Guitar Grip (Guitar Hero: On Tour)
+        nds->SetGBACart(GBACart::LoadAddon(GBAAddon_GuitarGrip, this));
+        break;
+    case 6: // Paddle Controller (Arkanoid DS / Space Invaders Extreme)
+        nds->SetGBACart(GBACart::LoadAddon(GBAAddon_Analog, this));
+        break;
+    case 7: // Motion Pak (Homebrew)
+        nds->SetGBACart(GBACart::LoadAddon(GBAAddon_MotionPakHomebrew, this));
+        break;
+    default:
+        break;
+    }
+}
+
 bool MelonInstance::bootFirmware()
 {
     if (nds->NeedsDirectBoot())

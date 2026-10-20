@@ -14,6 +14,7 @@
 #include "VulkanSurfacePresenterCompatibilityFragmentShaderData.h"
 #include "VulkanSurfacePresenterVertexShaderData.h"
 #include "renderer/RetroArchOutputScale.h"
+#include "VulkanRuntimeControls.h"
 
 namespace MelonDSAndroid
 {
@@ -4568,7 +4569,8 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
         && surfaceState.cachedDirectTopComposedCarryRequired == inputs.directPresentTopComposedCarryRequired
         && surfaceState.cachedDirectBottomComposedCarryRequired == inputs.directPresentBottomComposedCarryRequired
         && surfaceState.cachedCompositorMode == inputs.compositorMode
-        && surfaceState.cachedDebugView == inputs.debugView)
+        && surfaceState.cachedDebugView == inputs.debugView
+        && surfaceState.cachedHingeGapPixels == VulkanRuntime::GetHingeGapPixels())
     {
         drawCalls = surfaceState.cachedDrawCalls;
         return true;
@@ -4747,13 +4749,38 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
         surfaceState.cachedDirectBottomComposedCarryRequired = inputs.directPresentBottomComposedCarryRequired;
         surfaceState.cachedCompositorMode = inputs.compositorMode;
         surfaceState.cachedDebugView = inputs.debugView;
+        surfaceState.cachedHingeGapPixels = VulkanRuntime::GetHingeGapPixels();
         surfaceState.vertexBufferDirty = false;
         return true;
     }
 
-    auto appendScreen = [&](const VulkanPresenterRect& rect, bool topScreen, float alpha) {
-        if (!rect.enabled || rect.width <= 0 || rect.height <= 0)
+    const int hingeGapPx = VulkanRuntime::GetHingeGapPixels();
+    const bool canApplyVerticalHingeGap =
+        hingeGapPx > 0
+        && config.topScreen.enabled
+        && config.bottomScreen.enabled
+        && config.bottomScreen.y >= config.topScreen.y + config.topScreen.height - 8;
+
+    auto appendScreen = [&](const VulkanPresenterRect& rawRect, bool topScreen, float alpha) {
+        if (!rawRect.enabled || rawRect.width <= 0 || rawRect.height <= 0)
             return;
+
+        VulkanPresenterRect rect = rawRect;
+        if (canApplyVerticalHingeGap)
+        {
+            const int halfGap = hingeGapPx / 2;
+            if (topScreen)
+            {
+                const int shiftUp = std::min(halfGap, std::max(0, rect.y));
+                rect.y -= shiftUp;
+            }
+            else
+            {
+                const int maxY = static_cast<int>(surfaceState.extent.height) - rect.height;
+                const int shiftDown = std::min(hingeGapPx - halfGap, std::max(0, maxY - rect.y));
+                rect.y += shiftDown;
+            }
+        }
 
         const float left = screenXToNdc(rect.x);
         const float right = screenXToNdc(rect.x + rect.width);
@@ -5012,6 +5039,7 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
     surfaceState.cachedDirectBottomComposedCarryRequired = inputs.directPresentBottomComposedCarryRequired;
     surfaceState.cachedCompositorMode = inputs.compositorMode;
     surfaceState.cachedDebugView = inputs.debugView;
+    surfaceState.cachedHingeGapPixels = VulkanRuntime::GetHingeGapPixels();
     surfaceState.vertexBufferDirty = false;
 
     return true;
@@ -5302,8 +5330,8 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         pushConstants.rendererWidth = inputs.rendererWidth;
         pushConstants.rendererHeight = inputs.rendererHeight;
         pushConstants.packedStride = inputs.packedStride;
-        pushConstants.screenSwap = inputs.screenSwap;
-        pushConstants.filtering = static_cast<u32>(surfaceState.config.filtering);
+        pushConstants.screenSwap = VulkanRuntime::PackPresenterScreenSwapWord(inputs.screenSwap);
+        pushConstants.filtering = VulkanRuntime::PackPresenterFilteringWord(static_cast<u32>(surfaceState.config.filtering));
         pushConstants.previousTopSourceValid = inputs.previousTopSourceValid ? 1u : 0u;
         pushConstants.previousBottomSourceValid = inputs.previousBottomSourceValid ? 1u : 0u;
         pushConstants.captureSourceValid = inputs.capture3dSourceValid ? 1u : 0u;

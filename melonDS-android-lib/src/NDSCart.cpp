@@ -26,6 +26,7 @@
 #include "melonDLDI.h"
 #include "FATStorage.h"
 #include "Utils.h"
+#include "VulkanRuntimeControls.h"
 
 namespace melonDS
 {
@@ -1257,6 +1258,28 @@ u8 CartRetailIR::SPIWrite(u8 val, u32 pos, bool last)
     {
     case 0x00: // pass-through
         return CartRetail::SPIWrite(val, pos-1, last);
+
+    case 0x01: // IR recv / Pokéwalker & Pedometer step packet read
+    case 0x02: // IR send / ack
+    case 0x03: // IR connection / pedometer status
+    case 0x04: // IR disconnect / clear
+    {
+        const u32 steps = MelonDSAndroid::VulkanRuntime::GetIrPedometerStepCount();
+        if (IRCmd == 0x03)
+            return 0x02; // IR ready / active link
+        if (IRCmd == 0x01)
+        {
+            switch (pos)
+            {
+            case 1: return static_cast<u8>(steps & 0xFFu);
+            case 2: return static_cast<u8>((steps >> 8u) & 0xFFu);
+            case 3: return static_cast<u8>((steps >> 16u) & 0xFFu);
+            case 4: return static_cast<u8>((steps >> 24u) & 0xFFu);
+            default: return 0x00;
+            }
+        }
+        return 0x00;
+    }
 
     case 0x08: // ID
         return 0xAA;

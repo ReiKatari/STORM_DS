@@ -1635,4 +1635,22 @@
     <string name="vulkan_debug_dump_report">Save Vulkan debug report</string>
     <string name="vulkan_debug_dump_report_success">Vulkan debug report saved to %1$s</string>
     <string name="vulkan_debug_dump_report_failed">Failed to save Vulkan debug report</string>
+    <string name="video_vulkan_3d_depth_mode_title">Real 3D depth effect (Vulkan)</string>
+    <string name="video_vulkan_3d_depth_mode_off">Off</string>
+    <string name="video_vulkan_3d_depth_mode_gyro">Gyroscopic 3D parallax (window depth)</string>
+    <string name="video_vulkan_3d_depth_mode_anaglyph">Stereoscopic 3D anaglyph (Red / Cyan)</string>
+    <string name="video_vulkan_3d_depth_mode_sbs">Stereoscopic 3D side-by-side (XR / VR glasses)</string>
+    <string name="video_vulkan_3d_depth_strength_title">3D depth intensity</string>
+    <string name="video_vulkan_ssao_title">Volumetric 3D ambient occlusion (SSAO)</string>
+    <string name="video_vulkan_ssao_summary">Adds realistic contact shadows and depth volume to 3D geometry in Vulkan</string>
+    <string name="video_ds_color_profile_title">Console display color calibration</string>
+    <string name="video_ds_color_profile_standard">Standard sRGB (uncalibrated)</string>
+    <string name="video_ds_color_profile_ds_phat">Original Nintendo DS Phat (NTR-001)</string>
+    <string name="video_ds_color_profile_ds_lite">Nintendo DS Lite (USG-001)</string>
+    <string name="video_ds_color_profile_dsi_xl">Nintendo DSi XL IPS (UTL-001)</string>
+    <string name="video_ds_hinge_gap_title">Dual-screen physical hinge gap</string>
+    <string name="video_ds_hinge_gap_0">None (0 px)</string>
+    <string name="video_ds_hinge_gap_32">Compact hinge (32 px)</string>
+    <string name="video_ds_hinge_gap_64">Nintendo DS Lite hinge (64 px)</string>
+    <string name="video_ds_hinge_gap_90">Nintendo DSi XL hinge (90 px)</string>
 </resources>

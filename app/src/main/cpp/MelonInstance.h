@@ -44,6 +44,7 @@ public:
     void loadGbaMemoryExpansion();
     void loadGbaAnalogInput();
     void loadGbaRumblePak();
+    void setSlot2AddonType(int addonType);
     bool bootFirmware();
     bool precompileVulkanPipelines(const VulkanSurfaceConfig& retroArchConfig);
     void start();

@@ -2167,6 +2167,21 @@ class SharedPreferencesSettingsRepository(
             "video_vulkan_compat_autoselect" -> {
                 applyVulkanRuntimeControls(gameCode = null, romName = null)
             }
+            "video_vulkan_3d_depth_mode" -> {
+                runCatching { MelonEmulator.setVulkanDepth3DMode(getVulkan3dDepthMode()) }
+            }
+            "video_vulkan_3d_depth_strength" -> {
+                runCatching { MelonEmulator.setVulkanDepth3DStrength(getVulkan3dDepthStrength()) }
+            }
+            "video_vulkan_ssao" -> {
+                runCatching { MelonEmulator.setVulkanSsaoEnabled(isVulkanSsaoEnabled()) }
+            }
+            "video_ds_color_profile" -> {
+                runCatching { MelonEmulator.setDisplayColorProfile(getDisplayColorProfile()) }
+            }
+            "video_ds_hinge_gap" -> {
+                runCatching { MelonEmulator.setHingeGapPixels(getHingeGapPixels()) }
+            }
         }
     }
 
@@ -2339,6 +2354,75 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("video_vulkan_compat_autoselect", true)
     }
 
+    override fun getVulkan3dDepthMode(): Int {
+        return when (preferences.getString("video_vulkan_3d_depth_mode", "off")?.lowercase()) {
+            "gyro_parallax" -> 1
+            "anaglyph" -> 2
+            "sbs_xr" -> 3
+            else -> 0
+        }
+    }
+
+    override fun setVulkan3dDepthMode(mode: Int) {
+        val str = when (mode) {
+            1 -> "gyro_parallax"
+            2 -> "anaglyph"
+            3 -> "sbs_xr"
+            else -> "off"
+        }
+        preferences.edit { putString("video_vulkan_3d_depth_mode", str) }
+        runCatching { MelonEmulator.setVulkanDepth3DMode(mode) }
+    }
+
+    override fun getVulkan3dDepthStrength(): Int {
+        return preferences.getString("video_vulkan_3d_depth_strength", "50")?.toIntOrNull()?.coerceIn(0, 100) ?: 50
+    }
+
+    override fun setVulkan3dDepthStrength(strength: Int) {
+        val clamped = strength.coerceIn(0, 100)
+        preferences.edit { putString("video_vulkan_3d_depth_strength", clamped.toString()) }
+        runCatching { MelonEmulator.setVulkanDepth3DStrength(clamped) }
+    }
+
+    override fun isVulkanSsaoEnabled(): Boolean {
+        return preferences.getBoolean("video_vulkan_ssao", false)
+    }
+
+    override fun setVulkanSsaoEnabled(enabled: Boolean) {
+        preferences.edit { putBoolean("video_vulkan_ssao", enabled) }
+        runCatching { MelonEmulator.setVulkanSsaoEnabled(enabled) }
+    }
+
+    override fun getDisplayColorProfile(): Int {
+        return when (preferences.getString("video_ds_color_profile", "standard")?.lowercase()) {
+            "ds_phat" -> 1
+            "ds_lite" -> 2
+            "dsi_xl" -> 3
+            else -> 0
+        }
+    }
+
+    override fun setDisplayColorProfile(profile: Int) {
+        val str = when (profile) {
+            1 -> "ds_phat"
+            2 -> "ds_lite"
+            3 -> "dsi_xl"
+            else -> "standard"
+        }
+        preferences.edit { putString("video_ds_color_profile", str) }
+        runCatching { MelonEmulator.setDisplayColorProfile(profile) }
+    }
+
+    override fun getHingeGapPixels(): Int {
+        return preferences.getString("video_ds_hinge_gap", "0")?.toIntOrNull()?.coerceIn(0, 200) ?: 0
+    }
+
+    override fun setHingeGapPixels(pixels: Int) {
+        val clamped = pixels.coerceIn(0, 200)
+        preferences.edit { putString("video_ds_hinge_gap", clamped.toString()) }
+        runCatching { MelonEmulator.setHingeGapPixels(clamped) }
+    }
+
     private fun applyVulkanRuntimeControls(gameCode: String?, romName: String?, fileName: String? = null) {
         VulkanCompatibilityDatabase.applyRuntimeControlsForRom(
             context = context,
@@ -2349,5 +2433,12 @@ class SharedPreferencesSettingsRepository(
             userCompositorMode = getVulkanCompositorMode(),
             userThickEdges = isVulkanThickHighResEdgesEnabled(),
         )
+        runCatching {
+            MelonEmulator.setVulkanDepth3DMode(getVulkan3dDepthMode())
+            MelonEmulator.setVulkanDepth3DStrength(getVulkan3dDepthStrength())
+            MelonEmulator.setVulkanSsaoEnabled(isVulkanSsaoEnabled())
+            MelonEmulator.setDisplayColorProfile(getDisplayColorProfile())
+            MelonEmulator.setHingeGapPixels(getHingeGapPixels())
+        }
     }
 }
