@@ -2190,21 +2190,6 @@ void CompatibilitySoftRenderer::DrawScanline_BGOBJ(u32 line)
             BGOBJLine[256 + i] = 0;
             BGOBJLine[512 + i] = 0x07000000;
         }
-        if (useStructuredVulkan2D && line < kStructuredScreenHeight)
-        {
-            const size_t screenIndex = StructuredVulkan2DCurrentLineTargetsTop ? 0u : 1u;
-            const size_t screenBase = screenIndex * kStructuredPlaneCount * kStructuredPixelCount;
-            const size_t rowBase = static_cast<size_t>(line) * kStructuredScreenWidth;
-            u32* dstBelow = StructuredVulkan2DPlanes.data() + screenBase + rowBase;
-            u32* dstAbove = StructuredVulkan2DPlanes.data() + screenBase + kStructuredPixelCount + rowBase;
-            u32* dstControl = StructuredVulkan2DPlanes.data() + screenBase + (2u * kStructuredPixelCount) + rowBase;
-            for (size_t x = 0; x < kStructuredScreenWidth; x++)
-            {
-                dstBelow[x] = 0xFF3F3F3Fu;
-                dstAbove[x] = 0u;
-                dstControl[x] = (0x07u | kStructuredVulkan2DOnlyFlag) << 24u;
-            }
-        }
 
         return;
     }
@@ -2273,28 +2258,13 @@ void CompatibilitySoftRenderer::DrawScanline_BGOBJ(u32 line)
     {
         const u32 displayMode =
             (CurUnit->DispCnt >> 16u) & (CurUnit->Num ? 0x1u : 0x3u);
-        const bool engineBHasDirectColorBitmapBg =
-            bgMode >= 3u
-            && bgMode <= 5u
-            && ((((CurUnit->DispCnt & 0x0400u) != 0u) && ((CurUnit->BGCnt[2] & 0x0084u) == 0x0084u))
-                || (((CurUnit->DispCnt & 0x0800u) != 0u) && ((CurUnit->BGCnt[3] & 0x0084u) == 0x0084u)));
-        const bool engineBCanReadCaptured3DBg =
-            CurrentLineRegularCaptureUses3d
-            || (engineBHasDirectColorBitmapBg
-                && std::any_of(
-                    GPU.VRAMMap_BBG,
-                    GPU.VRAMMap_BBG + 8,
-                    [](u32 mask) { return (mask & (1u << 2u)) != 0u; })
-                && line < kStructuredScreenHeight
-                && StructuredVulkan2DCaptureLineValid[(2u * kStructuredScreenHeight) + line] != 0u);
         const bool captureBacked3DLine =
             useStructuredVulkan2D
             &&
             CurUnit->Num == 1
             && displayMode == 1u
             && line < CaptureLineUses3d.size()
-            && CaptureLineUses3d[line] != 0u
-            && engineBCanReadCaptured3DBg;
+            && CaptureLineUses3d[line] != 0u;
         u32 captureBacked3DSourceClass = 0u;
         if (captureBacked3DLine)
         {

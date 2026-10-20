@@ -3,7 +3,7 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(binding = 0, rgba8) uniform readonly image2D newSnapshot;
-layout(binding = 1, rgba8) uniform writeonly image2D accumulated;
+layout(binding = 1, rgba8) uniform image2D accumulated;
 
 layout(binding = 2, std430) readonly buffer TopPackedBuffer
 {
@@ -182,7 +182,7 @@ bool packedAllowsOpaqueBlackAccumulator(int dsX, int dsY)
 void main()
 {
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 size = imageSize(newSnapshot);
+    ivec2 size = imageSize(accumulated);
     if (coord.x >= size.x || coord.y >= size.y)
         return;
 

@@ -369,9 +369,110 @@ static int IndexOfSequence(const uint8_t* buffer, size_t bufferLen, const uint8_
 bool ApplyCompatibilityPatches(uint8_t* rom, size_t fileSize)
 {
     if (!rom || fileSize < HEADER_SIZE) return false;
-    // Compatibility patches: AlphaBounce and other titles are now handled natively via
-    // proper NAND save and TWLFontTable.dat auto-provisioning in melonDS core.
-    return false;
+    bool patched = false;
+
+    // AlphaBounce [KALE] / [KALP] compatibility fix:
+    // The game attempts to load TWLFontTable.dat from NAND, fails magic check, and calls OS_Terminate.
+    // We NOP/redirect OS_Terminate calls and redirect the NAND font path to internal rom:/Arial.NFTR.
+    if (memcmp(&rom[OFFSET_GAME_CODE], "KAL", 3) == 0)
+    {
+        uint32_t arm9Off  = *(uint32_t*)&rom[OFFSET_ARM9_ROM_OFFSET];
+        uint32_t arm9Size = *(uint32_t*)&rom[OFFSET_ARM9_SIZE];
+
+        auto patchAt = [&](uint32_t relOffset, uint32_t expectedOp, uint32_t newOp) {
+            if (arm9Off > 0 && arm9Off + relOffset + 4 <= fileSize)
+            {
+                uint32_t op = *(uint32_t*)&rom[arm9Off + relOffset];
+                if (op == expectedOp)
+                {
+                    *(uint32_t*)&rom[arm9Off + relOffset] = newOp;
+                    patched = true;
+                }
+            }
+            if (relOffset + 4 <= fileSize)
+            {
+                uint32_t op = *(uint32_t*)&rom[relOffset];
+                if (op == expectedOp)
+                {
+                    *(uint32_t*)&rom[relOffset] = newOp;
+                    patched = true;
+                }
+            }
+        };
+
+        // 1. 0x50d4: bl OS_Terminate in NitroMain (0xeb0085a3 -> nop 0xe1a00000)
+        patchAt(0x50d4, 0xeb0085a3, 0xe1a00000);
+
+        // 2. 0xba014: bl OS_Terminate on font validation failure (0xebfdb1d3 -> b 0x20ba058 0xea00000f)
+        patchAt(0xba014, 0xebfdb1d3, 0xea00000f);
+
+        // 3. 0xe4548: bl OS_Terminate (0xebfd0886 -> nop 0xe1a00000)
+        patchAt(0xe4548, 0xebfd0886, 0xe1a00000);
+
+        // 4. 0xf5c50: bl OS_Terminate (0xebfcc2c4 -> nop 0xe1a00000)
+        patchAt(0xf5c50, 0xebfcc2c4, 0xe1a00000);
+
+        // 5. 0xf5f0c: bl OS_Terminate (0xebfcc215 -> nop 0xe1a00000)
+        patchAt(0xf5f0c, 0xebfcc215, 0xe1a00000);
+
+        // 6. Neutralize OS_Terminate entrypoint at 0x26768 with bx lr (0xe12fff1e)
+        if (arm9Off > 0 && arm9Off + 0x26768 + 4 <= fileSize)
+        {
+            *(uint32_t*)&rom[arm9Off + 0x26768] = 0xe12fff1e;
+            patched = true;
+        }
+        if (0x26768 + 4 <= fileSize)
+        {
+            *(uint32_t*)&rom[0x26768] = 0xe12fff1e;
+            patched = true;
+        }
+
+        // 7. Scan ARM9 binary range to neutralize any remaining matching opcodes
+        if (arm9Off > 0 && arm9Off + arm9Size <= fileSize)
+        {
+            for (uint32_t i = arm9Off; i + 4 <= arm9Off + arm9Size; i += 4)
+            {
+                uint32_t op = *(uint32_t*)&rom[i];
+                if (op == 0xebfdb1d3)
+                {
+                    *(uint32_t*)&rom[i] = 0xea00000f;
+                    patched = true;
+                }
+                else if (op == 0xeb0085a3 || op == 0xebfd0886 || op == 0xebfcc2c4 || op == 0xebfcc215)
+                {
+                    *(uint32_t*)&rom[i] = 0xe1a00000;
+                    patched = true;
+                }
+            }
+        }
+
+        // 8. Font path redirect: replace ALL occurrences of "nand:/sys/TWLFontTable.dat" with "rom:/Arial.NFTR"
+        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
+        const size_t targetLen = sizeof(targetPath) - 1;
+        const char replacementFont[] = "rom:/Arial.NFTR";
+        char replacement[sizeof(targetPath)] = {0};
+        memcpy(replacement, replacementFont, strlen(replacementFont));
+
+        size_t searchPos = 0;
+        while (searchPos + targetLen <= fileSize)
+        {
+            int found = IndexOfSequence(rom + searchPos, fileSize - searchPos, (const uint8_t*)targetPath, targetLen);
+            if (found == -1)
+                break;
+            memcpy(&rom[searchPos + found], replacement, targetLen);
+            patched = true;
+            searchPos += found + targetLen;
+        }
+
+        // 9. Recalculate Secure Area CRC16 if present
+        if (fileSize >= 0x8000)
+        {
+            uint16_t secCrc = CalcHeaderCRC16(&rom[0x4000], 0x4000);
+            *(uint16_t*)&rom[0x6C] = secCrc;
+        }
+    }
+
+    return patched;
 }
 
 DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)

@@ -528,8 +528,22 @@ class FileSystemRomsRepository(
     private fun writeRomOptions(rom: Rom) {
         val rootDocument = getRomOptionsRootDocument(rom) ?: return
         val optionsFileName = getRomOptionsFileName(rom)
+        val rootUri = rootDocument.uri
+        if (rootUri.scheme == "file" && !rootUri.path.isNullOrBlank()) {
+            val dir = File(rootUri.path!!).apply { mkdirs() }
+            val legacyBin = File(dir, "$optionsFileName.bin")
+            if (legacyBin.exists()) runCatching { legacyBin.delete() }
+            val optsFile = File(dir, optionsFileName)
+            runCatching {
+                optsFile.writeText(gson.toJson(RomOptionsDto(config = RomConfigDto.fromModel(rom.config))))
+            }.onFailure {
+                Log.w(TAG, "Failed to write ROM options for ${rom.fileName}", it)
+            }
+            return
+        }
         val optionsDocument = rootDocument.findFile(optionsFileName)
-            ?: rootDocument.createFile("application/octet-stream", optionsFileName)
+            ?: rootDocument.findFile("$optionsFileName.bin")
+            ?: rootDocument.createFile("*/*", optionsFileName)
             ?: rootDocument.findFile(optionsFileName)
             ?: return
 
@@ -553,7 +567,9 @@ class FileSystemRomsRepository(
     }
 
     private fun getRomOptionsDocument(rom: Rom): DocumentFile? {
-        return getRomOptionsRootDocument(rom)?.findFile(getRomOptionsFileName(rom))
+        val rootDoc = getRomOptionsRootDocument(rom) ?: return null
+        val name = getRomOptionsFileName(rom)
+        return rootDoc.findFile(name) ?: rootDoc.findFile("$name.bin")
     }
 
     private fun getRomOptionsRootDocument(rom: Rom): DocumentFile? {

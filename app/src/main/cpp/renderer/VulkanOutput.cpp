@@ -3515,6 +3515,70 @@ bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
     if (topPacked == nullptr || bottomPacked == nullptr)
         return false;
 
+    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
+    {
+        for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
+        {
+            const size_t packedRowBase = y * static_cast<size_t>(kAcceleratedStride);
+            const size_t snapshotRowBase = y * SoftPackedFrameSnapshot::kScreenWidth;
+            std::memcpy(
+                topPacked + packedRowBase,
+                softPackedSnapshot.packedTopPlane0.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                topPacked + packedRowBase + SoftPackedFrameSnapshot::kScreenWidth,
+                softPackedSnapshot.packedTopPlane1.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                topPacked + packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
+                softPackedSnapshot.packedTopControl.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            topPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
+                softPackedSnapshot.packedTopLineMeta[y];
+
+            std::memcpy(
+                bottomPacked + packedRowBase,
+                softPackedSnapshot.packedBottomPlane0.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                bottomPacked + packedRowBase + SoftPackedFrameSnapshot::kScreenWidth,
+                softPackedSnapshot.packedBottomPlane1.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                bottomPacked + packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
+                softPackedSnapshot.packedBottomControl.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            bottomPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
+                softPackedSnapshot.packedBottomLineMeta[y];
+        }
+        resource.fastHighresOnlyTop = false;
+        resource.fastHighresOnlyBottom = false;
+        resource.fastHighresOverlay2DTop = false;
+        resource.fastHighresOverlay2DBottom = false;
+        resource.topPackedCarryFromPrevious = false;
+        resource.bottomPackedCarryFromPrevious = false;
+        resource.topPackedPlane0Zeroed = false;
+        resource.topPackedPlane1Zeroed = false;
+        resource.topPackedControlZeroed = false;
+        resource.bottomPackedPlane0Zeroed = false;
+        resource.bottomPackedPlane1Zeroed = false;
+        resource.bottomPackedControlZeroed = false;
+        resource.softPackedFrameId = softPackedSnapshot.frameId;
+        resource.frontBufferLatched = softPackedSnapshot.frontBufferLatched;
+        resource.captureCntLatched = softPackedSnapshot.captureCntLatched;
+        resource.dispCntALatched = softPackedSnapshot.dispCntALatched;
+        resource.dispCntBLatched = softPackedSnapshot.dispCntBLatched;
+        resource.captureLinesLatched = softPackedSnapshot.captureLinesLatched;
+        resource.captureAgeLatched = softPackedSnapshot.captureAgeLatched;
+        resource.hasSoftPackedDebugData = true;
+        resource.topScreenStats = softPackedSnapshot.topScreenStats;
+        resource.bottomScreenStats = softPackedSnapshot.bottomScreenStats;
+        resource.capture3dSourceDsFrame = softPackedSnapshot.capture3dSourceDsFrame;
+        resource.captureLineUses3dMask = softPackedSnapshot.captureLineUses3dMask;
+        resource.captureFallbackLines.fill(0);
+        return true;
+    }
+
     const bool topStructuredAboveDominant =
         screenUsesFullRegularComp7WithDominantAbove(
             softPackedSnapshot.topScreenStats);
@@ -3769,6 +3833,11 @@ bool VulkanOutput::updateCompositorPackedBuffersFastPath(
     resource.topPartialRegularCaptureProtectedBlackAuthoritative = false;
     if (!softPackedSnapshot.valid)
         return false;
+
+    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
+    {
+        return updateCompositorPackedBuffersCompatibility(frame, resource, softPackedSnapshot);
+    }
 
     if (resource.topPackedMapped == nullptr || resource.bottomPackedMapped == nullptr || resource.packedBufferSize == 0)
         return false;
@@ -12564,7 +12633,7 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
     vkCmdPipelineBarrier(
         resource.commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
         0,
         0,
         nullptr,
@@ -12573,6 +12642,93 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
         static_cast<u32>(postCopyBarriers.size()),
         postCopyBarriers.data()
     );
+
+    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise
+        && resource.captureAgeLatched == 0u
+        && resource.captureLinesLatched >= static_cast<u32>(kScreenHeight)
+        && (resource.captureCntLatched & (1u << 31u)) != 0u
+        && ((resource.captureCntLatched >> 29u) & 0x3u) != 1u)
+    {
+        const u32 captureBank = (resource.captureCntLatched >> 16u) & 0x3u;
+        if (ensureSameBankMode2SourceCache(captureBank, rendererWidth, rendererHeight))
+        {
+            SameBankMode2SourceCache& cache = sameBankMode2SourceCaches[captureBank];
+            VkImageMemoryBarrier snapToSrc{};
+            snapToSrc.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            snapToSrc.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+            snapToSrc.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            snapToSrc.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            snapToSrc.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            snapToSrc.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            snapToSrc.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            snapToSrc.image = resource.renderer3dSnapshot;
+            snapToSrc.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            snapToSrc.subresourceRange.levelCount = 1u;
+            snapToSrc.subresourceRange.layerCount = 1u;
+
+            VkImageMemoryBarrier cacheToDst{};
+            cacheToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            cacheToDst.srcAccessMask = cache.layoutReady ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT) : 0u;
+            cacheToDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            cacheToDst.oldLayout = cache.layoutReady ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            cacheToDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            cacheToDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            cacheToDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            cacheToDst.image = cache.image;
+            cacheToDst.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            cacheToDst.subresourceRange.levelCount = 1u;
+            cacheToDst.subresourceRange.layerCount = 1u;
+
+            std::array<VkImageMemoryBarrier, 2> cachePreBarriers = {snapToSrc, cacheToDst};
+            vkCmdPipelineBarrier(
+                resource.commandBuffer,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0, 0, nullptr, 0, nullptr,
+                static_cast<u32>(cachePreBarriers.size()),
+                cachePreBarriers.data());
+
+            if (vkCmdCopyImage != nullptr)
+            {
+                VkImageCopy copyRegion{};
+                copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.srcSubresource.layerCount = 1u;
+                copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.dstSubresource.layerCount = 1u;
+                copyRegion.extent = {rendererWidth, rendererHeight, 1u};
+                vkCmdCopyImage(
+                    resource.commandBuffer,
+                    resource.renderer3dSnapshot,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    cache.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1u,
+                    &copyRegion);
+            }
+
+            snapToSrc.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            snapToSrc.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            snapToSrc.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            snapToSrc.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            cacheToDst.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            cacheToDst.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+            cacheToDst.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            cacheToDst.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            std::array<VkImageMemoryBarrier, 2> cachePostBarriers = {snapToSrc, cacheToDst};
+            vkCmdPipelineBarrier(
+                resource.commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr,
+                static_cast<u32>(cachePostBarriers.size()),
+                cachePostBarriers.data());
+
+            cache.valid = true;
+            cache.layoutReady = true;
+        }
+    }
 
     resource.hasRenderer3dSnapshot = true;
     resource.renderer3dSnapshotScreenSwap = snapshotScreenSwap;

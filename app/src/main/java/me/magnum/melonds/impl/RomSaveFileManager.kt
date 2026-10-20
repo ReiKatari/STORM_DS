@@ -119,17 +119,32 @@ class RomSaveFileManager @Inject constructor(
 
     private fun findExistingSaveFile(rom: Rom): DocumentFile? {
         val rootDocument = getSaveRootDocument(rom)
-        return rootDocument.findFile(resolveSaveFileName(rom))
+        val saveFileName = resolveSaveFileName(rom)
+        return rootDocument.findFile(saveFileName) ?: rootDocument.findFile("$saveFileName.bin")
     }
 
     private fun getOrCreateSaveFile(rom: Rom): DocumentFile {
         val rootDocument = getSaveRootDocument(rom)
         val saveFileName = resolveSaveFileName(rom)
         rootDocument.findFile(saveFileName)?.let { return it }
+        rootDocument.findFile("$saveFileName.bin")?.let { binDoc ->
+            runCatching { binDoc.renameTo(saveFileName) }
+            return rootDocument.findFile(saveFileName) ?: binDoc
+        }
 
-        val createdFile = rootDocument.createFile("application/octet-stream", saveFileName)
+        val rootUri = rootDocument.uri
+        if (rootUri.scheme == "file" && !rootUri.path.isNullOrBlank()) {
+            val saveFile = File(File(rootUri.path!!).apply { mkdirs() }, saveFileName)
+            runCatching { saveFile.createNewFile() }
+            if (saveFile.exists()) {
+                return DocumentFile.fromFile(saveFile)
+            }
+        }
+
+        val createdFile = rootDocument.createFile("*/*", saveFileName)
         return createdFile
             ?: rootDocument.findFile(saveFileName)
+            ?: rootDocument.findFile("$saveFileName.bin")
             ?: throw IllegalStateException("Could not create save file at ${rootDocument.uri}")
     }
 

@@ -305,13 +305,13 @@ class SettingsBackupManager @Inject constructor(
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
 
         val backupDoc = getMirrorDocument(treeUri)
-            ?: root.createFile("application/octet-stream", STORM_DS_OPTIONS_FILE)
+            ?: root.createFile("*/*", STORM_DS_OPTIONS_FILE)
             ?: return
         context.contentResolver.openOutputStream(backupDoc.uri, "wt")?.use { outStream ->
             outStream.writer().use { it.write(createBackupJson(includeLocalKeys = true).toString()) }
         }
         val settingsDoc = root.findFile(SETTINGS_FILE)
-            ?: root.createFile("application/json", SETTINGS_FILE)
+            ?: root.createFile("*/*", SETTINGS_FILE)
         settingsDoc?.uri?.let { uri ->
             context.contentResolver.openOutputStream(uri, "wt")?.use { outStream ->
                 outStream.writer().use { it.write(createSettingsJson(includeLocalKeys = true).toString()) }
@@ -749,7 +749,7 @@ class SettingsBackupManager @Inject constructor(
             ?: "[]"
         val layouts = runCatching { JSONArray(layoutsText) }.getOrNull() ?: return
 
-        val dest = root.findFile(fileName) ?: root.createFile("application/json", fileName) ?: return
+        val dest = root.findFile(fileName) ?: root.createFile("*/*", fileName) ?: return
         context.contentResolver.openOutputStream(dest.uri)?.use { out ->
             out.writer().use { it.write(layouts.toString()) }
         }

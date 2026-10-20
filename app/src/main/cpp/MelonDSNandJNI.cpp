@@ -601,7 +601,12 @@ static void formatFatSaveBuffer(std::vector<u8>& buf, u32 size)
     const u16 reservedSectors = 1;
     const u8 numFats = 2;
     const u16 rootDirEntries = (size <= 0x8000) ? 16 : ((size <= 0x20000) ? 64 : 128);
-    const u16 sectorsPerFat = (size <= 0x80000) ? 1 : 2;
+    const u32 rootDirSectors = ((rootDirEntries * 32) + bytesPerSector - 1) / bytesPerSector;
+    const bool isFat16 = (size > 0x80000);
+    const u32 approxDataSectors = (totalSectors > (1u + rootDirSectors + 2u)) ? (totalSectors - 1u - rootDirSectors - 2u) : 1u;
+    const u32 totalClusters = std::max<u32>(1u, approxDataSectors / sectorsPerCluster);
+    const u32 fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
+    const u16 sectorsPerFat = (u16)std::max<u32>(1u, (fatBytes + bytesPerSector - 1) / bytesPerSector);
 
     // Boot Sector (Sector 0)
     buf[0x00] = 0xEB; buf[0x01] = 0x3C; buf[0x02] = 0x90;

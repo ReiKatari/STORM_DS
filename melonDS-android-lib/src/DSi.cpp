@@ -1575,6 +1575,61 @@ void DSi::SetupDirectBoot()
         }
     }
 
+    if (memcmp(header.GameCode, "KAL", 3) == 0)
+    {
+        u32 base = header.ARM9RAMAddress;
+        if (ARM9Read32(base + 0xba014) == 0xebfdb1d3)
+            ARM9Write32(base + 0xba014, 0xea00000f);
+
+        if (ARM9Read32(base + 0x50d4) == 0xeb0085a3)
+            ARM9Write32(base + 0x50d4, 0xe1a00000);
+        if (ARM9Read32(base + 0xe4548) == 0xebfd0886)
+            ARM9Write32(base + 0xe4548, 0xe1a00000);
+        if (ARM9Read32(base + 0xf5c50) == 0xebfcc2c4)
+            ARM9Write32(base + 0xf5c50, 0xe1a00000);
+        if (ARM9Read32(base + 0xf5f0c) == 0xebfcc215)
+            ARM9Write32(base + 0xf5f0c, 0xe1a00000);
+
+        ARM9Write32(0x02026768, 0xe12fff1e);
+
+        for (u32 addr = base; addr + 4 <= base + header.ARM9Size; addr += 4)
+        {
+            u32 op = ARM9Read32(addr);
+            if (op == 0xebfdb1d3)
+                ARM9Write32(addr, 0xea00000f);
+            else if (op == 0xeb0085a3 || op == 0xebfd0886 || op == 0xebfcc2c4 || op == 0xebfcc215)
+                ARM9Write32(addr, 0xe1a00000);
+        }
+
+        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
+        const u32 targetLen = sizeof(targetPath) - 1;
+        const char replacementFont[] = "rom:/Arial.NFTR";
+        u8 replacement[sizeof(targetPath)] = {0};
+        memcpy(replacement, replacementFont, strlen(replacementFont));
+
+        for (u32 addr = base; addr + targetLen <= base + header.ARM9Size; addr++)
+        {
+            if (ARM9Read8(addr) == (u8)targetPath[0])
+            {
+                bool match = true;
+                for (u32 k = 1; k < targetLen; k++)
+                {
+                    if (ARM9Read8(addr + k) != (u8)targetPath[k])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match)
+                {
+                    for (u32 k = 0; k < targetLen; k++)
+                        ARM9Write8(addr + k, replacement[k]);
+                }
+            }
+        }
+        Log(LogLevel::Info, "DSi::SetupDirectBoot: Applied AlphaBounce (KAL*) dynamic RAM and font patches.\n");
+    }
+
     if (dsmode)
     {
         ARM9.R[13] = 0x03002F7C;
@@ -2267,7 +2322,7 @@ void DSi::Set_SCFG_Clock9(u16 val)
     SCFG_Clock9 = val & 0x0187;
 
     const u32 baseShift = (SCFG_Clock9 & (1<<0)) ? 2u : 1u;
-    ARM9ClockShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
+    ARM9ClockShift = std::max<u32>(baseShift, std::min<u32>(3u, 1u + ARM9OverclockShift));
 
     ARM9Timestamp <<= ARM9ClockShift;
     ARM9Target    <<= ARM9ClockShift;

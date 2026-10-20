@@ -1069,6 +1069,20 @@ class AndroidEmulatorManager(
         if (numFats < 1) return false
         val rootEntries = (sramBytes[0x11].toInt() and 0xFF) or ((sramBytes[0x12].toInt() and 0xFF) shl 8)
         if (rootEntries <= 0) return false
+        val sectorsPerFat = (sramBytes[0x16].toInt() and 0xFF) or ((sramBytes[0x17].toInt() and 0xFF) shl 8)
+        val sectorsPerCluster = (sramBytes[0x0D].toInt() and 0xFF).coerceAtLeast(1)
+        val reservedSectors = ((sramBytes[0x0E].toInt() and 0xFF) or ((sramBytes[0x0F].toInt() and 0xFF) shl 8)).coerceAtLeast(1)
+        val totalSectors = sramBytes.size / bytesPerSector
+        val rootDirSectors = ((rootEntries * 32) + bytesPerSector - 1) / bytesPerSector
+        val isFat16 = sramBytes.size > 0x80000
+        val approxDataSectors = (totalSectors - reservedSectors - rootDirSectors - numFats).coerceAtLeast(1)
+        val totalClusters = (approxDataSectors / sectorsPerCluster).coerceAtLeast(1)
+        val fatBytes = if (isFat16) (totalClusters + 2) * 2 else ((totalClusters + 2) * 3 + 1) / 2
+        val requiredSectorsPerFat = ((fatBytes + bytesPerSector - 1) / bytesPerSector).coerceAtLeast(1)
+        if (sectorsPerFat < requiredSectorsPerFat) {
+            Log.w("AndroidEmulatorManager", "Invalid FAT12/16 save: sectorsPerFat=$sectorsPerFat < required=$requiredSectorsPerFat (size=${sramBytes.size}), will reformat")
+            return false
+        }
         val firstByte = sramBytes[0]
         return sramBytes.any { it != firstByte }
     }
@@ -1082,7 +1096,12 @@ class AndroidEmulatorManager(
         val reservedSectors = 1
         val numFats = 2
         val rootDirEntries = if (targetSize <= 0x8000) 16 else if (targetSize <= 0x20000) 64 else 128
-        val sectorsPerFat = if (targetSize <= 0x80000) 1 else 2
+        val rootDirSectors = ((rootDirEntries * 32) + bytesPerSector - 1) / bytesPerSector
+        val isFat16 = targetSize > 0x80000
+        val approxDataSectors = (totalSectors - reservedSectors - rootDirSectors - 2).coerceAtLeast(1)
+        val totalClusters = (approxDataSectors / sectorsPerCluster).coerceAtLeast(1)
+        val fatBytes = if (isFat16) (totalClusters + 2) * 2 else ((totalClusters + 2) * 3 + 1) / 2
+        val sectorsPerFat = ((fatBytes + bytesPerSector - 1) / bytesPerSector).coerceAtLeast(1)
 
         buf[0x00] = 0xEB.toByte()
         buf[0x01] = 0x3C.toByte()

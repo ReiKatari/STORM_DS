@@ -1353,7 +1353,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     val directory = DocumentFile.fromTreeUri(requireContext(), romFolder)
                         ?: return@runCatching null
                     directory.findFile(SHADER_LOG_FILE_NAME)?.delete()
-                    val file = directory.createFile("application/octet-stream", SHADER_LOG_FILE_NAME)
+                    val file = directory.createFile("*/*", SHADER_LOG_FILE_NAME)
                         ?: return@runCatching null
                     requireContext().contentResolver.openOutputStream(file.uri)?.use { output ->
                         output.write(lines.joinToString("\n", postfix = "\n").toByteArray())

@@ -1121,12 +1121,14 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
             f_read(&ef, bootSec, sizeof(bootSec), &nr);
             f_close(&ef);
             u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
+            u16 existingSectorsPerFat = (u16)bootSec[0x016] | ((u16)bootSec[0x017] << 8);
             bool rootMatches = rootEntries > 0;
             bool isValid = (nr >= 512 &&
                             bootSec[0x1FE] == 0x55 && bootSec[0x1FF] == 0xAA &&
                             (bootSec[0] == 0xEB || bootSec[0] == 0xE9) &&
                             bootSec[0x010] >= 1 &&
                             bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02 &&
+                            existingSectorsPerFat >= sectorsPerFat &&
                             rootMatches);
             if (isValid)
             {

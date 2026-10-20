@@ -1771,7 +1771,15 @@ void runPresenterCore()
     outColor = composeBottomScreenColor();
 }
 
-float estimateSceneDepthFactor(vec2 uv)
+vec4 evalPresenterAt(vec2 uv, bool allowCarry)
+{
+    fragUv = clamp(uv, vec2(0.001), vec2(0.999));
+    gAllowCarryStore = allowCarry;
+    runPresenterCore();
+    return outColor;
+}
+
+float estimateSceneDepthFactor(vec2 uv, vec3 baseRgb)
 {
     bool topScreen = (pushConstants.drawMode == 1u)
         || (pushConstants.drawMode == 2u)
@@ -1793,15 +1801,14 @@ float estimateSceneDepthFactor(vec2 uv)
             ? imageLoad(u3dPreviousTopImage, ivec2(scaledX, scaledY))
             : imageLoad(u3dPreviousBottomImage, ivec2(scaledX, scaledY)));
 
-    float luma = clamp((float(v1.r) * 0.299 + float(v1.g) * 0.587 + float(v1.b) * 0.114) * (1.0 / 63.0), 0.0, 1.0);
+    float luma = dot(baseRgb, vec3(0.299, 0.587, 0.114));
     if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
     {
         return 0.75;
     }
     if (raw3D.a > 0.01)
     {
-        float rawLuma = dot(raw3D.rgb, vec3(0.299, 0.587, 0.114));
-        float persp = clamp((1.0 - uv.y) * 0.6 + rawLuma * 0.4, 0.0, 1.0);
+        float persp = clamp((1.0 - uv.y) * 0.6 + luma * 0.4, 0.0, 1.0);
         return mix(-0.35, 0.50, persp);
     }
     return mix(-0.65, -0.15, luma);
@@ -1839,73 +1846,45 @@ void main()
     uint colorProfile = (pushConstants.filtering >> 11u) & 0x7u;
     float strengthNorm = float((pushConstants.filtering >> 14u) & 0x7Fu) * 0.01;
 
-    vec2 baseUv = inFragUv;
-    float depthFactor = 0.0;
-    float sheen = 0.0;
-    if (pushConstants.drawMode != 0u && depthMode != 0u)
+    vec4 baseColor = evalPresenterAt(inFragUv, true);
+    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u))
     {
-        if (depthMode == 1u)
-        {
-            float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
-            float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
-            depthFactor = estimateSceneDepthFactor(inFragUv);
-            baseUv = clamp(inFragUv + vec2(tiltX, -tiltY) * depthFactor * (0.008 + 0.024 * strengthNorm), vec2(0.001), vec2(0.999));
-            sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.08 * strengthNorm, -0.04, 0.04) * max(depthFactor, 0.0);
-        }
-        else if (depthMode == 2u)
-        {
-            depthFactor = estimateSceneDepthFactor(inFragUv);
-        }
-        else if (depthMode == 3u)
-        {
-            bool rightEye = inFragUv.x >= 0.5;
-            float eyeSign = rightEye ? 1.0 : -1.0;
-            vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
-            depthFactor = estimateSceneDepthFactor(sbsUv);
-            float shift = eyeSign * (0.003 + 0.014 * strengthNorm) * depthFactor;
-            baseUv = vec2(clamp(sbsUv.x + shift, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
-        }
+        outColor = baseColor;
+        return;
     }
 
-    fragUv = baseUv;
-    gAllowCarryStore = true;
-    runPresenterCore();
-    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u))
-        return;
-
-    vec4 finalColor = outColor;
+    vec4 finalColor = baseColor;
     if (depthMode == 1u)
     {
-        finalColor.rgb = clamp(finalColor.rgb + vec3(sheen), 0.0, 1.0);
+        float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
+        float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
+        float depthFactor = estimateSceneDepthFactor(inFragUv, baseColor.rgb);
+        vec2 parallaxUv = inFragUv + vec2(tiltX, -tiltY) * depthFactor * (0.008 + 0.024 * strengthNorm);
+        finalColor = evalPresenterAt(parallaxUv, false);
+        float sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.08 * strengthNorm, -0.04, 0.04);
+        finalColor.rgb = clamp(finalColor.rgb + vec3(sheen * max(depthFactor, 0.0)), 0.0, 1.0);
     }
     else if (depthMode == 2u)
     {
-        float shiftPx = (0.8 + 3.5 * strengthNorm) * (depthFactor + 0.15);
-        bool topScreen = (pushConstants.drawMode == 1u)
-            || (pushConstants.drawMode == 2u)
-            || (pushConstants.drawMode == 4u)
-            || (pushConstants.drawMode == 7u)
-            || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
-                && ((pushConstants.drawMode & 1u) != 0u));
-        int sy = int(clamp((1.0 - inFragUv.y) * 192.0, 0.0, 191.0));
-        int sxL = int(clamp(inFragUv.x * 256.0 - shiftPx, 0.0, 255.0));
-        int sxR = int(clamp(inFragUv.x * 256.0 + shiftPx, 0.0, 255.0));
-        vec3 pL = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxL) : readBottomPacked(sy, sxL)));
-        vec3 pR = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxR) : readBottomPacked(sy, sxR)));
-        int scY = int(clamp((1.0 - inFragUv.y) * float(max(pushConstants.rendererHeight, 1u)), 0.0, float(max(pushConstants.rendererHeight, 1u) - 1u)));
-        float scScale = float(max(pushConstants.scale, 1u));
-        int scXL = int(clamp(inFragUv.x * float(max(pushConstants.rendererWidth, 1u)) - shiftPx * scScale, 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
-        int scXR = int(clamp(inFragUv.x * float(max(pushConstants.rendererWidth, 1u)) + shiftPx * scScale, 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
-        bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
-        vec4 r3L = screenOwns3D ? imageLoad(u3dImage, ivec2(scXL, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXL, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXL, scY)));
-        vec4 r3R = screenOwns3D ? imageLoad(u3dImage, ivec2(scXR, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXR, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXR, scY)));
-        vec3 leftRgb = mix(finalColor.rgb, (r3L.a > 0.01) ? r3L.rgb : pL, 0.65);
-        vec3 rightRgb = mix(finalColor.rgb, (r3R.a > 0.01) ? r3R.rgb : pR, 0.65);
+        float depthFactor = estimateSceneDepthFactor(inFragUv, baseColor.rgb);
+        float shift = (0.003 + 0.014 * strengthNorm) * (depthFactor + 0.15);
+        vec3 leftRgb = evalPresenterAt(inFragUv - vec2(shift, 0.0), false).rgb;
+        vec3 rightRgb = evalPresenterAt(inFragUv + vec2(shift, 0.0), false).rgb;
         vec3 anaglyph;
         anaglyph.r = clamp(dot(leftRgb, vec3(0.456, 0.500, 0.176)) + dot(rightRgb, vec3(-0.043, -0.088, -0.002)), 0.0, 1.0);
         anaglyph.g = clamp(dot(leftRgb, vec3(-0.040, -0.038, -0.016)) + dot(rightRgb, vec3(0.378, 0.734, -0.018)), 0.0, 1.0);
         anaglyph.b = clamp(dot(leftRgb, vec3(-0.015, -0.021, -0.005)) + dot(rightRgb, vec3(-0.072, -0.113, 1.226)), 0.0, 1.0);
-        finalColor = vec4(anaglyph, finalColor.a);
+        finalColor = vec4(anaglyph, baseColor.a);
+    }
+    else if (depthMode == 3u)
+    {
+        bool rightEye = inFragUv.x >= 0.5;
+        float eyeSign = rightEye ? 1.0 : -1.0;
+        vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
+        vec4 sbsCenter = evalPresenterAt(sbsUv, false);
+        float depthFactor = estimateSceneDepthFactor(sbsUv, sbsCenter.rgb);
+        float shift = eyeSign * (0.003 + 0.014 * strengthNorm) * depthFactor;
+        finalColor = evalPresenterAt(vec2(clamp(sbsUv.x + shift, 0.001, 0.999), sbsUv.y), false);
     }
 
     finalColor.rgb = applyConsoleColorProfile(finalColor.rgb, colorProfile);

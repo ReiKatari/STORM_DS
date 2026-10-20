@@ -97,7 +97,7 @@ using Platform::LogLevel;
 
 namespace
 {
-constexpr u32 kPipelineCacheFileVersion = 6;
+constexpr u32 kPipelineCacheFileVersion = 7;
 constexpr u32 kVulkanDiagnosticDisablePassiveRepeatCoverageExpand = 1u << 0u;
 constexpr float kTriangleAreaEpsilon = 0.000001f;
 constexpr float kTileOverlapEpsilon = 0.00001f;
