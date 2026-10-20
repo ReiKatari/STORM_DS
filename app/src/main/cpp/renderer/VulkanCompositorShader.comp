@@ -54,6 +54,8 @@ layout(push_constant) uniform PushConsts
     uint regionHeight;
     uint fastHighresOnlyTop;
     uint fastHighresOnlyBottom;
+    uint compositorMode;
+    uint debugView;
 } pc;
 
 const uint kMetaFlagRegularCaptureUses3d = 1u << 21u;
@@ -1306,6 +1308,171 @@ DEFINE_COMPOSE_SCREEN_PIXEL(composeBottomScreenPixel, readBottomPacked, false)
 
 #undef DEFINE_COMPOSE_SCREEN_PIXEL
 
+Rgba6 composeScreenPixelPrecise(bool topScreen, int sourceX, int dsY, int scaledX, int scaledY, uint safeScale)
+{
+    uint masterBrightness = topScreen ? readTopPacked(dsY, 256 * 3) : readBottomPacked(dsY, 256 * 3);
+    int dispmode = int((masterBrightness >> 16u) & 0x3u);
+    int bmode = int(((masterBrightness >> 8u) & 0xFFu) >> 6u);
+    int bfactor = min(16, int(masterBrightness & 0x1Fu));
+    int xoffset = int((masterBrightness >> 24u) & 0xFFu)
+        - ((((masterBrightness >> 16u) & 0x80u) != 0u) ? 256 : 0);
+
+    bool screenOwnsLive3D = topScreen ? (pc.screenSwap != 0u) : (pc.screenSwap == 0u);
+    bool screenHasCapturedHighres3D = !screenOwnsLive3D
+        && (topScreen ? (pc.previousTopSourceValid != 0u) : (pc.previousBottomSourceValid != 0u))
+        && (dispmode == 2
+            || ((masterBrightness & (kMetaFlagRegularCaptureUses3d | kMetaFlagVramCaptureUses3d)) != 0u));
+
+    int sample3dX = scaledX + (xoffset * int(safeScale));
+    Rgba6 pixel3D = Rgba6(0, 0, 0, 0);
+    if (screenOwnsLive3D)
+    {
+        pixel3D = sample3DColorAtScaledPixel(sample3dX, scaledY);
+    }
+    else if (screenHasCapturedHighres3D)
+    {
+        pixel3D = topScreen
+            ? samplePreviousTop3DColorAtScaledPixel(sample3dX, scaledY)
+            : samplePreviousBottom3DColorAtScaledPixel(sample3dX, scaledY);
+    }
+
+    Rgba6 val1 = topScreen
+        ? sampleTopFilteredPackedLayer(sourceX, dsY, scaledX, scaledY, safeScale, 0)
+        : sampleBottomFilteredPackedLayer(sourceX, dsY, scaledX, scaledY, safeScale, 0);
+    Rgba6 val2 = topScreen
+        ? sampleTopFilteredPackedLayer(sourceX, dsY, scaledX, scaledY, safeScale, 256)
+        : sampleBottomFilteredPackedLayer(sourceX, dsY, scaledX, scaledY, safeScale, 256);
+    Rgba6 val3 = unpackColor6(topScreen ? readTopPacked(dsY, 512 + sourceX) : readBottomPacked(dsY, 512 + sourceX));
+
+    if (pc.debugView == 1u)
+    {
+        return ((pixel3D.a & 0x1F) > 0) ? pixel3D : Rgba6(0, 0, 0, 0);
+    }
+    if (pc.debugView == 2u)
+    {
+        Rgba6 only2d = isPacked3dPlaceholder(val1) ? val2 : val1;
+        if (dispmode != 0)
+        {
+            if (bmode == 1)
+                applyBrightnessUp(only2d, bfactor);
+            else if (bmode == 2)
+                applyBrightnessDown(only2d, bfactor, 0xF);
+        }
+        return only2d;
+    }
+
+    // maskKind: 0 = Blank, 1 = 3D Primary (Red), 2 = 2D Primary (Green), 3 = Blended 2D+3D (Blue), 4 = Captured 3D (Yellow)
+    uint maskKind = 2u;
+
+    if (dispmode == 1)
+    {
+        int compmode = val3.a & 0xF;
+        if (compmode == 4)
+        {
+            if ((pixel3D.a & 0x1F) > 0)
+            {
+                int eva = (pixel3D.a & 0x1F) + 1;
+                int evb = 32 - eva;
+                val1.r = clampColor6(((pixel3D.r * eva) + (val1.r * evb) + 0x10) >> 5);
+                val1.g = clampColor6(((pixel3D.g * eva) + (val1.g * evb) + 0x10) >> 5);
+                val1.b = clampColor6(((pixel3D.b * eva) + (val1.b * evb) + 0x10) >> 5);
+                maskKind = screenHasCapturedHighres3D ? 4u : 3u;
+            }
+            else
+            {
+                val1 = val2;
+                maskKind = 2u;
+            }
+        }
+        else if (compmode == 1)
+        {
+            if ((pixel3D.a & 0x1F) > 0)
+            {
+                int eva = val3.g;
+                int evb = val3.b;
+                val1.r = clampColor6(((val1.r * eva) + (pixel3D.r * evb) + 0x8) >> 4);
+                val1.g = clampColor6(((val1.g * eva) + (pixel3D.g * evb) + 0x8) >> 4);
+                val1.b = clampColor6(((val1.b * eva) + (pixel3D.b * evb) + 0x8) >> 4);
+                maskKind = screenHasCapturedHighres3D ? 4u : 3u;
+            }
+            else
+            {
+                val1 = val2;
+                maskKind = 2u;
+            }
+        }
+        else if (compmode <= 3)
+        {
+            if ((pixel3D.a & 0x1F) > 0)
+            {
+                int evy = val3.g;
+                val1 = pixel3D;
+                if (compmode == 2)
+                {
+                    val1.r = clampColor6(val1.r + ((((0x3F - val1.r) * evy) + 0x8) >> 4));
+                    val1.g = clampColor6(val1.g + ((((0x3F - val1.g) * evy) + 0x8) >> 4));
+                    val1.b = clampColor6(val1.b + ((((0x3F - val1.b) * evy) + 0x8) >> 4));
+                }
+                else if (compmode == 3)
+                {
+                    val1.r = clampColor6(val1.r - (((val1.r * evy) + 0x7) >> 4));
+                    val1.g = clampColor6(val1.g - (((val1.g * evy) + 0x7) >> 4));
+                    val1.b = clampColor6(val1.b - (((val1.b * evy) + 0x7) >> 4));
+                }
+                maskKind = screenHasCapturedHighres3D ? 4u : 1u;
+            }
+            else
+            {
+                val1 = val2;
+                maskKind = 2u;
+            }
+        }
+        else
+        {
+            maskKind = 2u;
+        }
+    }
+    else if (dispmode == 2)
+    {
+        if (screenHasCapturedHighres3D && (pixel3D.a & 0x1F) > 0)
+        {
+            val1 = pixel3D;
+            maskKind = 4u;
+        }
+        else
+        {
+            maskKind = 2u;
+        }
+    }
+    else if (dispmode == 0)
+    {
+        maskKind = 0u;
+    }
+
+    if (pc.debugView == 3u)
+    {
+        if (maskKind == 1u)
+            return Rgba6(63, 0, 0, 31);
+        if (maskKind == 2u)
+            return Rgba6(0, 63, 0, 31);
+        if (maskKind == 3u)
+            return Rgba6(0, 16, 63, 31);
+        if (maskKind == 4u)
+            return Rgba6(63, 63, 0, 31);
+        return Rgba6(16, 16, 16, 31);
+    }
+
+    if (dispmode != 0)
+    {
+        if (bmode == 1)
+            applyBrightnessUp(val1, bfactor);
+        else if (bmode == 2)
+            applyBrightnessDown(val1, bfactor, 0xF);
+    }
+
+    return val1;
+}
+
 void main()
 {
     uvec2 gid = gl_GlobalInvocationID.xy;
@@ -1365,7 +1532,9 @@ void main()
     }
 
     Rgba6 pixel;
-    if ((isTopScreen && pc.fastHighresOnlyTop != 0u)
+    if (pc.debugView != 0u)
+        pixel = composeScreenPixelPrecise(isTopScreen, sourceX, dsY, scaledX, scaledY, safeScale);
+    else if ((isTopScreen && pc.fastHighresOnlyTop != 0u)
         || (isBottomScreen && pc.fastHighresOnlyBottom != 0u))
         pixel = sampleFastHighresOnly(isTopScreen, scaledX, scaledY);
     else if (isTopScreen)

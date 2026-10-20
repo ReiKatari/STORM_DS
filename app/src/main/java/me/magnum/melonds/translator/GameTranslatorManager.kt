@@ -629,6 +629,10 @@ class GameTranslatorManager(
                     } ?: emptyList()
                 }
 
+                // Translate whole sentences: a line wrapped by the game ("...could join" + "me.")
+                // must reach the engine as one sentence, otherwise the meaning is lost.
+                blocks = me.magnum.melonds.translator.ocr.DialogueSentenceAssembler.mergeSentenceContinuations(blocks)
+
                 if (blocks.isEmpty()) {
                     overlayView?.clearTranslations()
                     overlayView?.isTranslating = false

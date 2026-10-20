@@ -221,4 +221,16 @@ object MelonEmulator {
     external fun stopLanDiscovery()
 
     external fun getLanDiscoveredSessions(): Array<String>
+
+    @JvmStatic
+    external fun setVulkanCompositorMode(mode: Int)
+
+    @JvmStatic
+    external fun setVulkanThickHighResEdges(enabled: Boolean)
+
+    @JvmStatic
+    external fun setVulkanDebugViewMode(mode: Int)
+
+    @JvmStatic
+    external fun dumpVulkanDebugReport(outputDir: String): Boolean
 }

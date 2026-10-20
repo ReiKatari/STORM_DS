@@ -509,4 +509,13 @@
         <item>3</item>
         <item>4</item>
     </string-array>
+
+    <string-array name="video_vulkan_compositor_mode_options">
+        <item>@string/video_vulkan_compositor_mode_precise</item>
+        <item>@string/video_vulkan_compositor_mode_legacy</item>
+    </string-array>
+    <string-array name="video_vulkan_compositor_mode_values">
+        <item>precise</item>
+        <item>legacy</item>
+    </string-array>
 </resources>

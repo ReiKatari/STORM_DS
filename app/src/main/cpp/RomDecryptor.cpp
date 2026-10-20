@@ -440,8 +440,9 @@ DecryptResult DecryptRomFd(int fd, ProgressCallback progressCallback)
     if (!mod1Encrypted && !mod2Encrypted)
     {
         bool patched = ApplyCompatibilityPatches(rom.data(), fileSize);
+        bool flagsChanged = (rom[OFFSET_DSI_CRYPTO_FLAGS] & 0x03) != 0;
         rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
-        if (patched)
+        if (patched || flagsChanged)
         {
             uint16_t headerCrc = CalcHeaderCRC16(rom.data(), 0x15E);
             *(uint16_t*)&rom[0x15E] = headerCrc;
@@ -658,8 +659,9 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
     if (!mod1Encrypted && !mod2Encrypted)
     {
         bool patched = ApplyCompatibilityPatches(rom, fileSize);
+        bool flagsChanged = (rom[OFFSET_DSI_CRYPTO_FLAGS] & 0x03) != 0;
         rom[OFFSET_DSI_CRYPTO_FLAGS] &= ~0x03;
-        if (patched)
+        if (patched || flagsChanged)
         {
             uint16_t headerCrc = CalcHeaderCRC16(rom, 0x15E);
             *(uint16_t*)&rom[0x15E] = headerCrc;

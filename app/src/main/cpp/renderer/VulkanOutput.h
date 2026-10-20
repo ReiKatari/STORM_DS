@@ -403,6 +403,8 @@ struct VulkanCompositionInputs
     bool needsReadback{};
     bool multiSurface{};
     bool validationMode{};
+    u32 compositorMode{};
+    u32 debugView{};
 };
 
 struct VulkanVisibleCompositorRegion
@@ -605,8 +607,10 @@ private:
         u32 regionHeight;
         u32 fastHighresOnlyTop;
         u32 fastHighresOnlyBottom;
+        u32 compositorMode;
+        u32 debugView;
     };
-    static_assert(sizeof(CompositorPushConstants) == 120u);
+    static_assert(sizeof(CompositorPushConstants) == 128u);
     static_assert(offsetof(CompositorPushConstants, regionMode) == 88u);
 
     struct CompatibilityAccumulatePushConstants
@@ -816,6 +820,7 @@ private:
     struct SameBankMode2SourceCache
     {
         VkImage image{VK_NULL_HANDLE};
+        VkImageView imageView{VK_NULL_HANDLE};
         VkDeviceMemory memory{VK_NULL_HANDLE};
         u32 width{};
         u32 height{};

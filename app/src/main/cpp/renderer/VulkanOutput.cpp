@@ -22,6 +22,7 @@
 #include "VulkanAccumulate3dShaderData.h"
 #include "VulkanAccumulate3dCompatibilityShaderData.h"
 #include "VulkanAccumulate3dScale8ShaderData.h"
+#include "VulkanRuntimeControls.h"
 
 namespace MelonDSAndroid
 {
@@ -1709,9 +1710,7 @@ bool VulkanOutput::createCompositorResources()
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = melonDS::UsesVulkanFastPath(pipelineProfile)
-        ? sizeof(CompositorPushConstants)
-        : offsetof(CompositorPushConstants, regionMode);
+    pushConstantRange.size = sizeof(CompositorPushConstants);
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -3516,6 +3515,70 @@ bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
     if (topPacked == nullptr || bottomPacked == nullptr)
         return false;
 
+    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
+    {
+        for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
+        {
+            const size_t packedRowBase = y * static_cast<size_t>(kAcceleratedStride);
+            const size_t snapshotRowBase = y * SoftPackedFrameSnapshot::kScreenWidth;
+            std::memcpy(
+                topPacked + packedRowBase,
+                softPackedSnapshot.packedTopPlane0.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                topPacked + packedRowBase + SoftPackedFrameSnapshot::kScreenWidth,
+                softPackedSnapshot.packedTopPlane1.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                topPacked + packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
+                softPackedSnapshot.packedTopControl.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            topPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
+                softPackedSnapshot.packedTopLineMeta[y];
+
+            std::memcpy(
+                bottomPacked + packedRowBase,
+                softPackedSnapshot.packedBottomPlane0.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                bottomPacked + packedRowBase + SoftPackedFrameSnapshot::kScreenWidth,
+                softPackedSnapshot.packedBottomPlane1.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            std::memcpy(
+                bottomPacked + packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
+                softPackedSnapshot.packedBottomControl.data() + snapshotRowBase,
+                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
+            bottomPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
+                softPackedSnapshot.packedBottomLineMeta[y];
+        }
+        resource.fastHighresOnlyTop = false;
+        resource.fastHighresOnlyBottom = false;
+        resource.fastHighresOverlay2DTop = false;
+        resource.fastHighresOverlay2DBottom = false;
+        resource.topPackedCarryFromPrevious = false;
+        resource.bottomPackedCarryFromPrevious = false;
+        resource.topPackedPlane0Zeroed = false;
+        resource.topPackedPlane1Zeroed = false;
+        resource.topPackedControlZeroed = false;
+        resource.bottomPackedPlane0Zeroed = false;
+        resource.bottomPackedPlane1Zeroed = false;
+        resource.bottomPackedControlZeroed = false;
+        resource.softPackedFrameId = softPackedSnapshot.frameId;
+        resource.frontBufferLatched = softPackedSnapshot.frontBufferLatched;
+        resource.captureCntLatched = softPackedSnapshot.captureCntLatched;
+        resource.dispCntALatched = softPackedSnapshot.dispCntALatched;
+        resource.dispCntBLatched = softPackedSnapshot.dispCntBLatched;
+        resource.captureLinesLatched = softPackedSnapshot.captureLinesLatched;
+        resource.captureAgeLatched = softPackedSnapshot.captureAgeLatched;
+        resource.hasSoftPackedDebugData = true;
+        resource.topScreenStats = softPackedSnapshot.topScreenStats;
+        resource.bottomScreenStats = softPackedSnapshot.bottomScreenStats;
+        resource.capture3dSourceDsFrame = softPackedSnapshot.capture3dSourceDsFrame;
+        resource.captureLineUses3dMask = softPackedSnapshot.captureLineUses3dMask;
+        resource.captureFallbackLines.fill(0);
+        return true;
+    }
+
     const bool topStructuredAboveDominant =
         screenUsesFullRegularComp7WithDominantAbove(
             softPackedSnapshot.topScreenStats);
@@ -3770,6 +3833,11 @@ bool VulkanOutput::updateCompositorPackedBuffersFastPath(
     resource.topPartialRegularCaptureProtectedBlackAuthoritative = false;
     if (!softPackedSnapshot.valid)
         return false;
+
+    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
+    {
+        return updateCompositorPackedBuffersCompatibility(frame, resource, softPackedSnapshot);
+    }
 
     if (resource.topPackedMapped == nullptr || resource.bottomPackedMapped == nullptr || resource.packedBufferSize == 0)
         return false;
@@ -4728,6 +4796,7 @@ bool VulkanOutput::prepareFrameForPresentation(
     resource.screenSwap = softPackedSnapshot.valid ? softPackedSnapshot.screenSwapLatched : frameScreenSwap;
     resource.capture3dSourceScreenSwapHintValid = renderer3D.IsCurrentCaptureScreenSwapHintValid();
     resource.capture3dSourceScreenSwapHint = renderer3D.GetCurrentCaptureScreenSwapHint();
+
     const bool topStructured2dOnlyCaptureReplay =
         screenUsesStructured2dOnlyCaptureReplay(
             softPackedSnapshot.topScreenStats,
@@ -8826,6 +8895,8 @@ bool VulkanOutput::buildCompositionInputsCompatibility(
     outInputs.needsReadback = needsReadback;
     outInputs.multiSurface = multiSurface;
     outInputs.validationMode = validationMode;
+    outInputs.compositorMode = static_cast<u32>(VulkanRuntime::GetCompositorMode());
+    outInputs.debugView = static_cast<u32>(VulkanRuntime::GetDebugView());
 
     return outInputs.sourceImage != VK_NULL_HANDLE
         && outInputs.sourceImageView != VK_NULL_HANDLE
@@ -10563,6 +10634,8 @@ bool VulkanOutput::buildCompositionInputs(
     outInputs.needsReadback = needsReadback;
     outInputs.multiSurface = multiSurface;
     outInputs.validationMode = validationMode;
+    outInputs.compositorMode = static_cast<u32>(VulkanRuntime::GetCompositorMode());
+    outInputs.debugView = static_cast<u32>(VulkanRuntime::GetDebugView());
     return outInputs.sourceImage != VK_NULL_HANDLE
         && outInputs.sourceImageView != VK_NULL_HANDLE
         && outInputs.previousTopSourceImage != VK_NULL_HANDLE
@@ -11384,12 +11457,15 @@ bool VulkanOutput::ensureSameBankMode2SourceCache(
     SameBankMode2SourceCache& cache =
         sameBankMode2SourceCaches[vramBank];
     if (cache.image != VK_NULL_HANDLE
+        && cache.imageView != VK_NULL_HANDLE
         && cache.width == width
         && cache.height == height)
     {
         return true;
     }
 
+    if (cache.imageView != VK_NULL_HANDLE)
+        vkDestroyImageView(device, cache.imageView, nullptr);
     if (cache.image != VK_NULL_HANDLE)
         vkDestroyImage(device, cache.image, nullptr);
     if (cache.memory != VK_NULL_HANDLE)
@@ -11406,7 +11482,10 @@ bool VulkanOutput::ensureSameBankMode2SourceCache(
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCreateInfo.usage =
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+        | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+        | VK_IMAGE_USAGE_SAMPLED_BIT
+        | VK_IMAGE_USAGE_STORAGE_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (vkCreateImage(device, &imageCreateInfo, nullptr, &cache.image)
@@ -11445,6 +11524,25 @@ bool VulkanOutput::ensureSameBankMode2SourceCache(
         return false;
     }
 
+    VkImageViewCreateInfo viewCreateInfo{};
+    viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewCreateInfo.image = cache.image;
+    viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewCreateInfo.subresourceRange.baseMipLevel = 0u;
+    viewCreateInfo.subresourceRange.levelCount = 1u;
+    viewCreateInfo.subresourceRange.baseArrayLayer = 0u;
+    viewCreateInfo.subresourceRange.layerCount = 1u;
+    if (vkCreateImageView(device, &viewCreateInfo, nullptr, &cache.imageView)
+        != VK_SUCCESS)
+    {
+        vkFreeMemory(device, cache.memory, nullptr);
+        vkDestroyImage(device, cache.image, nullptr);
+        cache = {};
+        return false;
+    }
+
     cache.width = width;
     cache.height = height;
     return true;
@@ -11454,6 +11552,8 @@ void VulkanOutput::destroySameBankMode2SourceCaches()
 {
     for (SameBankMode2SourceCache& cache : sameBankMode2SourceCaches)
     {
+        if (cache.imageView != VK_NULL_HANDLE)
+            vkDestroyImageView(device, cache.imageView, nullptr);
         if (cache.image != VK_NULL_HANDLE)
             vkDestroyImage(device, cache.image, nullptr);
         if (cache.memory != VK_NULL_HANDLE)
@@ -12533,7 +12633,7 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
     vkCmdPipelineBarrier(
         resource.commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
         0,
         0,
         nullptr,
@@ -12542,6 +12642,93 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
         static_cast<u32>(postCopyBarriers.size()),
         postCopyBarriers.data()
     );
+
+    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise
+        && resource.captureAgeLatched == 0u
+        && resource.captureLinesLatched >= static_cast<u32>(kScreenHeight)
+        && (resource.captureCntLatched & (1u << 31u)) != 0u
+        && ((resource.captureCntLatched >> 29u) & 0x3u) != 1u)
+    {
+        const u32 captureBank = (resource.captureCntLatched >> 16u) & 0x3u;
+        if (ensureSameBankMode2SourceCache(captureBank, rendererWidth, rendererHeight))
+        {
+            SameBankMode2SourceCache& cache = sameBankMode2SourceCaches[captureBank];
+            VkImageMemoryBarrier snapToSrc{};
+            snapToSrc.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            snapToSrc.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+            snapToSrc.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            snapToSrc.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            snapToSrc.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            snapToSrc.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            snapToSrc.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            snapToSrc.image = resource.renderer3dSnapshot;
+            snapToSrc.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            snapToSrc.subresourceRange.levelCount = 1u;
+            snapToSrc.subresourceRange.layerCount = 1u;
+
+            VkImageMemoryBarrier cacheToDst{};
+            cacheToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            cacheToDst.srcAccessMask = cache.layoutReady ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT) : 0u;
+            cacheToDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            cacheToDst.oldLayout = cache.layoutReady ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            cacheToDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            cacheToDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            cacheToDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            cacheToDst.image = cache.image;
+            cacheToDst.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            cacheToDst.subresourceRange.levelCount = 1u;
+            cacheToDst.subresourceRange.layerCount = 1u;
+
+            std::array<VkImageMemoryBarrier, 2> cachePreBarriers = {snapToSrc, cacheToDst};
+            vkCmdPipelineBarrier(
+                resource.commandBuffer,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0, 0, nullptr, 0, nullptr,
+                static_cast<u32>(cachePreBarriers.size()),
+                cachePreBarriers.data());
+
+            if (vkCmdCopyImage != nullptr)
+            {
+                VkImageCopy copyRegion{};
+                copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.srcSubresource.layerCount = 1u;
+                copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.dstSubresource.layerCount = 1u;
+                copyRegion.extent = {rendererWidth, rendererHeight, 1u};
+                vkCmdCopyImage(
+                    resource.commandBuffer,
+                    resource.renderer3dSnapshot,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    cache.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1u,
+                    &copyRegion);
+            }
+
+            snapToSrc.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            snapToSrc.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            snapToSrc.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            snapToSrc.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            cacheToDst.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            cacheToDst.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+            cacheToDst.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            cacheToDst.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            std::array<VkImageMemoryBarrier, 2> cachePostBarriers = {snapToSrc, cacheToDst};
+            vkCmdPipelineBarrier(
+                resource.commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr,
+                static_cast<u32>(cachePostBarriers.size()),
+                cachePostBarriers.data());
+
+            cache.valid = true;
+            cache.layoutReady = true;
+        }
+    }
 
     resource.hasRenderer3dSnapshot = true;
     resource.renderer3dSnapshotScreenSwap = snapshotScreenSwap;
@@ -12804,6 +12991,8 @@ bool VulkanOutput::dispatchCompositor(
     pushConstants.bottomStructuredHandoffSuppress3d = inputs.bottomStructuredHandoffSuppress3d ? 1u : 0u;
     pushConstants.fastHighresOnlyTop = inputs.fastHighresOnlyTop ? 1u : 0u;
     pushConstants.fastHighresOnlyBottom = inputs.fastHighresOnlyBottom ? 1u : 0u;
+    pushConstants.compositorMode = inputs.compositorMode;
+    pushConstants.debugView = inputs.debugView;
 
     const u32 safeScale = inputs.scale == 0u ? 1u : inputs.scale;
     const u32 screenRegionWidth = kScreenWidth * safeScale;
@@ -12850,9 +13039,7 @@ bool VulkanOutput::dispatchCompositor(
         pushConstants.regionHeight = screenRegionHeight;
     }
 
-    const u32 compositorPushConstantSize = fastPathProfile
-        ? sizeof(pushConstants)
-        : offsetof(CompositorPushConstants, regionMode);
+    const u32 compositorPushConstantSize = sizeof(pushConstants);
     vkCmdPushConstants(
         resource.commandBuffer,
         compositorPipelineLayout,
@@ -13539,6 +13726,8 @@ bool VulkanOutput::dispatchVisibleCompositor(
         pushConstants.regionHeight = region.height;
         pushConstants.fastHighresOnlyTop = inputs.fastHighresOnlyTop ? 1u : 0u;
         pushConstants.fastHighresOnlyBottom = inputs.fastHighresOnlyBottom ? 1u : 0u;
+        pushConstants.compositorMode = inputs.compositorMode;
+        pushConstants.debugView = inputs.debugView;
 
         vkCmdPushConstants(
             resource.commandBuffer,

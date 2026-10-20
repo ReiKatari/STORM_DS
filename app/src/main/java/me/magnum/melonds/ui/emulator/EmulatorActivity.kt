@@ -1,10 +1,13 @@
 package me.magnum.melonds.ui.emulator
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.hardware.display.DisplayManager
 import android.hardware.input.InputManager
@@ -103,6 +106,7 @@ import me.magnum.melonds.impl.emulator.debug.RendererDebugBridge
 import me.magnum.melonds.impl.layout.DeviceLayoutDisplayMapper
 import me.magnum.melonds.impl.layout.SecondaryDisplaySelector
 import me.magnum.melonds.impl.system.AppForegroundStateObserver
+import me.magnum.melonds.impl.vulkan.VulkanCompatibilityDatabase
 import me.magnum.melonds.parcelables.RomInfoParcelable
 import me.magnum.melonds.parcelables.RomParcelable
 import me.magnum.melonds.ui.cheats.CheatsActivity
@@ -153,6 +157,8 @@ import me.magnum.melonds.ui.layouts.LayoutSelectorActivity
 import me.magnum.melonds.ui.layouteditor.model.LayoutTarget
 import me.magnum.melonds.ui.settings.SettingsActivity
 import me.magnum.melonds.ui.theme.MelonTheme
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.UUID
 import javax.inject.Inject
@@ -166,6 +172,8 @@ class EmulatorActivity : AppCompatActivity() {
         const val KEY_URI = "uri"
         const val KEY_BOOT_FIRMWARE_CONSOLE = "boot_firmware_console"
         const val KEY_BOOT_FIRMWARE_ONLY = "boot_firmware_only"
+        const val ACTION_DEBUG_CAPTURE = "me.magnum.melonds.DEBUG_CAPTURE"
+        private const val DEFAULT_VULKAN_DEBUG_DIR = "/storage/emulated/0/STORM DS/debug"
         private const val STARTUP_PRESENTATION_REFRESH_ATTEMPTS = 24
         private const val STARTUP_PRESENTATION_REFRESH_INTERVAL_MS = 100L
         private const val OVERLAY_FOCUS_ATTEMPTS = 12
@@ -274,6 +282,32 @@ class EmulatorActivity : AppCompatActivity() {
     private var startupPresentationRefreshRunnable: Runnable? = null
     private var startupPresentationRefreshAttempts = 0
     private var rendererDebugPauseEmulation = true
+    private var currentVulkanDebugViewMode = 0
+    private var isDebugCaptureReceiverRegistered = false
+    private val debugCaptureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_DEBUG_CAPTURE) {
+                return
+            }
+            val outputDir = intent.getStringExtra("output_dir")
+                ?.takeIf { it.isNotBlank() }
+                ?: "$DEFAULT_VULKAN_DEBUG_DIR/regression"
+            if (intent.hasExtra("debug_view_mode")) {
+                val mode = intent.getIntExtra("debug_view_mode", 0).coerceIn(0, 3)
+                currentVulkanDebugViewMode = mode
+                runCatching { MelonEmulator.setVulkanDebugViewMode(mode) }
+            }
+            if (intent.hasExtra("compositor_mode")) {
+                val compMode = intent.getIntExtra("compositor_mode", 0).coerceIn(0, 1)
+                runCatching { MelonEmulator.setVulkanCompositorMode(compMode) }
+            }
+            if (intent.hasExtra("thick_edges")) {
+                val thick = intent.getBooleanExtra("thick_edges", false)
+                runCatching { MelonEmulator.setVulkanThickHighResEdges(thick) }
+            }
+            handleDebugCaptureIntent(outputDir)
+        }
+    }
     private var isClosingEmulator = false
     private var isFrameRenderCoordinatorStopped = false
     private var excludeTouchScreenFromSystemGestures = false
@@ -584,6 +618,15 @@ class EmulatorActivity : AppCompatActivity() {
         handler = Handler(mainLooper)
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         lifecycleOwnerProvider.setCurrentLifecycleOwner(this)
+        runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                debugCaptureReceiver,
+                IntentFilter(ACTION_DEBUG_CAPTURE),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
+            isDebugCaptureReceiverRegistered = true
+        }
         binding = ActivityEmulatorBinding.inflate(layoutInflater)
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
         setContentView(binding.root)
@@ -1320,9 +1363,9 @@ class EmulatorActivity : AppCompatActivity() {
                         it is EmulatorState.LoadingFirmware || it is EmulatorState.LoadingRom) {
                         if (romLoadingTimeoutJob == null || romLoadingTimeoutJob?.isActive != true) {
                             romLoadingTimeoutJob = lifecycleScope.launch {
-                                kotlinx.coroutines.delay(8_000L)
+                                kotlinx.coroutines.delay(90_000L)
                                 if (!bootRomReady.value && !isFinishing && !isDestroyed) {
-                                    android.util.Log.e("EmulatorActivity", "ROM launch timed out after 8s")
+                                    android.util.Log.e("EmulatorActivity", "ROM launch timed out after 90s")
                                     binding.textLoading.isGone = true
                                     binding.progressLoading.isGone = true
                                     binding.textLoadingDetail.isGone = true
@@ -1356,6 +1399,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.ValidatingRom -> {
                             bootIsDsi.value = it.rom.isDsiWareTitle
                             bootRomTitle.value = it.rom.config.customName ?: it.rom.name
+                            applyVulkanCompatibilityProfileForRom(it.rom)
                             prepareBootExternalInfo(it.rom)
                             showLoadingState()
                             emulatorLaunchValidatorDelegate.validateRom(it.rom)
@@ -1376,6 +1420,7 @@ class EmulatorActivity : AppCompatActivity() {
                             (it as? EmulatorState.RunningRom)?.let { running ->
                                 bootIsDsi.value = running.rom.isDsiWareTitle
                                 bootRomTitle.value = running.rom.config.customName ?: running.rom.name
+                                applyVulkanCompatibilityProfileForRom(running.rom)
                             }
                             (it as? EmulatorState.RunningFirmware)?.let { running ->
                                 bootIsDsi.value = running.console == me.magnum.melonds.domain.model.ConsoleType.DSi
@@ -3178,6 +3223,14 @@ class EmulatorActivity : AppCompatActivity() {
             add(romSettingsMenuLabel(getString(R.string.microphone_source), menuState.micSourceValue) to {
                 showRomMicSourceDialog(rom.config.runtimeMicSource)
             })
+            if (renderer == VideoRenderer.VULKAN) {
+                add(romSettingsMenuLabel(getString(R.string.vulkan_debug_view_mode_title), vulkanDebugViewModeLabel(currentVulkanDebugViewMode)) to {
+                    showVulkanDebugViewModeChoiceOverlay()
+                })
+                add(getString(R.string.vulkan_debug_dump_report) to {
+                    dumpVulkanDebugReportFromMenu()
+                })
+            }
         }
 
         if (entries.isEmpty()) {
@@ -3317,11 +3370,125 @@ class EmulatorActivity : AppCompatActivity() {
         )
     }
 
+    private fun vulkanDebugViewModeLabels(): List<String> {
+        return listOf(
+            getString(R.string.vulkan_debug_view_normal),
+            getString(R.string.vulkan_debug_view_only_3d),
+            getString(R.string.vulkan_debug_view_only_2d),
+            getString(R.string.vulkan_debug_view_composition_mask),
+        )
+    }
+
+    private fun vulkanDebugViewModeLabel(mode: Int): String {
+        val labels = vulkanDebugViewModeLabels()
+        return labels.getOrElse(mode.coerceIn(0, labels.lastIndex)) { labels.first() }
+    }
+
+    private fun showVulkanDebugViewModeChoiceOverlay() {
+        val labels = vulkanDebugViewModeLabels()
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.vulkan_debug_view_mode_title),
+                labels = labels,
+                selectedIndex = currentVulkanDebugViewMode.coerceIn(0, labels.lastIndex),
+                onSelect = { which ->
+                    currentVulkanDebugViewMode = which.coerceIn(0, 3)
+                    runCatching { MelonEmulator.setVulkanDebugViewMode(currentVulkanDebugViewMode) }
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun showVulkanDebugViewModeDialog() {
+        val labels = vulkanDebugViewModeLabels().toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.vulkan_debug_view_mode_title)
+            .setSingleChoiceItems(labels, currentVulkanDebugViewMode.coerceIn(0, labels.lastIndex)) { dialog, which ->
+                currentVulkanDebugViewMode = which.coerceIn(0, 3)
+                runCatching { MelonEmulator.setVulkanDebugViewMode(currentVulkanDebugViewMode) }
+                onRendererDebugControlApplied()
+                dialog.dismiss()
+                handler.post { showRendererDebugMenu() }
+            }
+            .setNegativeButton(R.string.cancel) { _, _ ->
+                handler.post { showRendererDebugMenu() }
+            }
+            .show()
+    }
+
+    private fun dumpVulkanDebugReportFromMenu() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val outDir = File(DEFAULT_VULKAN_DEBUG_DIR).apply { mkdirs() }.absolutePath
+            val ok = runCatching { MelonEmulator.dumpVulkanDebugReport(outDir) }.getOrDefault(false)
+            withContext(Dispatchers.Main) {
+                val msg = if (ok) {
+                    getString(R.string.vulkan_debug_dump_report_success, outDir)
+                } else {
+                    getString(R.string.vulkan_debug_dump_report_failed)
+                }
+                Toast.makeText(this@EmulatorActivity, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun applyVulkanCompatibilityProfileForRom(rom: Rom) {
+        VulkanCompatibilityDatabase.applyRuntimeControlsForRom(
+            context = this,
+            gameCode = rom.gameCode,
+            romName = rom.config.customName ?: rom.name,
+            fileName = rom.fileName,
+            autoselectEnabled = settingsRepository.isVulkanCompatAutoselectEnabled(),
+            userCompositorMode = settingsRepository.getVulkanCompositorMode(),
+            userThickEdges = settingsRepository.isVulkanThickHighResEdgesEnabled(),
+        )
+    }
+
+    private fun handleDebugCaptureIntent(outputDir: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dir = File(outputDir).apply { mkdirs() }
+            val reportOk = runCatching { MelonEmulator.dumpVulkanDebugReport(dir.absolutePath) }.getOrDefault(false)
+            val screenshotBitmap = runCatching { viewModel.captureScreenshot() }.getOrNull()
+            var screenshotSaved = false
+            if (screenshotBitmap != null) {
+                screenshotSaved = runCatching {
+                    val frameFile = File(dir, "frame.png")
+                    FileOutputStream(frameFile).use { out ->
+                        screenshotBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    true
+                }.getOrDefault(false)
+            }
+            runCatching {
+                val statusJson = org.json.JSONObject().apply {
+                    put("timestamp", System.currentTimeMillis())
+                    put("outputDir", dir.absolutePath)
+                    put("reportSuccess", reportOk)
+                    put("screenshotSaved", screenshotSaved)
+                    put("debugViewMode", currentVulkanDebugViewMode)
+                }
+                File(dir, "capture_done.json").writeText(statusJson.toString(2), Charsets.UTF_8)
+            }
+        }
+    }
+
     private fun showRendererDebugMenu() {
         showRendererDebugListDialog(
             title = getString(R.string.renderer_debug_menu),
             entries = buildList {
                 add(RendererDebugMenuEntry(getString(R.string.renderer_debug_capture)) { viewModel.dumpRendererDebugCapture() })
+                add(
+                    RendererDebugMenuEntry(
+                        "${getString(R.string.vulkan_debug_view_mode_title)}: ${vulkanDebugViewModeLabel(currentVulkanDebugViewMode)}"
+                    ) {
+                        handler.post { showVulkanDebugViewModeDialog() }
+                    },
+                )
+                add(
+                    RendererDebugMenuEntry(getString(R.string.vulkan_debug_dump_report)) {
+                        dumpVulkanDebugReportFromMenu()
+                    },
+                )
                 if (isDebuggableBuild()) {
                     add(
                         RendererDebugMenuEntry(rendererDebugPauseLabel()) {
@@ -4927,6 +5094,10 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isDebugCaptureReceiverRegistered) {
+            runCatching { unregisterReceiver(debugCaptureReceiver) }
+            isDebugCaptureReceiverRegistered = false
+        }
         translatorManager.onDestroy()
         releaseEmulatorUiResources()
     }

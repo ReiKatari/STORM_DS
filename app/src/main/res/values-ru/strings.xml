@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="video_vulkan_compositor_mode_title">Режим композиции 2D/3D (Vulkan)</string>
+    <string name="video_vulkan_compositor_mode_precise">Точный (приоритеты и смешивание слоёв)</string>
+    <string name="video_vulkan_compositor_mode_legacy">Быстрый (Legacy)</string>
+    <string name="video_vulkan_thick_edges_title">Утолщённые контуры 3D в высоком разрешении</string>
+    <string name="video_vulkan_thick_edges_summary">Расширяет cel-shading обводку пропорционально масштабу рендера</string>
+    <string name="video_vulkan_compat_autoselect_title">Автопрофили совместимости игр (Vulkan)</string>
+    <string name="video_vulkan_compat_autoselect_summary">Автоматически применять оптимальные настройки рендера для известных игр</string>
+    <string name="vulkan_debug_view_mode_title">Режим отладки слоёв Vulkan</string>
+    <string name="vulkan_debug_view_normal">Обычный вид</string>
+    <string name="vulkan_debug_view_only_3d">Только 3D</string>
+    <string name="vulkan_debug_view_only_2d">Только 2D</string>
+    <string name="vulkan_debug_view_composition_mask">Маска композиции</string>
+    <string name="vulkan_debug_dump_report">Сохранить отчёт Vulkan</string>
+    <string name="vulkan_debug_dump_report_success">Отчёт Vulkan сохранён в %1$s</string>
+    <string name="vulkan_debug_dump_report_failed">Не удалось сохранить отчёт Vulkan</string>
+</resources>

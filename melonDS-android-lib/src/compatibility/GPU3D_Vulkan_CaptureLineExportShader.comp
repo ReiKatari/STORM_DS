@@ -52,37 +52,46 @@ void main()
     uint colorWidth = max(pc.width, 1u);
     uint colorHeight = max(pc.height, 1u);
     uint captureScale = max(1u, colorWidth / 256u);
-    uint captureSampleOffset = captureScale > 1u ? (captureScale / 2u) : 0u;
     uint baseX = gid.x * captureScale;
     uint baseY = gid.y * captureScale;
-    uint sourceX = min(colorWidth - 1u, baseX + captureSampleOffset);
-    uint sourceY = min(colorHeight - 1u, baseY + captureSampleOffset);
 
-    vec4 sampledColor = imageLoad(colorImage, ivec2(sourceX, sourceY));
-    if (captureScale > 1u
-        && (sampledColor.a <= 0.0 || !any(greaterThan(sampledColor.rgb, vec3(0.0)))))
+    vec4 sampledColor;
+    if (captureScale <= 1u)
     {
+        uint sourceX = min(colorWidth - 1u, baseX);
+        uint sourceY = min(colorHeight - 1u, baseY);
+        sampledColor = imageLoad(colorImage, ivec2(sourceX, sourceY));
+    }
+    else
+    {
+        vec4 totalColor = vec4(0.0);
+        vec3 visibleRgbSum = vec3(0.0);
+        float visibleAlphaSum = 0.0;
+        uint sampleCount = captureScale * captureScale;
         for (uint dy = 0u; dy < captureScale; dy++)
         {
             uint y = min(colorHeight - 1u, baseY + dy);
-            bool foundVisible = false;
             for (uint dx = 0u; dx < captureScale; dx++)
             {
                 uint x = min(colorWidth - 1u, baseX + dx);
                 vec4 candidate = imageLoad(colorImage, ivec2(x, y));
-                if (candidate.a > 0.0 && any(greaterThan(candidate.rgb, vec3(0.0))))
+                totalColor += candidate;
+                if (candidate.a > 0.0)
                 {
-                    sampledColor = candidate;
-                    foundVisible = true;
-                    break;
-                }
-                else if (sampledColor.a <= 0.0 && candidate.a > 0.0)
-                {
-                    sampledColor = candidate;
+                    visibleRgbSum += candidate.rgb * candidate.a;
+                    visibleAlphaSum += candidate.a;
                 }
             }
-            if (foundVisible)
-                break;
+        }
+        if (visibleAlphaSum > 0.0)
+        {
+            sampledColor = vec4(
+                visibleRgbSum / visibleAlphaSum,
+                max(totalColor.a / float(sampleCount), 1.0 / 31.0));
+        }
+        else
+        {
+            sampledColor = totalColor / float(sampleCount);
         }
     }
     captureLineValues[gid.y * 256u + gid.x] = packColor6A5(sampledColor);

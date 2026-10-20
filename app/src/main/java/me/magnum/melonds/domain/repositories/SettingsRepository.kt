@@ -196,4 +196,7 @@ interface SettingsRepository {
     fun setDualScreenCastEnabled(enabled: Boolean)
     fun isTurboMacrosEnabled(): Boolean
     fun isGyroMicEnabled(): Boolean
+    fun getVulkanCompositorMode(): Int
+    fun isVulkanThickHighResEdgesEnabled(): Boolean
+    fun isVulkanCompatAutoselectEnabled(): Boolean
 }

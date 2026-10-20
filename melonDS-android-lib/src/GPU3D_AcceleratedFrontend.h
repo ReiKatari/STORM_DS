@@ -130,6 +130,13 @@ struct AcceleratedSceneBuildConfig
     bool UseHiresCoordinates = false;
     s32 MaxFixedX = 0xFFFF;
     s32 MaxFixedY = 0xFFFF;
+    // OpenGL parity (GPU3D_OpenGL.cpp ResolveOpenGlVertexX/Y): when
+    // UseHiresCoordinates is set, snap every vertex (and the BetterPolygons centroid)
+    // to integer target pixels via (HiresPosition * Scale) >> 4 across all scales
+    // (at 1x this equals integer FinalPosition). Snapped scenes never apply the
+    // CoverageFix expansion: those pixel amounts are not expressed in DS pixels and
+    // the integer snapping already produces OpenGL-identical coverage.
+    bool SnapToTargetPixels = false;
     AcceleratedCoverageFixConfig CoverageFix{};
 };
 

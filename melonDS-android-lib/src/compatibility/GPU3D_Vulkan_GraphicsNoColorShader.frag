@@ -16,4 +16,6 @@ void main()
 
     if (WRITE_FRAG_DEPTH != 0u)
         gl_FragDepth = fDepth;
+    else
+        gl_FragDepth = gl_FragCoord.z;
 }

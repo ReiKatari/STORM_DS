@@ -38,8 +38,11 @@
 #include "net/MPInterface.h"
 #include "net/LAN.h"
 #include <arpa/inet.h>
+#include <fstream>
+#include <filesystem>
 
 #include "Platform.h"
+#include "VulkanRuntimeControls.h"
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
 #define MELONDS_ANDROID_DEBUG_BUILD 0
@@ -2680,6 +2683,94 @@ Java_me_magnum_melonds_MelonEmulator_getLanDiscoveredSessions(JNIEnv* env, jobje
         env->DeleteLocalRef(item);
     }
     return result;
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanCompositorMode(JNIEnv*, jclass, jint mode)
+{
+    MelonDSAndroid::VulkanRuntime::SetCompositorMode(static_cast<int>(mode));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanThickHighResEdges(JNIEnv*, jclass, jboolean enabled)
+{
+    MelonDSAndroid::VulkanRuntime::SetThickHighResEdges(enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanDebugViewMode(JNIEnv*, jclass, jint mode)
+{
+    MelonDSAndroid::VulkanRuntime::SetDebugView(static_cast<int>(mode));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_dumpVulkanDebugReport(JNIEnv* env, jclass, jstring outputDir)
+{
+    if (outputDir == nullptr)
+        return JNI_FALSE;
+
+    const char* rawDir = env->GetStringUTFChars(outputDir, nullptr);
+    if (rawDir == nullptr)
+        return JNI_FALSE;
+    std::string dirStr(rawDir);
+    env->ReleaseStringUTFChars(outputDir, rawDir);
+
+    std::error_code ec;
+    std::filesystem::create_directories(dirStr, ec);
+    const std::filesystem::path reportPath = std::filesystem::path(dirStr) / "vulkan_debug_report.json";
+
+    auto escapeJson = [](const std::string& input) -> std::string {
+        std::string out;
+        out.reserve(input.size() + 32);
+        for (unsigned char c : input)
+        {
+            switch (c)
+            {
+                case '\"': out += "\\\""; break;
+                case '\\': out += "\\\\"; break;
+                case '\b': out += "\\b"; break;
+                case '\f': out += "\\f"; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default:
+                    if (c < 0x20)
+                    {
+                        char hex[7];
+                        std::snprintf(hex, sizeof(hex), "\\u%04x", static_cast<unsigned>(c));
+                        out += hex;
+                    }
+                    else
+                    {
+                        out.push_back(static_cast<char>(c));
+                    }
+                    break;
+            }
+        }
+        return out;
+    };
+
+    const int compositorMode = static_cast<int>(MelonDSAndroid::VulkanRuntime::GetCompositorMode());
+    const bool thickEdges = MelonDSAndroid::VulkanRuntime::GetThickHighResEdges();
+    const int debugView = static_cast<int>(MelonDSAndroid::VulkanRuntime::GetDebugView());
+    const std::string diag = MelonDSAndroid::getDetailedEmulationDiagnostic();
+    const std::string frameMetaJson = MelonDSAndroid::captureCurrentSoftPackedFrameMetaJsonForDebug();
+
+    std::ofstream ofs(reportPath, std::ios::out | std::ios::trunc);
+    if (!ofs.is_open())
+        return JNI_FALSE;
+
+    ofs << "{\n"
+        << "  \"compositorMode\": " << compositorMode << ",\n"
+        << "  \"compositorModeName\": \"" << (compositorMode == 0 ? "precise" : "legacy") << "\",\n"
+        << "  \"thickHighResEdges\": " << (thickEdges ? "true" : "false") << ",\n"
+        << "  \"debugViewMode\": " << debugView << ",\n"
+        << "  \"frameIndex\": " << MelonDSAndroid::getCurrentFrameIndexForDebug() << ",\n"
+        << "  \"diagnostic\": \"" << escapeJson(diag) << "\",\n"
+        << "  \"softPackedFrameMeta\": " << (frameMetaJson.empty() ? "null" : frameMetaJson) << "\n"
+        << "}\n";
+    ofs.close();
+    return ofs.good() ? JNI_TRUE : JNI_FALSE;
 }
 
 } // extern "C"

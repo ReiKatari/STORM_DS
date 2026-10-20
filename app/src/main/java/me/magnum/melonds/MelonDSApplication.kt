@@ -294,16 +294,30 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                             runCatching { nandFile.delete() }
                         }
 
-                        if (currentDs == null || currentDs.contains("data/user/0") || currentDs.contains("files/bios")) {
-                            prefs.edit().putStringSet("bios_dir", setOf(android.net.Uri.fromFile(dsDir).toString())).apply()
-                        }
-                        if (currentDsi == null || currentDsi.contains("data/user/0") || currentDsi.contains("files/bios")) {
-                            prefs.edit().putStringSet("dsi_bios_dir", setOf(android.net.Uri.fromFile(dsiDir).toString())).apply()
-                        }
-                    }
+                        val hasDsBios = File(dsDir, "bios7.bin").let { it.exists() && it.length() > 0 } &&
+                                File(dsDir, "bios9.bin").let { it.exists() && it.length() > 0 } &&
+                                File(dsDir, "firmware.bin").let { it.exists() && it.length() > 0 }
+                        val hasDsiBios = File(dsiDir, "bios7.bin").let { it.exists() && it.length() > 0 } ||
+                                File(dsiDir, "bios7i.bin").let { it.exists() && it.length() > 0 } ||
+                                File(dsiDir, "dsi_bios7.bin").let { it.exists() && it.length() > 0 }
 
-                    if (!prefs.contains("use_custom_bios")) {
-                        prefs.edit().putBoolean("use_custom_bios", true).apply()
+                        if (hasDsBios && (currentDs == null || currentDs.contains("data/user/0") || currentDs.contains("files/bios"))) {
+                            prefs.edit().putStringSet("bios_dir", setOf(android.net.Uri.fromFile(dsDir).toString())).apply()
+                        } else if (!hasDsBios && currentDs != null && (currentDs.contains("STORM%20DS/bios") || currentDs.contains("STORM DS/bios") || currentDs.contains("files/bios"))) {
+                            prefs.edit().remove("bios_dir").apply()
+                        }
+
+                        if (hasDsiBios && (currentDsi == null || currentDsi.contains("data/user/0") || currentDsi.contains("files/bios"))) {
+                            prefs.edit().putStringSet("dsi_bios_dir", setOf(android.net.Uri.fromFile(dsiDir).toString())).apply()
+                        } else if (!hasDsiBios && currentDsi != null && (currentDsi.contains("STORM%20DS/bios") || currentDsi.contains("STORM DS/bios") || currentDsi.contains("files/bios"))) {
+                            prefs.edit().remove("dsi_bios_dir").apply()
+                        }
+
+                        if (!hasDsBios && !hasDsiBios && !isCustomDs && !isCustomDsi) {
+                            prefs.edit().putBoolean("use_custom_bios", false).apply()
+                        } else if (!prefs.contains("use_custom_bios")) {
+                            prefs.edit().putBoolean("use_custom_bios", hasDsBios || isCustomDs).apply()
+                        }
                     }
                     lastMigrationTime = System.currentTimeMillis()
                 } catch (e: Throwable) {

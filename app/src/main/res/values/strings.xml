@@ -1620,4 +1620,19 @@
     <string name="label_rom_config_dual_screen_preset">Dual screen layout preset</string>
     <string name="video_ai_upscale_sharpness_title">AI-Upscale and CAS sharpness (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Intensity of contrast-adaptive edge and text sharpening</string>
+    <string name="video_vulkan_compositor_mode_title">2D/3D compositor mode (Vulkan)</string>
+    <string name="video_vulkan_compositor_mode_precise">Precise (layer priorities and blending)</string>
+    <string name="video_vulkan_compositor_mode_legacy">Fast (Legacy)</string>
+    <string name="video_vulkan_thick_edges_title">Thickened high-resolution 3D edges</string>
+    <string name="video_vulkan_thick_edges_summary">Scales cel-shading edge outlines proportionally to internal resolution</string>
+    <string name="video_vulkan_compat_autoselect_title">Automatic game compatibility profiles (Vulkan)</string>
+    <string name="video_vulkan_compat_autoselect_summary">Automatically apply optimal renderer settings for known games</string>
+    <string name="vulkan_debug_view_mode_title">Vulkan layer debug view</string>
+    <string name="vulkan_debug_view_normal">Normal view</string>
+    <string name="vulkan_debug_view_only_3d">3D only</string>
+    <string name="vulkan_debug_view_only_2d">2D only</string>
+    <string name="vulkan_debug_view_composition_mask">Composition mask</string>
+    <string name="vulkan_debug_dump_report">Save Vulkan debug report</string>
+    <string name="vulkan_debug_dump_report_success">Vulkan debug report saved to %1$s</string>
+    <string name="vulkan_debug_dump_report_failed">Failed to save Vulkan debug report</string>
 </resources>

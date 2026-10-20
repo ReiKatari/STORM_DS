@@ -97,7 +97,7 @@ using Platform::LogLevel;
 
 namespace
 {
-constexpr u32 kPipelineCacheFileVersion = 5;
+constexpr u32 kPipelineCacheFileVersion = 6;
 constexpr u32 kVulkanDiagnosticDisablePassiveRepeatCoverageExpand = 1u << 0u;
 constexpr float kTriangleAreaEpsilon = 0.000001f;
 constexpr float kTileOverlapEpsilon = 0.00001f;
@@ -1392,7 +1392,8 @@ void VulkanRenderer3D::RenderFrameActiveBackend(GPU& gpu)
     const bool sourceAHasDominant2dReplay =
         gpu.GetRenderer2D().StructuredVulkan2DSourceACaptureHasDominant2DReplay();
     const bool structuredSourceACaptureCanStayHighres =
-        ActiveBackendMode == BackendMode::GraphicsHardware
+        UsesStructured2DMetadata()
+        && ActiveBackendMode == BackendMode::GraphicsHardware
         && captureMode == 0u
         && !captureSource3d
         && bg0Uses3d
@@ -2496,7 +2497,8 @@ void VulkanRenderer3D::BlitActiveBackend(const GPU& gpu)
     const bool sourceAHasDominant2dReplay =
         gpu.GetRenderer2D().StructuredVulkan2DSourceACaptureHasDominant2DReplay();
     const bool structuredSourceACaptureCanStayHighres =
-        captureMode == 0u
+        UsesStructured2DMetadata()
+        && captureMode == 0u
         && !captureSource3d
         && bg0Uses3d
         && sourceAContributes
@@ -12919,7 +12921,8 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     pushConstants.clearColor = rgbaColor;
     pushConstants.clearDepth = clearDepth;
     pushConstants.triangleCount = static_cast<u32>(Triangles.size());
-    pushConstants.dispCnt = dispCnt;
+    pushConstants.dispCnt = (dispCnt & 0xFFFFu)
+        | ((MelonDSAndroid::VulkanRuntime::GetThickHighResEdges() && ScaleFactor > 1) ? (1u << 16u) : 0u);
     pushConstants.alphaRef = alphaRef;
     pushConstants.fogColor = fogColor;
     pushConstants.fogOffset = fogOffset;
@@ -19831,6 +19834,8 @@ void VulkanRenderer3D::buildTriangleList(GPU& gpu)
     // Keep Vulkan geometry in subpixel space even at 1x. Integer-snapped FinalPosition
     // opens visible cracks on repeat-textured floors once the passive coverage expand is disabled.
     const bool useHiresCoordinates = true;
+    const bool snapToTargetPixels = false;
+    const int safeScale = std::max(1, ScaleFactor);
     const bool textureMapsEnabled = (gpu.GPU3D.RenderDispCnt & (1u << 0)) != 0;
     const bool disablePassiveRepeatCoverageExpand =
         (MelonDSAndroid::getVulkanDiagnosticFlags() & kVulkanDiagnosticDisablePassiveRepeatCoverageExpand) != 0u;
@@ -19838,12 +19843,18 @@ void VulkanRenderer3D::buildTriangleList(GPU& gpu)
 
     const auto resolveVertexX = [&](const Vertex* vertex) -> float {
         const s32 xFixed = ResolveAcceleratedVertexFixedX(*vertex, ScaleFactor, useHiresCoordinates);
-        return std::clamp(static_cast<float>(xFixed) * (1.0f / 16.0f), 0.0f, maxTargetX);
+        const float xPx = snapToTargetPixels
+            ? static_cast<float>(xFixed >> 4)
+            : static_cast<float>(xFixed) * (1.0f / 16.0f);
+        return std::clamp(xPx, 0.0f, maxTargetX);
     };
 
     const auto resolveVertexY = [&](const Vertex* vertex) -> float {
         const s32 yFixed = ResolveAcceleratedVertexFixedY(*vertex, ScaleFactor, useHiresCoordinates);
-        return std::clamp(static_cast<float>(yFixed) * (1.0f / 16.0f), 0.0f, maxTargetY);
+        const float yPx = snapToTargetPixels
+            ? static_cast<float>(yFixed >> 4)
+            : static_cast<float>(yFixed) * (1.0f / 16.0f);
+        return std::clamp(yPx, 0.0f, maxTargetY);
     };
 
     const auto to8From6 = [](u32 c6) -> u32 {
@@ -19887,16 +19898,18 @@ void VulkanRenderer3D::buildTriangleList(GPU& gpu)
             continue;
         }
 
-        const AcceleratedCoverageFixState coverageFixState = ResolveAcceleratedCoverageFix(
-            *polygon,
-            AcceleratedCoverageFixConfig{
-                CoverageFixEnabled,
-                CoverageFixPx,
-                CoverageFixApplyRepeat,
-                CoverageFixApplyClamp,
-                PassiveCoverageFixRepeatPx,
-                disablePassiveRepeatCoverageExpand,
-            });
+        const AcceleratedCoverageFixState coverageFixState = snapToTargetPixels
+            ? AcceleratedCoverageFixState{}
+            : ResolveAcceleratedCoverageFix(
+                *polygon,
+                AcceleratedCoverageFixConfig{
+                    CoverageFixEnabled,
+                    CoverageFixPx,
+                    CoverageFixApplyRepeat,
+                    CoverageFixApplyClamp,
+                    PassiveCoverageFixRepeatPx,
+                    disablePassiveRepeatCoverageExpand,
+                });
         const float effectiveCoverageFixPx = coverageFixState.EffectivePx;
         const float effectiveCoverageDepthBias =
             coverageFixState.ApplyUserFix ? coverageDepthBias : 0.0f;
@@ -20129,8 +20142,14 @@ void VulkanRenderer3D::buildTriangleList(GPU& gpu)
             TriangleVertexData centerVertex{};
             centerXFixed /= validVertexCount;
             centerYFixed /= validVertexCount;
-            centerVertex.x = std::clamp((static_cast<float>(centerXFixed) * scale) * (1.0f / 16.0f), 0.0f, maxTargetX);
-            centerVertex.y = std::clamp((static_cast<float>(centerYFixed) * scale) * (1.0f / 16.0f), 0.0f, maxTargetY);
+            const float centerXPx = snapToTargetPixels
+                ? static_cast<float>((static_cast<s32>(centerXFixed) * safeScale) >> 4)
+                : (static_cast<float>(centerXFixed) * scale) * (1.0f / 16.0f);
+            const float centerYPx = snapToTargetPixels
+                ? static_cast<float>((static_cast<s32>(centerYFixed) * safeScale) >> 4)
+                : (static_cast<float>(centerYFixed) * scale) * (1.0f / 16.0f);
+            centerVertex.x = std::clamp(centerXPx, 0.0f, maxTargetX);
+            centerVertex.y = std::clamp(centerYPx, 0.0f, maxTargetY);
             centerVertex.w = 1.0f / centerReciprocalW;
             centerVertex.wRaw = std::max<u32>(1u, static_cast<u32>(centerVertex.w));
 

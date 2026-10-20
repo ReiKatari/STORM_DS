@@ -55,28 +55,30 @@ static char* duplicateAndDecodeJavaUriString(JNIEnv* env, jobject uriObj, jmetho
     if (path.rfind("file://", 0) == 0)
     {
         path = path.substr(7);
-    }
-    std::string decoded;
-    decoded.reserve(path.length());
-    for (size_t i = 0; i < path.length(); ++i)
-    {
-        if (path[i] == '%' && i + 2 < path.length())
+        std::string decoded;
+        decoded.reserve(path.length());
+        for (size_t i = 0; i < path.length(); ++i)
         {
-            int val = 0;
-            std::istringstream is(path.substr(i + 1, 2));
-            if (is >> std::hex >> val)
+            if (path[i] == '%' && i + 2 < path.length())
             {
-                decoded += static_cast<char>(val);
-                i += 2;
-                continue;
+                int val = 0;
+                std::istringstream is(path.substr(i + 1, 2));
+                if (is >> std::hex >> val)
+                {
+                    decoded += static_cast<char>(val);
+                    i += 2;
+                    continue;
+                }
             }
+            decoded += path[i];
         }
-        decoded += path[i];
+        path = std::move(decoded);
     }
-    char* copy = static_cast<char*>(std::malloc(decoded.length() + 1));
+
+    char* copy = static_cast<char*>(std::malloc(path.length() + 1));
     if (copy != nullptr)
     {
-        std::memcpy(copy, decoded.c_str(), decoded.length() + 1);
+        std::memcpy(copy, path.c_str(), path.length() + 1);
     }
     return copy;
 }

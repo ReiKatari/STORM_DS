@@ -33,6 +33,7 @@
 #include "Platform.h"
 #include "RomDecryptor.h"
 #include "SDCardArgsBuilder.h"
+#include "VulkanRuntimeControls.h"
 
 using namespace std;
 using namespace melonDS;
@@ -1692,8 +1693,14 @@ bool MelonInstance::loadRom(std::string romPath, std::string sramPath)
     };
 
     // In-memory transparent Modcrypt decryption and compatibility patching for DSi / DSiWare ROMs
-    MelonDSAndroid::RomDecryptor::ApplyCompatibilityPatches(romData.get(), (size_t) romFileLength);
-    MelonDSAndroid::RomDecryptor::DecryptRomBuffer(romData.get(), (size_t) romFileLength);
+    const bool isDsiWareHeader = romFileLength >= 0x240
+        && (romData[0x12] == 0x03
+            || (romData[0x234] == 0x04 && romData[0x235] == 0x00 && romData[0x236] == 0x03 && romData[0x237] == 0x00));
+    if (consoleType == 1 || isDsiWareHeader)
+    {
+        MelonDSAndroid::RomDecryptor::ApplyCompatibilityPatches(romData.get(), (size_t) romFileLength);
+        MelonDSAndroid::RomDecryptor::DecryptRomBuffer(romData.get(), (size_t) romFileLength);
+    }
 
     auto cart = NDSCart::ParseROM(std::move(romData), romFileLength, this, std::move(cartargs));
     if (!cart)
@@ -2655,7 +2662,8 @@ u32 MelonInstance::runFrame()
     const bool useAsyncFrameTail =
         asyncFrameTailEnabled
         && currentRenderer == Renderer::Vulkan
-        && UsesVulkanFastPath(vulkanSessionProfile.get());
+        && UsesVulkanFastPath(vulkanSessionProfile.get())
+        && VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Legacy;
     if (useAsyncFrameTail)
     {
         {
@@ -3112,7 +3120,7 @@ bool MelonInstance::presentVulkanFrame(
         !fastForwardActive
         && graphicsHardwareActive
         && !needsReusablePreviousFrame
-        && deviceProfile.IsAdreno;
+        && (deviceProfile.IsAdreno || deviceProfile.IsArmMali);
     const FrameQueuePolicy deferFrameQueuePolicy = [&]() -> FrameQueuePolicy {
         if (!fastForwardActive)
             return frameQueuePolicy;

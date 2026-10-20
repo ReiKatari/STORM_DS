@@ -148,6 +148,7 @@ public:
     static u32 PageSize;
     static u32 PageShift;
 private:
+    friend class ARMJIT;
     friend class Compiler;
     struct Mapping
     {

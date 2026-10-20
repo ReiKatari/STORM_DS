@@ -475,7 +475,7 @@ ARMJIT::ARMJIT(melonDS::NDS& nds, std::optional<JITArgs> jit) noexcept :
         MaxBlockSize(jit.has_value() ? std::clamp(jit->MaxBlockSize, 1u, 128u) : 64),
         LiteralOptimizations(jit.has_value() ? jit->LiteralOptimizations : false),
         BranchOptimizations(jit.has_value() ? jit->BranchOptimizations : false),
-        FastMemory((jit.has_value() ? jit->FastMemory : false) && ARMJIT_Memory::IsFastMemSupported()),
+        FastMemory((jit.has_value() ? jit->FastMemory : false) && ARMJIT_Memory::IsFastMemSupported() && Memory.FastMem9Start != nullptr),
         HgEngineFix(jit.has_value() ? jit->HgEngineFix : false)
 {}
 
@@ -520,7 +520,7 @@ void ARMJIT::RetireJitBlock(JitBlock* block) noexcept
 
 void ARMJIT::SetJITArgs(JITArgs args) noexcept
 {
-    args.FastMemory = args.FastMemory && ARMJIT_Memory::IsFastMemSupported();
+    args.FastMemory = args.FastMemory && ARMJIT_Memory::IsFastMemSupported() && Memory.FastMem9Start != nullptr;
     args.MaxBlockSize = std::clamp(args.MaxBlockSize, 1u, 128u);
 
     if (MaxBlockSize != args.MaxBlockSize
@@ -594,24 +594,25 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
         map.erase(existingBlockIt);
     }
 
-    FetchedInstr instrs[MaxBlockSize];
+    const u32 maxExpandedInstrs = MaxBlockSize * 2;
+    FetchedInstr instrs[maxExpandedInstrs];
     int i = 0;
     u32 r15 = cpu->R[15];
 
-    u32 addressRanges[MaxBlockSize];
-    u32 addressMasks[MaxBlockSize];
-    memset(addressMasks, 0, MaxBlockSize * sizeof(u32));
+    u32 addressRanges[maxExpandedInstrs];
+    u32 addressMasks[maxExpandedInstrs];
+    memset(addressMasks, 0, maxExpandedInstrs * sizeof(u32));
     u32 numAddressRanges = 0;
 
     u32 numLiterals = 0;
-    u32 literalLoadAddrs[MaxBlockSize];
+    u32 literalLoadAddrs[maxExpandedInstrs];
     // they are going to be hashed
-    u32 literalValues[MaxBlockSize];
-    u32 instrValues[MaxBlockSize];
+    u32 literalValues[maxExpandedInstrs];
+    u32 instrValues[maxExpandedInstrs];
     // due to instruction merging i might not reflect the amount of actual instructions
     u32 numInstrs = 0;
 
-    u32 writeAddrs[MaxBlockSize];
+    u32 writeAddrs[maxExpandedInstrs];
     u32 numWriteAddrs = 0, writeAddrsTranslated = 0;
 
     cpu->FillPipeline();
@@ -640,7 +641,8 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
         nextInstrAddr[1] = r15;
         JIT_DEBUGPRINT("instr %08x %x\n", instrs[i].Instr & (thumb ? 0xFFFF : ~0), instrs[i].Addr);
 
-        instrValues[numInstrs++] = instrs[i].Instr;
+        if (numInstrs < maxExpandedInstrs)
+            instrValues[numInstrs++] = instrs[i].Instr;
 
         u32 translatedAddr = LocaliseCodeAddress(cpu->Num, instrs[i].Addr);
         if (!translatedAddr)
@@ -800,10 +802,10 @@ void ARMJIT::CompileBlock(ARM* cpu) noexcept
 
                 if (cond <= 0xE && target <= instrs[i].Addr && target >= lastSegmentStart)
                 {
-                    // Detect both conditional polling idle loops (cond < 0xE) and
-                    // unconditional IRQ wait spinloops (cond == 0xE, e.g. loop: B loop)
+                    // we might have an idle loop
                     u32 backwardsOffset = (instrs[i].Addr - target) / (thumb ? 2 : 4);
-                    if (IsIdleLoop(thumb, &instrs[i - backwardsOffset], backwardsOffset + 1))
+                    if (backwardsOffset <= static_cast<u32>(i)
+                        && IsIdleLoop(thumb, &instrs[i - backwardsOffset], backwardsOffset + 1))
                     {
                         instrs[i].BranchFlags |= branch_IdleBranch;
                         JIT_DEBUGPRINT("found %s idle loop %d in block %08x\n", thumb ? "thumb" : "arm", cpu->Num, blockAddr);

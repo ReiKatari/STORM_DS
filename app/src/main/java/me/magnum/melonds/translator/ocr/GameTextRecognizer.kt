@@ -629,6 +629,7 @@ class GameTextRecognizer {
                     sourceLang.startsWith("ko", ignoreCase = true)
 
         val rawBlocks = mutableListOf<TranslatedTextBlock>()
+        val rawLineHeights = mutableListOf<Float>()
         val imgWidth = bitmap.width.toFloat()
         val imgHeight = bitmap.height.toFloat()
 
@@ -642,11 +643,10 @@ class GameTextRecognizer {
             }
             if (unionBox.isEmpty) continue
 
-            val joinedRawText = if (isCjk) {
-                validLines.joinToString("") { it.text.trim() }
-            } else {
-                validLines.joinToString(" ") { it.text.trim() }
-            }
+            val joinedRawText = DialogueSentenceAssembler.joinFragments(
+                validLines.map { it.text.trim() },
+                isCjk
+            )
 
             val correctedText = SmartWordCorrector.correctText(joinedRawText, sourceLang)
             if (correctedText.isNotBlank()) {
@@ -669,6 +669,13 @@ class GameTextRecognizer {
                         isCjk = isCjk
                     )
                 )
+                val lineHeightsPx = validLines.mapNotNull { it.boundingBox?.height()?.toFloat() }
+                val singleLineHeightPx = if (lineHeightsPx.isNotEmpty()) {
+                    lineHeightsPx.maxOrNull() ?: unionBox.height().toFloat()
+                } else {
+                    unionBox.height().toFloat() / validLines.size
+                }
+                rawLineHeights.add((singleLineHeightPx / imgHeight).coerceIn(0.001f, 1f))
             }
         }
 
@@ -676,53 +683,83 @@ class GameTextRecognizer {
             return rawBlocks
         }
 
-        // Smart contiguous dialogue block clustering:
-        // Merge vertically adjacent lines belonging to the same speech bubble/dialogue box
-        rawBlocks.sortBy { it.boundingBox.top }
-        val clusteredBlocks = mutableListOf<TranslatedTextBlock>()
+        // Sentence-aware dialogue clustering:
+        // merge lines/blocks of the same dialogue box so a sentence wrapped by the game
+        // is translated as a whole instead of piece by piece.
+        val aspect = if (imgWidth > 0f) imgHeight / imgWidth else 1f
+        val order = rawBlocks.indices.sortedWith(
+            compareBy<Int> { rawBlocks[it].boundingBox.top }.thenBy { rawBlocks[it].boundingBox.left }
+        )
+        val clusters = mutableListOf<OcrCluster>()
 
-        for (curr in rawBlocks) {
-            val prev = clusteredBlocks.lastOrNull()
-            if (prev != null && shouldClusterBlocks(prev, curr, isCjk)) {
-                clusteredBlocks[clusteredBlocks.size - 1] = mergeBlocks(prev, curr, isCjk)
+        for (index in order) {
+            val curr = rawBlocks[index]
+            val currLineHeight = rawLineHeights.getOrElse(index) { curr.boundingBox.height() }
+            var target: OcrCluster? = null
+            for (i in clusters.indices.reversed()) {
+                val candidate = clusters[i]
+                if (shouldClusterBlocks(candidate, curr, currLineHeight, isCjk, aspect)) {
+                    target = candidate
+                    break
+                }
+                // Clusters far above can no longer receive lines.
+                if (curr.boundingBox.top - candidate.block.boundingBox.bottom > candidate.lineHeight * 3f) break
+            }
+            if (target != null) {
+                target.block = mergeBlocks(target.block, curr, isCjk)
+                target.lineHeight = max(target.lineHeight, currLineHeight)
             } else {
-                clusteredBlocks.add(curr)
+                clusters.add(OcrCluster(curr, currLineHeight))
             }
         }
 
-        return clusteredBlocks
+        return clusters.map { it.block }
     }
 
-    private fun shouldClusterBlocks(a: TranslatedTextBlock, b: TranslatedTextBlock, isCjk: Boolean): Boolean {
-        // Vertical adjacency: b must be directly below a with gap <= line height * 0.85
-        val maxLineH = max(a.boundingBox.height(), b.boundingBox.height())
+    private class OcrCluster(var block: TranslatedTextBlock, var lineHeight: Float)
+
+    private fun shouldClusterBlocks(
+        cluster: OcrCluster,
+        b: TranslatedTextBlock,
+        bLineHeight: Float,
+        isCjk: Boolean,
+        aspect: Float
+    ): Boolean {
+        val a = cluster.block
+        val lineH = max(cluster.lineHeight, bLineHeight)
+        val continues = DialogueSentenceAssembler.continuesSentence(a.originalText, b.originalText, isCjk)
+
+        // Vertical adjacency (measured in single-line heights, not in merged box heights).
         val verticalGap = b.boundingBox.top - a.boundingBox.bottom
-        if (verticalGap > maxLineH * 0.85f || verticalGap < -maxLineH * 0.5f) {
+        val maxGap = if (continues) lineH * 1.6f else lineH * 0.9f
+        if (verticalGap > maxGap || verticalGap < -lineH * 0.6f) {
             return false
         }
 
-        // Horizontal alignment/overlap: must share at least 50% horizontal span
+        // Horizontal relation: overlapping spans, shared left edge or shared centre (centred dialogue).
         val overlapLeft = max(a.boundingBox.left, b.boundingBox.left)
         val overlapRight = min(a.boundingBox.right, b.boundingBox.right)
         val overlapW = max(0f, overlapRight - overlapLeft)
         val minW = min(a.boundingBox.width(), b.boundingBox.width())
-        if (minW <= 0f || (overlapW / minW) < 0.50f) {
+        val alignTolerance = lineH * aspect * 1.5f
+        val overlaps = minW > 0f && (overlapW / minW) >= 0.5f
+        val leftAligned = kotlin.math.abs(a.boundingBox.left - b.boundingBox.left) <= alignTolerance
+        val centred = kotlin.math.abs(a.boundingBox.centerX() - b.boundingBox.centerX()) <= alignTolerance
+        if (!overlaps && !leftAligned && !centred) {
             return false
         }
 
-        // Background color consistency: dialogue box must have matching background
+        // Background colour consistency: same dialogue box. Short continuation fragments ("me.")
+        // sample less reliable backgrounds, so they get a wider tolerance.
         val dr = kotlin.math.abs(Color.red(a.backgroundColor) - Color.red(b.backgroundColor))
         val dg = kotlin.math.abs(Color.green(a.backgroundColor) - Color.green(b.backgroundColor))
         val db = kotlin.math.abs(Color.blue(a.backgroundColor) - Color.blue(b.backgroundColor))
-        return (dr + dg + db) < 85
+        val colourTolerance = if (continues) 170 else 85
+        return (dr + dg + db) < colourTolerance
     }
 
     private fun mergeBlocks(a: TranslatedTextBlock, b: TranslatedTextBlock, isCjk: Boolean): TranslatedTextBlock {
-        val mergedText = if (isCjk) {
-            "${a.originalText}${b.originalText}"
-        } else {
-            "${a.originalText} ${b.originalText}"
-        }
+        val mergedText = DialogueSentenceAssembler.joinFragments(listOf(a.originalText, b.originalText), isCjk)
         val mergedBox = RectF(
             min(a.boundingBox.left, b.boundingBox.left),
             min(a.boundingBox.top, b.boundingBox.top),
@@ -759,23 +796,30 @@ class GameTextRecognizer {
         val r = (box.right + padX).coerceIn(0, w - 1)
         val b = (box.bottom + padY).coerceIn(0, h - 1)
 
-        val cornerPixels = listOf(
-            bitmap.getPixel(l, t),
-            bitmap.getPixel(r, t),
-            bitmap.getPixel(l, b),
-            bitmap.getPixel(r, b)
-        )
-
-        var totalR = 0L
-        var totalG = 0L
-        var totalB = 0L
-        for (c in cornerPixels) {
-            totalR += Color.red(c)
-            totalG += Color.green(c)
-            totalB += Color.blue(c)
+        val samplesPerSide = 8
+        val reds = ArrayList<Int>(samplesPerSide * 4)
+        val greens = ArrayList<Int>(samplesPerSide * 4)
+        val blues = ArrayList<Int>(samplesPerSide * 4)
+        fun addSample(x: Int, y: Int) {
+            val c = bitmap.getPixel(x.coerceIn(0, w - 1), y.coerceIn(0, h - 1))
+            reds += Color.red(c)
+            greens += Color.green(c)
+            blues += Color.blue(c)
         }
-        val count = cornerPixels.size.coerceAtLeast(1)
-        return Color.rgb((totalR / count).toInt(), (totalG / count).toInt(), (totalB / count).toInt())
+        for (i in 0 until samplesPerSide) {
+            val fx = l + (r - l) * i / (samplesPerSide - 1).coerceAtLeast(1)
+            val fy = t + (b - t) * i / (samplesPerSide - 1).coerceAtLeast(1)
+            addSample(fx, t)
+            addSample(fx, b)
+            addSample(l, fy)
+            addSample(r, fy)
+        }
+        fun median(values: MutableList<Int>): Int {
+            if (values.isEmpty()) return 0
+            values.sort()
+            return values[values.size / 2]
+        }
+        return Color.rgb(median(reds), median(greens), median(blues))
     }
 
     private fun determineBestTextColor(bgColor: Int): Int {

@@ -37,12 +37,13 @@ git clone --recurse-submodules https://github.com/ReiKatari/STORM_DS.git
 # Переход в каталог проекта
 cd STORM_DS
 
-# Сборка релизного пакета APK
-./gradlew assembleGitHubProdRelease
+# Сборка релизных пакетов APK
+./gradlew assembleGitHubProdRelease assemblePlayStoreProdRelease
 ```
 
-После завершения сборки исполняемый пакет APK будет сформирован по пути:
-`app/build/outputs/apk/gitHubProd/release/STORM_DS_6.5.0.apk`
+После завершения сборки исполняемые пакеты APK будут сформированы для установки:
+- `STORM_DS_6.6.0.apk` — основная версия с поддержкой пользовательских драйверов Qualcomm Adreno и Turnip (`libadrenotools`).
+- `STORM_DS_6.6.0_LEGACY.apk` — универсальная версия повышенной совместимости без `libadrenotools`.
 
 ## **Благодарности**
 - **SapphireRhodonite (автор WatermelonDS)** — за создание эмулятора WatermelonDS, послужившего основой форка, разработку высокопроизводительного порта на Android, аппаратный рендерер Vulkan, внедрение шейдерного конвейера librashader и инновационный интерфейс.

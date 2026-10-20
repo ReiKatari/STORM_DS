@@ -23,6 +23,29 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
+        <ListPreference
+                android:key="video_vulkan_compositor_mode"
+                android:title="@string/video_vulkan_compositor_mode_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_vulkan_compositor_mode_options"
+                android:entryValues="@array/video_vulkan_compositor_mode_values"
+                android:defaultValue="precise" />
+
+        <SwitchPreferenceCompat
+                android:key="video_vulkan_thick_edges"
+                android:title="@string/video_vulkan_thick_edges_title"
+                android:summary="@string/video_vulkan_thick_edges_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+                android:key="video_vulkan_compat_autoselect"
+                android:title="@string/video_vulkan_compat_autoselect_title"
+                android:summary="@string/video_vulkan_compat_autoselect_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="true" />
+
         <me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
                 android:key="video_internal_resolution"
                 android:title="@string/internal_resolution"

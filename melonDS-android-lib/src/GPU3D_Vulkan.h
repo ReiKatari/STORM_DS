@@ -27,6 +27,7 @@
 
 #include "GPU3D.h"
 #include "VulkanPipelineProfile.h"
+#include "VulkanRuntimeControls.h"
 #include "GPU3D_AcceleratedFrontend.h"
 #include "GPU3D_TexcacheVulkan.h"
 #include "VulkanPerfStats.h"
@@ -71,7 +72,10 @@ public:
     void SetCaptureScreenSwapHint(bool screenSwap, u32 captureCnt, u32 displayCnt) override;
     [[nodiscard]] bool GetLastServedCaptureSourceIdentity(
         CaptureSourceIdentity& outIdentity) const noexcept override;
-    [[nodiscard]] bool UsesStructured2DMetadata() const noexcept override { return ActiveBackendMode == BackendMode::GraphicsHardware; }
+    [[nodiscard]] bool UsesStructured2DMetadata() const noexcept override
+    {
+        return ActiveBackendMode == BackendMode::GraphicsHardware;
+    }
     void Blit(const GPU& gpu) override;
     void Stop(const GPU& gpu) override;
 

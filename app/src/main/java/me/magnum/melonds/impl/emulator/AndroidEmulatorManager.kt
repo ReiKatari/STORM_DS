@@ -306,8 +306,8 @@ class AndroidEmulatorManager(
     private suspend fun resolvePlayableRomUri(rom: Rom): Uri? {
         val isArchive = rom.fileName.endsWith(".zip", ignoreCase = true) || rom.fileName.endsWith(".7z", ignoreCase = true)
         return if (isArchive) {
-            val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return null
-            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
+            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
+                ?: DocumentFile.fromSingleUri(context, rom.uri)?.let(romFileProcessorFactory::getFileRomProcessorForDocument)
             fileRomProcessor?.getRealRomUri(rom)
         } else {
             rom.uri
@@ -371,9 +371,10 @@ class AndroidEmulatorManager(
                 // Fast-path: If the ROM is a standard NDS/DSi file (not an archive), bypass slow DocumentFile SAF queries
                 val isArchive = rom.fileName.endsWith(".zip", ignoreCase = true) || rom.fileName.endsWith(".7z", ignoreCase = true)
                 val romUri = if (isArchive) {
-                    val fileRomDocument = DocumentFile.fromSingleUri(context, rom.uri) ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
-                    val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(fileRomDocument)
-                    fileRomProcessor?.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
+                    val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
+                        ?: DocumentFile.fromSingleUri(context, rom.uri)?.let(romFileProcessorFactory::getFileRomProcessorForDocument)
+                        ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
+                    fileRomProcessor.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
                 } else {
                     rom.uri
                 }
@@ -1424,7 +1425,11 @@ class AndroidEmulatorManager(
         } else {
             baseConfiguration.consoleType
         }
-        val mustUseCustomBios = (consoleType == ConsoleType.DSi) || baseConfiguration.useCustomBios || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT)
+        val hasValidDsCustomBios = baseConfiguration.dsBios7Uri != null &&
+            baseConfiguration.dsBios9Uri != null &&
+            baseConfiguration.dsFirmwareUri != null
+        val mustUseCustomBios = (consoleType == ConsoleType.DSi) ||
+            ((baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT) && hasValidDsCustomBios)
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,

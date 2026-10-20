@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "yugioh_wc_5ds",
+      "title": "Yu-Gi-Oh! World Championship 2007 / 2008 / 5D's",
+      "gameCodes": ["AY7", "YG8", "Y5D", "BYX", "BYG", "AY9", "YF4", "BYY"],
+      "titleKeywords": [
+        "yu-gi-oh! world championship",
+        "yu-gi-oh! 5d's",
+        "yugioh world championship",
+        "yugioh 5d"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Fixes dual-screen 3D card field, monster hologram alpha blending, and 2D/3D priority ordering"
+    },
+    {
+      "id": "golden_sun_dark_dawn",
+      "title": "Golden Sun: Dark Dawn",
+      "gameCodes": ["B6Z", "B6ZE", "B6ZP", "B6ZJ"],
+      "titleKeywords": [
+        "golden sun: dark dawn",
+        "golden sun dark dawn"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Fixes Djinn summon 2D/3D layer blending, shadow overlays, and psynergy effects"
+    },
+    {
+      "id": "okamiden",
+      "title": "Okamiden",
+      "gameCodes": ["B3T", "B3TE", "B3TP", "B3TJ"],
+      "titleKeywords": [
+        "okamiden"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": true,
+      "notes": "Preserves celestial brush 2D/3D composition and scales cel-shaded ink outlines at high internal resolutions"
+    },
+    {
+      "id": "zelda_ds",
+      "title": "The Legend of Zelda: Phantom Hourglass and Spirit Tracks",
+      "gameCodes": ["AZE", "AZEE", "AZEP", "AZEJ", "BKI", "BKIE", "BKIP", "BKIJ"],
+      "titleKeywords": [
+        "phantom hourglass",
+        "spirit tracks"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": true,
+      "notes": "Scales toon-shaded edge outlines at high internal resolutions and preserves dual-screen boss composition"
+    },
+    {
+      "id": "pokemon_gen4_gen5",
+      "title": "Pokemon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black and White",
+      "gameCodes": ["ADA", "APA", "CPU", "IPK", "IPG", "IRB", "IRA", "IRE", "IRD"],
+      "titleKeywords": [
+        "pokemon diamond",
+        "pokemon pearl",
+        "pokemon platinum",
+        "pokemon heartgold",
+        "pokemon soulsilver",
+        "pokemon black",
+        "pokemon white"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Ensures accurate battle textbox, weather particle, and distortion world 2D/3D layer priorities"
+    },
+    {
+      "id": "dragon_quest_ix",
+      "title": "Dragon Quest IX: Sentinels of the Starry Skies",
+      "gameCodes": ["YQU", "YQUE", "YQUP", "YQUJ", "A4V", "YIV", "YDQ"],
+      "titleKeywords": [
+        "dragon quest ix",
+        "sentinels of the starry skies"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": true,
+      "notes": "Scales cel-shaded character outlines at high internal resolutions and preserves UI/menu 3D priority"
+    },
+    {
+      "id": "chrono_trigger",
+      "title": "Chrono Trigger",
+      "gameCodes": ["YCT", "YCTE", "YCTP", "YCTJ"],
+      "titleKeywords": [
+        "chrono trigger"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Fixes time portal and tech effect 2D/3D alpha blending"
+    },
+    {
+      "id": "mario_and_luigi",
+      "title": "Mario and Luigi: Partners in Time and Bowser's Inside Story",
+      "gameCodes": ["ARM", "CLJ"],
+      "titleKeywords": [
+        "partners in time",
+        "bowser's inside story",
+        "bowsers inside story"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Fixes giant battle and dual-screen 3D attack priority transitions"
+    },
+    {
+      "id": "solatorobo",
+      "title": "Solatorobo: Red the Hunter",
+      "gameCodes": ["B2S", "B2SE", "B2SP", "B2SJ"],
+      "titleKeywords": [
+        "solatorobo"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": true,
+      "notes": "Scales anime cel-shaded mecha outlines and preserves 2D/3D sky island atmospheric blending"
+    },
+    {
+      "id": "jet_impulse_nanostray",
+      "title": "Jet Impulse and Nanostray 2",
+      "gameCodes": ["AJI", "AN2", "YN2"],
+      "titleKeywords": [
+        "jet impulse",
+        "nanostray"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Preserves 3D cockpit HUD and cloud layer alpha blending"
+    }
+  ]
+}

@@ -106,7 +106,9 @@ vec3 unpackFogColor()
 void main()
 {
     ivec2 coord = ivec2(gl_FragCoord.xy);
-    int scale = 1;
+    int scale = ((pc.dispCnt & (1u << 16u)) != 0u)
+        ? max(1, int(pc.width / 256u))
+        : 1;
 
     vec4 depth = texelFetch(DepthBuffer, coord, 0);
     vec4 attr = texelFetch(AttrBuffer, coord, 0);

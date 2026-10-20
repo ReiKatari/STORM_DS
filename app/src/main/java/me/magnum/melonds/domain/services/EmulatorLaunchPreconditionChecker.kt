@@ -82,9 +82,9 @@ class EmulatorLaunchPreconditionChecker(
         }
 
         val result = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
-        if (result.status != ConfigurationDirResult.Status.VALID && romTargetConsoleType == ConsoleType.DSi) {
-            // Direct DSi Boot support: native engine handles candidate path auto-discovery and synthetic fallback
-            return ConfigurationDirResult(ConsoleType.DSi, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
+        if (result.status != ConfigurationDirResult.Status.VALID) {
+            // Built-in FreeBIOS (DS) and Direct DSi Boot (DSi) handle missing custom BIOS files automatically
+            return ConfigurationDirResult(romTargetConsoleType, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
         return result
     }

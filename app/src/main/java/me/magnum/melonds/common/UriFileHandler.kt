@@ -22,8 +22,9 @@ class UriFileHandler(private val context: Context, private val uriHandler: UriHa
             isWriteMode = true
         }
 
-        if (uri.scheme == ContentResolver.SCHEME_FILE) {
-            val file = uri.path?.let(::File) ?: return FILE_NOT_FOUND
+        if (uri.scheme == ContentResolver.SCHEME_FILE || uri.scheme == null || uriString.startsWith("/")) {
+            val filePath = uri.path ?: uriString.removePrefix("file://")
+            val file = if (filePath.isNotEmpty()) File(filePath) else return FILE_NOT_FOUND
             return try {
                 if (isWriteMode) {
                     file.parentFile?.mkdirs()

@@ -157,9 +157,11 @@ struct CompatibilityPresenterPushConstants
     u32 bottomStructuredHandoffSuppress3d;
     float viewportWidth;
     float viewportHeight;
+    u32 compositorMode;
+    u32 debugView;
 };
 
-static_assert(sizeof(CompatibilityPresenterPushConstants) == 92u);
+static_assert(sizeof(CompatibilityPresenterPushConstants) == 100u);
 
 struct PrewarmedRetroArchChains
 {
@@ -4564,7 +4566,9 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
         && surfaceState.cachedDirectTopCarryRequired == inputs.directPresentTopCarryRequired
         && surfaceState.cachedDirectBottomCarryRequired == inputs.directPresentBottomCarryRequired
         && surfaceState.cachedDirectTopComposedCarryRequired == inputs.directPresentTopComposedCarryRequired
-        && surfaceState.cachedDirectBottomComposedCarryRequired == inputs.directPresentBottomComposedCarryRequired)
+        && surfaceState.cachedDirectBottomComposedCarryRequired == inputs.directPresentBottomComposedCarryRequired
+        && surfaceState.cachedCompositorMode == inputs.compositorMode
+        && surfaceState.cachedDebugView == inputs.debugView)
     {
         drawCalls = surfaceState.cachedDrawCalls;
         return true;
@@ -4741,6 +4745,8 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
         surfaceState.cachedDirectBottomCarryRequired = inputs.directPresentBottomCarryRequired;
         surfaceState.cachedDirectTopComposedCarryRequired = inputs.directPresentTopComposedCarryRequired;
         surfaceState.cachedDirectBottomComposedCarryRequired = inputs.directPresentBottomComposedCarryRequired;
+        surfaceState.cachedCompositorMode = inputs.compositorMode;
+        surfaceState.cachedDebugView = inputs.debugView;
         surfaceState.vertexBufferDirty = false;
         return true;
     }
@@ -5004,6 +5010,8 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
     surfaceState.cachedDirectBottomCarryRequired = inputs.directPresentBottomCarryRequired;
     surfaceState.cachedDirectTopComposedCarryRequired = inputs.directPresentTopComposedCarryRequired;
     surfaceState.cachedDirectBottomComposedCarryRequired = inputs.directPresentBottomComposedCarryRequired;
+    surfaceState.cachedCompositorMode = inputs.compositorMode;
+    surfaceState.cachedDebugView = inputs.debugView;
     surfaceState.vertexBufferDirty = false;
 
     return true;
@@ -5316,7 +5324,10 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         pushConstants.bottomComposedCarryRequired = inputs.directPresentBottomComposedCarryRequired ? 1u : 0u;
         pushConstants.topPackedDirectRequired = inputs.directPresentTopPackedRequired ? 1u : 0u;
         pushConstants.bottomPackedDirectRequired = inputs.directPresentBottomPackedRequired ? 1u : 0u;
-        pushConstants.alternatingLive3dPingPong = inputs.alternatingLive3dPingPong ? 1u : 0u;
+        pushConstants.alternatingLive3dPingPong =
+            (inputs.alternatingLive3dPingPong ? 1u : 0u)
+            | (inputs.compositorMode << 8u)
+            | (inputs.debugView << 16u);
         const bool replayImmediatePassiveTopCarry =
             inputs.topFullRegularComp7BottomPassiveComp2Phase
             && surfaceState.topComposedCarryWriterGeneration
@@ -5435,6 +5446,8 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
                     pushConstants.bottomStructuredHandoffSuppress3d,
                 .viewportWidth = pushConstants.viewportWidth,
                 .viewportHeight = pushConstants.viewportHeight,
+                .compositorMode = inputs.compositorMode,
+                .debugView = inputs.debugView,
             };
             vkCmdPushConstants(
                 surfaceState.commandBuffer,

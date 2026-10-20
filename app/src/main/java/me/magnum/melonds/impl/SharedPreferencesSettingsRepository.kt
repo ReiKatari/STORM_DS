@@ -27,9 +27,11 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.common.retroarch.RetroArchShaderPreset
 import me.magnum.melonds.common.retroarch.RetroArchShaderRootResolver
 import me.magnum.melonds.domain.model.RetroArchShaderSource
+import me.magnum.melonds.impl.vulkan.VulkanCompatibilityDatabase
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.AudioBitrate
 import me.magnum.melonds.domain.model.AudioInterpolation
@@ -468,6 +470,8 @@ class SharedPreferencesSettingsRepository(
             ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(stormDsBase, "dldi/dldi_sd.img").absolutePath
         }
 
+        applyVulkanRuntimeControls(gameCode = null, romName = null)
+
         return EmulatorConfiguration(
             useCustomBios(),
             showBootScreen(),
@@ -517,6 +521,7 @@ class SharedPreferencesSettingsRepository(
 
     override suspend fun getEmulatorConfiguration(romConfig: RomConfig): EmulatorConfiguration {
         val globalConfiguration = getEmulatorConfiguration()
+        applyVulkanRuntimeControls(gameCode = null, romName = romConfig.customName)
         return globalConfiguration.copy(
             rendererConfiguration = buildRomRendererConfiguration(
                 baseConfiguration = globalConfiguration.rendererConfiguration,
@@ -708,9 +713,12 @@ class SharedPreferencesSettingsRepository(
     override fun useCustomBios(): Boolean {
         val dsBiosDir = getDsBiosDirectory()
         val dsiBiosDir = getDsiBiosDirectory()
-        val explicitlyConfigured = (dsBiosDir != null && dsBiosDir.toString().isNotEmpty()) ||
+        val hasValidConfiguredDir = (dsBiosDir != null && dsBiosDir.toString().isNotEmpty()) ||
                 (dsiBiosDir != null && dsiBiosDir.toString().isNotEmpty())
-        return preferences.getBoolean("use_custom_bios", explicitlyConfigured)
+        if (!hasValidConfiguredDir) {
+            return false
+        }
+        return preferences.getBoolean("use_custom_bios", true)
     }
 
     override fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode {
@@ -746,7 +754,16 @@ class SharedPreferencesSettingsRepository(
     override fun getDsBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("bios_dir", null)?.firstOrNull()
         if (dirPreference != null && !dirPreference.contains("data/user/0") && !dirPreference.contains("files/bios")) {
-            return dirPreference.toUri()
+            val uri = dirPreference.toUri()
+            if (uri.scheme == "file" || uri.scheme == null) {
+                val path = uri.path ?: Uri.decode(dirPreference.removePrefix("file://"))
+                val dir = File(path)
+                if (dir.exists() && hasValidBiosFiles(dir, isDsi = false)) {
+                    return uri
+                }
+            } else {
+                return uri
+            }
         }
         val rootBase = getEmulatorBaseDirectory()
         val rootDir = File(rootBase, "bios/ds")
@@ -759,7 +776,16 @@ class SharedPreferencesSettingsRepository(
     override fun getDsiBiosDirectory(): Uri? {
         val dirPreference = preferences.getStringSet("dsi_bios_dir", null)?.firstOrNull()
         if (dirPreference != null && !dirPreference.contains("data/user/0") && !dirPreference.contains("files/bios")) {
-            return dirPreference.toUri()
+            val uri = dirPreference.toUri()
+            if (uri.scheme == "file" || uri.scheme == null) {
+                val path = uri.path ?: Uri.decode(dirPreference.removePrefix("file://"))
+                val dir = File(path)
+                if (dir.exists() && hasValidBiosFiles(dir, isDsi = true)) {
+                    return uri
+                }
+            } else {
+                return uri
+            }
         }
         val rootBase = getEmulatorBaseDirectory()
         val rootDir = File(rootBase, "bios/dsi")
@@ -2131,6 +2157,17 @@ class SharedPreferencesSettingsRepository(
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         preferenceSharedFlows[key]?.tryEmit(Unit)
+        when (key) {
+            "video_vulkan_compositor_mode" -> {
+                runCatching { MelonEmulator.setVulkanCompositorMode(getVulkanCompositorMode()) }
+            }
+            "video_vulkan_thick_edges" -> {
+                runCatching { MelonEmulator.setVulkanThickHighResEdges(isVulkanThickHighResEdgesEnabled()) }
+            }
+            "video_vulkan_compat_autoselect" -> {
+                applyVulkanRuntimeControls(gameCode = null, romName = null)
+            }
+        }
     }
 
     override fun observeRenderConfiguration(): Flow<RendererConfiguration> {
@@ -2283,5 +2320,34 @@ class SharedPreferencesSettingsRepository(
 
     override fun isGyroMicEnabled(): Boolean {
         return preferences.getBoolean("input_gyro_mic_enabled", false)
+    }
+
+    override fun getVulkanCompositorMode(): Int {
+        val raw = preferences.getString("video_vulkan_compositor_mode", "precise") ?: "precise"
+        return if (raw.equals("legacy", ignoreCase = true)) {
+            VulkanCompatibilityDatabase.COMPOSITOR_MODE_LEGACY
+        } else {
+            VulkanCompatibilityDatabase.COMPOSITOR_MODE_PRECISE
+        }
+    }
+
+    override fun isVulkanThickHighResEdgesEnabled(): Boolean {
+        return preferences.getBoolean("video_vulkan_thick_edges", false)
+    }
+
+    override fun isVulkanCompatAutoselectEnabled(): Boolean {
+        return preferences.getBoolean("video_vulkan_compat_autoselect", true)
+    }
+
+    private fun applyVulkanRuntimeControls(gameCode: String?, romName: String?, fileName: String? = null) {
+        VulkanCompatibilityDatabase.applyRuntimeControlsForRom(
+            context = context,
+            gameCode = gameCode,
+            romName = romName,
+            fileName = fileName,
+            autoselectEnabled = isVulkanCompatAutoselectEnabled(),
+            userCompositorMode = getVulkanCompositorMode(),
+            userThickEdges = isVulkanThickHighResEdgesEnabled(),
+        )
     }
 }
