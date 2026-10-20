@@ -336,20 +336,12 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
         getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
             vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2"));
     }
-    if (getPhysicalDeviceFeatures2 == nullptr)
-    {
-        getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-            vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2KHR"));
-    }
 
     if (getPhysicalDeviceFeatures2 != nullptr)
     {
         getPhysicalDeviceFeatures2(physicalDevice, &features2);
     }
-    else
-    {
-        vkGetPhysicalDeviceFeatures(physicalDevice, &features2.features);
-    }
+    vkGetPhysicalDeviceFeatures(physicalDevice, &features2.features);
 
     if (timelineFeatures.timelineSemaphore != VK_TRUE)
     {

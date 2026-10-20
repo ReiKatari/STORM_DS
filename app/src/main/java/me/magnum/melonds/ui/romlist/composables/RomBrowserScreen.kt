@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Surface
@@ -184,8 +185,9 @@ fun RomBrowserScreen(
         onRefresh()
     }
 
+    val isEffectivelyRefreshing = userRefreshPending || scanningStatus == RomScanningStatus.SCANNING
     val refreshState = rememberPullRefreshState(
-        refreshing = userRefreshPending,
+        refreshing = isEffectivelyRefreshing,
         onRefresh = handleRefreshWithScrollReset,
     )
 
@@ -431,7 +433,7 @@ fun RomBrowserScreen(
                             ) {
                                 if (state.entries.isEmpty()) {
                                     Column(modifier = Modifier.fillMaxSize()) {
-                                        EmptyState(filter = state.filter)
+                                        EmptyState(filter = state.filter, isScanning = isEffectivelyRefreshing)
                                     }
                                 } else {
                                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -505,7 +507,7 @@ fun RomBrowserScreen(
                                     }
                                 }
                                 PullRefreshIndicator(
-                                    refreshing = userRefreshPending,
+                                    refreshing = isEffectivelyRefreshing,
                                     state = refreshState,
                                     modifier = Modifier.align(Alignment.TopCenter),
                                     backgroundColor = colors.surface,
@@ -560,7 +562,7 @@ fun RomBrowserScreen(
                     ) {
                         if (state.entries.isEmpty() && !showContinueShelf) {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                EmptyState(filter = state.filter)
+                                EmptyState(filter = state.filter, isScanning = isEffectivelyRefreshing)
                             }
                         } else {
                             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -634,7 +636,7 @@ fun RomBrowserScreen(
                             }
                         }
                         PullRefreshIndicator(
-                            refreshing = userRefreshPending,
+                            refreshing = isEffectivelyRefreshing,
                             state = refreshState,
                             modifier = Modifier.align(Alignment.TopCenter),
                             backgroundColor = colors.surface,
@@ -1125,21 +1127,27 @@ private fun letterForIndex(alphabetIndex: Map<Char, Int>, currentIndex: Int): Ch
 }
 
 @Composable
-private fun EmptyState(filter: RomFilter) {
+private fun EmptyState(filter: RomFilter, isScanning: Boolean = false) {
     val colors = watermelon
     Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        val msg = when (filter) {
-            RomFilter.ALL -> stringResource(R.string.no_roms_found)
-            RomFilter.FAVORITES -> stringResource(R.string.rom_no_favorites)
-            RomFilter.DS_ONLY -> stringResource(R.string.rom_filter_ds_empty)
-            RomFilter.DSI_ENHANCED_ONLY -> stringResource(R.string.rom_filter_dsi_enhanced_empty)
-            RomFilter.DSIWARE_ONLY -> stringResource(R.string.rom_filter_dsiware_empty)
-            RomFilter.WITH_RETRO_ACHIEVEMENTS -> stringResource(R.string.rom_filter_retro_achievements_empty)
+        if (isScanning) {
+            CircularProgressIndicator(
+                color = colors.red,
+            )
+        } else {
+            val msg = when (filter) {
+                RomFilter.ALL -> stringResource(R.string.no_roms_found)
+                RomFilter.FAVORITES -> stringResource(R.string.rom_no_favorites)
+                RomFilter.DS_ONLY -> stringResource(R.string.rom_filter_ds_empty)
+                RomFilter.DSI_ENHANCED_ONLY -> stringResource(R.string.rom_filter_dsi_enhanced_empty)
+                RomFilter.DSIWARE_ONLY -> stringResource(R.string.rom_filter_dsiware_empty)
+                RomFilter.WITH_RETRO_ACHIEVEMENTS -> stringResource(R.string.rom_filter_retro_achievements_empty)
+            }
+            Text(
+                text = msg,
+                color = colors.text2,
+                textAlign = TextAlign.Center,
+            )
         }
-        Text(
-            text = msg,
-            color = colors.text2,
-            textAlign = TextAlign.Center,
-        )
     }
 }

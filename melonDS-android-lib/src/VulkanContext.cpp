@@ -487,23 +487,18 @@ bool VulkanContext::initializeLocked()
         VkPhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         deviceFeatures2.pNext = queryFeatureChainHead;
-        auto getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-            vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2"));
-        if (getPhysicalDeviceFeatures2 == nullptr)
+        PFN_vkGetPhysicalDeviceFeatures2 getPhysicalDeviceFeatures2 = nullptr;
+        if (isApiAtLeast(deviceProperties.apiVersion, 1, 1))
         {
             getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-                vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2KHR"));
+                vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2"));
         }
 
         if (getPhysicalDeviceFeatures2 != nullptr)
         {
             getPhysicalDeviceFeatures2(candidate, &deviceFeatures2);
         }
-        else
-        {
-            // Fallback for loaders exposing only Vulkan 1.0 symbols.
-            vkGetPhysicalDeviceFeatures(candidate, &deviceFeatures2.features);
-        }
+        vkGetPhysicalDeviceFeatures(candidate, &deviceFeatures2.features);
 
         const bool timelineFeatureAvailable = timelineFeaturesAvailable.timelineSemaphore == VK_TRUE;
         bool enableTimelineSemaphores =

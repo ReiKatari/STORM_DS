@@ -206,7 +206,7 @@ void main()
     }
     barrier();
 
-    ivec2 size = imageSize(accumulated);
+    ivec2 size = imageSize(newSnapshot);
     for (uint localY = gl_LocalInvocationID.y; localY < pc.scale; localY += kMaxBlockScale)
     {
         for (uint localX = gl_LocalInvocationID.x; localX < pc.scale; localX += kMaxBlockScale)

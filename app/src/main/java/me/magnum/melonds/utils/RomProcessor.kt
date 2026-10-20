@@ -39,15 +39,17 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68).toLong()
 
 			val unitCode = header[0x12].toInt() and 0xFF
+			val hasDsiHeader = (unitCode and 0x02) != 0
 			val gc0 = gameCode.getOrNull(0)
-			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
-			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
+			val categoryHigh = if (hasDsiHeader && header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
+			val categoryLow = if (hasDsiHeader && header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
 			val isDsiWareTitle = unitCode == 0x03 ||
-				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
-				categoryLow == 0x00030004 ||
-				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == '4')) ||
-				(gc0 == 'K' || gc0 == 'H' || gc0 == '4')
-			val isDsiEnhanced = !isDsiWareTitle && (unitCode and 0x02 != 0)
+				(hasDsiHeader && (
+					categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
+					categoryLow == 0x00030004 ||
+					gc0 == 'K' || gc0 == 'H'
+				))
+			val isDsiEnhanced = !isDsiWareTitle && hasDsiHeader
 
 			val arm9Buffer = ByteBuffer.allocate(arm9Size)
 			channel.position(arm9Offset)
@@ -112,15 +114,17 @@ object RomProcessor {
 			val bannerOffset = byteArrayToInt(header, 0x68)
 
 			val unitCode = header[0x12].toInt() and 0xFF
+			val hasDsiHeader = (unitCode and 0x02) != 0
 			val gc0 = gameCode.getOrNull(0)
-			val categoryHigh = if (header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
-			val categoryLow = if (header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
+			val categoryHigh = if (hasDsiHeader && header.size >= 0x238) byteArrayToInt(header, 0x234) else 0
+			val categoryLow = if (hasDsiHeader && header.size >= 0x234) byteArrayToInt(header, 0x230) else 0
 			val isDsiWareTitle = unitCode == 0x03 ||
-				categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
-				categoryLow == 0x00030004 ||
-				(unitCode and 0x02 != 0 && (gc0 == 'K' || gc0 == 'H' || gc0 == '4')) ||
-				(gc0 == 'K' || gc0 == 'H' || gc0 == '4')
-			val isDsiEnhanced = !isDsiWareTitle && (unitCode and 0x02 != 0)
+				(hasDsiHeader && (
+					categoryHigh == 0x00030004 || categoryHigh == 0x04000300 || categoryHigh == 0x00030005 ||
+					categoryLow == 0x00030004 ||
+					gc0 == 'K' || gc0 == 'H'
+				))
+			val isDsiEnhanced = !isDsiWareTitle && hasDsiHeader
 
 			var arm9Bootcode: ByteArray? = null
 			var arm7Bootcode: ByteArray? = null

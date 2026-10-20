@@ -25,7 +25,24 @@ abstract class BaseRomFileProcessorFactory(private val context: Context) : RomFi
 
     override fun getFileRomProcessorForDocument(romUri: Uri): RomFileProcessor? {
         val romDocument = DocumentFile.fromSingleUri(context, romUri)
-        val fileName = romDocument?.name ?: romUri.lastPathSegment ?: return null
-        return getFileRomProcessorForFileName(fileName)
+        val candidates = buildList {
+            romDocument?.name?.let { add(it) }
+            runCatching {
+                context.contentResolver.query(romUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                            cursor.getString(nameIndex)?.let { add(it) }
+                        }
+                    }
+                }
+            }
+            romUri.lastPathSegment?.let { add(it) }
+            romUri.path?.let { add(it) }
+        }
+        for (candidate in candidates) {
+            getFileRomProcessorForFileName(candidate)?.let { return it }
+        }
+        return getRomFileProcessorForFileExtension("nds")
     }
 }

@@ -323,7 +323,8 @@ class AndroidEmulatorManager(
         }
         val isArchive = rom.fileName.endsWith(".zip", ignoreCase = true) || rom.fileName.endsWith(".7z", ignoreCase = true)
         if (isArchive) {
-            return rom.isDsiWareTitle
+            val gc0 = rom.gameCode.getOrNull(0)
+            return rom.isDsiWareTitle && (gc0 == 'K' || gc0 == 'H')
         }
         return runCatching {
             context.contentResolver.openInputStream(rom.uri)?.use { stream ->
@@ -338,13 +339,18 @@ class AndroidEmulatorManager(
                     val gameCode = String(header, 0x0C, 4, java.nio.charset.StandardCharsets.US_ASCII)
                     val gc0 = gameCode.getOrNull(0)
                     val unitCode = header[0x012].toInt() and 0xFF
-                    val categoryId = if (read >= 0x238) {
-                        ((header[0x234].toInt() and 0xFF) or
-                            ((header[0x235].toInt() and 0xFF) shl 8) or
-                            ((header[0x236].toInt() and 0xFF) shl 16) or
-                            ((header[0x237].toInt() and 0xFF) shl 24))
-                    } else 0
-                    (categoryId == 0x00030004) || (unitCode == 0x03) || (gc0 != null && (gc0 == 'K' || gc0 == 'H'))
+                    val hasDsiHeader = (unitCode and 0x02) != 0
+                    if (!hasDsiHeader) {
+                        false
+                    } else {
+                        val categoryId = if (read >= 0x238) {
+                            ((header[0x234].toInt() and 0xFF) or
+                                ((header[0x235].toInt() and 0xFF) shl 8) or
+                                ((header[0x236].toInt() and 0xFF) shl 16) or
+                                ((header[0x237].toInt() and 0xFF) shl 24))
+                        } else 0
+                        (unitCode == 0x03) || (categoryId == 0x00030004) || (gc0 != null && (gc0 == 'K' || gc0 == 'H'))
+                    }
                 } else false
             }
         }.getOrNull() ?: false
@@ -353,13 +359,10 @@ class AndroidEmulatorManager(
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
             try {
-                val isDsiWare = rom.isInstalledDsiWareShortcut ||
-                    rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME ||
-                    rom.isDsiWareTitle ||
-                    isRealDsiWareTitle(rom)
+                val isDsiWare = isRealDsiWareTitle(rom)
 
                 val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
-                Log.w(TAG, "loadRom: CHECK rom='${rom.name}' isDsiWare=$isDsiWare (shortcut=${rom.isInstalledDsiWareShortcut}, isDsiWareTitle=${rom.isDsiWareTitle}, isReal=${isRealDsiWareTitle(rom)}) dsiBios=${dsiBiosResult.status}")
+                Log.w(TAG, "loadRom: CHECK rom='${rom.name}' isDsiWare=$isDsiWare (shortcut=${rom.isInstalledDsiWareShortcut}, isDsiWareTitle=${rom.isDsiWareTitle}, isReal=$isDsiWare) dsiBios=${dsiBiosResult.status}")
 
                 if (isDsiWare) {
                     if (dsiBiosResult.status == ConfigurationDirResult.Status.VALID) {
@@ -1417,17 +1420,26 @@ class AndroidEmulatorManager(
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isDsiWare = rom.isInstalledDsiWareShortcut || isRealDsiWareTitle(rom) || rom.isDsiWareTitle
-        val consoleType = if (isDsiWare) {
+        val isDsiWare = isRealDsiWareTitle(rom)
+        val hasValidDsCustomBios = baseConfiguration.dsBios7Uri != null &&
+            baseConfiguration.dsBios9Uri != null &&
+            baseConfiguration.dsFirmwareUri != null
+        val hasValidDsiCustomBios = baseConfiguration.dsiBios7Uri != null &&
+            baseConfiguration.dsiBios9Uri != null &&
+            baseConfiguration.dsiFirmwareUri != null &&
+            baseConfiguration.dsiNandUri != null
+        val requestedConsoleType = if (isDsiWare) {
             ConsoleType.DSi
         } else if (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT) {
             getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
         } else {
             baseConfiguration.consoleType
         }
-        val hasValidDsCustomBios = baseConfiguration.dsBios7Uri != null &&
-            baseConfiguration.dsBios9Uri != null &&
-            baseConfiguration.dsFirmwareUri != null
+        val consoleType = if (requestedConsoleType == ConsoleType.DSi && !isDsiWare && !hasValidDsiCustomBios) {
+            ConsoleType.DS
+        } else {
+            requestedConsoleType
+        }
         val mustUseCustomBios = (consoleType == ConsoleType.DSi) ||
             ((baseConfiguration.useCustomBios || rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT) && hasValidDsCustomBios)
 

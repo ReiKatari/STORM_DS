@@ -2582,6 +2582,16 @@ void VulkanRenderer3D::StopActiveBackend(const GPU& gpu)
     (void)gpu;
     Texcache.Reset();
     destroyVulkan();
+    Triangles.clear();
+    GraphicsVertices.clear();
+    GraphicsSceneVertices.clear();
+    SharedGraphicsScene = {};
+    GraphicsPolygons.clear();
+    GraphicsOpaqueDrawIndices.clear();
+    GraphicsNeedOpaqueDrawIndices.clear();
+    GraphicsAlphaDrawIndices.clear();
+    GraphicsShadowMaskDrawIndices.clear();
+    GraphicsShadowDrawIndices.clear();
     InitFailed = false;
     HasCpuFrame = false;
     SkipRenderAtVCount215 = false;
@@ -3160,6 +3170,8 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
         return false;
     if (!ensureToonBuffer(nullptr))
         return false;
+    if (!ensureGraphicsClearBuffer(nullptr))
+        return false;
     if (!ensureCaptureLineBuffer(nullptr))
         return false;
 
@@ -3172,6 +3184,14 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
 
     Triangles.clear();
     GraphicsVertices.clear();
+    GraphicsSceneVertices.clear();
+    SharedGraphicsScene = {};
+    GraphicsPolygons.clear();
+    GraphicsOpaqueDrawIndices.clear();
+    GraphicsNeedOpaqueDrawIndices.clear();
+    GraphicsAlphaDrawIndices.clear();
+    GraphicsShadowMaskDrawIndices.clear();
+    GraphicsShadowDrawIndices.clear();
     ActiveTextureDescriptorCount = 0;
     ActiveTextureDescriptors.fill(VkDescriptorImageInfo{});
     if (getTextureDescriptorPolicy().RequiresNormalizedTextureDescriptor())
@@ -3258,25 +3278,12 @@ bool VulkanRenderer3D::ensureInitialized()
 
     if (!tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, false))
     {
-        if (PipelineProfile == VulkanPipelineProfile::FastPath)
-        {
-            Log(LogLevel::Warn, "VulkanRenderer3D: FastPath initialization failed; automatically falling back to Compatibility profile");
-            PipelineProfile = VulkanPipelineProfile::Compatibility;
-            Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
-            if (tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, false))
-            {
-                Initialized = true;
-                refreshActiveBackendMode();
-                return true;
-            }
-        }
-
-        Log(LogLevel::Warn, "VulkanRenderer3D: retrying initialization with BaseSingleDescriptor compatibility sampling path");
-        PipelineProfile = VulkanPipelineProfile::Compatibility;
-        Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
+        Log(LogLevel::Warn, "VulkanRenderer3D: retrying initialization with BaseSingleDescriptor compatibility sampling path (profile=%s)",
+            VulkanPipelineProfileName(PipelineProfile));
         if (!tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, true))
         {
-            Log(LogLevel::Error, "VulkanRenderer3D: all initialization paths failed");
+            Log(LogLevel::Error, "VulkanRenderer3D: initialization failed for profile=%s",
+                VulkanPipelineProfileName(PipelineProfile));
             InitFailed = true;
             return false;
         }
@@ -5227,25 +5234,17 @@ bool VulkanRenderer3D::createDescriptorObjects()
     const VulkanPipelineProfile texcacheProfile =
         Texcache.GetLoader().GetPipelineProfile();
     const u32 textureDescriptorBindingCount = texturePolicy.TextureDescriptorCount;
-    const u32 requiredGraphicsCombinedSamplers = texturePolicy.GraphicsCombinedImageSamplerCount();
     const VulkanRenderContextPolicy renderContextPolicy =
         GetVulkanRenderContextPolicy(PipelineProfile);
     if (deviceProperties.limits.maxPerStageDescriptorSampledImages < textureDescriptorBindingCount
-        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount
-        || (UsesVulkanFastPath(PipelineProfile)
-            && (deviceProperties.limits.maxPerStageDescriptorSampledImages < requiredGraphicsCombinedSamplers
-                || deviceProperties.limits.maxPerStageDescriptorSamplers < requiredGraphicsCombinedSamplers
-                || deviceProperties.limits.maxDescriptorSetSampledImages < requiredGraphicsCombinedSamplers
-                || deviceProperties.limits.maxDescriptorSetSamplers < requiredGraphicsCombinedSamplers)))
+        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount)
     {
         Log(
             LogLevel::Warn,
-            "VulkanRenderer3D: descriptor limits too low (per-stage-images=%u, per-stage-samplers=%u, set-images=%u, required-compute=%u, required-graphics=%u, profile=%s, path=%s)",
+            "VulkanRenderer3D: descriptor limits too low (per-stage=%u, set=%u, required=%u, profile=%s, path=%s)",
             deviceProperties.limits.maxPerStageDescriptorSampledImages,
-            deviceProperties.limits.maxPerStageDescriptorSamplers,
             deviceProperties.limits.maxDescriptorSetSampledImages,
             textureDescriptorBindingCount,
-            requiredGraphicsCombinedSamplers,
             VulkanPipelineProfileName(PipelineProfile),
             textureSamplingPathName(ActiveTextureSamplingPath)
         );
@@ -12775,6 +12774,32 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     const bool useSynchronousContext = context == nullptr;
     const VkCommandBuffer commandBuffer = context != nullptr ? context->CommandBuffer : CommandBuffer;
     const VkFence frameFence = context != nullptr ? context->FrameFence : FrameFence;
+    if (commandBuffer == VK_NULL_HANDLE || frameFence == VK_NULL_HANDLE)
+        return false;
+
+    {
+        const u64 waitStartNs = PerfNowNs();
+        const VkResult waitResult = vkWaitForFences(Device, 1, &frameFence, VK_TRUE, kFenceWaitTimeoutNs);
+        if (waitResult != VK_SUCCESS)
+        {
+            Log(LogLevel::Error, "VulkanRenderer3D: graphics vkWaitForFences failed (%d)", static_cast<int>(waitResult));
+            return false;
+        }
+
+        FenceWaitCpuWindow.Add(PerfNowNs() - waitStartNs);
+        if (useSynchronousContext)
+            consumeGpuTiming(nullptr);
+    }
+
+    if (!ensureTriangleBuffer(context, std::max<u32>(static_cast<u32>(Triangles.size()), 1u)))
+        return false;
+    if (!ensureGraphicsVertexBuffer(context, std::max<u32>(static_cast<u32>(GraphicsVertices.size()), 1u)))
+        return false;
+    if (!ensureGraphicsSceneVertexBuffer(std::max<u32>(static_cast<u32>(GraphicsSceneVertices.size()), 1u)))
+        return false;
+    if (!ensureGraphicsEdgeIndexBuffer(std::max<u32>(static_cast<u32>(SharedGraphicsScene.EdgeIndices.size()), 1u)))
+        return false;
+
     const VkBuffer triangleBuffer = context != nullptr ? context->TriangleBuffer : TriangleBuffer;
     const VkBuffer graphicsVertexBuffer = context != nullptr ? context->GraphicsVertexBuffer : GraphicsVertexBuffer;
     const VkBuffer graphicsSceneVertexBuffer = GraphicsSceneVertexBuffer;
@@ -12799,20 +12824,6 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
         return false;
     if (captureReadbackPath && (captureLineBuffer == VK_NULL_HANDLE || captureLineMapped == nullptr))
         return false;
-
-    {
-        const u64 waitStartNs = PerfNowNs();
-        const VkResult waitResult = vkWaitForFences(Device, 1, &frameFence, VK_TRUE, kFenceWaitTimeoutNs);
-        if (waitResult != VK_SUCCESS)
-        {
-            Log(LogLevel::Error, "VulkanRenderer3D: graphics vkWaitForFences failed (%d)", static_cast<int>(waitResult));
-            return false;
-        }
-
-        FenceWaitCpuWindow.Add(PerfNowNs() - waitStartNs);
-        if (useSynchronousContext)
-            consumeGpuTiming(nullptr);
-    }
 
     const bool depthComplementClearState =
         ((clearAttr >> 16u) & 0x1Fu) == 0u

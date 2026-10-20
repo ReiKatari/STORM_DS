@@ -182,7 +182,7 @@ bool packedAllowsOpaqueBlackAccumulator(int dsX, int dsY)
 void main()
 {
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 size = imageSize(accumulated);
+    ivec2 size = imageSize(newSnapshot);
     if (coord.x >= size.x || coord.y >= size.y)
         return;
 

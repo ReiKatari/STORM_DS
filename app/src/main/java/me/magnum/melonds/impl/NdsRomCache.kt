@@ -56,13 +56,16 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
         }
 
         val romFile = File(romCacheDir, romHash)
-        return if (romFile.isFile) {
+        return if (romFile.isFile && romFile.length() > 0L) {
             if (forUse) {
                 romFile.setLastModified(Date().time)
             }
 
             DocumentFile.fromFile(romFile).uri
         } else {
+            if (romFile.isFile && romFile.length() == 0L) {
+                romFile.delete()
+            }
             null
         }
     }
@@ -80,22 +83,29 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
             throw CouldNotCreateRomCacheDirectoryException()
         }
 
-        val tempCachedFile = File(romCacheDir, TEMP_FILE_NAME)
+        val romHash = rom.uri.hashCode().toString()
+        val tempCachedFile = File(romCacheDir, "${TEMP_FILE_NAME}_${romHash}_${System.nanoTime()}")
 
         try {
             val romFileSize = romExtractor.getExtractedRomFileSize()
             freeCacheSpaceIfRequired(romFileSize)
 
+            var success = false
             tempCachedFile.outputStream().use {
-                val success = romExtractor.saveRomFile(it)
-                if (success) {
-                    val romHash = rom.uri.hashCode().toString()
-                    val cachedFile = File(romCacheDir, romHash)
-                    tempCachedFile.renameTo(cachedFile)
-                    cacheModifiedSubject.trySend(Unit)
-                } else {
+                success = romExtractor.saveRomFile(it)
+            }
+            if (success && tempCachedFile.isFile && tempCachedFile.length() > 0L) {
+                val cachedFile = File(romCacheDir, romHash)
+                if (cachedFile.exists()) {
+                    cachedFile.delete()
+                }
+                if (!tempCachedFile.renameTo(cachedFile)) {
+                    tempCachedFile.copyTo(cachedFile, overwrite = true)
                     tempCachedFile.delete()
                 }
+                cacheModifiedSubject.trySend(Unit)
+            } else {
+                tempCachedFile.delete()
             }
         } catch (e: Exception) {
             tempCachedFile.delete()

@@ -193,7 +193,7 @@ class FileSystemRomsRepository(
                 val buffer = mutableListOf<Rom>()
                 scanForNewRoms(targetDirectories = targetDirectories).collect {
                     buffer.add(it)
-                    if (buffer.size >= 25) {
+                    if (buffer.size >= 4) {
                         addRoms(buffer)
                         buffer.clear()
                     }
@@ -231,7 +231,9 @@ class FileSystemRomsRepository(
     }
 
     override suspend fun getRomAtPath(path: String): Rom? {
-        val allRoms = getRoms().first()
+        val allRoms = kotlinx.coroutines.withTimeoutOrNull(1500L) {
+            getRoms().first()
+        } ?: roms.toList()
         val targetFile = java.io.File(path)
         val targetName = targetFile.name
 
@@ -252,7 +254,9 @@ class FileSystemRomsRepository(
     }
 
     override suspend fun getRomAtUri(uri: Uri): Rom? {
-        val allRoms = getRoms().first()
+        val allRoms = kotlinx.coroutines.withTimeoutOrNull(1500L) {
+            getRoms().first()
+        } ?: roms.toList()
 
         // Quick exact URI match first (no filename needed)
         allRoms.find { rom -> rom.uri == uri }?.let { return refreshRomConfigFromOptions(it) }
@@ -667,8 +671,24 @@ class FileSystemRomsRepository(
             }
 
             val fixedCachedRoms = validCachedRoms.map { rom ->
-                if (!rom.isDsiWareTitle && (rom.fileName.endsWith(".dsi", ignoreCase = true) || rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true)) {
+                val isExplicitDsiFile = rom.fileName.endsWith(".dsi", ignoreCase = true) ||
+                    rom.uri.path?.endsWith(".dsi", ignoreCase = true) == true ||
+                    rom.isInstalledDsiWareShortcut ||
+                    rom.installedDsiWareTitleId != null
+                val gc0 = rom.gameCode.getOrNull(0)
+                val looksLikeFalsePositiveDsiWare = rom.isDsiWareTitle &&
+                    !isExplicitDsiFile &&
+                    gc0 != 'K' &&
+                    gc0 != 'H'
+                if (!rom.isDsiWareTitle && isExplicitDsiFile) {
                     rom.copy(isDsiWareTitle = true, config = RomConfig.forDsiWareTitle())
+                } else if (looksLikeFalsePositiveDsiWare) {
+                    val healedConfig = if (rom.config.runtimeConsoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DSi) {
+                        rom.config.copy(runtimeConsoleType = me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT)
+                    } else {
+                        rom.config
+                    }
+                    rom.copy(isDsiWareTitle = false, config = healedConfig)
                 } else {
                     rom
                 }
@@ -676,9 +696,7 @@ class FileSystemRomsRepository(
 
             roms.clear()
             roms.addAll(fixedCachedRoms)
-            if (fixedCachedRoms.isNotEmpty() || (cacheReadResult.isValid && searchDirectories.isNotEmpty())) {
-                onRomsChanged(persist = searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty())
-            }
+            onRomsChanged(persist = searchDirectories.isNotEmpty() && unavailableDirectories.isEmpty())
 
             var scannedRom = false
             try {
@@ -686,7 +704,7 @@ class FileSystemRomsRepository(
                 scanForNewRoms().collect {
                     scannedRom = true
                     buffer.add(it)
-                    if (buffer.size >= 25) {
+                    if (buffer.size >= 4) {
                         addRoms(buffer)
                         buffer.clear()
                     }
@@ -815,31 +833,39 @@ class FileSystemRomsRepository(
         val parallelism = (Runtime.getRuntime().availableProcessors() * 2).coerceIn(4, 16)
         val semaphore = Semaphore(parallelism)
 
-        val scannedRoms = coroutineScope {
-            updatedFiles.map { fileState ->
-                async(Dispatchers.IO) {
-                    semaphore.withPermit {
-                        runCatching {
-                            val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
-                            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
-                                ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
-                                ?: return@runCatching null
-                            val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
-                                ?: return@runCatching null
+        val romStream = kotlinx.coroutines.channels.Channel<Rom>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+        coroutineScope {
+            launch {
+                coroutineScope {
+                    for (fileState in updatedFiles) {
+                        launch(Dispatchers.IO) {
+                            semaphore.withPermit {
+                                val parsedRom = runCatching {
+                                    val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
+                                    val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
+                                        ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
+                                        ?: return@runCatching null
+                                    val rom = fileRomProcessor.getRomFromUri(fileState.uri, fileState.parentUri)
+                                        ?: return@runCatching null
 
-                            processedUpdatedFileUris.add(fileState.uri.toString())
-                            rom
-                        }.getOrElse {
-                            Log.e(TAG, "Failed to process file at ${fileState.uri}", it)
-                            null
+                                    processedUpdatedFileUris.add(fileState.uri.toString())
+                                    rom
+                                }.getOrElse {
+                                    Log.e(TAG, "Failed to process file at ${fileState.uri}", it)
+                                    null
+                                }
+                                if (parsedRom != null) {
+                                    romStream.send(parsedRom)
+                                }
+                            }
                         }
                     }
                 }
-            }.awaitAll().filterNotNull()
-        }
-
-        for (rom in scannedRoms) {
-            collector.emit(rom)
+                romStream.close()
+            }
+            for (rom in romStream) {
+                collector.emit(rom)
+            }
         }
 
         val cacheableFiles = currentFiles.filterKeys { uri ->
