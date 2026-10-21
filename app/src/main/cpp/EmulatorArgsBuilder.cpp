@@ -104,6 +104,12 @@ void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& fir
     auto firmwareConfig = configuration.firmwareConfiguration;
     auto &currentData = firmware.GetEffectiveUserData();
 
+    // Enforce 1:1 touch screen calibration matching melonDS TSC::SetTouchCoords (x << 4, y << 4)
+    currentData.TouchCalibrationADC1[0] = 0; currentData.TouchCalibrationADC1[1] = 0;
+    currentData.TouchCalibrationPixel1[0] = 0; currentData.TouchCalibrationPixel1[1] = 0;
+    currentData.TouchCalibrationADC2[0] = 255 << 4; currentData.TouchCalibrationADC2[1] = 191 << 4;
+    currentData.TouchCalibrationPixel2[0] = 255; currentData.TouchCalibrationPixel2[1] = 191;
+
     if (firmwareConfig.language == 8)
     {
         currentData.Settings &= ~Firmware::Language::Reserved;
@@ -592,6 +598,12 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
                     settings.Language = Firmware::Language::English;
                 else
                     settings.Language = static_cast<Firmware::Language>(firmcfg.language);
+                settings.TouchCalibrationADC1 = {0, 0};
+                settings.TouchCalibrationPixel1 = {0, 0};
+                settings.TouchCalibrationADC2 = {255 << 4, 191 << 4};
+                settings.TouchCalibrationPixel2 = {255, 191};
+                settings.ConfigFlags |= 0x01;
+                settings.UpdateHash();
                 mount.ApplyUserData(settings);
             }
         }

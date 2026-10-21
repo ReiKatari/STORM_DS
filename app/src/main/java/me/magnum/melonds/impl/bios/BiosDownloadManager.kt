@@ -275,6 +275,14 @@ class BiosDownloadManager @Inject constructor(
         if (!nand.exists() || nand.length() < 1024 * 1024L) {
             return false
         }
+        val font = File(dir, "TWLFontTable.dat")
+        if (!font.exists() || font.length() < 100000L) {
+            runCatching {
+                context.assets.open("bios/dsi/TWLFontTable.dat").use { input ->
+                    font.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
         return try {
             RandomAccessFile(nand, "r").use { raf ->
                 val len = raf.length()

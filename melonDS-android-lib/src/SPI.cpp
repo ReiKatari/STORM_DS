@@ -134,13 +134,27 @@ void FirmwareMem::SetupDirectBoot()
     {
         // The ARMWrite methods are virtual, they'll delegate to DSi if necessary
         for (u32 i = 0; i < 6; i += 2)
-            NDS.ARM9Write16(0x02FFFCF4, *(u16*)&header.MacAddr[i]); // MAC address
+            NDS.ARM9Write16(0x02FFFCF4 + i, *(u16*)&header.MacAddr[i]); // MAC address
 
         // checkme
         NDS.ARM9Write16(0x02FFFCFA, header.EnabledChannels); // enabled channels
 
+        NDS.ARM9Write32(0x027FF864, 0);
+        NDS.ARM9Write32(0x027FF868, header.UserSettingsOffset << 3);
+        NDS.ARM9Write16(0x027FF874, header.DataGfxChecksum);
+        NDS.ARM9Write16(0x027FF876, header.GUIWifiCodeChecksum);
+
+        NDS.ARM9Write32(0x02FFF864, 0);
+        NDS.ARM9Write32(0x02FFF868, header.UserSettingsOffset << 3);
+        NDS.ARM9Write16(0x02FFF874, header.DataGfxChecksum);
+        NDS.ARM9Write16(0x02FFF876, header.GUIWifiCodeChecksum);
+
         for (u32 i = 0; i < 0x70; i += 4)
-            NDS.ARM9Write32(0x02FFFC80+i, *(u32*)&userdata.Bytes[i]);
+        {
+            u32 val = *(u32*)&userdata.Bytes[i];
+            NDS.ARM9Write32(0x027FFC80 + i, val);
+            NDS.ARM9Write32(0x02FFFC80 + i, val);
+        }
     }
     else
     {

@@ -757,7 +757,16 @@ void DSi::SetupDirectBoot()
             if (DSi_NAND::NANDMount nand = DSi_NAND::NANDMount(*image))
             {
                 DSi_NAND::DSiFirmwareSystemSettings userdata {};
-                nand.ReadUserData(userdata);
+                if (nand.ReadUserData(userdata))
+                {
+                    userdata.TouchCalibrationADC1 = {0, 0};
+                    userdata.TouchCalibrationPixel1 = {0, 0};
+                    userdata.TouchCalibrationADC2 = {255 << 4, 191 << 4};
+                    userdata.TouchCalibrationPixel2 = {255, 191};
+                    userdata.ConfigFlags |= 0x01;
+                    userdata.UpdateHash();
+                    nand.ApplyUserData(userdata);
+                }
                 for (u32 i = 0; i < 0x128; i+=4)
                     ARM9Write32(0x02000400+i, *(u32*)&userdata.Bytes[0x88+i]);
 
@@ -906,7 +915,8 @@ void DSi::SetupDirectBoot()
                             u32 rawLen = NDSCartSlot.GetCart()->GetRawROMLength();
                             snprintf(dirPath, sizeof(dirPath), "0:/title/%08x/%08x/content/00000000.app", titleId0, tid);
                             FF_FILINFO appInfo;
-                            if (f_stat(dirPath, &appInfo) != FR_OK || appInfo.fsize != rawLen)
+                            bool forceRefreshApp = (memcmp(header.GameCode, "KAL", 3) == 0);
+                            if (forceRefreshApp || f_stat(dirPath, &appInfo) != FR_OK || appInfo.fsize != rawLen)
                             {
                                 FF_FIL appFile;
                                 if (f_open(&appFile, dirPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
@@ -1573,61 +1583,6 @@ void DSi::SetupDirectBoot()
             Log(LogLevel::Info, "DSi::SetupDirectBoot: Zelda Four Swords save patch applied (read=%d, write=%d)\n",
                 patchedRead, patchedWrite);
         }
-    }
-
-    if (memcmp(header.GameCode, "KAL", 3) == 0)
-    {
-        u32 base = header.ARM9RAMAddress;
-        if (ARM9Read32(base + 0xba014) == 0xebfdb1d3)
-            ARM9Write32(base + 0xba014, 0xea00000f);
-
-        if (ARM9Read32(base + 0x50d4) == 0xeb0085a3)
-            ARM9Write32(base + 0x50d4, 0xe1a00000);
-        if (ARM9Read32(base + 0xe4548) == 0xebfd0886)
-            ARM9Write32(base + 0xe4548, 0xe1a00000);
-        if (ARM9Read32(base + 0xf5c50) == 0xebfcc2c4)
-            ARM9Write32(base + 0xf5c50, 0xe1a00000);
-        if (ARM9Read32(base + 0xf5f0c) == 0xebfcc215)
-            ARM9Write32(base + 0xf5f0c, 0xe1a00000);
-
-        ARM9Write32(0x02026768, 0xe12fff1e);
-
-        for (u32 addr = base; addr + 4 <= base + header.ARM9Size; addr += 4)
-        {
-            u32 op = ARM9Read32(addr);
-            if (op == 0xebfdb1d3)
-                ARM9Write32(addr, 0xea00000f);
-            else if (op == 0xeb0085a3 || op == 0xebfd0886 || op == 0xebfcc2c4 || op == 0xebfcc215)
-                ARM9Write32(addr, 0xe1a00000);
-        }
-
-        const char targetPath[] = "nand:/sys/TWLFontTable.dat";
-        const u32 targetLen = sizeof(targetPath) - 1;
-        const char replacementFont[] = "rom:/Arial.NFTR";
-        u8 replacement[sizeof(targetPath)] = {0};
-        memcpy(replacement, replacementFont, strlen(replacementFont));
-
-        for (u32 addr = base; addr + targetLen <= base + header.ARM9Size; addr++)
-        {
-            if (ARM9Read8(addr) == (u8)targetPath[0])
-            {
-                bool match = true;
-                for (u32 k = 1; k < targetLen; k++)
-                {
-                    if (ARM9Read8(addr + k) != (u8)targetPath[k])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match)
-                {
-                    for (u32 k = 0; k < targetLen; k++)
-                        ARM9Write8(addr + k, replacement[k]);
-                }
-            }
-        }
-        Log(LogLevel::Info, "DSi::SetupDirectBoot: Applied AlphaBounce (KAL*) dynamic RAM and font patches.\n");
     }
 
     if (dsmode)
