@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">Continuar</string>
+    <string name="feature_quick_resume_continue_game">Continuar: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">Continuar</string>
+    <string name="feature_quick_resume_from_save">Salvamento rápido • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">Retomar do salvamento rápido</string>
+    <string name="feature_quick_resume_last_played">Jogado por último • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">Início normal — sem salvamento rápido ainda</string>
+    <string name="feature_quick_resume_tile_label">Continuar jogo</string>
+    <string name="feature_quick_resume_no_recent_game">Nenhum jogo recente</string>
+    <string name="feature_quick_resume_not_found">Não foi possível encontrar o último jogo</string>
+    <string name="feature_stats_menu_title">Estatísticas do jogador</string>
+    <string name="feature_stats_title">Estatísticas do jogador</string>
+    <string name="feature_stats_subtitle">Tempo de jogo, inicializações e atividade diária</string>
+    <string name="feature_stats_total_play_time">Tempo total de jogo</string>
+    <string name="feature_stats_games_played">Jogos jogados</string>
+    <string name="feature_stats_total_launches">Total de inicializações</string>
+    <string name="feature_stats_daily_chart_title">Tempo de jogo diário (últimos 7 dias)</string>
+    <string name="feature_stats_top_by_time">Jogos mais jogados por tempo</string>
+    <string name="feature_stats_top_by_launches">Jogos mais iniciados</string>
+    <string name="feature_stats_launches_count">Inicializações: %1$d</string>
+    <string name="feature_stats_time_hm">%1$dh %2$dm</string>
+    <string name="feature_stats_time_m">%1$dm</string>
+    <string name="feature_stats_time_less_than_min">&lt;1m</string>
+    <string name="feature_stats_empty_title">Ainda não há estatísticas</string>
+    <string name="feature_stats_empty_desc">Inicie qualquer jogo para começar a registrar o tempo de jogo e a atividade diária</string>
+    <string name="feature_problem_report_menu_title">Relatar um problema</string>
+    <string name="feature_problem_report_dialog_title">Criar relatório de problema</string>
+    <string name="feature_problem_report_dialog_message">Cria um arquivo ZIP de diagnóstico contendo a versão do aplicativo, informações do dispositivo e GPU, versão do Android, configurações do emulador e do renderizador (sem contas ou tokens), código do último jogo e registros recentes. Nada é enviado automaticamente — você escolhe onde compartilhar o arquivo.</string>
+    <string name="feature_problem_report_create_action">Criar e compartilhar</string>
+    <string name="feature_problem_report_generating">Coletando relatório de diagnóstico…</string>
+    <string name="feature_problem_report_share_chooser">Compartilhar relatório de problema</string>
+    <string name="feature_problem_report_failed">Falha ao criar o relatório de problema</string>
+</resources>

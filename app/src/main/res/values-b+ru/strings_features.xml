@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">Продолжить</string>
+    <string name="feature_quick_resume_continue_game">Продолжить: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">Продолжить</string>
+    <string name="feature_quick_resume_from_save">Быстрое сохранение • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">Продолжить с быстрого сохранения</string>
+    <string name="feature_quick_resume_last_played">Последний запуск • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">Обычный запуск — быстрого сохранения пока нет</string>
+    <string name="feature_quick_resume_tile_label">Продолжить игру</string>
+    <string name="feature_quick_resume_no_recent_game">Нет недавних игр</string>
+    <string name="feature_quick_resume_not_found">Последняя запущенная игра не найдена</string>
+    <string name="feature_stats_menu_title">Статистика игрока</string>
+    <string name="feature_stats_title">Статистика игрока</string>
+    <string name="feature_stats_subtitle">Время в игре, запуски и ежедневная активность</string>
+    <string name="feature_stats_total_play_time">Общее время в игре</string>
+    <string name="feature_stats_games_played">Сыграно игр</string>
+    <string name="feature_stats_total_launches">Всего запусков</string>
+    <string name="feature_stats_daily_chart_title">Время в игре по дням (за 7 дней)</string>
+    <string name="feature_stats_top_by_time">Топ игр по времени</string>
+    <string name="feature_stats_top_by_launches">Топ игр по числу запусков</string>
+    <string name="feature_stats_launches_count">Запусков: %1$d</string>
+    <string name="feature_stats_time_hm">%1$d ч %2$d мин</string>
+    <string name="feature_stats_time_m">%1$d мин</string>
+    <string name="feature_stats_time_less_than_min">&lt;1 мин</string>
+    <string name="feature_stats_empty_title">Статистика пока пуста</string>
+    <string name="feature_stats_empty_desc">Запустите любую игру, чтобы начать учёт времени и ежедневной активности</string>
+    <string name="feature_problem_report_menu_title">Сообщить о проблеме</string>
+    <string name="feature_problem_report_dialog_title">Создать отчёт о проблеме</string>
+    <string name="feature_problem_report_dialog_message">Создаёт диагностический ZIP-архив с версией приложения, данными об устройстве и GPU, версией Android, настройками эмулятора и рендерера (без аккаунтов и токенов), кодом последней игры и свежими логами. Ничего не отправляется автоматически — вы сами выбираете, куда отправить файл.</string>
+    <string name="feature_problem_report_create_action">Создать и отправить</string>
+    <string name="feature_problem_report_generating">Сбор диагностического отчёта…</string>
+    <string name="feature_problem_report_share_chooser">Отправить отчёт о проблеме</string>
+    <string name="feature_problem_report_failed">Не удалось создать отчёт о проблеме</string>
+</resources>

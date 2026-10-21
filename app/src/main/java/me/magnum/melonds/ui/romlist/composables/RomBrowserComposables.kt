@@ -108,6 +108,8 @@ fun WatermelonLibraryHeader(
     onOpenSingleRom: () -> Unit = {},
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenPlayerStats: () -> Unit = {},
+    onReportProblem: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = watermelon
@@ -239,6 +241,12 @@ fun WatermelonLibraryHeader(
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onRefresh() }) {
                             Text(stringResource(R.string.action_refresh_rom_list))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onOpenPlayerStats() }) {
+                            Text(stringResource(R.string.feature_stats_menu_title))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onReportProblem() }) {
+                            Text(stringResource(R.string.feature_problem_report_menu_title))
                         }
                     }
                 }
@@ -445,7 +453,10 @@ fun ContinuePlayingShelf(
     roms: List<Rom>,
     coverByHash: Map<String, String>,
     boxArtByUri: Map<String, String> = emptyMap(),
+    quickResumeHasSaveState: Boolean = false,
+    quickResumeSaveTimestamp: Long? = null,
     onRomClicked: (Rom) -> Unit,
+    onQuickResumeRom: (Rom) -> Unit = onRomClicked,
     onRomLongPressed: (Rom) -> Unit,
     modifier: Modifier = Modifier,
     horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
@@ -538,23 +549,43 @@ fun ContinuePlayingShelf(
             enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
         ) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = horizontalPadding),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(roms, key = { it.uri.toString() }) { rom ->
-                    LaunchedEffect(rom.uri) {
-                        onRomVisible(rom)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val topRom = roms.firstOrNull()
+                if (topRom != null) {
+                    LaunchedEffect(topRom.uri) {
+                        onRomVisible(topRom)
                     }
-                    ContinuePlayingCard(
-                        rom = rom,
-                        coverUrl = coverByHash[rom.retroAchievementsHash],
-                        boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
-                        boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
-                        onClick = { onRomClicked(rom) },
-                        onLongPress = { onRomLongPressed(rom) },
+                    QuickResumeBannerCard(
+                        rom = topRom,
+                        coverUrl = coverByHash[topRom.retroAchievementsHash],
+                        boxArtUrl = boxArtByUri[topRom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                        boxArtLoading = anyCoversEnabled && (boxArtByUri[topRom.uri.toString()] == null),
+                        hasQuickSave = quickResumeHasSaveState,
+                        quickSaveTimestampMs = quickResumeSaveTimestamp,
+                        onQuickResume = { onQuickResumeRom(topRom) },
+                        onLongPress = { onRomLongPressed(topRom) },
                         onFocused = onRomFocused,
+                        modifier = Modifier.padding(horizontal = horizontalPadding),
                     )
+                }
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = horizontalPadding),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(roms, key = { it.uri.toString() }) { rom ->
+                        LaunchedEffect(rom.uri) {
+                            onRomVisible(rom)
+                        }
+                        ContinuePlayingCard(
+                            rom = rom,
+                            coverUrl = coverByHash[rom.retroAchievementsHash],
+                            boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                            boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
+                            onClick = { onQuickResumeRom(rom) },
+                            onLongPress = { onRomLongPressed(rom) },
+                            onFocused = onRomFocused,
+                        )
+                    }
                 }
             }
         }
@@ -679,11 +710,177 @@ private fun ContinuePlayingCard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+fun QuickResumeBannerCard(
+    rom: Rom,
+    coverUrl: String?,
+    boxArtUrl: String?,
+    boxArtLoading: Boolean = false,
+    hasQuickSave: Boolean = false,
+    quickSaveTimestampMs: Long? = null,
+    onQuickResume: () -> Unit,
+    onLongPress: () -> Unit,
+    onFocused: (Rom) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    val colors = watermelon
+    val accentColor = Color(me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor())
+    val shape = RoundedCornerShape(14.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    LaunchedEffect(isFocused) {
+        if (isFocused) onFocused(rom)
+    }
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        label = "quick_resume_press",
+    )
+    val saveDateFormat = remember { java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()) }
+
+    val subtitleText = if (hasQuickSave) {
+        if (quickSaveTimestampMs != null && quickSaveTimestampMs > 0L) {
+            stringResource(
+                R.string.feature_quick_resume_from_save,
+                saveDateFormat.format(java.util.Date(quickSaveTimestampMs)),
+            )
+        } else {
+            stringResource(R.string.feature_quick_resume_from_save_ready)
+        }
+    } else {
+        val lastPlayedLabel = rom.lastPlayed?.let {
+            DateUtils.getRelativeTimeSpanString(it.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+        }
+        if (lastPlayedLabel != null) {
+            stringResource(R.string.feature_quick_resume_last_played, lastPlayedLabel)
+        } else {
+            stringResource(R.string.feature_quick_resume_no_save_hint)
+        }
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(shape)
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        colors.surface2,
+                        colors.surface,
+                    )
+                )
+            )
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) accentColor else accentColor.copy(alpha = 0.45f),
+                shape = shape,
+            )
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onQuickResume,
+                onLongClick = onLongPress,
+            )
+            .padding(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(56.dp)
+                .aspectRatio(DsBoxArtAspectRatio)
+                .clip(RoundedCornerShape(8.dp)),
+        ) {
+            WatermelonRomArt(
+                rom = rom,
+                boxArtUrl = boxArtUrl,
+                raCoverUrl = coverUrl,
+                initialsFontSize = 15.sp,
+                boxArtLoading = boxArtLoading,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PlatformBadge(
+                    text = romPlatformLabel(rom),
+                    fontSize = 8.sp,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.feature_quick_resume_continue),
+                    color = accentColor,
+                    fontFamily = WatermelonMono,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = romDisplayName(rom),
+                color = colors.text,
+                fontFamily = SpaceGrotesk,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitleText,
+                color = if (hasQuickSave) colors.green else colors.text3,
+                fontFamily = WatermelonMono,
+                fontSize = 9.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(accentColor)
+                .clickable(onClick = onQuickResume)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = Color.Black,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = stringResource(R.string.feature_quick_resume_continue),
+                color = Color.Black,
+                fontFamily = SpaceGrotesk,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 fun ContinuePlayingLandscapeColumn(
     roms: List<Rom>,
     coverByHash: Map<String, String>,
     boxArtByUri: Map<String, String> = emptyMap(),
+    quickResumeHasSaveState: Boolean = false,
+    quickResumeSaveTimestamp: Long? = null,
     onRomClicked: (Rom) -> Unit,
+    onQuickResumeRom: (Rom) -> Unit = onRomClicked,
     onRomLongPressed: (Rom) -> Unit,
     modifier: Modifier = Modifier,
     onRomFocused: (Rom) -> Unit = {},
@@ -771,6 +968,24 @@ fun ContinuePlayingLandscapeColumn(
                 )
             }
         } else {
+            val topRom = roms.firstOrNull()
+            if (topRom != null) {
+                LaunchedEffect(topRom.uri) {
+                    onRomVisible(topRom)
+                }
+                QuickResumeBannerCard(
+                    rom = topRom,
+                    coverUrl = coverByHash[topRom.retroAchievementsHash],
+                    boxArtUrl = boxArtByUri[topRom.uri.toString()]?.takeIf { it.isNotEmpty() },
+                    boxArtLoading = anyCoversEnabled && (boxArtByUri[topRom.uri.toString()] == null),
+                    hasQuickSave = quickResumeHasSaveState,
+                    quickSaveTimestampMs = quickResumeSaveTimestamp,
+                    onQuickResume = { onQuickResumeRom(topRom) },
+                    onLongPress = { onRomLongPressed(topRom) },
+                    onFocused = onRomFocused,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
@@ -786,7 +1001,7 @@ fun ContinuePlayingLandscapeColumn(
                         coverUrl = coverByHash[rom.retroAchievementsHash],
                         boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                         boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
-                        onClick = { onRomClicked(rom) },
+                        onClick = { onQuickResumeRom(rom) },
                         onLongPress = { onRomLongPressed(rom) },
                         onFocused = onRomFocused,
                     )

@@ -128,6 +128,7 @@ private fun optionIcon(option: PauseMenuOption): ImageVector {
         RomPauseMenuOption.ROM_SETTINGS -> Icons.Filled.Tune
         RomPauseMenuOption.SETTINGS, FirmwarePauseMenuOption.SETTINGS -> Icons.Filled.Settings
         RomPauseMenuOption.RENDERER_DEBUG -> Icons.Filled.DashboardCustomize
+        RomPauseMenuOption.RESET_COMPATIBILITY -> Icons.Filled.Refresh
         RomPauseMenuOption.RESET, FirmwarePauseMenuOption.RESET -> Icons.Filled.RestartAlt
         RomPauseMenuOption.EXIT, FirmwarePauseMenuOption.EXIT -> Icons.AutoMirrored.Filled.Logout
         else -> Icons.Filled.Settings

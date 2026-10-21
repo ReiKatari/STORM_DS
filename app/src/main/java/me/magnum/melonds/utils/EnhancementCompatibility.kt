@@ -87,6 +87,15 @@ object EnhancementCompatibility {
             lowerName.contains("star wars")
     }
 
+    fun canUseEnhancements(gameCode: String?, romName: String?): Boolean {
+        val code = gameCode?.trim().orEmpty()
+        val name = romName?.trim().orEmpty()
+        if (code.isEmpty() && name.isEmpty()) {
+            return true
+        }
+        return supports3dWidescreen(code, name)
+    }
+
     fun supports3dWidescreen(gameCode: String, romName: String): Boolean {
         val code3 = gameCode.take(3).uppercase()
         if (code3 in KNOWN_PURE_2D_CODES) return false

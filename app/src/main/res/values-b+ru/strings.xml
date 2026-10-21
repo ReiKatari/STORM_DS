@@ -81,7 +81,7 @@
   <string name="theme_option_light">STORM DAY (Светлая)</string>
   <string name="theme_option_dark">STORM NIGHT (Черная — по умолчанию)</string>
   <string name="theme_option_system_default">Системная тема</string>
-  <string name="video_renderer">Графический движок (Рендерер)</string>
+  <string name="video_renderer">Графический движок (рендерер)</string>
   <string name="video_renderer_summary">Выберите графический бэкенд для вывода изображения</string>
   <string name="video_internal_resolution">Внутреннее разрешение 3D</string>
   <string name="video_internal_resolution_summary">Масштабирование разрешения 3D графики</string>
@@ -110,6 +110,7 @@
   <string name="video_fps_counter_summary">Отображение кадров в секунду на экране</string>
   <string name="fast_forward_speed">Скорость быстрой перемотки</string>
   <string name="fast_forward_speed_summary">Множитель ускорения при нажатии Fast Forward</string>
+  <string name="frame_limit_speed_summary">Множитель ограничения частоты кадров</string>
   <string name="frame_limit_speed">Скорость эмуляции</string>
   <string name="audio_mute_on_fast_forward_title">Глушение звука при перемотке</string>
   <string name="audio_mute_on_fast_forward_summary">Отключает звук при ускорении (Fast Forward) для устранения щелчков и перегрузки</string>
@@ -130,7 +131,7 @@
   <string name="mic_source_summary">Выбор устройства или симуляции микрофона</string>
   <string name="input_layout">Макет сенсорных кнопок</string>
   <string name="input_layout_summary">Настройка положения и размера оверлей-кнопок</string>
-  <string name="input_haptic_feedback">Тактильный отклик (Вибрация)</string>
+  <string name="input_haptic_feedback">Тактильный отклик (вибрация)</string>
   <string name="input_haptic_feedback_summary">Вибрация при нажатии на сенсорные кнопки</string>
   <string name="input_haptic_feedback_strength">Сила вибрации</string>
   <string name="soft_input_behaviour">Поведение экранных кнопок</string>
@@ -203,12 +204,12 @@
   <string name="input_select">Select</string>
   <string name="input_lid">Закрыть крышку</string>
   <string name="input_pause">Пауза</string>
-  <string name="input_fast_forward">Ускорение (Переключатель)</string>
-  <string name="input_hold_fast_forward">Ускорение (Удержание)</string>
+  <string name="input_fast_forward">Ускорение (переключатель)</string>
+  <string name="input_hold_fast_forward">Ускорение (удержание)</string>
   <string name="input_microphone">Микрофон</string>
   <string name="input_toggle_soft_input">Скрыть / показать управление</string>
   <string name="input_reset">Сброс</string>
-  <string name="input_dpad">Крестовина (D-Pad) / Левый стик</string>
+  <string name="input_dpad">Крестовина (D-Pad) / левый стик</string>
   <string name="input_abxy_buttons">Кнопки ABXY</string>
   <string name="input_swap_screens">Поменять экраны местами</string>
   <string name="input_quick_save">Быстрое сохранение</string>
@@ -218,17 +219,17 @@
   <string name="toast_screens_swapped">Экраны переключены</string>
   <string name="toast_screens_restored">Исходное положение экранов</string>
   <string name="toast_rotation_locked">Поворот экрана заблокирован</string>
-  <string name="toast_rotation_unlocked">Поворот экрана разблокирован (Автоповорот)</string>
+  <string name="toast_rotation_unlocked">Поворот экрана разблокирован (автоповорот)</string>
   <string name="screen_layout">Экранная раскладка</string>
   <string name="layout_even_landscape">Ровная альбомная</string>
   <string name="layout_uneven_landscape">Неровная альбомная</string>
   <string name="layout_even_portrait_locked">Ровная портретная</string>
   <string name="layout_proportional_landscape">Пропорциональная альбомная</string>
   <string name="layout_fullscreen_landscape">Полноэкранная альбомная</string>
-  <string name="layout_auto_rotate">Автоматический поворот (По датчику)</string>
+  <string name="layout_auto_rotate">Автоматический поворот (по датчику)</string>
   <string name="layout_open_editor">Редактор раскладок</string>
   <string name="layout_open_editor_summary">Редактирование текущей активной раскладки (расположение, масштаб экранов и кнопок)</string>
-  <string name="input_toggle_analog_stick">Сменить D-Pad / Стик</string>
+  <string name="input_toggle_analog_stick">Сменить D-Pad / стик</string>
   <string name="pref_touch_dpad_stick_mode_title">Аналоговый стик вместо крестовины</string>
   <string name="pref_touch_dpad_stick_mode_summary">Отображать сенсорный стик (джойстик) вместо классической крестовины D-Pad</string>
   <string name="toast_layout_applied">Раскладка: %1$s</string>
@@ -267,8 +268,8 @@
   <string name="dual_screen_presets_summary">Пресет: %1$s\nПропорции DS: %2$s • Целочисленный масштаб: %3$s\nВнутренний В: %4$s • Внутренний Ш: %5$s\nВнешний В: %6$s • Внешний Ш: %7$s</string>
   <string name="dual_screen_presets_disabled_hint">Пресеты отключены. Выберите пресет для активации параметров.</string>
   <string name="dual_screen_preset_off">Отключены (ручная настройка)</string>
-  <string name="dual_screen_preset_internal_top_external_bottom">Внутренний: Верхний, Внешний: Нижний</string>
-  <string name="dual_screen_preset_internal_bottom_external_top">Внутренний: Нижний, Внешний: Верхний</string>
+  <string name="dual_screen_preset_internal_top_external_bottom">Внутренний: верхний, внешний: нижний</string>
+  <string name="dual_screen_preset_internal_bottom_external_top">Внутренний: нижний, внешний: верхний</string>
   <string name="dual_screen_integer_scale">Целочисленное масштабирование</string>
   <string name="dual_screen_internal_fill_height">Заполнить высоту внутреннего экрана</string>
   <string name="dual_screen_external_fill_height">Заполнить высоту внешнего экрана</string>
@@ -376,14 +377,14 @@
   <string name="points">Очки</string>
   <string name="completed">Завершено</string>
   <string name="ra_mode_hardcore">Хардкор</string>
-  <string name="ra_mode_softcore">Софдкор</string>
+  <string name="ra_mode_softcore">Софткор</string>
   <string name="ra_base_set">Базовый набор</string>
   <string name="view_achievement">Просмотр достижения</string>
   <string name="completed_achievements">
     <b>%1$d</b> из <b>%2$d</b> (%3$d%%)</string>
   <string name="submitting_achievements">Отправка результатов в RetroAchievements…</string>
   <string name="offline_ra_pending_title">Офлайн достижения ожидают отправки</string>
-  <string name="offline_ra_softcore_enabled">Включить офлайн Софдкор достижения</string>
+  <string name="offline_ra_softcore_enabled">Включить офлайн-достижения в режиме Софткор</string>
   <string name="offline_ra_softcore_enabled_summary">Сохранять достижения локально при отсутствии интернет-соединения.</string>
   <string name="offline_ra_pending_message">У вас есть %1$d офлайн достижений. Синхронизировать сейчас?</string>
   <string name="offline_ra_pending_message_with_expiration">У вас есть %1$d офлайн достижений. Синхронизировать сейчас? Срок действия истекает через %2$s.</string>
@@ -402,10 +403,10 @@
   <string name="offline_ra_disabled_no_cache_title">Офлайн достижения отключены</string>
   <string name="offline_ra_disabled_no_cache_message">Запустите эту игру онлайн один раз для включения офлайн достижений.</string>
   <string name="offline_ra_settings_title">Офлайн достижения</string>
-  <string name="offline_ra_status_enabled">Статус: Включено</string>
-  <string name="offline_ra_status_disabled_not_logged_in">Статус: Отключено (нет входа)</string>
-  <string name="offline_ra_status_disabled_no_cache">Статус: Отключено (нет кэша)</string>
-  <string name="offline_ra_pending_softcore_unlocks">В очереди Софдкор: %1$d</string>
+  <string name="offline_ra_status_enabled">Статус: включено</string>
+  <string name="offline_ra_status_disabled_not_logged_in">Статус: отключено (нет входа)</string>
+  <string name="offline_ra_status_disabled_no_cache">Статус: отключено (нет кэша)</string>
+  <string name="offline_ra_pending_softcore_unlocks">В очереди (Софткор): %1$d</string>
   <string name="offline_ra_pending_ledger_unlocks">Записей в журнале: %1$d</string>
   <string name="offline_ra_pending_softcore_notice">Офлайн достижений: %1$d. Можно синхронизировать позже.</string>
   <string name="offline_ra_pending_softcore_notice_with_expiration">Офлайн достижений: %1$d. Синхронизируйте в течение %2$s.</string>
@@ -425,7 +426,7 @@
   <string name="offline_ra_sync_now_button">Синхронизировать</string>
   <string name="offline_ra_continue_playing_button">Продолжить игру</string>
   <string name="offline_ra_exit_anyway_button">Все равно выйти</string>
-  <string name="offline_ra_hardcore_pending_exit_title">Требуется синхронизация Хардкора</string>
+  <string name="offline_ra_hardcore_pending_exit_title">Требуется синхронизация режима Хардкор</string>
   <string name="offline_ra_hardcore_pending_exit_message">У вас есть %1$d несинхронизированных достижений Хардкора. При выходе они будут утеряны.</string>
   <string name="offline_ra_hardcore_unsynced_warning_toast">%1$d результатов Хардкора сохранены локально. Подключитесь к сети для синхронизации.</string>
   <string name="offline_ra_hardcore_try_sync_button">Синхронизировать сейчас</string>
@@ -448,16 +449,16 @@
   <string name="ra_pending_state_verification_failed">Не удалось проверить состояние результатов.</string>
   <string name="ra_pending_review_submissions">Просмотр несинхронизированных данных</string>
   <string name="ra_pending_process_loss_notification_message">%1$d результатов (%2$d достижений, %3$d рекордов) из %4$s не отправлены вовремя.</string>
-  <string name="offline_ra_mode_softcore">Режим RetroAchievements: Софдкор</string>
+  <string name="offline_ra_mode_softcore">Режим RetroAchievements: Софткор</string>
   <string name="offline_ra_mode_hardcore">Режим RetroAchievements: Хардкор</string>
-  <string name="offline_ra_mode_softcore_offline">Режим RetroAchievements: Софдкор Офлайн</string>
-  <string name="offline_ra_mode_softcore_offline_hardcore_disabled">Софдкор Офлайн включен. Хардкор Офлайн отключен.</string>
-  <string name="offline_ra_mode_softcore_offline_no_internet_start">Режим RetroAchievements: Софдкор Офлайн (без интернета).</string>
+  <string name="offline_ra_mode_softcore_offline">Режим RetroAchievements: Софткор офлайн</string>
+  <string name="offline_ra_mode_softcore_offline_hardcore_disabled">Софткор Офлайн включен. Хардкор Офлайн отключен.</string>
+  <string name="offline_ra_mode_softcore_offline_no_internet_start">Режим RetroAchievements: Софткор Офлайн (без интернета).</string>
   <string name="achievements_loaded">Достижения загружены</string>
   <string name="ra_welcome_eyebrow">RETROACHIEVEMENTS</string>
   <string name="ra_welcome_title">Добро пожаловать, %1$s!</string>
   <string name="ra_welcome_hardcore">Хардкорный режим</string>
-  <string name="ra_welcome_softcore">Софдкорный режим</string>
+  <string name="ra_welcome_softcore">Софткорный режим</string>
   <string name="ra_now_playing">СЕЙЧАС ИГРАЕТЕ</string>
   <string name="ra_achievements_progress">%1$d из %2$d достижений</string>
   <string name="ra_no_achievements">Нет достижений для этой игры</string>
@@ -944,6 +945,10 @@
   <string name="video_vulkan_driver_category">Драйвер Vulkan</string>
   <string name="video_vulkan_driver_manager_title">Менеджер Vulkan драйверов</string>
   <string name="video_vulkan_driver_manager_summary">Скачивание и переключение Turnip/Mesa драйверов из сети</string>
+  <string name="video_prefs_resolution_position_changed">Индикатор разрешения перемещён, чтобы не перекрывать счётчик FPS</string>
+  <string name="video_prefs_fps_position_changed">Счётчик FPS перемещён, чтобы не перекрывать индикатор разрешения</string>
+  <string name="video_prefs_recommended_driver_available">⭐ Доступен рекомендуемый драйвер: %1$s</string>
+  <string name="video_prefs_internal_resolution_software_only">Масштабирование разрешения 3D доступно только в OpenGL и Vulkan.</string>
   <string name="video_vulkan_driver_mode">Режим драйвера</string>
   <string name="video_vulkan_driver_import">Загрузить кастомный драйвер</string>
   <string name="video_vulkan_driver_import_summary">Установка zip-архива AdrenoTools</string>
@@ -1012,14 +1017,14 @@
   <string name="input_summary">Экранные кнопки, физические геймпады, вибрация и сенсор</string>
   <string name="key_mapping">Назначение физических клавиш</string>
   <string name="key_mapping_summary">Настройка геймпада и клавиатуры</string>
-  <string name="slot2_analog_mapping_title">Назначение Аналогового Стика</string>
+  <string name="slot2_analog_mapping_title">Назначение аналогового стика</string>
   <string name="slot2_analog_mapping_summary">Настройка аналогового ввода слота 2</string>
   <string name="slot2_analog_axis_x">Ось X</string>
   <string name="slot2_analog_axis_y">Ось Y</string>
-  <string name="slot2_analog_axis_x_expected">Ожидается Ось X</string>
-  <string name="slot2_analog_axis_y_expected">Ожидается Ось Y</string>
-  <string name="slot2_analog_invert_x">Инвертировать Ось X</string>
-  <string name="slot2_analog_invert_y">Инвертировать Ось Y</string>
+  <string name="slot2_analog_axis_x_expected">Ожидается ось X</string>
+  <string name="slot2_analog_axis_y_expected">Ожидается ось Y</string>
+  <string name="slot2_analog_invert_x">Инвертировать ось X</string>
+  <string name="slot2_analog_invert_y">Инвертировать ось Y</string>
   <string name="slot2_analog_deadzone">Мертвая зона стика</string>
   <string name="slot2_analog_device">Устройство аналогового ввода</string>
   <string name="slot2_analog_device_summary">Выберите контроллер для аналогового ввода</string>
@@ -1162,7 +1167,7 @@
   <string name="dsi_bios_dir_not_set_info">Укажите путь к файлам DSi BIOS в настройках эмулятора</string>
   <string name="system_file_picker_not_found">Системный проводник не найден</string>
   <string name="dsiware_manager_import_title_error_open_nand_failed">Не удалось открыть NAND DSi</string>
-  <string name="nightly_update_available_message">Доступна новая предварительная версия STORM DS %1$s. Желаете обновиться?</string>
+  <string name="nightly_update_available_message">Доступна новая предварительная версия STORM DS. Скачать её сейчас?</string>
   <string name="rom_cache_status_cached">Проверено %1$s (кэш)</string>
   <string name="info_vulkan_compiling_stage_warmup">Прогрев конвейеров Vulkan</string>
   <string name="dsi_incorrect_bios_dir_info">Путь к BIOS Nintendo DSi содержит некорректные дамп-файлы</string>
@@ -1213,7 +1218,7 @@
     <string name="about_app_title">О программе и благодарности</string>
     <string name="about_app_description">Мощный форк эмулятора WatermelonDS (на ядре melonDS) для Android с Vulkan 3D, поддержкой шейдеров RetroArch и RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, авторы и лицензии</string>
-    <string name="about_fork_info_title">Основа проекта: Форк WatermelonDS</string>
+    <string name="about_fork_info_title">Основа проекта: форк WatermelonDS</string>
     <string name="about_fork_info_summary">STORM DS является расширенным форком WatermelonDS (автор SapphireRhodonite и авторы), который в свою очередь основан на ядре melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura и команда). Включает глубокие доработки ядра DSi/DSiWare, прямого запуска Slot-1 без повреждения NAND, оффлайн-достижений RetroAchievements, вывода на ТВ/мониторы через USB-C/HDMI, быстрый проводник РОМов, позиционирование HUD и кастомные темы.</string>
     <string name="about_version_title">Версия</string>
     <string name="about_credits_title">Благодарности авторам</string>
@@ -1295,11 +1300,11 @@
     <string name="translator_enabled_summary">Распознавать и переводить игровые диалоги на экране</string>
     <string name="translator_engine">Движок перевода</string>
     <string name="translator_engine_offline">Google ML Kit (100% офлайн нейросеть)</string>
-    <string name="translator_engine_yandex">Яндекс Переводчик (Бесплатно / Идеальный русский)</string>
+    <string name="translator_engine_yandex">Яндекс Переводчик (бесплатно / лучший для русского)</string>
     <string name="translator_engine_google">Google Translate (Онлайн, быстрый)</string>
-    <string name="translator_engine_lingva">Lingva Neural (Бесплатно / Без ограничений)</string>
+    <string name="translator_engine_lingva">Lingva Neural (бесплатно / без ограничений)</string>
     <string name="translator_engine_deepl">DeepL Neural API (Ключ API)</string>
-    <string name="translator_engine_libre">LibreTranslate (Open-Source)</string>
+    <string name="translator_engine_libre">LibreTranslate (открытый код)</string>
     <string name="translator_engine_mymemory">MyMemory Translated</string>
     <string name="translator_engine_custom_ai">Custom AI (ChatGPT, Claude, DeepSeek)</string>
     <string name="translator_source_lang">Язык оригинала</string>
@@ -1313,7 +1318,7 @@
     <string name="translator_style_smart_match">Умный подбор фона под диалоговое окно игры</string>
     <string name="translator_style_semi_transparent">Полупрозрачный темный фон</string>
     <string name="translator_style_neon_bubble">Полупрозрачный неоновый баббл</string>
-    <string name="translator_style_outline_only">Только контур (Без фона)</string>
+    <string name="translator_style_outline_only">Только контур (без фона)</string>
     <string name="translator_bubble_opacity">Непрозрачность фона</string>
     <string name="translator_font_size_scale">Масштаб шрифта</string>
     <string name="translator_show_floating_button">Отображать плавающую кнопку перевода</string>
@@ -1346,7 +1351,7 @@
     <string name="translator_dict_title">Словарь и разбор фразы</string>
     <string name="translator_speak_action">Озвучить ▶️</string>
     <string name="translator_preview_voice">Проверить голос ▶️</string>
-    <string name="translator_voice_engine_neural">Нейросетевая Edge HD (Облако, 24 кГц)</string>
+    <string name="translator_voice_engine_neural">Нейросетевая Edge HD (облако, 24 кГц)</string>
     <string name="translator_voice_engine_local_multi">Локальная AI Studio (Piper INT8, оффлайн)</string>
     <string name="translator_voice_engine_system">Системный Android TTS</string>
     <string name="resolution_hud_position_title">Отображение разрешения рендера</string>
@@ -1365,7 +1370,7 @@
     <string name="lang_pt">Португальский (Português)</string>
     <string name="label_button_spread">Разнос кнопок</string>
     <string name="input_toggle_extra_buttons">Скрыть/показать доп. кнопки</string>
-    <string name="toggle_visibility">Скрыть / Показать</string>
+    <string name="toggle_visibility">Скрыть / показать</string>
     <string name="components_visibility_title">Управление элементами</string>
     <string name="back">Назад</string>
     <string name="rom_info_file">Файл</string>
@@ -1373,7 +1378,7 @@
     <string name="rom_info_never">Никогда</string>
     <string name="wfc_server_title">Онлайн-сервер Nintendo WFC</string>
     <string name="wfc_server_summary">Быстрое подключение к серверам сетевой игры Nintendo Wi-Fi Connection</string>
-    <string name="wfc_server_disabled">Официальный / Выключено</string>
+    <string name="wfc_server_disabled">Официальный / выключено</string>
     <string name="wfc_server_custom">Пользовательский DNS</string>
     <string name="wfc_custom_dns_title">Основной DNS-сервер WFC</string>
     <string name="wfc_custom_dns_summary">IP-адрес DNS для сетевого мультиплеера Nintendo WFC</string>
@@ -1410,7 +1415,7 @@
     <string name="input_gyro_deadzone_y_title">Мертвая зона оси Y</string>
     <string name="input_gyro_deadzone_y_summary">Игнорировать микро-дрожание рук по вертикали</string>
     <string name="input_gyro_recenter_quick_action">Быстрая калибровка «Центр»</string>
-    <string name="translator_tts_neural_title">Нейросетевая облачная озвучка (Высокое качество)</string>
+    <string name="translator_tts_neural_title">Нейросетевая облачная озвучка (высокое качество)</string>
     <string name="translator_tts_neural_summary">Естественные живые голоса с выразительными эмоциями через нейросеть</string>
     <string name="video_console_skin_title">3D-скин корпуса консоли</string>
     <string name="video_console_skin_summary">Реалистичный корпус Nintendo DS Lite / DSi XL с подсветкой диодов питания и Wi-Fi</string>
@@ -1453,12 +1458,12 @@
     <string name="card_style_3d_boxart">3D Boxart (Объемные боксы)</string>
 
     <!-- JIT Overclock & CPU Tuning -->
-    <string name="arm9_overclock_title">Частота CPU ARM9 (Разгон / Overclock)</string>
+    <string name="arm9_overclock_title">Частота CPU ARM9 (разгон)</string>
     <string name="arm9_overclock_summary">Разгон виртуального процессора для устранения просадок FPS в тяжелых 3D-играх</string>
-    <string name="arm9_overclock_1x">67 МГц (По умолчанию / 1x)</string>
-    <string name="arm9_overclock_2x">133 МГц (Режим DSi / 2x)</string>
-    <string name="arm9_overclock_3x">200 МГц (3x Разгон)</string>
-    <string name="arm9_overclock_4x">266 МГц (4x Турбо-режим)</string>
+    <string name="arm9_overclock_1x">67 МГц (по умолчанию / 1x)</string>
+    <string name="arm9_overclock_2x">133 МГц (режим DSi / 2x)</string>
+    <string name="arm9_overclock_3x">200 МГц (разгон 3x)</string>
+    <string name="arm9_overclock_4x">266 МГц (турбо-режим 4x)</string>
 
     <!-- Scraper Pro & Covers -->
     <string name="enable_gametdb_covers_title">Scraper Pro: 3D-боксы и HD-обложки</string>
@@ -1501,7 +1506,7 @@
     <string name="rewind_history_depth">Глубина истории</string>
     <string name="rewind_memory_estimate">Оценочный расход RAM: ~%1$d МБ (макс. %2$d снимков)</string>
     <string name="seconds_short">%d сек.</string>
-    <string name="firmware_birthday_format">Формат: День / Месяц</string>
+    <string name="firmware_birthday_format">Формат: день / месяц</string>
     <string name="day_label">День</string>
     <string name="month_label">Месяц</string>
     <string name="settings_sub_general">Интерфейс, темы, язык и режим работы</string>
@@ -1565,7 +1570,7 @@
     <string name="video_vulkan_3d_depth_mode_title">Реальный 3D-эффект глубины (Vulkan)</string>
     <string name="video_vulkan_3d_depth_mode_off">Отключён</string>
     <string name="video_vulkan_3d_depth_mode_gyro">Гироскопический 3D-параллакс (окно в глубину)</string>
-    <string name="video_vulkan_3d_depth_mode_anaglyph">Стереоскопический 3D анаглиф (Красный / Голубой)</string>
+    <string name="video_vulkan_3d_depth_mode_anaglyph">Стереоскопический 3D-анаглиф (красный / голубой)</string>
     <string name="video_vulkan_3d_depth_mode_sbs">Стереоскопический 3D горизонтальная стереопара (XR / VR)</string>
     <string name="video_vulkan_3d_depth_strength_title">Интенсивность 3D-глубины</string>
     <string name="video_vulkan_ssao_title">Объёмное затенение 3D-глубины (SSAO)</string>

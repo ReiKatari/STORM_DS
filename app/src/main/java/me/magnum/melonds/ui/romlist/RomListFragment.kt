@@ -119,6 +119,16 @@ class RomListFragment : Fragment() {
                         romSelectedListener?.invoke(rom)
                     }
 
+                    val topContinueRom = state.continuePlaying.firstOrNull()
+                    androidx.compose.runtime.LaunchedEffect(topContinueRom?.uri, topContinueRom?.lastPlayed) {
+                        if (topContinueRom != null) {
+                            me.magnum.melonds.ui.quickresume.QuickResumeStore.syncFromContinuePlaying(
+                                requireContext(),
+                                topContinueRom,
+                            )
+                        }
+                    }
+
                     RomBrowserScreen(
                         state = state,
                         coverByHash = raCoverByHash,
@@ -130,6 +140,11 @@ class RomListFragment : Fragment() {
                         isRaAuthenticated = isRaAuthenticated,
                         onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
                         onRomClick = { rom ->
+                            romListViewModel.setRomLastPlayedNow(rom)
+                            checkAndLaunch(rom)
+                        },
+                        onQuickResumeRom = { rom ->
+                            me.magnum.melonds.ui.quickresume.QuickResumeRequest.request(rom.uri)
                             romListViewModel.setRomLastPlayedNow(rom)
                             checkAndLaunch(rom)
                         },
@@ -148,6 +163,8 @@ class RomListFragment : Fragment() {
                         onBootFirmwareDsi = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DSi) },
                         onOpenSingleRom = { (activity as? RomListActivity)?.openSingleRom() },
                         onOpenSettings = { (activity as? RomListActivity)?.openSettings() },
+                        onOpenPlayerStats = { (activity as? RomListActivity)?.openPlayerStats() },
+                        onReportProblem = { (activity as? RomListActivity)?.reportProblem(topContinueRom) },
                         onRomVisible = { rom -> romListViewModel.requestBoxArt(rom) },
                         onFocusedRomChanged = { rom ->
                             (activity as? RomListActivity)?.onLibraryRomHighlighted(rom)

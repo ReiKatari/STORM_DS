@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compat_reset_safe_mode">Сбросить безопасный режим</string>
+    <string name="compat_safe_mode_applied_toast">Включён безопасный режим (%1$s, масштаб 1x)</string>
+    <string name="compat_safe_mode_jit_disabled_toast">Включён безопасный режим (%1$s, масштаб 1x, JIT отключён)</string>
+    <string name="compat_safe_mode_reset_toast">Безопасный режим сброшен к обычным настройкам</string>
+    <string name="compat_load_fallback_retry_toast">Не удалось инициализировать %1$s, повторный запуск через %2$s</string>
+    <string name="compat_capability_fallback_toast">%1$s не поддерживается на этом устройстве, включён %2$s</string>
+    <string name="compat_touch_stick_mode_enabled">Режим мини-джойстика включён</string>
+    <string name="compat_touch_dpad_mode_enabled">Режим кнопок направлений включён</string>
+    <string name="compat_slot2_addon_title">Аксессуар Slot-2 (GBA)</string>
+    <string name="compat_slot2_addon_disabled">Отключён</string>
+    <string name="compat_slot2_addon_rumble_pak">Rumble Pak (вибропакет DS)</string>
+    <string name="compat_slot2_addon_memory_expansion">Memory Expansion Pak (8 МБ ОЗУ)</string>
+    <string name="compat_slot2_addon_solar_sensor">Solar Sensor (датчик солнца Boktai)</string>
+    <string name="compat_slot2_addon_motion_pak">Motion Pak (гироскоп и акселерометр)</string>
+    <string name="compat_slot2_addon_guitar_grip">Guitar Grip (4 клавиши Guitar Hero)</string>
+    <string name="compat_slot2_addon_paddle_controller">Paddle Controller (колесо Arkanoid)</string>
+    <string name="compat_solar_sensor_title">Датчик солнца (Boktai / Lunar Knights)</string>
+    <string name="compat_solar_sensor_auto_short">Авто (датчик телефона)</string>
+    <string name="compat_solar_sensor_level_bars">%1$d / 10 делений</string>
+    <string name="compat_solar_sensor_auto_full">Авто (датчик освещённости телефона)</string>
+    <string name="compat_solar_sensor_level_0">0 / 10 (полная темнота)</string>
+    <string name="compat_solar_sensor_level_2">2 / 10 (сумерки)</string>
+    <string name="compat_solar_sensor_level_4">4 / 10 (тень или облачно)</string>
+    <string name="compat_solar_sensor_level_6">6 / 10 (ясный день)</string>
+    <string name="compat_solar_sensor_level_8">8 / 10 (яркое солнце)</string>
+    <string name="compat_solar_sensor_level_10">10 / 10 (зенит солнца)</string>
+    <string name="compat_ir_pedometer_title">ИК-шагомер Pokéwalker (Pokémon HG/SS)</string>
+    <string name="compat_ir_pedometer_add_100">+100 шагов</string>
+    <string name="compat_ir_pedometer_add_500">+500 шагов</string>
+    <string name="compat_ir_pedometer_add_1000">+1000 шагов</string>
+    <string name="compat_ir_pedometer_add_5000">+5000 шагов</string>
+    <string name="compat_ir_pedometer_reset">Сбросить счётчик (0 шагов)</string>
+</resources>

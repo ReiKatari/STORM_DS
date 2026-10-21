@@ -124,6 +124,13 @@
     <string name="audio_bitrate">音声ビット深度</string>
     <string name="audio_bitrate_summary">音声出力の解像度</string>
     <string name="audio_latency_summary">音声出力バッファの遅延時間</string>
+    <string name="audio_mute_on_fast_forward_title">早送り時にミュート</string>
+    <string name="audio_mute_on_fast_forward_summary">早送り中のノイズや音飛びを防ぐため音声をミュートします</string>
+    <string name="video_drs_title">動的解像度スケーリング (DRS)</string>
+    <string name="video_drs_summary">負荷時に3D解像度を自動的に下げて60 FPSを維持します</string>
+    <string name="drs_hud_status_active">DRS: 有効 (自動スケーリング)</string>
+    <string name="drs_hud_status_scaled">DRS: %1$dx に縮小中 (目標 %2$dx)</string>
+    <string name="drs_hud_status_disabled">DRS: 無効</string>
     <string name="mic_source">マイク入力元</string>
     <string name="mic_source_summary">マイクデバイスまたはシミュレーションを選択</string>
     <string name="input_layout">オンスクリーンレイアウト</string>
@@ -187,6 +194,9 @@
     <string name="video_retroarch_shader_browser_up">戻る</string>
     <string name="video_retroarch_shader_browser_empty">項目がありません</string>
     <string name="video_retroarch_shader_browser_slow">低速</string>
+    <plurals name="video_retroarch_shader_browser_passes">
+        <item quantity="other">%1$d パス</item>
+    </plurals>
     <string name="video_retroarch_shader_settings_title">RAシェーダーの設定</string>
     <string name="video_retroarch_shader_settings_summary">シェーダーライブラリ、プリセットパラメータおよびlibrashaderログ</string>
     <string name="shader_heavy_compile_title">このプリセットは構築に時間がかかります</string>
@@ -315,7 +325,7 @@
     <string name="rom_filter_all">すべて</string>
     <string name="rom_filter_favorites">お気に入り</string>
     <string name="rom_filter_ds">DS</string>
-    <string name="rom_filter_dsi_enhanced">DSi Enhanced</string>
+    <string name="rom_filter_dsi_enhanced">DSi対応 (DSi Enhanced)</string>
     <string name="rom_filter_dsiware">Nintendo DSiWare</string>
     <string name="rom_filter_retro_achievements">RA</string>
     <string name="rom_filter_ds_empty">DSゲームが見つかりません</string>
@@ -464,6 +474,10 @@
     <string name="video_vulkan_driver_category">Vulkanドライバー</string>
     <string name="video_vulkan_driver_manager_title">Vulkan Driver Hub</string>
     <string name="video_vulkan_driver_manager_summary">Turnip/Mesaドライバーをクラウドから直接ダウンロードして切り替え</string>
+    <string name="video_prefs_resolution_position_changed">FPSカウンターとの重なりを避けるため解像度インジケーターを移動しました</string>
+    <string name="video_prefs_fps_position_changed">解像度インジケーターとの重なりを避けるためFPSカウンターを移動しました</string>
+    <string name="video_prefs_recommended_driver_available">⭐ 推奨ドライバーが利用可能です: %1$s</string>
+    <string name="video_prefs_internal_resolution_software_only">3D解像度スケーリングはOpenGLまたはVulkanでのみ利用可能です。</string>
     <string name="video_vulkan_driver_mode">Adreno Vulkanドライバー</string>
     <string name="video_vulkan_driver_import">カスタムドライバーをインポート</string>
     <string name="video_vulkan_driver_import_summary">ドライバーのZIPをインストールします。変更は次回ゲーム起動時に適用されます。</string>
@@ -872,6 +886,9 @@
     <string name="offline_ra_ledger_integrity_tampered">改ざんあり</string>
     <string name="offline_ra_ledger_expiration">台帳の有効期限: %1$s</string>
     <string name="offline_ra_ledger_expired">期限切れ</string>
+    <plurals name="offline_ra_ledger_expires_days">
+        <item quantity="other">%1$d 日</item>
+    </plurals>
     <string name="offline_ra_sync_now_button">今すぐ同期</string>
     <string name="offline_ra_continue_playing_button">プレイを継続</string>
     <string name="offline_ra_exit_anyway_button">このまま終了</string>
@@ -945,6 +962,12 @@
     <string name="game_mastered">コンプリート: %1$s</string>
     <string name="retroachievements_unsynchronized_data">未同期のRetroAchievementsデータ</string>
     <string name="retroachievements_unsynchronized_data_info">未同期のRetroAchievementsデータがあります。次の操作が保留中です:</string>
+    <plurals name="retroachievements_pending_achievement_unlocks">
+        <item quantity="other">%d 件の実績解除</item>
+    </plurals>
+    <plurals name="retroachievements_pending_leaderboard_entries">
+        <item quantity="other">%d 件のリーダーボード記録</item>
+    </plurals>
     <string name="retroachievements_unsynchronized_data_connect_internet">インターネットに接続してデータを同期してください。</string>
     <string name="retroachievements_unsynchronized_data_loss_info">今終了すると、このデータは失われます！</string>
     <string name="retroachievements_unsynchronized_data_synchronized">すべてのデータを同期しました！</string>
@@ -1518,4 +1541,58 @@
     <string name="translator_local_voice_pitch_variance_title">キャラクター間のピッチ変化</string>
     <string name="translator_voice_model_dialog_title">音声モデルパック</string>
     <string name="translator_action_all_settings">すべての設定 ⚙️</string>
+    <string name="pref_cat_updates">アップデート</string>
+    <string name="import_storm_folder_settings">STORM DS フォルダから設定を適用</string>
+    <string name="import_storm_folder_settings_summary">STORM DS / settings から settings.json と STORM_DS.opts を読み込む</string>
+    <string name="manage_setting_snapshots">設定スナップショットとクイックロールバック</string>
+    <string name="manage_setting_snapshots_summary">STORM DS / settings / backups 内のローカル復元ポイント (dd.MM.yyyy HH:mm)</string>
+    <string name="export_import_stormlayout">画面レイアウトのエクスポートとインポート (.stormlayout)</string>
+    <string name="export_import_stormlayout_summary">STORM DS / settings にカスタム画面レイアウトを保存・読み込み</string>
+    <string name="backup_settings_summary">すべての設定、レイアウト、プロファイルを選択したフォルダにエクスポート</string>
+    <string name="restore_settings_summary">任意のフォルダから settings.json または STORM_DS.opts をインポート</string>
+    <string name="label_rom_config_translator_section">自動翻訳</string>
+    <string name="label_rom_config_translator_source_lang">ゲームの元の言語</string>
+    <string name="label_rom_config_dual_screen_preset">デュアル画面レイアウトプリセット</string>
+    <string name="video_ai_upscale_sharpness_title">AIアップスケールとCASシャープネス (%)</string>
+    <string name="video_ai_upscale_sharpness_summary">コントラスト適応型エッジ・テキスト鮮鋭化の強度</string>
+    <string name="video_vulkan_compositor_mode_title">2D/3D コンポジターモード (Vulkan)</string>
+    <string name="video_vulkan_compositor_mode_precise">高精度 (レイヤー優先度とブレンディング)</string>
+    <string name="video_vulkan_compositor_mode_legacy">高速 (レガシー)</string>
+    <string name="video_vulkan_thick_edges_title">高解像度3Dエッジの太線化</string>
+    <string name="video_vulkan_thick_edges_summary">内部解像度に比例してトゥーンシェーディングの輪郭線を拡大します</string>
+    <string name="video_vulkan_compat_autoselect_title">自動ゲーム互換性プロファイル (Vulkan)</string>
+    <string name="video_vulkan_compat_autoselect_summary">既知のゲームに最適なレンダラー設定を自動的に適用します</string>
+    <string name="vulkan_debug_view_mode_title">Vulkan レイヤーデバッグ表示</string>
+    <string name="vulkan_debug_view_normal">通常表示</string>
+    <string name="vulkan_debug_view_only_3d">3Dのみ</string>
+    <string name="vulkan_debug_view_only_2d">2Dのみ</string>
+    <string name="vulkan_debug_view_composition_mask">合成マスク</string>
+    <string name="vulkan_debug_dump_report">Vulkan デバッグレポートを保存</string>
+    <string name="vulkan_debug_dump_report_success">Vulkan デバッグレポートを %1$s に保存しました</string>
+    <string name="vulkan_debug_dump_report_failed">Vulkan デバッグレポートの保存に失敗しました</string>
+    <string name="video_vulkan_3d_depth_mode_title">リアル3D立体視エフェクト (Vulkan)</string>
+    <string name="video_vulkan_3d_depth_mode_off">オフ</string>
+    <string name="video_vulkan_3d_depth_mode_gyro">ジャイロ3D視差 (ウィンドウ奥行き)</string>
+    <string name="video_vulkan_3d_depth_mode_anaglyph">ステレオ3Dアナグリフ (赤 / シアン)</string>
+    <string name="video_vulkan_3d_depth_mode_sbs">ステレオ3Dサイドバイサイド (XR / VRグラス)</string>
+    <string name="video_vulkan_3d_depth_strength_title">3D奥行きの強度</string>
+    <string name="video_vulkan_ssao_title">ボリューメトリック3Dアンビエントオクルージョン (SSAO)</string>
+    <string name="video_vulkan_ssao_summary">Vulkanの3Dジオメトリにリアルな接地影と立体感を追加します</string>
+    <string name="video_ds_color_profile_title">本体ディスプレイの色補正</string>
+    <string name="video_ds_color_profile_standard">標準 sRGB (補正なし)</string>
+    <string name="video_ds_color_profile_ds_phat">初代 Nintendo DS Phat (NTR-001)</string>
+    <string name="video_ds_color_profile_ds_lite">Nintendo DS Lite (USG-001)</string>
+    <string name="video_ds_color_profile_dsi_xl">Nintendo DSi XL IPS (UTL-001)</string>
+    <string name="video_ds_hinge_gap_title">上下画面間の物理ヒンジ間隔</string>
+    <string name="video_ds_hinge_gap_0">なし (0 px)</string>
+    <string name="video_ds_hinge_gap_32">コンパクトヒンジ (32 px)</string>
+    <string name="video_ds_hinge_gap_64">Nintendo DS Lite ヒンジ (64 px)</string>
+    <string name="video_ds_hinge_gap_90">Nintendo DSi XL ヒンジ (90 px)</string>
+    <string name="enhancement_active_notification">有効: %1$s</string>
+    <string name="rom_settings_slot2_addon_title">Slot-2 周辺機器 (GBA)</string>
+    <string name="rom_settings_solar_sensor_title">太陽センサー (ボクらの太陽)</string>
+    <string name="rom_settings_ir_pedometer_title">ポケウォーカー赤外線歩数計</string>
+    <plurals name="ir_pedometer_steps">
+        <item quantity="other">%1$d 歩</item>
+    </plurals>
 </resources>

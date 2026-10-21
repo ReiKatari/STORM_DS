@@ -403,7 +403,7 @@ class EmulatorActivity : AppCompatActivity() {
             val current = prefs.getBoolean("pref_touch_dpad_stick_mode", false)
             val next = !current
             prefs.edit().putBoolean("pref_touch_dpad_stick_mode", next).apply()
-            val msg = if (next) "Режим стика: Включен 🕹️" else "Режим крестовины: Включен ➕"
+            val msg = getString(if (next) R.string.compat_touch_stick_mode_enabled else R.string.compat_touch_dpad_mode_enabled)
             Toast.makeText(this@EmulatorActivity, msg, Toast.LENGTH_SHORT).show()
             binding.viewLayoutControls.invalidate()
         }
@@ -976,6 +976,7 @@ class EmulatorActivity : AppCompatActivity() {
                                     return@PauseMenuOverlay
                                 }
                                 val isTerminal = option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.RESET ||
+                                    option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.RESET_COMPATIBILITY ||
                                     option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.EXIT ||
                                     option == me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption.RESET ||
                                     option == me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption.EXIT
@@ -1272,6 +1273,13 @@ class EmulatorActivity : AppCompatActivity() {
                     }
 
                     Toast.makeText(this@EmulatorActivity, message, duration).show()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.compatNoticeEvent.collect { message ->
+                    Toast.makeText(this@EmulatorActivity, message, Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -3650,13 +3658,13 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun slot2AddonLabels(): List<String> = listOf(
-        "Отключён",
-        "Rumble Pak (Вибропакет DS)",
-        "Memory Expansion Pak (8 МБ ОЗУ)",
-        "Solar Sensor (Датчик солнца Boktai)",
-        "Motion Pak (Гироскоп и акселерометр)",
-        "Guitar Grip (4 клавиши Guitar Hero)",
-        "Paddle Controller (Колесо Arkanoid)",
+        getString(R.string.compat_slot2_addon_disabled),
+        getString(R.string.compat_slot2_addon_rumble_pak),
+        getString(R.string.compat_slot2_addon_memory_expansion),
+        getString(R.string.compat_slot2_addon_solar_sensor),
+        getString(R.string.compat_slot2_addon_motion_pak),
+        getString(R.string.compat_slot2_addon_guitar_grip),
+        getString(R.string.compat_slot2_addon_paddle_controller),
     )
 
     private fun slot2AddonLabel(addonType: Int): String {
@@ -3669,7 +3677,7 @@ class EmulatorActivity : AppCompatActivity() {
         val current = activeSlot2AddonState.value.coerceIn(0, labels.lastIndex)
         pushConsoleOverlay(
             ConsoleOverlayNode.Choice(
-                title = "Аксессуар Slot-2 (GBA)",
+                title = getString(R.string.compat_slot2_addon_title),
                 labels = labels,
                 selectedIndex = current,
                 onSelect = { which ->
@@ -3687,24 +3695,28 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun solarSensorLabel(level: Int): String {
-        return if (level < 0) "Авто (датчик телефона)" else "$level / 10 делений"
+        return if (level < 0) {
+            getString(R.string.compat_solar_sensor_auto_short)
+        } else {
+            getString(R.string.compat_solar_sensor_level_bars, level)
+        }
     }
 
     private fun showSolarSensorChoiceOverlay() {
         val values = listOf(-1, 0, 2, 4, 6, 8, 10)
         val labels = listOf(
-            "Авто (датчик освещённости телефона)",
-            "0 / 10 (Полная темнота)",
-            "2 / 10 (Сумерки)",
-            "4 / 10 (Тень / Облачно)",
-            "6 / 10 (Ясный день)",
-            "8 / 10 (Яркое солнце)",
-            "10 / 10 (Зенит солнца)",
+            getString(R.string.compat_solar_sensor_auto_full),
+            getString(R.string.compat_solar_sensor_level_0),
+            getString(R.string.compat_solar_sensor_level_2),
+            getString(R.string.compat_solar_sensor_level_4),
+            getString(R.string.compat_solar_sensor_level_6),
+            getString(R.string.compat_solar_sensor_level_8),
+            getString(R.string.compat_solar_sensor_level_10),
         )
         val currentIdx = values.indexOf(solarSensorOverrideLevel).let { if (it < 0) 0 else it }
         pushConsoleOverlay(
             ConsoleOverlayNode.Choice(
-                title = "Датчик солнца (Boktai / Lunar Knights)",
+                title = getString(R.string.compat_solar_sensor_title),
                 labels = labels,
                 selectedIndex = currentIdx,
                 onSelect = { which ->
@@ -3724,15 +3736,15 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun showIrPedometerChoiceOverlay() {
         val labels = listOf(
-            "+100 шагов",
-            "+500 шагов",
-            "+1000 шагов",
-            "+5000 шагов",
-            "Сбросить счётчик (0 шагов)",
+            getString(R.string.compat_ir_pedometer_add_100),
+            getString(R.string.compat_ir_pedometer_add_500),
+            getString(R.string.compat_ir_pedometer_add_1000),
+            getString(R.string.compat_ir_pedometer_add_5000),
+            getString(R.string.compat_ir_pedometer_reset),
         )
         pushConsoleOverlay(
             ConsoleOverlayNode.Choice(
-                title = "ИК-шагомер Pokéwalker (Pokémon HG/SS)",
+                title = getString(R.string.compat_ir_pedometer_title),
                 labels = labels,
                 selectedIndex = 0,
                 onSelect = { which ->

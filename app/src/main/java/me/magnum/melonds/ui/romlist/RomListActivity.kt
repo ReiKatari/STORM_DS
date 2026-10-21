@@ -126,6 +126,8 @@ class RomListActivity : AppCompatActivity() {
 
         emulatorLauncherValidatorDelegate = EmulatorLaunchValidatorDelegate(this, object : EmulatorLaunchValidatorDelegate.Callback {
             override fun onRomValidated(rom: Rom) {
+                me.magnum.melonds.ui.quickresume.QuickResumeStore.rememberLastRom(this@RomListActivity, rom)
+                me.magnum.melonds.ui.stats.PlayStatsStore.recordLaunch(this@RomListActivity, rom)
                 val intent = EmulatorActivity.getRomEmulatorActivityIntent(this@RomListActivity, rom)
                 startActivity(intent)
                 applyLaunchTransition()
@@ -138,7 +140,7 @@ class RomListActivity : AppCompatActivity() {
             }
 
             override fun onValidationAborted() {
-                // Do nothing
+                me.magnum.melonds.ui.quickresume.QuickResumeRequest.clear()
             }
         })
 
@@ -330,6 +332,14 @@ class RomListActivity : AppCompatActivity() {
                 viewModel.refreshRoms()
                 return true
             }
+            R.id.action_player_stats -> {
+                openPlayerStats()
+                return true
+            }
+            R.id.action_report_problem -> {
+                reportProblem(viewModel.browserState.value.continuePlaying.firstOrNull())
+                return true
+            }
             R.id.action_settings -> {
                 val intent = Intent(this, SettingsActivity::class.java)
                 startActivity(intent)
@@ -346,6 +356,15 @@ class RomListActivity : AppCompatActivity() {
     internal fun openSettings() {
         val intent = Intent(this, SettingsActivity::class.java)
         startActivity(intent)
+    }
+
+    internal fun openPlayerStats() {
+        val intent = Intent(this, me.magnum.melonds.ui.stats.PlayerStatsActivity::class.java)
+        startActivity(intent)
+    }
+
+    internal fun reportProblem(lastRom: Rom? = null) {
+        me.magnum.melonds.ui.diagnostics.ProblemReportGenerator.showDialogAndShare(this, lastRom)
     }
 
     private fun addNoSearchDirectoriesFragment() {

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compat_reset_safe_mode">Atur ulang mode aman</string>
+    <string name="compat_safe_mode_applied_toast">Mode aman diaktifkan (%1$s, skala 1x)</string>
+    <string name="compat_safe_mode_jit_disabled_toast">Mode aman diaktifkan (%1$s, skala 1x, JIT nonaktif)</string>
+    <string name="compat_safe_mode_reset_toast">Mode aman diatur ulang ke pengaturan awal</string>
+    <string name="compat_load_fallback_retry_toast">Gagal menginisialisasi %1$s, mencoba ulang dengan %2$s</string>
+    <string name="compat_capability_fallback_toast">%1$s tidak didukung di perangkat ini, dialihkan ke %2$s</string>
+    <string name="compat_touch_stick_mode_enabled">Mode stik mini diaktifkan</string>
+    <string name="compat_touch_dpad_mode_enabled">Mode tombol arah diaktifkan</string>
+    <string name="compat_slot2_addon_title">Aksesori Slot-2 (GBA)</string>
+    <string name="compat_slot2_addon_disabled">Nonaktif</string>
+    <string name="compat_slot2_addon_rumble_pak">Rumble Pak (paket getar DS)</string>
+    <string name="compat_slot2_addon_memory_expansion">Memory Expansion Pak (RAM 8 MB)</string>
+    <string name="compat_slot2_addon_solar_sensor">Solar Sensor (sensor cahaya Boktai)</string>
+    <string name="compat_slot2_addon_motion_pak">Motion Pak (giroskop dan akselerometer)</string>
+    <string name="compat_slot2_addon_guitar_grip">Guitar Grip (4 tombol Guitar Hero)</string>
+    <string name="compat_slot2_addon_paddle_controller">Paddle Controller (pemutar Arkanoid)</string>
+    <string name="compat_solar_sensor_title">Sensor surya (Boktai / Lunar Knights)</string>
+    <string name="compat_solar_sensor_auto_short">Otomatis (sensor ponsel)</string>
+    <string name="compat_solar_sensor_level_bars">%1$d / 10 tingkat</string>
+    <string name="compat_solar_sensor_auto_full">Otomatis (sensor cahaya sekitar ponsel)</string>
+    <string name="compat_solar_sensor_level_0">0 / 10 (gelap gulita)</string>
+    <string name="compat_solar_sensor_level_2">2 / 10 (senja)</string>
+    <string name="compat_solar_sensor_level_4">4 / 10 (teduh atau berawan)</string>
+    <string name="compat_solar_sensor_level_6">6 / 10 (hari cerah)</string>
+    <string name="compat_solar_sensor_level_8">8 / 10 (matahari terik)</string>
+    <string name="compat_solar_sensor_level_10">10 / 10 (matahari tepat di atas)</string>
+    <string name="compat_ir_pedometer_title">Pedometer IR Pokéwalker (Pokémon HG/SS)</string>
+    <string name="compat_ir_pedometer_add_100">+100 langkah</string>
+    <string name="compat_ir_pedometer_add_500">+500 langkah</string>
+    <string name="compat_ir_pedometer_add_1000">+1000 langkah</string>
+    <string name="compat_ir_pedometer_add_5000">+5000 langkah</string>
+    <string name="compat_ir_pedometer_reset">Atur ulang penghitung (0 langkah)</string>
+</resources>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">Lanjutkan</string>
+    <string name="feature_quick_resume_continue_game">Lanjutkan: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">Lanjutkan</string>
+    <string name="feature_quick_resume_from_save">Simpan cepat • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">Lanjutkan dari simpan cepat</string>
+    <string name="feature_quick_resume_last_played">Terakhir dimainkan • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">Mulai normal — belum ada simpan cepat</string>
+    <string name="feature_quick_resume_tile_label">Lanjutkan game</string>
+    <string name="feature_quick_resume_no_recent_game">Tidak ada game terbaru</string>
+    <string name="feature_quick_resume_not_found">Game yang terakhir dimainkan tidak ditemukan</string>
+    <string name="feature_stats_menu_title">Statistik pemain</string>
+    <string name="feature_stats_title">Statistik pemain</string>
+    <string name="feature_stats_subtitle">Waktu bermain, jumlah dijalankan, dan aktivitas harian</string>
+    <string name="feature_stats_total_play_time">Total waktu bermain</string>
+    <string name="feature_stats_games_played">Game dimainkan</string>
+    <string name="feature_stats_total_launches">Total dijalankan</string>
+    <string name="feature_stats_daily_chart_title">Waktu bermain harian (7 hari terakhir)</string>
+    <string name="feature_stats_top_by_time">Game teratas menurut waktu bermain</string>
+    <string name="feature_stats_top_by_launches">Game teratas menurut jumlah dijalankan</string>
+    <string name="feature_stats_launches_count">Dijalankan: %1$d</string>
+    <string name="feature_stats_time_hm">%1$dj %2$dm</string>
+    <string name="feature_stats_time_m">%1$dm</string>
+    <string name="feature_stats_time_less_than_min">&lt;1m</string>
+    <string name="feature_stats_empty_title">Belum ada statistik</string>
+    <string name="feature_stats_empty_desc">Jalankan game apa pun untuk mulai mencatat waktu bermain dan aktivitas harian</string>
+    <string name="feature_problem_report_menu_title">Laporkan masalah</string>
+    <string name="feature_problem_report_dialog_title">Buat laporan masalah</string>
+    <string name="feature_problem_report_dialog_message">Membuat arsip ZIP diagnostik yang berisi versi aplikasi, info perangkat dan GPU, versi Android, pengaturan emulator dan perender (tanpa akun atau token), kode game terakhir, dan log terbaru. Tidak ada yang dikirim secara otomatis — Anda memilih ke mana file dibagikan.</string>
+    <string name="feature_problem_report_create_action">Buat dan bagikan</string>
+    <string name="feature_problem_report_generating">Mengumpulkan laporan diagnostik…</string>
+    <string name="feature_problem_report_share_chooser">Bagikan laporan masalah</string>
+    <string name="feature_problem_report_failed">Gagal membuat laporan masalah</string>
+</resources>

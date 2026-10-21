@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compat_reset_safe_mode">Restablecer el modo seguro</string>
+    <string name="compat_safe_mode_applied_toast">Modo seguro activado (%1$s, escala 1x)</string>
+    <string name="compat_safe_mode_jit_disabled_toast">Modo seguro activado (%1$s, escala 1x, JIT desactivado)</string>
+    <string name="compat_safe_mode_reset_toast">Modo seguro restablecido a los ajustes predeterminados</string>
+    <string name="compat_load_fallback_retry_toast">Error al inicializar %1$s, reintentando con %2$s</string>
+    <string name="compat_capability_fallback_toast">%1$s no es compatible con este dispositivo, cambiado a %2$s</string>
+    <string name="compat_touch_stick_mode_enabled">Modo de minipalanca activado</string>
+    <string name="compat_touch_dpad_mode_enabled">Modo de botones de dirección activado</string>
+    <string name="compat_slot2_addon_title">Accesorio Slot-2 (GBA)</string>
+    <string name="compat_slot2_addon_disabled">Desactivado</string>
+    <string name="compat_slot2_addon_rumble_pak">Rumble Pak (módulo de vibración DS)</string>
+    <string name="compat_slot2_addon_memory_expansion">Memory Expansion Pak (8 MB de RAM)</string>
+    <string name="compat_slot2_addon_solar_sensor">Solar Sensor (sensor solar de Boktai)</string>
+    <string name="compat_slot2_addon_motion_pak">Motion Pak (giroscopio y acelerómetro)</string>
+    <string name="compat_slot2_addon_guitar_grip">Guitar Grip (4 trastes de Guitar Hero)</string>
+    <string name="compat_slot2_addon_paddle_controller">Paddle Controller (rueda de Arkanoid)</string>
+    <string name="compat_solar_sensor_title">Sensor solar (Boktai / Lunar Knights)</string>
+    <string name="compat_solar_sensor_auto_short">Auto (sensor del teléfono)</string>
+    <string name="compat_solar_sensor_level_bars">%1$d / 10 barras</string>
+    <string name="compat_solar_sensor_auto_full">Auto (sensor de luz ambiental del teléfono)</string>
+    <string name="compat_solar_sensor_level_0">0 / 10 (oscuridad total)</string>
+    <string name="compat_solar_sensor_level_2">2 / 10 (penumbra)</string>
+    <string name="compat_solar_sensor_level_4">4 / 10 (sombra o nublado)</string>
+    <string name="compat_solar_sensor_level_6">6 / 10 (día despejado)</string>
+    <string name="compat_solar_sensor_level_8">8 / 10 (sol intenso)</string>
+    <string name="compat_solar_sensor_level_10">10 / 10 (sol en el cenit)</string>
+    <string name="compat_ir_pedometer_title">Podómetro IR Pokéwalker (Pokémon HG/SS)</string>
+    <string name="compat_ir_pedometer_add_100">+100 pasos</string>
+    <string name="compat_ir_pedometer_add_500">+500 pasos</string>
+    <string name="compat_ir_pedometer_add_1000">+1000 pasos</string>
+    <string name="compat_ir_pedometer_add_5000">+5000 pasos</string>
+    <string name="compat_ir_pedometer_reset">Restablecer contador (0 pasos)</string>
+</resources>

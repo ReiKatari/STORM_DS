@@ -106,7 +106,7 @@
     <string name="pref_cat_backup_restore">Backup and restore</string>
     <string name="pref_cat_renderer_3d">Renderer and 3D graphics</string>
     <string name="pref_cat_enhancements">Enhancements and upscaling</string>
-    <string name="pref_cat_retroarch_shaders">RetroArch Shaders</string>
+    <string name="pref_cat_retroarch_shaders">RetroArch shaders</string>
     <string name="pref_cat_display_layout">Display, skins and HUD</string>
     <string name="pref_cat_audio_output">Audio output and quality</string>
     <string name="pref_cat_microphone">Microphone and recording</string>
@@ -116,7 +116,7 @@
     <string name="pref_cat_system_misc">System and logs</string>
     <string name="pref_cat_core_compiler">CPU and compilers</string>
     <string name="pref_cat_bios_firmware">BIOS and firmware</string>
-    <string name="pref_cat_sd_cards">Virtual SD Cards</string>
+    <string name="pref_cat_sd_cards">Virtual SD cards</string>
     <string name="pref_cat_network_wfc">Nintendo WFC network</string>
     <string name="pref_cat_layout_management">Layouts and screen area</string>
 
@@ -181,7 +181,7 @@
     <string name="download_progress_sizes">%1$.1fMB/%2$.1fMB</string>
     <string name="update_download_failed">Failed to download update</string>
 
-    <string name="dsiware_manager">DSiWare Manager</string>
+    <string name="dsiware_manager">DSiWare manager</string>
     <string name="no_dsiware_titles_installed">You don\'t have any DSiWare title installed</string>
     <string name="dsiware_manager_no_dsi_setup">You haven\'t setup the DSi system</string>
     <string name="dsiware_manager_invalid_dsi_setup">Your DSi system setup is invalid</string>
@@ -330,7 +330,7 @@
     <string name="rewind">Rewind</string>
     <string name="save_slot">Save slot</string>
     <string name="empty_slot">%1$s. &lt;Empty&gt;</string>
-    <string name="quick_slot">Quick Slot</string>
+    <string name="quick_slot">Quick slot</string>
     <string name="saved">Saved</string>
     <string name="loaded">Loaded</string>
     <string name="title_activity_settings">Settings</string>
@@ -374,7 +374,7 @@
   <string name="rom_no_favorites">No favorites yet long-press a ROM to mark one</string>
     <string name="rom_action_favorite">Add to favorites</string>
     <string name="rom_action_unfavorite">Remove from favorites</string>
-    <string name="rom_action_details">ROM Config and Details</string>
+    <string name="rom_action_details">ROM config and details</string>
     <string name="rom_action_send_save_file">Send save file</string>
     <string name="rom_action_import_save_file">Import save file</string>
     <string name="rom_save_file_share_chooser">Send save file</string>
@@ -433,10 +433,10 @@
     <string name="auto_download_dsi_bios_summary">Auto-download and configure dsi_bios7.bin, dsi_bios9.bin, dsi_sd_card.bin, dsi_firmware.bin, nand.bin</string>
     <string name="dsi_bios_directory">DSi BIOS directory</string>
     <string name="show_boot_screen">Show boot screen</string>
-    <string name="dsiware_boot_mode_title">DSiWare Boot Mode</string>
-    <string name="dsiware_boot_mode_autoload">System Autoload</string>
-    <string name="dsiware_boot_mode_direct">Direct Boot</string>
-    <string name="dsiware_boot_mode_system_menu">DSi System Menu (NAND Launcher)</string>
+    <string name="dsiware_boot_mode_title">DSiWare boot mode</string>
+    <string name="dsiware_boot_mode_autoload">System autoload</string>
+    <string name="dsiware_boot_mode_direct">Direct boot</string>
+    <string name="dsiware_boot_mode_system_menu">DSi system menu (NAND launcher)</string>
     <string name="mac_address">MAC address</string>
     <string name="randomize_mac_address">Randomize MAC address</string>
     <string name="randomize_mac_address_summary">When enabled, a random MAC address is used at every boot. This may cause some games to think its running on a different system and can break time based events.</string>
@@ -497,7 +497,7 @@
     <string name="video_vulkan_fastpath_warning_title" tools:ignore="MissingTranslation">Enable experimental Vulkan FastPath?</string>
     <string name="video_vulkan_fastpath_warning_message" tools:ignore="MissingTranslation">Vulkan FastPath may cause graphical glitches, stale or incorrect frames, or stability issues in some games.</string>
     <string name="video_vulkan_fastpath_enable_action" tools:ignore="MissingTranslation">Enable FastPath</string>
-    <string name="video_hacks">Video Hacks</string>
+    <string name="video_hacks">Video hacks</string>
     <string name="video_renderer_debug_tools_enabled">Renderer debug tools</string>
     <string name="video_renderer_debug_tools_enabled_summary">Enables renderer snapshots, parity captures and performance/debug logs in release builds.</string>
     <string name="video_renderer_debug_bgobj_enabled">Show RendererDebug BGOBJ</string>
@@ -511,6 +511,10 @@
     <string name="video_vulkan_driver_category">Vulkan driver</string>
     <string name="video_vulkan_driver_manager_title">Vulkan driver hub</string>
     <string name="video_vulkan_driver_manager_summary">Download and switch Turnip/Mesa drivers directly from cloud</string>
+    <string name="video_prefs_resolution_position_changed">Resolution indicator moved to avoid overlapping the FPS counter</string>
+    <string name="video_prefs_fps_position_changed">FPS counter moved to avoid overlapping the resolution indicator</string>
+    <string name="video_prefs_recommended_driver_available">⭐ Recommended driver available: %1$s</string>
+    <string name="video_prefs_internal_resolution_software_only">3D resolution scaling is only available with OpenGL or Vulkan.</string>
     <string name="video_vulkan_driver_mode">Adreno Vulkan driver</string>
     <string name="video_vulkan_driver_import">Import custom driver</string>
     <string name="video_vulkan_driver_import_summary">Install a driver ZIP. Changes apply the next time a game starts.</string>
@@ -569,7 +573,7 @@
     <string name="audio_latency">Audio latency</string>
     <string name="microphone_source">Microphone source</string>
     <string name="controller_layout">Layouts</string>
-    <string name="category_save_files">Save Files</string>
+    <string name="category_save_files">Save files</string>
     <string name="category_save_files_summary">Save file and save state locations</string>
     <string name="save_next_rom">Save next to ROM file</string>
     <string name="save_file_directory">Save file directory</string>
@@ -585,7 +589,7 @@
     <string name="input_summary">Key mapping, layouts, haptic feedback</string>
     <string name="key_mapping">Key mapping</string>
     <string name="key_mapping_summary">Assign keys to controller inputs</string>
-    <string name="slot2_analog_mapping_title">Slot-2 Analog Input</string>
+    <string name="slot2_analog_mapping_title">Slot-2 analog input</string>
     <string name="slot2_analog_mapping_summary">Configure joystick axis mapping for Slot-2 analog support.</string>
     <string name="slot2_analog_axis_x">Analog axis X</string>
     <string name="slot2_analog_axis_y">Analog axis Y</string>
@@ -606,11 +610,11 @@
     <string name="vibration_strength">Vibration strength</string>
     <string name="soft_input_opacity">Soft input opacity</string>
     <string name="retroachievements">RetroAchievements</string> <!-- Keep words together because this is the official name -->
-    <string name="retroachievements_summary">Login and manage RetroAchievements integration</string> <!-- Keep words together because this is the official name -->
+    <string name="retroachievements_summary">Log in and manage RetroAchievements integration</string> <!-- Keep words together because this is the official name -->
     <string name="enable_retroachievements">Enable RetroAchievements</string>
     <string name="enable_retroachievements_summary">Keep your account signed in, but skip achievement runtime and profile activity while disabled</string>
     <string name="enable_rich_presence">Enable rich presence</string>
-    <string name="rich_presence_summary">Allows other RetroAchievement users to see what you are playing</string>
+    <string name="rich_presence_summary">Allows other RetroAchievements users to see what you are playing</string>
     <string name="show_unofficial_achievements">Show unofficial achievements</string>
     <string name="show_unofficial_achievements_summary">Include unofficial achievement definitions in the runtime list and overlays</string>
     <string name="enable_encore_mode">Enable encore mode</string>
@@ -697,9 +701,9 @@
 
     <string name="notification_channel_background_tasks">Background tasks</string>
 
-    <string name="top_screen">Top Screen</string>
-    <string name="bottom_screen">Bottom Screen</string>
-    <string name="hybrid_screen">Hybrid Screen</string>
+    <string name="top_screen">Top screen</string>
+    <string name="bottom_screen">Bottom screen</string>
+    <string name="hybrid_screen">Hybrid screen</string>
     <string name="custom_layout">Custom layout</string>
     <string name="input_a">A</string>
     <string name="input_b">B</string>
@@ -709,54 +713,54 @@
     <string name="input_right">Right</string>
     <string name="input_up">Up</string>
     <string name="input_down">Down</string>
-    <string name="input_left_joy">Left Joy</string>
-    <string name="input_right_joy">Right Joy</string>
-    <string name="input_up_joy">Up Joy</string>
-    <string name="input_down_joy">Down Joy</string>
+    <string name="input_left_joy">Left joy</string>
+    <string name="input_right_joy">Right joy</string>
+    <string name="input_up_joy">Up joy</string>
+    <string name="input_down_joy">Down joy</string>
     <string name="input_l">L</string>
     <string name="input_r">R</string>
     <string name="input_start">Start</string>
     <string name="input_select">Select</string>
-    <string name="input_lid">Toggle Lid</string>
+    <string name="input_lid">Toggle lid</string>
     <string name="input_pause">Pause</string>
-    <string name="input_fast_forward">Fast Forward (Toggle)</string>
-    <string name="input_hold_fast_forward">Fast Forward (Hold)</string>
-    <string name="input_microphone">Toggle Microphone</string>
-    <string name="input_toggle_soft_input">Toggle Soft Input</string>
+    <string name="input_fast_forward">Fast forward (toggle)</string>
+    <string name="input_hold_fast_forward">Fast forward (hold)</string>
+    <string name="input_microphone">Toggle microphone</string>
+    <string name="input_toggle_soft_input">Toggle soft input</string>
     <string name="input_reset">@string/reset</string>
     <string name="input_dpad">DPAD</string>
-    <string name="input_abxy_buttons">ABXY Buttons</string>
-    <string name="input_swap_screens">Swap Screens</string>
-    <string name="input_quick_save">Quick Save</string>
-    <string name="input_quick_load">Quick Load</string>
-    <string name="input_translate">Translate Screen</string>
-    <string name="input_lock_rotation">Lock Screen Orientation</string>
+    <string name="input_abxy_buttons">ABXY buttons</string>
+    <string name="input_swap_screens">Swap screens</string>
+    <string name="input_quick_save">Quick save</string>
+    <string name="input_quick_load">Quick load</string>
+    <string name="input_translate">Translate screen</string>
+    <string name="input_lock_rotation">Lock screen orientation</string>
     <string name="toast_screens_swapped">Screens swapped</string>
     <string name="toast_screens_restored">Original screen layout</string>
     <string name="toast_rotation_locked">Screen orientation locked</string>
-    <string name="toast_rotation_unlocked">Screen orientation unlocked (Auto-rotate)</string>
-    <string name="screen_layout">Screen Layout</string>
-    <string name="layout_even_landscape">Even Landscape (Dual Screen)</string>
-    <string name="layout_uneven_landscape">Uneven Landscape (Main + Sub)</string>
-    <string name="layout_even_portrait_locked">Even Portrait (Locked)</string>
-    <string name="layout_proportional_landscape">Proportional Landscape (4:3)</string>
-    <string name="layout_fullscreen_landscape">Fullscreen Landscape</string>
-    <string name="layout_auto_rotate">Auto-Rotate (Sensor)</string>
-    <string name="layout_open_editor">Layout Editor</string>
+    <string name="toast_rotation_unlocked">Screen orientation unlocked (auto-rotate)</string>
+    <string name="screen_layout">Screen layout</string>
+    <string name="layout_even_landscape">Even landscape (dual screen)</string>
+    <string name="layout_uneven_landscape">Uneven landscape (main + sub)</string>
+    <string name="layout_even_portrait_locked">Even portrait (locked)</string>
+    <string name="layout_proportional_landscape">Proportional landscape (4:3)</string>
+    <string name="layout_fullscreen_landscape">Fullscreen landscape</string>
+    <string name="layout_auto_rotate">Auto-rotate (sensor)</string>
+    <string name="layout_open_editor">Layout editor</string>
     <string name="toast_layout_applied">Layout: %1$s</string>
-    <string name="input_group_console">Console Controls</string>
-    <string name="input_group_hotkeys">Hotkeys and Shortcuts</string>
+    <string name="input_group_console">Console controls</string>
+    <string name="input_group_hotkeys">Hotkeys and shortcuts</string>
 
     <string name="layouts">Layouts</string>
     <string name="layouts_summary">Manage custom layout configurations</string>
     <string name="action_layouts_new">New layout</string>
     <string name="default_layout_name">Default</string>
-    <string name="custom_layout_default_name">My Layout</string>
+    <string name="custom_layout_default_name">My layout</string>
     <string name="use_global_layout">Use global layout</string>
     <string name="use_global_preference">Use global setting</string>
     <string name="use_global_preference_with_value">Use global setting (%1$s)</string>
     <string name="global_controller_mapping">Global mapping</string>
-    <string name="cannot_change_use_rom_settings">Cannot change, use ROM Settings</string>
+    <string name="cannot_change_use_rom_settings">Cannot change, use ROM settings</string>
     <string name="label_rom_config_video">Video</string>
     <string name="retroarch_shader_root_not_valid">No RetroArch shaders are configured. Install them or select a folder in Video settings.</string>
     <string name="video_setting_cannot_change_ingame">Cannot change in-game</string>
@@ -781,8 +785,8 @@
     <string name="dual_screen_presets_summary">Preset: %1$s\nKeep DS ratio: %2$s • Integer scale: %3$s\nInternal H: %4$s • Internal W: %5$s\nExternal H: %6$s • External W: %7$s</string>
     <string name="dual_screen_presets_disabled_hint">Presets disabled. Select a preset to enable the options below.</string>
     <string name="dual_screen_preset_off">Disabled (manual layout)</string>
-    <string name="dual_screen_preset_internal_top_external_bottom">Internal: Top, External: Bottom</string>
-    <string name="dual_screen_preset_internal_bottom_external_top">Internal: Bottom, External: Top</string>
+    <string name="dual_screen_preset_internal_top_external_bottom">Internal: top, external: bottom</string>
+    <string name="dual_screen_preset_internal_bottom_external_top">Internal: bottom, external: top</string>
     <string name="dual_screen_integer_scale">Integer scale</string>
     <string name="dual_screen_internal_fill_height">Fill internal height</string>
     <string name="dual_screen_external_fill_height">Fill external height</string>
@@ -792,8 +796,8 @@
     <string name="dual_screen_fill_area_title">Fill area options</string>
     <string name="dual_screen_fill_area_description">Choose which DS screens stretch vertically or horizontally when Integer scale or Keep DS ratio is active.</string>
     <string name="dual_screen_fill_area_requires_integer">Enable Integer scale or Keep DS ratio to adjust these options.</string>
-    <string name="dual_screen_fill_section_internal">Internal Screen</string>
-    <string name="dual_screen_fill_section_external">External Screen</string>
+    <string name="dual_screen_fill_section_internal">Internal screen</string>
+    <string name="dual_screen_fill_section_external">External screen</string>
     <string name="dual_screen_fill_height_label">Height</string>
     <string name="dual_screen_fill_width_label">Width</string>
     <string name="dual_screen_vertical_alignment_button">Vertical alignment options</string>
@@ -830,7 +834,7 @@
     <string name="layout_component_position_title">%1$s position</string>
     <string name="layout_position_allowed_range">Allowed range: %1$d to %2$d</string>
 
-    <string name="layout_background_title">Layout Background</string>
+    <string name="layout_background_title">Layout background</string>
     <string name="background">Background</string>
     <string name="backgrounds">Backgrounds</string>
     <string name="background_mode">Background mode</string>
@@ -840,9 +844,9 @@
     <string name="background_add_processing_failed">Failed to process the selected background image. Make sure it\'s not corrupted.</string>
 
     <string name="retro_achievements_login_description">Login with RetroAchievements to view achievements that you can unlock while playing this game!</string>
-    <string name="login_with_retro_achievements">Login with RetroAchievements</string>
+    <string name="login_with_retro_achievements">Log in with RetroAchievements</string>
     <string name="login">Login</string>
-    <string name="retroachievements_login_summary">Login with RetroAchievements to unlock achievements while playing!</string>
+    <string name="retroachievements_login_summary">Log in with RetroAchievements to unlock achievements while playing!</string>
     <string name="retroachievements_login_status">Logged in as %1$s</string>
     <string name="retroachievements_login_expired_status">Your RetroAchievements login expired. Click to log in again</string>
     <string name="retroachievements_logout">Logout</string>
@@ -863,11 +867,11 @@
     <string name="retro_achievements_enabled">Enabled</string>
     <string name="retro_achievements_disabled">Disabled</string>
     <string name="retro_achievements_enabled_global_disabled">Enabled when global setting is on</string>
-    <string name="retro_achievements_pending_unlocks">Pending Unlocks</string>
-    <string name="retro_achievements_active_challenges">Active Challenges</string>
-    <string name="retro_achievements_recently_unlokced">Recently Unlocked</string>
+    <string name="retro_achievements_pending_unlocks">Pending unlocks</string>
+    <string name="retro_achievements_active_challenges">Active challenges</string>
+    <string name="retro_achievements_recently_unlokced">Recently unlocked</string>
     <string name="retro_achievements_unsynced">Unsynced</string>
-    <string name="retro_achievements_almost_there">Almost There</string>
+    <string name="retro_achievements_almost_there">Almost there</string>
     <string name="retro_achievements_locked">Locked</string>
     <string name="retro_achievements_unsupported">Unsupported</string>
     <string name="retro_achievements_unofficial">Unofficial</string>
@@ -893,7 +897,7 @@
     <string name="completed">Completed</string>
     <string name="ra_mode_hardcore">Hardcore</string>
     <string name="ra_mode_softcore">Softcore</string>
-    <string name="ra_base_set">Base Set</string>
+    <string name="ra_base_set">Base set</string>
     <string name="view_achievement">View achievement</string>
     <string name="completed_achievements"><b>%1$d</b> of <b>%2$d</b> (%3$d%%)</string>
     <string name="submitting_achievements">Submitting RetroAchievements…</string>
@@ -963,7 +967,7 @@
     <string name="ra_pending_process_loss_notification_message">%1$d Hardcore submissions (%2$d achievements, %3$d leaderboard scores) from %4$s may not have synchronized because the live session ended before local server acceptance was confirmed.</string>
     <string name="offline_ra_mode_softcore">RetroAchievements mode: Softcore</string>
     <string name="offline_ra_mode_hardcore">RetroAchievements mode: Hardcore</string>
-    <string name="offline_ra_mode_softcore_offline">RetroAchievements mode: Softcore Offline</string>
+    <string name="offline_ra_mode_softcore_offline">RetroAchievements mode: Softcore offline</string>
     <string name="offline_ra_mode_softcore_offline_hardcore_disabled">Softcore Offline enabled. Hardcore Offline is disabled.</string>
     <string name="offline_ra_mode_softcore_offline_no_internet_start">RetroAchievements mode: Softcore Offline (no Internet).</string>
     <string name="achievements_loaded">Achievements loaded</string>
@@ -979,7 +983,7 @@
     <string name="achievements_unlocked_compact">Unlocked: %1$d/%2$d</string>
     <string name="game_has_no_achievements">This game has no achievements</string>
     <string name="achievements_failed_load">Failed to load achievements!</string>
-    <string name="achievements_failed_load_tip">Make sure you are Online</string>
+    <string name="achievements_failed_load_tip">Make sure you are online</string>
     <string name="achievements_login_expired">RetroAchievements login expired!</string>
     <string name="achievements_login_expired_tip">Log in again to enable RetroAchievements</string>
     <string name="achievement_unlocked">Achievement unlocked!</string>
@@ -1158,9 +1162,9 @@
     <string name="video_retroarch_shader_clear_history_summary">Reset multipass history on the next presentation config update.</string>
 
     <string name="video_retroarch_shader_source_title">Shader source</string>
-    <string name="video_retroarch_shader_source_scan_retroarch">Find on Device (RetroArch)</string>
+    <string name="video_retroarch_shader_source_scan_retroarch">Find on device (RetroArch)</string>
     <string name="video_retroarch_shader_source_scan_retroarch_description">Automatically search for installed RetroArch shaders and import them to STORM DS.</string>
-    <string name="video_retroarch_shader_scan_found_title">Import RetroArch Shaders</string>
+    <string name="video_retroarch_shader_scan_found_title">Import RetroArch shaders</string>
     <string name="video_retroarch_shader_scan_found_msg">Found RetroArch shaders in:\n%1$s\n\nImport them into STORM DS?</string>
     <string name="video_retroarch_shader_scan_not_found">RetroArch shaders were not found in standard directories. Please select a folder manually.</string>
     <string name="video_retroarch_shader_scan_import_success">Successfully imported %1$d shader files!</string>
@@ -1291,7 +1295,7 @@
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch core)</string>
     <string name="about_credits_melonds_ds_summary">JesseTG and Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
-    <string name="about_credits_drastic_title">DraStic and fastDS Inspirations</string>
+    <string name="about_credits_drastic_title">DraStic and fastDS inspirations</string>
     <string name="about_credits_drastic_summary">Exophase and DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
     <string name="about_credits_libraries_title">Open source libraries and tools</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang shaders), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (Adreno/Turnip drivers)</string>
@@ -1352,35 +1356,35 @@
     </string-array>
     <string name="rom_display_name_mode">Game title display</string>
     <string name="rom_display_name_mode_file_name">File name (without extension)</string>
-    <string name="rom_display_name_mode_internal">Internal game title (from ROM/Database)</string>
+    <string name="rom_display_name_mode_internal">Internal game title (from ROM/database)</string>
 
     <!-- Auto-Translator Strings -->
     <string name="category_translator">Auto-Translator</string>
     <string name="category_translator_summary">Smart in-game neural translation and native overlay</string>
-    <string name="translator_enabled">Enable Auto-Translator</string>
+    <string name="translator_enabled">Enable auto-translator</string>
     <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
-    <string name="translator_engine">Translation Engine</string>
-    <string name="translator_engine_offline">Google ML Kit (100% On-Device Neural)</string>
-    <string name="translator_engine_yandex">Yandex Translate (Free / Best Russian)</string>
-    <string name="translator_engine_google">Google Translate (Online / Fast)</string>
-    <string name="translator_engine_lingva">Lingva Neural (Free / No Rate Limits)</string>
-    <string name="translator_engine_deepl">DeepL Neural API (API Key)</string>
-    <string name="translator_engine_libre">LibreTranslate (Open-Source)</string>
+    <string name="translator_engine">Translation engine</string>
+    <string name="translator_engine_offline">Google ML Kit (100% on-device neural)</string>
+    <string name="translator_engine_yandex">Yandex Translate (free / best for Russian)</string>
+    <string name="translator_engine_google">Google Translate (online / fast)</string>
+    <string name="translator_engine_lingva">Lingva Neural (free / no rate limits)</string>
+    <string name="translator_engine_deepl">DeepL neural API (API key)</string>
+    <string name="translator_engine_libre">LibreTranslate (open source)</string>
     <string name="translator_engine_mymemory">MyMemory Translated</string>
     <string name="translator_engine_custom_ai">Custom AI (ChatGPT / Claude / DeepSeek)</string>
-    <string name="translator_source_lang">Source Language</string>
-    <string name="translator_target_lang">Target Language</string>
-    <string name="translator_trigger_mode">Translation Trigger</string>
-    <string name="translator_trigger_mode_on_demand">On-Demand (Button or Hotkey)</string>
-    <string name="translator_trigger_mode_auto">Auto-Detect on Screen Change</string>
+    <string name="translator_source_lang">Source language</string>
+    <string name="translator_target_lang">Target language</string>
+    <string name="translator_trigger_mode">Translation trigger</string>
+    <string name="translator_trigger_mode_on_demand">On demand (button or hotkey)</string>
+    <string name="translator_trigger_mode_auto">Auto-detect on screen change</string>
     <string name="translator_pause_on_translate">Pause game during translation</string>
     <string name="translator_pause_on_translate_summary">Temporarily suspend gameplay while text overlay is visible</string>
-    <string name="translator_overlay_style">Overlay Appearance</string>
-    <string name="translator_style_smart_match">Smart Game Background Inpainting</string>
-    <string name="translator_style_semi_transparent">Semi-transparent Dark</string>
-    <string name="translator_style_neon_bubble">Translucent Neon Bubble</string>
-    <string name="translator_style_outline_only">Outline Only (No Background)</string>
-    <string name="translator_bubble_opacity">Background Opacity</string>
+    <string name="translator_overlay_style">Overlay appearance</string>
+    <string name="translator_style_smart_match">Smart game background inpainting</string>
+    <string name="translator_style_semi_transparent">Semi-transparent dark</string>
+    <string name="translator_style_neon_bubble">Translucent neon bubble</string>
+    <string name="translator_style_outline_only">Outline only (no background)</string>
+    <string name="translator_bubble_opacity">Background opacity</string>
     <string name="translator_font_size_scale">Font size scale</string>
     <string name="translator_show_floating_button">Show floating translate button</string>
     <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
@@ -1388,20 +1392,20 @@
     <string name="translator_tts_enabled">Enable speech synthesis (TTS)</string>
     <string name="translator_tts_enabled_summary">Read translated game dialogues aloud automatically</string>
     <string name="translator_tts_lang_title">Voice acting language</string>
-    <string name="translator_tts_multi_voice">Multi-Character Voice Acting</string>
+    <string name="translator_tts_multi_voice">Multi-character voice acting</string>
     <string name="translator_tts_multi_voice_summary">Automatically detect male, female, and elder characters to speak with different timbres and pitches</string>
     <string name="translator_api_keys_category">API keys and custom AI configuration</string>
     <string name="translator_deepl_key">DeepL API key</string>
     <string name="translator_custom_ai_key">AI API key (Gemini/OpenAI/Claude)</string>
     <string name="translator_custom_ai_endpoint">AI base URL / endpoint</string>
     <string name="translator_custom_ai_model">AI model name</string>
-    <string name="translator_disabled_hint">Auto-Translator is disabled in Settings</string>
+    <string name="translator_disabled_hint">Auto-translator is disabled in settings</string>
     <string name="translator_capture_failed">Failed to capture emulator screen</string>
     <string name="translator_no_text_found">No readable text found on screen</string>
-    <string name="translator_regions_title">Translation Regions</string>
+    <string name="translator_regions_title">Translation regions</string>
     <string name="translator_regions_summary">Targeted translation areas on screen</string>
     <string name="translator_add_region">+ Area</string>
-    <string name="translator_clear_regions">Clear All</string>
+    <string name="translator_clear_regions">Clear all</string>
     <string name="translator_save_regions">Save</string>
     <string name="translator_close_regions">Close</string>
     <string name="translator_regions_saved_toast">Translation regions saved: %d</string>
@@ -1412,11 +1416,11 @@
     <string name="translator_dict_title">Dictionary and phrase breakdown</string>
     <string name="translator_speak_action">Speak ▶️</string>
     <string name="translator_preview_voice">Test voice ▶️</string>
-    <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24kHz)</string>
-    <string name="translator_voice_engine_local_multi">Local AI Studio (Piper INT8, offline)</string>
+    <string name="translator_voice_engine_neural">Edge neural HD (cloud, 24kHz)</string>
+    <string name="translator_voice_engine_local_multi">Local AI studio (Piper INT8, offline)</string>
     <string name="translator_voice_engine_system">System Android TTS</string>
     <string name="resolution_hud_position_title">Current resolution display</string>
-    <string name="button_translate">Translate Screen</string>
+    <string name="button_translate">Translate screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>
     <string name="lang_en">English</string>
@@ -1432,15 +1436,15 @@
     <string name="label_button_spread">Button spacing</string>
     <string name="input_toggle_extra_buttons">Toggle extra buttons</string>
     <string name="input_toggle_analog_stick">Toggle analog stick / D-Pad</string>
-    <string name="toggle_visibility">Hide / Show</string>
-    <string name="components_visibility_title">Manage Components</string>
+    <string name="toggle_visibility">Hide / show</string>
+    <string name="components_visibility_title">Manage components</string>
     <string name="back">Back</string>
     <string name="rom_info_file">File</string>
     <string name="rom_info_last_played">Last played</string>
     <string name="rom_info_never">Never</string>
     <string name="wfc_server_title">Nintendo WFC online server</string>
     <string name="wfc_server_summary">1-Click connect to custom Nintendo Wi-Fi Connection servers</string>
-    <string name="wfc_server_disabled">Official / Disabled</string>
+    <string name="wfc_server_disabled">Official / disabled</string>
     <string name="wfc_server_custom">Custom DNS</string>
     <string name="wfc_custom_dns_title">Custom WFC primary DNS</string>
     <string name="wfc_custom_dns_summary">Primary DNS IP address for Nintendo WFC multiplayer</string>
@@ -1452,9 +1456,9 @@
     <string name="video_ai_upscale_scale_title">AI upscale resolution</string>
     <string name="video_hd_textures_title">HD texture packs loader</string>
     <string name="video_hd_textures_summary">Automatically load custom HD/4K textures from textures/&lt;GameID&gt;/</string>
-    <string name="input_gyro_aiming_title">Gyro Aiming</string>
+    <string name="input_gyro_aiming_title">Gyro aiming</string>
     <string name="input_gyro_aiming_summary">Control aiming in 3D shooters (Metroid, Dementium, Moon) by tilting device</string>
-    <string name="input_gyro_sensitivity_title">Gyro Sensitivity</string>
+    <string name="input_gyro_sensitivity_title">Gyro sensitivity</string>
     <string name="pref_cat_dsp_effects">DSP sound effects and limiter</string>
     <string name="audio_soft_limiter_title">Soft-clipping peak limiter</string>
     <string name="audio_soft_limiter_summary">Smoothly limits dynamic audio peaks, eliminating clicks, pops, and crackles during frame drops and fast forward</string>
@@ -1477,56 +1481,56 @@
     <string name="input_gyro_deadzone_y_title">Vertical deadzone (Y)</string>
     <string name="input_gyro_deadzone_y_summary">Suppress micro-tremors along the vertical axis</string>
     <string name="input_gyro_recenter_quick_action">Quick calibrate / center</string>
-    <string name="translator_tts_neural_title">Neural Cloud TTS (High Quality)</string>
+    <string name="translator_tts_neural_title">Neural cloud TTS (high quality)</string>
     <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
     <string name="video_console_skin_title">3D animated console skin</string>
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
     <string name="video_console_skin_type_title">Console model and color</string>
     <string name="video_oled_battery_saver_title">Smart OLED battery saver</string>
     <string name="video_oled_battery_saver_summary">Uses a pure black background and disables the console skin to save power on OLED screens</string>
-    <string name="decrypt_rom_title">ROM Encrypted</string>
+    <string name="decrypt_rom_title">ROM encrypted</string>
     <string name="decrypt_rom_description">This DSi ROM uses Modcrypt encryption. Decrypt it to enable direct playback.</string>
     <string name="decrypt_rom_button">Decrypt</string>
     <string name="decrypt_rom_success">ROM successfully decrypted!</string>
     <string name="decrypt_rom_error">Decryption failed</string>
     <string name="decrypt_rom_progress">Decrypting...</string>
-    <string name="rom_status_decrypted">ROM Decrypted</string>
-    <string name="rom_status_encrypted">ROM Encrypted</string>
-    <string name="app_language">App Language</string>
+    <string name="rom_status_decrypted">ROM decrypted</string>
+    <string name="rom_status_encrypted">ROM encrypted</string>
+    <string name="app_language">App language</string>
     <string name="app_language_summary">Select the interface language for STORM DS</string>
-    <string name="dual_screen_info_title">How Dual Screen Presets Work</string>
+    <string name="dual_screen_info_title">How dual screen presets work</string>
     <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area and Alignment: customize vertical alignment and display coverage.</string>
 
     <!-- STORM Theme Studio and Colors -->
-    <string name="theme_accent_color_title">Accent Color</string>
+    <string name="theme_accent_color_title">Accent color</string>
     <string name="theme_accent_color_summary">Select accent neon color for STORM NIGHT theme</string>
-    <string name="accent_electric_cyan">💎 Electric Cyan</string>
-    <string name="accent_matrix_emerald">🌿 Matrix Emerald</string>
-    <string name="accent_amber_gold">⚡ Cyber Gold</string>
-    <string name="accent_cyber_red">🔥 Cyber Red</string>
-    <string name="accent_neon_magenta">🔮 Neon Magenta</string>
-    <string name="accent_royal_violet">💜 Royal Violet</string>
-    <string name="accent_deep_sapphire">🌊 Deep Sapphire</string>
-    <string name="accent_solar_orange">🍊 Solar Orange</string>
-    <string name="accent_mint_frost">❄️ Mint Frost</string>
-    <string name="accent_toxic_lime">🧪 Toxic Lime</string>
-    <string name="accent_hot_pink">🌸 Hot Pink</string>
-    <string name="accent_oled_white">⚪ OLED Pure White</string>
+    <string name="accent_electric_cyan">💎 Electric cyan</string>
+    <string name="accent_matrix_emerald">🌿 Matrix emerald</string>
+    <string name="accent_amber_gold">⚡ Cyber gold</string>
+    <string name="accent_cyber_red">🔥 Cyber red</string>
+    <string name="accent_neon_magenta">🔮 Neon magenta</string>
+    <string name="accent_royal_violet">💜 Royal violet</string>
+    <string name="accent_deep_sapphire">🌊 Deep sapphire</string>
+    <string name="accent_solar_orange">🍊 Solar orange</string>
+    <string name="accent_mint_frost">❄️ Mint frost</string>
+    <string name="accent_toxic_lime">🧪 Toxic lime</string>
+    <string name="accent_hot_pink">🌸 Hot pink</string>
+    <string name="accent_oled_white">⚪ OLED pure white</string>
 
     <!-- Card Styles -->
     <string name="rom_card_style_title">Library card style</string>
     <string name="rom_card_style_summary">Visual card representation in game grid</string>
     <string name="card_style_glassmorphism">Glassmorphism</string>
-    <string name="card_style_flat_minimal">Flat Minimal</string>
-    <string name="card_style_3d_boxart">3D Boxart</string>
+    <string name="card_style_flat_minimal">Flat minimal</string>
+    <string name="card_style_3d_boxart">3D boxart</string>
 
     <!-- JIT Overclock and CPU Tuning -->
     <string name="arm9_overclock_title">ARM9 CPU clock (overclock)</string>
     <string name="arm9_overclock_summary">Overclock CPU to eliminate frame drops in demanding 3D games</string>
-    <string name="arm9_overclock_1x">67 MHz (Default / 1x)</string>
-    <string name="arm9_overclock_2x">133 MHz (DSi Mode / 2x)</string>
-    <string name="arm9_overclock_3x">200 MHz (3x Overclock)</string>
-    <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
+    <string name="arm9_overclock_1x">67 MHz (default / 1x)</string>
+    <string name="arm9_overclock_2x">133 MHz (DSi mode / 2x)</string>
+    <string name="arm9_overclock_3x">200 MHz (3x overclock)</string>
+    <string name="arm9_overclock_4x">266 MHz (4x turbo)</string>
 
     <!-- Scraper Pro and Covers -->
     <string name="enable_gametdb_covers_title">Scraper Pro: 3D boxart and high-res covers</string>
@@ -1535,14 +1539,14 @@
     <string name="enable_gametdb_2d_covers_summary">Download flat 2D game covers from GameTDB database</string>
     <string name="enable_gametdb_3d_covers_title">GameTDB 3D covers</string>
     <string name="enable_gametdb_3d_covers_summary">Download authentic 3D boxart from GameTDB database</string>
-    <string name="pick_custom_cover">Change Cover from Gallery</string>
-    <string name="reset_custom_cover">Reset Custom Cover</string>
+    <string name="pick_custom_cover">Change cover from gallery</string>
+    <string name="reset_custom_cover">Reset custom cover</string>
     <string name="custom_cover_updated">Cover updated successfully</string>
     <string name="custom_cover_removed">Custom cover removed</string>
 
     <!-- Input Macros and Gyro Mic -->
     <string name="input_turbo_macros_title">Turbo buttons and macros</string>
-    <string name="input_turbo_macros_summary">Enable virtual Turbo A/B/X/Y rapid-fire buttons</string>
+    <string name="input_turbo_macros_summary">Enable virtual turbo A/B/X/Y rapid-fire buttons</string>
     <string name="input_gyro_mic_title">Gyro microphone emulation</string>
     <string name="input_gyro_mic_summary">Shake or tilt device to blow into virtual microphone</string>
 
@@ -1551,12 +1555,12 @@
     <string name="video_widescreen_3d_summary">Anamorphic widescreen aspect ratio rendering for 3D games</string>
     <string name="video_60fps_patch_title">60 FPS unlock hack</string>
     <string name="video_60fps_patch_summary">Force 60 FPS in supported 30 FPS 3D titles</string>
-    <string name="action_open_single_rom">Open ROM File…</string>
+    <string name="action_open_single_rom">Open ROM file…</string>
     <string name="video_dual_screen_cast_title">Dual-screen cast mode (TV / HDMI)</string>
     <string name="video_dual_screen_cast_summary">Display touchscreen on device and 4K top screen on TV</string>
     <string name="soft_patch_applied">Applied patch: %s</string>
     <string name="layout_open_editor_summary">Edit currently active layout profile (position, scale of screens and controls)</string>
-    <string name="pref_touch_dpad_stick_mode_title">Analog Stick instead of D-Pad</string>
+    <string name="pref_touch_dpad_stick_mode_title">Analog stick instead of D-Pad</string>
     <string name="pref_touch_dpad_stick_mode_summary">Display a virtual analog thumbstick instead of the classic directional pad</string>
 
     <!-- UI & Subtitles Localization -->
@@ -1574,7 +1578,7 @@
     <string name="rewind_history_depth">History depth</string>
     <string name="rewind_memory_estimate">Estimated RAM usage: ~%1$d MB (max %2$d states)</string>
     <string name="seconds_short">%d sec.</string>
-    <string name="firmware_birthday_format">Format: Day / Month</string>
+    <string name="firmware_birthday_format">Format: day / month</string>
     <string name="day_label">Day</string>
     <string name="month_label">Month</string>
     <string name="settings_sub_general">Interface, themes, language and operation mode</string>
@@ -1622,7 +1626,7 @@
     <string name="video_ai_upscale_sharpness_summary">Intensity of contrast-adaptive edge and text sharpening</string>
     <string name="video_vulkan_compositor_mode_title">2D/3D compositor mode (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Precise (layer priorities and blending)</string>
-    <string name="video_vulkan_compositor_mode_legacy">Fast (Legacy)</string>
+    <string name="video_vulkan_compositor_mode_legacy">Fast (legacy)</string>
     <string name="video_vulkan_thick_edges_title">Thickened high-resolution 3D edges</string>
     <string name="video_vulkan_thick_edges_summary">Scales cel-shading edge outlines proportionally to internal resolution</string>
     <string name="video_vulkan_compat_autoselect_title">Automatic game compatibility profiles (Vulkan)</string>
@@ -1638,7 +1642,7 @@
     <string name="video_vulkan_3d_depth_mode_title">Real 3D depth effect (Vulkan)</string>
     <string name="video_vulkan_3d_depth_mode_off">Off</string>
     <string name="video_vulkan_3d_depth_mode_gyro">Gyroscopic 3D parallax (window depth)</string>
-    <string name="video_vulkan_3d_depth_mode_anaglyph">Stereoscopic 3D anaglyph (Red / Cyan)</string>
+    <string name="video_vulkan_3d_depth_mode_anaglyph">Stereoscopic 3D anaglyph (red / cyan)</string>
     <string name="video_vulkan_3d_depth_mode_sbs">Stereoscopic 3D side-by-side (XR / VR glasses)</string>
     <string name="video_vulkan_3d_depth_strength_title">3D depth intensity</string>
     <string name="video_vulkan_ssao_title">Volumetric 3D ambient occlusion (SSAO)</string>

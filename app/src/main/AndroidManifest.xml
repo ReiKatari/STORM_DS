@@ -190,6 +190,28 @@
             android:name=".ui.backgrounds.BackgroundsActivity"
             android:label="@string/backgrounds">
         </activity>
+        <activity
+            android:name=".ui.quickresume.QuickResumeActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="false" />
+        <activity
+            android:name=".ui.stats.PlayerStatsActivity"
+            android:label="@string/feature_stats_title"
+            android:parentActivityName=".ui.romlist.RomListActivity"
+            android:exported="false" />
+
+        <service
+            android:name=".ui.quickresume.QuickResumeTileService"
+            android:icon="@drawable/ic_quick_resume_tile"
+            android:label="@string/feature_quick_resume_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
 
         <receiver

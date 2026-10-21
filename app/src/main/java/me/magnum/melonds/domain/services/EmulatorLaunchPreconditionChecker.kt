@@ -15,8 +15,7 @@ import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.emulator.validation.RomLaunchPreconditionCheckResult
 import me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType
 import me.magnum.melonds.domain.repositories.SettingsRepository
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import me.magnum.melonds.impl.compat.GameCompatibilityManager
 
 class EmulatorLaunchPreconditionChecker(
     private val context: Context,
@@ -27,11 +26,22 @@ class EmulatorLaunchPreconditionChecker(
 ) {
 
     suspend fun checkRomLaunchPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
+        settingsRepository.setActiveRomContext(
+            gameCode = rom.gameCode,
+            romName = rom.config.customName ?: rom.name,
+            fileName = rom.fileName,
+        )
         val renderer = settingsRepository.getEffectiveVideoRenderer(rom.config)
         getRendererValidationFailureOrNull(renderer)?.let {
-            return when (it) {
-                RendererValidationFailure.UNSUPPORTED -> RomLaunchPreconditionCheckResult.RendererUnsupported(VideoRenderer.VULKAN)
-                RendererValidationFailure.INIT_FAILED -> RomLaunchPreconditionCheckResult.RendererInitFailed(VideoRenderer.VULKAN)
+            val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+            GameCompatibilityManager.markDeviceVulkanUnavailable(context)
+            GameCompatibilityManager.recordCapabilityFallbackNotice(
+                context = context,
+                requested = VideoRenderer.VULKAN,
+                fallback = fallbackRenderer,
+            )
+            if (rom.config.videoRenderer == null) {
+                settingsRepository.setCurrentVideoRenderer(fallbackRenderer)
             }
         }
 
@@ -54,10 +64,14 @@ class EmulatorLaunchPreconditionChecker(
 
     suspend fun checkFirmwareLaunchPreconditions(consoleType: ConsoleType): FirmwareLaunchPreconditionCheckResult {
         getRendererValidationFailureOrNull(settingsRepository.getCurrentVideoRenderer())?.let {
-            return when (it) {
-                RendererValidationFailure.UNSUPPORTED -> FirmwareLaunchPreconditionCheckResult.RendererUnsupported(VideoRenderer.VULKAN)
-                RendererValidationFailure.INIT_FAILED -> FirmwareLaunchPreconditionCheckResult.RendererInitFailed(VideoRenderer.VULKAN)
-            }
+            val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+            GameCompatibilityManager.markDeviceVulkanUnavailable(context)
+            GameCompatibilityManager.recordCapabilityFallbackNotice(
+                context = context,
+                requested = VideoRenderer.VULKAN,
+                fallback = fallbackRenderer,
+            )
+            settingsRepository.setCurrentVideoRenderer(fallbackRenderer)
         }
 
         val configurationDirResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(consoleType)

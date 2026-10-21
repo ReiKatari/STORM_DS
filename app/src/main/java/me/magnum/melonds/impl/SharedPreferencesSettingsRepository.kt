@@ -70,9 +70,11 @@ import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.retroachievements.RetroAchievementsOfflineBackend
 import me.magnum.melonds.domain.repositories.SettingsRepository
+import me.magnum.melonds.impl.compat.GameCompatibilityManager
 import me.magnum.melonds.impl.dtos.input.ControllerConfigurationDto
 import me.magnum.melonds.impl.input.ControllerConfigurationFactory
 import me.magnum.melonds.ui.Theme
+import me.magnum.melonds.utils.EnhancementCompatibility
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
 import org.json.JSONArray
 import org.json.JSONObject
@@ -524,13 +526,28 @@ class SharedPreferencesSettingsRepository(
     }
 
     override suspend fun getEmulatorConfiguration(romConfig: RomConfig): EmulatorConfiguration {
+        val effectiveRomName = romConfig.customName ?: activeRomName
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = effectiveRomName,
+            fileName = activeRomFileName,
+        )
         val globalConfiguration = getEmulatorConfiguration()
         applyVulkanRuntimeControls(
             gameCode = activeGameCode,
-            romName = romConfig.customName ?: activeRomName,
+            romName = effectiveRomName,
             fileName = activeRomFileName,
         )
+        val widescreenAllowed = safeProfile?.safeVisuals != true &&
+            EnhancementCompatibility.canUseEnhancements(activeGameCode, effectiveRomName)
+        val fpsPatchAllowed = safeProfile?.safeVisuals != true &&
+            (activeGameCode.isNullOrBlank() && effectiveRomName.isNullOrBlank() ||
+                EnhancementCompatibility.supports60FpsUnlock(activeGameCode.orEmpty(), effectiveRomName.orEmpty()))
         return globalConfiguration.copy(
+            useJit = if (safeProfile?.disableJit == true) false else globalConfiguration.useJit,
+            enable3dWidescreen = globalConfiguration.enable3dWidescreen && widescreenAllowed,
+            enable60FpsPatch = globalConfiguration.enable60FpsPatch && fpsPatchAllowed,
             rendererConfiguration = buildRomRendererConfiguration(
                 baseConfiguration = globalConfiguration.rendererConfiguration,
                 romConfig = romConfig,
@@ -862,25 +879,43 @@ class SharedPreferencesSettingsRepository(
 
     override fun getCurrentVideoRenderer(): VideoRenderer {
         val videoRendererPreference = preferences.getString("video_renderer", "opengl")!!
+        val requested = runCatching { VideoRenderer.valueOf(videoRendererPreference.uppercase()) }
+            .getOrDefault(VideoRenderer.OPENGL)
         return sanitizeVideoRenderer(
-            runCatching { VideoRenderer.valueOf(videoRendererPreference.uppercase()) }
-                .getOrDefault(VideoRenderer.OPENGL),
-            fallback = VideoRenderer.OPENGL,
+            renderer = requested,
+            fallback = resolveSupportedFallbackVideoRenderer(),
         )
     }
 
     override fun getEffectiveVideoRenderer(romConfig: RomConfig): VideoRenderer {
-        return sanitizeVideoRenderer(romConfig.videoRenderer, fallback = getCurrentVideoRenderer())
+        val baseRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = getCurrentVideoRenderer())
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = romConfig.customName ?: activeRomName,
+            fileName = activeRomFileName,
+        )
+        val forced = safeProfile?.forcedRenderer ?: return baseRenderer
+        val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+        return GameCompatibilityManager.pickSaferRenderer(baseRenderer, sanitizedForced)
     }
 
     override fun setCurrentVideoRenderer(renderer: VideoRenderer) {
+        if (renderer == VideoRenderer.VULKAN) {
+            GameCompatibilityManager.clearDeviceVulkanUnavailable(context)
+        }
         preferences.edit {
             putString("video_renderer", renderer.name.lowercase())
         }
     }
 
     override fun getVideoRenderer(): Flow<VideoRenderer> {
-        return getOrCreatePreferenceSharedFlow("video_renderer") {
+        return combine(
+            getOrCreatePreferenceSharedFlow("video_renderer") {
+                getCurrentVideoRenderer()
+            },
+            GameCompatibilityManager.profileVersionFlow,
+        ) { _, _ ->
             getCurrentVideoRenderer()
         }
     }
@@ -2166,6 +2201,12 @@ class SharedPreferencesSettingsRepository(
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         preferenceSharedFlows[key]?.tryEmit(Unit)
         when (key) {
+            "video_vulkan_driver_mode",
+            "video_vulkan_selected_driver_id",
+            "video_vulkan_custom_drivers" -> {
+                GameCompatibilityManager.clearDeviceVulkanUnavailable(context)
+                preferenceSharedFlows["video_renderer"]?.tryEmit(Unit)
+            }
             // Resolve through VulkanCompatibilityDatabase so a per-game profile keeps precedence.
             "video_vulkan_compositor_mode",
             "video_vulkan_thick_edges",
@@ -2200,7 +2241,8 @@ class SharedPreferencesSettingsRepository(
             observeRetroArchShaderRootLocation(),
             observeRetroArchShaderPreset(),
             observeRetroArchShaderParameterText(),
-        ) { baseConfiguration, root, globalPresetRelativePath, globalParameterText ->
+            GameCompatibilityManager.profileVersionFlow,
+        ) { baseConfiguration, root, globalPresetRelativePath, globalParameterText, _ ->
             buildRomRendererConfiguration(
                 baseConfiguration = baseConfiguration,
                 romConfig = romConfig,
@@ -2218,18 +2260,32 @@ class SharedPreferencesSettingsRepository(
         globalPresetRelativePath: String?,
         globalParameterText: String?,
     ): RendererConfiguration {
-        val renderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = baseConfiguration.renderer)
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = romConfig.customName ?: activeRomName,
+            fileName = activeRomFileName,
+        )
+        val baseSanitizedRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = baseConfiguration.renderer)
+        val renderer = safeProfile?.forcedRenderer?.let { forced ->
+            val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+            GameCompatibilityManager.pickSaferRenderer(baseSanitizedRenderer, sanitizedForced)
+        } ?: baseSanitizedRenderer
         val aiEnabled = preferences.getBoolean("video_ai_upscale_enabled", false) && !preferences.contains("video_filtering")
-        val requestedFiltering = romConfig.videoFiltering ?: if (aiEnabled) {
-            VideoFiltering.AI_UPSCALE
+        val requestedFiltering = if (safeProfile?.safeVisuals == true) {
+            VideoFiltering.NONE
         } else {
-            baseConfiguration.videoFiltering
+            romConfig.videoFiltering ?: if (aiEnabled) {
+                VideoFiltering.AI_UPSCALE
+            } else {
+                baseConfiguration.videoFiltering
+            }
         }
         val cleanRomPresetPath = romConfig.retroArchShaderPresetPath
             ?.removePrefix("internal:")
             ?.removePrefix("folder:")
             ?.takeIf { it.isNotBlank() && it != "none" }
-        val retroArchShader = if (requestedFiltering == VideoFiltering.RETROARCH) {
+        val retroArchShader = if (requestedFiltering == VideoFiltering.RETROARCH && safeProfile?.safeVisuals != true) {
             if (cleanRomPresetPath == null && romConfig.retroArchShaderParameters == null) {
                 baseConfiguration.retroArchShader
             } else {
@@ -2244,6 +2300,7 @@ class SharedPreferencesSettingsRepository(
             EmptyRetroArchShaderConfiguration
         }
         val effectiveFiltering = when {
+            safeProfile?.safeVisuals == true -> VideoFiltering.NONE
             !requestedFiltering.isSupportedByRenderer(renderer) -> VideoFiltering.NONE
             requestedFiltering == VideoFiltering.RETROARCH &&
                 retroArchShader.presetPath.isNullOrBlank() -> if (aiEnabled) VideoFiltering.AI_UPSCALE else VideoFiltering.NONE
@@ -2253,12 +2310,26 @@ class SharedPreferencesSettingsRepository(
             renderer,
             romConfig.threadedRendering ?: baseConfiguration.threadedRendering,
         )
+        val effectiveResolutionScaling = if (safeProfile?.safeVisuals == true) {
+            1
+        } else {
+            romConfig.internalResolutionScaling ?: baseConfiguration.resolutionScaling
+        }
+        val effectiveCoverageFix = (renderer == VideoRenderer.OPENGL || renderer == VideoRenderer.VULKAN) &&
+            baseConfiguration.conservativeCoverageEnabled &&
+            safeProfile?.safeVisuals != true
 
         return baseConfiguration.copy(
             renderer = renderer,
             videoFiltering = effectiveFiltering,
             threadedRendering = threadedRendering,
-            internalResolutionScaling = romConfig.internalResolutionScaling ?: baseConfiguration.resolutionScaling,
+            vulkanPipelineProfile = if (renderer == VideoRenderer.VULKAN) {
+                baseConfiguration.vulkanPipelineProfile
+            } else {
+                VulkanPipelineProfile.COMPATIBILITY
+            },
+            internalResolutionScaling = effectiveResolutionScaling,
+            conservativeCoverageEnabled = effectiveCoverageFix,
             retroArchShader = if (effectiveFiltering == VideoFiltering.RETROARCH) retroArchShader else EmptyRetroArchShaderConfiguration,
         )
     }
@@ -2266,10 +2337,46 @@ class SharedPreferencesSettingsRepository(
     private fun sanitizeVideoRenderer(renderer: VideoRenderer?, fallback: VideoRenderer): VideoRenderer {
         return when (renderer) {
             null -> fallback
-            VideoRenderer.OPENGL -> if (isOpenGlRendererSupported()) VideoRenderer.OPENGL else fallback
-            VideoRenderer.COMPUTE -> if (isComputeRendererSupported()) VideoRenderer.COMPUTE else fallback
-            else -> renderer
+            VideoRenderer.VULKAN -> {
+                if (isVulkanRendererSupported()) {
+                    VideoRenderer.VULKAN
+                } else {
+                    val target = resolveSupportedFallbackVideoRenderer()
+                    GameCompatibilityManager.recordCapabilityFallbackNotice(context, VideoRenderer.VULKAN, target)
+                    target
+                }
+            }
+            VideoRenderer.OPENGL -> {
+                if (isOpenGlRendererSupported()) {
+                    VideoRenderer.OPENGL
+                } else {
+                    GameCompatibilityManager.recordCapabilityFallbackNotice(context, VideoRenderer.OPENGL, VideoRenderer.SOFTWARE)
+                    VideoRenderer.SOFTWARE
+                }
+            }
+            VideoRenderer.COMPUTE -> {
+                if (isComputeRendererSupported()) {
+                    VideoRenderer.COMPUTE
+                } else {
+                    val target = if (fallback != VideoRenderer.COMPUTE) {
+                        sanitizeVideoRenderer(fallback, resolveSupportedFallbackVideoRenderer())
+                    } else {
+                        resolveSupportedFallbackVideoRenderer()
+                    }
+                    GameCompatibilityManager.recordCapabilityFallbackNotice(context, VideoRenderer.COMPUTE, target)
+                    target
+                }
+            }
+            VideoRenderer.SOFTWARE -> VideoRenderer.SOFTWARE
         }
+    }
+
+    private fun resolveSupportedFallbackVideoRenderer(): VideoRenderer {
+        return if (isOpenGlRendererSupported()) VideoRenderer.OPENGL else VideoRenderer.SOFTWARE
+    }
+
+    private fun isVulkanRendererSupported(): Boolean {
+        return GameCompatibilityManager.isVulkanSupportedOnDevice(context)
     }
 
     private fun isOpenGlRendererSupported(): Boolean {
@@ -2321,11 +2428,40 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun is3dWidescreenEnabled(): Boolean {
-        return preferences.getBoolean("video_widescreen_3d", false)
+        if (!preferences.getBoolean("video_widescreen_3d", false)) {
+            return false
+        }
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = activeRomName,
+            fileName = activeRomFileName,
+        )
+        if (safeProfile?.safeVisuals == true) {
+            return false
+        }
+        return EnhancementCompatibility.canUseEnhancements(activeGameCode, activeRomName)
     }
 
+    fun isWidescreen3dEnabled(): Boolean = is3dWidescreenEnabled()
+
     override fun is60FpsPatchEnabled(): Boolean {
-        return preferences.getBoolean("video_60fps_patch", false)
+        if (!preferences.getBoolean("video_60fps_patch", false)) {
+            return false
+        }
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = activeRomName,
+            fileName = activeRomFileName,
+        )
+        if (safeProfile?.safeVisuals == true) {
+            return false
+        }
+        if (!activeGameCode.isNullOrBlank() || !activeRomName.isNullOrBlank()) {
+            return EnhancementCompatibility.supports60FpsUnlock(activeGameCode.orEmpty(), activeRomName.orEmpty())
+        }
+        return true
     }
 
     override fun isDualScreenCastEnabled(): Boolean {
@@ -2362,6 +2498,15 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getVulkan3dDepthMode(): Int {
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = activeRomName,
+            fileName = activeRomFileName,
+        )
+        if (safeProfile?.safeVisuals == true) {
+            return 0
+        }
         return when (preferences.getString("video_vulkan_3d_depth_mode", "off")?.lowercase()) {
             "gyro_parallax" -> 1
             "anaglyph" -> 2
@@ -2392,7 +2537,16 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isVulkanSsaoEnabled(): Boolean {
-        return preferences.getBoolean("video_vulkan_ssao", false)
+        if (!preferences.getBoolean("video_vulkan_ssao", false)) {
+            return false
+        }
+        val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+            context = context,
+            gameCode = activeGameCode,
+            romName = activeRomName,
+            fileName = activeRomFileName,
+        )
+        return safeProfile?.safeVisuals != true
     }
 
     override fun setVulkanSsaoEnabled(enabled: Boolean) {

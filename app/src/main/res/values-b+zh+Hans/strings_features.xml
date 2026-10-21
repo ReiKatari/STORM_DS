@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">继续游戏</string>
+    <string name="feature_quick_resume_continue_game">继续: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">继续</string>
+    <string name="feature_quick_resume_from_save">快速存档 • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">从快速存档恢复</string>
+    <string name="feature_quick_resume_last_played">上次游玩 • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">正常启动 — 暂无快速存档</string>
+    <string name="feature_quick_resume_tile_label">继续游戏</string>
+    <string name="feature_quick_resume_no_recent_game">没有最近游玩的游戏</string>
+    <string name="feature_quick_resume_not_found">找不到上次游玩的游戏</string>
+    <string name="feature_stats_menu_title">玩家统计</string>
+    <string name="feature_stats_title">玩家统计</string>
+    <string name="feature_stats_subtitle">游玩时长、启动次数和每日活动</string>
+    <string name="feature_stats_total_play_time">总游玩时长</string>
+    <string name="feature_stats_games_played">已玩游戏数</string>
+    <string name="feature_stats_total_launches">总启动次数</string>
+    <string name="feature_stats_daily_chart_title">每日游玩时长（最近 7 天）</string>
+    <string name="feature_stats_top_by_time">游玩时长排行</string>
+    <string name="feature_stats_top_by_launches">启动次数排行</string>
+    <string name="feature_stats_launches_count">启动次数: %1$d</string>
+    <string name="feature_stats_time_hm">%1$d小时 %2$d分钟</string>
+    <string name="feature_stats_time_m">%1$d分钟</string>
+    <string name="feature_stats_time_less_than_min">&lt;1分钟</string>
+    <string name="feature_stats_empty_title">暂无统计数据</string>
+    <string name="feature_stats_empty_desc">启动任意游戏即可开始记录游玩时长与每日活动</string>
+    <string name="feature_problem_report_menu_title">报告问题</string>
+    <string name="feature_problem_report_dialog_title">创建问题报告</string>
+    <string name="feature_problem_report_dialog_message">创建一个诊断 ZIP 压缩包，包含应用版本、设备与 GPU 信息、Android 版本、模拟器和渲染器设置（不含账号或令牌）、上次游玩的游戏代码以及最近日志。不会自动发送任何内容 — 您可以自行选择分享位置。</string>
+    <string name="feature_problem_report_create_action">创建并分享</string>
+    <string name="feature_problem_report_generating">正在收集诊断报告…</string>
+    <string name="feature_problem_report_share_chooser">分享问题报告</string>
+    <string name="feature_problem_report_failed">创建问题报告失败</string>
+</resources>

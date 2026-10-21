@@ -58,6 +58,7 @@ class RomListViewModel @Inject constructor(
     private val boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository,
     private val dsiWareTitlesMetadataStore: me.magnum.melonds.impl.DSiWareTitlesMetadataStore,
     private val dsiStorageTitlesScanner: me.magnum.melonds.impl.dsinand.DsiStorageTitlesScanner,
+    private val saveStatesRepository: me.magnum.melonds.domain.repositories.SaveStatesRepository,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -445,6 +446,12 @@ class RomListViewModel @Inject constructor(
             .sortedByDescending { it.lastPlayed }
             .take(10)
 
+        val quickSlot = continuePlaying.firstOrNull()?.let { topRom ->
+            runCatching { saveStatesRepository.getRomQuickSaveStateSlot(topRom) }.getOrNull()
+        }
+        val quickResumeHasSave = quickSlot?.exists == true
+        val quickResumeTimestamp = quickSlot?.lastUsedDate?.time
+
         if (roots.isEmpty()) {
             return@withContext RomBrowserUiState(
                 entries = emptyList(),
@@ -457,6 +464,8 @@ class RomListViewModel @Inject constructor(
                 sortingMode = sortingMode,
                 sortingOrder = sortingOrder,
                 continuePlaying = continuePlaying,
+                quickResumeHasSaveState = quickResumeHasSave,
+                quickResumeSaveTimestamp = quickResumeTimestamp,
                 alphabetIndex = emptyMap(),
             )
         }
@@ -475,6 +484,8 @@ class RomListViewModel @Inject constructor(
                 sortingMode = sortingMode,
                 sortingOrder = sortingOrder,
                 continuePlaying = continuePlaying,
+                quickResumeHasSaveState = quickResumeHasSave,
+                quickResumeSaveTimestamp = quickResumeTimestamp,
                 alphabetIndex = computeAlphabetIndex(romEntries, sortingMode),
             )
         }
@@ -500,6 +511,8 @@ class RomListViewModel @Inject constructor(
             sortingMode = sortingMode,
             sortingOrder = sortingOrder,
             continuePlaying = continuePlaying,
+            quickResumeHasSaveState = quickResumeHasSave,
+            quickResumeSaveTimestamp = quickResumeTimestamp,
             alphabetIndex = computeAlphabetIndex(entries, sortingMode),
         )
     }

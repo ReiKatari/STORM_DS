@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compat_reset_safe_mode">重置安全模式</string>
+    <string name="compat_safe_mode_applied_toast">已启用安全模式（%1$s，1x 分辨率）</string>
+    <string name="compat_safe_mode_jit_disabled_toast">已启用安全模式（%1$s，1x 分辨率，已关闭 JIT）</string>
+    <string name="compat_safe_mode_reset_toast">安全模式已重置为默认设置</string>
+    <string name="compat_load_fallback_retry_toast">%1$s 初始化失败，正在使用 %2$s 重试</string>
+    <string name="compat_capability_fallback_toast">当前设备不支持 %1$s，已自动切换为 %2$s</string>
+    <string name="compat_touch_stick_mode_enabled">已启用迷你摇杆模式</string>
+    <string name="compat_touch_dpad_mode_enabled">已启用方向键模式</string>
+    <string name="compat_slot2_addon_title">Slot-2 扩展配件 (GBA)</string>
+    <string name="compat_slot2_addon_disabled">已禁用</string>
+    <string name="compat_slot2_addon_rumble_pak">震动卡带 (DS 震动包)</string>
+    <string name="compat_slot2_addon_memory_expansion">内存扩展卡带 (8 MB RAM)</string>
+    <string name="compat_slot2_addon_solar_sensor">太阳光传感器 (我们的太阳 Boktai)</string>
+    <string name="compat_slot2_addon_motion_pak">动作感应卡带 (陀螺仪和加速度计)</string>
+    <string name="compat_slot2_addon_guitar_grip">吉他握把 (吉他英雄 4 键配件)</string>
+    <string name="compat_slot2_addon_paddle_controller">旋钮控制器 (打砖块 Arkanoid 转盘)</string>
+    <string name="compat_solar_sensor_title">太阳光传感器 (Boktai / Lunar Knights)</string>
+    <string name="compat_solar_sensor_auto_short">自动 (手机传感器)</string>
+    <string name="compat_solar_sensor_level_bars">%1$d / 10 格</string>
+    <string name="compat_solar_sensor_auto_full">自动 (手机环境光传感器)</string>
+    <string name="compat_solar_sensor_level_0">0 / 10 (完全黑暗)</string>
+    <string name="compat_solar_sensor_level_2">2 / 10 (黄昏微光)</string>
+    <string name="compat_solar_sensor_level_4">4 / 10 (树荫或多云)</string>
+    <string name="compat_solar_sensor_level_6">6 / 10 (晴朗白天)</string>
+    <string name="compat_solar_sensor_level_8">8 / 10 (强烈阳光)</string>
+    <string name="compat_solar_sensor_level_10">10 / 10 (正午烈日)</string>
+    <string name="compat_ir_pedometer_title">Pokéwalker 红外计步器 (宝可梦 心金/魂银)</string>
+    <string name="compat_ir_pedometer_add_100">+100 步</string>
+    <string name="compat_ir_pedometer_add_500">+500 步</string>
+    <string name="compat_ir_pedometer_add_1000">+1000 步</string>
+    <string name="compat_ir_pedometer_add_5000">+5000 步</string>
+    <string name="compat_ir_pedometer_reset">重置步数 (0 步)</string>
+</resources>

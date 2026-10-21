@@ -271,7 +271,7 @@ private fun SaveStateSlotCard(
     val isQuick = slot.slot == SaveStateSlot.QUICK_SAVE_SLOT
     val shape = RoundedCornerShape(12.dp)
 
-    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()) }
+    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
 
     Column(
         modifier = Modifier

@@ -16,6 +16,7 @@ enum class RomPauseMenuOption(override val textResource: Int) : PauseMenuOption 
     PRESETS(R.string.presets),
     SCREEN_LAYOUT(R.string.screen_layout),
     RENDERER_DEBUG(R.string.renderer_debug_menu),
+    RESET_COMPATIBILITY(R.string.compat_reset_safe_mode),
     RESET(R.string.reset),
     EXIT(R.string.exit)
 }

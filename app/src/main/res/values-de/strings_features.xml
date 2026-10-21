@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">Fortsetzen</string>
+    <string name="feature_quick_resume_continue_game">Fortsetzen: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">Fortsetzen</string>
+    <string name="feature_quick_resume_from_save">Schnellspeicherstand • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">Vom Schnellspeicherstand fortsetzen</string>
+    <string name="feature_quick_resume_last_played">Zuletzt gespielt • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">Normaler Start — noch kein Schnellspeicherstand</string>
+    <string name="feature_quick_resume_tile_label">Spiel fortsetzen</string>
+    <string name="feature_quick_resume_no_recent_game">Kein kürzlich gespieltes Spiel</string>
+    <string name="feature_quick_resume_not_found">Das zuletzt gespielte Spiel wurde nicht gefunden</string>
+    <string name="feature_stats_menu_title">Spielerstatistik</string>
+    <string name="feature_stats_title">Spielerstatistik</string>
+    <string name="feature_stats_subtitle">Spielzeit, Starts und tägliche Aktivität</string>
+    <string name="feature_stats_total_play_time">Gesamte Spielzeit</string>
+    <string name="feature_stats_games_played">Gespielte Spiele</string>
+    <string name="feature_stats_total_launches">Starts insgesamt</string>
+    <string name="feature_stats_daily_chart_title">Tägliche Spielzeit (letzte 7 Tage)</string>
+    <string name="feature_stats_top_by_time">Top-Spiele nach Spielzeit</string>
+    <string name="feature_stats_top_by_launches">Top-Spiele nach Starts</string>
+    <string name="feature_stats_launches_count">Starts: %1$d</string>
+    <string name="feature_stats_time_hm">%1$d Std. %2$d Min.</string>
+    <string name="feature_stats_time_m">%1$d Min.</string>
+    <string name="feature_stats_time_less_than_min">&lt;1 Min.</string>
+    <string name="feature_stats_empty_title">Noch keine Statistiken</string>
+    <string name="feature_stats_empty_desc">Starte ein beliebiges Spiel, um Spielzeit und tägliche Aktivität aufzuzeichnen</string>
+    <string name="feature_problem_report_menu_title">Problem melden</string>
+    <string name="feature_problem_report_dialog_title">Problembericht erstellen</string>
+    <string name="feature_problem_report_dialog_message">Erstellt ein Diagnose-ZIP-Archiv mit App-Version, Geräte- und GPU-Infos, Android-Version, Emulator- und Renderer-Einstellungen (ohne Konten oder Token), dem letzten Spielcode und aktuellen Protokollen. Es wird nichts automatisch gesendet — du wählst selbst, wo du die Datei teilst.</string>
+    <string name="feature_problem_report_create_action">Erstellen und teilen</string>
+    <string name="feature_problem_report_generating">Diagnosebericht wird erstellt…</string>
+    <string name="feature_problem_report_share_chooser">Problembericht teilen</string>
+    <string name="feature_problem_report_failed">Problembericht konnte nicht erstellt werden</string>
+</resources>

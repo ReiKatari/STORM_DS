@@ -30,5 +30,7 @@ data class RomBrowserUiState(
     val sortingMode: SortingMode = SortingMode.ALPHABETICALLY,
     val sortingOrder: SortingOrder = SortingOrder.ASCENDING,
     val continuePlaying: List<Rom> = emptyList(),
+    val quickResumeHasSaveState: Boolean = false,
+    val quickResumeSaveTimestamp: Long? = null,
     val alphabetIndex: Map<Char, Int> = emptyMap(),
 )

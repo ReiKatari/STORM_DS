@@ -199,6 +199,7 @@ import me.magnum.melonds.ui.emulator.model.ToastEvent
 import me.magnum.melonds.ui.emulator.model.RetroAchievementsLoadStage
 import me.magnum.melonds.ui.emulator.model.VulkanCompileProgress
 import me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState
+import me.magnum.melonds.impl.compat.GameCompatibilityManager
 import me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption
 import me.magnum.melonds.utils.EventSharedFlow
 import me.magnum.rcheevosapi.exception.UserTokenExpiredException
@@ -352,6 +353,7 @@ class EmulatorViewModel @Inject constructor(
     private var hardcoreSubmissionQueueTeardown: CompletableDeferred<Unit>? = null
     private var leaderboardDiagnosticsEnabled = false
     private var didReceiveRendererInitFailure = false
+    private var isRetryingRomLoadWithFallback = false
     private val raSessionStopGate = RaSessionStopGate()
     private val announcedMasteryKeys = mutableSetOf<Pair<Long, Boolean>>()
     private val pendingRuntimeAchievementTriggers = mutableMapOf<Long, Long>()
@@ -473,6 +475,9 @@ class EmulatorViewModel @Inject constructor(
 
     private val _toastEvent = EventSharedFlow<ToastEvent>()
     val toastEvent = _toastEvent.asSharedFlow()
+
+    private val _compatNoticeEvent = MutableSharedFlow<String>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val compatNoticeEvent = _compatNoticeEvent.asSharedFlow()
 
     private val retroAchievementsVersionName: String by lazy {
         runCatching {
@@ -809,16 +814,112 @@ class EmulatorViewModel @Inject constructor(
 
             val cheats = getRomInfo(rom)?.let { getRomEnabledCheats(it) } ?: emptyList()
             confirmRetroArchShaderCompile(rom.config)
-            val result = emulatorManager.loadRom(rom, cheats)
+
+            val romDisplayName = rom.config.customName ?: rom.name
+            settingsRepository.setActiveRomContext(
+                gameCode = rom.gameCode,
+                romName = romDisplayName,
+                fileName = rom.fileName,
+            )
+            GameCompatibilityManager.consumeStaleMarkerAndEscalateIfNeeded(
+                context = context,
+                gameCode = rom.gameCode,
+                romName = romDisplayName,
+                fileName = rom.fileName,
+            )?.let { escalatedProfile ->
+                val effectiveRenderer = escalatedProfile.forcedRenderer
+                    ?: settingsRepository.getEffectiveVideoRenderer(rom.config)
+                val rendererLabel = GameCompatibilityManager.formatRendererLabel(effectiveRenderer)
+                val messageRes = if (escalatedProfile.disableJit) {
+                    R.string.compat_safe_mode_jit_disabled_toast
+                } else {
+                    R.string.compat_safe_mode_applied_toast
+                }
+                _compatNoticeEvent.tryEmit(context.getString(messageRes, rendererLabel))
+            }
+
+            GameCompatibilityManager.consumePendingCapabilityFallbackNotice(context)?.let { (requested, fallback) ->
+                _compatNoticeEvent.tryEmit(
+                    context.getString(
+                        R.string.compat_capability_fallback_toast,
+                        GameCompatibilityManager.formatRendererLabel(requested),
+                        GameCompatibilityManager.formatRendererLabel(fallback),
+                    )
+                )
+            }
+
+            val initialEffectiveRenderer = settingsRepository.getEffectiveVideoRenderer(rom.config)
+            val activeSafeProfile = GameCompatibilityManager.getEffectiveProfile(
+                context = context,
+                gameCode = rom.gameCode,
+                romName = romDisplayName,
+                fileName = rom.fileName,
+            )
+            val effectiveJit = settingsRepository.isJitEnabled() && activeSafeProfile?.disableJit != true
+            val effectiveScale = if (activeSafeProfile?.safeVisuals == true) 1 else (rom.config.internalResolutionScaling ?: 1)
+            GameCompatibilityManager.writeLaunchMarker(
+                context = context,
+                gameCode = rom.gameCode,
+                romName = romDisplayName,
+                fileName = rom.fileName,
+                renderer = initialEffectiveRenderer,
+                jitEnabled = effectiveJit,
+                resolutionScaling = effectiveScale,
+            )
+
+            var result = emulatorManager.loadRom(rom, cheats)
+            if (result is RomLaunchResult.LaunchFailed &&
+                (didReceiveRendererInitFailure ||
+                    (initialEffectiveRenderer != VideoRenderer.SOFTWARE &&
+                        result.reason == MelonEmulator.LoadResult.NDS_FAILED))
+            ) {
+                val nextSaferRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                    context = context,
+                    gameCode = rom.gameCode,
+                    romName = romDisplayName,
+                    fileName = rom.fileName,
+                    failedRenderer = initialEffectiveRenderer,
+                )
+                if (nextSaferRenderer != null && nextSaferRenderer != initialEffectiveRenderer) {
+                    isRetryingRomLoadWithFallback = true
+                    didReceiveRendererInitFailure = false
+                    _compatNoticeEvent.tryEmit(
+                        context.getString(
+                            R.string.compat_load_fallback_retry_toast,
+                            GameCompatibilityManager.formatRendererLabel(initialEffectiveRenderer),
+                            GameCompatibilityManager.formatRendererLabel(nextSaferRenderer),
+                        )
+                    )
+                    result = try {
+                        emulatorManager.loadRom(rom, cheats)
+                    } finally {
+                        isRetryingRomLoadWithFallback = false
+                    }
+                }
+            }
+
             when (result) {
                 is RomLaunchResult.LaunchFailedRomNotFound,
                 is RomLaunchResult.LaunchFailedRomNotSupported,
                 is RomLaunchResult.LaunchFailedSramProblem,
                 is RomLaunchResult.LaunchFailed -> {
+                    GameCompatibilityManager.clearLaunchMarker(
+                        context = context,
+                        gameCode = rom.gameCode,
+                        romName = romDisplayName,
+                        fileName = rom.fileName,
+                    )
                     disableRetroAchievementsRuntime(reason = "rom_load_failed")
                     _emulatorState.value = EmulatorState.RomLoadError
                 }
                 is RomLaunchResult.LaunchSuccessful -> {
+                    GameCompatibilityManager.updateLaunchMarkerRenderer(
+                        context = context,
+                        gameCode = rom.gameCode,
+                        romName = romDisplayName,
+                        fileName = rom.fileName,
+                        renderer = settingsRepository.getEffectiveVideoRenderer(rom.config),
+                    )
                     if (!result.isGbaLoadSuccessful) {
                         _toastEvent.tryEmit(ToastEvent.GbaLoadFailed)
                     }
@@ -843,6 +944,12 @@ class EmulatorViewModel @Inject constructor(
                 throw exception
             }
             Log.e("EmulatorViewModel", "Failed to launch ROM '${rom.name}'", exception)
+            GameCompatibilityManager.clearLaunchMarker(
+                context = context,
+                gameCode = rom.gameCode,
+                romName = rom.config.customName ?: rom.name,
+                fileName = rom.fileName,
+            )
             disableRetroAchievementsRuntime(reason = "rom_launch_exception")
             _emulatorState.value = EmulatorState.RomLoadError
         }
@@ -1753,6 +1860,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun stopEmulator() {
+        GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
         raBootstrapJob?.cancel()
         raSessionJob?.cancel()
         raSessionJob = null
@@ -2147,6 +2255,7 @@ class EmulatorViewModel @Inject constructor(
                     RomPauseMenuOption.PRESETS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowDualScreenPresets)
                     RomPauseMenuOption.SCREEN_LAYOUT -> _uiEvent.tryEmit(EmulatorUiEvent.ShowScreenLayoutDialog)
                     RomPauseMenuOption.RENDERER_DEBUG -> _uiEvent.tryEmit(EmulatorUiEvent.ShowRendererDebugMenu)
+                    RomPauseMenuOption.RESET_COMPATIBILITY -> resetCurrentRomCompatibilityMode()
                     RomPauseMenuOption.RESET -> resetEmulator()
                     RomPauseMenuOption.EXIT -> exitEmulator()
                 }
@@ -2382,7 +2491,8 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun maybeAutoLoadStateOnLaunch(rom: Rom) {
-        if (!settingsRepository.isAutoLoadStateOnLaunchEnabled()) {
+        val forceQuickResume = me.magnum.melonds.ui.quickresume.QuickResumeRequest.consumeFor(rom.uri)
+        if (!forceQuickResume && !settingsRepository.isAutoLoadStateOnLaunchEnabled()) {
             Log.i(AUTO_STATE_TAG, "auto-load skipped: setting disabled")
             return
         }
@@ -2775,6 +2885,15 @@ class EmulatorViewModel @Inject constructor(
                     is EmulatorEvent.RendererInitFailed -> {
                         didReceiveRendererInitFailure = true
                         val failedRenderer = it.renderer
+                        currentRom?.let { rom ->
+                            GameCompatibilityManager.stepDownForLoadFailure(
+                                context = context,
+                                gameCode = rom.gameCode,
+                                romName = rom.config.customName ?: rom.name,
+                                fileName = rom.fileName,
+                                failedRenderer = failedRenderer,
+                            )
+                        }
                         settingsRepository.getCurrentVideoRenderer()
                             .takeIf { configuredRenderer -> configuredRenderer == failedRenderer }
                             ?.let {
@@ -2787,6 +2906,9 @@ class EmulatorViewModel @Inject constructor(
                     }
                     is EmulatorEvent.VulkanCompileProgress -> updateLoadingCompileProgress(it)
                     is EmulatorEvent.Stop -> {
+                        if (isRetryingRomLoadWithFallback && _emulatorState.value is EmulatorState.LoadingRom) {
+                            return@collect
+                        }
                         when (it.reason) {
                             EmulatorEvent.Stop.Reason.GBAModeNotSupported -> _toastEvent.tryEmit(ToastEvent.GbaModeNotSupported)
                             EmulatorEvent.Stop.Reason.BadExceptionRegion -> {
@@ -6311,9 +6433,26 @@ class EmulatorViewModel @Inject constructor(
 
     private fun startTrackingFps() {
         sessionCoroutineScope.launch {
+            var stableSeconds = 0
+            var markerCleared = false
             while (isActive) {
                 delay(1.seconds)
                 _currentFps.value = emulatorManager.getFps().roundToInt()
+                if (!markerCleared && _emulatorState.value is EmulatorState.RunningRom) {
+                    stableSeconds += 1
+                    if (stableSeconds >= GameCompatibilityManager.STABLE_EMULATION_SECONDS) {
+                        markerCleared = true
+                        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+                        if (runningRom != null) {
+                            GameCompatibilityManager.clearLaunchMarker(
+                                context = context,
+                                gameCode = runningRom.gameCode,
+                                romName = runningRom.config.customName ?: runningRom.name,
+                                fileName = runningRom.fileName,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -6386,6 +6525,26 @@ class EmulatorViewModel @Inject constructor(
             raSessionStopGate.canResume()
     }
 
+    private fun resetCurrentRomCompatibilityMode() {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+        if (runningRom != null) {
+            val romDisplayName = runningRom.config.customName ?: runningRom.name
+            GameCompatibilityManager.resetProfile(
+                context = context,
+                gameCode = runningRom.gameCode,
+                romName = romDisplayName,
+                fileName = runningRom.fileName,
+            )
+            sessionCoroutineScope.launch {
+                emulatorManager.updateRomEmulatorConfiguration(runningRom)
+            }
+        } else {
+            GameCompatibilityManager.clearDeviceVulkanUnavailable(context)
+        }
+        _compatNoticeEvent.tryEmit(context.getString(R.string.compat_safe_mode_reset_toast))
+        resumeEmulator()
+    }
+
     private fun filterRomPauseMenuOption(option: RomPauseMenuOption, rendererDebugToolsEnabled: Boolean): Boolean {
         return when (option) {
             RomPauseMenuOption.ROM_SETTINGS -> _emulatorState.value is EmulatorState.RunningRom
@@ -6396,6 +6555,15 @@ class EmulatorViewModel @Inject constructor(
             RomPauseMenuOption.VIEW_ACHIEVEMENTS -> emulatorSession.isRetroAchievementsEnabledForSession()
             RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> buildRaPendingSyncMenuState().isVisible
             RomPauseMenuOption.RENDERER_DEBUG -> rendererDebugToolsEnabled
+            RomPauseMenuOption.RESET_COMPATIBILITY -> {
+                val rom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+                rom != null && GameCompatibilityManager.isSafeModeActive(
+                    context = context,
+                    gameCode = rom.gameCode,
+                    romName = rom.config.customName ?: rom.name,
+                    fileName = rom.fileName,
+                )
+            }
             else -> true
         }
     }
@@ -6656,6 +6824,7 @@ class EmulatorViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
         detachPendingRaSubmissionSession()
         raBootstrapJob?.cancel()
         raSessionJob?.cancel()

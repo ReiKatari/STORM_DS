@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compat_reset_safe_mode">セーフモードをリセット</string>
+    <string name="compat_safe_mode_applied_toast">セーフモードを有効化しました（%1$s、1x解像度）</string>
+    <string name="compat_safe_mode_jit_disabled_toast">セーフモードを有効化しました（%1$s、1x解像度、JITオフ）</string>
+    <string name="compat_safe_mode_reset_toast">セーフモードを通常設定にリセットしました</string>
+    <string name="compat_load_fallback_retry_toast">%1$sの初期化に失敗したため、%2$sで再試行します</string>
+    <string name="compat_capability_fallback_toast">この端末は%1$sに非対応のため、%2$sに切り替えました</string>
+    <string name="compat_touch_stick_mode_enabled">ミニスティックモードを有効化しました</string>
+    <string name="compat_touch_dpad_mode_enabled">方向ボタンモードを有効化しました</string>
+    <string name="compat_slot2_addon_title">スロット2周辺機器（GBA）</string>
+    <string name="compat_slot2_addon_disabled">無効</string>
+    <string name="compat_slot2_addon_rumble_pak">振動カートリッジ（DS振動パック）</string>
+    <string name="compat_slot2_addon_memory_expansion">メモリ拡張カートリッジ（8 MB RAM）</string>
+    <string name="compat_slot2_addon_solar_sensor">太陽センサー（ボクらの太陽）</string>
+    <string name="compat_slot2_addon_motion_pak">モーションパック（ジャイロ・加速度センサー）</string>
+    <string name="compat_slot2_addon_guitar_grip">ギターグリップ（Guitar Hero 4フレット）</string>
+    <string name="compat_slot2_addon_paddle_controller">パドルコントローラ（アルカノイド）</string>
+    <string name="compat_solar_sensor_title">太陽センサー（ボクらの太陽 / Lunar Knights）</string>
+    <string name="compat_solar_sensor_auto_short">自動（端末のセンサー）</string>
+    <string name="compat_solar_sensor_level_bars">%1$d / 10 段階</string>
+    <string name="compat_solar_sensor_auto_full">自動（端末の照度センサー）</string>
+    <string name="compat_solar_sensor_level_0">0 / 10（暗闇）</string>
+    <string name="compat_solar_sensor_level_2">2 / 10（薄明かり）</string>
+    <string name="compat_solar_sensor_level_4">4 / 10（日陰・曇り）</string>
+    <string name="compat_solar_sensor_level_6">6 / 10（晴天）</string>
+    <string name="compat_solar_sensor_level_8">8 / 10（強い日差し）</string>
+    <string name="compat_solar_sensor_level_10">10 / 10（真夏の太陽）</string>
+    <string name="compat_ir_pedometer_title">ポケウォーカー赤外線歩数計（ポケモン HG/SS）</string>
+    <string name="compat_ir_pedometer_add_100">+100歩</string>
+    <string name="compat_ir_pedometer_add_500">+500歩</string>
+    <string name="compat_ir_pedometer_add_1000">+1000歩</string>
+    <string name="compat_ir_pedometer_add_5000">+5000歩</string>
+    <string name="compat_ir_pedometer_reset">歩数カウントをリセット（0歩）</string>
+</resources>

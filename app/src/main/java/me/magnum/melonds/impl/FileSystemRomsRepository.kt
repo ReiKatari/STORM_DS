@@ -329,6 +329,7 @@ class FileSystemRomsRepository(
         val romInList = roms[romIndex]
         val updatedRom = romInList.copy(totalPlayTime = romInList.totalPlayTime + playTime)
         roms[romIndex] = updatedRom
+        me.magnum.melonds.ui.stats.PlayStatsStore.recordPlayTime(context, updatedRom, playTime.inWholeMilliseconds)
         onRomsChanged()
     }
 

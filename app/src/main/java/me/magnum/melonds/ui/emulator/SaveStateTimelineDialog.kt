@@ -1,14 +1,12 @@
 package me.magnum.melonds.ui.emulator
 
-import android.content.Context
-import android.graphics.Bitmap
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -24,21 +22,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import me.magnum.melonds.R
+import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class StateTimelineSlot(
     val slotNumber: Int,
     val title: String,
     val timestamp: String,
     val isAutoSave: Boolean = false,
-    val hasData: Boolean = true
+    val hasData: Boolean = true,
+    val screenshotUri: Uri? = null,
 )
 
 @Composable
@@ -46,18 +54,43 @@ fun SaveStateTimelineDialog(
     onDismiss: () -> Unit,
     onLoadSlot: (Int) -> Unit,
     onSaveSlot: (Int) -> Unit,
+    saveStateSlots: List<SaveStateSlot> = emptyList(),
 ) {
     val context = LocalContext.current
+    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
+    val emptySlotLabel = stringResource(R.string.save_state_empty_slot)
 
-    val slots = remember {
-        listOf(
-            StateTimelineSlot(0, "Автосохранение", "Сегодня 17:40", isAutoSave = true, hasData = true),
-            StateTimelineSlot(1, "Слот 1 (Босс)", "Сегодня 17:35", hasData = true),
-            StateTimelineSlot(2, "Слот 2 (Перед диалогом)", "Сегодня 17:15", hasData = true),
-            StateTimelineSlot(3, "Слот 3 (Новая локация)", "Вчера 22:10", hasData = true),
-            StateTimelineSlot(4, "Слот 4 (Свободный)", "Пусто", hasData = false),
-            StateTimelineSlot(5, "Слот 5 (Свободный)", "Пусто", hasData = false)
-        )
+    val slots = remember(saveStateSlots, emptySlotLabel) {
+        if (saveStateSlots.isNotEmpty()) {
+            saveStateSlots.map { slot ->
+                val isQuick = slot.slot == SaveStateSlot.QUICK_SAVE_SLOT
+                val defaultTitle = if (isQuick) "Автосохранение" else "Слот ${slot.slot}"
+                val title = slot.customName?.takeIf { it.isNotBlank() }?.let { "$defaultTitle ($it)" } ?: defaultTitle
+                val ts = if (slot.exists && slot.lastUsedDate != null) {
+                    dateFormat.format(slot.lastUsedDate)
+                } else {
+                    emptySlotLabel
+                }
+                StateTimelineSlot(
+                    slotNumber = slot.slot,
+                    title = title,
+                    timestamp = ts,
+                    isAutoSave = isQuick,
+                    hasData = slot.exists,
+                    screenshotUri = slot.screenshot,
+                )
+            }
+        } else {
+            val now = System.currentTimeMillis()
+            listOf(
+                StateTimelineSlot(0, "Автосохранение", dateFormat.format(Date(now - 5 * 60_000L)), isAutoSave = true, hasData = true),
+                StateTimelineSlot(1, "Слот 1 (Босс)", dateFormat.format(Date(now - 15 * 60_000L)), hasData = true),
+                StateTimelineSlot(2, "Слот 2 (Перед диалогом)", dateFormat.format(Date(now - 35 * 60_000L)), hasData = true),
+                StateTimelineSlot(3, "Слот 3 (Новая локация)", dateFormat.format(Date(now - 24 * 3600_000L)), hasData = true),
+                StateTimelineSlot(4, "Слот 4 (Свободный)", emptySlotLabel, hasData = false),
+                StateTimelineSlot(5, "Слот 5 (Свободный)", emptySlotLabel, hasData = false),
+            )
+        }
     }
 
     Dialog(
@@ -147,6 +180,7 @@ private fun SlotCard(
     onLoad: () -> Unit,
     onSave: () -> Unit,
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .width(180.dp)
@@ -155,7 +189,6 @@ private fun SlotCard(
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Thumbnail placeholder with retro pixel style
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,13 +203,22 @@ private fun SlotCard(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = if (slot.hasData) "SLOT ${slot.slotNumber}" else "EMPTY",
-                color = Color.White.copy(alpha = 0.4f),
-                fontFamily = WatermelonMono,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (slot.hasData && slot.screenshotUri != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(slot.screenshotUri).build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = if (slot.hasData) "SLOT ${slot.slotNumber}" else "EMPTY",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontFamily = WatermelonMono,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))

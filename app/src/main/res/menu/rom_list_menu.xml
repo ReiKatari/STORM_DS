@@ -76,9 +76,21 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_player_stats"
+        android:title="@string/feature_stats_menu_title"
+        android:orderInCategory="4"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_report_problem"
+        android:title="@string/feature_problem_report_menu_title"
+        android:orderInCategory="5"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_settings"
         android:title="@string/settings"
         android:icon="@drawable/ic_settings"
-        android:orderInCategory="4"
+        android:orderInCategory="6"
         app:showAsAction="never" />
 </menu>

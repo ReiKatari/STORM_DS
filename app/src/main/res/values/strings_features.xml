@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">Continue</string>
+    <string name="feature_quick_resume_continue_game">Continue: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">Continue</string>
+    <string name="feature_quick_resume_from_save">Quick save • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">Resume from quick save</string>
+    <string name="feature_quick_resume_last_played">Last played • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">Starts normally — no quick save yet</string>
+    <string name="feature_quick_resume_tile_label">Continue game</string>
+    <string name="feature_quick_resume_no_recent_game">No recent game</string>
+    <string name="feature_quick_resume_not_found">Last played game could not be found</string>
+    <string name="feature_stats_menu_title">Player statistics</string>
+    <string name="feature_stats_title">Player statistics</string>
+    <string name="feature_stats_subtitle">Play time, launches and daily activity</string>
+    <string name="feature_stats_total_play_time">Total play time</string>
+    <string name="feature_stats_games_played">Games played</string>
+    <string name="feature_stats_total_launches">Total launches</string>
+    <string name="feature_stats_daily_chart_title">Daily play time (last 7 days)</string>
+    <string name="feature_stats_top_by_time">Top games by play time</string>
+    <string name="feature_stats_top_by_launches">Top games by launches</string>
+    <string name="feature_stats_launches_count">Launches: %1$d</string>
+    <string name="feature_stats_time_hm">%1$dh %2$dm</string>
+    <string name="feature_stats_time_m">%1$dm</string>
+    <string name="feature_stats_time_less_than_min">&lt;1m</string>
+    <string name="feature_stats_empty_title">No statistics yet</string>
+    <string name="feature_stats_empty_desc">Launch any game to start tracking play time and daily activity</string>
+    <string name="feature_problem_report_menu_title">Report a problem</string>
+    <string name="feature_problem_report_dialog_title">Create problem report</string>
+    <string name="feature_problem_report_dialog_message">Creates a diagnostic ZIP archive containing the app version, device and GPU info, Android version, emulator and renderer settings (without accounts or tokens), last played game code, and recent logs. Nothing is sent automatically — you choose where to share the file.</string>
+    <string name="feature_problem_report_create_action">Create and share</string>
+    <string name="feature_problem_report_generating">Collecting diagnostic report…</string>
+    <string name="feature_problem_report_share_chooser">Share problem report</string>
+    <string name="feature_problem_report_failed">Failed to create problem report</string>
+</resources>

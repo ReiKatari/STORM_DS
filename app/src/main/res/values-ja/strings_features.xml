@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_quick_resume_continue">再開</string>
+    <string name="feature_quick_resume_continue_game">再開: %1$s</string>
+    <string name="feature_quick_resume_shortcut_short">再開</string>
+    <string name="feature_quick_resume_from_save">クイックセーブ • %1$s</string>
+    <string name="feature_quick_resume_from_save_ready">クイックセーブから再開</string>
+    <string name="feature_quick_resume_last_played">最終プレイ • %1$s</string>
+    <string name="feature_quick_resume_no_save_hint">通常起動 — クイックセーブはまだありません</string>
+    <string name="feature_quick_resume_tile_label">ゲームを再開</string>
+    <string name="feature_quick_resume_no_recent_game">最近のゲームはありません</string>
+    <string name="feature_quick_resume_not_found">最後にプレイしたゲームが見つかりませんでした</string>
+    <string name="feature_stats_menu_title">プレイヤー統計</string>
+    <string name="feature_stats_title">プレイヤー統計</string>
+    <string name="feature_stats_subtitle">プレイ時間、起動回数、日別のアクティビティ</string>
+    <string name="feature_stats_total_play_time">総プレイ時間</string>
+    <string name="feature_stats_games_played">プレイしたゲーム数</string>
+    <string name="feature_stats_total_launches">総起動回数</string>
+    <string name="feature_stats_daily_chart_title">日別プレイ時間（過去7日間）</string>
+    <string name="feature_stats_top_by_time">プレイ時間トップのゲーム</string>
+    <string name="feature_stats_top_by_launches">起動回数トップのゲーム</string>
+    <string name="feature_stats_launches_count">起動回数: %1$d</string>
+    <string name="feature_stats_time_hm">%1$d時間 %2$d分</string>
+    <string name="feature_stats_time_m">%1$d分</string>
+    <string name="feature_stats_time_less_than_min">&lt;1分</string>
+    <string name="feature_stats_empty_title">統計データはまだありません</string>
+    <string name="feature_stats_empty_desc">ゲームを起動するとプレイ時間と日別アクティビティの記録が始まります</string>
+    <string name="feature_problem_report_menu_title">問題を報告</string>
+    <string name="feature_problem_report_dialog_title">問題レポートを作成</string>
+    <string name="feature_problem_report_dialog_message">アプリバージョン、端末とGPU情報、Androidバージョン、エミュレータとレンダラー設定（アカウントやトークンを除く）、最後にプレイしたゲームコード、最新ログを含む診断用ZIPアーカイブを作成します。自動送信はされず、共有先を自分で選択できます。</string>
+    <string name="feature_problem_report_create_action">作成して共有</string>
+    <string name="feature_problem_report_generating">診断レポートを収集中…</string>
+    <string name="feature_problem_report_share_chooser">問題レポートを共有</string>
+    <string name="feature_problem_report_failed">問題レポートの作成に失敗しました</string>
+</resources>

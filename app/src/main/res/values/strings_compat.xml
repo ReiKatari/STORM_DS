@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compat_reset_safe_mode">Reset safe mode</string>
+    <string name="compat_safe_mode_applied_toast">Safe mode enabled (%1$s, 1x scale)</string>
+    <string name="compat_safe_mode_jit_disabled_toast">Safe mode enabled (%1$s, 1x scale, JIT off)</string>
+    <string name="compat_safe_mode_reset_toast">Safe mode reset to default settings</string>
+    <string name="compat_load_fallback_retry_toast">%1$s failed to initialize, retrying with %2$s</string>
+    <string name="compat_capability_fallback_toast">%1$s is not supported on this device, switched to %2$s</string>
+    <string name="compat_touch_stick_mode_enabled">Mini-stick mode enabled</string>
+    <string name="compat_touch_dpad_mode_enabled">Directional buttons mode enabled</string>
+    <string name="compat_slot2_addon_title">Slot-2 accessory (GBA)</string>
+    <string name="compat_slot2_addon_disabled">Disabled</string>
+    <string name="compat_slot2_addon_rumble_pak">Rumble Pak (DS vibration pack)</string>
+    <string name="compat_slot2_addon_memory_expansion">Memory Expansion Pak (8 MB RAM)</string>
+    <string name="compat_slot2_addon_solar_sensor">Solar Sensor (Boktai light sensor)</string>
+    <string name="compat_slot2_addon_motion_pak">Motion Pak (gyroscope and accelerometer)</string>
+    <string name="compat_slot2_addon_guitar_grip">Guitar Grip (4 Guitar Hero frets)</string>
+    <string name="compat_slot2_addon_paddle_controller">Paddle Controller (Arkanoid dial)</string>
+    <string name="compat_solar_sensor_title">Solar sensor (Boktai / Lunar Knights)</string>
+    <string name="compat_solar_sensor_auto_short">Auto (phone sensor)</string>
+    <string name="compat_solar_sensor_level_bars">%1$d / 10 bars</string>
+    <string name="compat_solar_sensor_auto_full">Auto (phone ambient light sensor)</string>
+    <string name="compat_solar_sensor_level_0">0 / 10 (pitch dark)</string>
+    <string name="compat_solar_sensor_level_2">2 / 10 (twilight)</string>
+    <string name="compat_solar_sensor_level_4">4 / 10 (shade or cloudy)</string>
+    <string name="compat_solar_sensor_level_6">6 / 10 (clear day)</string>
+    <string name="compat_solar_sensor_level_8">8 / 10 (bright sun)</string>
+    <string name="compat_solar_sensor_level_10">10 / 10 (zenith sun)</string>
+    <string name="compat_ir_pedometer_title">Pokéwalker IR pedometer (Pokémon HG/SS)</string>
+    <string name="compat_ir_pedometer_add_100">+100 steps</string>
+    <string name="compat_ir_pedometer_add_500">+500 steps</string>
+    <string name="compat_ir_pedometer_add_1000">+1000 steps</string>
+    <string name="compat_ir_pedometer_add_5000">+5000 steps</string>
+    <string name="compat_ir_pedometer_reset">Reset counter (0 steps)</string>
+</resources>

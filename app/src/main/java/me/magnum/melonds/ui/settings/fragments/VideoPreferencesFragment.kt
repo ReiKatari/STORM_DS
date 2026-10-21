@@ -465,7 +465,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 if (newPos != "hidden" && newPos == resolutionHudPref.value) {
                     val fallback = if (newPos == "top_left") "top_right" else "top_left"
                     resolutionHudPref.value = fallback
-                    Toast.makeText(requireContext(), "Позиция разрешения изменена во избежание наложения", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.video_prefs_resolution_position_changed), Toast.LENGTH_SHORT).show()
                 }
                 true
             }
@@ -475,7 +475,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 if (newPos != "hidden" && newPos == fpsCounterPref.value) {
                     val fallback = if (newPos == "top_left") "top_right" else "top_left"
                     fpsCounterPref.value = fallback
-                    Toast.makeText(requireContext(), "Позиция FPS изменена во избежание наложения", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.video_prefs_fps_position_changed), Toast.LENGTH_SHORT).show()
                 }
                 true
             }
@@ -561,7 +561,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             driverDisplayName.contains(recommended.version, ignoreCase = true)
 
         if (recommended != null && !isRecommendedActive) {
-            managerPreference?.summary = "⭐ Доступен рекомендуемый: ${recommended.name}"
+            managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommended.name)
         } else {
             managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
         }
@@ -1162,7 +1162,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<ListPreference>("video_internal_resolution")?.let { internalResPref ->
             if (isSoftware) {
                 internalResPref.isEnabled = false
-                internalResPref.summary = "Масштабирование разрешения 3D доступно только в OpenGL / Vulkan."
+                internalResPref.summary = getString(R.string.video_prefs_internal_resolution_software_only)
             } else {
                 internalResPref.isEnabled = true
                 internalResPref.summary = "%s"
@@ -1759,7 +1759,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 driverDisplayName.contains(recommended.version, ignoreCase = true)
 
             if (recommended != null && !isRecommendedActive) {
-                managerPreference?.summary = "⭐ Доступен рекомендуемый: ${recommended.name}"
+                managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommended.name)
             } else {
                 managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
             }
