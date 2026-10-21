@@ -35,16 +35,23 @@ object ButtonThemeManager {
     var currentStyle: ButtonColorStyle = ButtonColorStyle.CYBER_CYAN
         private set
 
+    private var registeredPrefs: SharedPreferences? = null
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
+        if (key == "button_color_theme") {
+            val newKey = sp.getString("button_color_theme", "cyber_cyan") ?: "cyber_cyan"
+            currentStyle = parseStyle(newKey)
+        }
+    }
+
     fun init(context: Context) {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
         val styleKey = prefs.getString("button_color_theme", "cyber_cyan") ?: "cyber_cyan"
         currentStyle = parseStyle(styleKey)
 
-        prefs.registerOnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
-            if (key == "button_color_theme") {
-                val newKey = sp.getString("button_color_theme", "cyber_cyan") ?: "cyber_cyan"
-                currentStyle = parseStyle(newKey)
-            }
+        if (registeredPrefs !== prefs) {
+            registeredPrefs?.unregisterOnSharedPreferenceChangeListener(prefListener)
+            prefs.registerOnSharedPreferenceChangeListener(prefListener)
+            registeredPrefs = prefs
         }
     }
 

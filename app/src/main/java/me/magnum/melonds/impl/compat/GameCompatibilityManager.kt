@@ -112,22 +112,20 @@ object GameCompatibilityManager {
     fun markDeviceVulkanUnavailable(context: Context) {
         cachedVulkanUnavailableFp = Build.FINGERPRINT
         vulkanUnavailableLoaded = true
-        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit {
-            putString(KEY_VULKAN_UNAVAILABLE_FINGERPRINT, Build.FINGERPRINT)
-        }
         bumpVersion()
     }
 
     fun clearDeviceVulkanUnavailable(context: Context) {
-        val hadUnavailable = cachedVulkanUnavailableFp != null || !vulkanUnavailableLoaded
+        val hadInMemory = cachedVulkanUnavailableFp != null
         cachedVulkanUnavailableFp = null
         vulkanUnavailableLoaded = true
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (hadUnavailable && prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
+        if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
             prefs.edit {
                 remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
             }
+            bumpVersion()
+        } else if (hadInMemory) {
             bumpVersion()
         }
     }
@@ -135,7 +133,11 @@ object GameCompatibilityManager {
     fun isDeviceVulkanMarkedUnavailable(context: Context): Boolean {
         if (!vulkanUnavailableLoaded) {
             val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            cachedVulkanUnavailableFp = prefs.getString(KEY_VULKAN_UNAVAILABLE_FINGERPRINT, null)
+            if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
+                prefs.edit {
+                    remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
+                }
+            }
             vulkanUnavailableLoaded = true
         }
         val savedFp = cachedVulkanUnavailableFp ?: return false

@@ -48,6 +48,18 @@
                     app:visibilityMode="ignore" />
         </Constraint>
 
+        <Constraint android:id="@+id/layout_console_skin">
+            <PropertySet
+                    app:applyMotionScene="false"
+                    app:visibilityMode="ignore" />
+        </Constraint>
+
+        <Constraint android:id="@+id/layout_achievement">
+            <PropertySet
+                    app:applyMotionScene="false"
+                    app:visibilityMode="ignore" />
+        </Constraint>
+
         <Constraint android:id="@+id/view_translation_overlay">
             <PropertySet
                     app:applyMotionScene="false"

@@ -114,7 +114,7 @@ object VulkanCompatibilityDatabase {
         }
 
         val effectiveCompositorMode = matchedProfile?.compositorModeInt() ?: userCompositorMode
-        val effectiveThickEdges = matchedProfile?.thickEdges ?: userThickEdges
+        val effectiveThickEdges = (matchedProfile?.thickEdges == true) || userThickEdges
 
         if (matchedProfile != null) {
             Log.i(

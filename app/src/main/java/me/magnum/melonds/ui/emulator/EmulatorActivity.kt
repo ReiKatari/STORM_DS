@@ -470,9 +470,14 @@ class EmulatorActivity : AppCompatActivity() {
         setupSustainedPerformanceMode()
         setupFpsCounter()
         setupResolutionHud()
+        setupConsoleSkin()
+        me.magnum.melonds.ui.common.views.ButtonThemeManager.init(this)
+        binding.viewLayoutControls.invalidateInputControlViews()
+        ViewCompat.requestApplyInsets(binding.root)
         translatorManager.syncOverlaySettings()
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         updateDisplays()
+        updateRendererScreenAreas()
     }
     private val romInputSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         viewModel.onRomCustomInputConfigEdited()
@@ -559,6 +564,8 @@ class EmulatorActivity : AppCompatActivity() {
     private val saveStatesOverlayState = mutableStateOf<SaveStatesOverlayData?>(null)
     private val isLidClosedState = mutableStateOf(false)
     private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
+    private val consoleSkinEnabledState = mutableStateOf(false)
+    private val consoleSkinThemeState = mutableStateOf(me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK)
     private val activeSlot2AddonState = mutableStateOf(0)
     private var solarSensorOverrideLevel = -1 // -1 = Auto (phone ambient light sensor), 0..10 = manual bars
 
@@ -725,39 +732,19 @@ class EmulatorActivity : AppCompatActivity() {
         updateOrientation(resources.configuration)
         disableScreenTimeOut()
 
-        val defaultPrefs = PreferenceManager.getDefaultSharedPreferences(this)
-        val oledBatterySaver = defaultPrefs.getBoolean("video_oled_battery_saver", false)
-        val consoleSkinEnabled = isConsoleSkinActive()
-        val skinType = defaultPrefs.getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
-
-        if (oledBatterySaver) {
-            binding.layoutRoot.setBackgroundColor(android.graphics.Color.BLACK)
-            window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
-        }
-
-        if (consoleSkinEnabled) {
-            binding.layoutConsoleSkin.visibility = View.VISIBLE
-            binding.layoutConsoleSkin.isClickable = false
-            binding.layoutConsoleSkin.isFocusable = false
-            binding.layoutConsoleSkin.setContent {
+        binding.layoutConsoleSkin.isClickable = false
+        binding.layoutConsoleSkin.isFocusable = false
+        binding.layoutConsoleSkin.setContent {
+            if (consoleSkinEnabledState.value) {
                 val areas = consoleSkinAreasState.value
-                val theme = when (skinType) {
-                    "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
-                    "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
-                    "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
-                    "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
-                    "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
-                    else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
-                }
                 me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
-                    skinTheme = theme,
+                    skinTheme = consoleSkinThemeState.value,
                     topScreenRect = areas?.topScreenRect,
                     bottomScreenRect = areas?.bottomScreenRect
                 )
             }
-        } else {
-            binding.layoutConsoleSkin.visibility = View.GONE
         }
+        setupConsoleSkin()
 
         binding.layoutAchievement.setContent {
             MelonTheme {
@@ -1469,10 +1456,7 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
-                            val consoleSkinEnabled = isConsoleSkinActive()
-                            if (!consoleSkinEnabled) {
-                                binding.layoutConsoleSkin.visibility = View.GONE
-                            }
+                            setupConsoleSkin()
                             binding.surfaceMain.visibility = View.VISIBLE
                             binding.viewLayoutControls.visibility = View.VISIBLE
                             backPressedCallback.isEnabled = true
@@ -1983,6 +1967,9 @@ class EmulatorActivity : AppCompatActivity() {
         setupSustainedPerformanceMode()
         setupFpsCounter()
         setupResolutionHud()
+        setupConsoleSkin()
+        me.magnum.melonds.ui.common.views.ButtonThemeManager.init(this)
+        binding.viewLayoutControls.invalidateInputControlViews()
         choreographerFrameRenderer.startRendering()
         startShaderDiagnosticsPolling()
         translatorManager.syncOverlaySettings()
@@ -2711,8 +2698,8 @@ class EmulatorActivity : AppCompatActivity() {
             else -> {
                 // AUTO_ROTATE / Пользовательский профиль раскладки из редактора
                 val layoutMatchesOrientation = instantiatedLayoutIsLandscape == null || instantiatedLayoutIsLandscape == isLandscape
-                val candidateTop = topView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
-                val candidateBottom = bottomView?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val candidateTop = (topView?.initialRect ?: topView?.getRect())?.takeIf { it.width > 0 && it.height > 0 }
+                val candidateBottom = (bottomView?.initialRect ?: bottomView?.getRect())?.takeIf { it.width > 0 && it.height > 0 }
                 val bothFitSurface = layoutMatchesOrientation &&
                     (candidateTop == null || isRectValidForSurface(candidateTop, surfaceW, surfaceH)) &&
                     (candidateBottom == null || isRectValidForSurface(candidateBottom, surfaceW, surfaceH))
@@ -2779,6 +2766,36 @@ class EmulatorActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+
+        val hingeGapPx = settingsRepository.getHingeGapPixels()
+        val baseTopRect = topRect
+        val baseBottomRect = bottomRect
+        if (baseTopRect != null && baseBottomRect != null) {
+            if (hingeGapPx > 0 && kotlin.math.abs(baseTopRect.x - baseBottomRect.x) < 40) {
+                val upperIsTop = baseTopRect.y <= baseBottomRect.y
+                val upper = if (upperIsTop) baseTopRect else baseBottomRect
+                val lower = if (upperIsTop) baseBottomRect else baseTopRect
+                if (lower.y >= upper.bottom - 8) {
+                    val halfGap = hingeGapPx / 2
+                    val shiftUp = minOf(halfGap, upper.y.coerceAtLeast(0))
+                    val maxY = (surfaceH - lower.height).coerceAtLeast(0)
+                    val shiftDown = minOf(hingeGapPx - halfGap, (maxY - lower.y).coerceAtLeast(0))
+                    val newUpper = Rect(upper.x, upper.y - shiftUp, upper.width, upper.height)
+                    val newLower = Rect(lower.x, lower.y + shiftDown, lower.width, lower.height)
+                    if (upperIsTop) {
+                        topRect = newUpper
+                        bottomRect = newLower
+                    } else {
+                        bottomRect = newUpper
+                        topRect = newLower
+                    }
+                }
+            }
+            val topCompRect = if (areScreensSwapped) bottomRect else topRect
+            val bottomCompRect = if (areScreensSwapped) topRect else bottomRect
+            binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, topCompRect)
+            binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, bottomCompRect)
         }
 
         if (!usedFallbackForStaleOrientation) {
@@ -3179,6 +3196,10 @@ class EmulatorActivity : AppCompatActivity() {
             finish()
             return
         }
+        if (translatorManager.hasActiveTranslationOverlay()) {
+            translatorManager.dismissTranslation()
+            return
+        }
         if (isRewindWindowOpen()) {
             closeRewindWindow()
         } else {
@@ -3328,14 +3349,32 @@ class EmulatorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * The console skin is shown only when it is enabled and the OLED battery saver is off
-     * (the saver forces a pure black background and disables the skin).
-     */
     private fun isConsoleSkinActive(): Boolean {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        return prefs.getBoolean("video_console_skin_enabled", false) &&
-            !prefs.getBoolean("video_oled_battery_saver", false)
+        return prefs.getBoolean("video_console_skin_enabled", false)
+    }
+
+    private fun setupConsoleSkin() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val oledBatterySaver = prefs.getBoolean("video_oled_battery_saver", false)
+        if (oledBatterySaver) {
+            binding.layoutRoot.setBackgroundColor(android.graphics.Color.BLACK)
+            window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
+        }
+        val skinEnabled = isConsoleSkinActive()
+        val skinType = prefs.getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
+        consoleSkinThemeState.value = when (skinType) {
+            "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
+            "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
+            "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
+            "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
+            "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
+            else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
+        }
+        consoleSkinEnabledState.value = skinEnabled
+        binding.layoutConsoleSkin.visibility = if (skinEnabled) View.VISIBLE else View.GONE
+        val shiftPx = (14f * resources.displayMetrics.density).toInt()
+        binding.viewLayoutControls.applyConsoleSkinButtonShift(skinEnabled, shiftPx)
     }
 
     private fun romSettingsMenuLabel(title: String, value: String): String {

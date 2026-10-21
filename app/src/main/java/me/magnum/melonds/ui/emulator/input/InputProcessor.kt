@@ -46,6 +46,7 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
     }
 
     private val axisStates: Map<Axis, AxisState>
+    private val lastFrontendInputPressMs = java.util.EnumMap<Input, Long>(Input::class.java)
     private var lastSlot2AnalogLogAtMs = 0L
     private var lastSlot2RawAnalogEventAtMs = 0L
     private var slot2DigitalLeftPressed = false
@@ -103,6 +104,9 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
 
         when (keyEvent.action) {
             KeyEvent.ACTION_DOWN -> {
+                if (keyEvent.repeatCount > 0 && !input.isSystemInput) {
+                    return true
+                }
                 dispatchInputPressed(input, fromController)
                 return true
             }
@@ -205,6 +209,14 @@ class InputProcessor(private val controllerConfiguration: ControllerConfiguratio
         if (input.isSystemInput) {
             systemInputListener.onKeyPress(input)
         } else {
+            if (input != Input.HOLD_FAST_FORWARD) {
+                val now = SystemClock.uptimeMillis()
+                val prev = lastFrontendInputPressMs[input] ?: 0L
+                if (now - prev < 250L) {
+                    return
+                }
+                lastFrontendInputPressMs[input] = now
+            }
             frontendInputListener.onKeyPress(input)
         }
     }

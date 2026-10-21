@@ -4754,33 +4754,13 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
         return true;
     }
 
-    const int hingeGapPx = VulkanRuntime::GetHingeGapPixels();
-    const bool canApplyVerticalHingeGap =
-        hingeGapPx > 0
-        && config.topScreen.enabled
-        && config.bottomScreen.enabled
-        && config.bottomScreen.y >= config.topScreen.y + config.topScreen.height - 8;
-
     auto appendScreen = [&](const VulkanPresenterRect& rawRect, bool topScreen, float alpha) {
         if (!rawRect.enabled || rawRect.width <= 0 || rawRect.height <= 0)
             return;
 
-        VulkanPresenterRect rect = rawRect;
-        if (canApplyVerticalHingeGap)
-        {
-            const int halfGap = hingeGapPx / 2;
-            if (topScreen)
-            {
-                const int shiftUp = std::min(halfGap, std::max(0, rect.y));
-                rect.y -= shiftUp;
-            }
-            else
-            {
-                const int maxY = static_cast<int>(surfaceState.extent.height) - rect.height;
-                const int shiftDown = std::min(hingeGapPx - halfGap, std::max(0, maxY - rect.y));
-                rect.y += shiftDown;
-            }
-        }
+        // Note: Vertical hinge gap is applied in EmulatorActivity.resolveMainScreenPresentationAreas()
+        // so that Vulkan, OpenGL, Software, touch input, and the 3D console skin share identical screen rects.
+        const VulkanPresenterRect& rect = rawRect;
 
         const float left = screenXToNdc(rect.x);
         const float right = screenXToNdc(rect.x + rect.width);

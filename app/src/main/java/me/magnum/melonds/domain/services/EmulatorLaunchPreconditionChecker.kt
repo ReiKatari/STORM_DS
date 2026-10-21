@@ -109,16 +109,19 @@ class EmulatorLaunchPreconditionChecker(
         }
 
         return withContext(Dispatchers.Default) {
+            GameCompatibilityManager.clearDeviceVulkanUnavailable(context)
             MelonDSAndroidInterface.configureVulkanDriver(
                 settingsRepository.getVulkanDriverConfiguration(context.applicationInfo.nativeLibraryDir)
             )
             val pipelineProfile = VulkanPipelineProfile.fromFastPathPreference(
                 settingsRepository.isVulkanFastPathEnabled().first()
             )
-            when {
-                !MelonDSAndroidInterface.isVulkanRendererSupported() -> RendererValidationFailure.UNSUPPORTED
-                !MelonDSAndroidInterface.canInitializeVulkanRenderer(pipelineProfile) -> RendererValidationFailure.INIT_FAILED
-                else -> null
+            if (!MelonDSAndroidInterface.isVulkanRendererSupported()) {
+                RendererValidationFailure.UNSUPPORTED
+            } else {
+                // Warm up and apply compatibility overrides if needed without blocking Vulkan on slower devices
+                MelonDSAndroidInterface.canInitializeVulkanRenderer(pipelineProfile)
+                null
             }
         }
     }

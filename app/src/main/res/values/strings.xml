@@ -1487,7 +1487,7 @@
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
     <string name="video_console_skin_type_title">Console model and color</string>
     <string name="video_oled_battery_saver_title">Smart OLED battery saver</string>
-    <string name="video_oled_battery_saver_summary">Uses a pure black background and disables the console skin to save power on OLED screens</string>
+    <string name="video_oled_battery_saver_summary">Uses a pure black #000000 background to save battery power on AMOLED and OLED screens</string>
     <string name="decrypt_rom_title">ROM encrypted</string>
     <string name="decrypt_rom_description">This DSi ROM uses Modcrypt encryption. Decrypt it to enable direct playback.</string>
     <string name="decrypt_rom_button">Decrypt</string>

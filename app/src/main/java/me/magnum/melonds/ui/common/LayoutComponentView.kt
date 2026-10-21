@@ -15,6 +15,7 @@ class LayoutComponentView(val view: View, val aspectRatio: Float, val component:
         }
 
     var onTop: Boolean = false
+    var initialRect: Rect? = null
 
     fun setPosition(position: Point) {
         view.updateLayoutParams<FrameLayout.LayoutParams> {

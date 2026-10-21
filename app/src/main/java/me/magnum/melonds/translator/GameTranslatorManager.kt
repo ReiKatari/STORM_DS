@@ -72,6 +72,9 @@ class GameTranslatorManager(
 
     private var overlayView: GameTranslationOverlayView? = null
     private var autoTranslateJob: Job? = null
+    private var translationJob: Job? = null
+    @Volatile
+    private var activeTranslationGen: Int = 0
     private var isPausedByTranslator = false
     private var pendingTranslateAfterPermission = false
     private val ttsManager = GameTtsManager(activity)
@@ -318,32 +321,52 @@ class GameTranslatorManager(
         }
     }
 
-    fun triggerTranslation(isAuto: Boolean = false) {
-        if (!isEnabled) {
-            Toast.makeText(activity, R.string.translator_disabled_hint, Toast.LENGTH_SHORT).show()
-            return
-        }
+    fun hasActiveTranslationOverlay(): Boolean {
+        val ov = overlayView
+        return ov?.hasActiveTranslations() == true ||
+            ov?.isTranslating == true ||
+            ov?.isLassoModeActive == true ||
+            ov?.isEditRegionsMode == true ||
+            translationJob?.isActive == true ||
+            isPausedByTranslator
+    }
 
-        // If currently displaying translations, dismiss and unpause
-        if (overlayView?.hasActiveTranslations() == true || overlayView?.isTranslating == true) {
+    fun triggerTranslation(isAuto: Boolean = false) {
+        if (!isAuto && hasActiveTranslationOverlay()) {
             dismissTranslation()
             return
         }
 
+        if (!isEnabled) {
+            if (!isAuto) {
+                preferences.edit().putBoolean(PREF_TRANSLATOR_ENABLED, true).apply()
+                syncOverlaySettings()
+            } else {
+                return
+            }
+        }
+
+        if (isAuto && (overlayView?.isTranslating == true || translationJob?.isActive == true)) {
+            return
+        }
+
         if (!isAuto) {
-            // Manual user button tap: guarantee fresh OCR scan
+            // Manual user button/hotkey tap: guarantee fresh OCR scan
             textRecognizer.clearCache()
             lastTranslatedRawText = ""
             lastFrameDHash = 0L
             overlayView?.clearTranslations()
         }
 
+        overlayView?.visibility = View.VISIBLE
         overlayView?.isTranslating = true
-        val prevShowFloating = overlayView?.showFloatingButton ?: true
+        val prevShowFloating = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
         overlayView?.showFloatingButton = false
         overlayView?.invalidate()
 
-        mainScope.launch {
+        val currentGen = ++activeTranslationGen
+        translationJob?.cancel()
+        translationJob = mainScope.launch {
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
             var capturedBitmap: Bitmap? = null
 
@@ -382,6 +405,11 @@ class GameTranslatorManager(
                 }
             }
 
+            if (currentGen != activeTranslationGen || !isActive) {
+                capturedBitmap?.recycle()
+                return@launch
+            }
+
             // Fallback: If still no capture and MediaProjection not yet granted, request it
             if (capturedBitmap == null && !mediaProjectionCapturer.hasPermission) {
                 overlayView?.showFloatingButton = prevShowFloating
@@ -401,7 +429,7 @@ class GameTranslatorManager(
             overlayView?.showFloatingButton = prevShowFloating
             overlayView?.invalidate()
 
-            if (pauseOnTranslate) {
+            if (pauseOnTranslate && !isAuto) {
                 isPausedByTranslator = true
                 try {
                     onPauseEmulator()
@@ -414,7 +442,7 @@ class GameTranslatorManager(
                 val aspect = w / h
                 val isDsAspect = kotlin.math.abs(aspect - (256f / 384f)) < 0.05f || kotlin.math.abs(aspect - (256f / 192f)) < 0.05f
                 val isNativeDsBitmap = isDsAspect || (capturedBitmap.width == 256 && capturedBitmap.height == 384)
-                processCapturedFrame(capturedBitmap, forceFullscreen = isNativeDsBitmap, isAuto = isAuto)
+                processCapturedFrame(capturedBitmap, forceFullscreen = isNativeDsBitmap, isAuto = isAuto, expectedGen = currentGen)
             } else {
                 overlayView?.isTranslating = false
                 if (isPausedByTranslator) {
@@ -513,8 +541,16 @@ class GameTranslatorManager(
     }
 
     fun dismissTranslation() {
+        activeTranslationGen++
+        translationJob?.cancel()
+        translationJob = null
+        ttsManager.stop()
+        overlayView?.isLassoModeActive = false
+        overlayView?.isEditRegionsMode = false
         overlayView?.clearTranslations()
         overlayView?.isTranslating = false
+        overlayView?.showFloatingButton = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
+        overlayView?.invalidate()
         if (isPausedByTranslator) {
             isPausedByTranslator = false
             try {
@@ -588,20 +624,22 @@ class GameTranslatorManager(
             }
 
             if (capturedBitmap != null) {
-                processCapturedFrame(capturedBitmap, customOverrideRegions = listOf(region))
+                val gen = ++activeTranslationGen
+                processCapturedFrame(capturedBitmap, customOverrideRegions = listOf(region), expectedGen = gen)
             } else {
                 overlayView?.isTranslating = false
             }
         }
     }
 
-    private fun processCapturedFrame(
+    private suspend fun processCapturedFrame(
         bitmap: Bitmap,
         forceFullscreen: Boolean = false,
         isAuto: Boolean = false,
-        customOverrideRegions: List<TranslationRegion>? = null
+        customOverrideRegions: List<TranslationRegion>? = null,
+        expectedGen: Int = activeTranslationGen
     ) {
-        mainScope.launch {
+        coroutineScope {
             try {
                 if (isAuto) {
                     val currentDHash = calculateDHash(bitmap)
@@ -609,7 +647,7 @@ class GameTranslatorManager(
                     if (diff <= 2 && lastFrameDHash != 0L) {
                         // Screen Delta Diff: frame is identical -> skip OCR and translation!
                         overlayView?.isTranslating = false
-                        return@launch
+                        return@coroutineScope
                     }
                     lastFrameDHash = currentDHash
                 }
@@ -651,13 +689,13 @@ class GameTranslatorManager(
                         val toastMsg = if (!ocrError.isNullOrBlank()) "OCR: $ocrError" else activity.getString(R.string.translator_no_text_found)
                         Toast.makeText(activity, toastMsg, Toast.LENGTH_SHORT).show()
                     }
-                    return@launch
+                    return@coroutineScope
                 }
 
                 val currentMerged = blocks.joinToString(" ") { it.originalText.trim() }.replace(Regex("\\s+"), " ").trim()
                 if (isAuto && (currentMerged.length < 3 || currentMerged == lastTranslatedRawText)) {
                     overlayView?.isTranslating = false
-                    return@launch
+                    return@coroutineScope
                 }
                 lastTranslatedRawText = currentMerged
 
@@ -731,11 +769,16 @@ class GameTranslatorManager(
                     }
                 }
 
+                if (expectedGen != activeTranslationGen || !isActive) {
+                    return@coroutineScope
+                }
                 overlayView?.setTranslatedBlocks(blocks)
                 val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
                 if (ttsOn) {
                     ttsManager.speakBlocks(blocks, targetLang)
                 }
+            } catch (t: CancellationException) {
+                throw t
             } catch (t: Throwable) {
                 Log.e(TAG, "Process captured frame failed", t)
                 val msg = t.message?.takeIf { it.isNotBlank() } ?: activity.getString(R.string.translator_no_text_found)

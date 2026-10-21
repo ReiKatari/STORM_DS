@@ -204,7 +204,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 "video_vulkan_3d_depth_strength",
                 "video_vulkan_ssao",
                 "video_ds_color_profile",
-                "video_ds_hinge_gap",
             ).forEach { key -> findPreference<Preference>(key)?.let { add(it) } }
         }
 
@@ -280,6 +279,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 val rendererValue = newValue as String
                 val newRenderer = enumValueOfIgnoreCase<VideoRenderer>(rendererValue)
                 if (newRenderer == VideoRenderer.VULKAN) {
+                    me.magnum.melonds.impl.compat.GameCompatibilityManager.clearDeviceVulkanUnavailable(requireContext())
                     MelonDSAndroidInterface.configureVulkanDriver(
                         settingsRepository.getVulkanDriverConfiguration(requireContext().applicationInfo.nativeLibraryDir)
                     )

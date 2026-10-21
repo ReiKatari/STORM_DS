@@ -233,20 +233,43 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
     }
 
     fun applyConsoleSkinButtonShift(isConsoleSkinEnabled: Boolean, shiftPx: Int) {
-        if (!isConsoleSkinEnabled) return
         val h = height
+        val density = resources.displayMetrics.density
+        val bottomLipLiftPx = (24f * density).toInt()
+        val mainPadLiftPx = (20f * density).toInt()
+        val shoulderDropPx = (6f * density).toInt()
         getLayoutComponentViews().forEach { compView ->
             if (!compView.component.isScreen()) {
                 val v = compView.view
                 val lp = v.layoutParams as? FrameLayout.LayoutParams
                 if (lp != null) {
-                    val maxTop = if (h > 0) h - lp.height - 4 else Int.MAX_VALUE
-                    val newTop = (lp.topMargin + shiftPx).coerceAtMost(maxTop)
+                    val baseTop = compView.initialRect?.y ?: lp.topMargin
+                    val deltaY = if (!isConsoleSkinEnabled) {
+                        0
+                    } else {
+                        when (compView.component) {
+                            LayoutComponent.BUTTON_SELECT,
+                            LayoutComponent.BUTTON_START -> -bottomLipLiftPx
+                            LayoutComponent.DPAD,
+                            LayoutComponent.BUTTONS -> -mainPadLiftPx
+                            else -> shoulderDropPx
+                        }
+                    }
+                    val maxTop = if (h > 0 && lp.height > 0) (h - lp.height - 4).coerceAtLeast(0) else Int.MAX_VALUE
+                    val newTop = (baseTop + deltaY).coerceIn(0, maxTop)
                     if (newTop != lp.topMargin) {
                         lp.topMargin = newTop
                         v.layoutParams = lp
                     }
                 }
+            }
+        }
+    }
+
+    fun invalidateInputControlViews() {
+        getLayoutComponentViews().forEach { compView ->
+            if (!compView.component.isScreen()) {
+                compView.view.invalidate()
             }
         }
     }

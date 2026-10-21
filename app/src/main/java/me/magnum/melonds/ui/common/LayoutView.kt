@@ -71,6 +71,7 @@ open class LayoutView(context: Context, attrs: AttributeSet?) : FrameLayout(cont
             baseAlpha = layoutComponent.alpha
             setHighlighted(false)
             onTop = layoutComponent.onTop
+            initialRect = layoutComponent.rect
         }
 
         if (layoutComponent.isScreen()) {

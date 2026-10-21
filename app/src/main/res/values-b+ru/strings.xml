@@ -1421,7 +1421,7 @@
     <string name="video_console_skin_summary">Реалистичный корпус Nintendo DS Lite / DSi XL с подсветкой диодов питания и Wi-Fi</string>
     <string name="video_console_skin_type_title">Модель и цвет консоли</string>
     <string name="video_oled_battery_saver_title">Энергосбережение для OLED-экранов</string>
-    <string name="video_oled_battery_saver_summary">Чёрный фон и отключение скина консоли для экономии заряда на OLED-экранах</string>
+    <string name="video_oled_battery_saver_summary">Глубокий чёрный фон #000000 для экономии заряда аккумулятора на AMOLED и OLED-экранах</string>
   <string name="decrypt_rom_title">ROM зашифрован</string>
   <string name="decrypt_rom_description">Этот DSi ROM использует шифрование Modcrypt. Расшифруйте его для прямого воспроизведения.</string>
   <string name="decrypt_rom_button">Расшифровать</string>
