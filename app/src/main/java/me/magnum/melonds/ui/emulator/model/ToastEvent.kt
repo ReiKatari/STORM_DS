@@ -5,7 +5,6 @@ import me.magnum.melonds.domain.model.VideoRenderer
 sealed class ToastEvent {
     data object GbaLoadFailed : ToastEvent()
     data class EnhancementActiveNotification(
-        val is60Fps: Boolean,
         val isWidescreen3d: Boolean,
     ) : ToastEvent()
     data object RewindNotEnabled : ToastEvent()

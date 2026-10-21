@@ -823,14 +823,13 @@ class EmulatorViewModel @Inject constructor(
                         _toastEvent.tryEmit(ToastEvent.GbaLoadFailed)
                     }
                     val gameCode = getRomInfo(rom)?.gameCode ?: ""
-                    val is60FpsSetting = settingsRepository.is60FpsPatchEnabled()
                     val isWidescreen3dSetting = settingsRepository.is3dWidescreenEnabled()
 
-                    val is60FpsActive = is60FpsSetting && me.magnum.melonds.utils.EnhancementCompatibility.supports60FpsUnlock(gameCode, rom.name)
+                    // The 60 FPS patch is not consumed by the native core, so it is never announced as active.
                     val isWidescreen3dActive = isWidescreen3dSetting && me.magnum.melonds.utils.EnhancementCompatibility.supports3dWidescreen(gameCode, rom.name)
 
-                    if (is60FpsActive || isWidescreen3dActive) {
-                        _toastEvent.tryEmit(ToastEvent.EnhancementActiveNotification(is60FpsActive, isWidescreen3dActive))
+                    if (isWidescreen3dActive) {
+                        _toastEvent.tryEmit(ToastEvent.EnhancementActiveNotification(isWidescreen3dActive))
                     }
                     _emulatorState.value = EmulatorState.RunningRom(rom)
                     maybeAutoLoadStateOnLaunch(rom)

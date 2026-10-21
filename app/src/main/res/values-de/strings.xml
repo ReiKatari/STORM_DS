@@ -1150,7 +1150,7 @@
     <string name="video_console_skin_summary">Realistischer Gehäuserahmen im Nintendo DS Lite / DSi XL-Design mit aktiven Akku- und WLAN-LEDs</string>
     <string name="video_console_skin_type_title">Konsolenmodell und Farbe</string>
     <string name="video_oled_battery_saver_title">Intelligenter OLED-Akkuschoner</string>
-    <string name="video_oled_battery_saver_summary">Bildwiederholrate und Stromverbrauch auf OLED/AMOLED-Bildschirmen bei statischen Szenen dynamisch optimieren (spart bis zu 40% Akku)</string>
+    <string name="video_oled_battery_saver_summary">Reiner Schwarzhintergrund und deaktivierter Konsolen-Skin, um auf OLED-Bildschirmen Strom zu sparen</string>
     <string name="decrypt_rom_title">ROM verschlüsselt</string>
     <string name="decrypt_rom_description">Dieses DSi-ROM verwendet Modcrypt-Verschlüsselung. Entschlüssele es, um es direkt abzuspielen.</string>
     <string name="decrypt_rom_button">Entschlüsseln</string>

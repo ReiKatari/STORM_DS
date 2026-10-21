@@ -1150,7 +1150,7 @@
     <string name="video_console_skin_summary">アクティブなバッテリーおよびWi-Fi LEDを備えたリアルなNintendo DS Lite / DSi XLフレームベゼル</string>
     <string name="video_console_skin_type_title">本体モデルとカラー</string>
     <string name="video_oled_battery_saver_title">スマートOLED省電力</string>
-    <string name="video_oled_battery_saver_summary">静止画シーンでのOLED/AMOLED画面のリフレッシュレートと消費電力を動的に最適化 (バッテリーを最大40%節約)</string>
+    <string name="video_oled_battery_saver_summary">OLED画面での節電のため、純黒の背景を使用し、本体スキンを無効にします</string>
     <string name="decrypt_rom_title">暗号化されたROM</string>
     <string name="decrypt_rom_description">このDSi ROMはModcrypt暗号化を使用しています。直接プレイできるように復号します。</string>
     <string name="decrypt_rom_button">復号する</string>

@@ -228,6 +228,10 @@ class SharedPreferencesSettingsRepository(
     private val renderConfigurationFlow: SharedFlow<RendererConfiguration>
     @Volatile private var cachedRetroArchShaderRoot: String? = null
     @Volatile private var cachedRetroArchShaderImportKey: String? = null
+    // Active ROM identity used to resolve per-game Vulkan compatibility profiles (see setActiveRomContext).
+    @Volatile private var activeGameCode: String? = null
+    @Volatile private var activeRomName: String? = null
+    @Volatile private var activeRomFileName: String? = null
     private data class RetroArchPresetReferences(
         val shaders: List<String>,
         val textures: List<String>,
@@ -470,7 +474,7 @@ class SharedPreferencesSettingsRepository(
             ).firstOrNull { it.exists() && it.length() >= 512 }?.absolutePath ?: File(stormDsBase, "dldi/dldi_sd.img").absolutePath
         }
 
-        applyVulkanRuntimeControls(gameCode = null, romName = null)
+        applyActiveRomVulkanRuntimeControls()
 
         return EmulatorConfiguration(
             useCustomBios(),
@@ -521,7 +525,11 @@ class SharedPreferencesSettingsRepository(
 
     override suspend fun getEmulatorConfiguration(romConfig: RomConfig): EmulatorConfiguration {
         val globalConfiguration = getEmulatorConfiguration()
-        applyVulkanRuntimeControls(gameCode = null, romName = romConfig.customName)
+        applyVulkanRuntimeControls(
+            gameCode = activeGameCode,
+            romName = romConfig.customName ?: activeRomName,
+            fileName = activeRomFileName,
+        )
         return globalConfiguration.copy(
             rendererConfiguration = buildRomRendererConfiguration(
                 baseConfiguration = globalConfiguration.rendererConfiguration,
@@ -2158,14 +2166,11 @@ class SharedPreferencesSettingsRepository(
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         preferenceSharedFlows[key]?.tryEmit(Unit)
         when (key) {
-            "video_vulkan_compositor_mode" -> {
-                runCatching { MelonEmulator.setVulkanCompositorMode(getVulkanCompositorMode()) }
-            }
-            "video_vulkan_thick_edges" -> {
-                runCatching { MelonEmulator.setVulkanThickHighResEdges(isVulkanThickHighResEdgesEnabled()) }
-            }
+            // Resolve through VulkanCompatibilityDatabase so a per-game profile keeps precedence.
+            "video_vulkan_compositor_mode",
+            "video_vulkan_thick_edges",
             "video_vulkan_compat_autoselect" -> {
-                applyVulkanRuntimeControls(gameCode = null, romName = null)
+                applyActiveRomVulkanRuntimeControls()
             }
             "video_vulkan_3d_depth_mode" -> {
                 runCatching { MelonEmulator.setVulkanDepth3DMode(getVulkan3dDepthMode()) }
@@ -2290,7 +2295,9 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isGameTdbCoversEnabled(): Boolean {
-        return isGameTdb2dCoversEnabled() || isGameTdb3dCoversEnabled()
+        val masterEnabled = preferences.getBoolean("rom_gametdb_covers_enabled", false)
+        // Scraper master switch is an independent boxart source in the UI; fetch when any GameTDB source is enabled
+        return masterEnabled || isGameTdb2dCoversEnabled() || isGameTdb3dCoversEnabled()
     }
 
     override fun isGameTdb2dCoversEnabled(): Boolean {
@@ -2421,6 +2428,20 @@ class SharedPreferencesSettingsRepository(
         val clamped = pixels.coerceIn(0, 200)
         preferences.edit { putString("video_ds_hinge_gap", clamped.toString()) }
         runCatching { MelonEmulator.setHingeGapPixels(clamped) }
+    }
+
+    override fun setActiveRomContext(gameCode: String?, romName: String?, fileName: String?) {
+        activeGameCode = gameCode?.takeIf { it.isNotBlank() }
+        activeRomName = romName?.takeIf { it.isNotBlank() }
+        activeRomFileName = fileName?.takeIf { it.isNotBlank() }
+    }
+
+    private fun applyActiveRomVulkanRuntimeControls() {
+        applyVulkanRuntimeControls(
+            gameCode = activeGameCode,
+            romName = activeRomName,
+            fileName = activeRomFileName,
+        )
     }
 
     private fun applyVulkanRuntimeControls(gameCode: String?, romName: String?, fileName: String? = null) {

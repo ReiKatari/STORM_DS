@@ -727,7 +727,7 @@ class EmulatorActivity : AppCompatActivity() {
 
         val defaultPrefs = PreferenceManager.getDefaultSharedPreferences(this)
         val oledBatterySaver = defaultPrefs.getBoolean("video_oled_battery_saver", false)
-        val consoleSkinEnabled = !oledBatterySaver && defaultPrefs.getBoolean("video_console_skin_enabled", false)
+        val consoleSkinEnabled = isConsoleSkinActive()
         val skinType = defaultPrefs.getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
 
         if (oledBatterySaver) {
@@ -1156,9 +1156,8 @@ class EmulatorActivity : AppCompatActivity() {
                     val (message, duration) = when (it) {
                         is ToastEvent.EnhancementActiveNotification -> {
                             val items = mutableListOf<String>()
-                            if (it.is60Fps) items.add("⚡ 60 FPS")
                             if (it.isWidescreen3d) items.add("🖥️ 3D 16:9")
-                            "Активно: ${items.joinToString(" • ")}" to Toast.LENGTH_SHORT
+                            getString(R.string.enhancement_active_notification, items.joinToString(" • ")) to Toast.LENGTH_SHORT
                         }
                         ToastEvent.GbaLoadFailed -> getString(R.string.error_load_gba_rom) to Toast.LENGTH_SHORT
                         ToastEvent.QuickSaveSuccessful -> getString(R.string.saved) to Toast.LENGTH_SHORT
@@ -1462,7 +1461,7 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
-                            val consoleSkinEnabled = PreferenceManager.getDefaultSharedPreferences(this@EmulatorActivity).getBoolean("video_console_skin_enabled", false)
+                            val consoleSkinEnabled = isConsoleSkinActive()
                             if (!consoleSkinEnabled) {
                                 binding.layoutConsoleSkin.visibility = View.GONE
                             }
@@ -2064,7 +2063,7 @@ class EmulatorActivity : AppCompatActivity() {
         if (position == FpsCounterPosition.HIDDEN || !bootRomReady.value) {
             binding.textFps.isGone = true
         } else {
-            val isSkin = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
+            val isSkin = isConsoleSkinActive()
             val newParams = ConstraintLayout.LayoutParams(
                 ConstraintLayout.LayoutParams.WRAP_CONTENT,
                 ConstraintLayout.LayoutParams.WRAP_CONTENT
@@ -2174,7 +2173,7 @@ class EmulatorActivity : AppCompatActivity() {
             ).show()
         }
 
-        val isSkin = prefs.getBoolean("video_console_skin_enabled", false)
+        val isSkin = isConsoleSkinActive()
         val density = resources.displayMetrics.density
         val topMarginVal = if (isSkin) (6 * density).toInt() else (6 * density).toInt()
         val bottomMarginVal = (6 * density).toInt()
@@ -2354,7 +2353,7 @@ class EmulatorActivity : AppCompatActivity() {
                 layoutView.setLayoutComponentToggleState(LayoutComponent.BUTTON_MICROPHONE_TOGGLE, frontendInputHandler.microphoneEnabled)
             }
 
-            val isSkin = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("video_console_skin_enabled", false)
+            val isSkin = isConsoleSkinActive()
             val shiftPx = (14f * resources.displayMetrics.density).toInt()
             binding.viewLayoutControls.applyConsoleSkinButtonShift(isSkin, shiftPx)
 
@@ -3277,14 +3276,14 @@ class EmulatorActivity : AppCompatActivity() {
                     dumpVulkanDebugReportFromMenu()
                 })
             }
-            add(romSettingsMenuLabel("Аксессуар Slot-2 (GBA)", slot2AddonLabel(activeSlot2AddonState.value)) to {
+            add(romSettingsMenuLabel(getString(R.string.rom_settings_slot2_addon_title), slot2AddonLabel(activeSlot2AddonState.value)) to {
                 showSlot2AddonChoiceOverlay()
             })
-            add(romSettingsMenuLabel("Датчик солнца (Boktai)", solarSensorLabel(solarSensorOverrideLevel)) to {
+            add(romSettingsMenuLabel(getString(R.string.rom_settings_solar_sensor_title), solarSensorLabel(solarSensorOverrideLevel)) to {
                 showSolarSensorChoiceOverlay()
             })
-            val currentSteps = runCatching { MelonEmulator.getIrPedometerStepCount() }.getOrDefault(1250)
-            add(romSettingsMenuLabel("ИК-шагомер Pokéwalker", "$currentSteps шагов") to {
+            val currentSteps = runCatching { MelonEmulator.getIrPedometerStepCount() }.getOrDefault(0).coerceAtLeast(0)
+            add(romSettingsMenuLabel(getString(R.string.rom_settings_ir_pedometer_title), resources.getQuantityString(R.plurals.ir_pedometer_steps, currentSteps, currentSteps)) to {
                 showIrPedometerChoiceOverlay()
             })
         }
@@ -3319,6 +3318,16 @@ class EmulatorActivity : AppCompatActivity() {
         } else {
             requestOverlayHostFocus()
         }
+    }
+
+    /**
+     * The console skin is shown only when it is enabled and the OLED battery saver is off
+     * (the saver forces a pure black background and disables the skin).
+     */
+    private fun isConsoleSkinActive(): Boolean {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        return prefs.getBoolean("video_console_skin_enabled", false) &&
+            !prefs.getBoolean("video_oled_battery_saver", false)
     }
 
     private fun romSettingsMenuLabel(title: String, value: String): String {
@@ -3489,6 +3498,11 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun applyVulkanCompatibilityProfileForRom(rom: Rom) {
+        settingsRepository.setActiveRomContext(
+            gameCode = rom.gameCode,
+            romName = rom.config.customName ?: rom.name,
+            fileName = rom.fileName,
+        )
         VulkanCompatibilityDatabase.applyRuntimeControlsForRom(
             context = this,
             gameCode = rom.gameCode,
@@ -5391,6 +5405,9 @@ class EmulatorActivity : AppCompatActivity() {
         }
         translatorManager.onDestroy()
         releaseEmulatorUiResources()
+        if (isFinishing) {
+            settingsRepository.setActiveRomContext(gameCode = null, romName = null, fileName = null)
+        }
     }
 }
 

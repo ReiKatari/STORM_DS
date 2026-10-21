@@ -195,6 +195,17 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         vulkanRendererPreferences.apply {
             add(vulkanFastPathPreference)
+            // Consumed only by Vulkan code (VulkanRuntimeControls -> GPU3D_Vulkan / VulkanOutput / VulkanSurfacePresenter).
+            listOf(
+                "video_vulkan_compositor_mode",
+                "video_vulkan_thick_edges",
+                "video_vulkan_compat_autoselect",
+                "video_vulkan_3d_depth_mode",
+                "video_vulkan_3d_depth_strength",
+                "video_vulkan_ssao",
+                "video_ds_color_profile",
+                "video_ds_hinge_gap",
+            ).forEach { key -> findPreference<Preference>(key)?.let { add(it) } }
         }
 
         coverageFixPreferences.apply {

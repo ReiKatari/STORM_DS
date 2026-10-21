@@ -199,6 +199,12 @@ interface SettingsRepository {
     fun getVulkanCompositorMode(): Int
     fun isVulkanThickHighResEdgesEnabled(): Boolean
     fun isVulkanCompatAutoselectEnabled(): Boolean
+
+    /**
+     * Registers the ROM that is currently being launched/running so that runtime controls
+     * (per-game Vulkan compatibility profiles) are resolved for it. Pass nulls to clear.
+     */
+    fun setActiveRomContext(gameCode: String?, romName: String?, fileName: String?)
     fun getVulkan3dDepthMode(): Int
     fun setVulkan3dDepthMode(mode: Int)
     fun getVulkan3dDepthStrength(): Int

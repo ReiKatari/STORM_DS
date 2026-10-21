@@ -101,24 +101,24 @@
     <string name="settings_category_system">System</string>
     <string name="settings_category_retroachievements">RetroAchievements</string>
 
-    <string name="pref_cat_appearance">Appearance and Themes</string>
-    <string name="pref_cat_emulation_speed">Emulation Speed and Performance</string>
-    <string name="pref_cat_backup_restore">Backup and Restore</string>
-    <string name="pref_cat_renderer_3d">Renderer and 3D Graphics</string>
-    <string name="pref_cat_enhancements">Enhancements and Upscaling</string>
+    <string name="pref_cat_appearance">Appearance and themes</string>
+    <string name="pref_cat_emulation_speed">Emulation speed and performance</string>
+    <string name="pref_cat_backup_restore">Backup and restore</string>
+    <string name="pref_cat_renderer_3d">Renderer and 3D graphics</string>
+    <string name="pref_cat_enhancements">Enhancements and upscaling</string>
     <string name="pref_cat_retroarch_shaders">RetroArch Shaders</string>
-    <string name="pref_cat_display_layout">Display, Skins and HUD</string>
-    <string name="pref_cat_audio_output">Audio Output and Quality</string>
-    <string name="pref_cat_microphone">Microphone and Recording</string>
-    <string name="pref_cat_input_layouts">Layouts and Behavior</string>
-    <string name="pref_cat_touch_controls">On-Screen Controls and Haptics</string>
-    <string name="pref_cat_gamepads_sensors">Motion Sensors and Macros</string>
-    <string name="pref_cat_system_misc">System and Logs</string>
-    <string name="pref_cat_core_compiler">CPU and Compilers</string>
-    <string name="pref_cat_bios_firmware">BIOS and Firmware</string>
+    <string name="pref_cat_display_layout">Display, skins and HUD</string>
+    <string name="pref_cat_audio_output">Audio output and quality</string>
+    <string name="pref_cat_microphone">Microphone and recording</string>
+    <string name="pref_cat_input_layouts">Layouts and behavior</string>
+    <string name="pref_cat_touch_controls">On-screen controls and haptics</string>
+    <string name="pref_cat_gamepads_sensors">Motion sensors and macros</string>
+    <string name="pref_cat_system_misc">System and logs</string>
+    <string name="pref_cat_core_compiler">CPU and compilers</string>
+    <string name="pref_cat_bios_firmware">BIOS and firmware</string>
     <string name="pref_cat_sd_cards">Virtual SD Cards</string>
-    <string name="pref_cat_network_wfc">Nintendo WFC Network</string>
-    <string name="pref_cat_layout_management">Layouts and Screen Area</string>
+    <string name="pref_cat_network_wfc">Nintendo WFC network</string>
+    <string name="pref_cat_layout_management">Layouts and screen area</string>
 
     <string name="pref_theme">Theme</string>
     <string name="pref_theme_summary">Choose user interface theme</string>
@@ -227,7 +227,7 @@
         <item quantity="one">%1$d pass</item>
         <item quantity="other">%1$d passes</item>
     </plurals>
-    <string name="video_retroarch_shader_settings_title">Configure RA Shaders</string>
+    <string name="video_retroarch_shader_settings_title">Configure RA shaders</string>
     <string name="video_retroarch_shader_settings_summary">Shader library, preset parameters and the librashader log</string>
     <string name="shader_heavy_compile_title">This preset is slow to build</string>
     <string name="shader_heavy_compile_estimated">%1$s needs about %2$s to build the first time. The screen stays still until it finishes.</string>
@@ -426,10 +426,10 @@
     <string name="custom_bios_firmware_description">Using a custom BIOS and firmware allows you to launch and navigate in the DS\'s firmware without loading a ROM, just like in a real system</string>
     <string name="block_bios_download_title">Block downloading BIOS files</string>
     <string name="block_bios_download_summary">Hides the automatic download buttons for verified BIOS and firmware files</string>
-    <string name="auto_download_ds_bios_title">Download Official DS BIOS Files</string>
+    <string name="auto_download_ds_bios_title">Download official DS BIOS files</string>
     <string name="auto_download_ds_bios_summary">Auto-download and configure ds_bios7.bin, ds_bios9.bin, ds_sd_card.bin, ds_firmware.bin</string>
     <string name="bios_directory">DS BIOS directory</string>
-    <string name="auto_download_dsi_bios_title">Download Official DSi BIOS Files</string>
+    <string name="auto_download_dsi_bios_title">Download official DSi BIOS files</string>
     <string name="auto_download_dsi_bios_summary">Auto-download and configure dsi_bios7.bin, dsi_bios9.bin, dsi_sd_card.bin, dsi_firmware.bin, nand.bin</string>
     <string name="dsi_bios_directory">DSi BIOS directory</string>
     <string name="show_boot_screen">Show boot screen</string>
@@ -444,7 +444,7 @@
     <string name="generate_new_mac_address_description">Generating a new MAC address will make games think they are running on a different system.</string>
     <string name="enable_jit">Enable JIT</string>
     <string name="enable_jit_summary">Improves performance but may cause freezes or crashes.</string>
-    <string name="enable_storm_compiler">Enable STORM Compiler</string>
+    <string name="enable_storm_compiler">Enable STORM compiler</string>
     <string name="enable_storm_compiler_summary">Optimized LLVM/Clang vectorized ARM64 engine with fast memory decoding pipeline.</string>
     <string name="jit_not_supported">JIT is only supported in 64 bit devices.</string>
     <string name="save_internal_config_as_file">Save internal config as a file</string>
@@ -509,7 +509,7 @@
     <string name="renderer_debug_capture_logged">Renderer capture dumped to Logcat. Capture ID: %1$s</string>
     <string name="renderer_debug_capture_failed">Renderer capture could not be dumped. Check that Renderer debug tools is enabled.</string>
     <string name="video_vulkan_driver_category">Vulkan driver</string>
-    <string name="video_vulkan_driver_manager_title">Vulkan Driver Hub</string>
+    <string name="video_vulkan_driver_manager_title">Vulkan driver hub</string>
     <string name="video_vulkan_driver_manager_summary">Download and switch Turnip/Mesa drivers directly from cloud</string>
     <string name="video_vulkan_driver_mode">Adreno Vulkan driver</string>
     <string name="video_vulkan_driver_import">Import custom driver</string>
@@ -807,7 +807,7 @@
     <string name="dual_screen_vertical_alignment_summary">Internal: %1$s • External: %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">Preset (%1$s)</string>
     <string name="dual_screen_vertical_alignment_default_hint">Preset defaults — Internal: %1$s • External: %2$s</string>
-    <string name="presets">Dual Screen Presets</string>
+    <string name="presets">Dual screen presets</string>
     <string name="layout_editing_disabled_by_presets">Layouts can not be edited while a dual screen preset is active.</string>
     <string name="above_other_screen">Above other screen</string>
     <string name="center_horizontal">Center X</string>
@@ -1190,7 +1190,7 @@
     <string name="video_retroarch_shader_error_corrupt">The download finished but the archive is damaged. Please try again.</string>
     <string name="video_retroarch_shader_retry">Retry</string>
     <string name="shader_compatibility_preset_failed">Shader \'%1$s\' could not be used: %2$s</string>
-    <string name="shader_compatibility_report_title">libraShader Quick Log</string>
+    <string name="shader_compatibility_report_title">libraShader quick log</string>
     <string name="shader_compatibility_report_summary">Shows the latest librashader log. Saving writes librashader.log to your ROMs folder.</string>
     <string name="shader_compatibility_report_empty">No presets have been tried yet. Pick one and launch a game.</string>
     <string name="shader_compatibility_report_save">Save as librashader.log</string>
@@ -1276,28 +1276,28 @@
         <item>Fit right</item>
     </string-array>
 
-    <string name="about_app_title">About and Credits</string>
+    <string name="about_app_title">About and credits</string>
     <string name="about_app_description">High-performance fork of WatermelonDS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors and open source licenses</string>
-    <string name="about_fork_info_title">Project Base: WatermelonDS Fork</string>
+    <string name="about_fork_info_title">Project base: WatermelonDS fork</string>
     <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite and contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play and sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
     <string name="about_version_title">Version</string>
-    <string name="about_credits_title">Credits and Acknowledgements</string>
+    <string name="about_credits_title">Credits and acknowledgements</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
-    <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
+    <string name="about_credits_watermelonds_title">WatermelonDS (Android port)</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano and contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI and touch controls</string>
-    <string name="about_credits_melonds_title">melonDS (Original Core)</string>
+    <string name="about_credits_melonds_title">melonDS (original core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
-    <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
+    <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch core)</string>
     <string name="about_credits_melonds_ds_summary">JesseTG and Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
     <string name="about_credits_drastic_title">DraStic and fastDS Inspirations</string>
     <string name="about_credits_drastic_summary">Exophase and DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
-    <string name="about_credits_libraries_title">Open Source Libraries and Tools</string>
+    <string name="about_credits_libraries_title">Open source libraries and tools</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang shaders), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (Adreno/Turnip drivers)</string>
-    <string name="about_github_title">STORM DS Repository</string>
+    <string name="about_github_title">STORM DS repository</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
-    <string name="button_color_theme">Button Color Style</string>
+    <string name="button_color_theme">Button color style</string>
     <string-array name="button_color_theme_options">
         <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
         <item>Nintendo DS Classic (Metallic Grey)</item>
@@ -1350,7 +1350,7 @@
         <item>sakura_blossom</item>
         <item>solar_fusion</item>
     </string-array>
-    <string name="rom_display_name_mode">Game Title Display</string>
+    <string name="rom_display_name_mode">Game title display</string>
     <string name="rom_display_name_mode_file_name">File name (without extension)</string>
     <string name="rom_display_name_mode_internal">Internal game title (from ROM/Database)</string>
 
@@ -1373,7 +1373,7 @@
     <string name="translator_trigger_mode">Translation Trigger</string>
     <string name="translator_trigger_mode_on_demand">On-Demand (Button or Hotkey)</string>
     <string name="translator_trigger_mode_auto">Auto-Detect on Screen Change</string>
-    <string name="translator_pause_on_translate">Pause Game During Translation</string>
+    <string name="translator_pause_on_translate">Pause game during translation</string>
     <string name="translator_pause_on_translate_summary">Temporarily suspend gameplay while text overlay is visible</string>
     <string name="translator_overlay_style">Overlay Appearance</string>
     <string name="translator_style_smart_match">Smart Game Background Inpainting</string>
@@ -1381,20 +1381,20 @@
     <string name="translator_style_neon_bubble">Translucent Neon Bubble</string>
     <string name="translator_style_outline_only">Outline Only (No Background)</string>
     <string name="translator_bubble_opacity">Background Opacity</string>
-    <string name="translator_font_size_scale">Font Size Scale</string>
-    <string name="translator_show_floating_button">Show Floating Translate Button</string>
+    <string name="translator_font_size_scale">Font size scale</string>
+    <string name="translator_show_floating_button">Show floating translate button</string>
     <string name="translator_show_floating_button_summary">Draggable \'TR\' button over the emulator screen</string>
-    <string name="category_translator_tts">Dialogue Voice Acting (Text-to-Speech)</string>
-    <string name="translator_tts_enabled">Enable Speech Synthesis (TTS)</string>
+    <string name="category_translator_tts">Dialogue voice acting (text-to-speech)</string>
+    <string name="translator_tts_enabled">Enable speech synthesis (TTS)</string>
     <string name="translator_tts_enabled_summary">Read translated game dialogues aloud automatically</string>
-    <string name="translator_tts_lang_title">Voice Acting Language</string>
+    <string name="translator_tts_lang_title">Voice acting language</string>
     <string name="translator_tts_multi_voice">Multi-Character Voice Acting</string>
     <string name="translator_tts_multi_voice_summary">Automatically detect male, female, and elder characters to speak with different timbres and pitches</string>
-    <string name="translator_api_keys_category">API Keys and Custom AI Configuration</string>
-    <string name="translator_deepl_key">DeepL API Key</string>
-    <string name="translator_custom_ai_key">AI API Key (Gemini/OpenAI/Claude)</string>
-    <string name="translator_custom_ai_endpoint">AI Base URL / Endpoint</string>
-    <string name="translator_custom_ai_model">AI Model Name</string>
+    <string name="translator_api_keys_category">API keys and custom AI configuration</string>
+    <string name="translator_deepl_key">DeepL API key</string>
+    <string name="translator_custom_ai_key">AI API key (Gemini/OpenAI/Claude)</string>
+    <string name="translator_custom_ai_endpoint">AI base URL / endpoint</string>
+    <string name="translator_custom_ai_model">AI model name</string>
     <string name="translator_disabled_hint">Auto-Translator is disabled in Settings</string>
     <string name="translator_capture_failed">Failed to capture emulator screen</string>
     <string name="translator_no_text_found">No readable text found on screen</string>
@@ -1415,7 +1415,7 @@
     <string name="translator_voice_engine_neural">Edge Neural HD (Cloud, 24kHz)</string>
     <string name="translator_voice_engine_local_multi">Local AI Studio (Piper INT8, offline)</string>
     <string name="translator_voice_engine_system">System Android TTS</string>
-    <string name="resolution_hud_position_title">Current Resolution Display</string>
+    <string name="resolution_hud_position_title">Current resolution display</string>
     <string name="button_translate">Translate Screen</string>
     <string name="lang_auto">Auto-detect</string>
     <string name="lang_ru">Russian (Русский)</string>
@@ -1438,52 +1438,52 @@
     <string name="rom_info_file">File</string>
     <string name="rom_info_last_played">Last played</string>
     <string name="rom_info_never">Never</string>
-    <string name="wfc_server_title">Nintendo WFC Online Server</string>
+    <string name="wfc_server_title">Nintendo WFC online server</string>
     <string name="wfc_server_summary">1-Click connect to custom Nintendo Wi-Fi Connection servers</string>
     <string name="wfc_server_disabled">Official / Disabled</string>
     <string name="wfc_server_custom">Custom DNS</string>
-    <string name="wfc_custom_dns_title">Custom WFC Primary DNS</string>
+    <string name="wfc_custom_dns_title">Custom WFC primary DNS</string>
     <string name="wfc_custom_dns_summary">Primary DNS IP address for Nintendo WFC multiplayer</string>
     <string name="cheats_download_online">Download cheat database</string>
     <string name="cheats_download_online_summary">Download the latest cheat database (usrcheat.dat) from online repositories</string>
     <string name="cheats_download_success">Cheat database updated successfully</string>
-    <string name="video_ai_upscale_title">AI-Upscale 2D Sprites (Anime4K / NPU)</string>
+    <string name="video_ai_upscale_title">AI-upscale 2D sprites (Anime4K / NPU)</string>
     <string name="video_ai_upscale_summary">Real-time neural network scaling and edge smoothing for 2D sprites and fonts</string>
-    <string name="video_ai_upscale_scale_title">AI Upscale Resolution</string>
-    <string name="video_hd_textures_title">HD Texture Packs Loader</string>
+    <string name="video_ai_upscale_scale_title">AI upscale resolution</string>
+    <string name="video_hd_textures_title">HD texture packs loader</string>
     <string name="video_hd_textures_summary">Automatically load custom HD/4K textures from textures/&lt;GameID&gt;/</string>
     <string name="input_gyro_aiming_title">Gyro Aiming</string>
     <string name="input_gyro_aiming_summary">Control aiming in 3D shooters (Metroid, Dementium, Moon) by tilting device</string>
     <string name="input_gyro_sensitivity_title">Gyro Sensitivity</string>
-    <string name="pref_cat_dsp_effects">DSP Sound Effects and Limiter</string>
-    <string name="audio_soft_limiter_title">Soft-Clipping Peak Limiter</string>
+    <string name="pref_cat_dsp_effects">DSP sound effects and limiter</string>
+    <string name="audio_soft_limiter_title">Soft-clipping peak limiter</string>
     <string name="audio_soft_limiter_summary">Smoothly limits dynamic audio peaks, eliminating clicks, pops, and crackles during frame drops and fast forward</string>
-    <string name="audio_bass_boost_title">Dynamic Bass Boost</string>
+    <string name="audio_bass_boost_title">Dynamic bass boost</string>
     <string name="audio_bass_boost_summary">Enhance low-end frequencies for punchy retro sound</string>
-    <string name="audio_bass_boost_strength_title">Bass Boost Strength</string>
-    <string name="audio_spatial_audio_title">3D Spatial Stereo Expansion</string>
+    <string name="audio_bass_boost_strength_title">Bass boost strength</string>
+    <string name="audio_spatial_audio_title">3D spatial stereo expansion</string>
     <string name="audio_spatial_audio_summary">Expands stereo soundstage for an immersive headphone gaming experience</string>
-    <string name="audio_reverb_title">Acoustic Room Reverb</string>
+    <string name="audio_reverb_title">Acoustic room reverb</string>
     <string name="audio_reverb_summary">Adds natural spatial ambiance to in-game music and sound effects</string>
 
-    <string name="input_gyro_sensitivity_x_title">Horizontal Sensitivity (X)</string>
-    <string name="input_gyro_sensitivity_y_title">Vertical Sensitivity (Y)</string>
-    <string name="input_gyro_invert_x_title">Invert Horizontal Axis (X)</string>
+    <string name="input_gyro_sensitivity_x_title">Horizontal sensitivity (X)</string>
+    <string name="input_gyro_sensitivity_y_title">Vertical sensitivity (Y)</string>
+    <string name="input_gyro_invert_x_title">Invert horizontal axis (X)</string>
     <string name="input_gyro_invert_x_summary">Reverse left/right gyro tilt direction</string>
-    <string name="input_gyro_invert_y_title">Invert Vertical Axis (Y)</string>
+    <string name="input_gyro_invert_y_title">Invert vertical axis (Y)</string>
     <string name="input_gyro_invert_y_summary">Reverse up/down gyro tilt direction</string>
-    <string name="input_gyro_deadzone_x_title">Horizontal Deadzone (X)</string>
+    <string name="input_gyro_deadzone_x_title">Horizontal deadzone (X)</string>
     <string name="input_gyro_deadzone_x_summary">Suppress micro-tremors along the horizontal axis</string>
-    <string name="input_gyro_deadzone_y_title">Vertical Deadzone (Y)</string>
+    <string name="input_gyro_deadzone_y_title">Vertical deadzone (Y)</string>
     <string name="input_gyro_deadzone_y_summary">Suppress micro-tremors along the vertical axis</string>
-    <string name="input_gyro_recenter_quick_action">Quick Calibrate / Center</string>
+    <string name="input_gyro_recenter_quick_action">Quick calibrate / center</string>
     <string name="translator_tts_neural_title">Neural Cloud TTS (High Quality)</string>
     <string name="translator_tts_neural_summary">Natural sounding emotional actor voices via streaming neural network</string>
-    <string name="video_console_skin_title">3D Animated Console Skin</string>
+    <string name="video_console_skin_title">3D animated console skin</string>
     <string name="video_console_skin_summary">Realistic Nintendo DS Lite / DSi XL bezel frame with active battery and Wi-Fi LEDs</string>
-    <string name="video_console_skin_type_title">Console Model and Color</string>
-    <string name="video_oled_battery_saver_title">Smart OLED Battery Saver</string>
-    <string name="video_oled_battery_saver_summary">Dynamically optimize refresh rate and power consumption on OLED/AMOLED screens during static scenes (save up to 40% battery)</string>
+    <string name="video_console_skin_type_title">Console model and color</string>
+    <string name="video_oled_battery_saver_title">Smart OLED battery saver</string>
+    <string name="video_oled_battery_saver_summary">Uses a pure black background and disables the console skin to save power on OLED screens</string>
     <string name="decrypt_rom_title">ROM Encrypted</string>
     <string name="decrypt_rom_description">This DSi ROM uses Modcrypt encryption. Decrypt it to enable direct playback.</string>
     <string name="decrypt_rom_button">Decrypt</string>
@@ -1514,14 +1514,14 @@
     <string name="accent_oled_white">⚪ OLED Pure White</string>
 
     <!-- Card Styles -->
-    <string name="rom_card_style_title">Library Card Style</string>
+    <string name="rom_card_style_title">Library card style</string>
     <string name="rom_card_style_summary">Visual card representation in game grid</string>
     <string name="card_style_glassmorphism">Glassmorphism</string>
     <string name="card_style_flat_minimal">Flat Minimal</string>
     <string name="card_style_3d_boxart">3D Boxart</string>
 
     <!-- JIT Overclock and CPU Tuning -->
-    <string name="arm9_overclock_title">ARM9 CPU Clock (Overclock)</string>
+    <string name="arm9_overclock_title">ARM9 CPU clock (overclock)</string>
     <string name="arm9_overclock_summary">Overclock CPU to eliminate frame drops in demanding 3D games</string>
     <string name="arm9_overclock_1x">67 MHz (Default / 1x)</string>
     <string name="arm9_overclock_2x">133 MHz (DSi Mode / 2x)</string>
@@ -1529,7 +1529,7 @@
     <string name="arm9_overclock_4x">266 MHz (4x Turbo)</string>
 
     <!-- Scraper Pro and Covers -->
-    <string name="enable_gametdb_covers_title">Scraper Pro: 3D Boxart and High-Res Covers</string>
+    <string name="enable_gametdb_covers_title">Scraper Pro: 3D boxart and high-res covers</string>
     <string name="enable_gametdb_covers_summary">Download authentic 3D boxart and high-resolution covers from GameTDB</string>
     <string name="enable_gametdb_2d_covers_title">GameTDB 2D covers</string>
     <string name="enable_gametdb_2d_covers_summary">Download flat 2D game covers from GameTDB database</string>
@@ -1541,18 +1541,18 @@
     <string name="custom_cover_removed">Custom cover removed</string>
 
     <!-- Input Macros and Gyro Mic -->
-    <string name="input_turbo_macros_title">Turbo Buttons and Macros</string>
+    <string name="input_turbo_macros_title">Turbo buttons and macros</string>
     <string name="input_turbo_macros_summary">Enable virtual Turbo A/B/X/Y rapid-fire buttons</string>
-    <string name="input_gyro_mic_title">Gyro Microphone Emulation</string>
+    <string name="input_gyro_mic_title">Gyro microphone emulation</string>
     <string name="input_gyro_mic_summary">Shake or tilt device to blow into virtual microphone</string>
 
     <!-- Dual-Screen and Soft Patching -->
-    <string name="video_widescreen_3d_title">3D Widescreen (16:9 Aspect Ratio)</string>
+    <string name="video_widescreen_3d_title">3D widescreen (16:9 aspect ratio)</string>
     <string name="video_widescreen_3d_summary">Anamorphic widescreen aspect ratio rendering for 3D games</string>
-    <string name="video_60fps_patch_title">60 FPS Unlock Hack</string>
+    <string name="video_60fps_patch_title">60 FPS unlock hack</string>
     <string name="video_60fps_patch_summary">Force 60 FPS in supported 30 FPS 3D titles</string>
     <string name="action_open_single_rom">Open ROM File…</string>
-    <string name="video_dual_screen_cast_title">Dual-Screen Cast Mode (TV / HDMI)</string>
+    <string name="video_dual_screen_cast_title">Dual-screen cast mode (TV / HDMI)</string>
     <string name="video_dual_screen_cast_summary">Display touchscreen on device and 4K top screen on TV</string>
     <string name="soft_patch_applied">Applied patch: %s</string>
     <string name="layout_open_editor_summary">Edit currently active layout profile (position, scale of screens and controls)</string>
@@ -1653,4 +1653,12 @@
     <string name="video_ds_hinge_gap_32">Compact hinge (32 px)</string>
     <string name="video_ds_hinge_gap_64">Nintendo DS Lite hinge (64 px)</string>
     <string name="video_ds_hinge_gap_90">Nintendo DSi XL hinge (90 px)</string>
+    <string name="enhancement_active_notification">Active: %1$s</string>
+    <string name="rom_settings_slot2_addon_title">Slot-2 accessory (GBA)</string>
+    <string name="rom_settings_solar_sensor_title">Solar sensor (Boktai)</string>
+    <string name="rom_settings_ir_pedometer_title">Pokéwalker IR pedometer</string>
+    <plurals name="ir_pedometer_steps">
+        <item quantity="one">%1$d step</item>
+        <item quantity="other">%1$d steps</item>
+    </plurals>
 </resources>

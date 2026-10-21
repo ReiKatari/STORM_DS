@@ -1416,7 +1416,7 @@
     <string name="video_console_skin_summary">Реалистичный корпус Nintendo DS Lite / DSi XL с подсветкой диодов питания и Wi-Fi</string>
     <string name="video_console_skin_type_title">Модель и цвет консоли</string>
     <string name="video_oled_battery_saver_title">Энергосбережение для OLED-экранов</string>
-    <string name="video_oled_battery_saver_summary">Динамическая оптимизация частоты обновления и энергопотребления на OLED-дисплеях при статичных сценах (экономия до 40% батареи)</string>
+    <string name="video_oled_battery_saver_summary">Чёрный фон и отключение скина консоли для экономии заряда на OLED-экранах</string>
   <string name="decrypt_rom_title">ROM зашифрован</string>
   <string name="decrypt_rom_description">Этот DSi ROM использует шифрование Modcrypt. Расшифруйте его для прямого воспроизведения.</string>
   <string name="decrypt_rom_button">Расшифровать</string>
@@ -1580,4 +1580,14 @@
     <string name="video_ds_hinge_gap_32">Малый зазор (32 пикс.)</string>
     <string name="video_ds_hinge_gap_64">Стандарт DS Lite (64 пикс.)</string>
     <string name="video_ds_hinge_gap_90">Широкий зазор DSi XL (90 пикс.)</string>
+    <string name="enhancement_active_notification">Активно: %1$s</string>
+    <string name="rom_settings_slot2_addon_title">Аксессуар Slot-2 (GBA)</string>
+    <string name="rom_settings_solar_sensor_title">Датчик солнца (Boktai)</string>
+    <string name="rom_settings_ir_pedometer_title">ИК-шагомер Pokéwalker</string>
+    <plurals name="ir_pedometer_steps">
+        <item quantity="one">%1$d шаг</item>
+        <item quantity="few">%1$d шага</item>
+        <item quantity="many">%1$d шагов</item>
+        <item quantity="other">%1$d шага</item>
+    </plurals>
 </resources>

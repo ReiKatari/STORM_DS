@@ -265,7 +265,7 @@ object MelonEmulator {
     external fun setIrPedometerStepCount(steps: Int)
 
     @JvmStatic
-    external fun addIrPedometerSteps(delta: Int)
+    external fun addIrPedometerSteps(delta: Int): Int
 
     @JvmStatic
     external fun getIrPedometerStepCount(): Int

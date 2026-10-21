@@ -1438,6 +1438,11 @@ class AndroidEmulatorManager(
     }
 
     private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
+        settingsRepository.setActiveRomContext(
+            gameCode = rom.gameCode,
+            romName = rom.config.customName ?: rom.name,
+            fileName = rom.fileName,
+        )
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
         val isDsiWare = rom.isDsiWareTitle || isRealDsiWareTitle(rom)
         val consoleType = if (isDsiWare) {
@@ -1461,6 +1466,7 @@ class AndroidEmulatorManager(
     }
 
     private suspend fun getFirmwareEmulatorConfiguration(consoleType: ConsoleType): EmulatorConfiguration {
+        settingsRepository.setActiveRomContext(gameCode = null, romName = null, fileName = null)
         return settingsRepository.getEmulatorConfiguration().copy(
             consoleType = consoleType,
             useCustomBios = true,
