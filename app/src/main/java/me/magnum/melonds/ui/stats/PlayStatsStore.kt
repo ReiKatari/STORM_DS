@@ -2,6 +2,10 @@ package me.magnum.melonds.ui.stats
 
 import android.content.Context
 import android.os.SystemClock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import org.json.JSONObject
@@ -16,6 +20,8 @@ object PlayStatsStore {
     private const val KEY_DAILY_PLAY_MS_PREFIX = "daily_play_ms_"
     private const val KEY_DAILY_LAUNCHES_PREFIX = "daily_launches_"
     private const val LAUNCH_DEBOUNCE_MS = 3_500L
+
+    private val statsIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var lastRecordedUri: String? = null
@@ -68,7 +74,6 @@ object PlayStatsStore {
         )
     }
 
-    @Synchronized
     fun recordLaunchByUri(
         context: Context,
         uriString: String,
@@ -84,32 +89,37 @@ object PlayStatsStore {
         lastRecordedElapsedMs = nowElapsed
 
         val appContext = context.applicationContext
-        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val metaKey = KEY_ROM_META_PREFIX + uriString
-        val existingJson = prefs.getString(metaKey, null)
-        val existing = parseStoredRomStats(uriString, existingJson)
         val nowEpoch = System.currentTimeMillis()
-        val todayKey = isoDayFormat().format(Date(nowEpoch))
+        statsIoScope.launch {
+            runCatching {
+                synchronized(PlayStatsStore) {
+                    val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val metaKey = KEY_ROM_META_PREFIX + uriString
+                    val existingJson = prefs.getString(metaKey, null)
+                    val existing = parseStoredRomStats(uriString, existingJson)
+                    val todayKey = isoDayFormat().format(Date(nowEpoch))
 
-        val updated = StoredRomStats(
-            uriString = uriString,
-            displayName = displayName?.takeIf { it.isNotBlank() } ?: existing?.displayName ?: "ROM",
-            gameCode = gameCode?.takeIf { it.isNotBlank() } ?: existing?.gameCode.orEmpty(),
-            launchCount = (existing?.launchCount ?: 0) + 1,
-            recordedPlayTimeMs = existing?.recordedPlayTimeMs ?: 0L,
-            lastLaunchedEpochMs = nowEpoch,
-        )
+                    val updated = StoredRomStats(
+                        uriString = uriString,
+                        displayName = displayName?.takeIf { it.isNotBlank() } ?: existing?.displayName ?: "ROM",
+                        gameCode = gameCode?.takeIf { it.isNotBlank() } ?: existing?.gameCode.orEmpty(),
+                        launchCount = (existing?.launchCount ?: 0) + 1,
+                        recordedPlayTimeMs = existing?.recordedPlayTimeMs ?: 0L,
+                        lastLaunchedEpochMs = nowEpoch,
+                    )
 
-        val todayLaunchesKey = KEY_DAILY_LAUNCHES_PREFIX + todayKey
-        val todayLaunches = prefs.getInt(todayLaunchesKey, 0) + 1
+                    val todayLaunchesKey = KEY_DAILY_LAUNCHES_PREFIX + todayKey
+                    val todayLaunches = prefs.getInt(todayLaunchesKey, 0) + 1
 
-        prefs.edit()
-            .putString(metaKey, serializeStoredRomStats(updated))
-            .putInt(todayLaunchesKey, todayLaunches)
-            .apply()
+                    prefs.edit()
+                        .putString(metaKey, serializeStoredRomStats(updated))
+                        .putInt(todayLaunchesKey, todayLaunches)
+                        .apply()
+                }
+            }
+        }
     }
 
-    @Synchronized
     fun recordPlayTime(
         context: Context,
         rom: Rom,
@@ -117,28 +127,36 @@ object PlayStatsStore {
     ) {
         if (deltaMs <= 0L) return
         val appContext = context.applicationContext
-        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uriString = rom.uri.toString()
-        val metaKey = KEY_ROM_META_PREFIX + uriString
-        val existing = parseStoredRomStats(uriString, prefs.getString(metaKey, null))
+        val resolvedName = romDisplayName(rom).ifBlank { rom.name }
+        val resolvedCode = rom.gameCode
         val nowEpoch = System.currentTimeMillis()
-        val todayKey = isoDayFormat().format(Date(nowEpoch))
-        val todayPlayKey = KEY_DAILY_PLAY_MS_PREFIX + todayKey
+        statsIoScope.launch {
+            runCatching {
+                synchronized(PlayStatsStore) {
+                    val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val metaKey = KEY_ROM_META_PREFIX + uriString
+                    val existing = parseStoredRomStats(uriString, prefs.getString(metaKey, null))
+                    val todayKey = isoDayFormat().format(Date(nowEpoch))
+                    val todayPlayKey = KEY_DAILY_PLAY_MS_PREFIX + todayKey
 
-        val updated = StoredRomStats(
-            uriString = uriString,
-            displayName = romDisplayName(rom).ifBlank { existing?.displayName ?: rom.name },
-            gameCode = rom.gameCode.ifBlank { existing?.gameCode.orEmpty() },
-            launchCount = maxOf(existing?.launchCount ?: 0, 1),
-            recordedPlayTimeMs = (existing?.recordedPlayTimeMs ?: 0L) + deltaMs,
-            lastLaunchedEpochMs = maxOf(existing?.lastLaunchedEpochMs ?: 0L, nowEpoch),
-        )
+                    val updated = StoredRomStats(
+                        uriString = uriString,
+                        displayName = resolvedName.ifBlank { existing?.displayName ?: "ROM" },
+                        gameCode = resolvedCode.ifBlank { existing?.gameCode.orEmpty() },
+                        launchCount = maxOf(existing?.launchCount ?: 0, 1),
+                        recordedPlayTimeMs = (existing?.recordedPlayTimeMs ?: 0L) + deltaMs,
+                        lastLaunchedEpochMs = maxOf(existing?.lastLaunchedEpochMs ?: 0L, nowEpoch),
+                    )
 
-        val todayPlayMs = prefs.getLong(todayPlayKey, 0L) + deltaMs
-        prefs.edit()
-            .putString(metaKey, serializeStoredRomStats(updated))
-            .putLong(todayPlayKey, todayPlayMs)
-            .apply()
+                    val todayPlayMs = prefs.getLong(todayPlayKey, 0L) + deltaMs
+                    prefs.edit()
+                        .putString(metaKey, serializeStoredRomStats(updated))
+                        .putLong(todayPlayKey, todayPlayMs)
+                        .apply()
+                }
+            }
+        }
     }
 
     fun buildSummary(context: Context, roms: List<Rom>): PlayerStatsSummary {

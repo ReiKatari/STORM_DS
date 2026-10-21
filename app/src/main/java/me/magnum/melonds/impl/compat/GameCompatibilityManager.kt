@@ -13,7 +13,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 object GameCompatibilityManager {
-    private const val PREFS_NAME = "storm_game_compat_guard"
+    private const val PREFS_NAME = "storm_game_compat_guard_v2"
     private const val KEY_LAST_MARKER_GAME_KEY = "last_launch_marker_key"
     private const val KEY_MARKER_PREFIX = "launch_marker_"
     private const val KEY_PROFILE_PREFIX = "safe_profile_"
@@ -22,7 +22,7 @@ object GameCompatibilityManager {
     private const val GLES_3_0 = 0x30000
     private const val GLES_3_2 = 0x30002
 
-    const val STABLE_EMULATION_SECONDS = 15
+    const val STABLE_EMULATION_SECONDS = 4
 
     data class LaunchMarker(
         val gameKey: String,
@@ -47,6 +47,13 @@ object GameCompatibilityManager {
 
     private val profileCache = ConcurrentHashMap<String, SafeCompatibilityProfile>()
     private val emptyProfileKeys = ConcurrentHashMap.newKeySet<String>()
+    private val notifiedCapabilityFallbacks = ConcurrentHashMap.newKeySet<String>()
+    @Volatile
+    private var cachedOpenGlEsVersion: Int = -1
+    @Volatile
+    private var cachedVulkanUnavailableFp: String? = null
+    @Volatile
+    private var vulkanUnavailableLoaded: Boolean = false
     @Volatile
     private var pendingCapabilityFallback: Pair<VideoRenderer, VideoRenderer>? = null
 
@@ -78,16 +85,21 @@ object GameCompatibilityManager {
         return null
     }
 
+    private fun getDeviceGlEsVersion(context: Context): Int {
+        val cached = cachedOpenGlEsVersion
+        if (cached >= 0) return cached
+        val activityManager = context.applicationContext.getSystemService(ActivityManager::class.java)
+        val reqGlEsVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: GLES_3_2
+        cachedOpenGlEsVersion = reqGlEsVersion
+        return reqGlEsVersion
+    }
+
     fun isOpenGlEs32Supported(context: Context): Boolean {
-        val activityManager = context.getSystemService(ActivityManager::class.java)
-        val reqGlEsVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0
-        return reqGlEsVersion >= GLES_3_2
+        return getDeviceGlEsVersion(context) >= GLES_3_2
     }
 
     fun isOpenGlEs30Supported(context: Context): Boolean {
-        val activityManager = context.getSystemService(ActivityManager::class.java)
-        val reqGlEsVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0
-        return reqGlEsVersion >= GLES_3_0
+        return getDeviceGlEsVersion(context) >= GLES_3_0
     }
 
     fun isVulkanSupportedOnDevice(context: Context): Boolean {
@@ -98,26 +110,35 @@ object GameCompatibilityManager {
     }
 
     fun markDeviceVulkanUnavailable(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit(commit = true) {
+        cachedVulkanUnavailableFp = Build.FINGERPRINT
+        vulkanUnavailableLoaded = true
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit {
             putString(KEY_VULKAN_UNAVAILABLE_FINGERPRINT, Build.FINGERPRINT)
         }
         bumpVersion()
     }
 
     fun clearDeviceVulkanUnavailable(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
-            prefs.edit(commit = true) {
+        val hadUnavailable = cachedVulkanUnavailableFp != null || !vulkanUnavailableLoaded
+        cachedVulkanUnavailableFp = null
+        vulkanUnavailableLoaded = true
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (hadUnavailable && prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
+            prefs.edit {
                 remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
             }
             bumpVersion()
         }
     }
 
-    private fun isDeviceVulkanMarkedUnavailable(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val savedFp = prefs.getString(KEY_VULKAN_UNAVAILABLE_FINGERPRINT, null) ?: return false
+    fun isDeviceVulkanMarkedUnavailable(context: Context): Boolean {
+        if (!vulkanUnavailableLoaded) {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            cachedVulkanUnavailableFp = prefs.getString(KEY_VULKAN_UNAVAILABLE_FINGERPRINT, null)
+            vulkanUnavailableLoaded = true
+        }
+        val savedFp = cachedVulkanUnavailableFp ?: return false
         return savedFp == Build.FINGERPRINT
     }
 
@@ -159,9 +180,13 @@ object GameCompatibilityManager {
         fallback: VideoRenderer,
     ) {
         if (requested == fallback) return
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val noticeKey = "$KEY_CAP_NOTICE_PREFIX${Build.FINGERPRINT}_${requested.name}_${fallback.name}"
+        if (notifiedCapabilityFallbacks.contains(noticeKey)) {
+            return
+        }
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs.getBoolean(noticeKey, false)) {
+            notifiedCapabilityFallbacks.add(noticeKey)
             return
         }
         pendingCapabilityFallback = requested to fallback
@@ -170,8 +195,11 @@ object GameCompatibilityManager {
     fun consumePendingCapabilityFallbackNotice(context: Context): Pair<VideoRenderer, VideoRenderer>? {
         val pending = pendingCapabilityFallback ?: return null
         pendingCapabilityFallback = null
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val noticeKey = "$KEY_CAP_NOTICE_PREFIX${Build.FINGERPRINT}_${pending.first.name}_${pending.second.name}"
+        if (!notifiedCapabilityFallbacks.add(noticeKey)) {
+            return null
+        }
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs.getBoolean(noticeKey, false)) {
             return null
         }
@@ -191,7 +219,7 @@ object GameCompatibilityManager {
         resolutionScaling: Int,
     ) {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = JSONObject().apply {
             put("gameKey", key)
             put("gameCode", gameCode.orEmpty())
@@ -202,7 +230,7 @@ object GameCompatibilityManager {
             put("resolutionScaling", resolutionScaling)
             put("timestampMs", System.currentTimeMillis())
         }
-        prefs.edit(commit = true) {
+        prefs.edit {
             putString("$KEY_MARKER_PREFIX$key", json.toString())
             putString(KEY_LAST_MARKER_GAME_KEY, key)
         }
@@ -216,7 +244,7 @@ object GameCompatibilityManager {
         renderer: VideoRenderer,
     ) {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val existingRaw = prefs.getString("$KEY_MARKER_PREFIX$key", null) ?: return
         val updatedJson = runCatching {
             JSONObject(existingRaw).apply {
@@ -224,7 +252,7 @@ object GameCompatibilityManager {
                 put("timestampMs", System.currentTimeMillis())
             }.toString()
         }.getOrNull() ?: return
-        prefs.edit(commit = true) {
+        prefs.edit {
             putString("$KEY_MARKER_PREFIX$key", updatedJson)
         }
     }
@@ -236,9 +264,9 @@ object GameCompatibilityManager {
         fileName: String?,
     ) {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit(commit = true) {
+        prefs.edit {
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
                 remove(KEY_LAST_MARKER_GAME_KEY)
@@ -247,9 +275,9 @@ object GameCompatibilityManager {
     }
 
     fun clearAllActiveLaunchMarkers(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit(commit = true) {
+        prefs.edit {
             if (!lastKey.isNullOrBlank()) {
                 remove("$KEY_MARKER_PREFIX$lastKey")
             }
@@ -265,12 +293,14 @@ object GameCompatibilityManager {
         openGlSupported: Boolean = isOpenGlEs32Supported(context),
     ): SafeCompatibilityProfile? {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return null
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        // If another game crashed previously, escalate its profile as well so its marker isn't orphaned.
+        // If another game crashed previously, clear its stale marker without blindly penalizing unrelated games.
         val lastMarkerKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
         if (!lastMarkerKey.isNullOrBlank() && lastMarkerKey != key) {
-            escalateMarkerForKey(prefs, lastMarkerKey, openGlSupported)
+            prefs.edit {
+                remove("$KEY_MARKER_PREFIX$lastMarkerKey")
+            }
         }
 
         return escalateMarkerForKey(prefs, key, openGlSupported)
@@ -284,7 +314,7 @@ object GameCompatibilityManager {
         val rawMarker = prefs.getString("$KEY_MARKER_PREFIX$key", null) ?: return null
         val marker = parseLaunchMarker(rawMarker)
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit(commit = true) {
+        prefs.edit {
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
                 remove(KEY_LAST_MARKER_GAME_KEY)
@@ -396,9 +426,11 @@ object GameCompatibilityManager {
         fileName: String?,
     ) {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit(commit = true) {
+        cachedVulkanUnavailableFp = null
+        vulkanUnavailableLoaded = true
+        prefs.edit {
             remove("$KEY_PROFILE_PREFIX$key")
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
@@ -431,7 +463,7 @@ object GameCompatibilityManager {
             put("disableJit", profile.disableJit)
             put("level", profile.level)
         }
-        prefs.edit(commit = true) {
+        prefs.edit {
             putString("$KEY_PROFILE_PREFIX$key", json.toString())
         }
         emptyProfileKeys.remove(key)

@@ -581,7 +581,7 @@ fun ContinuePlayingShelf(
                             coverUrl = coverByHash[rom.retroAchievementsHash],
                             boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                             boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
-                            onClick = { onQuickResumeRom(rom) },
+                            onClick = { onRomClicked(rom) },
                             onLongPress = { onRomLongPressed(rom) },
                             onFocused = onRomFocused,
                         )
@@ -849,7 +849,6 @@ fun QuickResumeBannerCard(
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
                 .background(accentColor)
-                .clickable(onClick = onQuickResume)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Icon(
@@ -1001,7 +1000,7 @@ fun ContinuePlayingLandscapeColumn(
                         coverUrl = coverByHash[rom.retroAchievementsHash],
                         boxArtUrl = boxArtByUri[rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                         boxArtLoading = anyCoversEnabled && (boxArtByUri[rom.uri.toString()] == null),
-                        onClick = { onQuickResumeRom(rom) },
+                        onClick = { onRomClicked(rom) },
                         onLongPress = { onRomLongPressed(rom) },
                         onFocused = onRomFocused,
                     )

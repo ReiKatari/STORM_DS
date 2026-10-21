@@ -144,7 +144,9 @@ class RomListFragment : Fragment() {
                             checkAndLaunch(rom)
                         },
                         onQuickResumeRom = { rom ->
-                            me.magnum.melonds.ui.quickresume.QuickResumeRequest.request(rom.uri)
+                            if (me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(rom.uri.toString()) != null) {
+                                me.magnum.melonds.ui.quickresume.QuickResumeRequest.request(rom.uri)
+                            }
                             romListViewModel.setRomLastPlayedNow(rom)
                             checkAndLaunch(rom)
                         },

@@ -446,11 +446,10 @@ class RomListViewModel @Inject constructor(
             .sortedByDescending { it.lastPlayed }
             .take(10)
 
-        val quickSlot = continuePlaying.firstOrNull()?.let { topRom ->
-            runCatching { saveStatesRepository.getRomQuickSaveStateSlot(topRom) }.getOrNull()
+        val quickResumeTimestamp = continuePlaying.firstOrNull()?.let { topRom ->
+            me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(topRom.uri.toString())
         }
-        val quickResumeHasSave = quickSlot?.exists == true
-        val quickResumeTimestamp = quickSlot?.lastUsedDate?.time
+        val quickResumeHasSave = quickResumeTimestamp != null && quickResumeTimestamp > 0L
 
         if (roots.isEmpty()) {
             return@withContext RomBrowserUiState(

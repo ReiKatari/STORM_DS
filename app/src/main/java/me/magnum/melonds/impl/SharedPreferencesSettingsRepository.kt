@@ -334,33 +334,48 @@ class SharedPreferencesSettingsRepository(
             renderInputsFlow,
             observeRetroArchShaderConfiguration(),
             observeAiUpscaleEnabled(),
-        ) { renderInputs, retroArchShader, aiEnabled ->
-            val requestedFiltering = if (aiEnabled && !preferences.contains("video_filtering")) {
-                VideoFiltering.AI_UPSCALE
-            } else {
-                renderInputs.core.filtering
+            GameCompatibilityManager.profileVersionFlow,
+        ) { renderInputs, retroArchShader, aiEnabled, _ ->
+            val safeProfile = GameCompatibilityManager.getEffectiveProfile(
+                context = context,
+                gameCode = activeGameCode,
+                romName = activeRomName,
+                fileName = activeRomFileName,
+            )
+            val effectiveRenderer = safeProfile?.forcedRenderer?.let { forced ->
+                val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+                GameCompatibilityManager.pickSaferRenderer(renderInputs.core.renderer, sanitizedForced)
+            } ?: renderInputs.core.renderer
+            val requestedFiltering = when {
+                safeProfile?.safeVisuals == true -> VideoFiltering.NONE
+                aiEnabled && !preferences.contains("video_filtering") -> VideoFiltering.AI_UPSCALE
+                else -> renderInputs.core.filtering
             }
             val effectiveFiltering = when {
-                !requestedFiltering.isSupportedByRenderer(renderInputs.core.renderer) -> VideoFiltering.NONE
+                safeProfile?.safeVisuals == true -> VideoFiltering.NONE
+                !requestedFiltering.isSupportedByRenderer(effectiveRenderer) -> VideoFiltering.NONE
                 requestedFiltering == VideoFiltering.RETROARCH &&
                     retroArchShader.presetPath.isNullOrBlank() -> if (aiEnabled) VideoFiltering.AI_UPSCALE else VideoFiltering.NONE
                 else -> requestedFiltering
             }
             val effectiveThreadedRendering = resolveThreadedRendering(
-                renderInputs.core.renderer,
+                effectiveRenderer,
                 renderInputs.core.threadedRenderingEnabled,
             )
-            val coverageFixEnabled = (renderInputs.core.renderer == VideoRenderer.OPENGL || renderInputs.core.renderer == VideoRenderer.VULKAN) && renderInputs.coverageFix.enabled
+            val effectiveResolutionScaling = if (safeProfile?.safeVisuals == true) 1 else renderInputs.core.resolutionScaling
+            val coverageFixEnabled = (effectiveRenderer == VideoRenderer.OPENGL || effectiveRenderer == VideoRenderer.VULKAN) &&
+                renderInputs.coverageFix.enabled &&
+                safeProfile?.safeVisuals != true
             RendererConfiguration(
-                renderInputs.core.renderer,
+                effectiveRenderer,
                 effectiveFiltering,
                 effectiveThreadedRendering,
-                if (renderInputs.core.renderer == VideoRenderer.VULKAN) {
+                if (effectiveRenderer == VideoRenderer.VULKAN) {
                     renderInputs.core.vulkanPipelineProfile
                 } else {
                     VulkanPipelineProfile.COMPATIBILITY
                 },
-                renderInputs.core.resolutionScaling,
+                effectiveResolutionScaling,
                 renderInputs.core.rendererDebugToolsEnabled,
                 renderInputs.core.rendererDebugBgObjEnabled,
                 renderInputs.core.rendererDebugLatchTraceEnabled,
@@ -2376,13 +2391,11 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun isVulkanRendererSupported(): Boolean {
-        return GameCompatibilityManager.isVulkanSupportedOnDevice(context)
+        return !GameCompatibilityManager.isDeviceVulkanMarkedUnavailable(context)
     }
 
     private fun isOpenGlRendererSupported(): Boolean {
-        val activityManager = context.getSystemService(ActivityManager::class.java)
-        val deviceGlesVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0
-        return deviceGlesVersion >= GLES_3_2
+        return GameCompatibilityManager.isOpenGlEs32Supported(context)
     }
 
     private fun isComputeRendererSupported(): Boolean {
@@ -2585,9 +2598,16 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun setActiveRomContext(gameCode: String?, romName: String?, fileName: String?) {
-        activeGameCode = gameCode?.takeIf { it.isNotBlank() }
-        activeRomName = romName?.takeIf { it.isNotBlank() }
-        activeRomFileName = fileName?.takeIf { it.isNotBlank() }
+        val nextCode = gameCode?.takeIf { it.isNotBlank() }
+        val nextName = romName?.takeIf { it.isNotBlank() }
+        val nextFile = fileName?.takeIf { it.isNotBlank() }
+        val changed = activeGameCode != nextCode || activeRomName != nextName || activeRomFileName != nextFile
+        activeGameCode = nextCode
+        activeRomName = nextName
+        activeRomFileName = nextFile
+        if (changed) {
+            preferenceSharedFlows["video_renderer"]?.tryEmit(Unit)
+        }
     }
 
     private fun applyActiveRomVulkanRuntimeControls() {

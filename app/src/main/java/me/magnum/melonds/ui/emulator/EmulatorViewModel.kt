@@ -789,32 +789,6 @@ class EmulatorViewModel @Inject constructor(
             isHardcoreEligibleAfterOnlineStart = launchDecision.isHardcoreEligibleAfterOnlineStart
             startedSessionOnlineLive = launchDecision.networkMode == RetroAchievementsNetworkMode.ONLINE_LIVE
 
-            startEmulatorSession(
-                sessionType = EmulatorSession.SessionType.RomSession(rom),
-                areRetroAchievementsEnabled = isRetroAchievementsEnabledForLaunch,
-                isRetroAchievementsHardcoreModeEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
-            )
-            startObservingMainScreenBackground()
-            startObservingSecondaryScreenBackground()
-            startObservingRuntimeInputLayoutConfiguration()
-            startObservingRendererConfiguration()
-            startObservingEmulatorEvents()
-            startObservingAchievementEvents()
-            startObservingLayoutForRom()
-            if (isRetroAchievementsEnabledForLaunch) {
-                startRetroAchievementsSession(rom, launchDecision)
-            } else {
-                activeRuntimeBridgeConfig = null
-                activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
-                emulatorSession.updateRetroAchievementsOfflineModeEnabled(false)
-                emulatorSession.updateRetroAchievementsIntegrationStatus(
-                    GameAchievementData.IntegrationStatus.DISABLED_BY_SETTING,
-                )
-            }
-
-            val cheats = getRomInfo(rom)?.let { getRomEnabledCheats(it) } ?: emptyList()
-            confirmRetroArchShaderCompile(rom.config)
-
             val romDisplayName = rom.config.customName ?: rom.name
             settingsRepository.setActiveRomContext(
                 gameCode = rom.gameCode,
@@ -847,6 +821,32 @@ class EmulatorViewModel @Inject constructor(
                     )
                 )
             }
+
+            startEmulatorSession(
+                sessionType = EmulatorSession.SessionType.RomSession(rom),
+                areRetroAchievementsEnabled = isRetroAchievementsEnabledForLaunch,
+                isRetroAchievementsHardcoreModeEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
+            )
+            startObservingMainScreenBackground()
+            startObservingSecondaryScreenBackground()
+            startObservingRuntimeInputLayoutConfiguration()
+            startObservingRendererConfiguration()
+            startObservingEmulatorEvents()
+            startObservingAchievementEvents()
+            startObservingLayoutForRom()
+            if (isRetroAchievementsEnabledForLaunch) {
+                startRetroAchievementsSession(rom, launchDecision)
+            } else {
+                activeRuntimeBridgeConfig = null
+                activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
+                emulatorSession.updateRetroAchievementsOfflineModeEnabled(false)
+                emulatorSession.updateRetroAchievementsIntegrationStatus(
+                    GameAchievementData.IntegrationStatus.DISABLED_BY_SETTING,
+                )
+            }
+
+            val cheats = getRomInfo(rom)?.let { getRomEnabledCheats(it) } ?: emptyList()
+            confirmRetroArchShaderCompile(rom.config)
 
             val initialEffectiveRenderer = settingsRepository.getEffectiveVideoRenderer(rom.config)
             val activeSafeProfile = GameCompatibilityManager.getEffectiveProfile(
@@ -1779,6 +1779,9 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun pauseEmulator(showPauseMenu: Boolean) {
+        if (_emulatorState.value is EmulatorState.RunningRom) {
+            GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
+        }
         sessionCoroutineScope.launch {
             emulatorManager.pauseEmulator()
             if (showPauseMenu) {
@@ -2418,6 +2421,9 @@ class EmulatorViewModel @Inject constructor(
     fun deleteSaveStateSlot(slot: SaveStateSlot, onSlotsUpdated: (List<SaveStateSlot>) -> Unit) {
         (_emulatorState.value as? EmulatorState.RunningRom)?.let {
             sessionCoroutineScope.launch {
+                if (slot.slot == 0) {
+                    me.magnum.melonds.ui.quickresume.QuickResumeStore.clearQuickSave(context, it.rom.uri.toString())
+                }
                 val updatedSlots = withContext(Dispatchers.IO) {
                     saveStatesRepository.deleteRomSaveState(it.rom, slot)
                     saveStatesRepository.getRomSaveStates(it.rom)
@@ -2458,6 +2464,10 @@ class EmulatorViewModel @Inject constructor(
             return false
         }
 
+        if (slot.slot == 0) {
+            me.magnum.melonds.ui.quickresume.QuickResumeStore.markQuickSaveUpdated(context, rom.uri.toString())
+        }
+
         withContext(Dispatchers.IO) {
             saveStatesRepository.deleteRomSaveStateScreenshot(rom, slot)
             val screenshot = screenshotFrameBufferProvider.getScreenshot()
@@ -2491,7 +2501,8 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun maybeAutoLoadStateOnLaunch(rom: Rom) {
-        val forceQuickResume = me.magnum.melonds.ui.quickresume.QuickResumeRequest.consumeFor(rom.uri)
+        val forceQuickResume = me.magnum.melonds.ui.quickresume.QuickResumeRequest.consumeFor(rom.uri) &&
+            me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(rom.uri.toString()) != null
         if (!forceQuickResume && !settingsRepository.isAutoLoadStateOnLaunchEnabled()) {
             Log.i(AUTO_STATE_TAG, "auto-load skipped: setting disabled")
             return
@@ -3039,6 +3050,8 @@ class EmulatorViewModel @Inject constructor(
         sessionCoroutineScope.launch {
             _emulatorState.flatMapLatest { state ->
                 val romConfig = (state as? EmulatorState.RunningRom)?.rom?.config
+                    ?: activeRomConfig.value?.config
+                    ?: currentRom?.config
                 if (romConfig == null) {
                     settingsRepository.observeRenderConfiguration()
                 } else {
