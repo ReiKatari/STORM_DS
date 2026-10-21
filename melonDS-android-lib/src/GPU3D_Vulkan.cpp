@@ -3278,8 +3278,23 @@ bool VulkanRenderer3D::ensureInitialized()
 
     if (!tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, false))
     {
+        if (PipelineProfile == VulkanPipelineProfile::FastPath)
+        {
+            Log(LogLevel::Warn, "VulkanRenderer3D: FastPath initialization failed; automatically falling back to Compatibility profile");
+            PipelineProfile = VulkanPipelineProfile::Compatibility;
+            Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
+            if (tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, false))
+            {
+                Initialized = true;
+                refreshActiveBackendMode();
+                return true;
+            }
+        }
+
         Log(LogLevel::Warn, "VulkanRenderer3D: retrying initialization with BaseSingleDescriptor compatibility sampling path (profile=%s)",
             VulkanPipelineProfileName(PipelineProfile));
+        PipelineProfile = VulkanPipelineProfile::Compatibility;
+        Texcache.GetLoader().SetPipelineProfile(PipelineProfile);
         if (!tryInitOnce(TextureSamplingPath::BaseSingleDescriptor, true))
         {
             Log(LogLevel::Error, "VulkanRenderer3D: initialization failed for profile=%s",
@@ -5234,17 +5249,25 @@ bool VulkanRenderer3D::createDescriptorObjects()
     const VulkanPipelineProfile texcacheProfile =
         Texcache.GetLoader().GetPipelineProfile();
     const u32 textureDescriptorBindingCount = texturePolicy.TextureDescriptorCount;
+    const u32 requiredGraphicsCombinedSamplers = texturePolicy.GraphicsCombinedImageSamplerCount();
     const VulkanRenderContextPolicy renderContextPolicy =
         GetVulkanRenderContextPolicy(PipelineProfile);
     if (deviceProperties.limits.maxPerStageDescriptorSampledImages < textureDescriptorBindingCount
-        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount)
+        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount
+        || (UsesVulkanFastPath(PipelineProfile)
+            && (deviceProperties.limits.maxPerStageDescriptorSampledImages < requiredGraphicsCombinedSamplers
+                || deviceProperties.limits.maxPerStageDescriptorSamplers < requiredGraphicsCombinedSamplers
+                || deviceProperties.limits.maxDescriptorSetSampledImages < requiredGraphicsCombinedSamplers
+                || deviceProperties.limits.maxDescriptorSetSamplers < requiredGraphicsCombinedSamplers)))
     {
         Log(
             LogLevel::Warn,
-            "VulkanRenderer3D: descriptor limits too low (per-stage=%u, set=%u, required=%u, profile=%s, path=%s)",
+            "VulkanRenderer3D: descriptor limits too low (per-stage-images=%u, per-stage-samplers=%u, set-images=%u, required-compute=%u, required-graphics=%u, profile=%s, path=%s)",
             deviceProperties.limits.maxPerStageDescriptorSampledImages,
+            deviceProperties.limits.maxPerStageDescriptorSamplers,
             deviceProperties.limits.maxDescriptorSetSampledImages,
             textureDescriptorBindingCount,
+            requiredGraphicsCombinedSamplers,
             VulkanPipelineProfileName(PipelineProfile),
             textureSamplingPathName(ActiveTextureSamplingPath)
         );

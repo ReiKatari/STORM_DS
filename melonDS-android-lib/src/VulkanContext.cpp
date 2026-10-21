@@ -493,12 +493,20 @@ bool VulkanContext::initializeLocked()
             getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
                 vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2"));
         }
+        if (getPhysicalDeviceFeatures2 == nullptr)
+        {
+            getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+                vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2KHR"));
+        }
 
         if (getPhysicalDeviceFeatures2 != nullptr)
         {
             getPhysicalDeviceFeatures2(candidate, &deviceFeatures2);
         }
-        vkGetPhysicalDeviceFeatures(candidate, &deviceFeatures2.features);
+        else
+        {
+            vkGetPhysicalDeviceFeatures(candidate, &deviceFeatures2.features);
+        }
 
         const bool timelineFeatureAvailable = timelineFeaturesAvailable.timelineSemaphore == VK_TRUE;
         bool enableTimelineSemaphores =

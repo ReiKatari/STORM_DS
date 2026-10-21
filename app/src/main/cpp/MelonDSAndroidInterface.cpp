@@ -137,6 +137,16 @@ constexpr const char* kOptionalExternalMemoryExtension = VK_KHR_EXTERNAL_MEMORY_
 constexpr const char* kOptionalAndroidHardwareBufferExtension = VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME;
 std::atomic<bool> gForceDisableTimelineSemaphores{false};
 std::atomic<bool> gForceDisableDynamicTextureIndexing{false};
+std::atomic<int> gCachedVulkanSupported{-1};
+std::atomic<int> gCachedCanInitFastPath{-1};
+std::atomic<int> gCachedCanInitCompatibility{-1};
+
+void invalidateVulkanValidationCache()
+{
+    gCachedVulkanSupported.store(-1, std::memory_order_relaxed);
+    gCachedCanInitFastPath.store(-1, std::memory_order_relaxed);
+    gCachedCanInitCompatibility.store(-1, std::memory_order_relaxed);
+}
 
 std::string jStringToString(JNIEnv* env, jstring value)
 {
@@ -169,7 +179,27 @@ void configureVulkanDriver(
     vulkanDriverConfiguration.CustomDriverName = jStringToString(env, customVulkanDriverName);
     vulkanDriverConfiguration.DisplayName = jStringToString(env, customVulkanDriverDisplayName);
 
+    static std::mutex sDriverConfigMutex;
+    static melonDS::VulkanDispatch::DriverConfiguration sLastDriverConfiguration{};
+    static bool sHasDriverConfiguration = false;
+    {
+        std::lock_guard<std::mutex> lock(sDriverConfigMutex);
+        if (sHasDriverConfiguration &&
+            sLastDriverConfiguration.UseCustomDriver == vulkanDriverConfiguration.UseCustomDriver &&
+            sLastDriverConfiguration.TmpLibDir == vulkanDriverConfiguration.TmpLibDir &&
+            sLastDriverConfiguration.HookLibDir == vulkanDriverConfiguration.HookLibDir &&
+            sLastDriverConfiguration.CustomDriverDir == vulkanDriverConfiguration.CustomDriverDir &&
+            sLastDriverConfiguration.CustomDriverName == vulkanDriverConfiguration.CustomDriverName &&
+            sLastDriverConfiguration.DisplayName == vulkanDriverConfiguration.DisplayName)
+        {
+            return;
+        }
+        sLastDriverConfiguration = vulkanDriverConfiguration;
+        sHasDriverConfiguration = true;
+    }
+
     MelonDSAndroid::VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
+    invalidateVulkanValidationCache();
 
     melonDS::VulkanDispatch::ConfigureDriver(vulkanDriverConfiguration);
 }
@@ -336,12 +366,20 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
         getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
             vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2"));
     }
+    if (getPhysicalDeviceFeatures2 == nullptr)
+    {
+        getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+            vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFeatures2KHR"));
+    }
 
     if (getPhysicalDeviceFeatures2 != nullptr)
     {
         getPhysicalDeviceFeatures2(physicalDevice, &features2);
     }
-    vkGetPhysicalDeviceFeatures(physicalDevice, &features2.features);
+    else
+    {
+        vkGetPhysicalDeviceFeatures(physicalDevice, &features2.features);
+    }
 
     if (timelineFeatures.timelineSemaphore != VK_TRUE)
     {
@@ -530,9 +568,16 @@ bool isVulkanRendererSupported()
     if (melonDS::VulkanContext::Get().IsReady())
         return true;
 
+    const int cached = gCachedVulkanSupported.load(std::memory_order_relaxed);
+    if (cached >= 0)
+        return cached != 0;
+
     VkInstance instance = VK_NULL_HANDLE;
     if (!createVulkanInstance(&instance))
+    {
+        gCachedVulkanSupported.store(0, std::memory_order_relaxed);
         return false;
+    }
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     uint32_t queueFamilyIndex = 0;
@@ -553,6 +598,7 @@ bool isVulkanRendererSupported()
         }
     }
 
+    gCachedVulkanSupported.store(result ? 1 : 0, std::memory_order_relaxed);
     return result;
 }
 
@@ -562,6 +608,14 @@ bool canInitializeVulkanRenderer(
     if (melonDS::VulkanContext::Get().IsReady())
         return true;
 
+    std::atomic<int>& profileCache =
+        (pipelineProfile == melonDS::VulkanPipelineProfile::FastPath)
+        ? gCachedCanInitFastPath
+        : gCachedCanInitCompatibility;
+    const int cachedProfileResult = profileCache.load(std::memory_order_relaxed);
+    if (cachedProfileResult >= 0)
+        return cachedProfileResult != 0;
+
     constexpr u64 kQuickValidationWaitTimeoutNs = 1'000'000'000ull;
     if (!isVulkanRendererSupported())
     {
@@ -569,6 +623,7 @@ bool canInitializeVulkanRenderer(
             melonDS::Platform::LogLevel::Error,
             "canInitializeVulkanRenderer: support check failed before VulkanOutput init"
         );
+        profileCache.store(0, std::memory_order_relaxed);
         return false;
     }
 
@@ -613,7 +668,10 @@ bool canInitializeVulkanRenderer(
     };
 
     if (tryInitializeWithProfile(pipelineProfile))
+    {
+        profileCache.store(1, std::memory_order_relaxed);
         return true;
+    }
 
     if (pipelineProfile != melonDS::VulkanPipelineProfile::Compatibility)
     {
@@ -622,7 +680,11 @@ bool canInitializeVulkanRenderer(
             "canInitializeVulkanRenderer: FastPath failed; falling back to Compatibility profile"
         );
         if (tryInitializeWithProfile(melonDS::VulkanPipelineProfile::Compatibility))
+        {
+            profileCache.store(1, std::memory_order_relaxed);
+            gCachedCanInitCompatibility.store(1, std::memory_order_relaxed);
             return true;
+        }
     }
 
     const bool initialDisableTimeline = gForceDisableTimelineSemaphores.load(std::memory_order_relaxed);
@@ -631,26 +693,39 @@ bool canInitializeVulkanRenderer(
     {
         setVulkanCompatibilityOverrides(true, initialDisableIndexing);
         if (tryInitializeWithProfile(melonDS::VulkanPipelineProfile::Compatibility))
+        {
+            profileCache.store(1, std::memory_order_relaxed);
+            gCachedCanInitCompatibility.store(1, std::memory_order_relaxed);
             return true;
+        }
     }
     if (!initialDisableIndexing)
     {
         setVulkanCompatibilityOverrides(true, true);
         if (tryInitializeWithProfile(melonDS::VulkanPipelineProfile::Compatibility))
+        {
+            profileCache.store(1, std::memory_order_relaxed);
+            gCachedCanInitCompatibility.store(1, std::memory_order_relaxed);
             return true;
+        }
     }
 
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Error,
         "canInitializeVulkanRenderer: all initialization profiles and compatibility fallbacks failed"
     );
+    profileCache.store(0, std::memory_order_relaxed);
     return false;
 }
 
 void setVulkanCompatibilityOverrides(bool disableTimelineSemaphores, bool disableDynamicTextureIndexing)
 {
-    gForceDisableTimelineSemaphores.store(disableTimelineSemaphores, std::memory_order_relaxed);
-    gForceDisableDynamicTextureIndexing.store(disableDynamicTextureIndexing, std::memory_order_relaxed);
+    const bool prevTimeline = gForceDisableTimelineSemaphores.exchange(disableTimelineSemaphores, std::memory_order_relaxed);
+    const bool prevIndexing = gForceDisableDynamicTextureIndexing.exchange(disableDynamicTextureIndexing, std::memory_order_relaxed);
+    if (prevTimeline != disableTimelineSemaphores || prevIndexing != disableDynamicTextureIndexing)
+    {
+        invalidateVulkanValidationCache();
+    }
     melonDS::VulkanContext::SetCompatibilityOverrides(disableTimelineSemaphores, disableDynamicTextureIndexing);
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Warn,

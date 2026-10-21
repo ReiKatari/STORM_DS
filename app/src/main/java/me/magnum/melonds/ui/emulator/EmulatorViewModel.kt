@@ -2171,11 +2171,22 @@ class EmulatorViewModel @Inject constructor(
     private fun startTrackingPlayTime(rom: Rom) {
         sessionCoroutineScope.launch {
             var lastTime = System.currentTimeMillis()
-            while (isActive) {
-                delay(1000)
+            try {
+                while (isActive) {
+                    delay(15_000L)
+                    val now = System.currentTimeMillis()
+                    val delta = now - lastTime
+                    if (delta > 0L) {
+                        romsRepository.addRomPlayTime(rom, delta.milliseconds)
+                        lastTime = now
+                    }
+                }
+            } finally {
                 val now = System.currentTimeMillis()
-                romsRepository.addRomPlayTime(rom, (now - lastTime).milliseconds)
-                lastTime = now
+                val remaining = now - lastTime
+                if (remaining > 0L) {
+                    romsRepository.addRomPlayTime(rom, remaining.milliseconds)
+                }
             }
         }
     }

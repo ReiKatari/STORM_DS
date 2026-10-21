@@ -3083,7 +3083,7 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
     std::snprintf(
         cacheFileName,
         sizeof(cacheFileName),
-        "vulkan_presenter_pipeline_cache_v3_%08x_%08x_%08x.bin",
+        "vulkan_presenter_pipeline_cache_v4_%08x_%08x_%08x.bin",
         deviceProperties.vendorID,
         deviceProperties.deviceID,
         deviceProperties.driverVersion

@@ -478,8 +478,48 @@ DEFINE_SAMPLE_FILTERED_PACKED_LAYER(sampleBottomFilteredPackedLayer, readBottomP
 
 #undef DEFINE_SAMPLE_FILTERED_PACKED_LAYER
 
-#define DEFINE_COMPOSE_SCREEN_COLOR(FUNC_NAME, READ_PACKED_FUNC, SAMPLE_PACKED_FUNC, SCREEN_IS_TOP) \
-vec4 FUNC_NAME() \
+uint readScreenPacked(bool topScreen, int y, int x)
+{
+    return topScreen ? readTopPacked(y, x) : readBottomPacked(y, x);
+}
+
+Rgba6 sampleScreenPackedWithBrightness(
+    bool topScreen,
+    int sourceX,
+    int sourceY,
+    int displayMode,
+    int brightnessMode,
+    int brightnessFactor)
+{
+    return topScreen
+        ? sampleTopPackedWithBrightness(sourceX, sourceY, displayMode, brightnessMode, brightnessFactor)
+        : sampleBottomPackedWithBrightness(sourceX, sourceY, displayMode, brightnessMode, brightnessFactor);
+}
+
+Rgba6 sampleScreenFilteredPackedLayer(
+    bool topScreen,
+    int sourceX,
+    int sourceY,
+    float sourceXFloat,
+    float sourceYFloat,
+    int layerOffset)
+{
+    return topScreen
+        ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, layerOffset)
+        : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, layerOffset);
+}
+
+Rgba6 samplePreviousScreen3DAtScaledCoord(bool topScreen, float scaledX, float scaledY)
+{
+    return topScreen
+        ? samplePreviousTop3DColorAtScaledCoord(scaledX, scaledY)
+        : samplePreviousBottom3DColorAtScaledCoord(scaledX, scaledY);
+}
+
+#define READ_PACKED_FUNC(y, x) readScreenPacked(SCREEN_IS_TOP, y, x)
+#define SAMPLE_PACKED_FUNC(x, y, dm, bm, bf) sampleScreenPackedWithBrightness(SCREEN_IS_TOP, x, y, dm, bm, bf)
+#define DEFINE_COMPOSE_SCREEN_COLOR_SINGLE() \
+vec4 composeScreenColor(bool SCREEN_IS_TOP) \
 { \
     float sourceXFloat = clamp(fragUv.x * 256.0, 0.0, 255.0); \
     float sourceYFloat = clamp((1.0 - fragUv.y) * 192.0, 0.0, 191.0); \
@@ -511,17 +551,23 @@ vec4 FUNC_NAME() \
             && !screenMatchesCapture3DSource \
             && (regularCaptureUses3d || vramCaptureUses3d || forceLive3dCompMode7); \
 \
-    Rgba6 pixel = SCREEN_IS_TOP \
-        ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 0) \
-        : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 0); \
+    Rgba6 pixel = sampleScreenFilteredPackedLayer(SCREEN_IS_TOP, sourceX, sourceY, sourceXFloat, sourceYFloat, 0); \
     Rgba6 nearestPixel = unpackColor6(READ_PACKED_FUNC(sourceY, sourceX)); \
 \
+    float sample3dXFloat = scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))); \
+    Rgba6 cachedLive3D = (displayMode == 1 || (displayMode == 2 && vramCaptureUses3d)) \
+        ? sample3DColorAtScaledCoord(sample3dXFloat, scaledYFloat) \
+        : Rgba6(0, 0, 0, 0); \
+    Rgba6 cachedPrevious3D = (displayMode == 1 || (displayMode == 2 && vramCaptureUses3d)) \
+        ? samplePreviousScreen3DAtScaledCoord(SCREEN_IS_TOP, sample3dXFloat, scaledYFloat) \
+        : Rgba6(0, 0, 0, 0); \
+    bool cachedLive3DHasSupport = (displayMode == 1 && (cachedLive3D.a & 0x1F) > 0 && ((cachedLive3D.r | cachedLive3D.g | cachedLive3D.b) == 0)) \
+        ? hasVisibleLive3DSupportAtScaledCoord(sample3dXFloat, scaledYFloat, float(max(pushConstants.scale, 1u))) \
+        : false; \
     if (displayMode == 1) \
     { \
 	        Rgba6 val1 = pixel; \
-	        Rgba6 val2 = SCREEN_IS_TOP \
-                ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 256) \
-                : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 256); \
+	        Rgba6 val2 = sampleScreenFilteredPackedLayer(SCREEN_IS_TOP, sourceX, sourceY, sourceXFloat, sourceYFloat, 256); \
 	        Rgba6 val3 = unpackColor6(READ_PACKED_FUNC(sourceY, 512 + sourceX)); \
 \
         int compMode = val3.a & 0xF; \
@@ -605,23 +651,12 @@ vec4 FUNC_NAME() \
         bool pixel3DFromLive = false; \
         if (compModeSamples3D && screenOwnsLive3D) \
         { \
-            pixel3D = sample3DColorAtScaledCoord( \
-                scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                scaledYFloat \
-            ); \
+            pixel3D = cachedLive3D; \
             pixel3DFromLive = true; \
         } \
         else if (compModeSamples3D && screenHasPrevious3D) \
         { \
-            pixel3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ); \
+            pixel3D = cachedPrevious3D; \
         } \
         if (compModeSamples3D \
             && screenOwnsLive3D \
@@ -630,20 +665,9 @@ vec4 FUNC_NAME() \
             && structured2DProtectedBlackOwned \
             && ((pixel3D.a & 0x1F) == 0 \
                 || (((pixel3D.r | pixel3D.g | pixel3D.b) == 0) \
-                    && !hasVisibleLive3DSupportAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat, \
-                        float(max(pushConstants.scale, 1u)))))) \
+                    && !cachedLive3DHasSupport))) \
         { \
-            pixel3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ); \
+            pixel3D = cachedPrevious3D; \
             pixel3DFromLive = false; \
         } \
         if (screenBlockedByOtherCapture3DSource) \
@@ -670,15 +694,7 @@ vec4 FUNC_NAME() \
             && structured2DSlot \
             && screenHasPrevious3D) \
         { \
-            pixel3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ); \
+            pixel3D = cachedPrevious3D; \
             pixel3DFromLive = false; \
         } \
         bool plainLiveStructured3DBlack = compMode == 0 \
@@ -703,15 +719,7 @@ vec4 FUNC_NAME() \
             && (pixel3D.a & 0x1F) > 0 \
             && ((pixel3D.r | pixel3D.g | pixel3D.b) == 0)) \
         { \
-            Rgba6 history3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ); \
+            Rgba6 history3D = cachedPrevious3D; \
             if ((history3D.a & 0x1F) > 0 && ((history3D.r | history3D.g | history3D.b) != 0)) \
             { \
                 pixel3D = history3D; \
@@ -723,10 +731,7 @@ vec4 FUNC_NAME() \
             && regularCaptureUses3d \
             && (pixel3D.a & 0x1F) > 0 \
             && ((pixel3D.r | pixel3D.g | pixel3D.b) == 0) \
-            && hasVisibleLive3DSupportAtScaledCoord( \
-                scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                scaledYFloat, \
-                float(max(pushConstants.scale, 1u))); \
+            && cachedLive3DHasSupport; \
         bool pixel3DHasVisibleColor = (pixel3D.a & 0x1F) > 0 \
             && (((pixel3D.r | pixel3D.g | pixel3D.b) != 0) \
                 || pixel3DLiveBlackHasSupport \
@@ -778,10 +783,7 @@ vec4 FUNC_NAME() \
         bool allowCaptureHighresFromLive = screenOwnsLive3D \
             || forceLive3dCompMode7; \
         Rgba6 captureHighresFromLive = allowCaptureHighresFromLive \
-            ? sample3DColorAtScaledCoord( \
-                scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                scaledYFloat \
-            ) \
+            ? cachedLive3D \
             : Rgba6(0, 0, 0, 0); \
         bool captureHighresHasCoverage = (captureHighresFromLive.a & 0x1F) > 0; \
         bool captureHighresHasVisibleColor = captureHighresHasCoverage \
@@ -793,15 +795,7 @@ vec4 FUNC_NAME() \
             && !screenOwnsLive3D \
             && !pixel3DHasVisibleColor) \
         { \
-            Rgba6 history3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ); \
+            Rgba6 history3D = cachedPrevious3D; \
             if ((history3D.a & 0x1F) > 0 && ((history3D.r | history3D.g | history3D.b) != 0)) \
             { \
                 pixel3D = history3D; \
@@ -910,13 +904,7 @@ vec4 FUNC_NAME() \
         { \
             if (structured2DProtectedBlackForeign && screenHasPrevious3D) \
             { \
-                Rgba6 history3D = SCREEN_IS_TOP \
-                    ? samplePreviousTop3DColorAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat) \
-                    : samplePreviousBottom3DColorAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat); \
+                Rgba6 history3D = cachedPrevious3D; \
                 val1 = ((history3D.a & 0x1F) > 0 && ((history3D.r | history3D.g | history3D.b) != 0)) \
                     ? history3D \
                     : pixel; \
@@ -968,13 +956,7 @@ vec4 FUNC_NAME() \
                 && (pixel3D.a & 0x1F) > 0 \
                 && !pixel3DHasVisibleColor) \
             { \
-                Rgba6 history3D = SCREEN_IS_TOP \
-                    ? samplePreviousTop3DColorAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat) \
-                    : samplePreviousBottom3DColorAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat); \
+                Rgba6 history3D = cachedPrevious3D; \
                 if ((history3D.a & 0x1F) > 0 && ((history3D.r | history3D.g | history3D.b) != 0)) \
                 { \
                     pixel3D = history3D; \
@@ -1318,15 +1300,7 @@ vec4 FUNC_NAME() \
                 && !capture3DHasVisibleColor \
                 && screenHasPrevious3D) \
             { \
-                pixel3D = SCREEN_IS_TOP \
-                    ? samplePreviousTop3DColorAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat \
-                    ) \
-                    : samplePreviousBottom3DColorAtScaledCoord( \
-                        scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                        scaledYFloat \
-                    ); \
+                pixel3D = cachedPrevious3D; \
                 pixel3DHasCoverage = (pixel3D.a & 0x1F) > 0; \
                 pixel3DFromLive = false; \
                 pixel3DHasVisibleColor = (pixel3D.a & 0x1F) > 0 \
@@ -1392,13 +1366,7 @@ vec4 FUNC_NAME() \
             && !partialCaptureBackedComp4BorderLine \
             && !suppressLateFinalBlackHistory) \
         { \
-            Rgba6 history3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat); \
+            Rgba6 history3D = cachedPrevious3D; \
             if ((history3D.a & 0x1F) > 0 && ((history3D.r | history3D.g | history3D.b) != 0)) \
                 val1 = history3D; \
         } \
@@ -1406,9 +1374,7 @@ vec4 FUNC_NAME() \
     } \
     else if (displayMode == 2 && vramCaptureUses3d) \
     { \
-        Rgba6 val2 = SCREEN_IS_TOP \
-            ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 256) \
-            : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 256); \
+        Rgba6 val2 = sampleScreenFilteredPackedLayer(SCREEN_IS_TOP, sourceX, sourceY, sourceXFloat, sourceYFloat, 256); \
         Rgba6 val3 = unpackColor6(READ_PACKED_FUNC(sourceY, 512 + sourceX)); \
         int compMode = val3.a & 0xF; \
         bool structured2DSlot = hasStructured2D3DSlot(val3); \
@@ -1438,23 +1404,12 @@ vec4 FUNC_NAME() \
         bool vram3DFromLive = false; \
         if (screenOwnsLive3D && !class4PreservePackedVram) \
         { \
-            vram3D = sample3DColorAtScaledCoord( \
-                scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                scaledYFloat \
-            ); \
+            vram3D = cachedLive3D; \
             vram3DFromLive = true; \
         } \
         else if (screenHasPrevious3D && !class4NoAbovePreservePackedVram) \
         { \
-            vram3D = SCREEN_IS_TOP \
-                ? samplePreviousTop3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ) \
-                : samplePreviousBottom3DColorAtScaledCoord( \
-                    scaledXFloat + (float(xOffset) * float(max(pushConstants.scale, 1u))), \
-                    scaledYFloat \
-                ); \
+            vram3D = cachedPrevious3D; \
         } \
         bool controlHas2DPayload = hasStructured2DControlPayload(val3); \
         bool vram3DHasVisibleColor = (vram3D.a & 0x1F) > 0 && ((vram3D.r | vram3D.g | vram3D.b) != 0); \
@@ -1583,8 +1538,10 @@ vec4 FUNC_NAME() \
     return vec4(color6ToRgb01(pixel), fragAlpha); \
 }
 
-DEFINE_COMPOSE_SCREEN_COLOR(composeTopScreenColor, readTopPacked, sampleTopPackedWithBrightness, true)
-DEFINE_COMPOSE_SCREEN_COLOR(composeBottomScreenColor, readBottomPacked, sampleBottomPackedWithBrightness, false)
+DEFINE_COMPOSE_SCREEN_COLOR_SINGLE()
+#undef DEFINE_COMPOSE_SCREEN_COLOR_SINGLE
+#undef READ_PACKED_FUNC
+#undef SAMPLE_PACKED_FUNC
 
 vec4 sampleComposedCarryColor(bool topScreen)
 {
@@ -1901,32 +1858,30 @@ vec4 sampleDirectHighresOnlyOutput(bool topScreen, out bool needsSurfaceSwizzle)
     return color;
 }
 
-vec4 sampleDirectOverlay2DOutput(bool topScreen)
+bool trySampleDirectOverlay2DOnlyCarryFallback(bool topScreen, out vec4 outFallbackColor)
 {
-    vec4 color = topScreen ? composeTopScreenColor() : composeBottomScreenColor();
-    return applyBottomDominantRegularCaptureCarry(topScreen, color);
-}
-
-vec4 sampleDirectOverlay2DOnlyFallback(bool topScreen)
-{
-    vec4 composed = topScreen ? composeTopScreenColor() : composeBottomScreenColor();
-    bool preserveCurrentEmptyPackedBlack = !topScreen
-        && (pushConstants.packedSpecializationMask & 64u) != 0u;
     bool useCompleteBottomCarry = !topScreen
         && (pushConstants.packedSpecializationMask & 256u) != 0u
         && directComposedCarryReady(false);
 
     if (useCompleteBottomCarry)
-        return sampleComposedCarryColor(false);
+    {
+        outFallbackColor = sampleComposedCarryColor(false);
+        return true;
+    }
 
     if (directComposedCarryReady(topScreen))
     {
         vec4 carryColor = sampleComposedCarryColor(topScreen);
         if (!directColorLooksEmpty(carryColor) && !directColorLooksWhite(carryColor))
-            return carryColor;
+        {
+            outFallbackColor = carryColor;
+            return true;
+        }
     }
 
-    return composed;
+    outFallbackColor = vec4(0.0);
+    return false;
 }
 
 vec4 applyLineMasterBrightnessRgb01(bool topScreen, vec4 color)
@@ -1965,21 +1920,15 @@ void applyLineMasterBrightness(bool topScreen, int sourceY, inout Rgba6 color)
         applyBrightnessDown(color, brightnessFactor, 0xF);
 }
 
-vec4 sampleDirectOverlay2DOnlyOutput(bool topScreen)
+bool trySampleDirectOverlay2DOnlyOutput(bool topScreen, out vec4 outResolvedColor)
 {
     float sourceXFloat = clamp(fragUv.x * 256.0, 0.0, 255.0);
     float sourceYFloat = clamp((1.0 - fragUv.y) * 192.0, 0.0, 191.0);
     int sourceX = int(sourceXFloat);
     int sourceY = int(sourceYFloat);
-    Rgba6 control = unpackColor6(topScreen
-        ? readTopPacked(sourceY, 512 + sourceX)
-        : readBottomPacked(sourceY, 512 + sourceX));
-    Rgba6 plane0 = topScreen
-        ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 0)
-        : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 0);
-    Rgba6 plane1 = topScreen
-        ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 256)
-        : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, 256);
+    Rgba6 control = unpackColor6(readScreenPacked(topScreen, sourceY, 512 + sourceX));
+    Rgba6 plane0 = sampleScreenFilteredPackedLayer(topScreen, sourceX, sourceY, sourceXFloat, sourceYFloat, 0);
+    Rgba6 plane1 = sampleScreenFilteredPackedLayer(topScreen, sourceX, sourceY, sourceXFloat, sourceYFloat, 256);
     Rgba6 overlay = plane0;
     bool overlayVisible = isStructured2DVisibleOrOwnedProtectedBlack(plane0, control, topScreen);
     if (hasStructured2DAbovePlane(control)
@@ -1989,27 +1938,22 @@ vec4 sampleDirectOverlay2DOnlyOutput(bool topScreen)
         overlayVisible = true;
     }
     if (!overlayVisible)
-        return sampleDirectOverlay2DOnlyFallback(topScreen);
+        return trySampleDirectOverlay2DOnlyCarryFallback(topScreen, outResolvedColor);
 
     applyLineMasterBrightness(topScreen, sourceY, overlay);
-    return vec4(color6ToRgb01(overlay), fragAlpha);
+    outResolvedColor = vec4(color6ToRgb01(overlay), fragAlpha);
+    return true;
 }
 
-vec4 sampleDirectOverlay2DOnlySingleLayerOutput(bool topScreen, int layerOffset)
+bool trySampleDirectOverlay2DOnlySingleLayerOutput(bool topScreen, int layerOffset, out vec4 outResolvedColor)
 {
     float sourceXFloat = clamp(fragUv.x * 256.0, 0.0, 255.0);
     float sourceYFloat = clamp((1.0 - fragUv.y) * 192.0, 0.0, 191.0);
     int sourceX = int(sourceXFloat);
     int sourceY = int(sourceYFloat);
-    Rgba6 pixel = topScreen
-        ? sampleTopFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, layerOffset)
-        : sampleBottomFilteredPackedLayer(sourceX, sourceY, sourceXFloat, sourceYFloat, layerOffset);
-    Rgba6 control = unpackColor6(topScreen
-        ? readTopPacked(sourceY, 512 + sourceX)
-        : readBottomPacked(sourceY, 512 + sourceX));
-    uint lineMeta = topScreen
-        ? readTopPacked(sourceY, 256 * 3)
-        : readBottomPacked(sourceY, 256 * 3);
+    Rgba6 pixel = sampleScreenFilteredPackedLayer(topScreen, sourceX, sourceY, sourceXFloat, sourceYFloat, layerOffset);
+    Rgba6 control = unpackColor6(readScreenPacked(topScreen, sourceY, 512 + sourceX));
+    uint lineMeta = readScreenPacked(topScreen, sourceY, 256 * 3);
     int displayMode = int((lineMeta >> 16u) & 0x3u);
     bool visibleRawVramDisplayPixel = layerOffset == 0
         && displayMode == 2
@@ -2017,10 +1961,11 @@ vec4 sampleDirectOverlay2DOnlySingleLayerOutput(bool topScreen, int layerOffset)
         && !isPacked3dLayerSlot(pixel);
     if (!isStructured2DVisibleOrOwnedProtectedBlack(pixel, control, topScreen)
         && !visibleRawVramDisplayPixel)
-        return sampleDirectOverlay2DOnlyFallback(topScreen);
+        return trySampleDirectOverlay2DOnlyCarryFallback(topScreen, outResolvedColor);
 
     applyLineMasterBrightness(topScreen, sourceY, pixel);
-    return vec4(color6ToRgb01(pixel), fragAlpha);
+    outResolvedColor = vec4(color6ToRgb01(pixel), fragAlpha);
+    return true;
 }
 
 vec2 compositeTexelSize()
@@ -2631,6 +2576,10 @@ void runPresenterCore()
         return;
     }
 
+    bool presenterTopScreen = (pushConstants.drawMode == 2u)
+        || (pushConstants.drawMode >= 13u && ((pushConstants.drawMode & 1u) != 0u));
+    vec4 composedScreenColor = composeScreenColor(presenterTopScreen);
+
     if (pushConstants.drawMode == 13u || pushConstants.drawMode == 14u)
     {
         bool topScreen = pushConstants.drawMode == 13u;
@@ -2665,7 +2614,7 @@ void runPresenterCore()
                 : (preserveCurrentTopBlack
                     ? applyLineMasterBrightnessRgb01(
                         topScreen, vec4(0.0, 0.0, 0.0, fragAlpha))
-                    : sampleDirectOverlay2DOutput(topScreen)));
+                    : applyBottomDominantRegularCaptureCarry(topScreen, composedScreenColor)));
         if (bottomA2BlackMaskPixel)
         {
             outColor = vec4(0.0, 0.0, 0.0, fragAlpha);
@@ -2715,11 +2664,18 @@ void runPresenterCore()
             && (pushConstants.packedSpecializationMask & 4096u) != 0u;
         bool mergeBottomClass4SparseOverlay = !topScreen
             && (pushConstants.packedSpecializationMask & 33554432u) != 0u;
-        outColor = replayBottomComp2OneShot
-            ? sampleBottomComp2OneShotCarryColor()
-            : (replayExactBottomCarry
-                ? sampleComposedCarryColor(false)
-                : sampleDirectOverlay2DOnlyOutput(topScreen));
+        if (replayBottomComp2OneShot)
+        {
+            outColor = sampleBottomComp2OneShotCarryColor();
+        }
+        else if (replayExactBottomCarry)
+        {
+            outColor = sampleComposedCarryColor(false);
+        }
+        else if (!trySampleDirectOverlay2DOnlyOutput(topScreen, outColor))
+        {
+            outColor = composedScreenColor;
+        }
         if (replayBottomComp2OneShot)
             return;
         if (mergeBottomClass4SparseOverlay)
@@ -2737,21 +2693,17 @@ void runPresenterCore()
         return;
     }
 
-    if (pushConstants.drawMode == 17u || pushConstants.drawMode == 18u)
+    if (pushConstants.drawMode >= 17u && pushConstants.drawMode <= 20u)
     {
-        outColor = sampleDirectOverlay2DOnlySingleLayerOutput(pushConstants.drawMode == 17u, 0);
-        return;
-    }
-
-    if (pushConstants.drawMode == 19u || pushConstants.drawMode == 20u)
-    {
-        outColor = sampleDirectOverlay2DOnlySingleLayerOutput(pushConstants.drawMode == 19u, 256);
+        int layerOffset = (pushConstants.drawMode >= 19u) ? 256 : 0;
+        if (!trySampleDirectOverlay2DOnlySingleLayerOutput(presenterTopScreen, layerOffset, outColor))
+            outColor = composedScreenColor;
         return;
     }
 
     if (pushConstants.drawMode == 2u)
     {
-        vec4 color = composeTopScreenColor();
+        vec4 color = composedScreenColor;
         if (pushConstants.topPackedDirectRequired != 0u)
         {
             storeComposedCarryColor(true, color);
@@ -2782,7 +2734,7 @@ void runPresenterCore()
         return;
     }
 
-    vec4 color = applyBottomDominantRegularCaptureCarry(false, composeBottomScreenColor());
+    vec4 color = applyBottomDominantRegularCaptureCarry(false, composedScreenColor);
     if (pushConstants.bottomPackedDirectRequired != 0u)
     {
         storeComposedCarryColor(false, color);
@@ -2812,15 +2764,7 @@ void runPresenterCore()
     outColor = color;
 }
 
-vec4 evalPresenterAt(vec2 uv, bool allowCarry)
-{
-    fragUv = clamp(uv, vec2(0.001), vec2(0.999));
-    gAllowCarryStore = allowCarry;
-    runPresenterCore();
-    return outColor;
-}
-
-float estimateSceneDepthFactor(vec2 uv, vec3 baseRgb)
+float estimateSceneDepthFactor(vec2 uv)
 {
     bool topScreen = (pushConstants.drawMode == 1u)
         || (pushConstants.drawMode == 2u)
@@ -2842,14 +2786,15 @@ float estimateSceneDepthFactor(vec2 uv, vec3 baseRgb)
             ? imageLoad(u3dPreviousTopImage, ivec2(scaledX, scaledY))
             : imageLoad(u3dPreviousBottomImage, ivec2(scaledX, scaledY)));
 
-    float luma = dot(baseRgb, vec3(0.299, 0.587, 0.114));
+    float luma = clamp((float(v1.r) * 0.299 + float(v1.g) * 0.587 + float(v1.b) * 0.114) * (1.0 / 63.0), 0.0, 1.0);
     if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
     {
         return 0.75;
     }
     if (raw3D.a > 0.01)
     {
-        float persp = clamp((1.0 - uv.y) * 0.6 + luma * 0.4, 0.0, 1.0);
+        float rawLuma = dot(raw3D.rgb, vec3(0.299, 0.587, 0.114));
+        float persp = clamp((1.0 - uv.y) * 0.6 + rawLuma * 0.4, 0.0, 1.0);
         return mix(-0.35, 0.50, persp);
     }
     return mix(-0.65, -0.15, luma);
@@ -2887,45 +2832,73 @@ void main()
     uint colorProfile = (pushConstants.filtering >> 11u) & 0x7u;
     float strengthNorm = float((pushConstants.filtering >> 14u) & 0x7Fu) * 0.01;
 
-    vec4 baseColor = evalPresenterAt(inFragUv, true);
-    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u))
+    vec2 baseUv = inFragUv;
+    float depthFactor = 0.0;
+    float sheen = 0.0;
+    if (pushConstants.drawMode != 0u && depthMode != 0u)
     {
-        outColor = baseColor;
-        return;
+        if (depthMode == 1u)
+        {
+            float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
+            float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
+            depthFactor = estimateSceneDepthFactor(inFragUv);
+            baseUv = clamp(inFragUv + vec2(tiltX, -tiltY) * depthFactor * (0.008 + 0.024 * strengthNorm), vec2(0.001), vec2(0.999));
+            sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.08 * strengthNorm, -0.04, 0.04) * max(depthFactor, 0.0);
+        }
+        else if (depthMode == 2u)
+        {
+            depthFactor = estimateSceneDepthFactor(inFragUv);
+        }
+        else if (depthMode == 3u)
+        {
+            bool rightEye = inFragUv.x >= 0.5;
+            float eyeSign = rightEye ? 1.0 : -1.0;
+            vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
+            depthFactor = estimateSceneDepthFactor(sbsUv);
+            float shift = eyeSign * (0.003 + 0.014 * strengthNorm) * depthFactor;
+            baseUv = vec2(clamp(sbsUv.x + shift, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
+        }
     }
 
-    vec4 finalColor = baseColor;
+    fragUv = baseUv;
+    gAllowCarryStore = true;
+    runPresenterCore();
+    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u))
+        return;
+
+    vec4 finalColor = outColor;
     if (depthMode == 1u)
     {
-        float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
-        float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
-        float depthFactor = estimateSceneDepthFactor(inFragUv, baseColor.rgb);
-        vec2 parallaxUv = inFragUv + vec2(tiltX, -tiltY) * depthFactor * (0.008 + 0.024 * strengthNorm);
-        finalColor = evalPresenterAt(parallaxUv, false);
-        float sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.08 * strengthNorm, -0.04, 0.04);
-        finalColor.rgb = clamp(finalColor.rgb + vec3(sheen * max(depthFactor, 0.0)), 0.0, 1.0);
+        finalColor.rgb = clamp(finalColor.rgb + vec3(sheen), 0.0, 1.0);
     }
     else if (depthMode == 2u)
     {
-        float depthFactor = estimateSceneDepthFactor(inFragUv, baseColor.rgb);
-        float shift = (0.003 + 0.014 * strengthNorm) * (depthFactor + 0.15);
-        vec3 leftRgb = evalPresenterAt(inFragUv - vec2(shift, 0.0), false).rgb;
-        vec3 rightRgb = evalPresenterAt(inFragUv + vec2(shift, 0.0), false).rgb;
+        float shiftPx = (0.8 + 3.5 * strengthNorm) * (depthFactor + 0.15);
+        bool topScreen = (pushConstants.drawMode == 1u)
+            || (pushConstants.drawMode == 2u)
+            || (pushConstants.drawMode == 4u)
+            || (pushConstants.drawMode == 7u)
+            || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
+                && ((pushConstants.drawMode & 1u) != 0u));
+        int sy = int(clamp((1.0 - inFragUv.y) * 192.0, 0.0, 191.0));
+        int sxL = int(clamp(inFragUv.x * 256.0 - shiftPx, 0.0, 255.0));
+        int sxR = int(clamp(inFragUv.x * 256.0 + shiftPx, 0.0, 255.0));
+        vec3 pL = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxL) : readBottomPacked(sy, sxL)));
+        vec3 pR = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxR) : readBottomPacked(sy, sxR)));
+        int scY = int(clamp((1.0 - inFragUv.y) * float(max(pushConstants.rendererHeight, 1u)), 0.0, float(max(pushConstants.rendererHeight, 1u) - 1u)));
+        float scScale = float(max(pushConstants.scale, 1u));
+        int scXL = int(clamp(inFragUv.x * float(max(pushConstants.rendererWidth, 1u)) - shiftPx * scScale, 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
+        int scXR = int(clamp(inFragUv.x * float(max(pushConstants.rendererWidth, 1u)) + shiftPx * scScale, 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
+        bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
+        vec4 r3L = screenOwns3D ? imageLoad(u3dImage, ivec2(scXL, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXL, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXL, scY)));
+        vec4 r3R = screenOwns3D ? imageLoad(u3dImage, ivec2(scXR, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXR, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXR, scY)));
+        vec3 leftRgb = mix(finalColor.rgb, (r3L.a > 0.01) ? r3L.rgb : pL, 0.65);
+        vec3 rightRgb = mix(finalColor.rgb, (r3R.a > 0.01) ? r3R.rgb : pR, 0.65);
         vec3 anaglyph;
         anaglyph.r = clamp(dot(leftRgb, vec3(0.456, 0.500, 0.176)) + dot(rightRgb, vec3(-0.043, -0.088, -0.002)), 0.0, 1.0);
         anaglyph.g = clamp(dot(leftRgb, vec3(-0.040, -0.038, -0.016)) + dot(rightRgb, vec3(0.378, 0.734, -0.018)), 0.0, 1.0);
         anaglyph.b = clamp(dot(leftRgb, vec3(-0.015, -0.021, -0.005)) + dot(rightRgb, vec3(-0.072, -0.113, 1.226)), 0.0, 1.0);
-        finalColor = vec4(anaglyph, baseColor.a);
-    }
-    else if (depthMode == 3u)
-    {
-        bool rightEye = inFragUv.x >= 0.5;
-        float eyeSign = rightEye ? 1.0 : -1.0;
-        vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
-        vec4 sbsCenter = evalPresenterAt(sbsUv, false);
-        float depthFactor = estimateSceneDepthFactor(sbsUv, sbsCenter.rgb);
-        float shift = eyeSign * (0.003 + 0.014 * strengthNorm) * depthFactor;
-        finalColor = evalPresenterAt(vec2(clamp(sbsUv.x + shift, 0.001, 0.999), sbsUv.y), false);
+        finalColor = vec4(anaglyph, finalColor.a);
     }
 
     finalColor.rgb = applyConsoleColorProfile(finalColor.rgb, colorProfile);
