@@ -616,7 +616,7 @@ bool canInitializeVulkanRenderer(
     if (cachedProfileResult >= 0)
         return cachedProfileResult != 0;
 
-    constexpr u64 kQuickValidationWaitTimeoutNs = 1'000'000'000ull;
+    constexpr u64 kQuickValidationWaitTimeoutNs = 5'000'000'000ull;
     if (!isVulkanRendererSupported())
     {
         melonDS::Platform::Log(

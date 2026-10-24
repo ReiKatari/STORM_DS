@@ -113,14 +113,9 @@ class EmulatorLaunchPreconditionChecker(
             MelonDSAndroidInterface.configureVulkanDriver(
                 settingsRepository.getVulkanDriverConfiguration(context.applicationInfo.nativeLibraryDir)
             )
-            val pipelineProfile = VulkanPipelineProfile.fromFastPathPreference(
-                settingsRepository.isVulkanFastPathEnabled().first()
-            )
             if (!MelonDSAndroidInterface.isVulkanRendererSupported()) {
                 RendererValidationFailure.UNSUPPORTED
             } else {
-                // Warm up and apply compatibility overrides if needed without blocking Vulkan on slower devices
-                MelonDSAndroidInterface.canInitializeVulkanRenderer(pipelineProfile)
                 null
             }
         }

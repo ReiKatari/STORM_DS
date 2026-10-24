@@ -2657,12 +2657,14 @@ void VulkanRenderer3D::SetRenderSettings(
         if (Initialized)
         {
             Log(
-                LogLevel::Error,
-                "VulkanRenderer3D: refusing live pipeline profile change (%s -> %s)",
+                LogLevel::Warn,
+                "VulkanRenderer3D: resetting initialized renderer for pipeline profile change (%s -> %s)",
                 VulkanPipelineProfileName(PipelineProfile),
                 VulkanPipelineProfileName(pipelineProfile));
+            Texcache.Reset();
+            destroyVulkan();
         }
-        else if (!Texcache.GetLoader().SetPipelineProfile(pipelineProfile))
+        if (!Texcache.GetLoader().SetPipelineProfile(pipelineProfile))
         {
             Log(
                 LogLevel::Error,
@@ -2673,7 +2675,12 @@ void VulkanRenderer3D::SetRenderSettings(
         else
         {
             PipelineProfile = pipelineProfile;
+            InitFailed = false;
         }
+    }
+    if (!Initialized)
+    {
+        InitFailed = false;
     }
     CoverageFixEnabled = conservativeCoverageEnabled;
     CoverageFixPx = std::clamp(conservativeCoveragePx, 0.0f, 2.0f);
@@ -3142,6 +3149,10 @@ std::vector<u32> VulkanRenderer3D::CaptureTopCoverageForDebug()
 
 bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
 {
+    if (!Initialized)
+    {
+        InitFailed = false;
+    }
     if (!ensureInitialized())
         return false;
 
@@ -3175,9 +3186,7 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
     if (!ensureCaptureLineBuffer(nullptr))
         return false;
 
-    const VulkanDeviceProfile& deviceProfile = VulkanContext::Get().GetDeviceProfile();
-    if (ActiveBackendMode == BackendMode::GraphicsHardware
-        && (deviceProfile.IsMaliG52Class || deviceProfile.IsArmMali || deviceProfile.IsPowerVR))
+    if (ActiveBackendMode == BackendMode::GraphicsHardware && GraphicsReady)
     {
         return true;
     }
@@ -5271,7 +5280,10 @@ bool VulkanRenderer3D::createDescriptorObjects()
             VulkanPipelineProfileName(PipelineProfile),
             textureSamplingPathName(ActiveTextureSamplingPath)
         );
-        return false;
+        if (UsesVulkanFastPath(PipelineProfile))
+        {
+            return false;
+        }
     }
 
     if (MelonDSAndroid::areRendererDebugToolsEnabled())

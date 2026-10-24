@@ -13,7 +13,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 object GameCompatibilityManager {
-    private const val PREFS_NAME = "storm_game_compat_guard_v2"
+    private const val PREFS_NAME = "storm_game_compat_guard_v3"
     private const val KEY_LAST_MARKER_GAME_KEY = "last_launch_marker_key"
     private const val KEY_MARKER_PREFIX = "launch_marker_"
     private const val KEY_PROFILE_PREFIX = "safe_profile_"
@@ -33,6 +33,7 @@ object GameCompatibilityManager {
         val jitEnabled: Boolean,
         val resolutionScaling: Int,
         val timestampMs: Long,
+        val crashCount: Int = 1,
     )
 
     data class SafeCompatibilityProfile(
@@ -116,18 +117,29 @@ object GameCompatibilityManager {
     }
 
     fun clearDeviceVulkanUnavailable(context: Context) {
-        val hadInMemory = cachedVulkanUnavailableFp != null
         cachedVulkanUnavailableFp = null
         vulkanUnavailableLoaded = true
+        clearAllSafeProfiles(context)
+    }
+
+    fun clearAllSafeProfiles(context: Context) {
+        profileCache.clear()
+        emptyProfileKeys.clear()
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
-            prefs.edit {
-                remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
-            }
-            bumpVersion()
-        } else if (hadInMemory) {
-            bumpVersion()
+        val keysToRemove = prefs.all.keys.filter {
+            it == KEY_VULKAN_UNAVAILABLE_FINGERPRINT ||
+                it == KEY_LAST_MARKER_GAME_KEY ||
+                it.startsWith(KEY_PROFILE_PREFIX) ||
+                it.startsWith(KEY_MARKER_PREFIX)
         }
+        if (keysToRemove.isNotEmpty()) {
+            prefs.edit {
+                for (k in keysToRemove) {
+                    remove(k)
+                }
+            }
+        }
+        bumpVersion()
     }
 
     fun isDeviceVulkanMarkedUnavailable(context: Context): Boolean {
@@ -222,6 +234,8 @@ object GameCompatibilityManager {
     ) {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prevCrashCount = prefs.getString("$KEY_MARKER_PREFIX$key", null)
+            ?.let { parseLaunchMarker(it)?.crashCount } ?: 0
         val json = JSONObject().apply {
             put("gameKey", key)
             put("gameCode", gameCode.orEmpty())
@@ -231,6 +245,7 @@ object GameCompatibilityManager {
             put("jitEnabled", jitEnabled)
             put("resolutionScaling", resolutionScaling)
             put("timestampMs", System.currentTimeMillis())
+            put("crashCount", prevCrashCount + 1)
         }
         prefs.edit {
             putString("$KEY_MARKER_PREFIX$key", json.toString())
@@ -322,7 +337,7 @@ object GameCompatibilityManager {
                 remove(KEY_LAST_MARKER_GAME_KEY)
             }
         }
-        if (marker == null) {
+        if (marker == null || marker.crashCount < 2) {
             return null
         }
 
@@ -511,6 +526,7 @@ object GameCompatibilityManager {
                 jitEnabled = json.optBoolean("jitEnabled", true),
                 resolutionScaling = json.optInt("resolutionScaling", 1),
                 timestampMs = json.optLong("timestampMs", 0L),
+                crashCount = json.optInt("crashCount", 1),
             )
         }.getOrNull()
     }

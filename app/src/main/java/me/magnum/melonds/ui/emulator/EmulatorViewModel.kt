@@ -1418,19 +1418,8 @@ class EmulatorViewModel @Inject constructor(
                     emulatorManager.setRetroAchievementsSubmissionTransportSuspended(
                         suspendRcClientSubmissionTransport,
                     )
-                    if (settingsRepository.getCurrentVideoRenderer() == VideoRenderer.VULKAN) {
-                        val pipelineProfile = VulkanPipelineProfile.fromFastPathPreference(
-                            settingsRepository.isVulkanFastPathEnabled().first()
-                        )
-                        val canUseVulkan = MelonDSAndroidInterface.isVulkanRendererSupported() &&
-                            MelonDSAndroidInterface.canInitializeVulkanRenderer(pipelineProfile)
-                        if (!canUseVulkan) {
-                            val activeRenderer = getRuntimeRendererOrNull() ?: VideoRenderer.SOFTWARE
-                            settingsRepository.setCurrentVideoRenderer(activeRenderer)
-                            _toastEvent.tryEmit(ToastEvent.RendererInitFailed(VideoRenderer.VULKAN))
-                            return@withLock
-                        }
-                    }
+                    // Do not run synchronous Vulkan validation or overwrite global renderer preference
+                    // while returning from in-game settings; renderer switching during active emulation is disabled.
 
                     val requestedRaEnabled = isRetroAchievementsEnabledForSettingsUpdate(currentState)
                     if (
@@ -2907,23 +2896,8 @@ class EmulatorViewModel @Inject constructor(
                     is EmulatorEvent.RendererInitFailed -> {
                         didReceiveRendererInitFailure = true
                         val failedRenderer = it.renderer
-                        currentRom?.let { rom ->
-                            GameCompatibilityManager.stepDownForLoadFailure(
-                                context = context,
-                                gameCode = rom.gameCode,
-                                romName = rom.config.customName ?: rom.name,
-                                fileName = rom.fileName,
-                                failedRenderer = failedRenderer,
-                            )
-                        }
-                        settingsRepository.getCurrentVideoRenderer()
-                            .takeIf { configuredRenderer -> configuredRenderer == failedRenderer }
-                            ?.let {
-                                val activeRenderer = getRuntimeRendererOrNull()
-                                if (activeRenderer != null && activeRenderer != failedRenderer) {
-                                    settingsRepository.setCurrentVideoRenderer(activeRenderer)
-                                }
-                        }
+                        // AndroidEmulatorManager already stepped down for this ROM session if needed;
+                        // do not overwrite the global renderer setting or step down a second time.
                         _toastEvent.tryEmit(ToastEvent.RendererInitFailed(failedRenderer))
                     }
                     is EmulatorEvent.VulkanCompileProgress -> updateLoadingCompileProgress(it)
