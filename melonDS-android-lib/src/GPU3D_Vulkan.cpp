@@ -97,7 +97,7 @@ using Platform::LogLevel;
 
 namespace
 {
-constexpr u32 kPipelineCacheFileVersion = 7;
+constexpr u32 kPipelineCacheFileVersion = 8;
 constexpr u32 kVulkanDiagnosticDisablePassiveRepeatCoverageExpand = 1u << 0u;
 constexpr float kTriangleAreaEpsilon = 0.000001f;
 constexpr float kTileOverlapEpsilon = 0.00001f;
@@ -5273,13 +5273,14 @@ bool VulkanRenderer3D::createDescriptorObjects()
     const u32 requiredGraphicsCombinedSamplers = texturePolicy.GraphicsCombinedImageSamplerCount();
     const VulkanRenderContextPolicy renderContextPolicy =
         GetVulkanRenderContextPolicy(PipelineProfile);
-    if (deviceProperties.limits.maxPerStageDescriptorSampledImages < textureDescriptorBindingCount
-        || deviceProperties.limits.maxDescriptorSetSampledImages < textureDescriptorBindingCount
-        || (UsesVulkanFastPath(PipelineProfile)
-            && (deviceProperties.limits.maxPerStageDescriptorSampledImages < requiredGraphicsCombinedSamplers
-                || deviceProperties.limits.maxPerStageDescriptorSamplers < requiredGraphicsCombinedSamplers
-                || deviceProperties.limits.maxDescriptorSetSampledImages < requiredGraphicsCombinedSamplers
-                || deviceProperties.limits.maxDescriptorSetSamplers < requiredGraphicsCombinedSamplers)))
+    const u32 requiredComputeCombinedSamplers =
+        (RequestedBackendMode == BackendMode::GraphicsHardware) ? 1u : textureDescriptorBindingCount;
+    if (deviceProperties.limits.maxPerStageDescriptorSampledImages < requiredComputeCombinedSamplers
+        || deviceProperties.limits.maxDescriptorSetSampledImages < requiredComputeCombinedSamplers
+        || deviceProperties.limits.maxPerStageDescriptorSampledImages < requiredGraphicsCombinedSamplers
+        || deviceProperties.limits.maxPerStageDescriptorSamplers < requiredGraphicsCombinedSamplers
+        || deviceProperties.limits.maxDescriptorSetSampledImages < requiredGraphicsCombinedSamplers
+        || deviceProperties.limits.maxDescriptorSetSamplers < requiredGraphicsCombinedSamplers)
     {
         Log(
             LogLevel::Warn,
@@ -5287,15 +5288,12 @@ bool VulkanRenderer3D::createDescriptorObjects()
             deviceProperties.limits.maxPerStageDescriptorSampledImages,
             deviceProperties.limits.maxPerStageDescriptorSamplers,
             deviceProperties.limits.maxDescriptorSetSampledImages,
-            textureDescriptorBindingCount,
+            requiredComputeCombinedSamplers,
             requiredGraphicsCombinedSamplers,
             VulkanPipelineProfileName(PipelineProfile),
             textureSamplingPathName(ActiveTextureSamplingPath)
         );
-        if (UsesVulkanFastPath(PipelineProfile))
-        {
-            return false;
-        }
+        return false;
     }
 
     if (MelonDSAndroid::areRendererDebugToolsEnabled())
@@ -5377,7 +5375,13 @@ bool VulkanRenderer3D::createDescriptorObjects()
     captureLineBinding.descriptorCount = 1;
     captureLineBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 10> bindings = {
+    const bool captureOnlyComputeLayout = (RequestedBackendMode == BackendMode::GraphicsHardware);
+    if (captureOnlyComputeLayout)
+    {
+        textureBinding.descriptorCount = 1u;
+    }
+
+    std::array<VkDescriptorSetLayoutBinding, 10> fullBindings = {
         imageBinding,
         triangleBinding,
         textureBinding,
@@ -5388,11 +5392,19 @@ bool VulkanRenderer3D::createDescriptorObjects()
         spanSetupBinding,
         workOffsetBinding,
         captureLineBinding};
+    std::array<VkDescriptorSetLayoutBinding, 3> captureOnlyBindings = {
+        imageBinding,
+        textureBinding,
+        captureLineBinding};
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo{};
     layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.bindingCount = static_cast<u32>(bindings.size());
-    layoutCreateInfo.pBindings = bindings.data();
+    layoutCreateInfo.bindingCount = captureOnlyComputeLayout
+        ? static_cast<u32>(captureOnlyBindings.size())
+        : static_cast<u32>(fullBindings.size());
+    layoutCreateInfo.pBindings = captureOnlyComputeLayout
+        ? captureOnlyBindings.data()
+        : fullBindings.data();
 
     if (vkCreateDescriptorSetLayout(Device, &layoutCreateInfo, nullptr, &DescriptorSetLayout) != VK_SUCCESS)
     {
@@ -5400,7 +5412,7 @@ bool VulkanRenderer3D::createDescriptorObjects()
         return false;
     }
 
-    const bool singleTexturePath = usesSingleDescriptorTexturePath();
+    const bool singleTexturePath = !captureOnlyComputeLayout && usesSingleDescriptorTexturePath();
     const u32 descriptorSetsPerContext = singleTexturePath ? texturePolicy.TextureDescriptorCount : 1u;
     const u32 descriptorSetCount = static_cast<u32>(
         renderContextPolicy.DescriptorSetCount() * descriptorSetsPerContext);
@@ -5408,9 +5420,9 @@ bool VulkanRenderer3D::createDescriptorObjects()
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     poolSizes[0].descriptorCount = descriptorSetCount;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 8u * descriptorSetCount;
+    poolSizes[1].descriptorCount = (captureOnlyComputeLayout ? 1u : 8u) * descriptorSetCount;
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[2].descriptorCount = textureDescriptorBindingCount * descriptorSetCount;
+    poolSizes[2].descriptorCount = (captureOnlyComputeLayout ? 1u : textureDescriptorBindingCount) * descriptorSetCount;
 
     VkDescriptorPoolCreateInfo poolCreateInfo{};
     poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -5495,9 +5507,7 @@ bool VulkanRenderer3D::createGraphicsDescriptorObjects()
     triangleBinding.binding = 0;
     triangleBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triangleBinding.descriptorCount = 1;
-    triangleBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    if (texturePolicy.UsesNormalizedTextureDescriptors)
-        triangleBinding.stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    triangleBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutBinding textureBinding{};
     textureBinding.binding = 1;
@@ -10689,6 +10699,11 @@ void VulkanRenderer3D::updateDescriptorSet(RenderContext* context)
 
 void VulkanRenderer3D::updateDescriptorSet(RenderContext* context, u32 singleTextureDescriptorIndex)
 {
+    if (ActiveBackendMode == BackendMode::GraphicsHardware
+        || RequestedBackendMode == BackendMode::GraphicsHardware)
+    {
+        return;
+    }
     const VulkanTextureDescriptorPolicy texturePolicy = getTextureDescriptorPolicy();
     const VkDescriptorSet DescriptorSet = getDescriptorSet(context, singleTextureDescriptorIndex);
     const VkBuffer TriangleBuffer = context != nullptr ? context->TriangleBuffer : this->TriangleBuffer;

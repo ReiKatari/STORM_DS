@@ -1,6 +1,6 @@
 #version 450
 
-const uint MAX_TEXTURE_DESCRIPTORS = 128u;
+const uint MAX_TEXTURE_DESCRIPTORS = 62u;
 const float MAX_DEPTH = 16777215.0;
 const uint VARIANT_WILDCARD = 0xFFFFFFFFu;
 const uint VARIANT_PIPELINE_MASK = (1u << 8u) - 1u;

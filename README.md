@@ -46,8 +46,8 @@ cd STORM_DS
 ```
 
 После завершения сборки исполняемые пакеты APK будут сформированы для установки:
-- `STORM_DS_7.7.2.apk` — основная версия с поддержкой пользовательских драйверов Qualcomm Adreno и Turnip (`libadrenotools`).
-- `STORM_DS_7.7.2_LEGACY.apk` — универсальная версия повышенной совместимости без `libadrenotools` (для процессоров MediaTek, Exynos, Tensor, Kirin, Unisoc).
+- `STORM_DS_7.7.3.apk` — основная версия с поддержкой пользовательских драйверов Qualcomm Adreno и Turnip (`libadrenotools`).
+- `STORM_DS_7.7.3_LEGACY.apk` — универсальная версия повышенной совместимости без `libadrenotools` (для процессоров MediaTek, Exynos, Tensor, Kirin, Unisoc).
 
 ## **Благодарности**
 - **SapphireRhodonite (автор WatermelonDS)** — за создание эмулятора WatermelonDS, послужившего основой форка, разработку высокопроизводительного порта на Android, аппаратный рендерер Vulkan, внедрение шейдерного конвейера librashader и инновационный интерфейс.

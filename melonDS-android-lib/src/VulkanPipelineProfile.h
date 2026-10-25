@@ -113,48 +113,48 @@ struct VulkanTextureDescriptorPolicy
     switch (profile)
     {
         case VulkanPipelineProfile::Compatibility:
-            return {128u, false};
+            return {14u, false};
         case VulkanPipelineProfile::FastPath:
-            return {256u, true};
+            return {62u, true};
     }
 
-    return {128u, false};
+    return {14u, false};
 }
 
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).MaxActiveTextureDescriptors() == 127u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).MaxActiveTextureDescriptors() == 13u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).FallbackTextureDescriptorIndex() == 127u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).FallbackTextureDescriptorIndex() == 13u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).ResolveDescriptorIndex(126u) == 126u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).ResolveDescriptorIndex(12u) == 12u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).ResolveDescriptorIndex(128u) == 127u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).ResolveDescriptorIndex(14u) == 13u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).ResolveDescriptorIndex(255u) == 127u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).ResolveDescriptorIndex(255u) == 13u);
 static_assert(
     !GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).UsesNormalizedTextureDescriptors);
 static_assert(
     GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).GraphicsDescriptorBindingCount() == 6u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).GraphicsCombinedImageSamplerCount() == 130u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).GraphicsCombinedImageSamplerCount() == 16u);
 static_assert(
     GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).GraphicsCombinedImageSamplerCountFor(7u) == 9u);
 static_assert(
     GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::Compatibility).DescriptorViewsValid(true, false));
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).MaxActiveTextureDescriptors() == 255u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).MaxActiveTextureDescriptors() == 61u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).FallbackTextureDescriptorIndex() == 255u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).FallbackTextureDescriptorIndex() == 61u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).ResolveDescriptorIndex(128u) == 128u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).ResolveDescriptorIndex(60u) == 60u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).ResolveDescriptorIndex(254u) == 254u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).ResolveDescriptorIndex(62u) == 61u);
 static_assert(
     GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).UsesNormalizedTextureDescriptors);
 static_assert(
     GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).GraphicsDescriptorBindingCount() == 7u);
 static_assert(
-    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).GraphicsCombinedImageSamplerCount() == 514u);
+    GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).GraphicsCombinedImageSamplerCount() == 126u);
 static_assert(
     GetVulkanTextureDescriptorPolicy(VulkanPipelineProfile::FastPath).GraphicsCombinedImageSamplerCountFor(7u) == 16u);
 static_assert(
