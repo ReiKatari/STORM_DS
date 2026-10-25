@@ -1887,8 +1887,6 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
             "Vulkan precompile failed (%s)",
             reason != nullptr ? reason : "unknown"
         );
-        if (eventMessenger != nullptr)
-            eventMessenger->onRendererInitFailed(Renderer::Vulkan);
         return false;
     };
 
@@ -1919,6 +1917,7 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
             Platform::LogLevel::Warn,
             "Vulkan precompile: FastPath validation failed; downgrading session to Compatibility profile"
         );
+        vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
         vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
         vulkanRenderSettings.useSimplePipeline = true;
         vulkanOutput = std::make_unique<VulkanOutput>(VulkanPipelineProfile::Compatibility);
@@ -1944,6 +1943,14 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
     {
         if (!downgradeToCompatibilityProfile() || !renderer3D.EnsureVulkanReadyForValidation())
             return failPrecompile("renderer pipelines");
+    }
+    if (renderer3D.GetVulkanPipelineProfile() != vulkanRenderSettings.pipelineProfile)
+    {
+        const VulkanPipelineProfile activeProfile = renderer3D.GetVulkanPipelineProfile();
+        vulkanSessionProfile.set(activeProfile);
+        vulkanRenderSettings.pipelineProfile = activeProfile;
+        vulkanRenderSettings.useSimplePipeline = true;
+        vulkanOutput = std::make_unique<VulkanOutput>(activeProfile);
     }
 
     emitProgress(kVulkanCompileStageInitOutput, 2);
@@ -2270,9 +2277,9 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
                     );
                 }
             }
-            else if (useFastPathPrepareFailurePolicy
-                && prepareBlockedByMissingHighresHistory)
+            else if (prepareBlockedByMissingHighresHistory)
             {
+                (void)useFastPathPrepareFailurePolicy;
                 vulkanHeldPreviousFrameWindow++;
                 vulkanPrepareFailureCount = 0;
                 if (areRendererDebugBgObjLogsEnabled())
@@ -2285,9 +2292,9 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
                     );
                 }
             }
-            else if (useFastPathPrepareFailurePolicy
-                && prepareBlockedByMissingRegularCapture3dSource)
+            else if (prepareBlockedByMissingRegularCapture3dSource)
             {
+                (void)useFastPathPrepareFailurePolicy;
                 vulkanHeldPreviousFrameWindow++;
                 vulkanPrepareFailedWindow++;
                 vulkanPrepareFailureCount = 0;
@@ -2311,49 +2318,36 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
             }
             else if (renderFrame != nullptr && hasPresentableSoftPackedFrame && !isFrameUploaded)
             {
+                (void)useFastPathPrepareFailurePolicy;
                 vulkanPrepareFailedWindow++;
                 vulkanPrepareFailureCount++;
-                if (!useFastPathPrepareFailurePolicy)
+                Platform::Log(
+                    Platform::LogLevel::Warn,
+                    "VulkanOutput: prepare/present failed (%d/4) frameId=%u hasColor=%u colorInit=%u size=%ux%u softValid=%u front=%d",
+                    vulkanPrepareFailureCount,
+                    static_cast<unsigned>(renderFrame->frameId),
+                    renderer3D.HasColorTarget() ? 1u : 0u,
+                    renderer3D.IsColorTargetInitialized() ? 1u : 0u,
+                    renderer3D.GetColorTargetWidth(),
+                    renderer3D.GetColorTargetHeight(),
+                    lastSoftPackedFrameSnapshot.valid ? 1u : 0u,
+                    lastSoftPackedFrameSnapshot.frontBufferLatched
+                );
+                if (vulkanPrepareFailureCount == 1 || (vulkanPrepareFailureCount % 30) == 0)
                 {
                     Platform::Log(
                         Platform::LogLevel::Warn,
-                        "VulkanOutput: prepare/present failed, requesting resync (%d/4)",
-                        vulkanPrepareFailureCount
+                        "VulkanOutput: requesting bounded presentation resync after prepare/present failure"
                     );
                     requestVulkanPresentationResync();
-                    if (vulkanPrepareFailureCount >= 4)
-                        handleVulkanRuntimeFailure("prepare/present");
                 }
-                else
+                if (vulkanPrepareFailureCount >= 4)
                 {
                     Platform::Log(
                         Platform::LogLevel::Warn,
-                        "VulkanOutput: prepare/present failed (%d/4) frameId=%u hasColor=%u colorInit=%u size=%ux%u softValid=%u front=%d",
-                        vulkanPrepareFailureCount,
-                        static_cast<unsigned>(renderFrame->frameId),
-                        renderer3D.HasColorTarget() ? 1u : 0u,
-                        renderer3D.IsColorTargetInitialized() ? 1u : 0u,
-                        renderer3D.GetColorTargetWidth(),
-                        renderer3D.GetColorTargetHeight(),
-                        lastSoftPackedFrameSnapshot.valid ? 1u : 0u,
-                        lastSoftPackedFrameSnapshot.frontBufferLatched
+                        "VulkanOutput: repeated prepare/present failures; waiting for next valid prepared frame without presenting an empty frame"
                     );
-                    if (vulkanPrepareFailureCount == 1 || (vulkanPrepareFailureCount % 30) == 0)
-                    {
-                        Platform::Log(
-                            Platform::LogLevel::Warn,
-                            "VulkanOutput: requesting bounded presentation resync after prepare/present failure"
-                        );
-                        requestVulkanPresentationResync();
-                    }
-                    if (vulkanPrepareFailureCount >= 4)
-                    {
-                        Platform::Log(
-                            Platform::LogLevel::Warn,
-                            "VulkanOutput: repeated prepare/present failures; waiting for next valid prepared frame without presenting an empty frame"
-                        );
-                        vulkanPrepareFailureCount = 0;
-                    }
+                    vulkanPrepareFailureCount = 0;
                 }
             }
             else if (isFrameUploaded)
@@ -5531,6 +5525,7 @@ void MelonInstance::updateRenderer()
                         Platform::LogLevel::Warn,
                         "VulkanOutput init failed in FastPath; falling back to Compatibility profile"
                     );
+                    vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
                     if (currentConfiguration && currentConfiguration->renderSettings)
                     {
                         auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(
@@ -5546,13 +5541,16 @@ void MelonInstance::updateRenderer()
             if (!vulkanOutput->isInitialized() && !vulkanOutput->init())
             {
                 Platform::Log(Platform::LogLevel::Error, "Failed to initialize Vulkan renderer backend");
-                if (eventMessenger)
-                    eventMessenger->onRendererInitFailed(Renderer::Vulkan);
-
-                if (frame == 0)
+                if (nds->IsRunning())
                 {
-                    Platform::Log(Platform::LogLevel::Error, "Aborting launch after Vulkan renderer initialization failure");
-                    nds->Stop(Platform::StopReason::BadExceptionRegion);
+                    if (eventMessenger)
+                        eventMessenger->onRendererInitFailed(Renderer::Vulkan);
+
+                    if (frame == 0)
+                    {
+                        Platform::Log(Platform::LogLevel::Error, "Aborting launch after Vulkan renderer initialization failure");
+                        nds->Stop(Platform::StopReason::BadExceptionRegion);
+                    }
                 }
 
                 currentConfiguration->renderer = currentRenderer;
@@ -5604,13 +5602,16 @@ void MelonInstance::updateRenderer()
                 if (!vulkanRenderer)
                 {
                     Platform::Log(Platform::LogLevel::Error, "Failed to create Vulkan renderer backend");
-                    if (eventMessenger)
-                        eventMessenger->onRendererInitFailed(Renderer::Vulkan);
-
-                    if (frame == 0)
+                    if (nds->IsRunning())
                     {
-                        Platform::Log(Platform::LogLevel::Error, "Aborting launch after Vulkan renderer validation failure");
-                        nds->Stop(Platform::StopReason::BadExceptionRegion);
+                        if (eventMessenger)
+                            eventMessenger->onRendererInitFailed(Renderer::Vulkan);
+
+                        if (frame == 0)
+                        {
+                            Platform::Log(Platform::LogLevel::Error, "Aborting launch after Vulkan renderer validation failure");
+                            nds->Stop(Platform::StopReason::BadExceptionRegion);
+                        }
                     }
 
                     if (currentRenderer != Renderer::Vulkan)
@@ -5664,8 +5665,15 @@ void MelonInstance::updateRenderer()
         }
         case Renderer::Vulkan:
         {
-            auto vulkanRenderSettings = static_cast<VulkanRenderSettings&>(*currentConfiguration->renderSettings);
+            auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(*currentConfiguration->renderSettings);
             auto& renderer3d = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+            if (renderer3d.GetVulkanPipelineProfile() == VulkanPipelineProfile::Compatibility
+                && vulkanRenderSettings.pipelineProfile == VulkanPipelineProfile::FastPath)
+            {
+                vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
+                vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
+                vulkanRenderSettings.useSimplePipeline = true;
+            }
             renderer3d.SetBackendMode(getConfiguredVulkanBackendMode(vulkanRenderSettings));
             renderer3d.SetRenderSettings(
                 vulkanRenderSettings.threadedRendering,

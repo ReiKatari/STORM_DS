@@ -2652,6 +2652,12 @@ void VulkanRenderer3D::SetRenderSettings(
     ScaleFactor = std::max(1, scale);
     (void)useSimplePipeline;
     UseSimplePipeline = true;
+    if (Initialized
+        && PipelineProfile == VulkanPipelineProfile::Compatibility
+        && pipelineProfile == VulkanPipelineProfile::FastPath)
+    {
+        pipelineProfile = VulkanPipelineProfile::Compatibility;
+    }
     if (pipelineProfile != PipelineProfile)
     {
         if (Initialized)
@@ -3161,8 +3167,11 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
 
     if (!ensureRenderTarget(kValidationWidth, kValidationHeight))
         return false;
-    if (!ensureResultBuffer(kValidationWidth, kValidationHeight))
-        return false;
+    if (ActiveBackendMode != BackendMode::GraphicsHardware)
+    {
+        if (!ensureResultBuffer(kValidationWidth, kValidationHeight))
+            return false;
+    }
     if (!ensureTriangleBuffer(nullptr, 1))
         return false;
     if (!ensureGraphicsVertexBuffer(nullptr, 1))
@@ -3171,14 +3180,17 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
         return false;
     if (!ensureGraphicsEdgeIndexBuffer(1))
         return false;
-    if (!ensureBinMaskBuffer(0, kValidationWidth, kValidationHeight))
-        return false;
-    if (!ensureGroupListBuffer(0, kValidationWidth, kValidationHeight))
-        return false;
-    if (!ensureSpanSetupBuffer(1))
-        return false;
-    if (!ensureWorkOffsetBuffer(kValidationWidth, kValidationHeight, 1))
-        return false;
+    if (ActiveBackendMode != BackendMode::GraphicsHardware)
+    {
+        if (!ensureBinMaskBuffer(0, kValidationWidth, kValidationHeight))
+            return false;
+        if (!ensureGroupListBuffer(0, kValidationWidth, kValidationHeight))
+            return false;
+        if (!ensureSpanSetupBuffer(1))
+            return false;
+        if (!ensureWorkOffsetBuffer(kValidationWidth, kValidationHeight, 1))
+            return false;
+    }
     if (!ensureToonBuffer(nullptr))
         return false;
     if (!ensureGraphicsClearBuffer(nullptr))
@@ -5876,6 +5888,26 @@ bool VulkanRenderer3D::createComputePipeline()
 
         return true;
     };
+
+    if (ActiveBackendMode == BackendMode::GraphicsHardware)
+    {
+        Log(
+            LogLevel::Warn,
+            "VulkanRuntime[Capabilities]: backend=%s sampling=%s",
+            backendModeName(ActiveBackendMode),
+            textureSamplingPathName(samplingPath)
+        );
+        if (!createPipelineFromSpirv(
+                captureLineExportShader.bytes,
+                captureLineExportShader.length,
+                "capture_line_export",
+                nullptr,
+                &CaptureLineExportPipeline))
+        {
+            return false;
+        }
+        return true;
+    }
 
     if (!createPipelineFromSpirv(
             melonDS_gpu3d_vulkan_interp_spans_comp_spv,

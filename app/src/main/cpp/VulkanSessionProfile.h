@@ -22,6 +22,11 @@ public:
         return effectiveProfile;
     }
 
+    constexpr void set(melonDS::VulkanPipelineProfile profile) const noexcept
+    {
+        effectiveProfile = profile;
+    }
+
     [[nodiscard]] constexpr bool usesVulkanStrategy() const noexcept
     {
         return sessionUsesVulkanStrategy;
@@ -45,7 +50,7 @@ public:
 
 private:
     bool sessionUsesVulkanStrategy;
-    melonDS::VulkanPipelineProfile effectiveProfile;
+    mutable melonDS::VulkanPipelineProfile effectiveProfile;
 };
 
 }

@@ -2902,7 +2902,10 @@ class EmulatorViewModel @Inject constructor(
                     }
                     is EmulatorEvent.VulkanCompileProgress -> updateLoadingCompileProgress(it)
                     is EmulatorEvent.Stop -> {
-                        if (isRetryingRomLoadWithFallback && _emulatorState.value is EmulatorState.LoadingRom) {
+                        if (_emulatorState.value is EmulatorState.LoadingRom &&
+                            (isRetryingRomLoadWithFallback ||
+                                (it.reason == EmulatorEvent.Stop.Reason.BadExceptionRegion && didReceiveRendererInitFailure))
+                        ) {
                             return@collect
                         }
                         when (it.reason) {

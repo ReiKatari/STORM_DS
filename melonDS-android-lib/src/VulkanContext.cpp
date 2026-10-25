@@ -542,13 +542,16 @@ bool VulkanContext::initializeLocked()
 
         const bool dynamicTextureIndexingFeatureAvailable =
             deviceFeatures2.features.shaderSampledImageArrayDynamicIndexing == VK_TRUE;
-        // Mali and PowerVR drivers compile the compat-dynamic-uniform graphics_hw
-        // shaders unreliably. Force the base single-descriptor path there so
+        // Mali, PowerVR, and older Adreno Vulkan 1.1 drivers compile the compat-dynamic-uniform
+        // graphics_hw shaders unreliably. Force the base single-descriptor path there so
         // graphics_hw remains available instead of falling over during init.
+        const bool isOlderAdrenoVulkan11 =
+            candidateProfile.IsAdreno && !apiAtLeast12;
         const bool forceDynamicTextureIndexingOffForDevice =
             candidateProfile.IsMaliG52Class
             || candidateProfile.IsArmMali
-            || candidateProfile.IsPowerVR;
+            || candidateProfile.IsPowerVR
+            || isOlderAdrenoVulkan11;
         const bool enableDynamicTextureIndexing =
             !ForceDisableDynamicTextureIndexing
             && !forceDynamicTextureIndexingOffForDevice
