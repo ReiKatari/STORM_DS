@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import me.magnum.melonds.R
 import me.magnum.melonds.common.suspendMapCatching
 import me.magnum.melonds.common.suspendRunCatching
 import me.magnum.melonds.domain.model.Version
@@ -15,6 +16,7 @@ import me.magnum.melonds.github.GitHubUpdateChannel
 import me.magnum.melonds.github.GitHubUpdateCheckPolicy
 import me.magnum.melonds.github.PREF_KEY_GITHUB_CHECK_FOR_UPDATES
 import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
+import me.magnum.melonds.github.StormUpdateMirrorClient
 import me.magnum.melonds.utils.PackageManagerCompat
 
 class GitHubProdUpdatesRepository(
@@ -35,7 +37,12 @@ class GitHubProdUpdatesRepository(
             return Result.success(null)
         }
 
-        return suspendRunCatching { api.getReleases() }.suspendMapCatching { releases ->
+        return suspendRunCatching {
+            StormUpdateMirrorClient.fetchReleasesWithMirror { api.getReleases() }
+        }.suspendMapCatching { releases ->
+            if (releases.isEmpty()) {
+                return@suspendMapCatching null
+            }
             updateLastUpdateCheckTime()
             val packageInfo = PackageManagerCompat.getPackageInfo(
                 context.packageManager,
@@ -54,12 +61,16 @@ class GitHubProdUpdatesRepository(
                     GitHubUpdateChannel.STABLE.preferenceValue,
                 ),
             )
+            val preferLegacyApk = !runCatching {
+                context.resources.getBoolean(R.bool.adrenotools_enabled)
+            }.getOrDefault(true)
 
             GitHubReleaseSelector.selectProduction(
                 releases = releases,
                 currentVersion = currentVersion,
                 channel = channel,
                 skippedVersion = skippedVersion,
+                preferLegacyApk = preferLegacyApk,
             )?.let { candidate ->
                 AppUpdate(
                     type = AppUpdate.Type.PRODUCTION,

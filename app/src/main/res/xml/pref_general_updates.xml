@@ -1,4 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen>
-    <!-- Empty on purpose since not all builds have update options -->
+<PreferenceScreen
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:key="category_updates"
+        android:title="@string/pref_cat_updates"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreference
+            android:key="github_check_for_updates"
+            android:title="@string/check_for_updates"
+            android:summary="@string/check_for_updates_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="true" />
+
+        <ListPreference
+            android:key="github_update_channel"
+            android:title="@string/update_channel_title"
+            android:summary="%s"
+            android:entries="@array/update_channel_options"
+            android:entryValues="@array/update_channel_values"
+            android:defaultValue="stable"
+            app:iconSpaceReserved="false"
+            app:dependency="github_check_for_updates" />
+    </PreferenceCategory>
 </PreferenceScreen>

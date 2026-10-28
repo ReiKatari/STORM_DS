@@ -18,21 +18,26 @@ object GitHubReleaseSelector {
         currentVersion: Version,
         channel: GitHubUpdateChannel,
         skippedVersion: Version?,
+        preferLegacyApk: Boolean = false,
     ): GitHubReleaseCandidate? {
         return releases.asSequence()
             .filter(::belongsToConfiguredRepository)
             .filterNot { it.draft }
             .filter { channel == GitHubUpdateChannel.STABLE_AND_PRERELEASE || !it.prerelease }
             .mapNotNull { release ->
-                val version = Version.parseOrNull(release.tagName) ?: return@mapNotNull null
+                val cleanTag = release.tagName.trim().removePrefix("v").removePrefix("V")
+                val version = Version.parseOrNull(cleanTag) ?: Version.parseOrNull(release.tagName) ?: return@mapNotNull null
                 if (version.type == Version.ReleaseType.NIGHTLY || version <= currentVersion) {
                     return@mapNotNull null
                 }
                 if (skippedVersion != null && version == skippedVersion) {
                     return@mapNotNull null
                 }
-                val asset = release.assets.firstOrNull(::isProductionApk) ?: return@mapNotNull null
-                val published = parsePublishedAt(release) ?: return@mapNotNull null
+                val matchingAssets = release.assets.filter(::isProductionApk)
+                val asset = matchingAssets.firstOrNull { isLegacyApk(it) == preferLegacyApk }
+                    ?: matchingAssets.firstOrNull()
+                    ?: return@mapNotNull null
+                val published = parsePublishedAt(release) ?: Instant.fromEpochMilliseconds(0L)
                 GitHubReleaseCandidate(release, asset, version, published)
             }
             .maxWithOrNull(compareBy<GitHubReleaseCandidate> { it.version }.thenBy { it.publishedAt })
@@ -68,14 +73,22 @@ object GitHubReleaseSelector {
             "nightly" in lowerName
     }
 
+    private fun isLegacyApk(asset: AssetDto): Boolean {
+        return "legacy" in asset.name.lowercase()
+    }
+
     private fun belongsToConfiguredRepository(release: ReleaseDto): Boolean {
-        return release.htmlUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}tag/")
+        return release.htmlUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}tag/") ||
+            release.htmlUrl.startsWith(STORM_GAMES_WORLD_RELEASE_URL_PREFIX) ||
+            release.htmlUrl.startsWith(STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX)
     }
 
     private fun isRepositoryDownload(asset: AssetDto): Boolean {
         return asset.id > 0 &&
-            asset.size > 0 &&
-            asset.url.startsWith("${GITHUB_RELEASE_URL_PREFIX}download/")
+            asset.size >= 0 &&
+            (asset.url.startsWith("${GITHUB_RELEASE_URL_PREFIX}download/") ||
+                asset.url.startsWith(STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX) ||
+                asset.url.startsWith(STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX))
     }
 
     private fun parsePublishedAt(release: ReleaseDto): Instant? {

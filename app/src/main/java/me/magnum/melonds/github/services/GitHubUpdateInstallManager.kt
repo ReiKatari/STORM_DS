@@ -17,6 +17,10 @@ import me.magnum.melonds.domain.model.DownloadProgress
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.services.UpdateInstallManager
 import me.magnum.melonds.github.GITHUB_RELEASE_URL_PREFIX
+import me.magnum.melonds.github.STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX
+import me.magnum.melonds.github.STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX
+import me.magnum.melonds.github.STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX
+import me.magnum.melonds.github.STORM_GAMES_WORLD_RELEASE_URL_PREFIX
 import me.magnum.melonds.utils.PackageManagerCompat
 import java.io.File
 import java.net.HttpURLConnection
@@ -48,82 +52,113 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
             return@flow
         }
 
-        if (!hasTrustedGitHubOrigin(update)) {
-            Log.w(TAG, "Rejected update with an unexpected GitHub release origin")
+        if (!hasTrustedOrigin(update)) {
+            Log.w(TAG, "Rejected update with an unexpected release origin: ${update.sourceReleaseUrl}")
             emit(DownloadProgress.DownloadFailed)
             return@flow
         }
 
-        try {
-            var currentUrl = update.downloadUri.toString()
-            var connection: HttpURLConnection? = null
-            var redirects = 0
-            while (redirects < 10) {
-                val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                    instanceFollowRedirects = false
-                    connectTimeout = 20_000
-                    readTimeout = 30_000
-                    setRequestProperty("User-Agent", "STORM-DS-Updater")
-                    setRequestProperty("Accept", "application/octet-stream, */*")
-                }
-                val code = conn.responseCode
-                if (code in 300..399) {
-                    val location = conn.getHeaderField("Location")
-                    conn.disconnect()
-                    if (location.isNullOrBlank()) {
-                        emit(DownloadProgress.DownloadFailed)
-                        return@flow
-                    }
-                    currentUrl = URL(URL(currentUrl), location).toString()
-                    redirects++
-                } else {
-                    connection = conn
-                    break
-                }
-            }
+        val candidateUrls = buildCandidateDownloadUrls(update)
+        var downloadedSuccessfully = false
 
-            val activeConnection = connection
-            if (activeConnection == null || activeConnection.responseCode !in 200..299) {
-                activeConnection?.disconnect()
-                emit(DownloadProgress.DownloadFailed)
-                return@flow
-            }
-
+        for (candidateUrl in candidateUrls) {
             try {
-                val totalSize = activeConnection.contentLengthLong.takeIf { it > 0L } ?: update.binarySize
-                var downloaded = 0L
-                emit(DownloadProgress.DownloadUpdate(totalSize, 0L))
-
-                activeConnection.inputStream.use { input ->
-                    destinationFile.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read <= 0) break
-                            output.write(buffer, 0, read)
-                            downloaded += read
-                            if (totalSize > 0L) {
-                                emit(DownloadProgress.DownloadUpdate(totalSize, downloaded))
-                            }
+                if (destinationFile.isFile) {
+                    destinationFile.delete()
+                }
+                var currentUrl = candidateUrl
+                var connection: HttpURLConnection? = null
+                var redirects = 0
+                while (redirects < 10) {
+                    val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = false
+                        connectTimeout = 20_000
+                        readTimeout = 30_000
+                        setRequestProperty("User-Agent", "STORM-DS-Updater")
+                        setRequestProperty("Accept", "application/octet-stream, */*")
+                    }
+                    val code = conn.responseCode
+                    if (code in 300..399) {
+                        val location = conn.getHeaderField("Location")
+                        conn.disconnect()
+                        if (location.isNullOrBlank()) {
+                            break
                         }
-                        output.flush()
+                        currentUrl = URL(URL(currentUrl), location).toString()
+                        redirects++
+                    } else {
+                        connection = conn
+                        break
                     }
                 }
-            } finally {
-                activeConnection.disconnect()
-            }
 
-            if (validateDownloadedApk(update, destinationFile)) {
-                openInstaller(destinationFile)
-                emit(DownloadProgress.DownloadComplete)
-            } else {
-                emit(DownloadProgress.DownloadFailed)
+                val activeConnection = connection
+                if (activeConnection == null || activeConnection.responseCode !in 200..299) {
+                    activeConnection?.disconnect()
+                    continue
+                }
+
+                try {
+                    val totalSize = activeConnection.contentLengthLong.takeIf { it > 0L } ?: update.binarySize
+                    var downloaded = 0L
+                    emit(DownloadProgress.DownloadUpdate(totalSize, 0L))
+
+                    activeConnection.inputStream.use { input ->
+                        destinationFile.outputStream().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read <= 0) break
+                                output.write(buffer, 0, read)
+                                downloaded += read
+                                if (totalSize > 0L) {
+                                    emit(DownloadProgress.DownloadUpdate(totalSize, downloaded))
+                                }
+                            }
+                            output.flush()
+                        }
+                    }
+                    downloadedSuccessfully = true
+                } finally {
+                    activeConnection.disconnect()
+                }
+
+                if (downloadedSuccessfully && destinationFile.length() > 0L) {
+                    break
+                } else {
+                    downloadedSuccessfully = false
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Download attempt failed from $candidateUrl, trying next mirror if available", e)
             }
-        } catch (e: Throwable) {
-            Log.e(TAG, "Failed to download update APK", e)
+        }
+
+        if (!downloadedSuccessfully) {
+            emit(DownloadProgress.DownloadFailed)
+            return@flow
+        }
+
+        if (validateDownloadedApk(update, destinationFile)) {
+            openInstaller(destinationFile)
+            emit(DownloadProgress.DownloadComplete)
+        } else {
             emit(DownloadProgress.DownloadFailed)
         }
     }.flowOn(Dispatchers.IO)
+
+    private fun buildCandidateDownloadUrls(update: AppUpdate): List<String> {
+        val primary = update.downloadUri.toString()
+        val fileName = primary.substringAfterLast('/').substringBefore('?')
+        val urls = linkedSetOf(primary)
+        if (fileName.endsWith(".apk", ignoreCase = true)) {
+            urls.add("$STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX$fileName")
+            urls.add("$STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX$fileName")
+            if (update.releaseTag.isNotBlank()) {
+                urls.add("${GITHUB_RELEASE_URL_PREFIX}download/${update.releaseTag}/$fileName")
+            }
+        }
+        return urls.toList()
+    }
 
     @Suppress("DEPRECATION")
     internal fun validateDownloadedApk(update: AppUpdate, apkFile: File): Boolean {
@@ -151,9 +186,15 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
         return rejection == null || reject(rejection.name.lowercase())
     }
 
-    private fun hasTrustedGitHubOrigin(update: AppUpdate): Boolean {
-        return update.sourceReleaseUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}tag/") &&
-            update.downloadUri.toString().startsWith("${GITHUB_RELEASE_URL_PREFIX}download/")
+    private fun hasTrustedOrigin(update: AppUpdate): Boolean {
+        val validReleaseOrigin = update.sourceReleaseUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}tag/") ||
+            update.sourceReleaseUrl.startsWith(STORM_GAMES_WORLD_RELEASE_URL_PREFIX) ||
+            update.sourceReleaseUrl.startsWith(STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX)
+        val downloadUrl = update.downloadUri.toString()
+        val validDownloadOrigin = downloadUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}download/") ||
+            downloadUrl.startsWith(STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX) ||
+            downloadUrl.startsWith(STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX)
+        return validReleaseOrigin && validDownloadOrigin
     }
 
     private fun openInstaller(destinationFile: File) {
