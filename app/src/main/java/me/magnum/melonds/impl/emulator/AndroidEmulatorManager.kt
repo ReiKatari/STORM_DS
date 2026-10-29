@@ -1173,15 +1173,35 @@ class AndroidEmulatorManager(
         val reservedSectors = ((sramBytes[0x0E].toInt() and 0xFF) or ((sramBytes[0x0F].toInt() and 0xFF) shl 8)).coerceAtLeast(1)
         val totalSectors = sramBytes.size / bytesPerSector
         val rootDirSectors = ((rootEntries * 32) + bytesPerSector - 1) / bytesPerSector
-        val isFat16 = sramBytes.size > 0x80000
         val approxDataSectors = (totalSectors - reservedSectors - rootDirSectors - numFats).coerceAtLeast(1)
         val totalClusters = (approxDataSectors / sectorsPerCluster).coerceAtLeast(1)
+        val isFat16 = totalClusters >= 4086
         val fatBytes = if (isFat16) (totalClusters + 2) * 2 else ((totalClusters + 2) * 3 + 1) / 2
         val requiredSectorsPerFat = ((fatBytes + bytesPerSector - 1) / bytesPerSector).coerceAtLeast(1)
         if (sectorsPerFat < requiredSectorsPerFat) {
             Log.w("AndroidEmulatorManager", "Invalid FAT12/16 save: sectorsPerFat=$sectorsPerFat < required=$requiredSectorsPerFat (size=${sramBytes.size}), will reformat")
             return false
         }
+
+        // If marked FAT16 but should be FAT12 (< 4086 clusters), check if root dir is empty
+        if (!isFat16 && sramBytes.size >= 0x3E && sramBytes.copyOfRange(0x36, 0x3B).toString(java.nio.charset.StandardCharsets.US_ASCII) == "FAT16") {
+            val rootStart = (reservedSectors + numFats * sectorsPerFat) * bytesPerSector
+            val rootEnd = rootStart + rootDirSectors * bytesPerSector
+            if (sramBytes.size >= rootEnd) {
+                var rootEmpty = true
+                for (offset in rootStart until rootEnd step 32) {
+                    if (sramBytes[offset] != 0.toByte()) {
+                        rootEmpty = false
+                        break
+                    }
+                }
+                if (rootEmpty) {
+                    Log.i("AndroidEmulatorManager", "Empty mis-formatted FAT16 template detected for size ${sramBytes.size}, will reformat as clean FAT12")
+                    return false
+                }
+            }
+        }
+
         val firstByte = sramBytes[0]
         return sramBytes.any { it != firstByte }
     }
@@ -1191,16 +1211,25 @@ class AndroidEmulatorManager(
         val buf = ByteArray(targetSize)
         val bytesPerSector = 512
         val totalSectors = targetSize / bytesPerSector
-        val sectorsPerCluster = 1
+        val sectorsPerCluster = if (totalSectors > 8192) 8 else if (totalSectors > 1024) 4 else 1
         val reservedSectors = 1
         val numFats = 2
         val rootDirEntries = if (targetSize <= 0x8000) 16 else if (targetSize <= 0x20000) 64 else 128
         val rootDirSectors = ((rootDirEntries * 32) + bytesPerSector - 1) / bytesPerSector
-        val isFat16 = targetSize > 0x80000
+
+        // Accurate 2-step calculation matching DSi_NAND.cpp (TWL-SDK FAT12 limit: totalClusters < 4086)
         val approxDataSectors = (totalSectors - reservedSectors - rootDirSectors - 2).coerceAtLeast(1)
-        val totalClusters = (approxDataSectors / sectorsPerCluster).coerceAtLeast(1)
-        val fatBytes = if (isFat16) (totalClusters + 2) * 2 else ((totalClusters + 2) * 3 + 1) / 2
-        val sectorsPerFat = ((fatBytes + bytesPerSector - 1) / bytesPerSector).coerceAtLeast(1)
+        val estClusters = (approxDataSectors / sectorsPerCluster).coerceAtLeast(1)
+        var isFat16 = estClusters >= 4086
+        var fatBytes = if (isFat16) (estClusters + 2) * 2 else ((estClusters + 2) * 3 + 1) / 2
+        var sectorsPerFat = ((fatBytes + bytesPerSector - 1) / bytesPerSector).coerceAtLeast(1)
+
+        val totalFatSectors = numFats * sectorsPerFat
+        val dataSectors = (totalSectors - reservedSectors - rootDirSectors - totalFatSectors).coerceAtLeast(1)
+        val totalClusters = (dataSectors / sectorsPerCluster).coerceAtLeast(1)
+        isFat16 = totalClusters >= 4086
+        fatBytes = if (isFat16) (totalClusters + 2) * 2 else ((totalClusters + 2) * 3 + 1) / 2
+        sectorsPerFat = ((fatBytes + bytesPerSector - 1) / bytesPerSector).coerceAtLeast(1)
 
         buf[0x00] = 0xEB.toByte()
         buf[0x01] = 0x3C.toByte()
@@ -1230,14 +1259,14 @@ class AndroidEmulatorManager(
         buf[0x19] = 0.toByte()
         buf[0x1A] = 2.toByte()
         buf[0x1B] = 0.toByte()
-        buf[0x24] = if (targetSize > 0x80000) 0x80.toByte() else 0x00.toByte()
+        buf[0x24] = if (isFat16) 0x80.toByte() else 0x00.toByte()
         buf[0x26] = 0x29.toByte()
         buf[0x27] = 0x78.toByte()
         buf[0x28] = 0x56.toByte()
         buf[0x29] = 0x34.toByte()
         buf[0x2A] = 0x12.toByte()
         System.arraycopy("NO NAME    ".toByteArray(java.nio.charset.StandardCharsets.US_ASCII), 0, buf, 0x2B, 11)
-        val fsType = if (targetSize <= 0x80000) "FAT12   " else "FAT16   "
+        val fsType = if (isFat16) "FAT16   " else "FAT12   "
         System.arraycopy(fsType.toByteArray(java.nio.charset.StandardCharsets.US_ASCII), 0, buf, 0x36, 8)
         buf[0x1FE] = 0x55.toByte()
         buf[0x1FF] = 0xAA.toByte()
@@ -1247,7 +1276,7 @@ class AndroidEmulatorManager(
             buf[fat1Offset + 0] = 0xF8.toByte()
             buf[fat1Offset + 1] = 0xFF.toByte()
             buf[fat1Offset + 2] = 0xFF.toByte()
-            if (targetSize > 0x80000 && fat1Offset + 4 <= targetSize) {
+            if (isFat16 && fat1Offset + 4 <= targetSize) {
                 buf[fat1Offset + 3] = 0xFF.toByte()
             }
         }
@@ -1257,7 +1286,7 @@ class AndroidEmulatorManager(
             buf[fat2Offset + 0] = 0xF8.toByte()
             buf[fat2Offset + 1] = 0xFF.toByte()
             buf[fat2Offset + 2] = 0xFF.toByte()
-            if (targetSize > 0x80000 && fat2Offset + 4 <= targetSize) {
+            if (isFat16 && fat2Offset + 4 <= targetSize) {
                 buf[fat2Offset + 3] = 0xFF.toByte()
             }
         }

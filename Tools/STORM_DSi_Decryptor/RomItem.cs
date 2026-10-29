@@ -9,6 +9,8 @@ public class RomItem : INotifyPropertyChanged
     private bool _isProcessing;
     private bool _isSuccess;
     private bool _isEncrypted;
+    private bool _isDsiRom = true;
+    private bool _needsCompatibilityPatch;
 
     public string FilePath { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
@@ -17,13 +19,23 @@ public class RomItem : INotifyPropertyChanged
     public long FileSize { get; set; }
     public string FileSizeFormatted => $"{(double)FileSize / (1024 * 1024):F2} МБ";
 
+    public bool IsFromArchive { get; set; }
+    public string ArchivePath { get; set; } = string.Empty;
+    public string ArchiveEntryName { get; set; } = string.Empty;
+    public string SuggestedFileName { get; set; } = string.Empty;
+
     public bool IsEncrypted
     {
         get => _isEncrypted;
         set { _isEncrypted = value; OnPropertyChanged(); }
     }
 
-    private bool _needsCompatibilityPatch;
+    public bool IsDsiRom
+    {
+        get => _isDsiRom;
+        set { _isDsiRom = value; OnPropertyChanged(); }
+    }
+
     public bool NeedsCompatibilityPatch
     {
         get => _needsCompatibilityPatch;

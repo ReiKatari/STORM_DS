@@ -1212,7 +1212,11 @@ class SharedPreferencesSettingsRepository(
 
     private fun observeRetroArchShaderLibraryVersion(): Flow<Long> {
         return getOrCreatePreferenceSharedFlow(RetroArchShaderLibraryManager.KEY_LIBRARY_VERSION) {
-            preferences.getLong(RetroArchShaderLibraryManager.KEY_LIBRARY_VERSION, 0L)
+            try {
+                preferences.getLong(RetroArchShaderLibraryManager.KEY_LIBRARY_VERSION, 0L)
+            } catch (_: ClassCastException) {
+                preferences.getInt(RetroArchShaderLibraryManager.KEY_LIBRARY_VERSION, 0).toLong()
+            }
         }
     }
 

@@ -64,7 +64,19 @@ class SettingsBackupManager @Inject constructor(
             "github_updates_nightly_last_release_date",
             "github_updates_last_check",
             "last_version",
+            "video_retroarch_shader_library_version",
+            "ra_profile_score",
+            "ra_profile_softcore_score",
+            "generation",
+            "quick_resume_last_played_timestamp",
         )
+
+        private fun isLongPrefKey(key: String): Boolean {
+            return key in LONG_PREF_KEYS ||
+                   key.startsWith("quick_resume_timestamp_") ||
+                   key.startsWith("play_stats_daily_play_ms_") ||
+                   key.startsWith("shader_compile_time_")
+        }
     }
 
     private val mirrorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -589,7 +601,7 @@ class SettingsBackupManager @Inject constructor(
             when (value) {
                 is Boolean -> editor.putBoolean(key, value)
                 is Int -> {
-                    if (key in LONG_PREF_KEYS) {
+                    if (isLongPrefKey(key)) {
                         editor.putLong(key, value.toLong())
                     } else {
                         editor.putInt(key, value)
@@ -608,7 +620,7 @@ class SettingsBackupManager @Inject constructor(
                 is Number -> {
                     val current = preferences.all[key]
                     when {
-                        current is Long || key in LONG_PREF_KEYS -> editor.putLong(key, value.toLong())
+                        current is Long || isLongPrefKey(key) -> editor.putLong(key, value.toLong())
                         current is Int -> editor.putInt(key, value.toInt())
                         current is Float -> editor.putFloat(key, value.toFloat())
                         value is Double -> editor.putFloat(key, value.toFloat())

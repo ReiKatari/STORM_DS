@@ -46,7 +46,11 @@ class Migrator(private val context: Context, private val sharedPreferences: Shar
 
     private fun getLastVersion(): Long {
         // 6 is the version at which migrations started being supported
-        return sharedPreferences.getLong("last_version", 6)
+        return try {
+            sharedPreferences.getLong("last_version", 6)
+        } catch (_: ClassCastException) {
+            sharedPreferences.getInt("last_version", 6).toLong()
+        }
     }
 
     private fun getCurrentVersion(): Long {

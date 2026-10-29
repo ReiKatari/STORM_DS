@@ -825,9 +825,57 @@ void DSi::SetupDirectBoot()
                     snprintf(dirPath, sizeof(dirPath), "0:/ticket/%08x", titleId0);
                     f_mkdir(dirPath);
 
+                    // NAND cleanup pass over 0:/ticket/00030004: unlink corrupt files with fsize < 0x2C4
+                    {
+                        FF_DIR tikDir;
+                        if (f_opendir(&tikDir, dirPath) == FR_OK)
+                        {
+                            FF_FILINFO tikFno;
+                            while (f_readdir(&tikDir, &tikFno) == FR_OK && tikFno.fname[0] != 0)
+                            {
+                                if (!(tikFno.fattrib & AM_DIR) && tikFno.fsize < 0x2C4)
+                                {
+                                    char corruptTikPath[160];
+                                    snprintf(corruptTikPath, sizeof(corruptTikPath), "%s/%s", dirPath, tikFno.fname);
+                                    f_unlink(corruptTikPath);
+                                    Log(LogLevel::Info, "DSi::SetupDirectBoot: Cleaned up 0-byte corrupt ticket %s\n", corruptTikPath);
+                                }
+                            }
+                            f_closedir(&tikDir);
+                        }
+                    }
+
                     f_mkdir("0:/title");
                     snprintf(dirPath, sizeof(dirPath), "0:/title/%08x", titleId0);
                     f_mkdir(dirPath);
+
+                    // NAND cleanup pass over 0:/title/00030004: unlink 00000000.app for other titles
+                    {
+                        FF_DIR titleBaseDir;
+                        if (f_opendir(&titleBaseDir, dirPath) == FR_OK)
+                        {
+                            FF_FILINFO titleFno;
+                            while (f_readdir(&titleBaseDir, &titleFno) == FR_OK && titleFno.fname[0] != 0)
+                            {
+                                if (titleFno.fattrib & AM_DIR)
+                                {
+                                    u32 dirTid = (u32)strtoul(titleFno.fname, nullptr, 16);
+                                    if (dirTid != idNormal && (header.DSiTitleIDLow == 0 || dirTid != header.DSiTitleIDLow))
+                                    {
+                                        char otherAppPath[160];
+                                        snprintf(otherAppPath, sizeof(otherAppPath), "%s/%s/content/00000000.app", dirPath, titleFno.fname);
+                                        FF_FILINFO otherAppInfo;
+                                        if (f_stat(otherAppPath, &otherAppInfo) == FR_OK)
+                                        {
+                                            f_unlink(otherAppPath);
+                                            Log(LogLevel::Info, "DSi::SetupDirectBoot: Pruned dormant 00000000.app (%u B) from %s\n", (u32)otherAppInfo.fsize, otherAppPath);
+                                        }
+                                    }
+                                }
+                            }
+                            f_closedir(&titleBaseDir);
+                        }
+                    }
 
                     for (u32 tid : targetIds)
                     {
@@ -922,16 +970,30 @@ void DSi::SetupDirectBoot()
                                 if (f_open(&appFile, dirPath, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK)
                                 {
                                     const u32 chunkSize = 64 * 1024;
+                                    bool writeOk = true;
                                     for (u32 offset = 0; offset < rawLen; offset += chunkSize)
                                     {
                                         u32 toWrite = std::min(chunkSize, rawLen - offset);
                                         u32 writtenApp = 0;
-                                        f_write(&appFile, &cartrom[offset], toWrite, &writtenApp);
+                                        FRESULT wres = f_write(&appFile, &cartrom[offset], toWrite, &writtenApp);
+                                        if (wres != FR_OK || writtenApp != toWrite)
+                                        {
+                                            writeOk = false;
+                                            Log(LogLevel::Error, "DSi::SetupDirectBoot: Failed writing 00000000.app chunk at offset %u (%d, wrote %u of %u)\n", offset, wres, writtenApp, toWrite);
+                                            break;
+                                        }
                                     }
                                     f_close(&appFile);
-                                    Log(LogLevel::Info,
-                                        "DSi::SetupDirectBoot: Auto-provisioned 00000000.app (%u bytes) to %s\n",
-                                        rawLen, dirPath);
+                                    if (!writeOk)
+                                    {
+                                        f_unlink(dirPath);
+                                    }
+                                    else
+                                    {
+                                        Log(LogLevel::Info,
+                                            "DSi::SetupDirectBoot: Auto-provisioned 00000000.app (%u bytes) to %s\n",
+                                            rawLen, dirPath);
+                                    }
                                 }
                                 else
                                 {
@@ -1582,6 +1644,38 @@ void DSi::SetupDirectBoot()
             }
             Log(LogLevel::Info, "DSi::SetupDirectBoot: Zelda Four Swords save patch applied (read=%d, write=%d)\n",
                 patchedRead, patchedWrite);
+        }
+
+        // For Plants vs. Zombies (KZLE / KZLP / KZLV),
+        // the direct boot checks OS_GetBootType() == 3 before proceeding past startup/save checks.
+        // In direct boot mode, OS_GetBootType() must be 1 for Slot-1 ROM/CARD access.
+        // Patching PvZ to accept boot type 1 enables clean startup without freezing.
+        if (!memcmp(header.GameCode, "KZL", 3))
+        {
+            bool patchedPvZ = false;
+            if (ARM9Read32(0x02111CA4) == 0xE3500003 && ARM9Read32(0x02111CA8) == 0x0A000004)
+            {
+                ARM9Write32(0x02111CA4, 0xE3500001); // cmp r0, #1
+                patchedPvZ = true;
+            }
+
+            // Fallback scan across ARM9 executable for non-USA regions (KZLP / KZLV)
+            if (!patchedPvZ && header.ARM9Size > 24)
+            {
+                u32 arm9End = header.ARM9RAMAddress + header.ARM9Size - 24;
+                for (u32 addr = header.ARM9RAMAddress; addr < arm9End; addr += 4)
+                {
+                    if (ARM9Read32(addr) == 0xE3500003 &&
+                        ARM9Read32(addr + 4) == 0x0A000004 &&
+                        ARM9Read32(addr + 0x14) == 0xE3A00003)
+                    {
+                        ARM9Write32(addr, 0xE3500001);
+                        patchedPvZ = true;
+                        break;
+                    }
+                }
+            }
+            Log(LogLevel::Info, "DSi::SetupDirectBoot: Plants vs. Zombies boot patch applied (patched=%d)\n", patchedPvZ);
         }
     }
 

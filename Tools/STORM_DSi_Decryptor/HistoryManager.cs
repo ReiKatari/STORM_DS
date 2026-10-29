@@ -12,7 +12,7 @@ public static class HistoryManager
 {
     private static readonly string HistoryDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "STORM DSi Decryptor");
+        "STORM DSI DECRYPTOR");
 
     private static readonly string HistoryFile = Path.Combine(HistoryDir, "history.json");
 
@@ -94,6 +94,11 @@ public static class HistoryManager
             Save();
         }
         catch { }
+    }
+
+    public static HistoryItem? Find(string filePath)
+    {
+        return Items.FirstOrDefault(x => x.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase));
     }
 
     public static HistoryItem? FindPrevious(string filePath, string gameCode)

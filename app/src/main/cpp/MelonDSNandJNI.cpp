@@ -597,16 +597,25 @@ static void formatFatSaveBuffer(std::vector<u8>& buf, u32 size)
 
     const u16 bytesPerSector = 512;
     const u32 totalSectors = size / bytesPerSector;
-    const u8 sectorsPerCluster = 1;
+    const u8 sectorsPerCluster = (totalSectors > 8192) ? 8 : (totalSectors > 1024 ? 4 : 1);
     const u16 reservedSectors = 1;
     const u8 numFats = 2;
     const u16 rootDirEntries = (size <= 0x8000) ? 16 : ((size <= 0x20000) ? 64 : 128);
     const u32 rootDirSectors = ((rootDirEntries * 32) + bytesPerSector - 1) / bytesPerSector;
-    const bool isFat16 = (size > 0x80000);
-    const u32 approxDataSectors = (totalSectors > (1u + rootDirSectors + 2u)) ? (totalSectors - 1u - rootDirSectors - 2u) : 1u;
-    const u32 totalClusters = std::max<u32>(1u, approxDataSectors / sectorsPerCluster);
-    const u32 fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
-    const u16 sectorsPerFat = (u16)std::max<u32>(1u, (fatBytes + bytesPerSector - 1) / bytesPerSector);
+
+    // Accurate 2-step calculation matching DSi_NAND.cpp (TWL-SDK FAT12 limit: totalClusters < 4086)
+    u32 approxDataSectors = (totalSectors > (1u + rootDirSectors + 2u)) ? (totalSectors - 1u - rootDirSectors - 2u) : 1u;
+    u32 estClusters = std::max<u32>(1u, approxDataSectors / sectorsPerCluster);
+    bool isFat16 = (estClusters >= 4086);
+    u32 fatBytes = isFat16 ? ((estClusters + 2) * 2) : (((estClusters + 2) * 3 + 1) / 2);
+    u16 sectorsPerFat = (u16)std::max<u32>(1u, (fatBytes + bytesPerSector - 1) / bytesPerSector);
+
+    u32 totalFatSectors = 2 * sectorsPerFat;
+    u32 dataSectors = (totalSectors > (1u + rootDirSectors + totalFatSectors)) ? (totalSectors - 1u - rootDirSectors - totalFatSectors) : 1u;
+    u32 totalClusters = std::max<u32>(1u, dataSectors / sectorsPerCluster);
+    isFat16 = (totalClusters >= 4086);
+    fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
+    sectorsPerFat = (u16)std::max<u32>(1u, (fatBytes + bytesPerSector - 1) / bytesPerSector);
 
     // Boot Sector (Sector 0)
     buf[0x00] = 0xEB; buf[0x01] = 0x3C; buf[0x02] = 0x90;
@@ -698,6 +707,46 @@ static bool ensureValidSaveFile(const char* path, u32 expectedSize)
                 !rootValid)
             {
                 needsFormatting = true;
+            }
+
+            u32 totsec = expectedSize / 512;
+            u8 clustersize = (totsec > 8192) ? 8 : (totsec > 1024 ? 4 : 1);
+            u16 rDirEntries = (expectedSize <= 0x8000) ? 16 : ((expectedSize <= 0x20000) ? 64 : 128);
+            u16 rDirSectors = ((rDirEntries * 32) + 512 - 1) / 512;
+            u32 appDataSec = (totsec > (1u + rDirSectors + 2u)) ? (totsec - 1u - rDirSectors - 2u) : 1u;
+            u32 calcClusters = std::max<u32>(1u, appDataSec / clustersize);
+            bool targetIsFat16 = (calcClusters >= 4086);
+
+            // If existing file is marked FAT16 but should be FAT12, check if root dir is empty
+            if (!needsFormatting && !targetIsFat16 && memcmp(&bootSec[0x36], "FAT16", 5) == 0)
+            {
+                u16 existingSectorsPerFat = (u16)bootSec[0x016] | ((u16)bootSec[0x017] << 8);
+                u32 rootDirOffset = (1 + 2 * existingSectorsPerFat) * 512;
+                if (f_lseek(&file, rootDirOffset) == FR_OK)
+                {
+                    bool rootIsEmpty = true;
+                    u8 rootSec[512];
+                    for (u16 s = 0; s < rDirSectors; ++s)
+                    {
+                        u32 rread = 0;
+                        if (f_read(&file, rootSec, sizeof(rootSec), &rread) == FR_OK && rread == sizeof(rootSec))
+                        {
+                            for (size_t entry = 0; entry < sizeof(rootSec); entry += 32)
+                            {
+                                if (rootSec[entry] != 0x00)
+                                {
+                                    rootIsEmpty = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!rootIsEmpty) break;
+                    }
+                    if (rootIsEmpty)
+                    {
+                        needsFormatting = true;
+                    }
+                }
             }
         }
         else
@@ -818,9 +867,57 @@ Java_me_magnum_melonds_MelonDSiNand_ensureTitleSaveStructure(JNIEnv* env, jobjec
     snprintf(path, sizeof(path), "0:/ticket/%08x", DSI_NAND_FILE_CATEGORY);
     f_mkdir(path);
 
+    // NAND cleanup pass over 0:/ticket/00030004: unlink corrupt files with fsize < 0x2C4
+    {
+        FF_DIR tikDir;
+        if (f_opendir(&tikDir, path) == FR_OK)
+        {
+            FF_FILINFO tikFno;
+            while (f_readdir(&tikDir, &tikFno) == FR_OK && tikFno.fname[0] != 0)
+            {
+                if (!(tikFno.fattrib & AM_DIR) && tikFno.fsize < 0x2C4)
+                {
+                    char corruptTikPath[256];
+                    snprintf(corruptTikPath, sizeof(corruptTikPath), "%s/%s", path, tikFno.fname);
+                    f_unlink(corruptTikPath);
+                    melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: Cleaned up 0-byte corrupt ticket %s\n", corruptTikPath);
+                }
+            }
+            f_closedir(&tikDir);
+        }
+    }
+
     f_mkdir("0:/title");
     snprintf(path, sizeof(path), "0:/title/%08x", DSI_NAND_FILE_CATEGORY);
     f_mkdir(path);
+
+    // NAND cleanup pass over 0:/title/00030004: unlink 00000000.app for other titles
+    {
+        FF_DIR titleBaseDir;
+        if (f_opendir(&titleBaseDir, path) == FR_OK)
+        {
+            FF_FILINFO titleFno;
+            while (f_readdir(&titleBaseDir, &titleFno) == FR_OK && titleFno.fname[0] != 0)
+            {
+                if (titleFno.fattrib & AM_DIR)
+                {
+                    u32 dirTid = (u32)strtoul(titleFno.fname, nullptr, 16);
+                    if (dirTid != idNormal && dirTid != idSwapped)
+                    {
+                        char otherAppPath[256];
+                        snprintf(otherAppPath, sizeof(otherAppPath), "%s/%s/content/00000000.app", path, titleFno.fname);
+                        FF_FILINFO otherAppInfo;
+                        if (f_stat(otherAppPath, &otherAppInfo) == FR_OK)
+                        {
+                            f_unlink(otherAppPath);
+                            melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "DSiWare: Pruned dormant 00000000.app (%u B) from %s\n", (u32)otherAppInfo.fsize, otherAppPath);
+                        }
+                    }
+                }
+            }
+            f_closedir(&titleBaseDir);
+        }
+    }
 
     u32 pubSavSize = header.DSiPublicSavSize;
     if (pubSavSize == 0) pubSavSize = 0x10000; // 64KB minimum FAT12 public save

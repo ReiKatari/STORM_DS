@@ -1086,9 +1086,14 @@ bool NANDMount::CreateTicket(const char* path, u32 titleid0, u32 titleid1, u8 ve
 
     Image->ESEncrypt(ticket, 0x2A4);
 
-    f_write(&file, ticket, 0x2C4, &nwrite);
-
+    res = f_write(&file, ticket, 0x2C4, &nwrite);
     f_close(&file);
+    if (res != FR_OK || nwrite != 0x2C4)
+    {
+        f_unlink(path);
+        Log(LogLevel::Error, "CreateTicket: failed to write full ticket (%d, wrote %u of %u)\n", res, nwrite, 0x2C4);
+        return false;
+    }
 
     return true;
 }
@@ -1105,10 +1110,20 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
     const u8 clustersize = (totsec > (8 << 10)) ? 8 : (totsec > (1 << 10) ? 4 : 1);
     const u16 rootDirEntries = (len <= 0x8000) ? 16 : ((len <= 0x20000) ? 64 : 128);
     const u16 rootDirSectors = (rootDirEntries * 32 + sectorsize - 1) / sectorsize;
-    const u32 totalClusters = (totsec > 1 + rootDirSectors) ? ((totsec - 1 - rootDirSectors) / clustersize) : 0;
-    const bool isFat16 = (totalClusters >= 4085 || len > 0x80000);
-    const u32 fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
-    const u16 sectorsPerFat = (u16)((fatBytes + sectorsize - 1) / sectorsize);
+
+    // Accurate 2-step calculation of sectorsPerFat and totalClusters (TWL-SDK FAT12 limit: totalClusters < 4086)
+    u32 approxDataSectors = (totsec > (1 + rootDirSectors + 2)) ? (totsec - 1 - rootDirSectors - 2) : 1;
+    u32 estClusters = std::max<u32>(1, approxDataSectors / clustersize);
+    bool isFat16 = (estClusters >= 4086);
+    u32 fatBytes = isFat16 ? ((estClusters + 2) * 2) : (((estClusters + 2) * 3 + 1) / 2);
+    u16 sectorsPerFat = (u16)((fatBytes + sectorsize - 1) / sectorsize);
+
+    u32 totalFatSectors = 2 * sectorsPerFat;
+    u32 dataSectors = (totsec > (1 + rootDirSectors + totalFatSectors)) ? (totsec - 1 - rootDirSectors - totalFatSectors) : 1;
+    u32 totalClusters = std::max<u32>(1, dataSectors / clustersize);
+    isFat16 = (totalClusters >= 4086);
+    fatBytes = isFat16 ? ((totalClusters + 2) * 2) : (((totalClusters + 2) * 3 + 1) / 2);
+    sectorsPerFat = (u16)((fatBytes + sectorsize - 1) / sectorsize);
 
     FF_FILINFO existingInfo;
     if (f_stat(path, &existingInfo) == FR_OK && existingInfo.fsize == len)
@@ -1119,7 +1134,6 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
             u8 bootSec[512];
             u32 nr = 0;
             f_read(&ef, bootSec, sizeof(bootSec), &nr);
-            f_close(&ef);
             u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
             u16 existingSectorsPerFat = (u16)bootSec[0x016] | ((u16)bootSec[0x017] << 8);
             bool rootMatches = rootEntries > 0;
@@ -1130,13 +1144,47 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
                             bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02 &&
                             existingSectorsPerFat >= sectorsPerFat &&
                             rootMatches);
+
+            // If existing file is marked FAT16 but should be FAT12, check if root dir is empty
+            if (isValid && !isFat16 && memcmp(&bootSec[0x36], "FAT16", 5) == 0)
+            {
+                u32 rootDirOffset = (1 + 2 * existingSectorsPerFat) * sectorsize;
+                if (f_lseek(&ef, rootDirOffset) == FR_OK)
+                {
+                    bool rootIsEmpty = true;
+                    u8 rootSec[512];
+                    for (u16 s = 0; s < rootDirSectors; ++s)
+                    {
+                        u32 rread = 0;
+                        if (f_read(&ef, rootSec, sizeof(rootSec), &rread) == FR_OK && rread == sizeof(rootSec))
+                        {
+                            for (size_t entry = 0; entry < sizeof(rootSec); entry += 32)
+                            {
+                                if (rootSec[entry] != 0x00)
+                                {
+                                    rootIsEmpty = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!rootIsEmpty) break;
+                    }
+                    if (rootIsEmpty)
+                    {
+                        isValid = false; // Empty mis-formatted FAT16 template, reformat as clean FAT12
+                    }
+                }
+            }
+
+            f_close(&ef);
+
             if (isValid)
             {
                 f_chmod(path, 0, AM_RDO);
                 Log(LogLevel::Info, "CreateSaveFile: %s already exists with valid FAT format (rootEntries=%u), keeping existing file\n", path, (u32)rootEntries);
                 return true;
             }
-            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks FAT boot signature (rootEntries=%u), reformatting\n", path, (u32)rootEntries);
+            Log(LogLevel::Warn, "CreateSaveFile: %s exists but lacks valid FAT format or needs FAT12 reformat, reformatting\n", path);
         }
     }
 
@@ -1203,11 +1251,18 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
             data[fat2Offset + 3] = 0xFF;
     }
 
-    f_write(&file, data, len, &nwrite);
+    FRESULT wres = f_write(&file, data, len, &nwrite);
     f_close(&file);
-    f_chmod(path, 0, AM_RDO);
     delete[] data;
 
+    if (wres != FR_OK || nwrite != len)
+    {
+        f_unlink(path);
+        Log(LogLevel::Error, "CreateSaveFile: failed to write full save file %s (%d, wrote %u of %u)\n", path, wres, nwrite, len);
+        return false;
+    }
+
+    f_chmod(path, 0, AM_RDO);
     return true;
 }
 

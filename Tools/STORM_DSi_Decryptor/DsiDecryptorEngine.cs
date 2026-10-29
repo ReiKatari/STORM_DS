@@ -134,6 +134,14 @@ public static class DsiDecryptorEngine
 
     public static ushort CalcHeaderCRC16(byte[] data, int len) => CalcHeaderCRC16(data, 0, len);
 
+    public static bool IsRomHeader(byte[] header)
+    {
+        if (header == null || header.Length < 0x160) return false;
+        ushort headerCrc = BitConverter.ToUInt16(header, 0x15E);
+        if (headerCrc == 0 || headerCrc == 0xFFFF) return false;
+        return headerCrc == CalcHeaderCRC16(header, 0x15E);
+    }
+
     public static byte[]? FindWorkingNormalKey(byte[] rom, uint offset, uint size, int ivOffset)
     {
         if (offset == 0 || size == 0 || offset + size > rom.Length) return null;

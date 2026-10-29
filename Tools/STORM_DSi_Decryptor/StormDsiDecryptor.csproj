@@ -6,15 +6,18 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
-    <AssemblyName>STORM DSi Decryptor</AssemblyName>
+    <AssemblyName>STORM DSI DECRYPTOR</AssemblyName>
     <RootNamespace>StormDsiDecryptor</RootNamespace>
-    <Version>1.1.8</Version>
-    <Authors>ReiKatari</Authors>
+    <Version>1.1.9</Version>
+    <AssemblyVersion>1.1.9.0</AssemblyVersion>
+    <FileVersion>1.1.9.0</FileVersion>
+    <Authors>STORM TEAM</Authors>
     <Company>STORM SOFT</Company>
-    <Product>STORM DSi Decryptor</Product>
-    <Description>Утилита сверхбыстрой расшифровки Modcrypt для Nintendo DSi и DSiWare</Description>
-    <Copyright>Copyright © 2026 ReiKatari. All rights reserved.</Copyright>
+    <Product>STORM DSI DECRYPTOR</Product>
+    <Title>STORM DSI DECRYPTOR 1.1.9</Title>
+    <Description>Сверхбыстрая утилита расшифровки Modcrypt для Nintendo DSi и DSiWare</Description>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -27,6 +30,10 @@
     <None Remove="Installer\**" />
     <EmbeddedResource Remove="Installer\**" />
     <Resource Include="AppIcon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.50.7" />
   </ItemGroup>
 
 </Project>
