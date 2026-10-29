@@ -2302,7 +2302,8 @@ bool VulkanOutput::recordAccumulateMerge(
         && !resource.preparedCapture3dRgbaValid
         && !resource.capture3dSourceScreenSwapHintValid
         && !resource.alternatingLive3dPingPong
-        && !resource.sharedCaptureReplayPairStable;
+        && !resource.sharedCaptureReplayPairStable
+        && VulkanRuntime::GetCompositorMode() != VulkanRuntime::CompositorMode::Precise;
     const bool resolvedBottomPackedPair =
         screenProvidesResolvedMixedComp4Comp7(resource.topScreenStats)
         && screenProvidesResolvedMixedRegularComp4Comp7(resource.bottomScreenStats);
@@ -2318,7 +2319,8 @@ bool VulkanOutput::recordAccumulateMerge(
         && !resource.sourceAFullHighresOnlyTop
         && !resource.sourceAFullHighresOnlyBottom
         && !resource.preparedCapture3dRgbaValid
-        && resolvedBottomPackedPair;
+        && resolvedBottomPackedPair
+        && VulkanRuntime::GetCompositorMode() != VulkanRuntime::CompositorMode::Precise;
     const bool clearSparseResolvedTopPackedHandoff =
         resource.snapshotFromGraphicsBackend
         && resource.hasSoftPackedDebugData
@@ -2331,7 +2333,8 @@ bool VulkanOutput::recordAccumulateMerge(
         && !resource.captureBackedClass4Only
         && !resource.sourceAFullHighresOnlyTop
         && !resource.sourceAFullHighresOnlyBottom
-        && !resource.preparedCapture3dRgbaValid;
+        && !resource.preparedCapture3dRgbaValid
+        && VulkanRuntime::GetCompositorMode() != VulkanRuntime::CompositorMode::Precise;
     const bool canCopyPureHighres =
         fastHighresOnly
         || (screenStats.Plane0VisiblePixels == 0u

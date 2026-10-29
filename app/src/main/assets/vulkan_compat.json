@@ -4,7 +4,16 @@
     {
       "id": "yugioh_wc_5ds",
       "title": "Yu-Gi-Oh! World Championship 2007 / 2008 / 5D's",
-      "gameCodes": ["AY7", "YG8", "Y5D", "BYX", "BYG", "AY9", "YF4", "BYY"],
+      "gameCodes": [
+        "AY7",
+        "YG8",
+        "Y5D",
+        "BYX",
+        "BYG",
+        "AY9",
+        "YF4",
+        "BYY"
+      ],
       "titleKeywords": [
         "yu-gi-oh! world championship",
         "yu-gi-oh! 5d's",
@@ -18,7 +27,12 @@
     {
       "id": "golden_sun_dark_dawn",
       "title": "Golden Sun: Dark Dawn",
-      "gameCodes": ["B6Z", "B6ZE", "B6ZP", "B6ZJ"],
+      "gameCodes": [
+        "B6Z",
+        "B6ZE",
+        "B6ZP",
+        "B6ZJ"
+      ],
       "titleKeywords": [
         "golden sun: dark dawn",
         "golden sun dark dawn"
@@ -30,7 +44,12 @@
     {
       "id": "okamiden",
       "title": "Okamiden",
-      "gameCodes": ["B3T", "B3TE", "B3TP", "B3TJ"],
+      "gameCodes": [
+        "B3T",
+        "B3TE",
+        "B3TP",
+        "B3TJ"
+      ],
       "titleKeywords": [
         "okamiden"
       ],
@@ -41,7 +60,16 @@
     {
       "id": "zelda_ds",
       "title": "The Legend of Zelda: Phantom Hourglass and Spirit Tracks",
-      "gameCodes": ["AZE", "AZEE", "AZEP", "AZEJ", "BKI", "BKIE", "BKIP", "BKIJ"],
+      "gameCodes": [
+        "AZE",
+        "AZEE",
+        "AZEP",
+        "AZEJ",
+        "BKI",
+        "BKIE",
+        "BKIP",
+        "BKIJ"
+      ],
       "titleKeywords": [
         "phantom hourglass",
         "spirit tracks"
@@ -53,7 +81,17 @@
     {
       "id": "pokemon_gen4_gen5",
       "title": "Pokemon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black and White",
-      "gameCodes": ["ADA", "APA", "CPU", "IPK", "IPG", "IRB", "IRA", "IRE", "IRD"],
+      "gameCodes": [
+        "ADA",
+        "APA",
+        "CPU",
+        "IPK",
+        "IPG",
+        "IRB",
+        "IRA",
+        "IRE",
+        "IRD"
+      ],
       "titleKeywords": [
         "pokemon diamond",
         "pokemon pearl",
@@ -70,7 +108,15 @@
     {
       "id": "dragon_quest_ix",
       "title": "Dragon Quest IX: Sentinels of the Starry Skies",
-      "gameCodes": ["YQU", "YQUE", "YQUP", "YQUJ", "A4V", "YIV", "YDQ"],
+      "gameCodes": [
+        "YQU",
+        "YQUE",
+        "YQUP",
+        "YQUJ",
+        "A4V",
+        "YIV",
+        "YDQ"
+      ],
       "titleKeywords": [
         "dragon quest ix",
         "sentinels of the starry skies"
@@ -82,7 +128,12 @@
     {
       "id": "chrono_trigger",
       "title": "Chrono Trigger",
-      "gameCodes": ["YCT", "YCTE", "YCTP", "YCTJ"],
+      "gameCodes": [
+        "YCT",
+        "YCTE",
+        "YCTP",
+        "YCTJ"
+      ],
       "titleKeywords": [
         "chrono trigger"
       ],
@@ -93,7 +144,10 @@
     {
       "id": "mario_and_luigi",
       "title": "Mario and Luigi: Partners in Time and Bowser's Inside Story",
-      "gameCodes": ["ARM", "CLJ"],
+      "gameCodes": [
+        "ARM",
+        "CLJ"
+      ],
       "titleKeywords": [
         "partners in time",
         "bowser's inside story",
@@ -106,7 +160,12 @@
     {
       "id": "solatorobo",
       "title": "Solatorobo: Red the Hunter",
-      "gameCodes": ["B2S", "B2SE", "B2SP", "B2SJ"],
+      "gameCodes": [
+        "B2S",
+        "B2SE",
+        "B2SP",
+        "B2SJ"
+      ],
       "titleKeywords": [
         "solatorobo"
       ],
@@ -117,7 +176,11 @@
     {
       "id": "jet_impulse_nanostray",
       "title": "Jet Impulse and Nanostray 2",
-      "gameCodes": ["AJI", "AN2", "YN2"],
+      "gameCodes": [
+        "AJI",
+        "AN2",
+        "YN2"
+      ],
       "titleKeywords": [
         "jet impulse",
         "nanostray"
@@ -125,6 +188,39 @@
       "compositorMode": "precise",
       "thickEdges": false,
       "notes": "Preserves 3D cockpit HUD and cloud layer alpha blending"
+    },
+    {
+      "id": "alphabounce_kale",
+      "title": "AlphaBounce",
+      "gameCodes": [
+        "KAL",
+        "KALE",
+        "KALP"
+      ],
+      "titleKeywords": [
+        "alphabounce"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": true,
+      "notes": "Preserves clean direct boot DSiWare UI geometry and eliminates bottom screen startup flicker"
+    },
+    {
+      "id": "mario_vs_dk_minis",
+      "title": "Mario vs. Donkey Kong: Minis March Again!",
+      "gameCodes": [
+        "KDM",
+        "KDME",
+        "KDMP",
+        "KDMJ"
+      ],
+      "titleKeywords": [
+        "minis march again",
+        "mario vs donkey kong",
+        "mario vs. donkey kong"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Eliminates 30 Hz bottom screen swap flicker and preserves dual-screen capture synchronization"
     }
   ]
 }

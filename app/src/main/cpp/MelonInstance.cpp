@@ -7295,6 +7295,58 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             int carriedLines = 0;
             for (int y = 0; y < kScreenshotScreenHeight; y++)
             {
+                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
+                const u32 currentMeta = lineMeta[static_cast<size_t>(y)];
+                const u32 previousMeta = previousLineMeta[static_cast<size_t>(y)];
+
+                bool currentPlane0IsBlank = true;
+                for (int x = 0; x < kScreenshotScreenWidth; x += 4)
+                {
+                    if (plane0[rowBase + static_cast<size_t>(x)] != 0u)
+                    {
+                        currentPlane0IsBlank = false;
+                        break;
+                    }
+                }
+                bool previousPlane0HasContent = false;
+                for (int x = 0; x < kScreenshotScreenWidth; x += 4)
+                {
+                    if (previousPlane0[rowBase + static_cast<size_t>(x)] != 0u)
+                    {
+                        previousPlane0HasContent = true;
+                        break;
+                    }
+                }
+
+                const bool alternatingSwapBlankVram =
+                    !topScreen
+                    && screenSwapToggledThisFrame
+                    && ((currentMeta >> 16u) & 0x3u) == 2u
+                    && (currentMeta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u
+                    && currentPlane0IsBlank
+                    && previousPlane0HasContent;
+
+                if (alternatingSwapBlankVram)
+                {
+                    std::memcpy(
+                        plane0.data() + rowBase,
+                        previousPlane0.data() + rowBase,
+                        static_cast<size_t>(kScreenshotScreenWidth) * sizeof(u32));
+                    std::memcpy(
+                        plane1.data() + rowBase,
+                        previousPlane1.data() + rowBase,
+                        static_cast<size_t>(kScreenshotScreenWidth) * sizeof(u32));
+                    std::memcpy(
+                        control.data() + rowBase,
+                        previousControl.data() + rowBase,
+                        static_cast<size_t>(kScreenshotScreenWidth) * sizeof(u32));
+                    lineMeta[static_cast<size_t>(y)] =
+                        (previousLineMeta[static_cast<size_t>(y)] & 0xFFFF0000u)
+                        | (lineMeta[static_cast<size_t>(y)] & 0x0000FFFFu);
+                    carriedLines++;
+                    continue;
+                }
+
                 if (!latchedSnapshotLineNeedsTemporalCarry(plane0, plane1, lineMeta, y))
                     continue;
                 if (latchedSnapshotLineIsZero(previousPlane0, previousPlane1, previousLineMeta, y))
@@ -7302,9 +7354,6 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                 if (!previousSnapshotLineNeedsTemporalCarry(previousPlane0, previousPlane1, previousControl, previousLineMeta, y))
                     continue;
 
-                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
-                const u32 currentMeta = lineMeta[static_cast<size_t>(y)];
-                const u32 previousMeta = previousLineMeta[static_cast<size_t>(y)];
                 const bool currentLineHasExplicit3DMeta =
                     (currentMeta & (kSoftPackedMetaFlagRegularCaptureUses3d
                         | kSoftPackedMetaFlagVramCaptureUses3d
@@ -11723,6 +11772,58 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
             int carriedLines = 0;
             for (int y = 0; y < kScreenshotScreenHeight; y++)
             {
+                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
+                const u32 currentMeta = lineMeta[static_cast<size_t>(y)];
+                const u32 previousMeta = previousLineMeta[static_cast<size_t>(y)];
+
+                bool currentPlane0IsBlank = true;
+                for (int x = 0; x < kScreenshotScreenWidth; x += 4)
+                {
+                    if (plane0[rowBase + static_cast<size_t>(x)] != 0u)
+                    {
+                        currentPlane0IsBlank = false;
+                        break;
+                    }
+                }
+                bool previousPlane0HasContent = false;
+                for (int x = 0; x < kScreenshotScreenWidth; x += 4)
+                {
+                    if (previousPlane0[rowBase + static_cast<size_t>(x)] != 0u)
+                    {
+                        previousPlane0HasContent = true;
+                        break;
+                    }
+                }
+
+                const bool alternatingSwapBlankVram =
+                    !topScreen
+                    && screenSwapToggledThisFrame
+                    && ((currentMeta >> 16u) & 0x3u) == 2u
+                    && (currentMeta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u
+                    && currentPlane0IsBlank
+                    && previousPlane0HasContent;
+
+                if (alternatingSwapBlankVram)
+                {
+                    std::memcpy(
+                        plane0.data() + rowBase,
+                        previousPlane0.data() + rowBase,
+                        static_cast<size_t>(kScreenshotScreenWidth) * sizeof(u32));
+                    std::memcpy(
+                        plane1.data() + rowBase,
+                        previousPlane1.data() + rowBase,
+                        static_cast<size_t>(kScreenshotScreenWidth) * sizeof(u32));
+                    std::memcpy(
+                        control.data() + rowBase,
+                        previousControl.data() + rowBase,
+                        static_cast<size_t>(kScreenshotScreenWidth) * sizeof(u32));
+                    lineMeta[static_cast<size_t>(y)] =
+                        (previousLineMeta[static_cast<size_t>(y)] & 0xFFFF0000u)
+                        | (lineMeta[static_cast<size_t>(y)] & 0x0000FFFFu);
+                    carriedLines++;
+                    continue;
+                }
+
                 if (!latchedSnapshotLineNeedsTemporalCarry(plane0, plane1, control, lineMeta, y))
                     continue;
                 if (latchedSnapshotLineIsZero(previousPlane0, previousPlane1, previousLineMeta, y))
@@ -11730,9 +11831,6 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                 if (!previousSnapshotLineNeedsTemporalCarry(previousPlane0, previousPlane1, previousControl, previousLineMeta, y))
                     continue;
 
-                const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenshotScreenWidth);
-                const u32 currentMeta = lineMeta[static_cast<size_t>(y)];
-                const u32 previousMeta = previousLineMeta[static_cast<size_t>(y)];
                 const bool currentLineHasExplicit3DMeta =
                     (currentMeta & (kSoftPackedMetaFlagRegularCaptureUses3d
                         | kSoftPackedMetaFlagVramCaptureUses3d

@@ -268,6 +268,41 @@ Firmware::Firmware(Platform::FileHandle* file) : FirmwareBuffer(nullptr), Firmwa
                 FirmwareBufferLength = 0;
                 FirmwareMask = 0;
             }
+            else
+            {
+                FirmwareHeader& header = GetHeader();
+                u32 userDataOffset = GetUserDataOffset();
+                if (header.UserSettingsOffset == 0 || userDataOffset + 0x200 > FirmwareBufferLength)
+                {
+                    userDataOffset = (FirmwareBufferLength >= 0x200) ? (FirmwareBufferLength - 0x200) : 0;
+                    header.UserSettingsOffset = static_cast<u16>(userDataOffset >> 3);
+                    if (FirmwareBufferLength >= 0x22)
+                    {
+                        FirmwareBuffer[0x20] = static_cast<u8>(header.UserSettingsOffset & 0xFF);
+                        FirmwareBuffer[0x21] = static_cast<u8>((header.UserSettingsOffset >> 8) & 0xFF);
+                    }
+                }
+
+                if (userDataOffset + 0x200 <= FirmwareBufferLength)
+                {
+                    std::array<UserData, 2>& userdata = GetUserData();
+                    for (int i = 0; i < 2; i++)
+                    {
+                        const bool checksumBad = CRC16(userdata[i].Bytes, 0x70, 0xFFFF) != userdata[i].Checksum;
+                        const bool adcZero = (userdata[i].TouchCalibrationADC2[0] == 0 && userdata[i].TouchCalibrationADC2[1] == 0);
+                        const bool adcMax = (userdata[i].TouchCalibrationADC2[0] == 0xFFFF && userdata[i].TouchCalibrationADC2[1] == 0xFFFF);
+                        const bool pixelZero = (userdata[i].TouchCalibrationPixel2[0] == 0 && userdata[i].TouchCalibrationPixel2[1] == 0);
+
+                        if (checksumBad || adcZero || adcMax || pixelZero)
+                        {
+                            userdata[i] = Firmware::UserData();
+                            userdata[i].UpdateChecksum();
+                            memcpy(&FirmwareBuffer[userDataOffset + i * 0x100], userdata[i].Bytes, 0x100);
+                        }
+                    }
+                    UpdateChecksums();
+                }
+            }
         }
 
         Platform::FileRewind(file);
@@ -411,6 +446,13 @@ void Firmware::UpdateChecksums()
     for (auto& u : GetUserData())
     {
         u.UpdateChecksum();
+    }
+
+    if (FirmwareBuffer != nullptr && GetUserDataOffset() + 0x200 <= FirmwareBufferLength)
+    {
+        const auto& userdata = GetUserData();
+        memcpy(&FirmwareBuffer[GetUserDataOffset()], userdata[0].Bytes, 0x100);
+        memcpy(&FirmwareBuffer[GetUserDataOffset() + 0x100], userdata[1].Bytes, 0x100);
     }
 }
 
