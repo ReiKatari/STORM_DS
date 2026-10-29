@@ -100,10 +100,16 @@ local.properties
 *.pyd
 __pycache__/
 Tools/*
-!Tools/STORM_DSi_Decryptor/
+Tools/STORM_DSi_Decryptor/
 Tools/STORM_DSi_Decryptor/**/bin/
 Tools/STORM_DSi_Decryptor/**/obj/
 Tools/STORM_DSi_Decryptor/**/publish/
 Tools/STORM_DSi_Decryptor/Installer/Payload/Payload.zip
 Tools/STORM_DSi_Decryptor/*.exe
 Tools/STORM_DSi_Decryptor/Installer/*.exe
+
+# STORM Multiplatform Avalonia & Native build outputs
+multiplatform/**/bin/
+multiplatform/**/obj/
+multiplatform/native/build*/
+
