@@ -1,5 +1,7 @@
 package me.magnum.melonds.ui.emulator.ui
 
+import android.view.HapticFeedbackConstants
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Slider
+import androidx.compose.material.SliderDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,27 +34,186 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import me.magnum.melonds.R
 
 @Composable
 fun Slot2PeripheralOverlay(
     addonType: Int,
+    solarLevel: Int = -1,
+    onSolarLevelChanged: ((level: Int) -> Unit)? = null,
     onGuitarFretStateChanged: (fretIndex: Int, pressed: Boolean) -> Unit,
     onPaddleAnalogDelta: (deltaX: Float) -> Unit,
     onDismissOverlay: () -> Unit,
 ) {
-    when (addonType) {
-        5 -> GuitarGripOverlay(
-            onFretStateChanged = onGuitarFretStateChanged,
-            onDismiss = onDismissOverlay,
-        )
-        6 -> PaddleControllerOverlay(
-            onPaddleDelta = onPaddleAnalogDelta,
-            onDismiss = onDismissOverlay,
-        )
+    BackHandler(onBack = onDismissOverlay)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)
+                ) {
+                    onDismissOverlay()
+                    true
+                } else {
+                    false
+                }
+            },
+    ) {
+        when (addonType) {
+            3 -> SolarSensorOverlay(
+                currentLevel = solarLevel,
+                onLevelChanged = { onSolarLevelChanged?.invoke(it) },
+                onDismiss = onDismissOverlay,
+            )
+            5 -> GuitarGripOverlay(
+                onFretStateChanged = onGuitarFretStateChanged,
+                onDismiss = onDismissOverlay,
+            )
+            6 -> PaddleControllerOverlay(
+                onPaddleDelta = onPaddleAnalogDelta,
+                onDismiss = onDismissOverlay,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SolarSensorOverlay(
+    currentLevel: Int,
+    onLevelChanged: (level: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var sliderValue by remember(currentLevel) {
+        mutableFloatStateOf(if (currentLevel < 0) 5f else currentLevel.toFloat().coerceIn(0f, 10f))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 14.dp, start = 12.dp, end = 12.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xCC0D111A))
+                .border(1.dp, Color(0x5500D2FF), RoundedCornerShape(18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(0.92f),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "☀️ " + stringResource(R.string.solar_sensor_slider_label).uppercase(),
+                    color = Color(0xFFFFB74D),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "✕",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onDismiss() }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 4 Instant Light Preset Chips
+            Row(
+                modifier = Modifier.fillMaxWidth(0.95f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val presets = listOf(
+                    0 to stringResource(R.string.solar_preset_0),
+                    4 to stringResource(R.string.solar_preset_35),
+                    7 to stringResource(R.string.solar_preset_70),
+                    10 to stringResource(R.string.solar_preset_100),
+                )
+                presets.forEach { (level, label) ->
+                    val isSelected = sliderValue.toInt() == level
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) Color(0xFFFFB74D).copy(alpha = 0.35f) else Color(0xFF1E293B))
+                            .border(
+                                1.dp,
+                                if (isSelected) Color(0xFFFFB74D) else Color(0x3300D2FF),
+                                RoundedCornerShape(8.dp),
+                            )
+                            .clickable {
+                                sliderValue = level.toFloat()
+                                onLevelChanged(level)
+                            }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) Color(0xFFFFB74D) else Color.White,
+                            fontSize = 9.5.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Slider from 0 to 10
+            Row(
+                modifier = Modifier.fillMaxWidth(0.92f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${(sliderValue * 10).toInt()}%",
+                    color = Color(0xFFFFB74D),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(36.dp),
+                )
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { newVal ->
+                        sliderValue = newVal
+                        onLevelChanged(newVal.toInt())
+                    },
+                    valueRange = 0f..10f,
+                    steps = 9,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFFFFB74D),
+                        activeTrackColor = Color(0xFFFFB74D),
+                        inactiveTrackColor = Color(0xFF334155),
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -60,6 +223,7 @@ private fun GuitarGripOverlay(
     onDismiss: () -> Unit,
 ) {
     val pressedStates = remember { mutableStateListOf(false, false, false, false) }
+    val view = LocalView.current
 
     DisposableEffect(Unit) {
         onDispose {
@@ -138,8 +302,13 @@ private fun GuitarGripOverlay(
                                 }
                                 for (i in 0..3) {
                                     if (pressedStates[i] != activeFrets[i]) {
-                                        pressedStates[i] = activeFrets[i]
-                                        onFretStateChanged(i, activeFrets[i])
+                                        val wasPressed = pressedStates[i]
+                                        val isNowPressed = activeFrets[i]
+                                        pressedStates[i] = isNowPressed
+                                        if (!wasPressed && isNowPressed) {
+                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        }
+                                        onFretStateChanged(i, isNowPressed)
                                     }
                                 }
                             }

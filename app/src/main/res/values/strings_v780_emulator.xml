@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="undo_overwrite_button">Undo overwrite</string>
+    <string name="undo_overwrite_success">Slot %d restored from backup</string>
+    <string name="undo_overwrite_badge">Undo available for slot %d</string>
+    <string name="relative_time_just_now">just now</string>
+    <string name="relative_time_minutes_ago">%d min ago</string>
+    <string name="relative_time_hours_ago">%d h ago</string>
+    <string name="relative_time_yesterday">yesterday</string>
+    <string name="relative_time_days_ago">%d d ago</string>
+    <string name="pause_session_duration_format">Session: %s</string>
+    <string name="pause_session_less_than_minute">&lt; 1 min</string>
+    <string name="pause_session_minutes">%d min</string>
+    <string name="pause_session_hours_minutes">%d h %d min</string>
+    <string name="battery_format">%d%%</string>
+    <string name="fast_forward_speed_unlimited">Unlimited (max)</string>
+    <string name="solar_preset_0">0% Shadow</string>
+    <string name="solar_preset_35">35% Cloudy</string>
+    <string name="solar_preset_70">70% Clear</string>
+    <string name="solar_preset_100">100% Zenith</string>
+    <string name="solar_sensor_slider_label">Solar light level (Boktai)</string>
+    <string name="translator_copy_last">Copy last translation</string>
+    <string name="translator_copied_to_clipboard">Translation copied to clipboard</string>
+    <string name="translator_no_translation_to_copy">No translation to copy</string>
+    <string name="translator_copy_action">Copy</string>
+    <string name="pause_resume_button">Resume</string>
+</resources>

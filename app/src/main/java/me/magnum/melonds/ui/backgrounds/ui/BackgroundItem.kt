@@ -58,9 +58,18 @@ fun BackgroundItem(
     onPreviewClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var dimensions by remember(background.uri) { mutableStateOf(BackgroundDimensionCache.get(background.uri)) }
+    androidx.compose.runtime.LaunchedEffect(background.uri) {
+        if (dimensions == null) {
+            dimensions = BackgroundDimensionCache.resolve(context, background.uri)
+        }
+    }
+
     BackgroundItemBase(
         backgroundId = background.id?.toString(),
         backgroundName = background.name,
+        dimensions = dimensions,
         backgroundImage = rememberAsyncImagePainter(background),
         isSelected = isSelected,
         showOptions = true,
@@ -81,6 +90,7 @@ fun NoneBackgroundItem(
     BackgroundItemBase(
         backgroundId = null,
         backgroundName = stringResource(R.string.none),
+        dimensions = null,
         backgroundImage = painterResource(R.drawable.ic_block),
         isSelected = isSelected,
         showOptions = false,
@@ -97,6 +107,7 @@ fun NoneBackgroundItem(
 private fun BackgroundItemBase(
     backgroundId: String?,
     backgroundName: String,
+    dimensions: Pair<Int, Int>? = null,
     backgroundImage: Painter,
     isSelected: Boolean,
     showOptions: Boolean,
@@ -160,15 +171,25 @@ private fun BackgroundItemBase(
                 modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = backgroundName,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.subtitle2,
-                    color = if (isSelected) accentColor else Color.White,
-                    fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = backgroundName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.subtitle2,
+                        color = if (isSelected) accentColor else Color.White,
+                        fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
+                    )
+                    if (dimensions != null) {
+                        Text(
+                            text = "${dimensions.first}×${dimensions.second}",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.caption,
+                            color = Color(0xFFAAAAAA),
+                        )
+                    }
+                }
                 if (showOptions) {
                     IconButton(
                         onClick = { isOptionsPopupVisible = true }
@@ -246,4 +267,27 @@ private fun BackgroundItemSelectedPreview() {
             onDeleteClick = { },
         )
     }
+}
+internal object BackgroundDimensionCache {
+    private val cache = java.util.concurrent.ConcurrentHashMap<android.net.Uri, Pair<Int, Int>>()
+
+    fun get(uri: android.net.Uri): Pair<Int, Int>? = cache[uri]
+
+    suspend fun resolve(context: android.content.Context, uri: android.net.Uri): Pair<Int, Int>? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            cache[uri]?.let { return@withContext it }
+            kotlin.runCatching {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val options = android.graphics.BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    android.graphics.BitmapFactory.decodeStream(stream, null, options)
+                    if (options.outWidth > 0 && options.outHeight > 0) {
+                        val dims = options.outWidth to options.outHeight
+                        cache[uri] = dims
+                        dims
+                    } else null
+                }
+            }.getOrNull()
+        }
 }

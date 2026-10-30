@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_search_settings_title">Поиск настроек</string>
+    <string name="v780_search_settings_hint">Поиск параметров и опций…</string>
+    <string name="v780_search_no_results">Параметры не найдены</string>
+    <string name="v780_search_results_count">Найдено: %1$d</string>
+    <string name="v780_rewind_summary_title">Расчёт буфера перемотки</string>
+    <string name="v780_rewind_summary_detail">Окно перемотки: %1$d сек (%2$d снимков). Расчётный объём буфера в ОЗУ: ~%3$s (до %4$s при пиковой нагрузке).</string>
+    <string name="v780_settings_maintenance_title">Обслуживание и резервные копии</string>
+    <string name="v780_settings_export_json_title">Экспорт настроек в файл JSON</string>
+    <string name="v780_settings_export_json_summary">Сохранить текущие настройки в переносимый файл JSON</string>
+    <string name="v780_settings_import_json_title">Импорт настроек из файла JSON</string>
+    <string name="v780_settings_import_json_summary">Загрузить и применить настройки из файла JSON</string>
+    <string name="v780_settings_reset_defaults_title">Сбросить основные настройки по умолчанию</string>
+    <string name="v780_settings_reset_defaults_summary">Сбросить основные параметры без изменения путей к играм и авторизации RetroAchievements</string>
+    <string name="v780_settings_reset_confirm_title">Сброс настроек</string>
+    <string name="v780_settings_reset_confirm_message">Вы уверены, что хотите сбросить основные настройки к значениям по умолчанию? Папки с играми, пути сохранений и авторизация RetroAchievements не будут затронуты.</string>
+    <string name="v780_settings_export_success">Настройки успешно экспортированы в JSON</string>
+    <string name="v780_settings_export_error">Не удалось экспортировать настройки</string>
+    <string name="v780_settings_import_success">Настройки успешно импортированы (применено параметров: %1$d)</string>
+    <string name="v780_settings_import_error">Ошибка импорта настроек: некорректный файл JSON</string>
+    <string name="v780_clear_rom_cache_confirm_title">Очистить кэш игр</string>
+    <string name="v780_clear_rom_cache_confirm_message">Вы уверены, что хотите очистить кэш ROM и распакованных иконок? Данные будут заново извлечены при следующем сканировании.</string>
+    <string name="v780_clear_rom_cache_success">Кэш ROM успешно очищен</string>
+    <string name="v780_bios_ready_status">DS: %1$s, DSi: %2$s</string>
+    <string name="v780_bios_status_ready">Готов</string>
+    <string name="v780_bios_status_not_ready">Не настроен</string>
+    <string name="v780_bios_size_valid">Корректно</string>
+    <string name="v780_bios_size_invalid">Неверный размер</string>
+    <string name="v780_internal_randomize_mac_title">Сгенерировать случайный MAC-адрес Nintendo</string>
+    <string name="v780_internal_randomize_mac_summary">Создать случайный сетевой адрес с префиксом Nintendo 00:09:BF</string>
+    <string name="v780_mac_generated">Сгенерирован MAC-адрес Nintendo: %1$s</string>
+    <string name="v780_mac_invalid_format">Некорректный формат MAC-адреса (требуется XX:XX:XX:XX:XX:XX)</string>
+</resources>

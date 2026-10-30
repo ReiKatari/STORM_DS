@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_search_settings_title">Cari pengaturan</string>
+    <string name="v780_search_settings_hint">Cari pengaturan dan opsi…</string>
+    <string name="v780_search_no_results">Pengaturan tidak ditemukan</string>
+    <string name="v780_search_results_count">Ditemukan: %1$d</string>
+    <string name="v780_rewind_summary_title">Estimasi buffer putar mundur</string>
+    <string name="v780_rewind_summary_detail">Jendela: %1$d dtk (%2$d status). Estimasi buffer RAM: ~%3$s (hingga %4$s saat beban puncak).</string>
+    <string name="v780_settings_maintenance_title">Pemeliharaan dan cadangan pengaturan</string>
+    <string name="v780_settings_export_json_title">Ekspor pengaturan ke berkas JSON</string>
+    <string name="v780_settings_export_json_summary">Simpan pengaturan saat ini ke berkas JSON portabel</string>
+    <string name="v780_settings_import_json_title">Impor pengaturan dari berkas JSON</string>
+    <string name="v780_settings_import_json_summary">Muat dan terapkan pengaturan dari berkas JSON</string>
+    <string name="v780_settings_reset_defaults_title">Atur ulang pengaturan utama ke default</string>
+    <string name="v780_settings_reset_defaults_summary">Atur ulang pengaturan tanpa mengubah direktori game atau RetroAchievements</string>
+    <string name="v780_settings_reset_confirm_title">Atur ulang pengaturan</string>
+    <string name="v780_settings_reset_confirm_message">Apakah Anda yakin ingin mengatur ulang pengaturan utama ke nilai default? Direktori game, penyimpanan dan RetroAchievements akan dipertahankan.</string>
+    <string name="v780_settings_export_success">Pengaturan berhasil diekspor ke JSON</string>
+    <string name="v780_settings_export_error">Gagal mengekspor pengaturan</string>
+    <string name="v780_settings_import_success">Pengaturan berhasil diimpor (%1$d parameter diterapkan)</string>
+    <string name="v780_settings_import_error">Gagal mengimpor pengaturan: berkas JSON tidak valid</string>
+    <string name="v780_clear_rom_cache_confirm_title">Hapus cache ROM</string>
+    <string name="v780_clear_rom_cache_confirm_message">Apakah Anda yakin ingin menghapus cache ROM dan ikon? Data akan diekstrak ulang pada pemindaian berikutnya.</string>
+    <string name="v780_clear_rom_cache_success">Cache ROM berhasil dihapus</string>
+    <string name="v780_bios_ready_status">DS: %1$s, DSi: %2$s</string>
+    <string name="v780_bios_status_ready">Siap</string>
+    <string name="v780_bios_status_not_ready">Belum dikonfigurasi</string>
+    <string name="v780_bios_size_valid">Valid</string>
+    <string name="v780_bios_size_invalid">Ukuran tidak valid</string>
+    <string name="v780_internal_randomize_mac_title">Buat alamat MAC Nintendo</string>
+    <string name="v780_internal_randomize_mac_summary">Buat alamat MAC acak dengan awalan Nintendo 00:09:BF</string>
+    <string name="v780_mac_generated">Alamat MAC Nintendo dibuat: %1$s</string>
+    <string name="v780_mac_invalid_format">Format alamat MAC tidak valid (harus XX:XX:XX:XX:XX:XX)</string>
+</resources>

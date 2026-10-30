@@ -18,6 +18,12 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
+                android:key="about_copy_diagnostics"
+                android:title="@string/v780_about_copy_diagnostics_title"
+                android:summary="@string/v780_about_copy_diagnostics_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="about_fork_info"
                 android:title="@string/about_fork_info_title"
                 android:summary="@string/about_fork_info_summary"

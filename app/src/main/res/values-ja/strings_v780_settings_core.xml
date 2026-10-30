@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_search_settings_title">設定を検索</string>
+    <string name="v780_search_settings_hint">設定やオプションを検索…</string>
+    <string name="v780_search_no_results">設定が見つかりません</string>
+    <string name="v780_search_results_count">件数: %1$d</string>
+    <string name="v780_rewind_summary_title">巻き戻しバッファの推定</string>
+    <string name="v780_rewind_summary_detail">期間: %1$d 秒 (%2$d スナップショット)。推定 RAM バッファ: ~%3$s (最大負荷時 %4$s)。</string>
+    <string name="v780_settings_maintenance_title">設定の保守とバックアップ</string>
+    <string name="v780_settings_export_json_title">設定を JSON ファイルにエクスポート</string>
+    <string name="v780_settings_export_json_summary">現在の設定をポータブルな JSON ファイルに保存します</string>
+    <string name="v780_settings_import_json_title">JSON ファイルから設定をインポート</string>
+    <string name="v780_settings_import_json_summary">JSON ファイルから設定を読み込んで適用します</string>
+    <string name="v780_settings_reset_defaults_title">主要な設定をデフォルトにリセット</string>
+    <string name="v780_settings_reset_defaults_summary">ゲームフォルダや RetroAchievements を変更せずに設定を初期化します</string>
+    <string name="v780_settings_reset_confirm_title">設定のリセット</string>
+    <string name="v780_settings_reset_confirm_message">主要な設定をデフォルト値にリセットしてもよろしいですか？ゲームフォルダ、セーブデータ、RetroAchievements は保持されます。</string>
+    <string name="v780_settings_export_success">設定を JSON に正常にエクスポートしました</string>
+    <string name="v780_settings_export_error">設定のエクスポートに失敗しました</string>
+    <string name="v780_settings_import_success">設定をインポートしました（%1$d 個のパラメータを適用）</string>
+    <string name="v780_settings_import_error">設定のインポートに失敗しました: 無効な JSON ファイル</string>
+    <string name="v780_clear_rom_cache_confirm_title">ROM キャッシュを消去</string>
+    <string name="v780_clear_rom_cache_confirm_message">ROM と展開済みアイコンのキャッシュを消去しますか？次回のスキャン時に再抽出されます。</string>
+    <string name="v780_clear_rom_cache_success">ROM キャッシュを消去しました</string>
+    <string name="v780_bios_ready_status">DS: %1$s, DSi: %2$s</string>
+    <string name="v780_bios_status_ready">準備完了</string>
+    <string name="v780_bios_status_not_ready">未設定</string>
+    <string name="v780_bios_size_valid">有効</string>
+    <string name="v780_bios_size_invalid">無効なサイズ</string>
+    <string name="v780_internal_randomize_mac_title">任天堂 MAC アドレスを生成</string>
+    <string name="v780_internal_randomize_mac_summary">任天堂プレフィックス 00:09:BF を持つランダムな MAC アドレスを生成</string>
+    <string name="v780_mac_generated">任天堂 MAC アドレスを生成しました: %1$s</string>
+    <string name="v780_mac_invalid_format">無効な MAC アドレス形式です（XX:XX:XX:XX:XX:XX である必要があります）</string>
+</resources>

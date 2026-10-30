@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="undo_overwrite_button">Pulihkan slot yang tertimpa</string>
+    <string name="undo_overwrite_success">Slot %d dipulihkan dari cadangan</string>
+    <string name="undo_overwrite_badge">Undo tersedia untuk slot %d</string>
+    <string name="relative_time_just_now">baru saja</string>
+    <string name="relative_time_minutes_ago">%d mnt lalu</string>
+    <string name="relative_time_hours_ago">%d jam lalu</string>
+    <string name="relative_time_yesterday">kemarin</string>
+    <string name="relative_time_days_ago">%d hr lalu</string>
+    <string name="pause_session_duration_format">Sesi: %s</string>
+    <string name="pause_session_less_than_minute">&lt; 1 mnt</string>
+    <string name="pause_session_minutes">%d mnt</string>
+    <string name="pause_session_hours_minutes">%d jam %d mnt</string>
+    <string name="battery_format">%d%%</string>
+    <string name="fast_forward_speed_unlimited">Tanpa batas (maks.)</string>
+    <string name="solar_preset_0">0% Bayangan</string>
+    <string name="solar_preset_35">35% Berawan</string>
+    <string name="solar_preset_70">70% Cerah</string>
+    <string name="solar_preset_100">100% Terik</string>
+    <string name="solar_sensor_slider_label">Tingkat sensor surya (Boktai)</string>
+    <string name="translator_copy_last">Salin terjemahan terakhir</string>
+    <string name="translator_copied_to_clipboard">Terjemahan disalin ke papan klip</string>
+    <string name="translator_no_translation_to_copy">Tidak ada teks terjemahan untuk disalin</string>
+    <string name="translator_copy_action">Salin</string>
+    <string name="pause_resume_button">Lanjutkan</string>
+</resources>

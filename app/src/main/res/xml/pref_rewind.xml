@@ -26,6 +26,7 @@
     <!--Only used to display information (max. memory usage) -->
     <Preference
             android:key="rewind_info"
+            android:title="@string/v780_rewind_summary_title"
             android:enabled="false"
             app:iconSpaceReserved="false"
             tools:summary="Max. memory usage: 100MB" />

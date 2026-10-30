@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">レイアウトを複製</string>
+    <string name="layout_copy_suffix">(コピー)</string>
+    <string name="layout_duplicate_success">レイアウトを複製しました</string>
+    <string name="action_layout_undo">元に戻す</string>
+    <string name="layout_snap_to_grid">グリッドにスナップ</string>
+    <string name="layout_snap_to_grid_summary">コントロールを 16 px グリッドと中心軸にスナップ</string>
+    <string name="layout_unsaved_changes_title">未保存の変更</string>
+    <string name="layout_unsaved_changes_message">このレイアウトに未保存の変更があります。終了する前に保存しますか？</string>
+    <string name="component_group_screens">本体スクリーン</string>
+    <string name="component_group_gameplay">メインゲームボタン</string>
+    <string name="component_group_emulator">エミュレータクイック機能</string>
+    <string name="component_group_combo_special">コンボ・特殊ボタン</string>
+    <string name="component_group_stick">スティック・アナログ操作</string>
+</resources>

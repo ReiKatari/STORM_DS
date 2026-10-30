@@ -117,7 +117,7 @@ fun ConsolePresetsOverlay(
                 if (screen == PresetsScreen.MAIN) onBack() else screen = PresetsScreen.MAIN
             }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back)) {
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)) {
                     if (screen == PresetsScreen.MAIN) onBack() else screen = PresetsScreen.MAIN
                     true
                 } else {
@@ -211,7 +211,7 @@ fun ConsolePresetsOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.pause_resume_button),
                                         color = colors.green,
                                         fontFamily = Manrope,
                                         fontSize = 11.5.sp,

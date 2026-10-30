@@ -10,6 +10,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +85,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+
+
+enum class StatsSortOption {
+    BY_TIME,
+    BY_LAUNCHES,
+    RECENT,
+}
 
 @AndroidEntryPoint
 class PlayerStatsActivity : AppCompatActivity() {
@@ -148,6 +157,7 @@ private fun PlayerStatsScreen(
 ) {
     val colors = watermelon
     val accentColor = Color(AppThemeManager.getAccentColor())
+    var selectedSortOption by remember { androidx.compose.runtime.mutableStateOf(StatsSortOption.BY_TIME) }
 
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -236,59 +246,122 @@ private fun PlayerStatsScreen(
                     )
                 }
 
-                if (summary.topByPlayTime.isEmpty() && summary.topByLaunches.isEmpty()) {
+                val hasAnyStats = summary.topByPlayTime.isNotEmpty() || summary.topByLaunches.isNotEmpty() || summary.topRecent.isNotEmpty()
+                if (!hasAnyStats) {
                     item(key = "empty_state") {
                         EmptyStatsCard()
                     }
                 } else {
-                    if (summary.topByPlayTime.isNotEmpty()) {
-                        item(key = "header_top_time") {
-                            SectionTitleRow(
-                                icon = Icons.Filled.Schedule,
-                                title = stringResource(R.string.feature_stats_top_by_time),
-                                tint = accentColor,
+                    item(key = "sort_chips_row") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            StatsSortChip(
+                                label = stringResource(R.string.feature_stats_sort_time),
+                                isSelected = selectedSortOption == StatsSortOption.BY_TIME,
+                                onClick = { selectedSortOption = StatsSortOption.BY_TIME },
+                                accentColor = accentColor,
+                                modifier = Modifier.weight(1f),
                             )
-                        }
-                        val maxPlayTimeMs = summary.topByPlayTime.maxOfOrNull { it.playTimeMs }?.coerceAtLeast(1L) ?: 1L
-                        itemsIndexed(
-                            items = summary.topByPlayTime,
-                            key = { _, item -> "time:${item.uriString}" },
-                        ) { index, item ->
-                            StatGameCard(
-                                rank = index + 1,
-                                item = item,
-                                boxArtUrl = boxArtByUri[item.uriString]?.takeIf { it.isNotEmpty() },
-                                progressFraction = (item.playTimeMs.toFloat() / maxPlayTimeMs.toFloat()).coerceIn(0.05f, 1f),
-                                primaryBadge = formatStatsDuration(item.playTimeMs),
-                                secondaryBadge = stringResource(R.string.feature_stats_launches_count, item.launchCount),
-                                barColor = accentColor,
+                            StatsSortChip(
+                                label = stringResource(R.string.feature_stats_sort_launches),
+                                isSelected = selectedSortOption == StatsSortOption.BY_LAUNCHES,
+                                onClick = { selectedSortOption = StatsSortOption.BY_LAUNCHES },
+                                accentColor = colors.green,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StatsSortChip(
+                                label = stringResource(R.string.feature_stats_sort_recent),
+                                isSelected = selectedSortOption == StatsSortOption.RECENT,
+                                onClick = { selectedSortOption = StatsSortOption.RECENT },
+                                accentColor = Color(0xFFF59E0B),
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
 
-                    if (summary.topByLaunches.isNotEmpty()) {
-                        item(key = "header_top_launches") {
-                            Spacer(Modifier.height(4.dp))
-                            SectionTitleRow(
-                                icon = Icons.Filled.BarChart,
-                                title = stringResource(R.string.feature_stats_top_by_launches),
-                                tint = colors.green,
-                            )
+                    when (selectedSortOption) {
+                        StatsSortOption.BY_TIME -> {
+                            if (summary.topByPlayTime.isNotEmpty()) {
+                                item(key = "header_top_time") {
+                                    SectionTitleRow(
+                                        icon = Icons.Filled.Schedule,
+                                        title = stringResource(R.string.feature_stats_top_by_time),
+                                        tint = accentColor,
+                                    )
+                                }
+                                val maxPlayTimeMs = summary.topByPlayTime.maxOfOrNull { it.playTimeMs }?.coerceAtLeast(1L) ?: 1L
+                                itemsIndexed(
+                                    items = summary.topByPlayTime,
+                                    key = { _, item -> "time:${item.uriString}" },
+                                ) { index, item ->
+                                    StatGameCard(
+                                        rank = index + 1,
+                                        item = item,
+                                        boxArtUrl = boxArtByUri[item.uriString]?.takeIf { it.isNotEmpty() },
+                                        progressFraction = (item.playTimeMs.toFloat() / maxPlayTimeMs.toFloat()).coerceIn(0.05f, 1f),
+                                        primaryBadge = formatStatsDuration(item.playTimeMs),
+                                        secondaryBadge = stringResource(R.string.feature_stats_launches_count, item.launchCount),
+                                        barColor = accentColor,
+                                    )
+                                }
+                            }
                         }
-                        val maxLaunches = summary.topByLaunches.maxOfOrNull { it.launchCount }?.coerceAtLeast(1) ?: 1
-                        itemsIndexed(
-                            items = summary.topByLaunches,
-                            key = { _, item -> "launch:${item.uriString}" },
-                        ) { index, item ->
-                            StatGameCard(
-                                rank = index + 1,
-                                item = item,
-                                boxArtUrl = boxArtByUri[item.uriString]?.takeIf { it.isNotEmpty() },
-                                progressFraction = (item.launchCount.toFloat() / maxLaunches.toFloat()).coerceIn(0.08f, 1f),
-                                primaryBadge = stringResource(R.string.feature_stats_launches_count, item.launchCount),
-                                secondaryBadge = formatStatsDuration(item.playTimeMs),
-                                barColor = colors.green,
-                            )
+                        StatsSortOption.BY_LAUNCHES -> {
+                            if (summary.topByLaunches.isNotEmpty()) {
+                                item(key = "header_top_launches") {
+                                    SectionTitleRow(
+                                        icon = Icons.Filled.BarChart,
+                                        title = stringResource(R.string.feature_stats_top_by_launches),
+                                        tint = colors.green,
+                                    )
+                                }
+                                val maxLaunches = summary.topByLaunches.maxOfOrNull { it.launchCount }?.coerceAtLeast(1) ?: 1
+                                itemsIndexed(
+                                    items = summary.topByLaunches,
+                                    key = { _, item -> "launch:${item.uriString}" },
+                                ) { index, item ->
+                                    StatGameCard(
+                                        rank = index + 1,
+                                        item = item,
+                                        boxArtUrl = boxArtByUri[item.uriString]?.takeIf { it.isNotEmpty() },
+                                        progressFraction = (item.launchCount.toFloat() / maxLaunches.toFloat()).coerceIn(0.08f, 1f),
+                                        primaryBadge = stringResource(R.string.feature_stats_launches_count, item.launchCount),
+                                        secondaryBadge = formatStatsDuration(item.playTimeMs),
+                                        barColor = colors.green,
+                                    )
+                                }
+                            }
+                        }
+                        StatsSortOption.RECENT -> {
+                            val recentItems = summary.topRecent.ifEmpty { summary.topByPlayTime }
+                            if (recentItems.isNotEmpty()) {
+                                item(key = "header_top_recent") {
+                                    SectionTitleRow(
+                                        icon = Icons.Filled.Schedule,
+                                        title = stringResource(R.string.feature_stats_sort_recent),
+                                        tint = Color(0xFFF59E0B),
+                                    )
+                                }
+                                val maxPlayTimeMs = recentItems.maxOfOrNull { it.playTimeMs }?.coerceAtLeast(1L) ?: 1L
+                                val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+                                itemsIndexed(
+                                    items = recentItems,
+                                    key = { _, item -> "recent:${item.uriString}" },
+                                ) { index, item ->
+                                    val dateStr = if (item.lastPlayedEpochMs > 0L) dateFormat.format(Date(item.lastPlayedEpochMs)) else "—"
+                                    StatGameCard(
+                                        rank = index + 1,
+                                        item = item,
+                                        boxArtUrl = boxArtByUri[item.uriString]?.takeIf { it.isNotEmpty() },
+                                        progressFraction = (item.playTimeMs.toFloat() / maxPlayTimeMs.toFloat()).coerceIn(0.05f, 1f),
+                                        primaryBadge = dateStr,
+                                        secondaryBadge = formatStatsDuration(item.playTimeMs),
+                                        barColor = Color(0xFFF59E0B),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -697,5 +770,40 @@ private fun formatShortBarDuration(durationMs: Long): String {
         hours >= 1L -> "${hours}h${if (minutes > 0L) " ${minutes}m" else ""}"
         minutes >= 1L -> "${minutes}m"
         else -> "<1m"
+    }
+}
+
+@Composable
+private fun StatsSortChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val colors = watermelon
+    val shape = RoundedCornerShape(20.dp)
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier
+            .clip(shape)
+            .background(if (isSelected) accentColor.copy(alpha = 0.18f) else colors.surface)
+            .border(
+                width = if (isSelected) 1.5.dp else 1.dp,
+                color = if (isSelected) accentColor else colors.line,
+                shape = shape,
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp, horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (isSelected) accentColor else colors.text2,
+            fontSize = 11.5.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }

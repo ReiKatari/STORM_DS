@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.settings.vulkandriver
 
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -171,7 +172,8 @@ fun VulkanDriverManagerScreen(
             // GPU Info Header
             GpuInfoHeader(
                 gpuDescription = state.gpuDescription,
-                gpuSeriesName = state.gpuSeries.displayName
+                gpuSeriesName = state.gpuSeries.displayName,
+                isSupported = state.isSupported,
             )
 
             // Recommended Hero Banner
@@ -256,7 +258,17 @@ fun VulkanDriverManagerScreen(
 }
 
 @Composable
-fun GpuInfoHeader(gpuDescription: String, gpuSeriesName: String) {
+fun GpuInfoHeader(
+    gpuDescription: String,
+    gpuSeriesName: String,
+    isSupported: Boolean,
+) {
+    val socModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Build.SOC_MODEL.takeIf { !it.isNullOrBlank() } ?: Build.HARDWARE
+    } else {
+        Build.HARDWARE
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -265,31 +277,62 @@ fun GpuInfoHeader(gpuDescription: String, gpuSeriesName: String) {
         backgroundColor = MaterialTheme.colors.surface,
         elevation = 2.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(14.dp)
         ) {
-            Icon(
-                Icons.Default.Memory,
-                contentDescription = null,
-                tint = MaterialTheme.colors.primary,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "📱 Ваше устройство: $gpuDescription",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colors.onSurface
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Memory,
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier.size(32.dp)
                 )
-                Text(
-                    text = "Совместимость: $gpuSeriesName",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "📱 Устройство: $gpuDescription",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colors.onSurface
+                    )
+                    Text(
+                        text = "Чипсет: $socModel (Hardware: ${Build.HARDWARE})",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "Архитектура GPU: $gpuSeriesName",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (isSupported) Color(0xFF059669).copy(alpha = 0.12f) else Color(0xFFD97706).copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isSupported) "✅ Совместимость подтверждена: поддерживаются кастомные драйверы Qualcomm Adreno и Mesa Turnip для максимальной производительности."
+                        else "ℹ️ Кастомные драйверы Adreno не поддерживаются (чипсет $socModel: Mali / Xclipse / PowerVR). Эмулятор использует стабильный системный драйвер Vulkan от производителя устройства.",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = if (isSupported) Color(0xFF047857) else Color(0xFFB45309),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
@@ -683,8 +726,14 @@ fun InstalledDriversList(
                             fontSize = 14.sp,
                             color = MaterialTheme.colors.onSurface
                         )
+                        val sizeStr = getInstalledDriverSize(driver)
+                        val details = if (sizeStr != null) {
+                            "Файл: ${driver.driverName} • Размер: $sizeStr"
+                        } else {
+                            "Файл: ${driver.driverName}"
+                        }
                         Text(
-                            text = "Файл: ${driver.driverName}",
+                            text = details,
                             fontSize = 11.sp,
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                         )
@@ -716,3 +765,17 @@ fun InstalledDriversList(
         }
     }
 }
+private fun getInstalledDriverSize(driver: VulkanDriverInfo): String? {
+    return runCatching {
+        val dir = java.io.File(driver.driverDir)
+        if (!dir.exists()) return null
+        val totalBytes = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        if (totalBytes <= 0L) return null
+        if (totalBytes >= 1024 * 1024) {
+            String.format(java.util.Locale.US, "%.1f МБ", totalBytes / (1024.0 * 1024.0))
+        } else {
+            String.format(java.util.Locale.US, "%d КБ", totalBytes / 1024)
+        }
+    }.getOrNull()
+}
+

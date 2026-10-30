@@ -68,6 +68,13 @@
         </menu>
     </item>
 
+        <item
+        android:id="@+id/action_random_rom"
+        android:title="@string/action_random_rom"
+        android:icon="@drawable/ic_play_arrow"
+        android:orderInCategory="3"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/action_rom_list_refresh"
         android:title="@string/action_refresh_rom_list"

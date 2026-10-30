@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Jeu aléatoire</string>
+    <string name="toast_random_rom_selected">Sélectionné: %s</string>
+    <string name="toast_no_roms_found">Aucun jeu trouvé</string>
+    <string name="reset_rom_config_section">Réinitialisation</string>
+    <string name="reset_rom_config_title">Réinitialiser les paramètres du jeu</string>
+    <string name="reset_rom_config_confirm_message">Rétablir tous les paramètres individuels de ce jeu aux valeurs globales?</string>
+    <string name="action_reset">Réinitialiser</string>
+    <string name="rom_technical_info_title">Informations techniques du ROM</string>
+    <string name="rom_technical_info_copy">Copier les détails</string>
+    <string name="rom_technical_info_copied">Détails techniques copiés dans le presse-papiers</string>
+    <string name="rom_info_title_label">Titre</string>
+    <string name="rom_info_file_name_label">Nom de fichier</string>
+    <string name="rom_info_file_size_label">Taille du fichier</string>
+    <string name="rom_info_platform_label">Plateforme</string>
+    <string name="rom_info_game_code_label">Code cartouche</string>
+    <string name="rom_info_play_time_label">Temps de jeu</string>
+    <string name="rom_info_last_played_label">Dernière partie</string>
+    <string name="rom_info_never_played">Jamais</string>
+    <string name="feature_stats_sort_time">Par temps</string>
+    <string name="feature_stats_sort_launches">Par lancements</string>
+    <string name="feature_stats_sort_recent">Récents</string>
+    <string name="cheats_search_hint">Rechercher des codes...</string>
+    <string name="cheats_disable_all">Tout désactiver</string>
+    <string name="cheats_disable_all_confirm_title">Désactiver tous les codes</string>
+    <string name="cheats_disable_all_confirm_message">Voulez-vous vraiment désactiver tous les codes actifs pour ce jeu?</string>
+    <string name="cheats_all_disabled_toast">Tous les codes sont désactivés</string>
+    <string name="error_cheat_line_format">Ligne %1$d: format Action Replay requis (XXXXXXXX YYYYYYYY)</string>
+</resources>

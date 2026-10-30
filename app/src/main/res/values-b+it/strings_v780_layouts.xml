@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Duplica layout</string>
+    <string name="layout_copy_suffix">(copia)</string>
+    <string name="layout_duplicate_success">Layout duplicato</string>
+    <string name="action_layout_undo">Annulla</string>
+    <string name="layout_snap_to_grid">Aggancia alla griglia</string>
+    <string name="layout_snap_to_grid_summary">Aggancia i controlli alla griglia da 16 px e assi centrali</string>
+    <string name="layout_unsaved_changes_title">Modifiche non salvate</string>
+    <string name="layout_unsaved_changes_message">Ci sono modifiche non salvate in questo layout. Salvarle prima di uscire?</string>
+    <string name="component_group_screens">Schermi della console</string>
+    <string name="component_group_gameplay">Pulsanti di gioco principali</string>
+    <string name="component_group_emulator">Azioni rapide dell\'emulatore</string>
+    <string name="component_group_combo_special">Pulsanti combinati e speciali</string>
+    <string name="component_group_stick">Levetta e controllo analogico</string>
+</resources>

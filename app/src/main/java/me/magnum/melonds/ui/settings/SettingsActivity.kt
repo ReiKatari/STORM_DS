@@ -197,8 +197,58 @@ class SettingsActivity :
                 finish()
             }
             return true
+        } else if (id == R.id.action_search_settings) {
+            openSearchDialog()
+            return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    fun openSearchDialog() {
+        SettingsSearchDialog(this, this).show()
+    }
+
+    fun navigateToPreference(fragmentClassName: String, preferenceKey: String?) {
+        val current = supportFragmentManager.fragments.lastOrNull()
+        if (current != null && current::class.java.name == fragmentClassName && current is PreferenceFragmentCompat) {
+            if (preferenceKey != null) {
+                current.scrollToPreference(preferenceKey)
+            }
+            return
+        }
+
+        val fragment = supportFragmentManager.fragmentFactory.instantiate(classLoader, fragmentClassName).apply {
+            if (preferenceKey != null) {
+                arguments = bundleOf(
+                    PreferenceFragmentCompat.ARG_PREFERENCE_ROOT to null,
+                    "target_preference_key" to preferenceKey
+                )
+            }
+        }
+
+        supportFragmentManager.commit {
+            setCustomAnimations(
+                R.anim.fragment_translate_enter_push,
+                R.anim.fragment_translate_exit_push,
+                R.anim.fragment_translate_enter_pop,
+                R.anim.fragment_translate_exit_pop
+            )
+            replace(binding.settingsContainer.id, fragment)
+            addToBackStack(null)
+        }
+
+        if (preferenceKey != null) {
+            supportFragmentManager.registerFragmentLifecycleCallbacks(object : androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks() {
+                override fun onFragmentViewCreated(fm: androidx.fragment.app.FragmentManager, f: androidx.fragment.app.Fragment, v: View, savedInstanceState: Bundle?) {
+                    if (f === fragment) {
+                        fm.unregisterFragmentLifecycleCallbacks(this)
+                        v.post {
+                            (f as? PreferenceFragmentCompat)?.scrollToPreference(preferenceKey)
+                        }
+                    }
+                }
+            }, false)
+        }
     }
 
     private fun updateTitle() {

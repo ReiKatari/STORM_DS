@@ -25,6 +25,22 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
         }
     }
 
+    fun duplicateLayout(layout: LayoutConfiguration, copySuffix: String, onComplete: ((LayoutConfiguration) -> Unit)? = null) {
+        viewModelScope.launch {
+            val baseName = layout.name?.ifBlank { "Layout" } ?: "Layout"
+            val newName = "$baseName $copySuffix".trim()
+            val duplicatedLayout = layout.copy(
+                id = UUID.randomUUID(),
+                name = newName,
+                type = LayoutConfiguration.LayoutType.CUSTOM
+            )
+            layoutsRepository.saveLayout(duplicatedLayout)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                onComplete?.invoke(duplicatedLayout)
+            }
+        }
+    }
+
     fun deleteLayout(layout: LayoutConfiguration) {
         viewModelScope.launch {
             if (layout.id == selectedLayoutId.value) {
@@ -38,7 +54,7 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val dto = me.magnum.melonds.impl.dtos.layout.LayoutConfigurationDto.fromModel(layout)
-                val json = com.google.gson.Gson().toJson(dto)
+                val json = com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(dto)
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.toByteArray(Charsets.UTF_8))
                 }

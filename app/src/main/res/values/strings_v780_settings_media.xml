@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Gyroscope mode</string>
+    <string name="v780_ra_profile_title">RetroAchievements profile</string>
+    <string name="v780_internal_resolution_high_warning">High load: increased heat and VRAM usage possible</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Warning: increased heat and VRAM usage</string>
+    <string name="v780_video_maintenance_category">Maintenance and reset</string>
+    <string name="v780_video_reset_enhancements_title">Reset enhancements to defaults</string>
+    <string name="v780_video_reset_enhancements_summary">Resets resolution scale, filters, shaders, and 3D hacks to safe defaults</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Reset all graphical enhancements, filters, shaders, and experimental video hacks to safe default values?</string>
+    <string name="v780_video_reset_enhancements_action">Reset</string>
+    <string name="v780_video_reset_enhancements_success">Graphical enhancements reset to defaults</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Permission granted</string>
+    <string name="v780_mic_permission_required">Audio recording permission required</string>
+    <string name="v780_connected_controllers_format">Connected: %s</string>
+    <string name="v780_no_controllers_detected">No gamepads detected</string>
+    <string name="v780_input_auto_map_title">Auto-map standard gamepad</string>
+    <string name="v780_input_auto_map_success">Standard gamepad layout mapped successfully</string>
+    <string name="v780_input_clear_all_title">Clear all assignments</string>
+    <string name="v780_input_clear_all_confirm_message">Are you sure you want to clear all button and axis assignments?</string>
+    <string name="v780_input_clear_all_action">Clear</string>
+    <string name="v780_input_clear_all_success">All button assignments cleared</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Competitive mode: loading save states, rewind, slow-motion, and cheats are strictly disabled during an active session.</string>
+    <string name="v780_about_copy_diagnostics_title">Copy device and renderer summary</string>
+    <string name="v780_about_copy_diagnostics_summary">Copies system info, GPU model, and Vulkan support to clipboard</string>
+    <string name="v780_about_copy_diagnostics_success">Device summary copied to clipboard</string>
+    <string name="v780_diagnostics_vulkan_supported">Supported</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Unsupported</string>
+</resources>

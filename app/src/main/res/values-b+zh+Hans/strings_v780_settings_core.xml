@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_search_settings_title">搜索设置</string>
+    <string name="v780_search_settings_hint">搜索设置和选项…</string>
+    <string name="v780_search_no_results">未找到相关设置</string>
+    <string name="v780_search_results_count">找到: %1$d</string>
+    <string name="v780_rewind_summary_title">倒带缓冲区预估</string>
+    <string name="v780_rewind_summary_detail">时间窗口: %1$d 秒 (%2$d 个快照)。预估内存占用: ~%3$s (峰值最高 %4$s)。</string>
+    <string name="v780_settings_maintenance_title">设置维护和备份</string>
+    <string name="v780_settings_export_json_title">导出设置为 JSON 文件</string>
+    <string name="v780_settings_export_json_summary">将当前设置保存到便携式 JSON 文件</string>
+    <string name="v780_settings_import_json_title">从 JSON 文件导入设置</string>
+    <string name="v780_settings_import_json_summary">从 JSON 文件加载并应用设置</string>
+    <string name="v780_settings_reset_defaults_title">重置主要设置为默认值</string>
+    <string name="v780_settings_reset_defaults_summary">恢复常规、视频和音频设置，不影响游戏目录和 RetroAchievements</string>
+    <string name="v780_settings_reset_confirm_title">重置设置</string>
+    <string name="v780_settings_reset_confirm_message">确定要将主要设置重置为默认值吗？游戏目录、存档路径和 RetroAchievements 登录信息将被保留。</string>
+    <string name="v780_settings_export_success">设置已成功导出到 JSON</string>
+    <string name="v780_settings_export_error">导出设置失败</string>
+    <string name="v780_settings_import_success">设置导入成功（已应用 %1$d 个参数）</string>
+    <string name="v780_settings_import_error">导入设置失败：无效的 JSON 文件</string>
+    <string name="v780_clear_rom_cache_confirm_title">清理 ROM 缓存</string>
+    <string name="v780_clear_rom_cache_confirm_message">确定要清理 ROM 和提取的图标缓存吗？下次扫描游戏库时将重新提取。</string>
+    <string name="v780_clear_rom_cache_success">ROM 缓存已成功清理</string>
+    <string name="v780_bios_ready_status">DS: %1$s, DSi: %2$s</string>
+    <string name="v780_bios_status_ready">已就绪</string>
+    <string name="v780_bios_status_not_ready">未配置</string>
+    <string name="v780_bios_size_valid">有效</string>
+    <string name="v780_bios_size_invalid">大小无效</string>
+    <string name="v780_internal_randomize_mac_title">生成任天堂 MAC 地址</string>
+    <string name="v780_internal_randomize_mac_summary">使用任天堂前缀 00:09:BF 创建随机 MAC 地址</string>
+    <string name="v780_mac_generated">已生成任天堂 MAC 地址: %1$s</string>
+    <string name="v780_mac_invalid_format">MAC 地址格式无效（必须为 XX:XX:XX:XX:XX:XX）</string>
+</resources>

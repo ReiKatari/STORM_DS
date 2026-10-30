@@ -42,7 +42,7 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_roms, rootKey)
         val cacheSizePreference = findPreference<SeekBarPreference>("rom_cache_max_size")!!
-        clearRomCachePreference = findPreference("rom_cache_clear")!!
+        clearRomCachePreference = findPreference<Preference>("rom_cache_clear") ?: findPreference("clear_rom_cache")!!
 
         helper.setupStoragePickerPreference(findPreference<StoragePickerPreference>("rom_search_dirs")!!) { uri, persistDirectory ->
             handleSettingsMirror(uri, persistDirectory)
@@ -59,9 +59,18 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         val gameTdb3dCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_3d_covers_enabled")
 
         clearRomCachePreference.setOnPreferenceClickListener {
-            if (!viewModel.clearRomCache()) {
-                Toast.makeText(requireContext(), R.string.error_clear_rom_cache, Toast.LENGTH_LONG).show()
-            }
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.v780_clear_rom_cache_confirm_title)
+                .setMessage(R.string.v780_clear_rom_cache_confirm_message)
+                .setPositiveButton(R.string.v780_clear_rom_cache_confirm_title) { _, _ ->
+                    if (!viewModel.clearRomCache()) {
+                        Toast.makeText(requireContext(), R.string.error_clear_rom_cache, Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(requireContext(), R.string.v780_clear_rom_cache_success, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
             true
         }
     }
@@ -72,7 +81,9 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.romCacheSize.collect {
                     val cacheSizeRepresentation = SizeUtils.getBestSizeStringRepresentation(requireContext(), it)
-                    clearRomCachePreference.summary = getString(R.string.cache_size, cacheSizeRepresentation)
+                    val summaryStr = getString(R.string.cache_size, cacheSizeRepresentation)
+                    clearRomCachePreference.summary = summaryStr
+                    findPreference<Preference>("clear_rom_cache")?.summary = summaryStr
                 }
             }
         }

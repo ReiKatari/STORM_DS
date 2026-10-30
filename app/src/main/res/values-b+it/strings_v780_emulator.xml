@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="undo_overwrite_button">Ripristina slot sovrascritto</string>
+    <string name="undo_overwrite_success">Slot %d ripristinato dal backup</string>
+    <string name="undo_overwrite_badge">Ripristino disponibile per slot %d</string>
+    <string name="relative_time_just_now">adesso</string>
+    <string name="relative_time_minutes_ago">%d min fa</string>
+    <string name="relative_time_hours_ago">%d ore fa</string>
+    <string name="relative_time_yesterday">ieri</string>
+    <string name="relative_time_days_ago">%d giorni fa</string>
+    <string name="pause_session_duration_format">Sessione: %s</string>
+    <string name="pause_session_less_than_minute">&lt; 1 min</string>
+    <string name="pause_session_minutes">%d min</string>
+    <string name="pause_session_hours_minutes">%d ore %d min</string>
+    <string name="battery_format">%d%%</string>
+    <string name="fast_forward_speed_unlimited">Illimitata (max.)</string>
+    <string name="solar_preset_0">0% Ombra</string>
+    <string name="solar_preset_35">35% Nuvoloso</string>
+    <string name="solar_preset_70">70% Sereno</string>
+    <string name="solar_preset_100">100% Zenit</string>
+    <string name="solar_sensor_slider_label">Sensore solare (Boktai)</string>
+    <string name="translator_copy_last">Copia ultima traduzione</string>
+    <string name="translator_copied_to_clipboard">Traduzione copiata negli appunti</string>
+    <string name="translator_no_translation_to_copy">Nessuna traduzione da copiare</string>
+    <string name="translator_copy_action">Copia</string>
+    <string name="pause_resume_button">Riprendi</string>
+</resources>

@@ -36,15 +36,19 @@ private data class LayoutMenuItem(
 
 @Composable
 fun LayoutEditorMenuDialog(
+    snapToGrid: Boolean = true,
+    canUndo: Boolean = false,
+    onToggleSnapToGrid: (Boolean) -> Unit = {},
     onDismiss: () -> Unit,
     onOptionSelected: (MenuOption) -> Unit,
 ) {
     val colors = LocalWatermelonColors.current
 
     val menuItems = listOf(
+        LayoutMenuItem(MenuOption.UNDO, R.string.action_layout_undo, Icons.Filled.Undo),
         LayoutMenuItem(MenuOption.PROPERTIES, R.string.properties, Icons.Filled.Settings),
         LayoutMenuItem(MenuOption.BACKGROUNDS, R.string.background, Icons.Filled.Image),
-        LayoutMenuItem(MenuOption.REVERT, R.string.revert_changes, Icons.Filled.Undo),
+        LayoutMenuItem(MenuOption.REVERT, R.string.revert_changes, Icons.Filled.Restore),
         LayoutMenuItem(MenuOption.SAVE_AS_NEW, R.string.save_as_new, Icons.Filled.Add),
         LayoutMenuItem(MenuOption.SAVE_AND_EXIT, R.string.save_and_exit, Icons.Filled.Check),
         LayoutMenuItem(MenuOption.EXIT_WITHOUT_SAVING, R.string.exit_without_saving, Icons.Filled.Close),
@@ -118,6 +122,58 @@ fun LayoutEditorMenuDialog(
 
                     Spacer(Modifier.height(14.dp))
                     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+                    Spacer(Modifier.height(10.dp))
+
+                    // Snap to grid quick toggle
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, if (snapToGrid) colors.green.copy(alpha = 0.5f) else colors.line, RoundedCornerShape(12.dp))
+                            .clickable { onToggleSnapToGrid(!snapToGrid) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                imageVector = if (snapToGrid) Icons.Filled.GridOn else Icons.Filled.GridOff,
+                                contentDescription = null,
+                                tint = if (snapToGrid) colors.green else colors.text3,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.layout_snap_to_grid),
+                                    color = colors.text,
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = stringResource(R.string.layout_snap_to_grid_summary),
+                                    color = colors.text3,
+                                    fontFamily = WatermelonMono,
+                                    fontSize = 11.sp,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            androidx.compose.material.Switch(
+                                checked = snapToGrid,
+                                onCheckedChange = onToggleSnapToGrid,
+                                colors = androidx.compose.material.SwitchDefaults.colors(
+                                    checkedThumbColor = colors.green,
+                                    checkedTrackColor = colors.green.copy(alpha = 0.5f),
+                                    uncheckedThumbColor = colors.text3,
+                                    uncheckedTrackColor = colors.surface,
+                                ),
+                            )
+                        }
+                    }
+
                     Spacer(Modifier.height(10.dp))
 
                     // Menu Options

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Zufälliges Spiel</string>
+    <string name="toast_random_rom_selected">Ausgewählt: %s</string>
+    <string name="toast_no_roms_found">Keine Spiele gefunden</string>
+    <string name="reset_rom_config_section">Zurücksetzen</string>
+    <string name="reset_rom_config_title">Individuelle Spieleinstellungen zurücksetzen</string>
+    <string name="reset_rom_config_confirm_message">Alle individuellen Einstellungen dieses Spiels auf Standardwerte zurücksetzen?</string>
+    <string name="action_reset">Zurücksetzen</string>
+    <string name="rom_technical_info_title">Technische ROM-Informationen</string>
+    <string name="rom_technical_info_copy">Details kopieren</string>
+    <string name="rom_technical_info_copied">Technische Details in Zwischenablage kopiert</string>
+    <string name="rom_info_title_label">Titel</string>
+    <string name="rom_info_file_name_label">Dateiname</string>
+    <string name="rom_info_file_size_label">Dateigröße</string>
+    <string name="rom_info_platform_label">Plattform</string>
+    <string name="rom_info_game_code_label">Modulcode</string>
+    <string name="rom_info_play_time_label">Spielzeit</string>
+    <string name="rom_info_last_played_label">Zuletzt gespielt</string>
+    <string name="rom_info_never_played">Nie</string>
+    <string name="feature_stats_sort_time">Nach Zeit</string>
+    <string name="feature_stats_sort_launches">Nach Starts</string>
+    <string name="feature_stats_sort_recent">Kürzlich</string>
+    <string name="cheats_search_hint">Cheats suchen...</string>
+    <string name="cheats_disable_all">Alle deaktivieren</string>
+    <string name="cheats_disable_all_confirm_title">Alle Cheats deaktivieren</string>
+    <string name="cheats_disable_all_confirm_message">Möchten Sie wirklich alle aktiven Cheats für dieses Spiel deaktivieren?</string>
+    <string name="cheats_all_disabled_toast">Alle Cheats deaktiviert</string>
+    <string name="error_cheat_line_format">Zeile %1$d: Action-Replay-Format erforderlich (XXXXXXXX YYYYYYYY)</string>
+</resources>

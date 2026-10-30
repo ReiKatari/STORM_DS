@@ -35,7 +35,7 @@ import java.util.zip.ZipOutputStream
 
 object ProblemReportGenerator {
 
-    private const val APP_VERSION_FALLBACK = "7.7.6"
+    private const val APP_VERSION_FALLBACK = "7.8.0"
     private const val MAX_LOG_ATTACHMENT_BYTES = 512 * 1024L
 
     private val SENSITIVE_KEY_TOKENS = listOf(
@@ -174,7 +174,7 @@ object ProblemReportGenerator {
             appendLine("App Version: $versionName")
             appendLine("Process PID: ${Process.myPid()}")
             appendLine()
-            appendLine("=== DEVICE & SOC & GPU ===")
+            appendLine("=== DEVICE AND SOC AND GPU ===")
             appendLine("Manufacturer: ${Build.MANUFACTURER}")
             appendLine("Brand: ${Build.BRAND}")
             appendLine("Model: ${Build.MODEL}")
@@ -188,7 +188,7 @@ object ProblemReportGenerator {
             appendLine("GPU Series: $gpuSeries")
             appendLine("Supported ABIs: ${Build.SUPPORTED_ABIS.joinToString(", ")}")
             appendLine()
-            appendLine("=== ANDROID & MEMORY ===")
+            appendLine("=== ANDROID AND MEMORY ===")
             appendLine("Android Release: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Build Display: ${Build.DISPLAY}")
             appendLine("Total RAM (MB): ${memInfo.totalMem / (1024 * 1024)}")

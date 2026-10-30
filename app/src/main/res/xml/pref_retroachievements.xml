@@ -4,6 +4,7 @@
 
     <me.magnum.melonds.ui.settings.preferences.RetroAchievementsProfilePreference
         android:key="ra_profile"
+        android:title="@string/v780_ra_profile_title"
         app:iconSpaceReserved="false" />
 
     <Preference

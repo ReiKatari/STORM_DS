@@ -51,4 +51,11 @@
             android:title="@string/mac_address"
             android:dependency="internal_randomize_mac_address"
             app:iconSpaceReserved="false"/>
+
+    <Preference
+            android:key="internal_randomize_mac"
+            android:title="@string/v780_internal_randomize_mac_title"
+            android:summary="@string/v780_internal_randomize_mac_summary"
+            android:dependency="internal_randomize_mac_address"
+            app:iconSpaceReserved="false" />
 </PreferenceScreen>

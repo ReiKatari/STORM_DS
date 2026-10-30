@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">ランダムなゲーム</string>
+    <string name="toast_random_rom_selected">選択: %s</string>
+    <string name="toast_no_roms_found">ゲームが見つかりません</string>
+    <string name="reset_rom_config_section">リセット</string>
+    <string name="reset_rom_config_title">個別のゲーム設定をリセット</string>
+    <string name="reset_rom_config_confirm_message">このゲームの個別設定をすべて既定値にリセットしますか？</string>
+    <string name="action_reset">リセット</string>
+    <string name="rom_technical_info_title">ROM技術情報</string>
+    <string name="rom_technical_info_copy">詳細をコピー</string>
+    <string name="rom_technical_info_copied">技術情報をクリップボードにコピーしました</string>
+    <string name="rom_info_title_label">タイトル</string>
+    <string name="rom_info_file_name_label">ファイル名</string>
+    <string name="rom_info_file_size_label">ファイルサイズ</string>
+    <string name="rom_info_platform_label">プラットフォーム</string>
+    <string name="rom_info_game_code_label">カートリッジコード</string>
+    <string name="rom_info_play_time_label">プレイ時間</string>
+    <string name="rom_info_last_played_label">前回のプレイ</string>
+    <string name="rom_info_never_played">なし</string>
+    <string name="feature_stats_sort_time">プレイ時間順</string>
+    <string name="feature_stats_sort_launches">起動回数順</string>
+    <string name="feature_stats_sort_recent">最近</string>
+    <string name="cheats_search_hint">チートを検索...</string>
+    <string name="cheats_disable_all">すべて無効化</string>
+    <string name="cheats_disable_all_confirm_title">すべてのチートを無効化</string>
+    <string name="cheats_disable_all_confirm_message">このゲームで有効なすべてのチートを無効化してもよろしいですか？</string>
+    <string name="cheats_all_disabled_toast">すべてのチートを無効化しました</string>
+    <string name="error_cheat_line_format">%1$d行目: Action Replay形式（XXXXXXXX YYYYYYYY）が必要です</string>
+</resources>

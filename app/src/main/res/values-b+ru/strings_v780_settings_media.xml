@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Режим работы гироскопа</string>
+    <string name="v780_ra_profile_title">Профиль RetroAchievements</string>
+    <string name="v780_internal_resolution_high_warning">Высокая нагрузка: возможен повышенный нагрев и расход видеопамяти</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Внимание: повышенный нагрев и расход видеопамяти</string>
+    <string name="v780_video_maintenance_category">Обслуживание и сброс</string>
+    <string name="v780_video_reset_enhancements_title">Сбросить графические улучшения по умолчанию</string>
+    <string name="v780_video_reset_enhancements_summary">Возвращает множитель разрешения, фильтры, шейдеры и 3D-хаки к безопасным значениям</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Сбросить все графические улучшения, фильтры, шейдеры и экспериментальные видеохаки к безопасным значениям по умолчанию?</string>
+    <string name="v780_video_reset_enhancements_action">Сбросить</string>
+    <string name="v780_video_reset_enhancements_success">Графические улучшения сброшены по умолчанию</string>
+    <string name="v780_audio_latency_approx_low">~12 мс</string>
+    <string name="v780_audio_latency_approx_medium">~24 мс</string>
+    <string name="v780_audio_latency_approx_high">~48 мс</string>
+    <string name="v780_mic_permission_granted">Разрешение предоставлено</string>
+    <string name="v780_mic_permission_required">Потребуется разрешение на запись звука</string>
+    <string name="v780_connected_controllers_format">Подключено: %s</string>
+    <string name="v780_no_controllers_detected">Геймпады не обнаружены</string>
+    <string name="v780_input_auto_map_title">Автоназначение стандартного геймпада</string>
+    <string name="v780_input_auto_map_success">Стандартная раскладка геймпада успешно назначена</string>
+    <string name="v780_input_clear_all_title">Очистить все назначения</string>
+    <string name="v780_input_clear_all_confirm_message">Вы уверены, что хотите полностью очистить все назначения кнопок и осей?</string>
+    <string name="v780_input_clear_all_action">Очистить</string>
+    <string name="v780_input_clear_all_success">Все назначения кнопок очищены</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Соревновательный режим: во время активной сессии полностью блокируются загрузка быстрых сохранений, перемотка назад, замедление времени и чит-коды.</string>
+    <string name="v780_about_copy_diagnostics_title">Скопировать сводку об устройстве и рендерере</string>
+    <string name="v780_about_copy_diagnostics_summary">Копирует в буфер обмена системную информацию, параметры GPU и поддержку Vulkan</string>
+    <string name="v780_about_copy_diagnostics_success">Сводка об устройстве скопирована в буфер обмена</string>
+    <string name="v780_diagnostics_vulkan_supported">Поддерживается</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Не поддерживается</string>
+</resources>

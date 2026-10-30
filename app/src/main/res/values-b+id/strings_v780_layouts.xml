@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Duplikatkan tata letak</string>
+    <string name="layout_copy_suffix">(salinan)</string>
+    <string name="layout_duplicate_success">Tata letak digandakan</string>
+    <string name="action_layout_undo">Urungkan</string>
+    <string name="layout_snap_to_grid">Pasang ke kisi</string>
+    <string name="layout_snap_to_grid_summary">Pasang kontrol ke kisi 16 px dan panduan sumbu tengah</string>
+    <string name="layout_unsaved_changes_title">Perubahan belum disimpan</string>
+    <string name="layout_unsaved_changes_message">Ada perubahan yang belum disimpan pada tata letak ini. Simpan sebelum keluar?</string>
+    <string name="component_group_screens">Layar konsol</string>
+    <string name="component_group_gameplay">Tombol game utama</string>
+    <string name="component_group_emulator">Aksi cepat emulator</string>
+    <string name="component_group_combo_special">Tombol kombinasi dan khusus</string>
+    <string name="component_group_stick">Stik dan kontrol analog</string>
+</resources>

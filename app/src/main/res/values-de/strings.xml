@@ -1341,4 +1341,16 @@
         <item quantity="one">%1$d Schritt</item>
         <item quantity="other">%1$d Schritte</item>
     </plurals>
+    <string-array name="video_internal_resolution_options">
+        <item>1x Nativ (256x192)</item>
+        <item>2x Nativ (512x384)</item>
+        <item>3x Nativ (768x576)</item>
+        <item>4x Nativ (1024x768)</item>
+        <item>5x Nativ (1280x960)</item>
+        <item>6x Nativ (1536x1152)</item>
+        <item>7x Nativ (1792x1344)</item>
+        <item>8x Nativ (2048x1536)</item>
+        <item>12x Nativ (3072x2304)</item>
+        <item>16x Nativ (4096x3072)</item>
+    </string-array>
 </resources>

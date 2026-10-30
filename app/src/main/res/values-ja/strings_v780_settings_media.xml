@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">ジャイロモード</string>
+    <string name="v780_ra_profile_title">RetroAchievements プロフィール</string>
+    <string name="v780_internal_resolution_high_warning">高負荷：発熱および VRAM 使用量が増加する可能性があります</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ 注意：発熱と VRAM 消費が増加します</string>
+    <string name="v780_video_maintenance_category">メンテナンスとリセット</string>
+    <string name="v780_video_reset_enhancements_title">グラフィック拡張をデフォルトに戻す</string>
+    <string name="v780_video_reset_enhancements_summary">解像度スケール、フィルター、シェーダー、3D ハックを安全な初期値にリセットします</string>
+    <string name="v780_video_reset_enhancements_confirm_message">すべてのグラフィック拡張、フィルター、シェーダー、実験的ビデオハックを安全な初期値にリセットしますか？</string>
+    <string name="v780_video_reset_enhancements_action">リセット</string>
+    <string name="v780_video_reset_enhancements_success">グラフィック拡張をデフォルトにリセットしました</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">権限付与済み</string>
+    <string name="v780_mic_permission_required">録音権限が必要です</string>
+    <string name="v780_connected_controllers_format">接続中：%s</string>
+    <string name="v780_no_controllers_detected">ゲームパッドが見つかりません</string>
+    <string name="v780_input_auto_map_title">標準ゲームパッドの自動割り当て</string>
+    <string name="v780_input_auto_map_success">標準ゲームパッドのレイアウトを割り当てました</string>
+    <string name="v780_input_clear_all_title">すべての割り当てをクリア</string>
+    <string name="v780_input_clear_all_confirm_message">すべてのボタンと軸の割り当てをクリアしてもよろしいですか？</string>
+    <string name="v780_input_clear_all_action">クリア</string>
+    <string name="v780_input_clear_all_success">すべてのボタン割り当てをクリアしました</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">ハードコア対戦モード：アクティブセッション中はクイックロード、巻き戻し、スローモーション、チートが完全に無効化されます。</string>
+    <string name="v780_about_copy_diagnostics_title">端末およびレンダラー情報をコピー</string>
+    <string name="v780_about_copy_diagnostics_summary">システム情報、GPU モデル、Vulkan 対応状況をクリップボードにコピーします</string>
+    <string name="v780_about_copy_diagnostics_success">端末情報をクリップボードにコピーしました</string>
+    <string name="v780_diagnostics_vulkan_supported">対応</string>
+    <string name="v780_diagnostics_vulkan_unsupported">非対応</string>
+</resources>

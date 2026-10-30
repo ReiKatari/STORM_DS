@@ -53,6 +53,7 @@ class LayoutEditorActivity : AppCompatActivity() {
     }
 
     enum class MenuOption(@field:StringRes val stringRes: Int) {
+        UNDO(R.string.action_layout_undo),
         PROPERTIES(R.string.properties),
         BACKGROUNDS(R.string.background),
         REVERT(R.string.revert_changes),
@@ -135,10 +136,14 @@ class LayoutEditorActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && ::layoutEditorManager.isInitialized &&
-            layoutEditorManager.handleControllerKeyDown(event)
-        ) {
-            return true
+        if (event.action == KeyEvent.ACTION_DOWN && ::layoutEditorManager.isInitialized) {
+            if (event.keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                layoutEditorManager.handleBackNavigation()
+                return true
+            }
+            if (layoutEditorManager.handleControllerKeyDown(event)) {
+                return true
+            }
         }
         return super.dispatchKeyEvent(event)
     }

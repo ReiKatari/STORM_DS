@@ -606,7 +606,9 @@ class RomListViewModel @Inject constructor(
         val searchKey = normalizeForSearch(me.magnum.melonds.ui.romlist.composables.romDisplayName(rom)) +
             "\u0000" + normalizeForSearch(rom.name) +
             "\u0000" + normalizeForSearch(rom.fileName) +
-            "\u0000" + normalizeForSearch(rom.developerName)
+            "\u0000" + normalizeForSearch(rom.developerName) +
+            "\u0000" + normalizeForSearch(rom.gameCode) +
+            (rom.config.customName?.let { "\u0000" + normalizeForSearch(it) } ?: "")
         return RomWithParent(rom, parentDocId, searchKey)
     }
 
@@ -841,12 +843,14 @@ class RomListViewModel @Inject constructor(
     )
 
     companion object {
-        private val nonAsciiRegex = "[^\\p{ASCII}]".toRegex()
+        private val combiningMarksRegex = "\\p{M}".toRegex()
 
         fun normalizeForSearch(input: String): String {
-            return Normalizer.normalize(input, Normalizer.Form.NFD)
-                .replace(nonAsciiRegex, "")
+            val eReplaced = input.replace('ё', 'е').replace('Ё', 'е')
+            return Normalizer.normalize(eReplaced, Normalizer.Form.NFD)
+                .replace(combiningMarksRegex, "")
                 .lowercase()
+                .trim()
         }
     }
 
@@ -856,6 +860,15 @@ class RomListViewModel @Inject constructor(
         val displayName: String,
         val relativePath: String
     )
+
+    fun getRandomRom(): Rom? {
+        val currentRomEntries = _browserState.value.entries.filterIsInstance<RomBrowserEntry.RomItem>().map { it.rom }
+        if (currentRomEntries.isNotEmpty()) {
+            return currentRomEntries.random()
+        }
+        val allMatching = romsWithParents.value.map { it.rom }.filter { matchesFilter(it, _filter.value) }
+        return allMatching.randomOrNull()
+    }
 
     suspend fun getRomAtUri(uri: Uri): Rom? {
         return romsRepository.getRomAtUri(uri)

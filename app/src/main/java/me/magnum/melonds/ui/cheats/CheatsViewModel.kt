@@ -238,6 +238,27 @@ class CheatsViewModel @Inject constructor(
         }
     }
 
+    fun disableAllCheats(enabledCheats: List<CheatInFolder>) {
+        if (committingCheatsChangesState.value || enabledCheats.isEmpty()) return
+
+        modifiedCheatSet.update { currentModified ->
+            val list = currentModified.toMutableList()
+            enabledCheats.forEach { item ->
+                val cheat = item.cheat
+                val cheatIndex = list.indexOfFirst { it.id == cheat.id }
+                val disabledCheat = cheat.copy(enabled = false)
+                if (cheatIndex >= 0) {
+                    list[cheatIndex] = disabledCheat
+                } else {
+                    list.add(disabledCheat)
+                }
+            }
+            list.also {
+                savedStateHandle[KEY_MODIFIED_CHEATS] = it.map { CheatParcelable.fromCheat(it) }
+            }
+        }
+    }
+
     fun addNewCheat(cheatSubmissionForm: CheatSubmissionForm) {
         if (!cheatSubmissionForm.isValid()) return
         val selectedFolder = savedStateHandle.get<CheatFolderParcelable>(KEY_SELECTED_FOLDER) ?: return

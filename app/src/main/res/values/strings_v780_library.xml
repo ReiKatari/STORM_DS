@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Random game</string>
+    <string name="toast_random_rom_selected">Selected: %s</string>
+    <string name="toast_no_roms_found">No games found</string>
+    <string name="reset_rom_config_section">Reset</string>
+    <string name="reset_rom_config_title">Reset individual game settings</string>
+    <string name="reset_rom_config_confirm_message">Reset all individual settings of this game to global defaults?</string>
+    <string name="action_reset">Reset</string>
+    <string name="rom_technical_info_title">Technical ROM info</string>
+    <string name="rom_technical_info_copy">Copy details</string>
+    <string name="rom_technical_info_copied">Technical details copied to clipboard</string>
+    <string name="rom_info_title_label">Title</string>
+    <string name="rom_info_file_name_label">File name</string>
+    <string name="rom_info_file_size_label">File size</string>
+    <string name="rom_info_platform_label">Platform</string>
+    <string name="rom_info_game_code_label">Cartridge code</string>
+    <string name="rom_info_play_time_label">Play time</string>
+    <string name="rom_info_last_played_label">Last played</string>
+    <string name="rom_info_never_played">Never</string>
+    <string name="feature_stats_sort_time">By time</string>
+    <string name="feature_stats_sort_launches">By launches</string>
+    <string name="feature_stats_sort_recent">Recent</string>
+    <string name="cheats_search_hint">Search cheats...</string>
+    <string name="cheats_disable_all">Disable all</string>
+    <string name="cheats_disable_all_confirm_title">Disable all cheats</string>
+    <string name="cheats_disable_all_confirm_message">Are you sure you want to disable all active cheats for this game?</string>
+    <string name="cheats_all_disabled_toast">All cheats disabled</string>
+    <string name="error_cheat_line_format">Line %1$d: Action Replay format required (XXXXXXXX YYYYYYYY)</string>
+</resources>

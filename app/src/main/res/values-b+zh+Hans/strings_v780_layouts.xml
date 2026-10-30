@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">复制布局</string>
+    <string name="layout_copy_suffix">(副本)</string>
+    <string name="layout_duplicate_success">布局已复制</string>
+    <string name="action_layout_undo">撤销操作</string>
+    <string name="layout_snap_to_grid">对齐网格</string>
+    <string name="layout_snap_to_grid_summary">将控件对齐到 16 px 网格和中心导线</string>
+    <string name="layout_unsaved_changes_title">未保存的更改</string>
+    <string name="layout_unsaved_changes_message">此布局中有未保存的更改。退出前是否保存？</string>
+    <string name="component_group_screens">主机屏幕</string>
+    <string name="component_group_gameplay">主要游戏按键</string>
+    <string name="component_group_emulator">模拟器快捷功能</string>
+    <string name="component_group_combo_special">组合与特殊按键</string>
+    <string name="component_group_stick">摇杆与摇杆控制</string>
+</resources>

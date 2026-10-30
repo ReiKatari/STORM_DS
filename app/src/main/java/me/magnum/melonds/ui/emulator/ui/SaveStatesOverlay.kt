@@ -62,6 +62,8 @@ fun SaveStatesOverlay(
     slots: List<SaveStateSlot>,
     isSaving: Boolean,
     gameTitle: String?,
+    undoSlotNumber: Int? = null,
+    onUndoOverwrite: (() -> Unit)? = null,
     onSlotPicked: (SaveStateSlot) -> Unit,
     onSlotDeleted: (SaveStateSlot) -> Unit,
     onSlotRenamed: (SaveStateSlot, String?) -> Unit,
@@ -100,7 +102,7 @@ fun SaveStatesOverlay(
                     onClick = { /* consume click */ },
                 )
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.ButtonB) {
+                    if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)) {
                         onDismiss()
                         true
                     } else {
@@ -208,6 +210,38 @@ fun SaveStatesOverlay(
                             )
                         }
 
+                        // ↩️ UNDO OVERWRITE BUTTON (1-Click Restore Overwritten Slot)
+                        if (undoSlotNumber != null && onUndoOverwrite != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface2)
+                                    .border(1.2.dp, Color(0xFFFF9800), RoundedCornerShape(8.dp))
+                                    .clickable { onUndoOverwrite() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Undo,
+                                        contentDescription = stringResource(R.string.undo_overwrite_button),
+                                        tint = Color(0xFFFF9800),
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.undo_overwrite_button),
+                                        color = Color(0xFFFF9800),
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
+
                         if (onResumeGame != null) {
                             Spacer(Modifier.width(10.dp))
                             Box(
@@ -228,11 +262,12 @@ fun SaveStatesOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.pause_resume_button),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
                                     )
                                 }
                             }
@@ -257,6 +292,7 @@ fun SaveStatesOverlay(
                     slot = slot,
                     isSaving = isSaving,
                     gameTitle = gameTitle,
+                    isUndoTarget = (slot.slot == undoSlotNumber),
                     focusRequester = if (slot.slot == slots.firstOrNull()?.slot) firstFocusRequester else null,
                     onClick = { onSlotPicked(slot) },
                     onDelete = { onSlotDeleted(slot) },
@@ -303,12 +339,29 @@ me.magnum.melonds.ui.common.UnifiedBackButton(
     }
 }
 
+private fun formatRelativeTime(context: android.content.Context, date: Date): String {
+    val diffMs = System.currentTimeMillis() - date.time
+    val diffSec = (diffMs / 1000).coerceAtLeast(0)
+    val diffMin = diffSec / 60
+    val diffHour = diffMin / 60
+    val diffDay = diffHour / 24
+
+    return when {
+        diffMin < 1 -> context.getString(R.string.relative_time_just_now)
+        diffMin < 60 -> context.getString(R.string.relative_time_minutes_ago, diffMin.toInt())
+        diffHour < 24 -> context.getString(R.string.relative_time_hours_ago, diffHour.toInt())
+        diffDay == 1L -> context.getString(R.string.relative_time_yesterday)
+        else -> context.getString(R.string.relative_time_days_ago, diffDay.coerceAtLeast(2).toInt())
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SaveStateSlotCard(
     slot: SaveStateSlot,
     isSaving: Boolean,
     gameTitle: String?,
+    isUndoTarget: Boolean = false,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -396,26 +449,49 @@ private fun SaveStateSlotCard(
                 }
             }
 
-            // Top-Left Badge: Slot number or Quick Save
-            Box(
+            // Top-Left Badge: Slot number or Quick Save + Undo Target
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 8.dp, top = 8.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (isQuick) colors.red else Color.Black.copy(alpha = 0.75f))
-                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                    .padding(start = 8.dp, top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = if (isQuick) {
-                        "⚡ БЫСТРОЕ"
-                    } else {
-                        "СЛОТ ${slot.slot}"
-                    },
-                    color = Color.White,
-                    fontFamily = WatermelonMono,
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold,
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isQuick) colors.red else Color.Black.copy(alpha = 0.75f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = if (isQuick) {
+                            "⚡ БЫСТРОЕ"
+                        } else {
+                            "СЛОТ ${slot.slot}"
+                        },
+                        color = Color.White,
+                        fontFamily = WatermelonMono,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                if (isUndoTarget) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFF9800))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = "↩️ РЕЗЕРВ",
+                            color = Color.Black,
+                            fontFamily = WatermelonMono,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
 
             // Top-Right Action Bar (Rename, Duplicate, Delete)
@@ -495,21 +571,39 @@ private fun SaveStateSlotCard(
             )
         }
 
-        // Exact Date & Time Stamp
+        // Exact Date & Time Stamp and Relative Time
         val lastUsed = slot.lastUsedDate
-        Text(
-            text = if (slot.exists && lastUsed != null) {
-                "📅 " + dateFormat.format(lastUsed)
-            } else {
-                stringResource(R.string.save_state_empty_slot)
-            },
-            color = colors.text3,
-            fontFamily = WatermelonMono,
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 2.dp, top = 2.dp),
-        )
+        if (slot.exists && lastUsed != null) {
+            Text(
+                text = "📅 " + dateFormat.format(lastUsed),
+                color = colors.text2,
+                fontFamily = WatermelonMono,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, top = 2.dp),
+            )
+            val relTime = remember(lastUsed) { formatRelativeTime(context, lastUsed) }
+            Text(
+                text = "⏱️ " + relTime,
+                color = colors.green.copy(alpha = 0.85f),
+                fontFamily = WatermelonMono,
+                fontSize = 8.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, top = 1.dp),
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.save_state_empty_slot),
+                color = colors.text3,
+                fontFamily = WatermelonMono,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, top = 2.dp),
+            )
+        }
     }
 }
 

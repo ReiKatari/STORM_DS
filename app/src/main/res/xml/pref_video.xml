@@ -433,4 +433,15 @@
                 android:defaultValue="false" />
 
     </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="@string/v780_video_maintenance_category"
+            app:iconSpaceReserved="false">
+
+        <Preference
+                android:key="video_reset_enhancements"
+                android:title="@string/v780_video_reset_enhancements_title"
+                android:summary="@string/v780_video_reset_enhancements_summary"
+                app:iconSpaceReserved="false" />
+    </PreferenceCategory>
 </PreferenceScreen>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Дублировать макет</string>
+    <string name="layout_copy_suffix">(копия)</string>
+    <string name="layout_duplicate_success">Макет продублирован</string>
+    <string name="action_layout_undo">Отменить действие</string>
+    <string name="layout_snap_to_grid">Привязка к сетке</string>
+    <string name="layout_snap_to_grid_summary">Привязка элементов к шагу 16 px и осевым линиям</string>
+    <string name="layout_unsaved_changes_title">Несохранённые изменения</string>
+    <string name="layout_unsaved_changes_message">В макет были внесены изменения. Сохранить их перед выходом?</string>
+    <string name="component_group_screens">Экраны консоли</string>
+    <string name="component_group_gameplay">Основные игровые кнопки</string>
+    <string name="component_group_emulator">Быстрые функции эмулятора</string>
+    <string name="component_group_combo_special">Комбинированные и спецкнопки</string>
+    <string name="component_group_stick">Стик и аналоговое управление</string>
+</resources>

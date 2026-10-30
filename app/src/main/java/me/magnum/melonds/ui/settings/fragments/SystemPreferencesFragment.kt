@@ -29,6 +29,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
+    @Inject lateinit var configurationDirectoryVerifier: me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier
     private val helper by lazy { PreferenceFragmentHelper(this, uriPermissionManager, directoryAccessValidator) }
     private var updatingMirrorPreference = false
 
@@ -258,5 +259,23 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         mirrorPreference.isChecked = true
         preferenceManager.sharedPreferences?.edit()?.putBoolean("save_internal_config_as_file", true)?.apply()
         updatingMirrorPreference = false
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateBiosStatusSummary()
+    }
+
+    private fun updateBiosStatusSummary() {
+        val dsResult = configurationDirectoryVerifier.checkDsConfigurationDirectory()
+        val dsiResult = configurationDirectoryVerifier.checkDsiConfigurationDirectory()
+
+        val dsReady = dsResult.status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
+        val dsiReady = dsiResult.status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
+
+        val dsStatusStr = if (dsReady) getString(R.string.v780_bios_status_ready) else getString(R.string.v780_bios_status_not_ready)
+        val dsiStatusStr = if (dsiReady) getString(R.string.v780_bios_status_ready) else getString(R.string.v780_bios_status_not_ready)
+
+        findPreference<Preference>("custom_bios_firmware")?.summary = getString(R.string.v780_bios_ready_status, dsStatusStr, dsiStatusStr)
     }
 }

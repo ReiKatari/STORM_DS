@@ -58,6 +58,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import me.magnum.melonds.ui.emulator.savestate.SaveStateUndoManager
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
@@ -2459,8 +2460,53 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
+    fun restoreOverwrittenSaveStateSlot(onSlotsUpdated: (List<SaveStateSlot>) -> Unit) {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: return
+        val undoSlotNum = SaveStateUndoManager.getUndoSlot(runningRom) ?: return
+        sessionCoroutineScope.launch {
+            val allSlots = withContext(Dispatchers.IO) { saveStatesRepository.getRomSaveStates(runningRom) }
+            val targetSlot = allSlots.firstOrNull { it.slot == undoSlotNum } ?: return@launch
+            val targetSlotUri = getRomSaveStateUri(runningRom, targetSlot)
+            val success = withContext(Dispatchers.IO) {
+                SaveStateUndoManager.restoreUndoBackup(
+                    context = context,
+                    rom = runningRom,
+                    targetSlotUri = targetSlotUri,
+                    targetScreenshotUri = targetSlot.screenshot,
+                    onRestoreCustomName = { slotNum, customName ->
+                        saveStatesRepository.setSaveStateCustomName(runningRom, slotNum, customName)
+                    }
+                )
+            }
+            if (success) {
+                val updatedSlots = withContext(Dispatchers.IO) {
+                    saveStatesRepository.getRomSaveStates(runningRom)
+                }
+                onSlotsUpdated(updatedSlots)
+            }
+        }
+    }
+
+    fun getUndoOverwriteSlot(): Int? {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: return null
+        return SaveStateUndoManager.getUndoSlot(runningRom)
+    }
+
     private suspend fun saveRomState(rom: Rom, slot: SaveStateSlot): Boolean {
         val slotUri = getRomSaveStateUri(rom, slot)
+        withContext(Dispatchers.IO) {
+            val existingSlot = saveStatesRepository.getRomSaveStates(rom).firstOrNull { it.slot == slot.slot }
+            if (existingSlot != null && existingSlot.exists) {
+                SaveStateUndoManager.backupBeforeOverwrite(
+                    context = context,
+                    rom = rom,
+                    slot = existingSlot,
+                    slotUri = slotUri,
+                    screenshotUri = existingSlot.screenshot,
+                    customName = existingSlot.customName,
+                )
+            }
+        }
         emulatorManager.takeScreenshot()
         if (!emulatorManager.saveState(slotUri)) {
             return false

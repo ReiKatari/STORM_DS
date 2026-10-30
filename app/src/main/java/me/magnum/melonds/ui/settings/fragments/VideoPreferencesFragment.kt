@@ -149,6 +149,31 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             it.isInGameLocked = launchedInGame
             it.inGameLockedMessageRes = R.string.video_setting_cannot_change_ingame
         }
+        internalResolutionPreference.addOnPreferenceChangeListener { pref, newValue ->
+            val listPref = pref as ListPreference
+            val index = listPref.findIndexOfValue(newValue as? String)
+            val entry = if (index >= 0 && index < listPref.entries.size) listPref.entries[index] else (newValue?.toString() ?: "")
+            val mult = (newValue as? String)?.toIntOrNull() ?: 1
+            if (mult >= 8) {
+                listPref.summary = getString(R.string.v780_internal_resolution_warning_summary, entry)
+            } else {
+                listPref.summary = entry
+            }
+            true
+        }
+        updateInternalResolutionSummary(internalResolutionPreference)
+
+        findPreference<Preference>("video_reset_enhancements")?.setOnPreferenceClickListener {
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.v780_video_reset_enhancements_title)
+                .setMessage(R.string.v780_video_reset_enhancements_confirm_message)
+                .setPositiveButton(R.string.v780_video_reset_enhancements_action) { _, _ ->
+                    resetVideoEnhancements()
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+            true
+        }
         val vulkanFastPathPreference =
             findPreference<InGameLockedSwitchPreference>("video_vulkan_fastpath_enabled")!!
         vulkanFastPathPreference.isInGameLocked = launchedInGame
@@ -1165,7 +1190,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 internalResPref.summary = getString(R.string.video_prefs_internal_resolution_software_only)
             } else {
                 internalResPref.isEnabled = true
-                internalResPref.summary = "%s"
+                updateInternalResolutionSummary(internalResPref)
             }
         }
 
@@ -2117,5 +2142,75 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         } else {
             getString(R.string.category_video)
         }
+    }
+
+    private fun updateInternalResolutionSummary(pref: ListPreference) {
+        val entry = pref.entry ?: pref.value ?: ""
+        val mult = pref.value?.toIntOrNull() ?: 1
+        if (mult >= 8) {
+            pref.summary = getString(R.string.v780_internal_resolution_warning_summary, entry)
+        } else {
+            pref.summary = entry
+        }
+    }
+
+    private fun resetVideoEnhancements() {
+        preferenceManager.sharedPreferences?.edit()?.apply {
+            putString("video_internal_resolution", "2")
+            putString("video_filtering", VideoFiltering.NONE.name.lowercase())
+            remove("video_retroarch_shader_preset")
+            putBoolean("video_ai_upscale_enabled", false)
+            putBoolean("video_widescreen_3d", false)
+            putBoolean("video_60fps_patch", false)
+            putBoolean("video_drs_enabled", false)
+            putBoolean("video_hd_textures_enabled", false)
+            putString("video_vulkan_3d_depth_mode", "off")
+            putString("video_vulkan_3d_depth_strength", "25")
+            putBoolean("video_vulkan_ssao", false)
+            putBoolean("video_vulkan_thick_edges", false)
+            putBoolean("video_vulkan_fastpath_enabled", false)
+            putBoolean("video_renderer_debug_tools_enabled", false)
+            putBoolean("video_renderer_debug_bgobj_enabled", false)
+            putBoolean("video_renderer_debug_latch_trace_enabled", false)
+            putBoolean("video_conservative_coverage_enabled", false)
+            putBoolean("video_debug_3d_clear_magenta", false)
+            apply()
+        }
+
+        findPreference<ListPreference>("video_internal_resolution")?.let {
+            it.value = "2"
+            updateInternalResolutionSummary(it)
+        }
+        findPreference<ListPreference>("video_filtering")?.let {
+            it.value = VideoFiltering.NONE.name.lowercase()
+            it.summary = "%s"
+        }
+        findPreference<ListPreference>("video_retroarch_shader_preset")?.let {
+            it.value = null
+            it.summary = getString(R.string.video_retroarch_shader_preset_summary)
+        }
+        findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_widescreen_3d")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_60fps_patch")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_drs_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_hd_textures_enabled")?.isChecked = false
+        findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let {
+            it.value = "off"
+            it.summary = "%s"
+        }
+        findPreference<ListPreference>("video_vulkan_3d_depth_strength")?.let {
+            it.value = "25"
+            it.summary = "%s"
+        }
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_ssao")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_thick_edges")?.isChecked = false
+        findPreference<InGameLockedSwitchPreference>("video_vulkan_fastpath_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_tools_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_bgobj_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_latch_trace_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_conservative_coverage_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_debug_3d_clear_magenta")?.isChecked = false
+
+        Toast.makeText(requireContext(), R.string.v780_video_reset_enhancements_success, Toast.LENGTH_SHORT).show()
     }
 }

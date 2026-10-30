@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Layout duplizieren</string>
+    <string name="layout_copy_suffix">(Kopie)</string>
+    <string name="layout_duplicate_success">Layout dupliziert</string>
+    <string name="action_layout_undo">Rückgängig</string>
+    <string name="layout_snap_to_grid">Am Raster ausrichten</string>
+    <string name="layout_snap_to_grid_summary">Steuerelemente an 16-px-Raster und Mittelachsen ausrichten</string>
+    <string name="layout_unsaved_changes_title">Ungespeicherte Änderungen</string>
+    <string name="layout_unsaved_changes_message">Dieses Layout enthält ungespeicherte Änderungen. Vor dem Beenden speichern?</string>
+    <string name="component_group_screens">Konsolen-Bildschirme</string>
+    <string name="component_group_gameplay">Haupt-Spielsteuerung</string>
+    <string name="component_group_emulator">Emulator-Schnellaktionen</string>
+    <string name="component_group_combo_special">Kombinierte und Sondertasten</string>
+    <string name="component_group_stick">Stick und Analogsteuerung</string>
+</resources>

@@ -43,14 +43,6 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="true" />
 
-        <SwitchPreference
-                android:key="enable_jit"
-                android:title="@string/enable_jit"
-                android:summary="@string/enable_jit_summary"
-                app:iconSpaceReserved="false"
-                app:isPreferenceVisible="false"
-                android:defaultValue="false" />
-
         <ListPreference
                 android:key="arm9_overclock"
                 android:title="@string/arm9_overclock_title"
@@ -74,6 +66,7 @@
                 android:fragment="me.magnum.melonds.ui.settings.fragments.FirmwarePreferencesFragment" />
 
         <Preference
+                android:key="custom_bios_firmware"
                 android:title="@string/custom_bios_firmware"
                 app:iconSpaceReserved="false"
                 android:fragment="me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment" />

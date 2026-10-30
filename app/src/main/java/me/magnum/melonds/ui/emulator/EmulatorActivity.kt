@@ -312,6 +312,7 @@ class EmulatorActivity : AppCompatActivity() {
     private var isFrameRenderCoordinatorStopped = false
     private var excludeTouchScreenFromSystemGestures = false
     private var externalDisplayMode = ExternalDisplayMode.MELON_DUAL_DS
+    private val sessionStartElapsedRealtime = android.os.SystemClock.elapsedRealtime()
     private var baseInternalResolutionScale = 1
     private var liveDrsScale = 1
     private var drsLowFpsCounter = 0
@@ -889,6 +890,17 @@ class EmulatorActivity : AppCompatActivity() {
                             slots = saveStatesData.slots,
                             isSaving = saveStatesData.isSaving,
                             gameTitle = currentRom?.let { it.config.customName ?: it.name },
+                            undoSlotNumber = viewModel.getUndoOverwriteSlot(),
+                            onUndoOverwrite = {
+                                viewModel.restoreOverwrittenSaveStateSlot { newSlots ->
+                                    saveStatesOverlayState.value = saveStatesData.copy(slots = newSlots)
+                                    android.widget.Toast.makeText(
+                                        this@EmulatorActivity,
+                                        getString(R.string.undo_overwrite_success, viewModel.getUndoOverwriteSlot() ?: 0),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
                             onSlotPicked = { slot ->
                                 dismissSaveStatesOverlay()
                                 saveStatesData.onSlotPicked(slot)
@@ -954,6 +966,7 @@ class EmulatorActivity : AppCompatActivity() {
                             pauseMenu = pauseMenu,
                             rom = currentRom,
                             achievementsSummary = null,
+                            sessionDurationMs = android.os.SystemClock.elapsedRealtime() - sessionStartElapsedRealtime,
                             onOptionSelected = { option ->
                                 if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.CALIBRATE_GYRO) {
                                     motionSensorManager.calibrateCenter()
@@ -1014,7 +1027,7 @@ class EmulatorActivity : AppCompatActivity() {
                 }
 
                 if (
-                    activeSlot2AddonState.value in listOf(5, 6) &&
+                    activeSlot2AddonState.value in listOf(3, 5, 6) &&
                     pauseMenu == null &&
                     topConsoleNode == null &&
                     saveStatesData == null &&
@@ -1023,6 +1036,14 @@ class EmulatorActivity : AppCompatActivity() {
                 ) {
                     me.magnum.melonds.ui.emulator.ui.Slot2PeripheralOverlay(
                         addonType = activeSlot2AddonState.value,
+                        solarLevel = solarSensorOverrideLevel,
+                        onSolarLevelChanged = { level ->
+                            solarSensorOverrideLevel = level
+                            motionSensorManager.solarSensorAutoEnabled = (level < 0)
+                            if (level >= 0) {
+                                runCatching { MelonEmulator.setSolarSensorLightLevel(level) }
+                            }
+                        },
                         onGuitarFretStateChanged = { fretIndex, pressed ->
                             runCatching { MelonEmulator.setGuitarGripKeyState(fretIndex, pressed) }
                         },
@@ -3256,6 +3277,16 @@ class EmulatorActivity : AppCompatActivity() {
                 showDualScreenPresets.value = true
                 activeOverlays.addActiveOverlay(EmulatorOverlay.PRESETS_DIALOG)
             })
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this@EmulatorActivity)
+            val currentResolutionScale = currentRuntimeRendererConfiguration?.resolutionScaling
+                ?: (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1)
+            add(romSettingsMenuLabel(getString(R.string.internal_resolution), "${currentResolutionScale}x") to {
+                showRomInternalResolutionChoiceOverlay()
+            })
+            val currentFfSpeed = prefs.getString("fast_forward_speed_multiplier", "-1") ?: "-1"
+            add(romSettingsMenuLabel(getString(R.string.fast_forward_speed), fastForwardMultiplierLabel(currentFfSpeed)) to {
+                showFastForwardMultiplierChoiceOverlay()
+            })
             add(romSettingsMenuLabel(getString(R.string.filter), menuState.videoFilteringValue) to {
                 showRomVideoFilteringDialog(
                     renderer = renderer,
@@ -3331,7 +3362,62 @@ class EmulatorActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshRomSettingsMenuIfOpen(): Boolean {
+        private fun fastForwardMultiplierLabel(valueStr: String): String {
+        return when (valueStr) {
+            "-1", "-1.0" -> getString(R.string.fast_forward_speed_unlimited)
+            "1.5" -> "1.5x"
+            "2", "2.0" -> "2x"
+            "3", "3.0" -> "3x"
+            "4", "4.0" -> "4x"
+            "8", "8.0" -> "8x"
+            else -> "${valueStr}x"
+        }
+    }
+
+    private fun showFastForwardMultiplierChoiceOverlay() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val speedValues = resources.getStringArray(R.array.fast_forward_speed_multiplier_values)
+        val labels = speedValues.map { fastForwardMultiplierLabel(it) }
+        val currentPref = prefs.getString("fast_forward_speed_multiplier", "-1") ?: "-1"
+        val currentIdx = speedValues.indexOf(currentPref).let { if (it < 0) 0 else it }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.fast_forward_speed),
+                labels = labels,
+                selectedIndex = currentIdx,
+                onSelect = { which ->
+                    val chosen = speedValues.getOrElse(which) { "-1" }
+                    prefs.edit().putString("fast_forward_speed_multiplier", chosen).apply()
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun showRomInternalResolutionChoiceOverlay() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val resolutionValues = resources.getStringArray(R.array.video_internal_resolution_values)
+        val labels = resolutionValues.map { "${it}x" }
+        val currentScale = currentRuntimeRendererConfiguration?.resolutionScaling
+            ?: (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1)
+        val currentIdx = resolutionValues.indexOf(currentScale.toString()).let { if (it < 0) 0 else it }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.internal_resolution),
+                labels = labels,
+                selectedIndex = currentIdx,
+                onSelect = { which ->
+                    val scale = resolutionValues.getOrElse(which) { "1" }.toIntOrNull() ?: 1
+                    baseInternalResolutionScale = scale
+                    viewModel.updateRuntimeResolutionScaling(scale)
+                    setupResolutionHud()
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+private fun refreshRomSettingsMenuIfOpen(): Boolean {
         val topNode = consoleOverlayStack.lastOrNull()
         return if (topNode is ConsoleOverlayNode.Submenu && topNode.title == getString(R.string.rom_settings)) {
             viewModel.onPauseMenuOptionSelected(me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.ROM_SETTINGS)
@@ -5203,6 +5289,13 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_ESCAPE && event.action == KeyEvent.ACTION_UP) {
+            if (hasComposeOverlayOpen() || activeOverlays.hasActiveOverlays()) {
+                onBackPressedDispatcher.onBackPressed()
+                return true
+            }
+        }
+
         if (!activeOverlays.hasActiveOverlays() && nativeInputListener.onKeyEvent(event))
             return true
 

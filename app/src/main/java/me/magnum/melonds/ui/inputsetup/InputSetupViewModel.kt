@@ -1,5 +1,8 @@
 package me.magnum.melonds.ui.inputsetup
 
+import android.view.KeyEvent
+import android.view.MotionEvent
+
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -220,5 +223,94 @@ class InputSetupViewModel @Inject constructor(
         if (nextInput != null) {
             _onInputAssignedEvent.tryEmit(nextInput.input)
         }
+    }
+    fun autoMapStandardGamepad() {
+        val standardMappings = mapOf(
+            Input.UP to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_DPAD_UP),
+                InputConfig.Assignment.Axis(null, MotionEvent.AXIS_HAT_Y, InputConfig.Assignment.Axis.Direction.NEGATIVE)
+            ),
+            Input.DOWN to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_DPAD_DOWN),
+                InputConfig.Assignment.Axis(null, MotionEvent.AXIS_HAT_Y, InputConfig.Assignment.Axis.Direction.POSITIVE)
+            ),
+            Input.LEFT to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_DPAD_LEFT),
+                InputConfig.Assignment.Axis(null, MotionEvent.AXIS_HAT_X, InputConfig.Assignment.Axis.Direction.NEGATIVE)
+            ),
+            Input.RIGHT to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_DPAD_RIGHT),
+                InputConfig.Assignment.Axis(null, MotionEvent.AXIS_HAT_X, InputConfig.Assignment.Axis.Direction.POSITIVE)
+            ),
+            Input.A to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_B),
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_A)
+            ),
+            Input.B to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_A),
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_B)
+            ),
+            Input.X to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_Y),
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_X)
+            ),
+            Input.Y to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_X),
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_Y)
+            ),
+            Input.L to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_L1),
+                InputConfig.Assignment.None
+            ),
+            Input.R to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_R1),
+                InputConfig.Assignment.None
+            ),
+            Input.START to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_START),
+                InputConfig.Assignment.None
+            ),
+            Input.SELECT to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_SELECT),
+                InputConfig.Assignment.None
+            ),
+            Input.FAST_FORWARD to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_THUMBR),
+                InputConfig.Assignment.None
+            ),
+            Input.SWAP_SCREENS to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_THUMBL),
+                InputConfig.Assignment.None
+            ),
+            Input.PAUSE to Pair(
+                InputConfig.Assignment.Key(null, KeyEvent.KEYCODE_BUTTON_MODE),
+                InputConfig.Assignment.None
+            ),
+        )
+
+        _inputConfig.update { list ->
+            list.map { cfg ->
+                val mapped = standardMappings[cfg.input]
+                if (mapped != null) {
+                    cfg.copy(assignment = mapped.first, altAssignment = mapped.second)
+                } else {
+                    cfg.copy(assignment = InputConfig.Assignment.None, altAssignment = InputConfig.Assignment.None)
+                }
+            }.also {
+                onConfigsChanged(it)
+            }
+        }
+        _inputUnderAssignment.value = null
+    }
+
+    fun clearAllAssignments() {
+        _inputConfig.update { list ->
+            list.map { cfg ->
+                cfg.copy(assignment = InputConfig.Assignment.None, altAssignment = InputConfig.Assignment.None)
+            }.also {
+                onConfigsChanged(it)
+            }
+        }
+        _inputUnderAssignment.value = null
     }
 }

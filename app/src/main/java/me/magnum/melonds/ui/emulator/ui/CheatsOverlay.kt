@@ -96,7 +96,7 @@ fun CheatsOverlay(
                 indication = null,
             ) { onDismiss() }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back)) {
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)) {
                     onDismiss()
                     true
                 } else {
@@ -200,7 +200,7 @@ fun CheatsOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.pause_resume_button),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.5.sp,

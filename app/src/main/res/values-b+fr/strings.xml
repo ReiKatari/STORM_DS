@@ -1464,4 +1464,16 @@ Les importer dans STORM DS ?</string>
         <item quantity="one">%1$d pas</item>
         <item quantity="other">%1$d pas</item>
     </plurals>
+    <string-array name="video_internal_resolution_options">
+        <item>1x natif (256x192)</item>
+        <item>2x natif (512x384)</item>
+        <item>3x natif (768x576)</item>
+        <item>4x natif (1024x768)</item>
+        <item>5x natif (1280x960)</item>
+        <item>6x natif (1536x1152)</item>
+        <item>7x natif (1792x1344)</item>
+        <item>8x natif (2048x1536)</item>
+        <item>12x natif (3072x2304)</item>
+        <item>16x natif (4096x3072)</item>
+    </string-array>
 </resources>

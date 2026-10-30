@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">随机游戏</string>
+    <string name="toast_random_rom_selected">已选择：%s</string>
+    <string name="toast_no_roms_found">未找到游戏</string>
+    <string name="reset_rom_config_section">重置</string>
+    <string name="reset_rom_config_title">重置游戏单独设置</string>
+    <string name="reset_rom_config_confirm_message">是否将此游戏的所有单独设置重置为全局默认值？</string>
+    <string name="action_reset">重置</string>
+    <string name="rom_technical_info_title">ROM技术信息</string>
+    <string name="rom_technical_info_copy">复制详细信息</string>
+    <string name="rom_technical_info_copied">技术信息已复制到剪贴板</string>
+    <string name="rom_info_title_label">标题</string>
+    <string name="rom_info_file_name_label">文件名</string>
+    <string name="rom_info_file_size_label">文件大小</string>
+    <string name="rom_info_platform_label">平台</string>
+    <string name="rom_info_game_code_label">卡带代码</string>
+    <string name="rom_info_play_time_label">游戏时间</string>
+    <string name="rom_info_last_played_label">上次运行</string>
+    <string name="rom_info_never_played">从未运行</string>
+    <string name="feature_stats_sort_time">按时间</string>
+    <string name="feature_stats_sort_launches">按启动次数</string>
+    <string name="feature_stats_sort_recent">最近</string>
+    <string name="cheats_search_hint">搜索金手指...</string>
+    <string name="cheats_disable_all">全部禁用</string>
+    <string name="cheats_disable_all_confirm_title">禁用所有金手指</string>
+    <string name="cheats_disable_all_confirm_message">确定要禁用此游戏的所有已激活金手指吗？</string>
+    <string name="cheats_all_disabled_toast">已禁用所有金手指</string>
+    <string name="error_cheat_line_format">第 %1$d 行：需要 Action Replay 格式（XXXXXXXX YYYYYYYY）</string>
+</resources>

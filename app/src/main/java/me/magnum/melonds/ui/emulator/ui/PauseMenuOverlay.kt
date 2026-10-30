@@ -32,6 +32,8 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CameraAlt
@@ -154,6 +156,7 @@ fun PauseMenuOverlay(
     pauseMenu: PauseMenu,
     rom: Rom?,
     achievementsSummary: String?,
+    sessionDurationMs: Long? = null,
     onOptionSelected: (PauseMenuOption) -> Unit,
     onResume: () -> Unit,
 ) {
@@ -163,6 +166,30 @@ fun PauseMenuOverlay(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     val context = LocalContext.current
+
+    val batteryManager = remember(context) {
+        context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager
+    }
+    val batteryLevel = remember(batteryManager) {
+        val level = batteryManager?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+        if (level in 0..100) level else null
+    }
+
+    val currentTimeStr = remember {
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+    }
+
+    val formattedSession = remember(sessionDurationMs) {
+        val durationSec = (sessionDurationMs ?: 0L) / 1000L
+        val mins = durationSec / 60
+        val hours = mins / 60
+        val remMins = mins % 60
+        when {
+            mins < 1 -> context.getString(R.string.pause_session_less_than_minute)
+            hours > 0 -> context.getString(R.string.pause_session_hours_minutes, hours.toInt(), remMins.toInt())
+            else -> context.getString(R.string.pause_session_minutes, mins.toInt())
+        }
+    }
 
     BackHandler {
         if (confirmingOption != null) {
@@ -182,7 +209,7 @@ fun PauseMenuOverlay(
                 indication = null,
             ) { onResume() }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back)) {
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)) {
                     if (confirmingOption != null) {
                         confirmingOption = null
                     } else {
@@ -218,103 +245,178 @@ fun PauseMenuOverlay(
                     .border(1.dp, colors.line, RoundedCornerShape(18.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    // Game Icon
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.surface2)
-                            .border(1.dp, colors.line, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center,
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (rom != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context).data(rom).build(),
-                                contentDescription = null,
-                                filterQuality = FilterQuality.None,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.VideogameAsset,
-                                contentDescription = null,
-                                tint = colors.green,
-                                modifier = Modifier.size(20.dp),
-                            )
+                        // Game Icon
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.surface2)
+                                .border(1.dp, colors.line, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (rom != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context).data(rom).build(),
+                                    contentDescription = null,
+                                    filterQuality = FilterQuality.None,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.VideogameAsset,
+                                    contentDescription = null,
+                                    tint = colors.green,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
-                    }
 
-                    Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(10.dp))
 
-                    // Title & Paused info
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = rom?.let { it.config.customName ?: it.name } ?: stringResource(R.string.pause),
-                            color = colors.text,
-                            fontFamily = Manrope,
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 1.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(colors.red.copy(alpha = 0.15f))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp),
-                            ) {
+                        // Title & Paused info
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = rom?.let { it.config.customName ?: it.name } ?: stringResource(R.string.pause),
+                                color = colors.text,
+                                fontFamily = Manrope,
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 1.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(colors.red.copy(alpha = 0.15f))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.pause_paused_label),
+                                        color = colors.red,
+                                        fontFamily = Manrope,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.6.sp,
+                                    )
+                                }
+                                val hours = rom?.totalPlayTime?.takeIf { it != Duration.ZERO }?.let { formatHoursLabel(it) }
+                                if (hours != null) {
+                                    Text(
+                                        text = hours,
+                                        color = colors.text2,
+                                        fontFamily = Manrope,
+                                        fontSize = 9.sp,
+                                        modifier = Modifier.padding(start = 8.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        // Resume to game pill in the banner
+                        Spacer(Modifier.width(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.surface2)
+                                .border(1.5.dp, colors.green.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
+                                .bouncingClickable(onClick = onResume)
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = stringResource(R.string.pause_resume),
+                                    tint = colors.green,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = stringResource(R.string.pause_paused_label),
-                                    color = colors.red,
+                                    text = stringResource(R.string.pause_resume_button),
+                                    color = colors.green,
                                     fontFamily = Manrope,
-                                    fontSize = 8.5.sp,
+                                    fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.6.sp,
-                                )
-                            }
-                            val hours = rom?.totalPlayTime?.takeIf { it != Duration.ZERO }?.let { formatHoursLabel(it) }
-                            if (hours != null) {
-                                Text(
-                                    text = hours,
-                                    color = colors.text2,
-                                    fontFamily = Manrope,
-                                    fontSize = 9.sp,
-                                    modifier = Modifier.padding(start = 8.dp),
+                                    maxLines = 1,
                                 )
                             }
                         }
                     }
 
-                    // Resume to game pill in the banner
-                    Spacer(Modifier.width(10.dp))
-                    Box(
+                    // Compact session info bar: System Time (HH:mm) • Battery (%) • Session Duration
+                    Spacer(Modifier.height(6.dp))
+                    Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(colors.surface2)
-                            .border(1.5.dp, colors.green.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
-                            .bouncingClickable(onClick = onResume)
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
-                        contentAlignment = Alignment.Center,
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.surface2.copy(alpha = 0.65f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // Current System Time
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = stringResource(R.string.pause_resume),
-                                tint = colors.green,
-                                modifier = Modifier.size(16.dp),
+                                imageVector = Icons.Filled.AccessTime,
+                                contentDescription = null,
+                                tint = colors.text2,
+                                modifier = Modifier.size(13.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "В игру",
-                                color = colors.green,
+                                text = currentTimeStr,
+                                color = colors.text,
                                 fontFamily = Manrope,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                        }
+
+                        // Battery Percentage
+                        if (batteryLevel != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.BatteryStd,
+                                    contentDescription = null,
+                                    tint = if (batteryLevel <= 20) colors.red else colors.green,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = stringResource(R.string.battery_format, batteryLevel),
+                                    color = colors.text,
+                                    fontFamily = Manrope,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+
+                        // Current Session Duration
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.HourglassTop,
+                                contentDescription = null,
+                                tint = colors.text2,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.pause_session_duration_format, formattedSession),
+                                color = colors.text2,
+                                fontFamily = Manrope,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -458,6 +560,8 @@ private fun PauseConfirmationModal(
     val cta = stringResource(if (isReset) R.string.reset else R.string.exit)
     val confirmFocusRequester = remember { FocusRequester() }
 
+    BackHandler { onCancel() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -466,7 +570,13 @@ private fun PauseConfirmationModal(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onCancel() },
+            ) { onCancel() }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.Escape || event.key == Key.Back || event.key == Key.ButtonB)) {
+                    onCancel()
+                    true
+                } else false
+            },
         contentAlignment = Alignment.Center,
     ) {
         Column(

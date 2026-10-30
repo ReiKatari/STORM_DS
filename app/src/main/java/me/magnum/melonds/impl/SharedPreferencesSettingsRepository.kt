@@ -265,6 +265,10 @@ class SharedPreferencesSettingsRepository(
         preferences.registerOnSharedPreferenceChangeListener(this)
         setDefaultThemeIfRequired()
         setDefaultMacAddressIfRequired()
+        if (!preferences.contains("enable_storm_compiler") && preferences.contains("enable_jit")) {
+            val oldJit = preferences.getBoolean("enable_jit", true)
+            preferences.edit().putBoolean("enable_storm_compiler", oldJit).apply()
+        }
 
         val coreRenderInputsFlow = combine(
             combine(

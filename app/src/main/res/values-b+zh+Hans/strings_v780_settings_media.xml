@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">陀螺仪模式</string>
+    <string name="v780_ra_profile_title">RetroAchievements 个人资料</string>
+    <string name="v780_internal_resolution_high_warning">高负载：可能会增加发热和显存占用</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ 警告：发热增加且显存占用较高</string>
+    <string name="v780_video_maintenance_category">维护与重置</string>
+    <string name="v780_video_reset_enhancements_title">恢复默认图形增强设置</string>
+    <string name="v780_video_reset_enhancements_summary">将分辨率缩放、滤镜、着色器和 3D Hack 恢复为安全默认值</string>
+    <string name="v780_video_reset_enhancements_confirm_message">确定要将所有图形增强、滤镜、着色器和实验性视频选项恢复为安全默认值吗？</string>
+    <string name="v780_video_reset_enhancements_action">重置</string>
+    <string name="v780_video_reset_enhancements_success">图形增强设置已恢复为默认值</string>
+    <string name="v780_audio_latency_approx_low">~12 毫秒</string>
+    <string name="v780_audio_latency_approx_medium">~24 毫秒</string>
+    <string name="v780_audio_latency_approx_high">~48 毫秒</string>
+    <string name="v780_mic_permission_granted">权限已授予</string>
+    <string name="v780_mic_permission_required">需要录音权限</string>
+    <string name="v780_connected_controllers_format">已连接：%s</string>
+    <string name="v780_no_controllers_detected">未检测到手柄</string>
+    <string name="v780_input_auto_map_title">自动映射标准手柄</string>
+    <string name="v780_input_auto_map_success">标准手柄按键已成功自动映射</string>
+    <string name="v780_input_clear_all_title">清除所有按键映射</string>
+    <string name="v780_input_clear_all_confirm_message">确定要清除所有按钮和轴的映射设置吗？</string>
+    <string name="v780_input_clear_all_action">清除</string>
+    <string name="v780_input_clear_all_success">所有按键映射已清除</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">硬核挑战模式：在有效游戏期间，严格禁用即时读档、倒带、慢动作和金手指作弊。</string>
+    <string name="v780_about_copy_diagnostics_title">复制设备与渲染器诊断摘要</string>
+    <string name="v780_about_copy_diagnostics_summary">复制系统硬件、GPU 型号和 Vulkan 支持信息至剪贴板</string>
+    <string name="v780_about_copy_diagnostics_success">设备诊断摘要已复制到剪贴板</string>
+    <string name="v780_diagnostics_vulkan_supported">支持</string>
+    <string name="v780_diagnostics_vulkan_unsupported">不支持</string>
+</resources>

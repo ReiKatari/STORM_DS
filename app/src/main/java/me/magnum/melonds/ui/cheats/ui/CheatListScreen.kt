@@ -15,6 +15,12 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.IconButton
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
+import me.magnum.melonds.ui.common.melonOutlinedTextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +33,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.ui.cheats.model.CheatFormDialogState
@@ -70,6 +77,13 @@ private fun List(
     onDeleteCheatClick: (Cheat) -> Unit,
 ) {
     var cheatFormDialogState by rememberSaveable(stateSaver = CheatFormDialogState.Saver) { mutableStateOf(CheatFormDialogState.Hidden) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    val filteredCheats = if (cheats.size > 5 && searchQuery.isNotBlank()) {
+        cheats.filter { it.name.contains(searchQuery, ignoreCase = true) || it.code.contains(searchQuery, ignoreCase = true) }
+    } else {
+        cheats
+    }
 
     Box(modifier) {
         if (cheats.isEmpty()) {
@@ -89,8 +103,41 @@ private fun List(
                     bottom = contentPadding.calculateBottomPadding() + 16.dp + 56.dp + 16.dp, // Take FAB into consideration
                 ),
             ) {
+                if (cheats.size > 5) {
+                    item(key = "cheat_search_bar") {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            placeholder = { Text(stringResource(R.string.cheats_search_hint), color = me.magnum.melonds.ui.theme.watermelon.text3, fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = me.magnum.melonds.ui.theme.watermelon.text3,
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Clear,
+                                            contentDescription = null,
+                                            tint = me.magnum.melonds.ui.theme.watermelon.text3,
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = melonOutlinedTextFieldColors(),
+                        )
+                    }
+                }
+
                 itemsIndexed(
-                    items = cheats,
+                    items = filteredCheats,
                     key = { _, item -> item.id ?: item.code },
                 ) { _, item ->
                     CheatItem(

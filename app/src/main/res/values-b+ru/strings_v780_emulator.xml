@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="undo_overwrite_button">Восстановить перезаписанный слот</string>
+    <string name="undo_overwrite_success">Слот %d восстановлен из резервной копии</string>
+    <string name="undo_overwrite_badge">Доступен откат слота %d</string>
+    <string name="relative_time_just_now">только что</string>
+    <string name="relative_time_minutes_ago">%d мин назад</string>
+    <string name="relative_time_hours_ago">%d ч назад</string>
+    <string name="relative_time_yesterday">вчера</string>
+    <string name="relative_time_days_ago">%d дн назад</string>
+    <string name="pause_session_duration_format">Сессия: %s</string>
+    <string name="pause_session_less_than_minute">&lt; 1 мин</string>
+    <string name="pause_session_minutes">%d мин</string>
+    <string name="pause_session_hours_minutes">%d ч %d мин</string>
+    <string name="battery_format">%d%%</string>
+    <string name="fast_forward_speed_unlimited">Без ограничений (макс.)</string>
+    <string name="solar_preset_0">0% Тень</string>
+    <string name="solar_preset_35">35% Облачно</string>
+    <string name="solar_preset_70">70% Ясно</string>
+    <string name="solar_preset_100">100% Зенит</string>
+    <string name="solar_sensor_slider_label">Освещённость (Boktai)</string>
+    <string name="translator_copy_last">Копировать последний перевод</string>
+    <string name="translator_copied_to_clipboard">Текст перевода скопирован в буфер обмена</string>
+    <string name="translator_no_translation_to_copy">Нет переведённого текста для копирования</string>
+    <string name="translator_copy_action">Копировать</string>
+    <string name="pause_resume_button">В игру</string>
+</resources>

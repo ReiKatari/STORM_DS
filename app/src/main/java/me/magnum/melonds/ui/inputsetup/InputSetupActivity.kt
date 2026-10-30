@@ -13,6 +13,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.core.view.MenuProvider
+import me.magnum.melonds.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -84,9 +91,32 @@ class InputSetupActivity : AppCompatActivity() {
                 InputSetupScreen(
                     viewModel = viewModel,
                     onBackClick = ::onNavigateUp,
+                    onAutoMapClick = ::autoMapStandardGamepadWithFeedback,
+                    onClearAllClick = ::showClearAllConfirmDialog,
                 )
             }
         }
+
+        addMenuProvider(object : MenuProvider {
+            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+                menu.add(0, 101, 0, R.string.v780_input_auto_map_title)
+                menu.add(0, 102, 1, R.string.v780_input_clear_all_title)
+            }
+
+            override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+                return when (menuItem.itemId) {
+                    101 -> {
+                        autoMapStandardGamepadWithFeedback()
+                        true
+                    }
+                    102 -> {
+                        showClearAllConfirmDialog()
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }, this)
 
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -162,5 +192,41 @@ class InputSetupActivity : AppCompatActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.add(0, 101, 0, R.string.v780_input_auto_map_title)
+        menu.add(0, 102, 1, R.string.v780_input_clear_all_title)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            101 -> {
+                autoMapStandardGamepadWithFeedback()
+                true
+            }
+            102 -> {
+                showClearAllConfirmDialog()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    fun autoMapStandardGamepadWithFeedback() {
+        viewModel.autoMapStandardGamepad()
+        Toast.makeText(this, R.string.v780_input_auto_map_success, Toast.LENGTH_SHORT).show()
+    }
+
+    fun showClearAllConfirmDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.v780_input_clear_all_title)
+            .setMessage(R.string.v780_input_clear_all_confirm_message)
+            .setPositiveButton(R.string.v780_input_clear_all_action) { _, _ ->
+                viewModel.clearAllAssignments()
+                Toast.makeText(this, R.string.v780_input_clear_all_success, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 }

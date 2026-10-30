@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Duplicar diseño</string>
+    <string name="layout_copy_suffix">(copia)</string>
+    <string name="layout_duplicate_success">Diseño duplicado</string>
+    <string name="action_layout_undo">Deshacer</string>
+    <string name="layout_snap_to_grid">Ajustar a la cuadrícula</string>
+    <string name="layout_snap_to_grid_summary">Ajustar controles a cuadrícula de 16 px y ejes centrales</string>
+    <string name="layout_unsaved_changes_title">Cambios no guardados</string>
+    <string name="layout_unsaved_changes_message">Tienes cambios sin guardar en este diseño. ¿Deseas guardarlos antes de salir?</string>
+    <string name="component_group_screens">Pantallas de la consola</string>
+    <string name="component_group_gameplay">Botones principales de juego</string>
+    <string name="component_group_emulator">Acciones rápidas del emulador</string>
+    <string name="component_group_combo_special">Botones combinados y especiales</string>
+    <string name="component_group_stick">Stick y control analógico</string>
+</resources>

@@ -1457,4 +1457,16 @@ Importá-los para o STORM DS?</string>
         <item quantity="one">%1$d passo</item>
         <item quantity="other">%1$d passos</item>
     </plurals>
+    <string-array name="video_internal_resolution_options">
+        <item>1x nativo (256x192)</item>
+        <item>2x nativo (512x384)</item>
+        <item>3x nativo (768x576)</item>
+        <item>4x nativo (1024x768)</item>
+        <item>5x nativo (1280x960)</item>
+        <item>6x nativo (1536x1152)</item>
+        <item>7x nativo (1792x1344)</item>
+        <item>8x nativo (2048x1536)</item>
+        <item>12x nativo (3072x2304)</item>
+        <item>16x nativo (4096x3072)</item>
+    </string-array>
 </resources>

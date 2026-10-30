@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Modo de giroscópio</string>
+    <string name="v780_ra_profile_title">Perfil do RetroAchievements</string>
+    <string name="v780_internal_resolution_high_warning">Carga alta: possível aquecimento e maior uso de VRAM</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Atenção: maior aquecimento e uso de VRAM</string>
+    <string name="v780_video_maintenance_category">Manutenção e redefinição</string>
+    <string name="v780_video_reset_enhancements_title">Restaurar melhorias gráficas padrão</string>
+    <string name="v780_video_reset_enhancements_summary">Restaura multiplicador de resolução, filtros, shaders e hacks 3D para valores seguros</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Deseja restaurar todas as melhorias gráficas, filtros, shaders e hacks de vídeo para os padrões seguros?</string>
+    <string name="v780_video_reset_enhancements_action">Restaurar</string>
+    <string name="v780_video_reset_enhancements_success">Melhorias gráficas restauradas para os padrões</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Permissão concedida</string>
+    <string name="v780_mic_permission_required">Permissão de gravação de áudio necessária</string>
+    <string name="v780_connected_controllers_format">Conectado: %s</string>
+    <string name="v780_no_controllers_detected">Nenhum controle detectado</string>
+    <string name="v780_input_auto_map_title">Mapeamento automático de controle padrão</string>
+    <string name="v780_input_auto_map_success">Layout de controle padrão mapeado com sucesso</string>
+    <string name="v780_input_clear_all_title">Limpar todos os mapeamentos</string>
+    <string name="v780_input_clear_all_confirm_message">Tem certeza de que deseja limpar todos os mapeamentos de botões e eixos?</string>
+    <string name="v780_input_clear_all_action">Limpar</string>
+    <string name="v780_input_clear_all_success">Todos os mapeamentos de botões foram limpos</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Modo competitivo: carregamento de salvamentos rápidos, retrocesso, câmera lenta e trapaças ficam desativados durante a sessão ativa.</string>
+    <string name="v780_about_copy_diagnostics_title">Copiar resumo do dispositivo e renderizador</string>
+    <string name="v780_about_copy_diagnostics_summary">Copia informações do sistema, GPU e suporte a Vulkan para a área de transferência</string>
+    <string name="v780_about_copy_diagnostics_success">Resumo do dispositivo copiado para a área de transferência</string>
+    <string name="v780_diagnostics_vulkan_supported">Suportado</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Não suportado</string>
+</resources>

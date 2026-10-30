@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_search_settings_title">Pesquisar configurações</string>
+    <string name="v780_search_settings_hint">Pesquisar configurações e opções…</string>
+    <string name="v780_search_no_results">Nenhuma configuração encontrada</string>
+    <string name="v780_search_results_count">Encontrados: %1$d</string>
+    <string name="v780_rewind_summary_title">Estimativa do buffer de retrocesso</string>
+    <string name="v780_rewind_summary_detail">Janela: %1$d s (%2$d estados). Buffer RAM estimado: ~%3$s (até %4$s em pico de carga).</string>
+    <string name="v780_settings_maintenance_title">Manutenção e backup de configurações</string>
+    <string name="v780_settings_export_json_title">Exportar configurações para arquivo JSON</string>
+    <string name="v780_settings_export_json_summary">Salvar as configurações atuais em um arquivo JSON portátil</string>
+    <string name="v780_settings_import_json_title">Importar configurações de arquivo JSON</string>
+    <string name="v780_settings_import_json_summary">Carregar e aplicar configurações a partir de um arquivo JSON</string>
+    <string name="v780_settings_reset_defaults_title">Restaurar configurações para os padrões</string>
+    <string name="v780_settings_reset_defaults_summary">Restaurar configurações gerais sem alterar diretórios de jogos ou RetroAchievements</string>
+    <string name="v780_settings_reset_confirm_title">Restaurar configurações</string>
+    <string name="v780_settings_reset_confirm_message">Tem certeza de que deseja restaurar as configurações padrão? As pastas de jogos, salvamentos e login do RetroAchievements serão preservados.</string>
+    <string name="v780_settings_export_success">Configurações exportadas para JSON com sucesso</string>
+    <string name="v780_settings_export_error">Falha ao exportar configurações</string>
+    <string name="v780_settings_import_success">Configurações importadas com sucesso (%1$d parâmetros aplicados)</string>
+    <string name="v780_settings_import_error">Falha ao importar: arquivo JSON inválido</string>
+    <string name="v780_clear_rom_cache_confirm_title">Limpar cache de ROMs</string>
+    <string name="v780_clear_rom_cache_confirm_message">Tem certeza de que deseja limpar o cache de ROMs e ícones? Os dados serão extraídos novamente na próxima verificação.</string>
+    <string name="v780_clear_rom_cache_success">Cache de ROMs limpo com sucesso</string>
+    <string name="v780_bios_ready_status">DS: %1$s, DSi: %2$s</string>
+    <string name="v780_bios_status_ready">Pronto</string>
+    <string name="v780_bios_status_not_ready">Não configurado</string>
+    <string name="v780_bios_size_valid">Válido</string>
+    <string name="v780_bios_size_invalid">Tamanho inválido</string>
+    <string name="v780_internal_randomize_mac_title">Gerar endereço MAC da Nintendo</string>
+    <string name="v780_internal_randomize_mac_summary">Criar um endereço MAC aleatório com prefixo da Nintendo 00:09:BF</string>
+    <string name="v780_mac_generated">Endereço MAC da Nintendo gerado: %1$s</string>
+    <string name="v780_mac_invalid_format">Formato de endereço MAC inválido (deve ser XX:XX:XX:XX:XX:XX)</string>
+</resources>

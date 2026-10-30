@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_search_settings_title">Einstellungen suchen</string>
+    <string name="v780_search_settings_hint">Einstellungen und Optionen suchen…</string>
+    <string name="v780_search_no_results">Keine Einstellungen gefunden</string>
+    <string name="v780_search_results_count">Gefunden: %1$d</string>
+    <string name="v780_rewind_summary_title">Rückspulpuffer-Berechnung</string>
+    <string name="v780_rewind_summary_detail">Fenster: %1$d Sek. (%2$d Zustände). Geschätzter RAM-Puffer: ~%3$s (bis zu %4$s bei Spitzenlast).</string>
+    <string name="v780_settings_maintenance_title">Wartung und Sicherung der Einstellungen</string>
+    <string name="v780_settings_export_json_title">Einstellungen in JSON-Datei exportieren</string>
+    <string name="v780_settings_export_json_summary">Aktuelle Einstellungen in einer portablen JSON-Datei speichern</string>
+    <string name="v780_settings_import_json_title">Einstellungen aus JSON-Datei importieren</string>
+    <string name="v780_settings_import_json_summary">Einstellungen aus einer JSON-Datei laden und anwenden</string>
+    <string name="v780_settings_reset_defaults_title">Haupteinstellungen auf Standardwerte zurücksetzen</string>
+    <string name="v780_settings_reset_defaults_summary">Allgemeine Einstellungen zurücksetzen, ohne Spielverzeichnisse oder RetroAchievements zu ändern</string>
+    <string name="v780_settings_reset_confirm_title">Einstellungen zurücksetzen</string>
+    <string name="v780_settings_reset_confirm_message">Möchten Sie die Haupteinstellungen wirklich auf die Standardwerte zurücksetzen? Spieleverzeichnisse, Speicherpfade und RetroAchievements bleiben erhalten.</string>
+    <string name="v780_settings_export_success">Einstellungen erfolgreich nach JSON exportiert</string>
+    <string name="v780_settings_export_error">Exportieren der Einstellungen fehlgeschlagen</string>
+    <string name="v780_settings_import_success">Einstellungen erfolgreich importiert (%1$d Parameter angewendet)</string>
+    <string name="v780_settings_import_error">Fehler beim Importieren der Einstellungen: ungültige JSON-Datei</string>
+    <string name="v780_clear_rom_cache_confirm_title">ROM-Cache leeren</string>
+    <string name="v780_clear_rom_cache_confirm_message">Möchten Sie den ROM- und Symbol-Cache wirklich leeren? Die Daten werden beim nächsten Scan neu extrahiert.</string>
+    <string name="v780_clear_rom_cache_success">ROM-Cache erfolgreich geleert</string>
+    <string name="v780_bios_ready_status">DS: %1$s, DSi: %2$s</string>
+    <string name="v780_bios_status_ready">Bereit</string>
+    <string name="v780_bios_status_not_ready">Nicht konfiguriert</string>
+    <string name="v780_bios_size_valid">Gültig</string>
+    <string name="v780_bios_size_invalid">Ungültige Größe</string>
+    <string name="v780_internal_randomize_mac_title">Nintendo MAC-Adresse generieren</string>
+    <string name="v780_internal_randomize_mac_summary">Zufällige MAC-Adresse mit Nintendo-Präfix 00:09:BF erstellen</string>
+    <string name="v780_mac_generated">Nintendo MAC-Adresse generiert: %1$s</string>
+    <string name="v780_mac_invalid_format">Ungültiges MAC-Adressformat (muss XX:XX:XX:XX:XX:XX sein)</string>
+</resources>

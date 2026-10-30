@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Mode giroskop</string>
+    <string name="v780_ra_profile_title">Profil RetroAchievements</string>
+    <string name="v780_internal_resolution_high_warning">Beban tinggi: kemungkinan peningkatan panas dan penggunaan VRAM</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Peringatan: peningkatan panas dan penggunaan VRAM</string>
+    <string name="v780_video_maintenance_category">Pemeliharaan dan reset</string>
+    <string name="v780_video_reset_enhancements_title">Reset peningkatan grafis ke default</string>
+    <string name="v780_video_reset_enhancements_summary">Mengembalikan skala resolusi, filter, shader, dan peretasan 3D ke default yang aman</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Reset semua peningkatan grafis, filter, shader, dan peretasan video eksperimental ke nilai default yang aman?</string>
+    <string name="v780_video_reset_enhancements_action">Reset</string>
+    <string name="v780_video_reset_enhancements_success">Peningkatan grafis direset ke default</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Izin diberikan</string>
+    <string name="v780_mic_permission_required">Izin perekaman audio diperlukan</string>
+    <string name="v780_connected_controllers_format">Terhubung: %s</string>
+    <string name="v780_no_controllers_detected">Tidak ada gamepad terdeteksi</string>
+    <string name="v780_input_auto_map_title">Tetapkan otomatis gamepad standar</string>
+    <string name="v780_input_auto_map_success">Tata letak gamepad standar berhasil ditetapkan</string>
+    <string name="v780_input_clear_all_title">Hapus semua penetapan</string>
+    <string name="v780_input_clear_all_confirm_message">Apakah Anda yakin ingin menghapus semua penetapan tombol dan sumbu?</string>
+    <string name="v780_input_clear_all_action">Hapus</string>
+    <string name="v780_input_clear_all_success">Semua penetapan tombol dihapus</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Mode kompetitif: memuat save state, rewind, gerak lambat, dan cheat dinonaktifkan selama sesi aktif.</string>
+    <string name="v780_about_copy_diagnostics_title">Salin ringkasan perangkat dan perender</string>
+    <string name="v780_about_copy_diagnostics_summary">Menyalin info sistem, model GPU, dan dukungan Vulkan ke papan klip</string>
+    <string name="v780_about_copy_diagnostics_success">Ringkasan perangkat disalin ke papan klip</string>
+    <string name="v780_diagnostics_vulkan_supported">Didukung</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Tidak didukung</string>
+</resources>

@@ -157,6 +157,16 @@ fun LayoutsScreen(
             val fileName = "${layout.name?.replace("[^\\p{L}\\p{N}_\\- ]".toRegex(), "_")?.trim() ?: "layout"}.json"
             exportLauncher.launch(fileName)
         },
+        onDuplicateLayout = { layout ->
+            val copySuffix = context.getString(R.string.layout_copy_suffix)
+            viewModel.duplicateLayout(layout, copySuffix) {
+                android.widget.Toast.makeText(
+                    context,
+                    R.string.layout_duplicate_success,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        },
         onEditLayout = { layoutId ->
             val intent = Intent(context, LayoutEditorActivity::class.java)
             intent.putExtra(LayoutEditorActivity.KEY_LAYOUT_ID, layoutId.toString())
@@ -176,6 +186,7 @@ private fun LayoutsScreenContent(
     onCreateLayout: () -> Unit,
     onImportLayout: () -> Unit,
     onExportLayout: (LayoutConfiguration) -> Unit,
+    onDuplicateLayout: (LayoutConfiguration) -> Unit,
     onEditLayout: (UUID) -> Unit,
     onDeleteLayout: (LayoutConfiguration) -> Unit,
     onUndoDelete: (LayoutConfiguration) -> Unit,
@@ -338,6 +349,7 @@ private fun LayoutsScreenContent(
                     isSelected = layout.id == selectedLayoutId,
                     onLayoutSelected = { onLayoutSelected(layout.id) },
                     onEditLayout = { layout.id?.let(onEditLayout) },
+                    onDuplicateLayout = { onDuplicateLayout(layout) },
                     onExportLayout = { onExportLayout(layout) },
                     onDeleteLayout = {
                         deleteLayoutEvent.tryEmit(layout)
@@ -367,6 +379,7 @@ private fun LayoutItem(
     layout: LayoutConfiguration,
     isSelected: Boolean,
     onLayoutSelected: () -> Unit,
+    onDuplicateLayout: () -> Unit,
     onEditLayout: () -> Unit,
     onExportLayout: () -> Unit,
     onDeleteLayout: () -> Unit,
@@ -471,6 +484,18 @@ private fun LayoutItem(
                 DropdownMenuItem(
                     onClick = {
                         showMenu = false
+                        onDuplicateLayout()
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_layout_duplicate),
+                        fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                    )
+                }
+
+                DropdownMenuItem(
+                    onClick = {
+                        showMenu = false
                         onExportLayout()
                     },
                 ) {
@@ -529,6 +554,7 @@ private fun PreviewLayoutsScreen() {
             onCreateLayout = { },
             onImportLayout = { },
             onExportLayout = { },
+            onDuplicateLayout = { },
             onEditLayout = { },
             onDeleteLayout = { },
             onUndoDelete = { },

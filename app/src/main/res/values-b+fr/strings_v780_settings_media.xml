@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Mode gyroscope</string>
+    <string name="v780_ra_profile_title">Profil RetroAchievements</string>
+    <string name="v780_internal_resolution_high_warning">Charge élevée : chauffe accrue et utilisation importante de VRAM</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Attention : chauffe accrue et utilisation de VRAM</string>
+    <string name="v780_video_maintenance_category">Maintenance et réinitialisation</string>
+    <string name="v780_video_reset_enhancements_title">Réinitialiser les améliorations par défaut</string>
+    <string name="v780_video_reset_enhancements_summary">Rétablit l’échelle de résolution, les filtres, shaders et hacks 3D par défaut</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Réinitialiser toutes les améliorations graphiques, filtres, shaders et hacks vidéo aux valeurs par défaut sûres ?</string>
+    <string name="v780_video_reset_enhancements_action">Réinitialiser</string>
+    <string name="v780_video_reset_enhancements_success">Améliorations graphiques réinitialisées par défaut</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Autorisation accordée</string>
+    <string name="v780_mic_permission_required">Autorisation d’enregistrement audio requise</string>
+    <string name="v780_connected_controllers_format">Connecté : %s</string>
+    <string name="v780_no_controllers_detected">Aucune manette détectée</string>
+    <string name="v780_input_auto_map_title">Configuration automatique de la manette standard</string>
+    <string name="v780_input_auto_map_success">Configuration de la manette standard appliquée</string>
+    <string name="v780_input_clear_all_title">Effacer toutes les assignations</string>
+    <string name="v780_input_clear_all_confirm_message">Voulez-vous vraiment effacer toutes les assignations de boutons et d’axes ?</string>
+    <string name="v780_input_clear_all_action">Effacer</string>
+    <string name="v780_input_clear_all_success">Toutes les assignations ont été effacées</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Mode compétitif : le chargement d’états, le rembobinage, le ralenti et les codes de triche sont désactivés pendant une session active.</string>
+    <string name="v780_about_copy_diagnostics_title">Copier le résumé de l’appareil et du moteur</string>
+    <string name="v780_about_copy_diagnostics_summary">Copie les informations système, le modèle GPU et le support Vulkan dans le presse-papiers</string>
+    <string name="v780_about_copy_diagnostics_success">Résumé de l’appareil copié dans le presse-papiers</string>
+    <string name="v780_diagnostics_vulkan_supported">Pris en charge</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Non pris en charge</string>
+</resources>

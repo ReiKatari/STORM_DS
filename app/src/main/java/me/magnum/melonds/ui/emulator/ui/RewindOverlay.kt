@@ -113,7 +113,7 @@ fun RewindOverlay(
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        Key.ButtonB, Key.Back -> {
+                        Key.ButtonB, Key.Back, Key.Escape -> {
                             onDismiss()
                             true
                         }
@@ -225,7 +225,7 @@ fun RewindOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.pause_resume_button),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.5.sp,
@@ -535,6 +535,8 @@ private fun RewindTimelineCard(
                 fontSize = 8.sp,
                 lineHeight = 9.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }

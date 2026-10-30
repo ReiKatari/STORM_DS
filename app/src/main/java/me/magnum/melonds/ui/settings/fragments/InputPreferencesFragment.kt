@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.settings.fragments
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.InputDevice
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SeekBarPreference
@@ -113,12 +114,40 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 value = "touch_aim"
             }
         }
+
+        updateKeyMappingSummary()
     }
 
     override fun onResume() {
         super.onResume()
         if (::softInputBehaviourPreference.isInitialized) {
             softInputBehaviourPreference.value = softInputBehaviourPreference.sharedPreferences?.getString(softInputBehaviourPreference.key, "hide_system_buttons_when_controller_connected")
+        }
+        updateKeyMappingSummary()
+    }
+
+    private fun updateKeyMappingSummary() {
+        val keyMappingPreference = findPreference<Preference>("input_key_mapping") ?: return
+        val deviceIds = InputDevice.getDeviceIds()
+        val controllerNames = mutableListOf<String>()
+        for (id in deviceIds) {
+            val dev = InputDevice.getDevice(id) ?: continue
+            if (dev.isVirtual) continue
+            val sources = dev.sources
+            val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+            val isJoystick = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+            if (isGamepad || isJoystick) {
+                val name = dev.name.takeIf { !it.isNullOrBlank() } ?: "Gamepad $id"
+                if (!controllerNames.contains(name)) {
+                    controllerNames.add(name)
+                }
+            }
+        }
+        val defaultSummary = getString(R.string.key_mapping_summary)
+        if (controllerNames.isNotEmpty()) {
+            keyMappingPreference.summary = "$defaultSummary\n🎮 ${getString(R.string.v780_connected_controllers_format, controllerNames.joinToString(", "))}"
+        } else {
+            keyMappingPreference.summary = defaultSummary
         }
     }
 }

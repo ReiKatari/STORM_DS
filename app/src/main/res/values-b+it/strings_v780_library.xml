@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Gioco casuale</string>
+    <string name="toast_random_rom_selected">Selezionato: %s</string>
+    <string name="toast_no_roms_found">Nessun gioco trovato</string>
+    <string name="reset_rom_config_section">Ripristina</string>
+    <string name="reset_rom_config_title">Ripristina impostazioni individuali del gioco</string>
+    <string name="reset_rom_config_confirm_message">Ripristinare tutte le impostazioni individuali di questo gioco ai valori predefiniti?</string>
+    <string name="action_reset">Ripristina</string>
+    <string name="rom_technical_info_title">Informazioni tecniche ROM</string>
+    <string name="rom_technical_info_copy">Copia dettagli</string>
+    <string name="rom_technical_info_copied">Dettagli tecnici copiati negli appunti</string>
+    <string name="rom_info_title_label">Titolo</string>
+    <string name="rom_info_file_name_label">Nome file</string>
+    <string name="rom_info_file_size_label">Dimensione file</string>
+    <string name="rom_info_platform_label">Piattaforma</string>
+    <string name="rom_info_game_code_label">Codice cartuccia</string>
+    <string name="rom_info_play_time_label">Tempo di gioco</string>
+    <string name="rom_info_last_played_label">Ultima partita</string>
+    <string name="rom_info_never_played">Mai</string>
+    <string name="feature_stats_sort_time">Per tempo</string>
+    <string name="feature_stats_sort_launches">Per avvii</string>
+    <string name="feature_stats_sort_recent">Recenti</string>
+    <string name="cheats_search_hint">Cerca trucchi...</string>
+    <string name="cheats_disable_all">Disattiva tutti</string>
+    <string name="cheats_disable_all_confirm_title">Disattiva tutti i trucchi</string>
+    <string name="cheats_disable_all_confirm_message">Sei sicuro di voler disattivare tutti i trucchi attivi per questo gioco?</string>
+    <string name="cheats_all_disabled_toast">Tutti i trucchi disattivati</string>
+    <string name="error_cheat_line_format">Riga %1$d: formato Action Replay richiesto (XXXXXXXX YYYYYYYY)</string>
+</resources>

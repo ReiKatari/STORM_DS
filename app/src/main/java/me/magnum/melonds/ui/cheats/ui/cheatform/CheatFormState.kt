@@ -30,6 +30,9 @@ class CheatFormState(
     var cheatCodeFieldError by mutableStateOf<FieldError?>(null)
         private set
 
+    var cheatCodeErrorLine by mutableStateOf<Int?>(null)
+        private set
+
     fun buildSubmissionForm(): CheatSubmissionForm {
         return CheatSubmissionForm(
             name = cheatName.text.trim(),
@@ -56,14 +59,19 @@ class CheatFormState(
     }
 
     fun validateCheatCodeField(): Boolean {
-        return if (cheatCode.text.isBlank()) {
+        if (cheatCode.text.isBlank()) {
             cheatCodeFieldError = FieldError.CANNOT_BE_EMPTY
-            false
-        } else if (!isCheatCodeValid(cheatCode.text.trim())) {
+            cheatCodeErrorLine = null
+            return false
+        }
+        val syntax = checkActionReplaySyntax(cheatCode.text)
+        return if (!syntax.isValid) {
             cheatCodeFieldError = FieldError.INVALID_FORMAT
+            cheatCodeErrorLine = syntax.errorLine
             false
         } else {
             cheatCodeFieldError = null
+            cheatCodeErrorLine = null
             true
         }
     }
@@ -178,4 +186,27 @@ private fun isValidChar(char: Char): Boolean {
 
 private fun isCheatCodeValid(codeText: String): Boolean {
     return codeText.replace("[ \n]".toRegex(), "").length % 16 == 0
+}
+data class CheatCodeSyntaxResult(
+    val isValid: Boolean,
+    val errorLine: Int? = null,
+)
+
+fun checkActionReplaySyntax(codeText: String): CheatCodeSyntaxResult {
+    val lines = codeText.split('\n')
+    var nonBlankLineCount = 0
+    val lineRegex = "^[0-9A-Fa-f]{8} [0-9A-Fa-f]{8}$".toRegex()
+    for ((index, rawLine) in lines.withIndex()) {
+        val trimmed = rawLine.trim()
+        if (trimmed.isEmpty()) continue
+        nonBlankLineCount++
+        val normalized = trimmed.replace("\\s+".toRegex(), " ")
+        if (!lineRegex.matches(normalized)) {
+            return CheatCodeSyntaxResult(isValid = false, errorLine = index + 1)
+        }
+    }
+    if (nonBlankLineCount == 0) {
+        return CheatCodeSyntaxResult(isValid = false, errorLine = null)
+    }
+    return CheatCodeSyntaxResult(isValid = true)
 }

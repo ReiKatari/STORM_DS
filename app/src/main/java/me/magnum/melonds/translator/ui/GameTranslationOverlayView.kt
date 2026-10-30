@@ -102,6 +102,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     private val dictCardRect = RectF()
     private val dictCloseRect = RectF()
     private val dictSpeakRect = RectF()
+    private val dictCopyRect = RectF()
 
     // Region Editor Touch State
     private enum class EditAction { NONE, DRAW_NEW, MOVE_REGION, RESIZE_REGION }
@@ -665,13 +666,18 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             curY += 28f
         }
 
-        // Action Button
-        dictSpeakRect.set(dictCardRect.left + 20f, dictCardRect.bottom - 52f, dictCardRect.left + 220f, dictCardRect.bottom - 14f)
+        // Action Buttons: Speak + Copy
+        dictSpeakRect.set(dictCardRect.left + 20f, dictCardRect.bottom - 52f, dictCardRect.left + 160f, dictCardRect.bottom - 14f)
         topBarBtnPaint.color = Color.parseColor("#10B981")
         canvas.drawRoundRect(dictSpeakRect, 10f, 10f, topBarBtnPaint)
         topBarTextPaint.color = Color.WHITE
         topBarTextPaint.textSize = 20f
         canvas.drawText(context.getString(R.string.translator_speak_action), dictSpeakRect.centerX(), dictSpeakRect.centerY() + 7f, topBarTextPaint)
+
+        dictCopyRect.set(dictSpeakRect.right + 12f, dictCardRect.bottom - 52f, dictSpeakRect.right + 172f, dictCardRect.bottom - 14f)
+        topBarBtnPaint.color = Color.parseColor("#3B82F6")
+        canvas.drawRoundRect(dictCopyRect, 10f, 10f, topBarBtnPaint)
+        canvas.drawText(context.getString(R.string.translator_copy_action), dictCopyRect.centerX(), dictCopyRect.centerY() + 7f, topBarTextPaint)
     }
 
     private fun drawLeftControlDock(canvas: Canvas, w: Float, h: Float) {
@@ -853,6 +859,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 }
                 if (dictSpeakRect.contains(x, y)) {
                     onSpeakWordRequested?.invoke(activeDictionaryResult!!.query)
+                    return true
+                }
+                if (dictCopyRect.contains(x, y)) {
+                    val textToCopy = "${activeDictionaryResult!!.query}\n${activeDictionaryResult!!.fullTranslation}"
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Game Dictionary", textToCopy))
+                    android.widget.Toast.makeText(context, context.getString(R.string.translator_copied_to_clipboard), android.widget.Toast.LENGTH_SHORT).show()
                     return true
                 }
                 if (!dictCardRect.contains(x, y)) {

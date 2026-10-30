@@ -27,4 +27,5 @@ sealed class RomConfigUpdateEvent {
     data class RetroAchievementsEnabledUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
     data class DualScreenPresetUpdate(val preset: me.magnum.melonds.domain.model.DualScreenPreset?) : RomConfigUpdateEvent()
     data class TranslatorSourceLangUpdate(val sourceLang: String?) : RomConfigUpdateEvent()
+    data class ResetToDefaults(val preserveCustomName: Boolean = true) : RomConfigUpdateEvent()
 }

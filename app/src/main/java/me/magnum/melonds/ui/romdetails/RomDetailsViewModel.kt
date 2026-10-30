@@ -170,6 +170,14 @@ class RomDetailsViewModel @Inject constructor(
             is RomConfigUpdateEvent.RetroAchievementsEnabledUpdate -> currentRomConfig.copy(retroAchievementsEnabled = event.enabled)
             is RomConfigUpdateEvent.DualScreenPresetUpdate -> currentRomConfig.copy(dualScreenPreset = event.preset)
             is RomConfigUpdateEvent.TranslatorSourceLangUpdate -> currentRomConfig.copy(translatorSourceLang = event.sourceLang)
+            is RomConfigUpdateEvent.ResetToDefaults -> {
+                val base = if (_rom.value.isDsiWareTitle) RomConfig.forDsiWareTitle() else RomConfig.default()
+                if (event.preserveCustomName) {
+                    base.copy(customName = currentRomConfig.customName)
+                } else {
+                    base
+                }
+            }
         }
 
         newRomConfig?.let { newConfig ->

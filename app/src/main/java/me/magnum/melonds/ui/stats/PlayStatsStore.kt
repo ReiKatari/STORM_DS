@@ -63,6 +63,7 @@ object PlayStatsStore {
         val dailyChart: List<DailyPlayPoint>,
         val topByPlayTime: List<GameStatItem>,
         val topByLaunches: List<GameStatItem>,
+        val topRecent: List<GameStatItem> = emptyList(),
     )
 
     fun recordLaunch(context: Context, rom: Rom) {
@@ -254,6 +255,11 @@ object PlayStatsStore {
             .sortedWith(compareByDescending<GameStatItem> { it.launchCount }.thenByDescending { it.playTimeMs })
             .take(10)
 
+        val topRecent = mergedItems
+            .filter { it.lastPlayedEpochMs > 0L }
+            .sortedWith(compareByDescending<GameStatItem> { it.lastPlayedEpochMs }.thenByDescending { it.playTimeMs })
+            .take(10)
+
         return PlayerStatsSummary(
             totalPlayTimeMs = totalPlayTimeMs,
             gamesPlayedCount = gamesPlayedCount,
@@ -261,6 +267,7 @@ object PlayStatsStore {
             dailyChart = dailyPoints,
             topByPlayTime = topByPlayTime,
             topByLaunches = topByLaunches,
+            topRecent = topRecent,
         )
     }
 

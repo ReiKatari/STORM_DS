@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Gyroskop-Modus</string>
+    <string name="v780_ra_profile_title">RetroAchievements-Profil</string>
+    <string name="v780_internal_resolution_high_warning">Hohe Auslastung: erhöhte Wärme und VRAM-Nutzung möglich</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Warnung: erhöhte Wärme und VRAM-Nutzung</string>
+    <string name="v780_video_maintenance_category">Wartung und Zurücksetzen</string>
+    <string name="v780_video_reset_enhancements_title">Grafikverbesserungen auf Standard zurücksetzen</string>
+    <string name="v780_video_reset_enhancements_summary">Setzt Auflösungsskalierung, Filter, Shader und 3D-Hacks auf sichere Standardwerte zurück</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Alle Grafikverbesserungen, Filter, Shader und experimentellen Video-Hacks auf sichere Standardwerte zurücksetzen?</string>
+    <string name="v780_video_reset_enhancements_action">Zurücksetzen</string>
+    <string name="v780_video_reset_enhancements_success">Grafikverbesserungen auf Standard zurückgesetzt</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Berechtigung erteilt</string>
+    <string name="v780_mic_permission_required">Audioaufnahme-Berechtigung erforderlich</string>
+    <string name="v780_connected_controllers_format">Verbunden: %s</string>
+    <string name="v780_no_controllers_detected">Keine Gamepads erkannt</string>
+    <string name="v780_input_auto_map_title">Standard-Gamepad automatisch zuweisen</string>
+    <string name="v780_input_auto_map_success">Standard-Gamepad-Layout erfolgreich zugewiesen</string>
+    <string name="v780_input_clear_all_title">Alle Zuweisungen löschen</string>
+    <string name="v780_input_clear_all_confirm_message">Möchten Sie wirklich alle Tasten- und Achsenzuweisungen löschen?</string>
+    <string name="v780_input_clear_all_action">Löschen</string>
+    <string name="v780_input_clear_all_success">Alle Tastenzuweisungen gelöscht</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Wettkampfmodus: Das Laden von Speicherständen, Zurückspulen, Zeitlupe und Cheats sind während einer aktiven Sitzung deaktiviert.</string>
+    <string name="v780_about_copy_diagnostics_title">Geräte- und Renderer-Übersicht kopieren</string>
+    <string name="v780_about_copy_diagnostics_summary">Kopiert Systeminformationen, GPU-Modell und Vulkan-Unterstützung in die Zwischenablage</string>
+    <string name="v780_about_copy_diagnostics_success">Geräteübersicht in die Zwischenablage kopiert</string>
+    <string name="v780_diagnostics_vulkan_supported">Unterstützt</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Nicht unterstützt</string>
+</resources>

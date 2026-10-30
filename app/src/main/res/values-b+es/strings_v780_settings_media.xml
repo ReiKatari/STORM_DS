@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Modo de giroscopio</string>
+    <string name="v780_ra_profile_title">Perfil de RetroAchievements</string>
+    <string name="v780_internal_resolution_high_warning">Carga alta: posible aumento de temperatura y uso de VRAM</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Advertencia: aumento de temperatura y uso de VRAM</string>
+    <string name="v780_video_maintenance_category">Mantenimiento y restablecimiento</string>
+    <string name="v780_video_reset_enhancements_title">Restablecer mejoras a valores predeterminados</string>
+    <string name="v780_video_reset_enhancements_summary">Restablece la escala de resolución, filtros, shaders y trucos 3D a valores seguros</string>
+    <string name="v780_video_reset_enhancements_confirm_message">¿Restablecer todas las mejoras gráficas, filtros, shaders y trucos experimentales de video a valores seguros?</string>
+    <string name="v780_video_reset_enhancements_action">Restablecer</string>
+    <string name="v780_video_reset_enhancements_success">Mejoras gráficas restablecidas a valores predeterminados</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Permiso concedido</string>
+    <string name="v780_mic_permission_required">Se requiere permiso de grabación de audio</string>
+    <string name="v780_connected_controllers_format">Conectado: %s</string>
+    <string name="v780_no_controllers_detected">No se detectaron mandos</string>
+    <string name="v780_input_auto_map_title">Asignación automática de mando estándar</string>
+    <string name="v780_input_auto_map_success">Diseño de mando estándar asignado con éxito</string>
+    <string name="v780_input_clear_all_title">Borrar todas las asignaciones</string>
+    <string name="v780_input_clear_all_confirm_message">¿Está seguro de que desea borrar todas las asignaciones de botones y ejes?</string>
+    <string name="v780_input_clear_all_action">Borrar</string>
+    <string name="v780_input_clear_all_success">Todas las asignaciones de botones borradas</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Modo competitivo: la carga de guardados rápidos, rebobinado, cámara lenta y trucos están estrictamente desactivados durante una sesión activa.</string>
+    <string name="v780_about_copy_diagnostics_title">Copiar resumen del dispositivo y renderizador</string>
+    <string name="v780_about_copy_diagnostics_summary">Copia la información del sistema, GPU y soporte de Vulkan al portapapeles</string>
+    <string name="v780_about_copy_diagnostics_success">Resumen del dispositivo copiado al portapapeles</string>
+    <string name="v780_diagnostics_vulkan_supported">Compatible</string>
+    <string name="v780_diagnostics_vulkan_unsupported">No compatible</string>
+</resources>

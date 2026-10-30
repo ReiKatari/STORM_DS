@@ -87,6 +87,7 @@
 
         <ListPreference
                 android:key="pref_motion_gyro_mode"
+                android:title="@string/v780_gyro_mode_title"
                 android:dependency="input_gyro_aiming_enabled"
                 android:defaultValue="touch_aim"
                 app:useSimpleSummaryProvider="true"

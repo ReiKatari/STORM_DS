@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Dupliquer la disposition</string>
+    <string name="layout_copy_suffix">(copie)</string>
+    <string name="layout_duplicate_success">Disposition dupliquée</string>
+    <string name="action_layout_undo">Annuler</string>
+    <string name="layout_snap_to_grid">Aligner sur la grille</string>
+    <string name="layout_snap_to_grid_summary">Aligner les commandes sur la grille 16 px et axes centraux</string>
+    <string name="layout_unsaved_changes_title">Modifications non enregistrées</string>
+    <string name="layout_unsaved_changes_message">Cette disposition contient des modifications non enregistrées. Les enregistrer avant de quitter ?</string>
+    <string name="component_group_screens">Écrans de la console</string>
+    <string name="component_group_gameplay">Boutons de jeu principaux</string>
+    <string name="component_group_emulator">Actions rapides de l\'émulateur</string>
+    <string name="component_group_combo_special">Boutons combinés et spéciaux</string>
+    <string name="component_group_stick">Stick et commandes analogiques</string>
+</resources>

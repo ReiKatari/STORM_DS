@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -525,6 +527,31 @@ fun TranslatorSettingsContent(
             }
             
             Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    val lastText = preferences.getString("pref_translator_last_text", null)
+                    if (!lastText.isNullOrBlank()) {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("STORM DS Translation", lastText))
+                        Toast.makeText(context, context.getString(R.string.translator_copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, context.getString(R.string.translator_no_translation_to_copy), Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.surface2, contentColor = watermelon.text)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = null,
+                    tint = watermelon.green,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(context.getString(R.string.translator_copy_last), fontWeight = FontWeight.SemiBold)
+            }
             
             Row(
                 modifier = Modifier.fillMaxWidth(),

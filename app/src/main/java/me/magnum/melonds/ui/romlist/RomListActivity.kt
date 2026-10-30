@@ -328,6 +328,25 @@ class RomListActivity : AppCompatActivity() {
                 launchFirmware(ConsoleType.DSi)
                 return true
             }
+            R.id.action_random_rom -> {
+                val randomRom = viewModel.getRandomRom()
+                if (randomRom != null) {
+                    val displayName = me.magnum.melonds.ui.romlist.composables.romDisplayName(randomRom)
+                    android.widget.Toast.makeText(
+                        this,
+                        getString(R.string.toast_random_rom_selected, displayName),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    launchRom(randomRom)
+                } else {
+                    android.widget.Toast.makeText(
+                        this,
+                        getString(R.string.toast_no_roms_found),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return true
+            }
             R.id.action_rom_list_refresh -> {
                 viewModel.refreshRoms()
                 return true

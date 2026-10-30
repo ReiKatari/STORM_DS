@@ -111,4 +111,28 @@
                 app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
                 app:iconSpaceReserved="false" />
     </PreferenceCategory>
+
+    <PreferenceCategory
+            android:key="category_settings_maintenance"
+            android:title="@string/v780_settings_maintenance_title"
+            app:iconSpaceReserved="false">
+
+        <Preference
+                android:key="settings_export_json"
+                android:title="@string/v780_settings_export_json_title"
+                android:summary="@string/v780_settings_export_json_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="settings_import_json"
+                android:title="@string/v780_settings_import_json_title"
+                android:summary="@string/v780_settings_import_json_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="settings_reset_defaults"
+                android:title="@string/v780_settings_reset_defaults_title"
+                android:summary="@string/v780_settings_reset_defaults_summary"
+                app:iconSpaceReserved="false" />
+    </PreferenceCategory>
 </PreferenceScreen>

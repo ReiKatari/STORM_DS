@@ -78,9 +78,37 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
     }
 
+    private val exportJsonLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            exportSettingsToJson(uri)
+        }
+    }
+
+    private val importJsonLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            importSettingsFromJson(uri)
+        }
+    }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         runCatching { setPreferencesFromResource(R.xml.pref_general, rootKey) }
         runCatching { addPreferencesFromResource(R.xml.pref_general_updates) }
+
+        findPreference<Preference>("settings_export_json")?.setOnPreferenceClickListener {
+            val dateStr = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            exportJsonLauncher.launch("storm_ds_settings_$dateStr.json")
+            true
+        }
+
+        findPreference<Preference>("settings_import_json")?.setOnPreferenceClickListener {
+            importJsonLauncher.launch(arrayOf("application/json", "text/*"))
+            true
+        }
+
+        findPreference<Preference>("settings_reset_defaults")?.setOnPreferenceClickListener {
+            showResetDefaultsConfirmationDialog()
+            true
+        }
 
         findPreference<Preference>("enable_rewind")?.let { pref ->
             rewindPreference = pref
@@ -320,5 +348,232 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         if (!hardcoreEnabled) {
             frameLimitSpeedPreference.summary = frameLimitSpeedPreference.entry ?: getString(R.string.not_set)
         }
+    }
+    private fun exportSettingsToJson(uri: android.net.Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val all = prefs.all
+                val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth")
+
+                val rootJson = org.json.JSONObject()
+                rootJson.put("app", "STORM DS")
+                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.8.0").removePrefix("v").removePrefix("V")
+                rootJson.put("version", vName)
+                rootJson.put("timestamp", System.currentTimeMillis())
+
+                val itemsJson = org.json.JSONObject()
+                for ((key, value) in all) {
+                    val lowerKey = key.lowercase()
+                    if (sensitiveKeys.any { lowerKey.contains(it) }) continue
+                    if (value == null) continue
+
+                    val entryObj = org.json.JSONObject()
+                    when (value) {
+                        is Boolean -> {
+                            entryObj.put("type", "Boolean")
+                            entryObj.put("value", value)
+                        }
+                        is Int -> {
+                            entryObj.put("type", "Int")
+                            entryObj.put("value", value)
+                        }
+                        is Long -> {
+                            entryObj.put("type", "Long")
+                            entryObj.put("value", value)
+                        }
+                        is Float -> {
+                            entryObj.put("type", "Float")
+                            entryObj.put("value", value.toDouble())
+                        }
+                        is String -> {
+                            entryObj.put("type", "String")
+                            entryObj.put("value", value)
+                        }
+                        is Set<*> -> {
+                            entryObj.put("type", "StringSet")
+                            val array = org.json.JSONArray()
+                            for (item in value) {
+                                if (item is String) array.put(item)
+                            }
+                            entryObj.put("value", array)
+                        }
+                        else -> continue
+                    }
+                    itemsJson.put(key, entryObj)
+                }
+                rootJson.put("preferences", itemsJson)
+
+                requireContext().contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(rootJson.toString(2).toByteArray(Charsets.UTF_8))
+                } ?: throw java.io.IOException("Cannot open output stream")
+                itemsJson.length()
+            }
+
+            withContext(Dispatchers.Main) {
+                result.onSuccess {
+                    Toast.makeText(requireContext(), getString(R.string.v780_settings_export_success), Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(requireContext(), getString(R.string.v780_settings_export_error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun importSettingsFromJson(uri: android.net.Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                val jsonText = requireContext().contentResolver.openInputStream(uri)?.use { ins ->
+                    ins.bufferedReader(Charsets.UTF_8).readText()
+                } ?: throw java.io.IOException("Cannot open input stream")
+
+                val rootJson = org.json.JSONObject(jsonText)
+                val prefsJson = if (rootJson.has("preferences")) rootJson.getJSONObject("preferences") else rootJson
+
+                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val editor = prefs.edit()
+                var appliedCount = 0
+
+                val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth")
+
+                val keys = prefsJson.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val lowerKey = key.lowercase()
+                    if (sensitiveKeys.any { lowerKey.contains(it) }) continue
+                    if (key == "app" || key == "version" || key == "timestamp") continue
+
+                    val objOrVal = prefsJson.get(key)
+                    if (objOrVal is org.json.JSONObject && objOrVal.has("type") && objOrVal.has("value")) {
+                        val type = objOrVal.getString("type")
+                        when (type) {
+                            "Boolean" -> {
+                                editor.putBoolean(key, objOrVal.getBoolean("value"))
+                                appliedCount++
+                            }
+                            "Int" -> {
+                                editor.putInt(key, objOrVal.getInt("value"))
+                                appliedCount++
+                            }
+                            "Long" -> {
+                                editor.putLong(key, objOrVal.getLong("value"))
+                                appliedCount++
+                            }
+                            "Float" -> {
+                                editor.putFloat(key, objOrVal.getDouble("value").toFloat())
+                                appliedCount++
+                            }
+                            "String" -> {
+                                editor.putString(key, objOrVal.getString("value"))
+                                appliedCount++
+                            }
+                            "StringSet" -> {
+                                val arr = objOrVal.getJSONArray("value")
+                                val set = mutableSetOf<String>()
+                                for (i in 0 until arr.length()) {
+                                    set.add(arr.getString(i))
+                                }
+                                editor.putStringSet(key, set)
+                                appliedCount++
+                            }
+                        }
+                    } else {
+                        when (objOrVal) {
+                            is Boolean -> {
+                                editor.putBoolean(key, objOrVal)
+                                appliedCount++
+                            }
+                            is Int -> {
+                                editor.putInt(key, objOrVal)
+                                appliedCount++
+                            }
+                            is Long -> {
+                                editor.putLong(key, objOrVal)
+                                appliedCount++
+                            }
+                            is Double -> {
+                                editor.putFloat(key, objOrVal.toFloat())
+                                appliedCount++
+                            }
+                            is String -> {
+                                editor.putString(key, objOrVal)
+                                appliedCount++
+                            }
+                            is org.json.JSONArray -> {
+                                val set = mutableSetOf<String>()
+                                for (i in 0 until objOrVal.length()) {
+                                    set.add(objOrVal.getString(i))
+                                }
+                                editor.putStringSet(key, set)
+                                appliedCount++
+                            }
+                        }
+                    }
+                }
+                editor.apply()
+                appliedCount
+            }
+
+            withContext(Dispatchers.Main) {
+                result.onSuccess { count ->
+                    AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.v780_settings_maintenance_title)
+                        .setMessage(getString(R.string.v780_settings_import_success, count))
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            activity?.recreate()
+                        }
+                        .show()
+                }.onFailure {
+                    Toast.makeText(requireContext(), getString(R.string.v780_settings_import_error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showResetDefaultsConfirmationDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.v780_settings_reset_confirm_title)
+            .setMessage(R.string.v780_settings_reset_confirm_message)
+            .setPositiveButton(R.string.v780_settings_reset_defaults_title) { _, _ ->
+                resetMainSettingsToDefaults()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun resetMainSettingsToDefaults() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val preserved = mutableMapOf<String, Any?>()
+        val all = prefs.all
+
+        val preservePrefixes = listOf("ra_", "rom_search_dirs", "sram_dir", "save_state_location", "save_state_custom_dir", "bios_dir", "dsi_bios_dir", "dsi_sd_card_dir", "dsi_nand_dir")
+
+        for ((key, value) in all) {
+            if (preservePrefixes.any { key.startsWith(it) || key == it }) {
+                preserved[key] = value
+            }
+        }
+
+        val editor = prefs.edit()
+        editor.clear()
+
+        for ((key, value) in preserved) {
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is String -> editor.putString(key, value)
+                is Set<*> -> {
+                    @Suppress("UNCHECKED_CAST")
+                    editor.putStringSet(key, value as Set<String>)
+                }
+            }
+        }
+        editor.putBoolean("enable_storm_compiler", true)
+        editor.apply()
+
+        Toast.makeText(requireContext(), getString(R.string.v780_settings_reset_defaults_title), Toast.LENGTH_SHORT).show()
+        activity?.recreate()
     }
 }

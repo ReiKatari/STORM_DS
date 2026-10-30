@@ -30,7 +30,10 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +66,17 @@ fun RomContextMenu(
     if (rom == null) return
     val colors = watermelon
     val context = LocalContext.current
+    var showTechnicalInfo by remember { mutableStateOf(false) }
+
+    if (showTechnicalInfo) {
+        RomTechnicalInfoDialog(
+            rom = rom,
+            onDismiss = {
+                showTechnicalInfo = false
+                onDismiss()
+            }
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material.LocalElevationOverlay provides null) {
@@ -143,6 +157,14 @@ fun RomContextMenu(
                     onClick = {
                         onShowDetails(rom)
                         onDismiss()
+                    },
+                )
+                ContextItem(
+                    icon = Icons.Filled.Info,
+                    iconTint = colors.text2,
+                    label = stringResource(R.string.rom_technical_info_title),
+                    onClick = {
+                        showTechnicalInfo = true
                     },
                 )
                 ContextItem(

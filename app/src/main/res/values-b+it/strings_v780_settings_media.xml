@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v780_gyro_mode_title">Modalità giroscopio</string>
+    <string name="v780_ra_profile_title">Profilo RetroAchievements</string>
+    <string name="v780_internal_resolution_high_warning">Carico elevato: possibile aumento di temperatura e consumo VRAM</string>
+    <string name="v780_internal_resolution_warning_summary">%1$s
+⚠️ Attenzione: aumento di temperatura e uso VRAM</string>
+    <string name="v780_video_maintenance_category">Manutenzione e ripristino</string>
+    <string name="v780_video_reset_enhancements_title">Ripristina miglioramenti predefiniti</string>
+    <string name="v780_video_reset_enhancements_summary">Ripristina scala di risoluzione, filtri, shader e hack 3D ai valori sicuri</string>
+    <string name="v780_video_reset_enhancements_confirm_message">Ripristinare tutti i miglioramenti grafici, filtri, shader e hack video ai valori predefiniti sicuri?</string>
+    <string name="v780_video_reset_enhancements_action">Ripristina</string>
+    <string name="v780_video_reset_enhancements_success">Miglioramenti grafici ripristinati ai valori predefiniti</string>
+    <string name="v780_audio_latency_approx_low">~12 ms</string>
+    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_high">~48 ms</string>
+    <string name="v780_mic_permission_granted">Autorizzazione concessa</string>
+    <string name="v780_mic_permission_required">Autorizzazione registrazione audio richiesta</string>
+    <string name="v780_connected_controllers_format">Connesso: %s</string>
+    <string name="v780_no_controllers_detected">Nessun controller rilevato</string>
+    <string name="v780_input_auto_map_title">Mappatura automatica controller standard</string>
+    <string name="v780_input_auto_map_success">Mappatura controller standard completata con successo</string>
+    <string name="v780_input_clear_all_title">Cancella tutte le assegnazioni</string>
+    <string name="v780_input_clear_all_confirm_message">Sei sicuro di voler cancellare tutte le assegnazioni di pulsanti e assi?</string>
+    <string name="v780_input_clear_all_action">Cancella</string>
+    <string name="v780_input_clear_all_success">Tutte le assegnazioni di pulsanti cancellate</string>
+    <string name="v780_ra_hardcore_mode_detailed_summary">Modalità competitiva: il caricamento di salvataggi rapidi, riavvolgimento, rallentatore e trucchi sono disabilitati durante una sessione attiva.</string>
+    <string name="v780_about_copy_diagnostics_title">Copia riepilogo dispositivo e renderer</string>
+    <string name="v780_about_copy_diagnostics_summary">Copia informazioni di sistema, GPU e supporto Vulkan negli appunti</string>
+    <string name="v780_about_copy_diagnostics_success">Riepilogo dispositivo copiato negli appunti</string>
+    <string name="v780_diagnostics_vulkan_supported">Supportato</string>
+    <string name="v780_diagnostics_vulkan_unsupported">Non supportato</string>
+</resources>

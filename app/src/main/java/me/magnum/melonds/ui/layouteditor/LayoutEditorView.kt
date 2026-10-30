@@ -45,6 +45,67 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     private var onLayoutChangedListener: ((List<PositionedLayoutComponent>, Int, Int) -> Unit)? = null
     private var onViewPositionEditRequestedListener: ((LayoutComponentPositionEditorState) -> Unit)? = null
 
+    private val undoStack = java.util.ArrayDeque<List<PositionedLayoutComponent>>()
+    private val maxUndoHistory = 25
+    private var onUndoAvailabilityChangedListener: ((Boolean) -> Unit)? = null
+
+    var snapToGridEnabled = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+    var snapGridStepDp = 16f
+    var magneticAxisSnapEnabled = true
+
+    private var isDragging = false
+    private var isSnappedToCenterX = false
+    private var isSnappedToCenterY = false
+
+    private val activeCenterGuidePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 2.5f
+        color = android.graphics.Color.parseColor("#E600E5FF")
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(12f, 8f), 0f)
+    }
+
+    fun setOnUndoAvailabilityChangedListener(listener: ((Boolean) -> Unit)?) {
+        onUndoAvailabilityChangedListener = listener
+        listener?.invoke(canUndo())
+    }
+
+    fun canUndo(): Boolean = undoStack.isNotEmpty()
+
+    fun pushUndoSnapshot() {
+        val currentSnapshot = buildCurrentLayout()
+        if (currentSnapshot.isEmpty()) return
+        if (undoStack.size >= maxUndoHistory) {
+            undoStack.removeFirst()
+        }
+        undoStack.addLast(currentSnapshot)
+        onUndoAvailabilityChangedListener?.invoke(true)
+    }
+
+    fun undo(): Boolean {
+        if (undoStack.isEmpty()) return false
+        val previousState = undoStack.removeLast()
+        applySnapshot(previousState)
+        onUndoAvailabilityChangedListener?.invoke(canUndo())
+        return true
+    }
+
+    fun applySnapshot(components: List<PositionedLayoutComponent>) {
+        deselectCurrentView()
+        destroyLayout()
+        val screens = components.filter { it.isScreen() }.sortedBy { if (it.onTop) 0 else 1 }
+        val others = components.filterNot { it.isScreen() }
+        (screens + others).forEach {
+            views[it.component] = addPositionedLayoutComponent(it)
+        }
+        modifiedByUser = true
+        notifyLayoutChanged()
+        invalidate()
+    }
+
     var safeAreaInsets: android.graphics.Rect = android.graphics.Rect(0, 0, 0, 0)
         set(value) {
             field = value
@@ -83,11 +144,20 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         // Draw center guidelines
         val cx = w / 2f
         val cy = h / 2f
-        canvas.drawLine(cx, 0f, cx, h, centerGuidePaint)
-        canvas.drawLine(0f, cy, w, cy, centerGuidePaint)
+        if (isDragging && isSnappedToCenterX) {
+            canvas.drawLine(cx, 0f, cx, h, activeCenterGuidePaint)
+        } else {
+            canvas.drawLine(cx, 0f, cx, h, centerGuidePaint)
+        }
+
+        if (isDragging && isSnappedToCenterY) {
+            canvas.drawLine(0f, cy, w, cy, activeCenterGuidePaint)
+        } else {
+            canvas.drawLine(0f, cy, w, cy, centerGuidePaint)
+        }
 
         // Draw alignment grid
-        val step = context.dpToPixels(32f)
+        val step = context.dpToPixels(if (snapToGridEnabled) snapGridStepDp else 32f)
         if (step > 0) {
             var x = step
             while (x < w) {
@@ -113,6 +183,8 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
             clampComponentsToCanvasBounds(width, height, 0, 0)
         }
         modifiedByUser = false
+        undoStack.clear()
+        onUndoAvailabilityChangedListener?.invoke(false)
         notifyLayoutChanged()
     }
 
@@ -190,6 +262,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     }
 
     fun addLayoutComponent(component: LayoutComponent) {
+        pushUndoSnapshot()
         val baseWidth = when (component) {
             LayoutComponent.DPAD, LayoutComponent.BUTTONS -> context.dpToPixels(140f).toInt()
             LayoutComponent.BUTTON_L, LayoutComponent.BUTTON_R -> context.dpToPixels(56f).toInt()
@@ -322,7 +395,9 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
                         if (!dragging) {
                             val distance = sqrt((motionEvent.x - downOffsetX).pow(2f) + (motionEvent.y - downOffsetY).pow(2f))
                             if (distance >= 25) {
+                                pushUndoSnapshot()
                                 dragging = true
+                                isDragging = true
                             }
                         } else {
                             dragView(layoutComponentView, motionEvent.x - downOffsetX, motionEvent.y - downOffsetY)
@@ -336,6 +411,10 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
                             view.alpha = 0.5f
                             layoutComponentView.setHighlighted(false)
                             dragging = false
+                            isDragging = false
+                            isSnappedToCenterX = false
+                            isSnappedToCenterY = false
+                            invalidate()
                         }
                         true
                     }
@@ -349,6 +428,10 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
                             view.alpha = 0.5f
                             layoutComponentView.setHighlighted(false)
                             dragging = false
+                            isDragging = false
+                            isSnappedToCenterX = false
+                            isSnappedToCenterY = false
+                            invalidate()
                         } else if (!gestureHandled) {
                             selectView(layoutComponentView)
                             view.performClick()
@@ -407,6 +490,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun deleteSelectedView() {
         val currentlySelectedView = selectedView ?: return
+        pushUndoSnapshot()
         removeView(currentlySelectedView.view)
         views.remove(currentlySelectedView.component)
         deselectCurrentView()
@@ -416,6 +500,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun removeLayoutComponent(component: LayoutComponent) {
         val compView = views[component] ?: return
+        pushUndoSnapshot()
         if (selectedView == compView) {
             deselectCurrentView()
         }
@@ -431,11 +516,49 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         val maxX = max(0f, (width - view.getWidth()).toFloat())
         val minY = 0f
         val maxY = max(0f, (height - view.getHeight()).toFloat())
-        val finalX = min(max(currentPosition.x + offsetX, minX), maxX)
-        val finalY = min(max(currentPosition.y + offsetY, minY), maxY)
-        view.setPosition(Point(finalX.toInt(), finalY.toInt()))
+
+        val rawX = currentPosition.x + offsetX
+        val rawY = currentPosition.y + offsetY
+
+        var finalX = rawX
+        var finalY = rawY
+
+        val cx = width / 2f
+        val cy = height / 2f
+        val snapThresholdPx = context.dpToPixels(12f)
+
+        // Center X magnetic axis snap
+        val compCenterX = rawX + view.getWidth() / 2f
+        if (magneticAxisSnapEnabled && kotlin.math.abs(compCenterX - cx) <= snapThresholdPx) {
+            finalX = cx - view.getWidth() / 2f
+            isSnappedToCenterX = true
+        } else if (snapToGridEnabled) {
+            val stepPx = context.dpToPixels(snapGridStepDp).coerceAtLeast(1f)
+            finalX = kotlin.math.round(rawX / stepPx) * stepPx
+            isSnappedToCenterX = false
+        } else {
+            isSnappedToCenterX = false
+        }
+
+        // Center Y magnetic axis snap
+        val compCenterY = rawY + view.getHeight() / 2f
+        if (magneticAxisSnapEnabled && kotlin.math.abs(compCenterY - cy) <= snapThresholdPx) {
+            finalY = cy - view.getHeight() / 2f
+            isSnappedToCenterY = true
+        } else if (snapToGridEnabled) {
+            val stepPx = context.dpToPixels(snapGridStepDp).coerceAtLeast(1f)
+            finalY = kotlin.math.round(rawY / stepPx) * stepPx
+            isSnappedToCenterY = false
+        } else {
+            isSnappedToCenterY = false
+        }
+
+        val clampedX = finalX.coerceIn(minX, maxX)
+        val clampedY = finalY.coerceIn(minY, maxY)
+        view.setPosition(Point(clampedX.toInt(), clampedY.toInt()))
         modifiedByUser = true
         notifyLayoutChanged()
+        invalidate()
     }
 
     fun setSelectedViewAlpha(alpha: Float) {
@@ -448,6 +571,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun setSelectedScreenOnTop(onTop: Boolean) {
         selectedView?.let {
+            pushUndoSnapshot()
             it.onTop = onTop
             rearrangeScreens()
             modifiedByUser = true
@@ -500,6 +624,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun centerSelectedViewHorizontally() {
         val view = selectedView ?: return
+        pushUndoSnapshot()
         val usableWidth = width - safeAreaInsets.left - safeAreaInsets.right
         val centerX = safeAreaInsets.left + (usableWidth - view.getWidth()) / 2
         val position = view.getPosition()
@@ -510,6 +635,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun centerSelectedViewVertically() {
         val view = selectedView ?: return
+        pushUndoSnapshot()
         val usableHeight = height - safeAreaInsets.top - safeAreaInsets.bottom
         val centerY = safeAreaInsets.top + (usableHeight - view.getHeight()) / 2
         val position = view.getPosition()

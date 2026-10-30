@@ -45,6 +45,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -82,7 +87,13 @@ fun ScreenLayoutOverlay(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onDismiss,
-            ),
+            )
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)) {
+                    onDismiss()
+                    true
+                } else false
+            },
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
@@ -165,7 +176,7 @@ fun ScreenLayoutOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.pause_resume_button),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.5.sp,

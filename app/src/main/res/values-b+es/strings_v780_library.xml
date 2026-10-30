@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Juego aleatorio</string>
+    <string name="toast_random_rom_selected">Seleccionado: %s</string>
+    <string name="toast_no_roms_found">No se encontraron juegos</string>
+    <string name="reset_rom_config_section">Restablecer</string>
+    <string name="reset_rom_config_title">Restablecer ajustes individuales del juego</string>
+    <string name="reset_rom_config_confirm_message">¿Restablecer todos los ajustes individuales de este juego a los valores predeterminados?</string>
+    <string name="action_reset">Restablecer</string>
+    <string name="rom_technical_info_title">Información técnica de la ROM</string>
+    <string name="rom_technical_info_copy">Copiar detalles</string>
+    <string name="rom_technical_info_copied">Detalles técnicos copiados al portapapeles</string>
+    <string name="rom_info_title_label">Título</string>
+    <string name="rom_info_file_name_label">Nombre del archivo</string>
+    <string name="rom_info_file_size_label">Tamaño del archivo</string>
+    <string name="rom_info_platform_label">Plataforma</string>
+    <string name="rom_info_game_code_label">Código de cartucho</string>
+    <string name="rom_info_play_time_label">Tiempo jugado</string>
+    <string name="rom_info_last_played_label">Última partida</string>
+    <string name="rom_info_never_played">Nunca</string>
+    <string name="feature_stats_sort_time">Por tiempo</string>
+    <string name="feature_stats_sort_launches">Por inicios</string>
+    <string name="feature_stats_sort_recent">Recientes</string>
+    <string name="cheats_search_hint">Buscar trucos...</string>
+    <string name="cheats_disable_all">Desactivar todos</string>
+    <string name="cheats_disable_all_confirm_title">Desactivar todos los trucos</string>
+    <string name="cheats_disable_all_confirm_message">¿Seguro que deseas desactivar todos los trucos activos de este juego?</string>
+    <string name="cheats_all_disabled_toast">Todos los trucos desactivados</string>
+    <string name="error_cheat_line_format">Línea %1$d: se requiere formato Action Replay (XXXXXXXX YYYYYYYY)</string>
+</resources>

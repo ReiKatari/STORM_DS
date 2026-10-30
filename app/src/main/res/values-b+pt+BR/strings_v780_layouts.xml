@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_layout_duplicate">Duplicar layout</string>
+    <string name="layout_copy_suffix">(cópia)</string>
+    <string name="layout_duplicate_success">Layout duplicado</string>
+    <string name="action_layout_undo">Desfazer</string>
+    <string name="layout_snap_to_grid">Ajustar à grade</string>
+    <string name="layout_snap_to_grid_summary">Ajustar controles à grade de 16 px e eixos centrais</string>
+    <string name="layout_unsaved_changes_title">Alterações não salvas</string>
+    <string name="layout_unsaved_changes_message">Você tem alterações não salvas neste layout. Salvar antes de sair?</string>
+    <string name="component_group_screens">Telas do console</string>
+    <string name="component_group_gameplay">Botões principais de jogo</string>
+    <string name="component_group_emulator">Ações rápidas do emulador</string>
+    <string name="component_group_combo_special">Botões combinados e especiais</string>
+    <string name="component_group_stick">Analógico e controles</string>
+</resources>

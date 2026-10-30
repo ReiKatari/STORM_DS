@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Game acak</string>
+    <string name="toast_random_rom_selected">Dipilih: %s</string>
+    <string name="toast_no_roms_found">Tidak ada game ditemukan</string>
+    <string name="reset_rom_config_section">Atur ulang</string>
+    <string name="reset_rom_config_title">Atur ulang setelan game individual</string>
+    <string name="reset_rom_config_confirm_message">Kembalikan semua setelan individual game ini ke default global?</string>
+    <string name="action_reset">Atur ulang</string>
+    <string name="rom_technical_info_title">Informasi teknis ROM</string>
+    <string name="rom_technical_info_copy">Salin detail</string>
+    <string name="rom_technical_info_copied">Detail teknis disalin ke papan klip</string>
+    <string name="rom_info_title_label">Judul</string>
+    <string name="rom_info_file_name_label">Nama berkas</string>
+    <string name="rom_info_file_size_label">Ukuran berkas</string>
+    <string name="rom_info_platform_label">Platform</string>
+    <string name="rom_info_game_code_label">Kode kartrid</string>
+    <string name="rom_info_play_time_label">Waktu bermain</string>
+    <string name="rom_info_last_played_label">Terakhir dimainkan</string>
+    <string name="rom_info_never_played">Tidak pernah</string>
+    <string name="feature_stats_sort_time">Berdasarkan waktu</string>
+    <string name="feature_stats_sort_launches">Berdasarkan peluncuran</string>
+    <string name="feature_stats_sort_recent">Baru saja</string>
+    <string name="cheats_search_hint">Cari cheat...</string>
+    <string name="cheats_disable_all">Nonaktifkan semua</string>
+    <string name="cheats_disable_all_confirm_title">Nonaktifkan semua cheat</string>
+    <string name="cheats_disable_all_confirm_message">Yakin ingin menonaktifkan semua cheat aktif untuk game ini?</string>
+    <string name="cheats_all_disabled_toast">Semua cheat dinonaktifkan</string>
+    <string name="error_cheat_line_format">Baris %1$d: diperlukan format Action Replay (XXXXXXXX YYYYYYYY)</string>
+</resources>

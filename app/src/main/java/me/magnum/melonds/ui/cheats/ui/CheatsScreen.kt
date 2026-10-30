@@ -256,7 +256,12 @@ fun CheatsScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = padding,
                     cheats = cheats,
-                    onCheatClick = { viewModel.toggleCheat(it.cheat) }
+                    onCheatClick = { viewModel.toggleCheat(it.cheat) },
+                    onDisableAllCheats = {
+                        (cheats as? CheatsScreenUiState.Ready)?.let { ready ->
+                            viewModel.disableAllCheats(ready.data)
+                        }
+                    }
                 )
             }
         }

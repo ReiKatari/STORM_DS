@@ -23,7 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +36,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.contracts.FilePickerContract
@@ -102,6 +108,7 @@ private fun Content(
     onCustomInputConfigEdited: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showResetConfirmDialog by remember { mutableStateOf(false) }
     val renameDialogState = rememberTextInputDialogState()
     val runtimeConsoleDialogState = rememberSingleChoiceDialogState<me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType>()
     val micDialogState = rememberSingleChoiceDialogState<RuntimeMicSource>()
@@ -139,6 +146,7 @@ private fun Content(
     val gbaSlotOptions = stringArrayResource(id = R.array.gba_slot_options)
     val rendererOptions = stringArrayResource(id = R.array.video_renderer_options)
     val internalResolutionOptions = stringArrayResource(id = R.array.video_internal_resolution_options)
+    val internalResolutionValues = stringArrayResource(id = R.array.video_internal_resolution_values).mapNotNull { it.toIntOrNull() }
     val videoFilteringOptions = stringArrayResource(id = R.array.video_filtering_options)
     val translatorLangEntries = stringArrayResource(id = R.array.translator_source_lang_options)
     val translatorLangValues = stringArrayResource(id = R.array.translator_source_lang_values)
@@ -175,7 +183,8 @@ private fun Content(
     } else {
         context.getString(R.string.off)
     }
-    val globalInternalResolutionLabel = internalResolutionOptions.getOrNull((romConfig.globalInternalResolutionScaling - 1).coerceIn(internalResolutionOptions.indices)) ?: "1x"
+    val globalResolutionIndex = internalResolutionValues.indexOf(romConfig.globalInternalResolutionScaling).takeIf { it >= 0 }
+    val globalInternalResolutionLabel = globalResolutionIndex?.let { internalResolutionOptions.getOrNull(it) } ?: "1x"
     val globalVideoFilteringLabel = videoFilteringOptions.getOrNull(effectiveGlobalFiltering.ordinal) ?: effectiveGlobalFiltering.name
     val globalRetroArchPresetPathLabel = romConfig.globalRetroArchShaderPresetPath ?: context.getString(R.string.not_set)
     val globalRetroArchParametersLabel = romConfig.globalRetroArchShaderParameters ?: context.getString(R.string.not_set)
@@ -315,18 +324,19 @@ private fun Content(
                 )
             }
             AnimatedVisibility(visible = effectiveRenderer != VideoRenderer.SOFTWARE) {
+                val currentResolutionIndex = romConfig.internalResolutionScaling?.let { internalResolutionValues.indexOf(it).takeIf { idx -> idx >= 0 } }
+                val currentResolutionLabel = currentResolutionIndex?.let { internalResolutionOptions.getOrNull(it) } ?: useGlobalWithValue(globalInternalResolutionLabel)
                 ConfigRow(
                     title = stringResource(R.string.internal_resolution),
-                    value = romConfig.internalResolutionScaling?.let { internalResolutionOptions[(it - 1).coerceIn(internalResolutionOptions.indices)] }
-                        ?: useGlobalWithValue(globalInternalResolutionLabel),
+                    value = currentResolutionLabel,
                     showDivider = true,
                     onClick = {
                         internalResolutionDialogState.show(
                             title = context.getString(R.string.internal_resolution),
-                            items = listOf(null) + (1..internalResolutionOptions.size).toList(),
+                            items = listOf(null) + internalResolutionValues,
                             labelOf = { scaling ->
-                                scaling?.let { internalResolutionOptions[(it - 1).coerceIn(internalResolutionOptions.indices)] }
-                                    ?: useGlobalWithValue(globalInternalResolutionLabel)
+                                val idx = scaling?.let { internalResolutionValues.indexOf(it).takeIf { i -> i >= 0 } }
+                                idx?.let { internalResolutionOptions.getOrNull(it) } ?: useGlobalWithValue(globalInternalResolutionLabel)
                             },
                             selected = romConfig.internalResolutionScaling,
                             onSelect = { onConfigUpdate(RomConfigUpdateEvent.InternalResolutionScalingUpdate(it)) },
@@ -534,7 +544,60 @@ private fun Content(
             }
         }
 
+        ConfigSection(title = stringResource(R.string.reset_rom_config_section)) {
+            ConfigRow(
+                title = stringResource(R.string.reset_rom_config_title),
+                value = stringResource(R.string.action_reset),
+                onClick = { showResetConfirmDialog = true },
+            )
+        }
+
         Spacer(Modifier.height(contentPadding.calculateBottomPadding() + 96.dp))
+    }
+
+    if (showResetConfirmDialog) {
+        androidx.compose.material.AlertDialog(
+            onDismissRequest = { showResetConfirmDialog = false },
+            backgroundColor = me.magnum.melonds.ui.theme.watermelon.surface,
+            title = {
+                Text(
+                    text = stringResource(R.string.reset_rom_config_title),
+                    color = me.magnum.melonds.ui.theme.watermelon.text,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.reset_rom_config_confirm_message),
+                    color = me.magnum.melonds.ui.theme.watermelon.text2,
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material.TextButton(
+                    onClick = {
+                        showResetConfirmDialog = false
+                        onConfigUpdate(RomConfigUpdateEvent.ResetToDefaults(preserveCustomName = true))
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_reset),
+                        color = me.magnum.melonds.ui.theme.watermelon.red,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    )
+                }
+            },
+            dismissButton = {
+                androidx.compose.material.TextButton(
+                    onClick = { showResetConfirmDialog = false }
+                ) {
+                    Text(
+                        text = stringResource(android.R.string.cancel),
+                        color = me.magnum.melonds.ui.theme.watermelon.text3,
+                    )
+                }
+            }
+        )
     }
 
     TextInputDialog(

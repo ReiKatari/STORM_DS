@@ -24,6 +24,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
@@ -65,6 +70,8 @@ import java.util.Locale
 fun InputSetupScreen(
     viewModel: InputSetupViewModel,
     onBackClick: () -> Unit,
+    onAutoMapClick: () -> Unit = {},
+    onClearAllClick: () -> Unit = {},
 ) {
     val inputConfig by viewModel.inputConfiguration.collectAsStateWithLifecycle()
     val inputUnderConfiguration by viewModel.inputUnderAssignment.collectAsStateWithLifecycle()
@@ -88,6 +95,8 @@ fun InputSetupScreen(
         onUseDeviceFilterChanged = viewModel::setSlot2UseDeviceFilter,
         onCancelInputConfiguration = viewModel::stopAnyAssignment,
         onBackClick = onBackClick,
+        onAutoMapClick = onAutoMapClick,
+        onClearAllClick = onClearAllClick,
     )
 }
 
@@ -123,6 +132,8 @@ private fun InputSetupScreenContent(
     onUseDeviceFilterChanged: (Boolean) -> Unit,
     onCancelInputConfiguration: () -> Unit,
     onBackClick: () -> Unit,
+    onAutoMapClick: () -> Unit = {},
+    onClearAllClick: () -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
 
@@ -145,6 +156,35 @@ private fun InputSetupScreenContent(
     WatermelonScreenScaffold(
         title = stringResource(R.string.key_mapping),
         onBack = onBackClick,
+        actions = {
+            var menuExpanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.v780_input_auto_map_title),
+                        tint = watermelon.text,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(onClick = {
+                        menuExpanded = false
+                        onAutoMapClick()
+                    }) {
+                        Text(stringResource(R.string.v780_input_auto_map_title))
+                    }
+                    DropdownMenuItem(onClick = {
+                        menuExpanded = false
+                        onClearAllClick()
+                    }) {
+                        Text(stringResource(R.string.v780_input_clear_all_title))
+                    }
+                }
+            }
+        },
     ) { padding ->
         Box(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
             LazyColumn(

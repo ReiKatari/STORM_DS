@@ -49,6 +49,7 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         val profilePreference = findPreference<RetroAchievementsProfilePreference>("ra_profile")!!
         val retroAchievementsEnabledPreference = findPreference<SwitchPreference>("ra_enabled")!!
         val hardcoreModePreference = findPreference<SwitchPreference>("ra_hardcore_enabled")!!
+        hardcoreModePreference.summary = getString(R.string.v780_ra_hardcore_mode_detailed_summary)
         val richPresencePreference = findPreference<SwitchPreference>("ra_rich_presence")!!
         val offlineBackendPreference = findPreference<ListPreference>("ra_offline_backend")!!
         val builtInOfflinePreference = findPreference<SwitchPreference>("ra_offline_softcore_enabled")!!

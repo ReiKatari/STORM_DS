@@ -204,6 +204,7 @@ class LayoutEditorManagerView(
                         },
                         onSave = { x, y ->
                             val targetComponent = positionDialogTargetComponent ?: shownPositionDialog?.component
+                            binding.viewLayoutEditor.pushUndoSnapshot()
                             if (targetComponent != null && binding.viewLayoutEditor.setComponentPosition(targetComponent, x, y)) {
                                 listener?.onStoreLayoutChanges()
                                 finishAppliedComponentEdit(targetComponent)
@@ -220,6 +221,15 @@ class LayoutEditorManagerView(
 
                     if (showMenuDialog) {
                         me.magnum.melonds.ui.layouteditor.ui.LayoutEditorMenuDialog(
+                            snapToGrid = binding.viewLayoutEditor.snapToGridEnabled,
+                            canUndo = binding.viewLayoutEditor.canUndo(),
+                            onToggleSnapToGrid = { enabled ->
+                                binding.viewLayoutEditor.snapToGridEnabled = enabled
+                                androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                                    .edit()
+                                    .putBoolean("layout_editor_snap_to_grid", enabled)
+                                    .apply()
+                            },
                             onDismiss = { showMenuDialog = false },
                             onOptionSelected = { option ->
                                 showMenuDialog = false
@@ -278,6 +288,21 @@ class LayoutEditorManagerView(
             WindowInsetsCompat.CONSUMED
         }
 
+        binding.buttonUndo.setOnClickListener {
+            if (binding.viewLayoutEditor.canUndo()) {
+                binding.viewLayoutEditor.undo()
+                instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
+                listener?.onStoreLayoutChanges()
+            }
+        }
+        binding.viewLayoutEditor.setOnUndoAvailabilityChangedListener { canUndo ->
+            binding.buttonUndo.isEnabled = canUndo
+            binding.buttonUndo.alpha = if (canUndo) 1.0f else 0.45f
+        }
+        val snapPref = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            .getBoolean("layout_editor_snap_to_grid", true)
+        binding.viewLayoutEditor.snapToGridEnabled = snapPref
+
         binding.buttonAddButton.setOnClickListener {
             openButtonsMenu()
         }
@@ -318,7 +343,9 @@ class LayoutEditorManagerView(
                 }
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                binding.viewLayoutEditor.pushUndoSnapshot()
+            }
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
         binding.seekBarButtonScale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -339,7 +366,9 @@ class LayoutEditorManagerView(
                 }
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                binding.viewLayoutEditor.pushUndoSnapshot()
+            }
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
 
@@ -398,6 +427,7 @@ class LayoutEditorManagerView(
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar) {
+                binding.viewLayoutEditor.pushUndoSnapshot()
             }
 
             override fun onStopTrackingTouch(seekBar: SeekBar) {
@@ -424,6 +454,7 @@ class LayoutEditorManagerView(
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar) {
+                binding.viewLayoutEditor.pushUndoSnapshot()
             }
 
             override fun onStopTrackingTouch(seekBar: SeekBar) {
@@ -450,6 +481,7 @@ class LayoutEditorManagerView(
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar) {
+                binding.viewLayoutEditor.pushUndoSnapshot()
             }
 
             override fun onStopTrackingTouch(seekBar: SeekBar) {
@@ -465,7 +497,9 @@ class LayoutEditorManagerView(
                 binding.viewLayoutEditor.setSelectedViewAlpha(alpha)
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                binding.viewLayoutEditor.pushUndoSnapshot()
+            }
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
 
@@ -564,6 +598,10 @@ class LayoutEditorManagerView(
                 }
                 return true
             }
+            KeyEvent.KEYCODE_ESCAPE -> {
+                handleBackNavigation()
+                return true
+            }
             KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_MENU -> {
                 openMenu()
                 return true
@@ -577,6 +615,7 @@ class LayoutEditorManagerView(
         if (!editor.hasSelectedComponent() || !areScalingControlsShown) {
             return
         }
+        editor.pushUndoSnapshot()
 
         val dir = if (increase) 1 else -1
         val widthStep = (binding.seekBarWidth.max / 40).coerceAtLeast(1)
@@ -633,9 +672,65 @@ class LayoutEditorManagerView(
     fun handleBackNavigation() {
         if (areScalingControlsShown) {
             hideScalingControls(true)
-        } else {
-            openMenu()
+            binding.viewLayoutEditor.deselectComponent()
+            return
         }
+        if (showMenuDialog) {
+            showMenuDialog = false
+            return
+        }
+        if (showComponentsVisibilityDialog) {
+            showComponentsVisibilityDialog = false
+            return
+        }
+        if (showLayoutPropertiesDialog) {
+            showLayoutPropertiesDialog = false
+            return
+        }
+        if (showBackgroundPropertiesDialog) {
+            showBackgroundPropertiesDialog = false
+            return
+        }
+        if (shownPositionDialog != null) {
+            shownPositionDialog = null
+            return
+        }
+        if (shownEditablePropertyDialog != null) {
+            shownEditablePropertyDialog = null
+            return
+        }
+
+        val hasUnsavedChanges = binding.viewLayoutEditor.isModifiedByUser() || binding.viewLayoutEditor.canUndo()
+        if (hasUnsavedChanges) {
+            showUnsavedChangesExitDialog()
+        } else {
+            listener?.onExit()
+        }
+    }
+
+    private fun showUnsavedChangesExitDialog() {
+        AlertDialog.Builder(context)
+            .setTitle(R.string.layout_unsaved_changes_title)
+            .setMessage(R.string.layout_unsaved_changes_message)
+            .setPositiveButton(R.string.save) { _, _ ->
+                if (viewModel.currentLayoutHasName()) {
+                    listener?.onSaveLayoutAndExit()
+                } else {
+                    showLayoutNameInputDialog(
+                        initialName = resources.getString(R.string.custom_layout_default_name),
+                        onConfirm = {
+                            viewModel.setCurrentLayoutName(it)
+                            listener?.onSaveLayoutAndExit()
+                        },
+                    )
+                }
+            }
+            .setNegativeButton(R.string.exit_without_saving) { _, _ ->
+                binding.viewLayoutEditor.resetModifiedState()
+                listener?.onExit()
+            }
+            .setNeutralButton(R.string.cancel, null)
+            .showInCurrentWindow()
     }
 
     fun saveEditorState(): ScreenEditorState {
@@ -708,6 +803,7 @@ class LayoutEditorManagerView(
             updatingScalingControls = false
         }
 
+        binding.viewLayoutEditor.pushUndoSnapshot()
         val applied = when (editableProperty) {
             LayoutComponentEditableProperty.SIZE -> {
                 val maxDelta = binding.seekBarSize.max.coerceAtLeast(1)
@@ -767,6 +863,13 @@ class LayoutEditorManagerView(
 
     private fun onMenuOptionSelected(option: MenuOption) {
         when (option) {
+            MenuOption.UNDO -> {
+                if (binding.viewLayoutEditor.canUndo()) {
+                    binding.viewLayoutEditor.undo()
+                    instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
+                    listener?.onStoreLayoutChanges()
+                }
+            }
             MenuOption.PROPERTIES -> openPropertiesDialog()
             MenuOption.BACKGROUNDS -> openBackgroundsConfigDialog()
             MenuOption.REVERT -> {

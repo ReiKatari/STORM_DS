@@ -269,7 +269,14 @@ private fun CheatFormBody(
                 error = {
                     when (cheatFormState.cheatCodeFieldError) {
                         CheatFormState.Companion.FieldError.CANNOT_BE_EMPTY -> Text(stringResource(R.string.error_code_cannot_be_empty))
-                        CheatFormState.Companion.FieldError.INVALID_FORMAT -> Text(stringResource(R.string.error_code_invalid_format))
+                        CheatFormState.Companion.FieldError.INVALID_FORMAT -> {
+                            val line = cheatFormState.cheatCodeErrorLine
+                            if (line != null) {
+                                Text(stringResource(R.string.error_cheat_line_format, line))
+                            } else {
+                                Text(stringResource(R.string.error_code_invalid_format))
+                            }
+                        }
                         else -> Unit
                     }
                 },

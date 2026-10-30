@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_random_rom">Случайная игра</string>
+    <string name="toast_random_rom_selected">Выбрана: %s</string>
+    <string name="toast_no_roms_found">Игры не найдены</string>
+    <string name="reset_rom_config_section">Сброс</string>
+    <string name="reset_rom_config_title">Сбросить индивидуальные настройки игры</string>
+    <string name="reset_rom_config_confirm_message">Вернуть все индивидуальные настройки этой игры к глобальным значениям по умолчанию?</string>
+    <string name="action_reset">Сбросить</string>
+    <string name="rom_technical_info_title">Технические сведения о ROM</string>
+    <string name="rom_technical_info_copy">Скопировать сведения</string>
+    <string name="rom_technical_info_copied">Сведения скопированы в буфер обмена</string>
+    <string name="rom_info_title_label">Название</string>
+    <string name="rom_info_file_name_label">Имя файла</string>
+    <string name="rom_info_file_size_label">Размер файла</string>
+    <string name="rom_info_platform_label">Платформа</string>
+    <string name="rom_info_game_code_label">Код картриджа</string>
+    <string name="rom_info_play_time_label">Время в игре</string>
+    <string name="rom_info_last_played_label">Последний запуск</string>
+    <string name="rom_info_never_played">Никогда</string>
+    <string name="feature_stats_sort_time">По времени</string>
+    <string name="feature_stats_sort_launches">По запускам</string>
+    <string name="feature_stats_sort_recent">Недавние</string>
+    <string name="cheats_search_hint">Поиск читов...</string>
+    <string name="cheats_disable_all">Отключить все</string>
+    <string name="cheats_disable_all_confirm_title">Отключить все читы</string>
+    <string name="cheats_disable_all_confirm_message">Вы уверены, что хотите отключить все активные читы для этой игры?</string>
+    <string name="cheats_all_disabled_toast">Все читы отключены</string>
+    <string name="error_cheat_line_format">Строка %1$d: требуется формат Action Replay (XXXXXXXX YYYYYYYY)</string>
+</resources>
