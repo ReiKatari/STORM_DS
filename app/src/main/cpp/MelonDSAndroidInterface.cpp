@@ -192,6 +192,10 @@ void configureVulkanDriver(
             sLastDriverConfiguration.CustomDriverName == vulkanDriverConfiguration.CustomDriverName &&
             sLastDriverConfiguration.DisplayName == vulkanDriverConfiguration.DisplayName)
         {
+            if (gCachedVulkanSupported.load(std::memory_order_relaxed) <= 0)
+            {
+                invalidateVulkanValidationCache();
+            }
             return;
         }
         sLastDriverConfiguration = vulkanDriverConfiguration;
@@ -449,9 +453,18 @@ bool createVulkanInstance(VkInstance* instance)
         {
             melonDS::Platform::Log(
                 melonDS::Platform::LogLevel::Warn,
-                "MelonDSAndroidInterface: Vulkan support check failed (missing required instance extension)"
+                "MelonDSAndroidInterface: required instance extension missing in enumeration; attempting direct vkCreateInstance"
             );
-            return false;
+        }
+
+        uint32_t loaderApiVersion = VK_API_VERSION_1_0;
+        auto enumInstanceVer = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
+        if (enumInstanceVer != nullptr)
+        {
+            if (enumInstanceVer(&loaderApiVersion) != VK_SUCCESS)
+            {
+                loaderApiVersion = VK_API_VERSION_1_0;
+            }
         }
 
         VkApplicationInfo appInfo{};
@@ -460,7 +473,7 @@ bool createVulkanInstance(VkInstance* instance)
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "STORM_DS";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_1;
+        appInfo.apiVersion = isApiAtLeast(loaderApiVersion, 1, 1) ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -566,23 +579,24 @@ void setVulkanCompatibilityOverrides(bool disableTimelineSemaphores, bool disabl
 bool isVulkanRendererSupported()
 {
     if (melonDS::VulkanContext::Get().IsReady())
-        return true;
-
-    const int cached = gCachedVulkanSupported.load(std::memory_order_relaxed);
-    if (cached >= 0)
-        return cached != 0;
-
-    VkInstance instance = VK_NULL_HANDLE;
-    if (!createVulkanInstance(&instance))
     {
-        gCachedVulkanSupported.store(0, std::memory_order_relaxed);
-        return false;
+        gCachedVulkanSupported.store(1, std::memory_order_relaxed);
+        return true;
     }
 
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    uint32_t queueFamilyIndex = 0;
-    bool result = pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex);
-    vkDestroyInstance(instance, nullptr);
+    const int cached = gCachedVulkanSupported.load(std::memory_order_relaxed);
+    if (cached > 0)
+        return true;
+
+    VkInstance instance = VK_NULL_HANDLE;
+    bool result = false;
+    if (createVulkanInstance(&instance))
+    {
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+        uint32_t queueFamilyIndex = 0;
+        result = pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex);
+        vkDestroyInstance(instance, nullptr);
+    }
 
     if (!result && melonDS::VulkanDispatch::IsUsingCustomDriver() && melonDS::VulkanDispatch::FallbackToSystemDriver())
     {
@@ -593,12 +607,26 @@ bool isVulkanRendererSupported()
         instance = VK_NULL_HANDLE;
         if (createVulkanInstance(&instance))
         {
+            VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+            uint32_t queueFamilyIndex = 0;
             result = pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex);
             vkDestroyInstance(instance, nullptr);
         }
     }
 
-    gCachedVulkanSupported.store(result ? 1 : 0, std::memory_order_relaxed);
+    if (!result)
+    {
+        if (melonDS::VulkanContext::Get().Acquire())
+        {
+            result = true;
+            melonDS::VulkanContext::Get().Release();
+        }
+    }
+
+    if (result)
+    {
+        gCachedVulkanSupported.store(1, std::memory_order_relaxed);
+    }
     return result;
 }
 

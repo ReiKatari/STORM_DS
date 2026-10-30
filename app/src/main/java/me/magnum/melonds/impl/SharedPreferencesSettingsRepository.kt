@@ -342,10 +342,14 @@ class SharedPreferencesSettingsRepository(
                 romName = activeRomName,
                 fileName = activeRomFileName,
             )
-            val effectiveRenderer = safeProfile?.forcedRenderer?.let { forced ->
-                val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
-                GameCompatibilityManager.pickSaferRenderer(renderInputs.core.renderer, sanitizedForced)
-            } ?: renderInputs.core.renderer
+            val effectiveRenderer = if (renderInputs.core.renderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
+                VideoRenderer.VULKAN
+            } else {
+                safeProfile?.forcedRenderer?.let { forced ->
+                    val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+                    GameCompatibilityManager.pickSaferRenderer(renderInputs.core.renderer, sanitizedForced)
+                } ?: renderInputs.core.renderer
+            }
             val requestedFiltering = when {
                 safeProfile?.safeVisuals == true -> VideoFiltering.NONE
                 aiEnabled && !preferences.contains("video_filtering") -> VideoFiltering.AI_UPSCALE
@@ -904,6 +908,9 @@ class SharedPreferencesSettingsRepository(
 
     override fun getEffectiveVideoRenderer(romConfig: RomConfig): VideoRenderer {
         val baseRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = getCurrentVideoRenderer())
+        if (baseRenderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
+            return VideoRenderer.VULKAN
+        }
         val safeProfile = GameCompatibilityManager.getEffectiveProfile(
             context = context,
             gameCode = activeGameCode,
@@ -2286,10 +2293,14 @@ class SharedPreferencesSettingsRepository(
             fileName = activeRomFileName,
         )
         val baseSanitizedRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = baseConfiguration.renderer)
-        val renderer = safeProfile?.forcedRenderer?.let { forced ->
-            val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
-            GameCompatibilityManager.pickSaferRenderer(baseSanitizedRenderer, sanitizedForced)
-        } ?: baseSanitizedRenderer
+        val renderer = if (baseSanitizedRenderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
+            VideoRenderer.VULKAN
+        } else {
+            safeProfile?.forcedRenderer?.let { forced ->
+                val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+                GameCompatibilityManager.pickSaferRenderer(baseSanitizedRenderer, sanitizedForced)
+            } ?: baseSanitizedRenderer
+        }
         val aiEnabled = preferences.getBoolean("video_ai_upscale_enabled", false) && !preferences.contains("video_filtering")
         val requestedFiltering = if (safeProfile?.safeVisuals == true) {
             VideoFiltering.NONE
@@ -2395,7 +2406,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun isVulkanRendererSupported(): Boolean {
-        return !GameCompatibilityManager.isDeviceVulkanMarkedUnavailable(context)
+        return me.magnum.melonds.MelonDSAndroidInterface.isVulkanRendererSupported()
     }
 
     private fun isOpenGlRendererSupported(): Boolean {

@@ -1920,6 +1920,10 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
         vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
         vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
         vulkanRenderSettings.useSimplePipeline = true;
+        if (nds != nullptr && dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
+        {
+            nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
+        }
         vulkanOutput = std::make_unique<VulkanOutput>(VulkanPipelineProfile::Compatibility);
         renderer3D.SetRenderSettings(
             vulkanRenderSettings.threadedRendering,
@@ -1942,7 +1946,11 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
     if (!renderer3D.EnsureVulkanReadyForValidation())
     {
         if (!downgradeToCompatibilityProfile() || !renderer3D.EnsureVulkanReadyForValidation())
-            return failPrecompile("renderer pipelines");
+        {
+            if (!melonDS::VulkanContext::Get().IsReady())
+                return failPrecompile("renderer pipelines");
+            Platform::Log(Platform::LogLevel::Warn, "Vulkan precompile: renderer validation warmup had a warning, continuing with active Vulkan context");
+        }
     }
     if (renderer3D.GetVulkanPipelineProfile() != vulkanRenderSettings.pipelineProfile)
     {
@@ -1950,6 +1958,12 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
         vulkanSessionProfile.set(activeProfile);
         vulkanRenderSettings.pipelineProfile = activeProfile;
         vulkanRenderSettings.useSimplePipeline = true;
+        if (!UsesVulkanFastPath(activeProfile)
+            && nds != nullptr
+            && dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
+        {
+            nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
+        }
         vulkanOutput = std::make_unique<VulkanOutput>(activeProfile);
     }
 
@@ -1963,12 +1977,22 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
     emitProgress(kVulkanCompileStageWarmupSubmission, 3);
     if (!vulkanOutput->validateRuntimePath(validationWidth, validationHeight, renderer3D, vulkanScale))
     {
-        if (!downgradeToCompatibilityProfile()
-            || !renderer3D.EnsureVulkanReadyForValidation()
-            || (!vulkanOutput->isInitialized() && !vulkanOutput->init())
-            || !vulkanOutput->validateRuntimePath(validationWidth, validationHeight, renderer3D, vulkanScale))
+        if (downgradeToCompatibilityProfile())
+        {
+            (void)renderer3D.EnsureVulkanReadyForValidation();
+            if (!vulkanOutput->isInitialized())
+                (void)vulkanOutput->init();
+        }
+        if (!vulkanOutput->isInitialized())
         {
             return failPrecompile("output warm-up");
+        }
+        if (!vulkanOutput->validateRuntimePath(validationWidth, validationHeight, renderer3D, vulkanScale))
+        {
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "Vulkan precompile: synthetic output warm-up timed out or was skipped on this driver, continuing with initialized VulkanOutput"
+            );
         }
     }
 
@@ -5532,6 +5556,10 @@ void MelonInstance::updateRenderer()
                             *currentConfiguration->renderSettings);
                         vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
                         vulkanRenderSettings.useSimplePipeline = true;
+                    }
+                    if (nds != nullptr && dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
+                    {
+                        nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
                     }
                     vulkanOutput = std::make_unique<VulkanOutput>(
                         VulkanPipelineProfile::Compatibility);

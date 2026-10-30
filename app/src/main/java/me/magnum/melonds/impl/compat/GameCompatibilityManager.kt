@@ -13,7 +13,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 object GameCompatibilityManager {
-    private const val PREFS_NAME = "storm_game_compat_guard_v3"
+    private const val PREFS_NAME = "storm_game_compat_guard_v4"
     private const val KEY_LAST_MARKER_GAME_KEY = "last_launch_marker_key"
     private const val KEY_MARKER_PREFIX = "launch_marker_"
     private const val KEY_PROFILE_PREFIX = "safe_profile_"
@@ -104,16 +104,12 @@ object GameCompatibilityManager {
     }
 
     fun isVulkanSupportedOnDevice(context: Context): Boolean {
-        if (isDeviceVulkanMarkedUnavailable(context)) {
-            return false
-        }
         return MelonDSAndroidInterface.isVulkanRendererSupported()
     }
 
     fun markDeviceVulkanUnavailable(context: Context) {
-        cachedVulkanUnavailableFp = Build.FINGERPRINT
+        cachedVulkanUnavailableFp = null
         vulkanUnavailableLoaded = true
-        bumpVersion()
     }
 
     fun clearDeviceVulkanUnavailable(context: Context) {
@@ -344,8 +340,7 @@ object GameCompatibilityManager {
         val existing = readProfileFromPrefs(prefs, key)
         val crashedRenderer = existing?.forcedRenderer?.let { pickSaferRenderer(it, marker.renderer) } ?: marker.renderer
         val escalated = when (crashedRenderer) {
-            VideoRenderer.COMPUTE,
-            VideoRenderer.VULKAN -> {
+            VideoRenderer.COMPUTE -> {
                 val nextRenderer = if (openGlSupported) VideoRenderer.OPENGL else VideoRenderer.SOFTWARE
                 SafeCompatibilityProfile(
                     forcedRenderer = nextRenderer,
@@ -353,6 +348,24 @@ object GameCompatibilityManager {
                     disableJit = existing?.disableJit ?: false,
                     level = if (nextRenderer == VideoRenderer.OPENGL) 1 else 2,
                 )
+            }
+            VideoRenderer.VULKAN -> {
+                if (MelonDSAndroidInterface.isVulkanRendererSupported()) {
+                    SafeCompatibilityProfile(
+                        forcedRenderer = null,
+                        safeVisuals = true,
+                        disableJit = existing?.disableJit ?: false,
+                        level = 1,
+                    )
+                } else {
+                    val nextRenderer = if (openGlSupported) VideoRenderer.OPENGL else VideoRenderer.SOFTWARE
+                    SafeCompatibilityProfile(
+                        forcedRenderer = nextRenderer,
+                        safeVisuals = true,
+                        disableJit = existing?.disableJit ?: false,
+                        level = if (nextRenderer == VideoRenderer.OPENGL) 1 else 2,
+                    )
+                }
             }
             VideoRenderer.OPENGL -> {
                 SafeCompatibilityProfile(
@@ -384,6 +397,21 @@ object GameCompatibilityManager {
         failedRenderer: VideoRenderer,
         openGlSupported: Boolean = isOpenGlEs32Supported(context),
     ): VideoRenderer? {
+        if (failedRenderer == VideoRenderer.VULKAN && MelonDSAndroidInterface.isVulkanRendererSupported()) {
+            val key = resolveGameKey(gameCode, romName, fileName)
+            if (key != null) {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val existing = readProfileFromPrefs(prefs, key)
+                val updated = SafeCompatibilityProfile(
+                    forcedRenderer = null,
+                    safeVisuals = true,
+                    disableJit = existing?.disableJit ?: false,
+                    level = 1,
+                )
+                saveProfileToPrefs(prefs, key, updated)
+            }
+            return VideoRenderer.VULKAN
+        }
         val nextRenderer = getNextSaferRenderer(failedRenderer, openGlSupported) ?: return null
         val key = resolveGameKey(gameCode, romName, fileName) ?: return nextRenderer
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

@@ -803,13 +803,15 @@ class EmulatorViewModel @Inject constructor(
             )?.let { escalatedProfile ->
                 val effectiveRenderer = escalatedProfile.forcedRenderer
                     ?: settingsRepository.getEffectiveVideoRenderer(rom.config)
-                val rendererLabel = GameCompatibilityManager.formatRendererLabel(effectiveRenderer)
-                val messageRes = if (escalatedProfile.disableJit) {
-                    R.string.compat_safe_mode_jit_disabled_toast
-                } else {
-                    R.string.compat_safe_mode_applied_toast
+                if (effectiveRenderer != VideoRenderer.VULKAN || escalatedProfile.disableJit) {
+                    val rendererLabel = GameCompatibilityManager.formatRendererLabel(effectiveRenderer)
+                    val messageRes = if (escalatedProfile.disableJit) {
+                        R.string.compat_safe_mode_jit_disabled_toast
+                    } else {
+                        R.string.compat_safe_mode_applied_toast
+                    }
+                    _compatNoticeEvent.tryEmit(context.getString(messageRes, rendererLabel))
                 }
-                _compatNoticeEvent.tryEmit(context.getString(messageRes, rendererLabel))
             }
 
             GameCompatibilityManager.consumePendingCapabilityFallbackNotice(context)?.let { (requested, fallback) ->
@@ -2894,8 +2896,11 @@ class EmulatorViewModel @Inject constructor(
                     is EmulatorEvent.RumbleStart -> _rumbleEvent.tryEmit(RumbleEvent.RumbleStart(it.duration))
                     EmulatorEvent.RumbleStop -> _rumbleEvent.tryEmit(RumbleEvent.RumbleStop)
                     is EmulatorEvent.RendererInitFailed -> {
-                        didReceiveRendererInitFailure = true
                         val failedRenderer = it.renderer
+                        if (failedRenderer == VideoRenderer.VULKAN && MelonDSAndroidInterface.isVulkanRendererSupported()) {
+                            return@collect
+                        }
+                        didReceiveRendererInitFailure = true
                         // AndroidEmulatorManager already stepped down for this ROM session if needed;
                         // do not overwrite the global renderer setting or step down a second time.
                         _toastEvent.tryEmit(ToastEvent.RendererInitFailed(failedRenderer))

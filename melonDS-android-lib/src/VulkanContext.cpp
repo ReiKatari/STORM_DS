@@ -202,13 +202,23 @@ bool VulkanContext::initializeLocked()
         return false;
     }
 
+    u32 loaderApiVersion = VK_API_VERSION_1_0;
+    auto enumInstanceVer = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
+    if (enumInstanceVer != nullptr)
+    {
+        if (enumInstanceVer(&loaderApiVersion) != VK_SUCCESS)
+        {
+            loaderApiVersion = VK_API_VERSION_1_0;
+        }
+    }
+
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "melonDS-android";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "melonDS";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_1;
+    appInfo.apiVersion = isApiAtLeast(loaderApiVersion, 1, 1) ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;
 
     u32 extensionCount = 0;
     if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr) != VK_SUCCESS)
@@ -390,7 +400,7 @@ bool VulkanContext::initializeLocked()
         const bool hasExternalMemoryExtension = hasExtension(kOptionalExternalMemoryExtension, deviceExtensions);
         const bool hasAndroidHardwareBufferExtension = hasExtension(kOptionalAndroidHardwareBufferExtension, deviceExtensions);
         bool enableAhbInterop = false;
-        if (hasExternalMemoryExtension && hasAndroidHardwareBufferExtension)
+        if (apiAtLeast12 && hasExternalMemoryExtension && hasAndroidHardwareBufferExtension)
         {
             enabledDeviceExtensions.push_back(kOptionalExternalMemoryExtension);
             enabledDeviceExtensions.push_back(kOptionalAndroidHardwareBufferExtension);
@@ -703,6 +713,19 @@ bool VulkanContext::initializeLocked()
             deviceCreateInfo.enabledExtensionCount = static_cast<u32>(minimalExtensions.size());
             deviceCreateInfo.ppEnabledExtensionNames = minimalExtensions.data();
             createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+            if (createDeviceResult != VK_SUCCESS)
+            {
+                VkPhysicalDeviceFeatures minimalFeatures{};
+                minimalFeatures.independentBlend = deviceFeatures2.features.independentBlend;
+                minimalFeatures.fragmentStoresAndAtomics = deviceFeatures2.features.fragmentStoresAndAtomics;
+                deviceCreateInfo.pEnabledFeatures = &minimalFeatures;
+                createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+            }
+            if (createDeviceResult != VK_SUCCESS)
+            {
+                deviceCreateInfo.pEnabledFeatures = nullptr;
+                createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+            }
         }
         if (createDeviceResult != VK_SUCCESS)
         {

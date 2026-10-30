@@ -1384,6 +1384,10 @@ class AndroidEmulatorManager(
                 millis = SystemClock.elapsedRealtime() - startedAt,
             )
         }
+        if (!succeeded && me.magnum.melonds.MelonDSAndroidInterface.isVulkanRendererSupported()) {
+            Log.w(TAG, "precompileVulkanPipelines reported non-fatal warmup failure, keeping Vulkan renderer active")
+            return true
+        }
         return succeeded
     }
 

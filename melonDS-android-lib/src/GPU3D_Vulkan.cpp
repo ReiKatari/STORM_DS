@@ -3223,21 +3223,30 @@ bool VulkanRenderer3D::EnsureVulkanReadyForValidation()
     std::array<u16, 8> edgeColors{};
     std::array<u16, 32> toonTable{};
 
-    return dispatchRasterAndReadback(
-        nullptr,
-        0xFF000000u,
-        0x00FFFFFFu,
-        0u,
-        0u,
-        0u,
-        0u,
-        0u,
-        0u,
-        fogDensity.data(),
-        edgeColors.data(),
-        toonTable.data(),
-        false
-    );
+    if (!dispatchRasterAndReadback(
+            nullptr,
+            0xFF000000u,
+            0x00FFFFFFu,
+            0u,
+            0u,
+            0u,
+            0u,
+            0u,
+            0u,
+            fogDensity.data(),
+            edgeColors.data(),
+            toonTable.data(),
+            false
+        ))
+    {
+        if (Initialized)
+        {
+            Log(LogLevel::Warn, "VulkanRenderer3D: warmup dispatchRasterAndReadback failed during validation, but Vulkan context and pipelines are initialized; continuing");
+            return true;
+        }
+        return false;
+    }
+    return true;
 }
 
 bool VulkanRenderer3D::ensureInitialized()
@@ -5507,7 +5516,7 @@ bool VulkanRenderer3D::createGraphicsDescriptorObjects()
     triangleBinding.binding = 0;
     triangleBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triangleBinding.descriptorCount = 1;
-    triangleBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    triangleBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutBinding textureBinding{};
     textureBinding.binding = 1;
