@@ -2235,6 +2235,31 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
             hasLatchedSoftPackedFrame = false;
         }
     }
+    else if (currentRenderer == Renderer::Vulkan
+        && renderFrame == nullptr
+        && nds != nullptr
+        && framesSinceLastScreenSwapToggle <= 2)
+    {
+        // WHY: fast-forward skips frame-queue slots. Wiping the latched history here broke
+        // 30 Hz alternating screen-swap titles (AlphaBounce, Mario vs. Donkey Kong): the swap
+        // parity and the carried VRAM-capture lines were lost, so screens flickered and the
+        // other screen's layers leaked onto the top screen. Latch the skipped emulated frame
+        // into history (never presented) to keep temporal continuity.
+        static Frame skippedQueueFrame{};
+        skippedQueueFrame.frameId = ~static_cast<u64>(0);
+        auto& skippedRenderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+        const bool skippedUseStructuredVulkan2D =
+            skippedRenderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware;
+        const auto skippedPipelineProfile = static_cast<const VulkanRenderSettings&>(
+            *currentConfiguration->renderSettings).pipelineProfile;
+        if (UsesVulkanFastPath(skippedPipelineProfile))
+            (void)latchSoftPackedFrameSnapshotFastPath(
+                &skippedQueueFrame, frontbuf, packedFrameScreenSwap, skippedUseStructuredVulkan2D);
+        else
+            (void)latchSoftPackedFrameSnapshotCompatibility(
+                &skippedQueueFrame, frontbuf, preparedFrameScreenSwap, skippedUseStructuredVulkan2D);
+        hasLatchedSoftPackedFrame = false;
+    }
     else
         clearLatchedSoftPackedFrameSnapshot();
     const bool hasPresentableSoftPackedFrame =

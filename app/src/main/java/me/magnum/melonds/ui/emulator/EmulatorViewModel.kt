@@ -2897,10 +2897,11 @@ class EmulatorViewModel @Inject constructor(
                     EmulatorEvent.RumbleStop -> _rumbleEvent.tryEmit(RumbleEvent.RumbleStop)
                     is EmulatorEvent.RendererInitFailed -> {
                         val failedRenderer = it.renderer
+                        didReceiveRendererInitFailure = true
                         if (failedRenderer == VideoRenderer.VULKAN && MelonDSAndroidInterface.isVulkanRendererSupported()) {
+                            // Per-title fallback already handled silently; no global Vulkan failure toast.
                             return@collect
                         }
-                        didReceiveRendererInitFailure = true
                         // AndroidEmulatorManager already stepped down for this ROM session if needed;
                         // do not overwrite the global renderer setting or step down a second time.
                         _toastEvent.tryEmit(ToastEvent.RendererInitFailed(failedRenderer))

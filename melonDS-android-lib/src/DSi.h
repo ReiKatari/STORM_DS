@@ -189,6 +189,10 @@ public:
     void SetDSPHLE(bool hle);
 private:
     bool FullBIOSBoot;
+    // WHY: AlphaBounce (KAL*) reads the NTR touch/user-settings IPC block at the 8 MB mirror.
+    // Mirroring must stay title-scoped: a global mirror corrupts TWL heap at 0x027FFxxx and
+    // breaks other DSiWare boots (Castle of Magic, Dark Void Zero, Plants vs. Zombies).
+    bool NtrIpcMirrorHack = false;
     void Set_SCFG_Clock9(u16 val);
     void Set_SCFG_MC(u32 val);
     void DecryptModcryptArea(u32 offset, u32 size, const u8* iv);

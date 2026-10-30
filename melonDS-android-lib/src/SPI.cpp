@@ -149,7 +149,7 @@ void FirmwareMem::SetupDirectBoot()
         NDS.ARM9Write16(0x02FFF874, header.DataGfxChecksum);
         NDS.ARM9Write16(0x02FFF876, header.GUIWifiCodeChecksum);
 
-        for (u32 i = 0; i < 0x74; i += 4)
+        for (u32 i = 0; i < 0x70; i += 4)
         {
             u32 val = *(u32*)&userdata.Bytes[i];
             NDS.ARM9Write32(0x027FFC80 + i, val);
@@ -164,7 +164,7 @@ void FirmwareMem::SetupDirectBoot()
         NDS.ARM9Write16(0x027FF874, header.DataGfxChecksum); // CRC16 for data/gfx
         NDS.ARM9Write16(0x027FF876, header.GUIWifiCodeChecksum); // CRC16 for GUI/wifi code
 
-        for (u32 i = 0; i < 0x74; i += 4)
+        for (u32 i = 0; i < 0x70; i += 4)
             NDS.ARM9Write32(0x027FFC80+i, *(u32*)&userdata.Bytes[i]);
     }
 }

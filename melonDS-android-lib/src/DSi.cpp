@@ -142,6 +142,10 @@ void DSi::Reset()
 
     // The SOUNDBIAS register does nothing on DSi
     SPU.SetApplyBias(false);
+    KeyInput &= ~(1 << (16+6));
+    NtrIpcMirrorHack = false;
+    if (auto* resetTsc = static_cast<DSi_TSC*>(SPI.GetTSC()))
+        resetTsc->SetLegacyPenBitTracking(false);
     MapSharedWRAM(3);
 
     NDMACnt[0] = 0; NDMACnt[1] = 0;
@@ -620,6 +624,9 @@ void DSi::SetupDirectBoot()
         header.DSiARM9iROMOffset, header.DSiARM9iRAMAddress, header.DSiARM9iSize,
         header.DSiARM7iROMOffset, header.DSiARM7iRAMAddress, header.DSiARM7iSize,
         header.IsDSiWare() ? 1 : 0);
+
+    NtrIpcMirrorHack = (memcmp(header.GameCode, "KAL", 3) == 0);
+    tsc->SetLegacyPenBitTracking(NtrIpcMirrorHack);
 
     if (dsmode)
     {
@@ -1718,8 +1725,11 @@ void DSi::SetupDirectBoot()
     ARM7.CPSR = 0x0000001F;
     ARM7.JumpTo(header.ARM7EntryAddress);
 
-    PowerControl9 = 0x820F;
-    GPU.SetPowerCnt(PowerControl9);
+    if (NtrIpcMirrorHack)
+    {
+        PowerControl9 = 0x820F;
+        GPU.SetPowerCnt(PowerControl9);
+    }
 
     Log(LogLevel::Info,
         "DSi::SetupDirectBoot: Initialized CPU EntryPoints: ARM9.PC=0x%08X (R12/R14=0x%08X), ARM7.PC=0x%08X (R12/R14=0x%08X)\n",
@@ -2663,6 +2673,7 @@ void DSi::ARM9Write8(u32 addr, u8 val)
     case 0x0C000000:
         JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_MainRAM>(addr);
         *(u8*)&MainRAM[addr & MainRAMMask] = val;
+        if (NtrIpcMirrorHack)
         {
             u32 offset = addr & 0x007FFFFF;
             if ((offset >= 0x007FFC80 && offset < 0x007FFD00) || (offset >= 0x007FFF80 && offset <= 0x007FFFFF))
@@ -2764,6 +2775,7 @@ void DSi::ARM9Write16(u32 addr, u16 val)
     case 0x0C000000:
         JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_MainRAM>(addr);
         *(u16*)&MainRAM[addr & MainRAMMask] = val;
+        if (NtrIpcMirrorHack)
         {
             u32 offset = addr & 0x007FFFFF;
             if ((offset >= 0x007FFC80 && offset < 0x007FFD00) || (offset >= 0x007FFF80 && offset <= 0x007FFFFF))
@@ -2865,6 +2877,7 @@ void DSi::ARM9Write32(u32 addr, u32 val)
     case 0x0C000000:
         JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_MainRAM>(addr);
         *(u32*)&MainRAM[addr & MainRAMMask] = val;
+        if (NtrIpcMirrorHack)
         {
             u32 offset = addr & 0x007FFFFF;
             if ((offset >= 0x007FFC80 && offset < 0x007FFD00) || (offset >= 0x007FFF80 && offset <= 0x007FFFFF))
@@ -3185,6 +3198,7 @@ void DSi::ARM7Write8(u32 addr, u8 val)
     case 0x0C800000:
         JIT.CheckAndInvalidate<1, ARMJIT_Memory::memregion_MainRAM>(addr);
         *(u8*)&NDS::MainRAM[addr & NDS::MainRAMMask] = val;
+        if (NtrIpcMirrorHack)
         {
             u32 offset = addr & 0x007FFFFF;
             if ((offset >= 0x007FFC80 && offset < 0x007FFD00) || (offset >= 0x007FFF80 && offset <= 0x007FFFFF))
@@ -3285,6 +3299,7 @@ void DSi::ARM7Write16(u32 addr, u16 val)
     case 0x0C800000:
         JIT.CheckAndInvalidate<1, ARMJIT_Memory::memregion_MainRAM>(addr);
         *(u16*)&NDS::MainRAM[addr & NDS::MainRAMMask] = val;
+        if (NtrIpcMirrorHack)
         {
             u32 offset = addr & 0x007FFFFF;
             if ((offset >= 0x007FFC80 && offset < 0x007FFD00) || (offset >= 0x007FFF80 && offset <= 0x007FFFFF))
@@ -3385,6 +3400,7 @@ void DSi::ARM7Write32(u32 addr, u32 val)
     case 0x0C800000:
         JIT.CheckAndInvalidate<1, ARMJIT_Memory::memregion_MainRAM>(addr);
         *(u32*)&NDS::MainRAM[addr & NDS::MainRAMMask] = val;
+        if (NtrIpcMirrorHack)
         {
             u32 offset = addr & 0x007FFFFF;
             if ((offset >= 0x007FFC80 && offset < 0x007FFD00) || (offset >= 0x007FFF80 && offset <= 0x007FFFFF))

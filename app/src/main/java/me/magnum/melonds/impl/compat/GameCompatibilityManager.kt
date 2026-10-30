@@ -350,7 +350,10 @@ object GameCompatibilityManager {
                 )
             }
             VideoRenderer.VULKAN -> {
-                if (MelonDSAndroidInterface.isVulkanRendererSupported()) {
+                // First Vulkan crash: retry Vulkan with safe visuals. A repeated crash on the
+                // same title steps that title (only) down so every game still launches.
+                val alreadyRetriedVulkanSafe = existing != null && existing.forcedRenderer == null && existing.safeVisuals
+                if (MelonDSAndroidInterface.isVulkanRendererSupported() && !alreadyRetriedVulkanSafe) {
                     SafeCompatibilityProfile(
                         forcedRenderer = null,
                         safeVisuals = true,
@@ -397,21 +400,6 @@ object GameCompatibilityManager {
         failedRenderer: VideoRenderer,
         openGlSupported: Boolean = isOpenGlEs32Supported(context),
     ): VideoRenderer? {
-        if (failedRenderer == VideoRenderer.VULKAN && MelonDSAndroidInterface.isVulkanRendererSupported()) {
-            val key = resolveGameKey(gameCode, romName, fileName)
-            if (key != null) {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val existing = readProfileFromPrefs(prefs, key)
-                val updated = SafeCompatibilityProfile(
-                    forcedRenderer = null,
-                    safeVisuals = true,
-                    disableJit = existing?.disableJit ?: false,
-                    level = 1,
-                )
-                saveProfileToPrefs(prefs, key, updated)
-            }
-            return VideoRenderer.VULKAN
-        }
         val nextRenderer = getNextSaferRenderer(failedRenderer, openGlSupported) ?: return null
         val key = resolveGameKey(gameCode, romName, fileName) ?: return nextRenderer
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
