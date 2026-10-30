@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Esporta pacchetto dati (.zip)</string>
+    <string name="export_data_bundle_success">Pacchetto dati di gioco salvato: %s</string>
+    <string name="export_data_bundle_error">Errore durante l\'esportazione del pacchetto: %s</string>
+    <string name="export_data_bundle_in_progress">Esportazione del pacchetto dati in corso...</string>
+    <string name="undo_overwrite_multi_step">Annulla sovrascrittura slot %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d passaggi</string>
+    <string name="ra_sync_queue_button">Sincronizza ora</string>
+    <string name="ra_sync_queue_success">Coda trofei offline inviata con successo al server</string>
+    <string name="ra_sync_queue_error">Errore sincronizzazione coda: %s</string>
+    <string name="ra_sync_queue_empty">Nessun trofeo offline in attesa</string>
+    <string name="ra_sync_queue_syncing">Sincronizzazione della coda in corso...</string>
+    <string name="cheat_import_dat_success">Database trucchi DAT importato con successo</string>
+    <string name="cheat_import_supported_formats">Supporta XML, DAT (usrcheat.dat) e archivi ZIP</string>
+</resources>

@@ -51,6 +51,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         }
 
     var onTriggerTranslationRequested: (() -> Unit)? = null
+    var onOpenBacklogRequested: (() -> Unit)? = null
     var onLassoRegionSelected: ((TranslationRegion) -> Unit)? = null
     var onDismissRequested: (() -> Unit)? = null
     var onRegionsSaved: ((List<TranslationRegion>) -> Unit)? = null
@@ -84,6 +85,11 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     private var dragStartY = 0f
     private var hasMovedFloatBtn = false
     private val longPressHandler = Handler(Looper.getMainLooper())
+    private var floatBtnDownX = 0f
+    private val floatBtnPanelWidth: Float
+        get() = floatBtnRadius * 3.4f
+    private val floatBtnPanelHeight: Float
+        get() = floatBtnRadius * 2f
 
     // Lasso / Box Drag Selection State
     var isLassoModeActive: Boolean = false
@@ -142,6 +148,17 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         textSize = 28f
+    }
+    private val floatBtnDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        color = Color.parseColor("#475569")
+    }
+    private val floatBtnBacklogTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#10B981")
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        textSize = 24f
     }
     private val pixelFont12: Typeface? by lazy {
         try {
@@ -350,14 +367,16 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     }
 
     private fun initFloatBtnPosition(w: Int, h: Int) {
+        val halfW = floatBtnPanelWidth / 2f
+        val halfH = floatBtnPanelHeight / 2f
         val savedXRatio = prefs.getFloat("pref_translator_float_btn_x_ratio", -1f)
         val savedYRatio = prefs.getFloat("pref_translator_float_btn_y_ratio", -1f)
         if (savedXRatio in 0f..1f && savedYRatio in 0f..1f) {
-            floatBtnX = (savedXRatio * w).coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
-            floatBtnY = (savedYRatio * h).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+            floatBtnX = (savedXRatio * w).coerceIn(halfW + 8f, w - halfW - 8f)
+            floatBtnY = (savedYRatio * h).coerceIn(halfH + 8f, h - halfH - 8f)
         } else {
-            floatBtnX = (w - floatBtnRadius - 20f * density).coerceAtLeast(floatBtnRadius)
-            floatBtnY = (h * 0.40f).coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+            floatBtnX = (w - halfW - 16f * density).coerceAtLeast(halfW)
+            floatBtnY = (h * 0.40f).coerceIn(halfH + 8f, h - halfH - 8f)
         }
     }
 
@@ -584,22 +603,41 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             )
         }
 
-        // 6. FLOATING BUTTON
+        // 6. FLOATING DUAL-ACTION PANEL (TR + LOG)
         if (showFloatingButton) {
+            val halfW = floatBtnPanelWidth / 2f
+            val halfH = floatBtnPanelHeight / 2f
+            val cornerR = floatBtnRadius
+
             if (floatBtnX < 0f || floatBtnY < 0f) {
                 initFloatBtnPosition(w.toInt(), h.toInt())
             } else {
-                floatBtnX = floatBtnX.coerceIn(floatBtnRadius + 8f, w - floatBtnRadius - 8f)
-                floatBtnY = floatBtnY.coerceIn(floatBtnRadius + 8f, h - floatBtnRadius - 8f)
+                floatBtnX = floatBtnX.coerceIn(halfW + 8f, w - halfW - 8f)
+                floatBtnY = floatBtnY.coerceIn(halfH + 8f, h - halfH - 8f)
             }
 
-            canvas.drawCircle(floatBtnX + 2f, floatBtnY + 3f, floatBtnRadius, shadowPaint)
-            canvas.drawCircle(floatBtnX, floatBtnY, floatBtnRadius * 1.15f, floatBtnGlowPaint)
-            canvas.drawCircle(floatBtnX, floatBtnY, floatBtnRadius, floatBtnPaint)
-            canvas.drawCircle(floatBtnX, floatBtnY, floatBtnRadius, floatBtnStrokePaint)
+            val panelRect = RectF(floatBtnX - halfW, floatBtnY - halfH, floatBtnX + halfW, floatBtnY + halfH)
 
+            // Drop shadow & Cyber glow
+            canvas.drawRoundRect(RectF(panelRect.left + 2f, panelRect.top + 3f, panelRect.right + 2f, panelRect.bottom + 3f), cornerR, cornerR, shadowPaint)
+            canvas.drawRoundRect(RectF(panelRect.left - 2f, panelRect.top - 2f, panelRect.right + 2f, panelRect.bottom + 2f), cornerR + 2f, cornerR + 2f, floatBtnGlowPaint)
+
+            // Elevated Slate Base & Neon Border
+            canvas.drawRoundRect(panelRect, cornerR, cornerR, floatBtnPaint)
+            canvas.drawRoundRect(panelRect, cornerR, cornerR, floatBtnStrokePaint)
+
+            // Center vertical divider
+            canvas.drawLine(floatBtnX, panelRect.top + 8f * density, floatBtnX, panelRect.bottom - 8f * density, floatBtnDividerPaint)
+
+            // Left Action: TR (Translate / Lasso)
+            val leftCx = floatBtnX - halfW / 2f
             val textY = floatBtnY - (floatBtnTextPaint.descent() + floatBtnTextPaint.ascent()) / 2f
-            canvas.drawText("TR", floatBtnX, textY, floatBtnTextPaint)
+            canvas.drawText("TR", leftCx, textY, floatBtnTextPaint)
+
+            // Right Action: LOG (Dialogue Backlog)
+            val rightCx = floatBtnX + halfW / 2f
+            val logTextY = floatBtnY - (floatBtnBacklogTextPaint.descent() + floatBtnBacklogTextPaint.ascent()) / 2f
+            canvas.drawText("LOG", rightCx, logTextY, floatBtnBacklogTextPaint)
         }
     }
 
@@ -609,10 +647,14 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         if (isDraggingFloatBtn && !hasMovedFloatBtn) {
             isDraggingFloatBtn = false
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            if (onFloatingButtonLongClickListener != null) {
-                onFloatingButtonLongClickListener?.invoke()
+            if (floatBtnDownX < floatBtnX) {
+                if (onFloatingButtonLongClickListener != null) {
+                    onFloatingButtonLongClickListener?.invoke()
+                } else {
+                    enterRegionEditMode()
+                }
             } else {
-                enterRegionEditMode()
+                onOpenBacklogRequested?.invoke()
             }
         }
     }
@@ -1047,12 +1089,20 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         // 4. FLOATING BUTTON & ACTIVE TRANSLATION TOUCH
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                val distToFloatBtn = Math.hypot((x - floatBtnX).toDouble(), (y - floatBtnY).toDouble()).toFloat()
-                if (showFloatingButton && distToFloatBtn <= floatBtnRadius + 15f) {
+                val halfW = floatBtnPanelWidth / 2f
+                val halfH = floatBtnPanelHeight / 2f
+                val touchRect = RectF(
+                    floatBtnX - halfW - 12f,
+                    floatBtnY - halfH - 12f,
+                    floatBtnX + halfW + 12f,
+                    floatBtnY + halfH + 12f
+                )
+                if (showFloatingButton && touchRect.contains(x, y)) {
                     isDraggingFloatBtn = true
                     hasMovedFloatBtn = false
                     dragStartX = x
                     dragStartY = y
+                    floatBtnDownX = x
                     longPressHandler.postDelayed(longPressRunnable, 500)
                     return true
                 }
@@ -1104,15 +1154,21 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                             .putFloat("pref_translator_float_btn_y_ratio", (floatBtnY / h).coerceIn(0f, 1f))
                             .apply()
                     } else if (!hasMovedFloatBtn) {
-                        val now = System.currentTimeMillis()
-                        if (now - lastFloatBtnClickTime <= 350L) {
-                            lastFloatBtnClickTime = 0L
-                            // Double tap on floating button activates Lasso Box Selection!
-                            isLassoModeActive = true
-                            invalidate()
+                        if (floatBtnDownX < floatBtnX) {
+                            // Tapped left action: TR
+                            val now = System.currentTimeMillis()
+                            if (now - lastFloatBtnClickTime <= 350L) {
+                                lastFloatBtnClickTime = 0L
+                                isLassoModeActive = true
+                                invalidate()
+                            } else {
+                                lastFloatBtnClickTime = now
+                                onTriggerTranslationRequested?.invoke()
+                            }
                         } else {
-                            lastFloatBtnClickTime = now
-                            onTriggerTranslationRequested?.invoke()
+                            // Tapped right action: LOG (Dialogue Backlog)
+                            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onOpenBacklogRequested?.invoke()
                         }
                     }
                     invalidate()

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Ekspor paket data (.zip)</string>
+    <string name="export_data_bundle_success">Paket data game disimpan: %s</string>
+    <string name="export_data_bundle_error">Gagal mengekspor paket data: %s</string>
+    <string name="export_data_bundle_in_progress">Mengekspor paket data...</string>
+    <string name="undo_overwrite_multi_step">Urungkan slot %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d langkah</string>
+    <string name="ra_sync_queue_button">Sinkronkan sekarang</string>
+    <string name="ra_sync_queue_success">Antrean pencapaian offline berhasil dikirim ke server</string>
+    <string name="ra_sync_queue_error">Gagal menyinkronkan antrean: %s</string>
+    <string name="ra_sync_queue_empty">Tidak ada pencapaian offline yang tertunda</string>
+    <string name="ra_sync_queue_syncing">Menyinkronkan antrean...</string>
+    <string name="cheat_import_dat_success">Database cheat DAT berhasil diimpor</string>
+    <string name="cheat_import_supported_formats">Mendukung XML, DAT (usrcheat.dat) dan arsip ZIP</string>
+</resources>

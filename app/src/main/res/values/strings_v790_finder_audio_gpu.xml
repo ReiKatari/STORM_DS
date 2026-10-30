@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">RAM Finder</string>
+    <string name="v790_ram_finder_title">Memory Scanner</string>
+    <string name="v790_ram_bitness_8">8-bit (1 byte)</string>
+    <string name="v790_ram_bitness_16">16-bit (2 bytes)</string>
+    <string name="v790_ram_bitness_32">32-bit (4 bytes)</string>
+    <string name="v790_ram_mode_exact">Exact value</string>
+    <string name="v790_ram_mode_increased">Increased</string>
+    <string name="v790_ram_mode_decreased">Decreased</string>
+    <string name="v790_ram_mode_changed">Changed</string>
+    <string name="v790_ram_mode_unchanged">Unchanged</string>
+    <string name="v790_ram_new_search">New search</string>
+    <string name="v790_ram_filter">Filter</string>
+    <string name="v790_ram_results_count">Addresses found: %1$d</string>
+    <string name="v790_ram_results_showing_top">Showing top %1$d matches</string>
+    <string name="v790_ram_no_results">No matching addresses found</string>
+    <string name="v790_ram_current_val">Cur: %1$s</string>
+    <string name="v790_ram_prev_val">Prev: %1$s</string>
+    <string name="v790_ram_btn_test">Test</string>
+    <string name="v790_ram_btn_create_cheat">Create cheat</string>
+    <string name="v790_ram_test_success">RAM written</string>
+    <string name="v790_ram_test_fail">Write failed</string>
+    <string name="v790_ram_cheat_created">Cheat created and copied to clipboard!</string>
+    <string name="v790_ram_enter_value">Enter value...</string>
+    <string name="v790_ram_cheat_name">RAM 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">Emulator RAM snapshot unavailable</string>
+    <string name="v790_ram_searching">Scanning memory...</string>
+    <string name="mic_agc_noise_gate_title">Adaptive Noise Gate and Mic AGC</string>
+    <string name="mic_agc_noise_gate_summary">DC rumble filter, room background noise gate and smooth voice normalization</string>
+    <string name="v790_vulkan_pipeline_cache_status">Vulkan shader pipeline cache active</string>
+</resources>

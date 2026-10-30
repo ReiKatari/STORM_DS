@@ -386,8 +386,8 @@
   <string name="offline_ra_pending_title">Офлайн достижения ожидают отправки</string>
   <string name="offline_ra_softcore_enabled">Включить офлайн-достижения в режиме Софткор</string>
   <string name="offline_ra_softcore_enabled_summary">Сохранять достижения локально при отсутствии интернет-соединения.</string>
-  <string name="offline_ra_pending_message">У вас есть %1$d офлайн достижений. Синхронизировать сейчас?</string>
-  <string name="offline_ra_pending_message_with_expiration">У вас есть %1$d офлайн достижений. Синхронизировать сейчас? Срок действия истекает через %2$s.</string>
+  <string name="offline_ra_pending_message">Несинхронизированных офлайн-достижений: %1$d. Синхронизировать сейчас?</string>
+  <string name="offline_ra_pending_message_with_expiration">Несинхронизированных офлайн-достижений: %1$d. Синхронизировать сейчас? Срок действия истекает через %2$s.</string>
   <string name="offline_ra_sync_now">Синхронизировать и играть</string>
   <string name="offline_ra_continue_offline">Продолжить офлайн</string>
   <string name="offline_ra_syncing_title">Синхронизация офлайн результатов</string>
@@ -398,7 +398,7 @@
   <string name="offline_ra_sync_skipped_cache_mismatch_toast">Достижение не синхронизировано: %1$s (ошибка кэша).</string>
   <string name="offline_ra_sync_skipped_server_rejected_toast">%1$s отклонено сервером: %2$s.</string>
   <string name="offline_ra_sync_skipped_server_rejected_unknown_reason">Сервер RetroAchievements отклонил результат</string>
-  <string name="offline_ra_sync_skipped_summary_toast">%1$d офлайн достижений не синхронизировано.</string>
+  <string name="offline_ra_sync_skipped_summary_toast">Не синхронизировано офлайн-достижений: %1$d.</string>
   <string name="offline_ra_ledger_tampered_toast">Журнал офлайн достижений изменен. Синхронизация заблокирована.</string>
   <string name="offline_ra_disabled_no_cache_title">Офлайн достижения отключены</string>
   <string name="offline_ra_disabled_no_cache_message">Запустите эту игру онлайн один раз для включения офлайн достижений.</string>
@@ -427,13 +427,13 @@
   <string name="offline_ra_continue_playing_button">Продолжить игру</string>
   <string name="offline_ra_exit_anyway_button">Все равно выйти</string>
   <string name="offline_ra_hardcore_pending_exit_title">Требуется синхронизация режима Хардкор</string>
-  <string name="offline_ra_hardcore_pending_exit_message">У вас есть %1$d несинхронизированных достижений Хардкора. При выходе они будут утеряны.</string>
-  <string name="offline_ra_hardcore_unsynced_warning_toast">%1$d результатов Хардкора сохранены локально. Подключитесь к сети для синхронизации.</string>
+  <string name="offline_ra_hardcore_pending_exit_message">Несинхронизированных достижений Хардкора: %1$d. При выходе они будут утеряны.</string>
+  <string name="offline_ra_hardcore_unsynced_warning_toast">Локально сохранено результатов Хардкора: %1$d. Подключитесь к сети для синхронизации.</string>
   <string name="offline_ra_hardcore_try_sync_button">Синхронизировать сейчас</string>
   <string name="offline_ra_hardcore_discard_exit_button">Сбросить и выйти</string>
-  <string name="offline_ra_hardcore_sync_result_all">Синхронизировано %1$d результатов Хардкора.</string>
+  <string name="offline_ra_hardcore_sync_result_all">Синхронизировано результатов Хардкора: %1$d.</string>
   <string name="offline_ra_hardcore_sync_result_partial">Синхронизировано %1$d из %2$d.</string>
-  <string name="offline_ra_hardcore_sync_result_none">Не удалось синхронизировать %1$d результатов.</string>
+  <string name="offline_ra_hardcore_sync_result_none">Не удалось синхронизировать результатов: %1$d.</string>
   <string name="offline_ra_hardcore_loss_notification_title">Офлайн результаты не синхронизированы</string>
   <string name="offline_ra_hardcore_loss_notification_message">%1$d результатов Хардкора из %2$s не отправлены.</string>
   <string name="ra_pending_sync_menu">Синхронизировать RetroAchievements</string>
@@ -1177,6 +1177,7 @@
       <item quantity="one">%1$d проход</item>
       <item quantity="few">%1$d прохода</item>
       <item quantity="many">%1$d проходов</item>
+      <item quantity="other">%1$d проходов</item>
   </plurals>
   <string name="dsiware_manager_import_title_error_insatll_failed">Сбой установки игры DSiWare</string>
   <string name="dsiware_manager_import_title_error_open_file_failed">Не удалось открыть файл DSiWare</string>
@@ -1504,7 +1505,7 @@
     <string name="rewind_status_disabled">Функция перемотки отключена</string>
     <string name="rewind_save_interval">Интервал сохранения</string>
     <string name="rewind_history_depth">Глубина истории</string>
-    <string name="rewind_memory_estimate">Оценочный расход RAM: ~%1$d МБ (макс. %2$d снимков)</string>
+    <string name="rewind_memory_estimate">Оценочный расход RAM: ~%1$d МБ (макс. снимков: %2$d)</string>
     <string name="seconds_short">%d сек.</string>
     <string name="firmware_birthday_format">Формат: день / месяц</string>
     <string name="day_label">День</string>
@@ -1593,6 +1594,6 @@
         <item quantity="one">%1$d шаг</item>
         <item quantity="few">%1$d шага</item>
         <item quantity="many">%1$d шагов</item>
-        <item quantity="other">%1$d шага</item>
+        <item quantity="other">%1$d шагов</item>
     </plurals>
 </resources>

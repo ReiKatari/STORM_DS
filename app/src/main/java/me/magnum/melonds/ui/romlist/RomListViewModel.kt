@@ -59,6 +59,7 @@ class RomListViewModel @Inject constructor(
     private val dsiWareTitlesMetadataStore: me.magnum.melonds.impl.DSiWareTitlesMetadataStore,
     private val dsiStorageTitlesScanner: me.magnum.melonds.impl.dsinand.DsiStorageTitlesScanner,
     private val saveStatesRepository: me.magnum.melonds.domain.repositories.SaveStatesRepository,
+    private val romSaveFileManager: me.magnum.melonds.impl.RomSaveFileManager,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -70,6 +71,11 @@ class RomListViewModel @Inject constructor(
             val cached = runCatching { boxArtRepository.getAllCachedMatches() }.getOrDefault(emptyMap())
             if (cached.isNotEmpty()) {
                 _boxArtByUri.update { current -> cached + current.filterValues { it.isNotEmpty() } }
+            }
+            boxArtRepository.coverUpdates.collect { (uri, url) ->
+                _boxArtByUri.update { current ->
+                    if (url != null) current + (uri to url) else current - uri
+                }
             }
         }
     }
@@ -532,6 +538,14 @@ class RomListViewModel @Inject constructor(
             RomFilter.DSI_ENHANCED_ONLY -> rom.isDsiEnhanced
             RomFilter.DSIWARE_ONLY -> rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
+            RomFilter.RECENTLY_PLAYED -> rom.lastPlayed != null
+            RomFilter.UNPLAYED -> rom.lastPlayed == null && rom.totalPlayTime.inWholeSeconds <= 0L
+            RomFilter.HAS_SAVES -> {
+                romSaveFileManager.hasSaveFile(rom) ||
+                    runCatching { saveStatesRepository.getRomQuickSaveStateSlot(rom).exists }.getOrDefault(false) ||
+                    runCatching { saveStatesRepository.getPeriodicAutoSaveSlot(rom).exists }.getOrDefault(false) ||
+                    runCatching { saveStatesRepository.getRomSaveStates(rom).any { it.exists } }.getOrDefault(false)
+            }
         }
     }
 

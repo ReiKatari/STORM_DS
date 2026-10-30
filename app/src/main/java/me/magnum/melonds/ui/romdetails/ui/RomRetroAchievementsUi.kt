@@ -79,7 +79,20 @@ import me.magnum.melonds.ui.theme.MelonTheme
 import me.magnum.melonds.ui.theme.watermelon
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAchievementSet
+import androidx.compose.runtime.rememberCoroutineScope
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.launch
+import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import java.net.URL
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface RetroAchievementsEntryPoint {
+    fun retroAchievementsRepository(): RetroAchievementsRepository
+}
 
 private const val SETS_TABS_ITEM_TYPE = "sets"
 private const val HEADER_ITEM_TYPE = "header"
@@ -115,25 +128,105 @@ fun RomRetroAchievementsUi(
                     NoAchievements(Modifier.weight(1f).fillMaxWidth())
                 } else {
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        var detailAchievement by remember {
-                            mutableStateOf<Pair<AchievementUiModel, Boolean>?>(null)
-                        }
-                        me.magnum.melonds.ui.emulator.ui.AchievementList(
-                            modifier = Modifier.fillMaxSize(),
-                            state = retroAchievementsUiState,
-                            onAchievementSelected = { model, inLedger -> detailAchievement = model to inLedger },
-                            onViewLeaderboard = onViewLeaderboard,
-                            onLoadLeaderboardRanking = onLoadLeaderboardRanking,
-                            onRetry = onRetryLoad,
-                            onDismiss = {},
-                            onAchievementFocused = onAchievementFocused,
-                        )
-                        detailAchievement?.let { (model, inLedger) ->
-                            me.magnum.melonds.ui.emulator.ui.AchievementDetailOverlay(
-                                achievementModel = model,
-                                isInOfflineLedger = inLedger,
-                                onClose = { detailAchievement = null },
-                            )
+                        val coroutineScope = rememberCoroutineScope()
+                        val context = LocalContext.current
+                        val colors = watermelon
+                        var isBannerSyncing by remember { mutableStateOf(false) }
+                        val pendingCount = offlineAchievementsUiState.pendingSoftcoreUnlockCount + offlineAchievementsUiState.pendingLedgerUnlockCount
+
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            if (pendingCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(androidx.compose.ui.graphics.Color(0xFF0284C7).copy(alpha = 0.2f))
+                                        .border(1.dp, androidx.compose.ui.graphics.Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                        .clickable(enabled = !isBannerSyncing) {
+                                            isBannerSyncing = true
+                                            Toast.makeText(context, context.getString(R.string.ra_sync_queue_syncing), Toast.LENGTH_SHORT).show()
+                                            coroutineScope.launch {
+                                                try {
+                                                    val entryPoint = EntryPointAccessors.fromApplication(
+                                                        context.applicationContext,
+                                                        RetroAchievementsEntryPoint::class.java
+                                                    )
+                                                    val repo = entryPoint.retroAchievementsRepository()
+                                                    val result = repo.submitPendingAchievements()
+                                                    result.fold(
+                                                        onSuccess = {
+                                                            Toast.makeText(context, context.getString(R.string.ra_sync_queue_success), Toast.LENGTH_SHORT).show()
+                                                            onSyncOfflineNow()
+                                                        },
+                                                        onFailure = { err ->
+                                                            Toast.makeText(context, context.getString(R.string.ra_sync_queue_error, err.message ?: ""), Toast.LENGTH_LONG).show()
+                                                        }
+                                                    )
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, context.getString(R.string.ra_sync_queue_error, e.message ?: ""), Toast.LENGTH_LONG).show()
+                                                } finally {
+                                                    isBannerSyncing = false
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "⏳ Ожидают отправки: $pendingCount",
+                                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.5.sp,
+                                            color = colors.text
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (isBannerSyncing) {
+                                                CircularProgressIndicator(
+                                                    color = androidx.compose.ui.graphics.Color(0xFF38BDF8),
+                                                    modifier = Modifier.size(12.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                            }
+                                            Text(
+                                                text = stringResource(R.string.ra_sync_queue_button),
+                                                fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = androidx.compose.ui.graphics.Color(0xFF38BDF8)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                var detailAchievement by remember {
+                                    mutableStateOf<Pair<AchievementUiModel, Boolean>?>(null)
+                                }
+                                me.magnum.melonds.ui.emulator.ui.AchievementList(
+                                    modifier = Modifier.fillMaxSize(),
+                                    state = retroAchievementsUiState,
+                                    onAchievementSelected = { model, inLedger -> detailAchievement = model to inLedger },
+                                    onViewLeaderboard = onViewLeaderboard,
+                                    onLoadLeaderboardRanking = onLoadLeaderboardRanking,
+                                    onRetry = onRetryLoad,
+                                    onDismiss = {},
+                                    onAchievementFocused = onAchievementFocused,
+                                )
+                                detailAchievement?.let { (model, inLedger) ->
+                                    me.magnum.melonds.ui.emulator.ui.AchievementDetailOverlay(
+                                        achievementModel = model,
+                                        isInOfflineLedger = inLedger,
+                                        onClose = { detailAchievement = null },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -152,6 +245,50 @@ fun OfflineAchievementsStatusUi(
 ) {
     val colors = watermelon
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var isManualSyncing by remember { mutableStateOf(false) }
+
+    val performQueueSync = {
+        if (!isManualSyncing && !state.isSyncing) {
+            isManualSyncing = true
+            Toast.makeText(context, context.getString(R.string.ra_sync_queue_syncing), Toast.LENGTH_SHORT).show()
+            coroutineScope.launch {
+                try {
+                    val entryPoint = EntryPointAccessors.fromApplication(
+                        context.applicationContext,
+                        RetroAchievementsEntryPoint::class.java
+                    )
+                    val repo = entryPoint.retroAchievementsRepository()
+                    val result = repo.submitPendingAchievements()
+                    result.fold(
+                        onSuccess = {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.ra_sync_queue_success),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            onSyncNow()
+                        },
+                        onFailure = { err ->
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.ra_sync_queue_error, err.message ?: ""),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    )
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.ra_sync_queue_error, e.message ?: ""),
+                        Toast.LENGTH_LONG
+                    ).show()
+                } finally {
+                    isManualSyncing = false
+                }
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -281,7 +418,7 @@ fun OfflineAchievementsStatusUi(
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "${state.pendingLedgerUnlockCount} записей",
+                        text = me.magnum.melonds.utils.RussianPlurals.format(state.pendingLedgerUnlockCount, "запись", "записи", "записей"),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -293,6 +430,77 @@ fun OfflineAchievementsStatusUi(
                         fontSize = 8.5.sp,
                         color = colors.text3
                     )
+                }
+            }
+        }
+
+        // Quick Sync Row directly adjacent to pending counter cards
+        val totalPending = state.pendingSoftcoreUnlockCount + state.pendingLedgerUnlockCount
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.surface)
+                .border(1.dp, if (totalPending > 0) androidx.compose.ui.graphics.Color(0xFF0284C7).copy(alpha = 0.6f) else colors.line, RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(
+                        text = "Очередь офлайн-достижений",
+                        fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.5.sp,
+                        color = colors.text
+                    )
+                    Text(
+                        text = if (totalPending > 0) "Ожидает отправки: $totalPending" else "Все достижения синхронизированы",
+                        fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
+                        fontSize = 9.sp,
+                        color = if (totalPending > 0) androidx.compose.ui.graphics.Color(0xFF38BDF8) else colors.text3
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (totalPending > 0 && !isManualSyncing && !state.isSyncing)
+                                Brush.horizontalGradient(listOf(androidx.compose.ui.graphics.Color(0xFF0284C7), androidx.compose.ui.graphics.Color(0xFF0369A1)))
+                            else
+                                Brush.horizontalGradient(listOf(colors.surface2, colors.surface2))
+                        )
+                        .clickable(enabled = !isManualSyncing && !state.isSyncing) {
+                            if (totalPending > 0) {
+                                performQueueSync()
+                            } else {
+                                Toast.makeText(context, context.getString(R.string.ra_sync_queue_empty), Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isManualSyncing || state.isSyncing) {
+                            CircularProgressIndicator(
+                                color = androidx.compose.ui.graphics.Color.White,
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = stringResource(R.string.ra_sync_queue_button),
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (totalPending > 0 && !isManualSyncing && !state.isSyncing) androidx.compose.ui.graphics.Color.White else colors.text3
+                        )
+                    }
                 }
             }
         }
@@ -383,15 +591,14 @@ fun OfflineAchievementsStatusUi(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
                 .background(Brush.horizontalGradient(listOf(androidx.compose.ui.graphics.Color(0xFFFF0055), androidx.compose.ui.graphics.Color(0xFFBE123C))))
-                .clickable(enabled = !state.isSyncing) {
-                    onSyncNow()
-                    Toast.makeText(context, "Синхронизация с сервером RetroAchievements выполнена", Toast.LENGTH_SHORT).show()
+                .clickable(enabled = !state.isSyncing && !isManualSyncing) {
+                    performQueueSync()
                 }
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (state.isSyncing) {
+                if (state.isSyncing || isManualSyncing) {
                     CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
                     Text(

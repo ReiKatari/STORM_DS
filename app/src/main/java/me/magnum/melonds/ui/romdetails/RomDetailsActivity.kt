@@ -87,9 +87,15 @@ class RomDetailsActivity : AppCompatActivity() {
                 )
                 else -> {
                     val boxArtUrl by produceState<String?>(initialValue = null, rom.uri) {
-                        value = if (settingsRepository.isRaCoverEnabled()) {
-                            runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
-                        } else null
+                        value = runCatching {
+                            boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
+                                ?: if (settingsRepository.isRaCoverEnabled()) boxArtRepository.getBoxArtUrl(rom) else null
+                        }.getOrNull()
+                        boxArtRepository.coverUpdates.collect { (uri, newUrl) ->
+                            if (uri == rom.uri.toString()) {
+                                value = newUrl
+                            }
+                        }
                     }
                     me.magnum.melonds.ui.common.ExternalLibraryGameInfo(
                         rom = rom,
@@ -152,9 +158,15 @@ class RomDetailsActivity : AppCompatActivity() {
             val offlineAchievementsUiState by romRetroAchievementsViewModel.offlineAchievementsUiState.collectAsState()
 
             val boxArtUrl by produceState<String?>(initialValue = null, rom.uri) {
-                value = if (settingsRepository.isRaCoverEnabled()) {
-                    runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
-                } else null
+                value = runCatching {
+                    boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
+                        ?: if (settingsRepository.isRaCoverEnabled()) boxArtRepository.getBoxArtUrl(rom) else null
+                }.getOrNull()
+                boxArtRepository.coverUpdates.collect { (uri, newUrl) ->
+                    if (uri == rom.uri.toString()) {
+                        value = newUrl
+                    }
+                }
             }
 
             LaunchedEffect(null) {

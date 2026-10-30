@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_backlog_and_glossary_title">Registro dialoghi e glossario utente</string>
+    <string name="translator_backlog_title">Registro dialoghi</string>
+    <string name="translator_glossary_title">Glossario utente</string>
+    <string name="translator_backlog_tab_history">Cronologia battute (fino a 50)</string>
+    <string name="translator_backlog_tab_glossary">Glossario nomi e termini</string>
+    <string name="translator_backlog_action_speak">Ascolta</string>
+    <string name="translator_backlog_action_copy">Copia</string>
+    <string name="translator_backlog_action_add_to_glossary">Nel glossario</string>
+    <string name="translator_backlog_clear_history">Cancella registro</string>
+    <string name="translator_backlog_empty_prompt">Nessun dialogo ancora registrato. Avvia la traduzione durante un dialogo nel gioco.</string>
+    <string name="translator_backlog_copied_toast">Copiato negli appunti</string>
+    <string name="translator_glossary_add_term">Aggiungi termine</string>
+    <string name="translator_glossary_edit_term">Modifica termine</string>
+    <string name="translator_glossary_delete_term">Elimina</string>
+    <string name="translator_glossary_export_path">File dizionario</string>
+    <string name="translator_glossary_path_copied">Percorso dizionario copiato: %s</string>
+    <string name="translator_glossary_empty_prompt">Il glossario è vuoto. Aggiungi nomi di personaggi e termini per una traduzione coerente.</string>
+    <string name="translator_glossary_source_label">Termine originale (nel gioco)</string>
+    <string name="translator_glossary_target_label">Traduzione corretta</string>
+    <string name="translator_glossary_case_sensitive">Distingui maiuscole e minuscole</string>
+    <string name="translator_glossary_game_specific">Solo per questo gioco</string>
+    <string name="translator_glossary_saved_toast">Terme \'%s\' salvato nel glossario</string>
+    <string name="translator_glossary_deleted_toast">Termine rimosso dal glossario</string>
+    <string name="translator_glossary_scope_global">Globale</string>
+    <string name="translator_glossary_scope_game">Specifico del gioco</string>
+</resources>

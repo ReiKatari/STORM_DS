@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">RAMチート検索</string>
+    <string name="v790_ram_finder_title">メモリスキャナー</string>
+    <string name="v790_ram_bitness_8">8ビット (1バイト)</string>
+    <string name="v790_ram_bitness_16">16ビット (2バイト)</string>
+    <string name="v790_ram_bitness_32">32ビット (4バイト)</string>
+    <string name="v790_ram_mode_exact">正確な値</string>
+    <string name="v790_ram_mode_increased">増加</string>
+    <string name="v790_ram_mode_decreased">減少</string>
+    <string name="v790_ram_mode_changed">変化あり</string>
+    <string name="v790_ram_mode_unchanged">変化なし</string>
+    <string name="v790_ram_new_search">新規検索</string>
+    <string name="v790_ram_filter">絞り込み</string>
+    <string name="v790_ram_results_count">発見アドレス数: %1$d</string>
+    <string name="v790_ram_results_showing_top">上位 %1$d 件を表示</string>
+    <string name="v790_ram_no_results">一致するアドレスが見つかりません</string>
+    <string name="v790_ram_current_val">現在: %1$s</string>
+    <string name="v790_ram_prev_val">前回: %1$s</string>
+    <string name="v790_ram_btn_test">テスト</string>
+    <string name="v790_ram_btn_create_cheat">チート作成</string>
+    <string name="v790_ram_test_success">RAMに書き込みました</string>
+    <string name="v790_ram_test_fail">書き込み失敗</string>
+    <string name="v790_ram_cheat_created">チートを作成してクリップボードにコピーしました！</string>
+    <string name="v790_ram_enter_value">値を入力...</string>
+    <string name="v790_ram_cheat_name">RAM 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">エミュレータのRAMが利用できません</string>
+    <string name="v790_ram_searching">メモリをスキャン中...</string>
+    <string name="mic_agc_noise_gate_title">適応型ノイズゲートとマイクAGC</string>
+    <string name="mic_agc_noise_gate_summary">DCノイズ低減、環境雑音抑制、および音量自動正規化</string>
+    <string name="v790_vulkan_pipeline_cache_status">Vulkanシェーダーパイプラインキャッシュ有効</string>
+</resources>

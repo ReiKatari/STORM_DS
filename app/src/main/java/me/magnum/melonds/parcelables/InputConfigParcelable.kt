@@ -32,6 +32,7 @@ class InputConfigParcelable : Parcelable {
         private const val ASSIGNMENT_NONE = 0
         private const val ASSIGNMENT_KEY = 1
         private const val ASSIGNMENT_AXIS = 2
+        private const val ASSIGNMENT_CHORD = 3
 
         override fun createFromParcel(parcel: Parcel): InputConfigParcelable {
             return InputConfigParcelable(parcel)
@@ -58,6 +59,14 @@ class InputConfigParcelable : Parcelable {
                     InputConfig.Assignment.Axis(deviceId, axisCode, direction)
                 }
 
+                ASSIGNMENT_CHORD -> {
+                    val hasDeviceId = parcel.readInt() != 0
+                    val deviceId = if (hasDeviceId) parcel.readInt() else null
+                    val modifierKeyCode = parcel.readInt()
+                    val triggerKeyCode = parcel.readInt()
+                    InputConfig.Assignment.Chord(deviceId, modifierKeyCode, triggerKeyCode)
+                }
+
                 else -> InputConfig.Assignment.None
             }
         }
@@ -78,6 +87,14 @@ class InputConfigParcelable : Parcelable {
                     assignment.deviceId?.let(parcel::writeInt)
                     parcel.writeInt(assignment.axisCode)
                     parcel.writeInt(assignment.direction.ordinal)
+                }
+
+                is InputConfig.Assignment.Chord -> {
+                    parcel.writeInt(ASSIGNMENT_CHORD)
+                    parcel.writeInt(if (assignment.deviceId != null) 1 else 0)
+                    assignment.deviceId?.let(parcel::writeInt)
+                    parcel.writeInt(assignment.modifierKeyCode)
+                    parcel.writeInt(assignment.triggerKeyCode)
                 }
             }
         }

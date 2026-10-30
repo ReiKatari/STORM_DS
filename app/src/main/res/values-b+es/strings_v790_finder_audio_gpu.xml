@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">Buscador RAM</string>
+    <string name="v790_ram_finder_title">Escáner de memoria</string>
+    <string name="v790_ram_bitness_8">8 bits (1 byte)</string>
+    <string name="v790_ram_bitness_16">16 bits (2 bytes)</string>
+    <string name="v790_ram_bitness_32">32 bits (4 bytes)</string>
+    <string name="v790_ram_mode_exact">Valor exacto</string>
+    <string name="v790_ram_mode_increased">Aumentó</string>
+    <string name="v790_ram_mode_decreased">Disminuyó</string>
+    <string name="v790_ram_mode_changed">Modificado</string>
+    <string name="v790_ram_mode_unchanged">Sin cambios</string>
+    <string name="v790_ram_new_search">Nueva búsqueda</string>
+    <string name="v790_ram_filter">Filtrar</string>
+    <string name="v790_ram_results_count">Direcciones encontradas: %1$d</string>
+    <string name="v790_ram_results_showing_top">Mostrando las primeras %1$d</string>
+    <string name="v790_ram_no_results">Sin coincidencias encontradas</string>
+    <string name="v790_ram_current_val">Act: %1$s</string>
+    <string name="v790_ram_prev_val">Ant: %1$s</string>
+    <string name="v790_ram_btn_test">Probar</string>
+    <string name="v790_ram_btn_create_cheat">Crear truco</string>
+    <string name="v790_ram_test_success">Escrito en RAM</string>
+    <string name="v790_ram_test_fail">Fallo al escribir</string>
+    <string name="v790_ram_cheat_created">¡Truco creado y copiado al portapapeles!</string>
+    <string name="v790_ram_enter_value">Ingresar valor...</string>
+    <string name="v790_ram_cheat_name">RAM 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">RAM del emulador no disponible</string>
+    <string name="v790_ram_searching">Escaneando memoria...</string>
+    <string name="mic_agc_noise_gate_title">Puerta de ruido adaptativa y AGC de micrófono</string>
+    <string name="mic_agc_noise_gate_summary">Filtro DC, supresión de ruido ambiental y normalización de voz</string>
+    <string name="v790_vulkan_pipeline_cache_status">Caché de pipelines Vulkan activo</string>
+</resources>

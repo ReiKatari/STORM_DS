@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">データバンドルをエクスポート (.zip)</string>
+    <string name="export_data_bundle_success">ゲームデータバンドルを保存しました: %s</string>
+    <string name="export_data_bundle_error">データバンドルのエクスポートに失敗しました: %s</string>
+    <string name="export_data_bundle_in_progress">データバンドルをエクスポート中...</string>
+    <string name="undo_overwrite_multi_step">スロット %1$s の上書きを取り消す (%2$s)</string>
+    <string name="undo_step_count_format">%d ステップ</string>
+    <string name="ra_sync_queue_button">今すぐ同期</string>
+    <string name="ra_sync_queue_success">オフライン実績キューがサーバーに正常に送信されました</string>
+    <string name="ra_sync_queue_error">実績キューの同期エラー: %s</string>
+    <string name="ra_sync_queue_empty">送信待ちのオフライン実績はありません</string>
+    <string name="ra_sync_queue_syncing">キューを同期中...</string>
+    <string name="cheat_import_dat_success">DAT チートデータベースを正常にインポートしました</string>
+    <string name="cheat_import_supported_formats">XML、DAT (usrcheat.dat)、ZIP アーカイブに対応</string>
+</resources>

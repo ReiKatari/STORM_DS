@@ -53,13 +53,20 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
     private fun updateDynamicSummaries() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
-        val isRu = java.util.Locale.getDefault().language.startsWith("ru")
+        val isRu = me.magnum.melonds.utils.RussianPlurals.isRussian(resources)
 
         // 1. General
         findPreference<Preference>("settings_home_general")?.let { pref ->
             val theme = prefs.getString("theme", "dark") ?: "dark"
             val accent = prefs.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
-            val formattedTheme = theme.replaceFirstChar { it.uppercase() }
+            val themeValues = runCatching { resources.getStringArray(R.array.theme_values) }.getOrNull()
+            val themeOptions = runCatching { resources.getStringArray(R.array.theme_options) }.getOrNull()
+            val themeIdx = themeValues?.indexOfFirst { it.equals(theme, ignoreCase = true) } ?: -1
+            val formattedTheme = if (themeIdx >= 0 && themeOptions != null && themeIdx < themeOptions.size) {
+                themeOptions[themeIdx]
+            } else {
+                theme.replaceFirstChar { it.uppercase() }
+            }
             val formattedAccent = accent.replace('_', ' ').split(' ').joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
             pref.summary = "$formattedTheme, $formattedAccent"
         }
@@ -70,7 +77,13 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             val viewMode = prefs.getString("rom_view_mode", "grid") ?: "grid"
             val modeStr = if (isRu) (if (viewMode == "grid") "Сетка" else "Список") else (if (viewMode == "grid") "Grid" else "List")
             pref.summary = if (dirs.isNotEmpty()) {
-                if (isRu) "${dirs.size} папок, $modeStr" else "${dirs.size} folders, $modeStr"
+                val count = dirs.size
+                val foldersStr = if (isRu) {
+                    me.magnum.melonds.utils.RussianPlurals.format(count, "папка", "папки", "папок")
+                } else {
+                    resources.getQuantityString(R.plurals.v780_rom_folders_count, count, count)
+                }
+                "$foldersStr, $modeStr"
             } else {
                 modeStr
             }
@@ -144,7 +157,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
         // 10. About
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.8.0").removePrefix("v").removePrefix("V")
+            val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.0").removePrefix("v").removePrefix("V")
             pref.summary = "STORM DS $vName"
         }
     }

@@ -1882,6 +1882,22 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("auto_save_state_on_exit", false)
     }
 
+    override fun getPeriodicAutoSaveIntervalMinutes(): Int {
+        return preferences.getString("periodic_auto_save_interval_minutes", "0")?.toIntOrNull() ?: 0
+    }
+
+    override fun getActiveQuickSlot(): Int {
+        return preferences.getInt("active_quick_slot", 0).coerceIn(0, 8)
+    }
+
+    override fun setActiveQuickSlot(slot: Int) {
+        preferences.edit().putInt("active_quick_slot", slot.coerceIn(0, 8)).apply()
+    }
+
+    override fun setRetroAchievementsHardcoreEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("ra_hardcore_enabled", enabled).apply()
+    }
+
     override fun isAutoLoadStateOnLaunchEnabled(): Boolean {
         return preferences.getBoolean("auto_load_state_on_launch", false)
     }

@@ -5,7 +5,7 @@
     <string name="v780_search_no_results">未找到相关设置</string>
     <string name="v780_search_results_count">找到: %1$d</string>
     <string name="v780_rewind_summary_title">倒带缓冲区预估</string>
-    <string name="v780_rewind_summary_detail">时间窗口: %1$d 秒 (%2$d 个快照)。预估内存占用: ~%3$s (峰值最高 %4$s)。</string>
+    <string name="v780_rewind_summary_detail">时间窗口: %1$d 秒 (%2$s)。预估内存占用: ~%3$s (峰值最高 %4$s)。</string>
     <string name="v780_settings_maintenance_title">设置维护和备份</string>
     <string name="v780_settings_export_json_title">导出设置为 JSON 文件</string>
     <string name="v780_settings_export_json_summary">将当前设置保存到便携式 JSON 文件</string>
@@ -31,4 +31,10 @@
     <string name="v780_internal_randomize_mac_summary">使用任天堂前缀 00:09:BF 创建随机 MAC 地址</string>
     <string name="v780_mac_generated">已生成任天堂 MAC 地址: %1$s</string>
     <string name="v780_mac_invalid_format">MAC 地址格式无效（必须为 XX:XX:XX:XX:XX:XX）</string>
+    <plurals name="v780_rom_folders_count">
+        <item quantity="other">%1$d 个文件夹</item>
+    </plurals>
+    <plurals name="v780_rewind_snapshots_count">
+        <item quantity="other">%1$d 个快照</item>
+    </plurals>
 </resources>

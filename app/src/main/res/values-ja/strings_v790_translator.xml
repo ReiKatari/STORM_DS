@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_backlog_and_glossary_title">セリフ履歴とユーザー用語集</string>
+    <string name="translator_backlog_title">セリフ履歴</string>
+    <string name="translator_glossary_title">ユーザー用語集</string>
+    <string name="translator_backlog_tab_history">セリフ履歴（最大50件）</string>
+    <string name="translator_backlog_tab_glossary">人名・用語辞典</string>
+    <string name="translator_backlog_action_speak">読み上げ</string>
+    <string name="translator_backlog_action_copy">コピー</string>
+    <string name="translator_backlog_action_add_to_glossary">用語集へ</string>
+    <string name="translator_backlog_clear_history">履歴をクリア</string>
+    <string name="translator_backlog_empty_prompt">セリフ履歴はありません。ゲーム内で会話中に翻訳を実行してください。</string>
+    <string name="translator_backlog_copied_toast">クリップボードにコピーしました</string>
+    <string name="translator_glossary_add_term">用語を追加</string>
+    <string name="translator_glossary_edit_term">用語を編集</string>
+    <string name="translator_glossary_delete_term">削除</string>
+    <string name="translator_glossary_export_path">辞書ファイル</string>
+    <string name="translator_glossary_path_copied">辞書パスをコピーしました：%s</string>
+    <string name="translator_glossary_empty_prompt">用語集は空です。人名や専門用語を追加して翻訳を統一しましょう。</string>
+    <string name="translator_glossary_source_label">ゲーム内の原文用語</string>
+    <string name="translator_glossary_target_label">正しい翻訳</string>
+    <string name="translator_glossary_case_sensitive">大文字・小文字を区別</string>
+    <string name="translator_glossary_game_specific">現在のゲーム専用</string>
+    <string name="translator_glossary_saved_toast">用語「%s」を用語集に保存しました</string>
+    <string name="translator_glossary_deleted_toast">用語を用語集から削除しました</string>
+    <string name="translator_glossary_scope_global">共通</string>
+    <string name="translator_glossary_scope_game">ゲーム専用</string>
+</resources>

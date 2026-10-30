@@ -120,6 +120,11 @@ private fun optionIcon(option: PauseMenuOption): ImageVector {
     return when (option) {
         RomPauseMenuOption.SAVE_STATE -> Icons.Filled.Download
         RomPauseMenuOption.LOAD_STATE -> Icons.Filled.Upload
+        RomPauseMenuOption.QUICK_SLOT_CAROUSEL -> Icons.Filled.Layers
+        RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE -> Icons.Filled.AccessTime
+        RomPauseMenuOption.TAKE_SCREENSHOT -> Icons.Filled.CameraAlt
+        RomPauseMenuOption.SLOW_MOTION -> Icons.Filled.HourglassTop
+        RomPauseMenuOption.FRAME_ADVANCE -> Icons.Filled.PlayArrow
         RomPauseMenuOption.REWIND -> Icons.Filled.History
         RomPauseMenuOption.CHEATS -> Icons.Filled.Tune
         RomPauseMenuOption.VIEW_ACHIEVEMENTS -> Icons.Filled.EmojiEvents
@@ -157,6 +162,8 @@ fun PauseMenuOverlay(
     rom: Rom?,
     achievementsSummary: String?,
     sessionDurationMs: Long? = null,
+    activeQuickSlot: Int = 0,
+    onQuickSlotCarouselClick: (() -> Unit)? = null,
     onOptionSelected: (PauseMenuOption) -> Unit,
     onResume: () -> Unit,
 ) {
@@ -420,6 +427,58 @@ fun PauseMenuOverlay(
                             )
                         }
                     }
+                }
+            }
+
+            if (rom != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF0F172A).copy(alpha = 0.85f))
+                        .border(1.dp, Color(0x4400D2FF), RoundedCornerShape(12.dp))
+                        .clickable {
+                            if (onQuickSlotCarouselClick != null) {
+                                onQuickSlotCarouselClick()
+                            } else {
+                                onOptionSelected(RomPauseMenuOption.QUICK_SLOT_CAROUSEL)
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = null,
+                            tint = Color(0xFF00D2FF),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.quick_slot_carousel_title),
+                            color = Color.White,
+                            fontFamily = Manrope,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+
+                    Text(
+                        text = if (activeQuickSlot in 1..8) {
+                            stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
+                        } else {
+                            "Слот 0 (По умолчанию)"
+                        },
+                        color = Color(0xFF00D2FF),
+                        fontFamily = Manrope,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
 

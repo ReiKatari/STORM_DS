@@ -50,6 +50,10 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
                 true
             }
         }
+
+        findPreference<androidx.preference.ListPreference>("periodic_auto_save_interval_minutes")?.let { pref ->
+            helper.bindPreferenceSummaryToValue(pref)
+        }
     }
 
     private fun handleSettingsMirror(uri: Uri, persistDirectory: () -> Unit) {

@@ -44,6 +44,9 @@ public:
     bool SupportsTimestamps() const { return TimestampQueriesSupported && ResetQueryPool != nullptr; }
     float GetTimestampPeriod() const { return TimestampPeriod; }
     const VulkanDeviceProfile& GetDeviceProfile() const { return DeviceProfile; }
+    VkPipelineCache GetPipelineCache() const { return PipelineCache; }
+    static void SetPipelineCacheFilePath(const std::string& path);
+    static std::string GetPipelineCacheFilePath();
 
     PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAhbProperties() const { return AhbProperties; }
     PFN_vkWaitSemaphoresKHR GetWaitSemaphores() const { return WaitSemaphores; }
@@ -73,6 +76,7 @@ private:
     VkDebugUtilsMessengerEXT DebugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
     VkDevice Device = VK_NULL_HANDLE;
+    VkPipelineCache PipelineCache = VK_NULL_HANDLE;
     VkQueue Queue = VK_NULL_HANDLE;
     u32 QueueFamilyIndex = 0;
     std::mutex QueueLock;

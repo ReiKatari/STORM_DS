@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">Комбинированные хоткеи геймпада (Select + кнопка)</string>
+    <string name="pref_input_chord_hotkeys_summary">Удержание Select + кнопка (R=ускорение, L=перемотка, Start=пауза, Y=скриншот, X=замедление)</string>
+    <string name="pref_input_turbo_frequency_title">Частота аппаратного турбо-режима</string>
+    <string name="pref_input_turbo_10hz">10 Гц</string>
+    <string name="pref_input_turbo_15hz">15 Гц (По умолчанию)</string>
+    <string name="pref_input_turbo_20hz">20 Гц</string>
+    <string name="pref_input_turbo_30hz">30 Гц</string>
+    <string name="turbo_toast_enabled_format">Турбо геймпада: Вкл (%d Гц)</string>
+    <string name="turbo_toast_disabled">Турбо геймпада: Выкл</string>
+    <string name="input_slow_motion">Замедление времени</string>
+    <string name="input_frame_advance">Покадровый шаг</string>
+    <string name="input_take_screenshot">Сделать скриншот</string>
+    <string name="input_toggle_hardware_turbo">Турбо-режим геймпада</string>
+    <string name="layout_editor_lock_component">Закрепить элемент (защита от сдвига)</string>
+    <string name="layout_editor_component_locked_toast">Элемент закреплен. Снимите замок для перемещения</string>
+    <string name="action_layout_multiselect">Мультивыбор</string>
+    <string name="action_layout_multiselect_summary">Групповое выделение и перемещение кнопок</string>
+    <string name="action_layout_live_test">Проверить нажатия</string>
+    <string name="action_layout_live_test_summary">Интерактивная проверка кнопок и мультитача</string>
+    <string name="live_test_status_idle">Режим проверки: нажимайте кнопки на экране • Нажмите Назад для возврата</string>
+    <string name="live_test_status_pressed_format">Режим проверки: нажаты [%s] • Нажмите Назад для возврата</string>
+    <string name="live_test_exit">Выйти из проверки</string>
+</resources>

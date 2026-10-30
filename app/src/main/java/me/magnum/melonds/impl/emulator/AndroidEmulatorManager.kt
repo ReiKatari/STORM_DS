@@ -390,7 +390,7 @@ class AndroidEmulatorManager(
 
                 val emulatorConfiguration = getRomEmulatorConfiguration(rom)
                     .withPreparedDldiConfiguration()
-                setupEmulator(emulatorConfiguration)
+                setupEmulator(emulatorConfiguration, rom.config.customVulkanDriverName)
 
                 val gbaSlotRomConfig = rom.config.gbaSlotConfig
                 val gbaSlotType = when (gbaSlotRomConfig) {
@@ -462,7 +462,7 @@ class AndroidEmulatorManager(
                         useCustomBios = false,
                         showBootScreen = false
                     )
-                    setupEmulator(fallbackConfig)
+                    setupEmulator(fallbackConfig, rom.config.customVulkanDriverName)
                     val retryResult = MelonEmulator.loadRom(
                         romUri = romUri,
                         sramUri = sram,
@@ -486,7 +486,7 @@ class AndroidEmulatorManager(
                             val glConfig = fallbackConfig.copy(
                                 rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
                             )
-                            setupEmulator(glConfig)
+                            setupEmulator(glConfig, rom.config.customVulkanDriverName)
                             MelonEmulator.loadRom(
                                 romUri = romUri,
                                 sramUri = sram,
@@ -535,7 +535,7 @@ class AndroidEmulatorManager(
                         val glFallbackConfig = emulatorConfiguration.copy(
                             rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
                         )
-                        setupEmulator(glFallbackConfig)
+                        setupEmulator(glFallbackConfig, rom.config.customVulkanDriverName)
                         val glRetryResult = MelonEmulator.loadRom(
                             romUri = romUri,
                             sramUri = sram,
@@ -734,7 +734,7 @@ class AndroidEmulatorManager(
                 )
                 .withPreparedDldiConfiguration()
 
-            setupEmulator(emulatorConfiguration)
+            setupEmulator(emulatorConfiguration, rom.config.customVulkanDriverName)
 
             Log.i(TAG, "loadDsiWare: direct booting title $titleIdHex in DSi mode directly from ${rom.fileName}")
             MelonEmulator.startBootDiagnosticCapture()
@@ -753,7 +753,7 @@ class AndroidEmulatorManager(
                     showBootScreen = false,
                     dsiWareAutoloadTitleId = 0L,
                 )
-                setupEmulator(fallbackConfig)
+                setupEmulator(fallbackConfig, rom.config.customVulkanDriverName)
                 val retryResult = MelonEmulator.loadRom(
                     romUri = playableRomUri,
                     sramUri = sram,
@@ -777,7 +777,7 @@ class AndroidEmulatorManager(
                         val glConfig = fallbackConfig.copy(
                             rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
                         )
-                        setupEmulator(glConfig)
+                        setupEmulator(glConfig, rom.config.customVulkanDriverName)
                         MelonEmulator.loadRom(
                             romUri = playableRomUri,
                             sramUri = sram,
@@ -822,7 +822,7 @@ class AndroidEmulatorManager(
                 val glConfig = emulatorConfiguration.copy(
                     rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
                 )
-                setupEmulator(glConfig)
+                setupEmulator(glConfig, rom.config.customVulkanDriverName)
                 val glRetry = MelonEmulator.loadRom(
                     romUri = playableRomUri,
                     sramUri = sram,
@@ -955,7 +955,7 @@ class AndroidEmulatorManager(
             playableRomUri
         }
 
-        setupEmulator(emulatorConfiguration)
+        setupEmulator(emulatorConfiguration, rom.config.customVulkanDriverName)
 
         Log.i(TAG, "loadDsiWare: booting title $titleIdHex in full DSi mode (isDirectRomFile=$isDirectRomFile)")
         MelonEmulator.startBootDiagnosticCapture()
@@ -974,7 +974,7 @@ class AndroidEmulatorManager(
                 showBootScreen = false,
                 dsiWareAutoloadTitleId = 0L,
             )
-            setupEmulator(fallbackConfig)
+            setupEmulator(fallbackConfig, rom.config.customVulkanDriverName)
             val retryResult = MelonEmulator.loadRom(
                 romUri = playableRomUri,
                 sramUri = sram,
@@ -997,7 +997,7 @@ class AndroidEmulatorManager(
                     val glConfig = fallbackConfig.copy(
                         rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
                     )
-                    setupEmulator(glConfig)
+                    setupEmulator(glConfig, rom.config.customVulkanDriverName)
                     MelonEmulator.loadRom(
                         romUri = playableRomUri,
                         sramUri = sram,
@@ -1041,7 +1041,7 @@ class AndroidEmulatorManager(
             val glConfig = emulatorConfiguration.copy(
                 rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
             )
-            setupEmulator(glConfig)
+            setupEmulator(glConfig, rom.config.customVulkanDriverName)
             val glRetry = MelonEmulator.loadRom(
                 romUri = targetRomUri,
                 sramUri = Uri.fromFile(saveFile),
@@ -1299,7 +1299,7 @@ class AndroidEmulatorManager(
             try {
                 val emulatorConfiguration = getFirmwareEmulatorConfiguration(consoleType)
                     .withPreparedDldiConfiguration()
-                setupEmulator(emulatorConfiguration)
+                setupEmulator(emulatorConfiguration, null)
                 val result = MelonEmulator.bootFirmware()
                 if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {
                     cameraManager.stopCurrentCameraSource()
@@ -1314,7 +1314,7 @@ class AndroidEmulatorManager(
                         val glConfig = emulatorConfiguration.copy(
                             rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
                         )
-                        setupEmulator(glConfig)
+                        setupEmulator(glConfig, null)
                         val glResult = MelonEmulator.bootFirmware()
                         if (glResult != MelonEmulator.FirmwareLoadResult.SUCCESS) {
                             cameraManager.stopCurrentCameraSource()
@@ -1570,10 +1570,57 @@ class AndroidEmulatorManager(
         return achievementsSharedFlow.asSharedFlow()
     }
 
-    private fun setupEmulator(emulatorConfiguration: EmulatorConfiguration) {
+    private fun getVulkanDriverConfigurationForRom(customDriverName: String?): me.magnum.melonds.domain.model.VulkanDriverConfiguration {
+        val defaultConfiguration = settingsRepository.getVulkanDriverConfiguration(context.applicationInfo.nativeLibraryDir)
+        if (customDriverName == null) {
+            return defaultConfiguration
+        }
+        val tmpDir = File(context.cacheDir, "adrenotools/tmp").apply { mkdirs() }
+        if (customDriverName == "__SYSTEM__") {
+            return me.magnum.melonds.domain.model.VulkanDriverConfiguration(
+                mode = me.magnum.melonds.domain.model.VulkanDriverMode.SYSTEM,
+                tmpLibDir = tmpDir.absolutePath,
+                hookLibDir = context.applicationInfo.nativeLibraryDir,
+                customDriverDir = null,
+                customDriverName = null,
+                customDriverDisplayName = null,
+            )
+        }
+        val installedDrivers = settingsRepository.getInstalledVulkanDrivers()
+        val matchingDriver = installedDrivers.firstOrNull {
+            it.id == customDriverName || it.displayName == customDriverName || it.driverName == customDriverName
+        }
+        if (matchingDriver != null && me.magnum.melonds.impl.AdrenoVulkanDriverSupport.isSupported(context)) {
+            val resolvedDriver = if (File(matchingDriver.driverDir, matchingDriver.driverName).isFile) {
+                matchingDriver
+            } else {
+                File(context.filesDir, "adreno-drivers")
+                    .walkTopDown()
+                    .firstOrNull { it.isFile && it.name == matchingDriver.driverName }
+                    ?.let { matchingDriver.copy(driverDir = it.parentFile?.absolutePath ?: matchingDriver.driverDir) }
+                    ?: matchingDriver
+            }
+            val driverDirWithSlash = if (resolvedDriver.driverDir.endsWith(File.separator)) {
+                resolvedDriver.driverDir
+            } else {
+                resolvedDriver.driverDir + File.separator
+            }
+            return me.magnum.melonds.domain.model.VulkanDriverConfiguration(
+                mode = me.magnum.melonds.domain.model.VulkanDriverMode.CUSTOM,
+                tmpLibDir = tmpDir.absolutePath,
+                hookLibDir = context.applicationInfo.nativeLibraryDir,
+                customDriverDir = driverDirWithSlash,
+                customDriverName = resolvedDriver.driverName,
+                customDriverDisplayName = resolvedDriver.displayName,
+            )
+        }
+        return defaultConfiguration
+    }
+
+    private fun setupEmulator(emulatorConfiguration: EmulatorConfiguration, customVulkanDriverName: String? = null) {
         if (emulatorConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN) {
             MelonDSAndroidInterface.configureVulkanDriver(
-                settingsRepository.getVulkanDriverConfiguration(context.applicationInfo.nativeLibraryDir)
+                getVulkanDriverConfigurationForRom(customVulkanDriverName)
             )
         }
         MelonEmulator.setupEmulator(
@@ -1603,7 +1650,9 @@ class AndroidEmulatorManager(
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
             showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
+            fastForwardSpeedMultiplier = rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier,
             frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
+            arm9OverclockMultiplier = rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),

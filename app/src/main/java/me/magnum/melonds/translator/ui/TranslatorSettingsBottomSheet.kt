@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,7 +35,8 @@ fun TranslatorSettingsContent(
     onSyncOverlay: () -> Unit,
     onStartAutoTranslate: () -> Unit,
     onOpenRegionEditor: () -> Unit,
-    onPreviewTts: () -> Unit
+    onPreviewTts: () -> Unit,
+    onOpenBacklogAndGlossary: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lang = context.resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
@@ -527,6 +529,22 @@ fun TranslatorSettingsContent(
             }
             
             Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = { onOpenBacklogAndGlossary?.invoke() },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(backgroundColor = watermelon.surface2, contentColor = watermelon.text)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = null,
+                    tint = watermelon.green,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(context.getString(R.string.translator_backlog_and_glossary_title), fontWeight = FontWeight.SemiBold)
+            }
 
             Button(
                 onClick = {

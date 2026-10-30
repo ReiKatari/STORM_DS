@@ -5,7 +5,7 @@
     <string name="v780_search_no_results">No se encontraron ajustes</string>
     <string name="v780_search_results_count">Encontrados: %1$d</string>
     <string name="v780_rewind_summary_title">Estimación del búfer de rebobinado</string>
-    <string name="v780_rewind_summary_detail">Ventana: %1$d s (%2$d estados). Búfer de RAM estimado: ~%3$s (hasta %4$s en carga máxima).</string>
+    <string name="v780_rewind_summary_detail">Ventana: %1$d s (%2$s). Búfer de RAM estimado: ~%3$s (hasta %4$s en carga máxima).</string>
     <string name="v780_settings_maintenance_title">Mantenimiento y copia de seguridad de ajustes</string>
     <string name="v780_settings_export_json_title">Exportar ajustes a archivo JSON</string>
     <string name="v780_settings_export_json_summary">Guardar los ajustes actuales en un archivo JSON portable</string>
@@ -31,4 +31,12 @@
     <string name="v780_internal_randomize_mac_summary">Crear una dirección MAC aleatoria con prefijo de Nintendo 00:09:BF</string>
     <string name="v780_mac_generated">Dirección MAC de Nintendo generada: %1$s</string>
     <string name="v780_mac_invalid_format">Formato de dirección MAC inválido (debe ser XX:XX:XX:XX:XX:XX)</string>
+    <plurals name="v780_rom_folders_count">
+        <item quantity="one">%1$d carpeta</item>
+        <item quantity="other">%1$d carpetas</item>
+    </plurals>
+    <plurals name="v780_rewind_snapshots_count">
+        <item quantity="one">%1$d captura</item>
+        <item quantity="other">%1$d capturas</item>
+    </plurals>
 </resources>

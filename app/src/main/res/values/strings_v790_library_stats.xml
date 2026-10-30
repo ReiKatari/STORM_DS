@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_cover_pick">Choose custom cover</string>
+    <string name="custom_cover_reset">Reset custom cover</string>
+    <string name="custom_cover_error">Failed to load image</string>
+    <string name="rom_config_overclock_arm9">ARM9 overclock</string>
+    <string name="rom_config_overclock_default">Default</string>
+    <string name="rom_config_speed_multiplier">Fast forward speed</string>
+    <string name="rom_config_speed_unlimited">Unlimited</string>
+    <string name="rom_config_vulkan_driver">Vulkan GPU driver</string>
+    <string name="rom_config_vulkan_driver_global">Global driver</string>
+    <string name="rom_config_vulkan_driver_system">System GPU driver</string>
+    <string name="rom_filter_unplayed">Unplayed</string>
+    <string name="rom_filter_recently_played">Recently played</string>
+    <string name="rom_filter_has_saves">Has saves</string>
+    <string name="feature_stats_tab_overview">Overview</string>
+    <string name="feature_stats_tab_daily_log">Daily log</string>
+    <string name="feature_stats_export_json">Export JSON</string>
+    <string name="feature_stats_export_csv">Export CSV</string>
+    <string name="feature_stats_export_success">Stats exported to: %s</string>
+    <string name="feature_stats_export_error">Failed to export statistics</string>
+    <string name="feature_stats_no_sessions">No recorded gaming sessions</string>
+    <string name="feature_stats_sessions_count">%d sessions</string>
+    <string name="feature_stats_session_single">%d session</string>
+</resources>

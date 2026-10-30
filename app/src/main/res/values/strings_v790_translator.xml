@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_backlog_and_glossary_title">Dialogue backlog and user glossary</string>
+    <string name="translator_backlog_title">Dialogue backlog</string>
+    <string name="translator_glossary_title">User glossary</string>
+    <string name="translator_backlog_tab_history">Dialogue history (up to 50)</string>
+    <string name="translator_backlog_tab_glossary">Names and terms glossary</string>
+    <string name="translator_backlog_action_speak">Speak</string>
+    <string name="translator_backlog_action_copy">Copy</string>
+    <string name="translator_backlog_action_add_to_glossary">To glossary</string>
+    <string name="translator_backlog_clear_history">Clear backlog</string>
+    <string name="translator_backlog_empty_prompt">No dialogue recorded yet. Trigger translation while dialogue is shown in game.</string>
+    <string name="translator_backlog_copied_toast">Copied to clipboard</string>
+    <string name="translator_glossary_add_term">Add term</string>
+    <string name="translator_glossary_edit_term">Edit term</string>
+    <string name="translator_glossary_delete_term">Delete</string>
+    <string name="translator_glossary_export_path">Dictionary file</string>
+    <string name="translator_glossary_path_copied">Dictionary path copied: %s</string>
+    <string name="translator_glossary_empty_prompt">Glossary is empty. Add character names and terms for consistent translation.</string>
+    <string name="translator_glossary_source_label">Original term (in game)</string>
+    <string name="translator_glossary_target_label">Target translation</string>
+    <string name="translator_glossary_case_sensitive">Case sensitive</string>
+    <string name="translator_glossary_game_specific">Only for this game</string>
+    <string name="translator_glossary_saved_toast">Term \'%s\' saved to glossary</string>
+    <string name="translator_glossary_deleted_toast">Term removed from glossary</string>
+    <string name="translator_glossary_scope_global">Global</string>
+    <string name="translator_glossary_scope_game">Game specific</string>
+</resources>

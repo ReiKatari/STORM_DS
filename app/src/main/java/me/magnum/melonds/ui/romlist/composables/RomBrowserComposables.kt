@@ -321,6 +321,9 @@ fun FilterChipsRow(
     val items = listOf(
         RomFilter.ALL to R.string.rom_filter_all,
         RomFilter.FAVORITES to R.string.rom_filter_favorites,
+        RomFilter.RECENTLY_PLAYED to R.string.rom_filter_recently_played,
+        RomFilter.UNPLAYED to R.string.rom_filter_unplayed,
+        RomFilter.HAS_SAVES to R.string.rom_filter_has_saves,
         RomFilter.DS_ONLY to R.string.rom_filter_ds,
         RomFilter.DSI_ENHANCED_ONLY to R.string.rom_filter_dsi_enhanced,
         RomFilter.DSIWARE_ONLY to R.string.rom_filter_dsiware,
@@ -337,6 +340,9 @@ fun FilterChipsRow(
             val displayText = when (filter) {
                 RomFilter.ALL -> "🎮 $titleText"
                 RomFilter.FAVORITES -> "★ $titleText"
+                RomFilter.RECENTLY_PLAYED -> "🕒 $titleText"
+                RomFilter.UNPLAYED -> "✨ $titleText"
+                RomFilter.HAS_SAVES -> "💾 $titleText"
                 RomFilter.DS_ONLY -> "🎮 Nintendo DS"
                 RomFilter.DSI_ENHANCED_ONLY -> "⚡ Nintendo DSi Enhanced"
                 RomFilter.DSIWARE_ONLY -> "🕹️ Nintendo DSiWare"

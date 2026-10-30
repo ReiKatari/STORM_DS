@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">Scorciatoie combinate del gamepad (Select + pulsante)</string>
+    <string name="pref_input_chord_hotkeys_summary">Tieni premuto Select + pulsante (R=Avanti veloce, L=Riavvolgimento, Start=Pausa, Y=Schermata, X=Rallentatore)</string>
+    <string name="pref_input_turbo_frequency_title">Frequenza del turbo hardware</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (Predefinito)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">Turbo gamepad: Attivo (%d Hz)</string>
+    <string name="turbo_toast_disabled">Turbo gamepad: Disattivo</string>
+    <string name="input_slow_motion">Rallentatore</string>
+    <string name="input_frame_advance">Avanzamento fotogramma</string>
+    <string name="input_take_screenshot">Cattura schermata</string>
+    <string name="input_toggle_hardware_turbo">Modalità turbo del gamepad</string>
+    <string name="layout_editor_lock_component">Blocca elemento (protezione da spostamento)</string>
+    <string name="layout_editor_component_locked_toast">Elemento bloccato. Sblocca per spostare</string>
+    <string name="action_layout_multiselect">Selezione multipla</string>
+    <string name="action_layout_multiselect_summary">Seleziona e sposta più pulsanti insieme</string>
+    <string name="action_layout_live_test">Testa pulsanti</string>
+    <string name="action_layout_live_test_summary">Test interattivo dei pulsanti e multitouch</string>
+    <string name="live_test_status_idle">Modalità test: premi pulsanti sullo schermo • Indietro per tornare</string>
+    <string name="live_test_status_pressed_format">Modalità test: premuti [%s] • Indietro per tornare</string>
+    <string name="live_test_exit">Esci dal test</string>
+</resources>

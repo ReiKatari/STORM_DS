@@ -55,4 +55,13 @@
             android:summary="@string/auto_load_state_on_launch_summary"
             android:defaultValue="false"
             app:iconSpaceReserved="false" />
+
+    <ListPreference
+            android:key="periodic_auto_save_interval_minutes"
+            android:title="@string/periodic_auto_save_interval"
+            android:summary="%s"
+            app:iconSpaceReserved="false"
+            android:entries="@array/periodic_auto_save_intervals"
+            android:entryValues="@array/periodic_auto_save_interval_values"
+            android:defaultValue="0" />
 </PreferenceScreen>

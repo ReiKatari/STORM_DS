@@ -15,6 +15,7 @@ data class InputConfig(
                 NEGATIVE,
             }
         }
+        data class Chord(override val deviceId: Int?, val modifierKeyCode: Int, val triggerKeyCode: Int) : Assignment(deviceId)
     }
 
     fun hasKeyAssigned(): Boolean {

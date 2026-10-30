@@ -35,6 +35,12 @@ class InputAssignmentDtoTypeAdapter : JsonSerializer<InputConfigDto.AssignmentDt
                     add(AXIS_CODE_FIELD, JsonPrimitive(src.axisCode))
                     add(DIRECTION_FIELD, context.serialize(src.direction))
                 }
+                is InputConfigDto.AssignmentDto.Chord -> {
+                    add(TYPE_FIELD, JsonPrimitive(TYPE_CHORD))
+                    addNullableInt(DEVICE_ID_FIELD, src.deviceId)
+                    add(MODIFIER_KEY_CODE_FIELD, JsonPrimitive(src.modifierKeyCode))
+                    add(TRIGGER_KEY_CODE_FIELD, JsonPrimitive(src.triggerKeyCode))
+                }
             }
         }
     }
@@ -58,6 +64,11 @@ class InputAssignmentDtoTypeAdapter : JsonSerializer<InputConfigDto.AssignmentDt
                 axisCode = obj.requiredInt(AXIS_CODE_FIELD),
                 direction = context.deserialize(obj.required(DIRECTION_FIELD), InputConfig.Assignment.Axis.Direction::class.java),
             )
+            TYPE_CHORD -> InputConfigDto.AssignmentDto.Chord(
+                deviceId = obj.optionalInt(DEVICE_ID_FIELD),
+                modifierKeyCode = obj.requiredInt(MODIFIER_KEY_CODE_FIELD),
+                triggerKeyCode = obj.requiredInt(TRIGGER_KEY_CODE_FIELD),
+            )
             else -> throw JsonParseException("Unknown input assignment type")
         }
     }
@@ -69,6 +80,7 @@ class InputAssignmentDtoTypeAdapter : JsonSerializer<InputConfigDto.AssignmentDt
         }
 
         return when {
+            has(MODIFIER_KEY_CODE_FIELD) || has(TRIGGER_KEY_CODE_FIELD) -> TYPE_CHORD
             has(KEY_CODE_FIELD) -> TYPE_KEY
             has(AXIS_CODE_FIELD) -> TYPE_AXIS
             else -> TYPE_NONE
@@ -109,5 +121,8 @@ class InputAssignmentDtoTypeAdapter : JsonSerializer<InputConfigDto.AssignmentDt
         const val KEY_CODE_FIELD = "keyCode"
         const val AXIS_CODE_FIELD = "axisCode"
         const val DIRECTION_FIELD = "direction"
+        const val TYPE_CHORD = "chord"
+        const val MODIFIER_KEY_CODE_FIELD = "modifierKeyCode"
+        const val TRIGGER_KEY_CODE_FIELD = "triggerKeyCode"
     }
 }

@@ -5,7 +5,7 @@
     <string name="v780_search_no_results">設定が見つかりません</string>
     <string name="v780_search_results_count">件数: %1$d</string>
     <string name="v780_rewind_summary_title">巻き戻しバッファの推定</string>
-    <string name="v780_rewind_summary_detail">期間: %1$d 秒 (%2$d スナップショット)。推定 RAM バッファ: ~%3$s (最大負荷時 %4$s)。</string>
+    <string name="v780_rewind_summary_detail">期間: %1$d 秒 (%2$s)。推定 RAM バッファ: ~%3$s (最大負荷時 %4$s)。</string>
     <string name="v780_settings_maintenance_title">設定の保守とバックアップ</string>
     <string name="v780_settings_export_json_title">設定を JSON ファイルにエクスポート</string>
     <string name="v780_settings_export_json_summary">現在の設定をポータブルな JSON ファイルに保存します</string>
@@ -31,4 +31,10 @@
     <string name="v780_internal_randomize_mac_summary">任天堂プレフィックス 00:09:BF を持つランダムな MAC アドレスを生成</string>
     <string name="v780_mac_generated">任天堂 MAC アドレスを生成しました: %1$s</string>
     <string name="v780_mac_invalid_format">無効な MAC アドレス形式です（XX:XX:XX:XX:XX:XX である必要があります）</string>
+    <plurals name="v780_rom_folders_count">
+        <item quantity="other">%1$d 個のフォルダ</item>
+    </plurals>
+    <plurals name="v780_rewind_snapshots_count">
+        <item quantity="other">%1$d 個のスナップショット</item>
+    </plurals>
 </resources>

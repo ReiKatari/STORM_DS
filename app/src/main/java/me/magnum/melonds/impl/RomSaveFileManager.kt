@@ -30,6 +30,33 @@ class RomSaveFileManager @Inject constructor(
         val fileName: String,
     )
 
+    fun hasSaveFile(rom: Rom): Boolean {
+        return runCatching {
+            val baseName = rom.fileName.substringBeforeLast('.')
+            val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+            if (extRoot != null) {
+                val savesDir = File(extRoot, "STORM DS/saves")
+                if (File(savesDir, "$baseName.sav").exists() ||
+                    File(savesDir, "$baseName.srm").exists() ||
+                    File(savesDir, "$baseName.dsv").exists()) {
+                    return true
+                }
+            }
+            val saveRootDir = runCatching { settingsRepository.getSaveFileDirectory(rom) }.getOrNull()
+            if (saveRootDir != null) {
+                val directFile = me.magnum.melonds.utils.FileUtils.resolveDirectFileFromExternalStorageUri(saveRootDir)
+                if (directFile != null && directFile.isDirectory) {
+                    if (File(directFile, "$baseName.sav").exists() ||
+                        File(directFile, "$baseName.srm").exists() ||
+                        File(directFile, "$baseName.dsv").exists()) {
+                        return true
+                    }
+                }
+            }
+            findExistingSaveFile(rom) != null
+        }.getOrDefault(false)
+    }
+
     fun prepareShareFile(rom: Rom): SharedSaveFile? {
         val sourceDocument = findExistingSaveFile(rom) ?: return null
         val sourceUri = sourceDocument.uri

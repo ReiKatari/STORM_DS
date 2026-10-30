@@ -14,8 +14,57 @@ class SramProvider(
     private val uriHandler: UriHandler,
 ) {
 
+    companion object {
+        var lastRom: Rom? = null
+            internal set
+        var lastSramUri: Uri? = null
+            internal set
+    }
+
+    private fun rotateSramBackups(sramFileName: String, copyCurrent: (File) -> Boolean) {
+        runCatching {
+            val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+            val stormDsRoot = if (extRoot != null) File(extRoot, "STORM DS") else null
+            val cacheBackupDir = if (stormDsRoot != null && (stormDsRoot.exists() || stormDsRoot.mkdirs())) {
+                File(stormDsRoot, "cache/save_backups").apply { mkdirs() }
+            } else {
+                File(context.cacheDir, "save_backups").apply { mkdirs() }
+            }
+
+            val bak1 = File(cacheBackupDir, "$sramFileName.bak1")
+            val bak2 = File(cacheBackupDir, "$sramFileName.bak2")
+            val bak3 = File(cacheBackupDir, "$sramFileName.bak3")
+
+            // Rotate: .sav.bak3 <- .sav.bak2
+            if (bak2.exists() && bak2.length() > 0L) {
+                runCatching { bak2.copyTo(bak3, overwrite = true) }
+            }
+            // Rotate: .sav.bak2 <- .sav.bak1
+            if (bak1.exists() && bak1.length() > 0L) {
+                runCatching { bak1.copyTo(bak2, overwrite = true) }
+            }
+
+            // Copy current save to temporary file, verify size > 0, then atomically promote to bak1
+            val tempBak = File(cacheBackupDir, "$sramFileName.tmp_bak")
+            val copied = copyCurrent(tempBak)
+            if (copied && tempBak.exists() && tempBak.length() > 0L) {
+                if (!tempBak.renameTo(bak1)) {
+                    tempBak.copyTo(bak1, overwrite = true)
+                    tempBak.delete()
+                }
+                // Backward compatibility mirror for single .bak readers
+                val legacyBak = File(cacheBackupDir, "$sramFileName.bak")
+                runCatching { bak1.copyTo(legacyBak, overwrite = true) }
+                Log.i("SramProvider", "Rotated SRAM backups: bak3 <= bak2 <= bak1 <= current '$sramFileName'")
+            } else {
+                tempBak.delete()
+            }
+        }
+    }
+
     @Throws(SramLoadException::class)
     fun getSramForRom(rom: Rom): Uri {
+        lastRom = rom
         val rootDirUri = try {
             settingsRepository.getSaveFileDirectory(rom)
         } catch (_: Throwable) {
@@ -88,23 +137,21 @@ class SramProvider(
                 } else {
                     runCatching { File(saveDir, "$sramFileName.bak").takeIf { it.exists() }?.delete() }
                     if (sramFile.length() > 0L) {
-                        runCatching {
-                            val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
-                            val cacheBackupDir = if (extRoot != null) {
-                                File(extRoot, "STORM DS/cache/save_backups").apply { mkdirs() }
-                            } else {
-                                File(context.cacheDir, "save_backups").apply { mkdirs() }
-                            }
-                            val backupFile = File(cacheBackupDir, "$sramFileName.bak")
-                            sramFile.inputStream().use { input ->
-                                backupFile.outputStream().use { output ->
-                                    input.copyTo(output)
+                        rotateSramBackups(sramFileName) { destFile ->
+                            runCatching {
+                                sramFile.inputStream().use { input ->
+                                    destFile.outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
                                 }
-                            }
+                                true
+                            }.getOrDefault(false)
                         }
                     }
                 }
-                return Uri.fromFile(sramFile)
+                val resolvedUri = Uri.fromFile(sramFile)
+                lastSramUri = resolvedUri
+                return resolvedUri
             }
         }
 
@@ -121,37 +168,41 @@ class SramProvider(
                 Log.w("SramProvider", "Detected 0-byte corrupt save stub '$sramFileName', purging and recreating")
                 runCatching { sramDocument.delete() }
                 val recreated = rootDocument.createFile("*/*", sramFileName)?.uri
-                recreated ?: (rootDocument.findFile(sramFileName)?.uri ?: rootDocument.findFile("$sramFileName.bin")?.uri ?: throw SramLoadException("Could not recreate SRAM file at ${rootDocument.uri}"))
+                val resolvedUri = recreated ?: (rootDocument.findFile(sramFileName)?.uri ?: rootDocument.findFile("$sramFileName.bin")?.uri ?: throw SramLoadException("Could not recreate SRAM file at ${rootDocument.uri}"))
+                lastSramUri = resolvedUri
+                resolvedUri
             } else {
                 // Remove legacy in-place .bak duplicate to keep user folder clean
                 runCatching { rootDocument.findFile("$sramFileName.bak")?.delete() }
 
-                // Keep emergency recovery copy in STORM DS cache directory without cluttering user saves folder
-                runCatching {
-                    val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
-                    val cacheBackupDir = if (extRoot != null) {
-                        File(extRoot, "STORM DS/cache/save_backups").apply { mkdirs() }
-                    } else {
-                        File(context.cacheDir, "save_backups").apply { mkdirs() }
-                    }
-                    val backupFile = File(cacheBackupDir, "$sramFileName.bak")
-                    context.contentResolver.openInputStream(sramDocument.uri)?.use { input ->
-                        backupFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
+                // Rotate up to 3 verified backup copies in STORM DS cache directory
+                if (sramDocument.length() > 0L) {
+                    rotateSramBackups(sramFileName) { destFile ->
+                        runCatching {
+                            context.contentResolver.openInputStream(sramDocument.uri)?.use { input ->
+                                destFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            true
+                        }.getOrDefault(false)
                     }
                 }
-                sramDocument.uri
+                val resolvedUri = sramDocument.uri
+                lastSramUri = resolvedUri
+                resolvedUri
             }
         } else {
             val newSramUri = rootDocument.createFile("*/*", sramFileName)?.uri
-            if (newSramUri == null) {
+            val resolvedUri = if (newSramUri == null) {
                 rootDocument.findFile(sramFileName)?.uri
                     ?: rootDocument.findFile("$sramFileName.bin")?.uri
                     ?: throw SramLoadException("Could not create temporary SRAM file at ${rootDocument.uri}")
             } else {
                 newSramUri
             }
+            lastSramUri = resolvedUri
+            resolvedUri
         }
     }
 }

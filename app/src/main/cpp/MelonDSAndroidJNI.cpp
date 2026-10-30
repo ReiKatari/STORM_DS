@@ -42,6 +42,9 @@
 #include <filesystem>
 
 #include "Platform.h"
+#include "MelonInstance.h"
+#include "MicInputOboeCallback.h"
+#include "VulkanContext.h"
 #include "VulkanRuntimeControls.h"
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
@@ -2860,4 +2863,91 @@ Java_me_magnum_melonds_MelonEmulator_dumpVulkanDebugReport(JNIEnv* env, jclass, 
     return ofs.good() ? JNI_TRUE : JNI_FALSE;
 }
 
-} // extern "C"
+
+JNIEXPORT jbyteArray JNICALL
+Java_me_magnum_melonds_MelonEmulator_readMainRamSnapshot(JNIEnv* env, jclass)
+{
+    auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
+    if (!currentInstance)
+        return nullptr;
+
+    melonDS::NDS* nds = currentInstance->getNDS();
+    if (!nds || !nds->MainRAM)
+        return nullptr;
+
+    const jsize ramSize = static_cast<jsize>((nds->MainRAMMask == 0xFFFFFF) ? 0x1000000 : 0x400000);
+    jbyteArray byteArray = env->NewByteArray(ramSize);
+    if (!byteArray)
+        return nullptr;
+
+    env->SetByteArrayRegion(byteArray, 0, ramSize, reinterpret_cast<const jbyte*>(nds->MainRAM));
+    return byteArray;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_writeMainRamValue(JNIEnv*, jclass, jint offset, jint byteSize, jlong value)
+{
+    if (offset < 0 || byteSize <= 0 || (byteSize != 1 && byteSize != 2 && byteSize != 4))
+        return JNI_FALSE;
+
+    auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
+    if (!currentInstance)
+        return JNI_FALSE;
+
+    melonDS::NDS* nds = currentInstance->getNDS();
+    if (!nds || !nds->MainRAM)
+        return JNI_FALSE;
+
+    const uint32_t ramSize = (nds->MainRAMMask == 0xFFFFFF) ? 0x1000000 : 0x400000;
+    const uint32_t uOffset = static_cast<uint32_t>(offset);
+    const uint32_t uSize = static_cast<uint32_t>(byteSize);
+
+    if (uOffset + uSize > ramSize)
+        return JNI_FALSE;
+
+    if (uSize == 1)
+    {
+        *(reinterpret_cast<uint8_t*>(nds->MainRAM + uOffset)) = static_cast<uint8_t>(value & 0xFF);
+    }
+    else if (uSize == 2)
+    {
+        uint16_t v16 = static_cast<uint16_t>(value & 0xFFFF);
+        std::memcpy(nds->MainRAM + uOffset, &v16, sizeof(v16));
+    }
+    else if (uSize == 4)
+    {
+        uint32_t v32 = static_cast<uint32_t>(value & 0xFFFFFFFF);
+        std::memcpy(nds->MainRAM + uOffset, &v32, sizeof(v32));
+    }
+    else
+    {
+        return JNI_FALSE;
+    }
+
+    return JNI_TRUE;
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setMicrophoneAgcEnabled(JNIEnv*, jclass, jboolean enabled)
+{
+    MicInputOboeCallback::agcEnabled.store(enabled == JNI_TRUE, std::memory_order_relaxed);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanPipelineCacheFile(JNIEnv* env, jclass, jstring filePath)
+{
+    if (!filePath)
+    {
+        melonDS::VulkanContext::SetPipelineCacheFilePath("");
+        return;
+    }
+
+    const char* nativePath = env->GetStringUTFChars(filePath, nullptr);
+    if (nativePath)
+    {
+        melonDS::VulkanContext::SetPipelineCacheFilePath(nativePath);
+        env->ReleaseStringUTFChars(filePath, nativePath);
+    }
+}
+
+}

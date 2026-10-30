@@ -62,7 +62,7 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         if (viewModel.areCheatsBeingImported()) {
             CheatsImportProgressDialog().show(childFragmentManager, null)
         } else {
-            cheatFilePickerLauncher.launch(Pair(null, arrayOf("text/xml", "application/xml", "application/zip")))
+            cheatFilePickerLauncher.launch(Pair(null, arrayOf("text/xml", "application/xml", "application/zip", "application/octet-stream", "*/*")))
         }
     }
 

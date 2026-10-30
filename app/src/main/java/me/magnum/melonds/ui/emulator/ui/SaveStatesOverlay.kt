@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.emulator.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -46,13 +47,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.SaveStateSlot
+import me.magnum.melonds.impl.saves.RomDataBundleExporter
 import me.magnum.melonds.ui.common.GamepadHint
 import me.magnum.melonds.ui.common.GamepadHintsFooter
+import me.magnum.melonds.ui.emulator.savestate.SaveStateUndoManager
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
+import me.magnum.melonds.utils.RussianPlurals
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -210,8 +215,84 @@ fun SaveStatesOverlay(
                             )
                         }
 
-                        // ↩️ UNDO OVERWRITE BUTTON (1-Click Restore Overwritten Slot)
-                        if (undoSlotNumber != null && onUndoOverwrite != null) {
+                        // 📦 ROM DATA BUNDLE EXPORTER (.zip)
+                        var isExportingBundle by remember { mutableStateOf(false) }
+                        val coroutineScope = rememberCoroutineScope()
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.surface2)
+                                .border(1.2.dp, Color(0xFF38BDF8).copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                                .clickable(enabled = !isExportingBundle) {
+                                    isExportingBundle = true
+                                    Toast.makeText(context, context.getString(R.string.export_data_bundle_in_progress), Toast.LENGTH_SHORT).show()
+                                    coroutineScope.launch {
+                                        val result = RomDataBundleExporter.exportBundle(
+                                            context = context,
+                                            rom = null,
+                                            slots = slots,
+                                        )
+                                        isExportingBundle = false
+                                        result.fold(
+                                            onSuccess = { savedPath ->
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.export_data_bundle_success, savedPath),
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            },
+                                            onFailure = { error ->
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.export_data_bundle_error, error.message ?: ""),
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Archive,
+                                    contentDescription = stringResource(R.string.export_data_bundle_button),
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = if (isExportingBundle) stringResource(R.string.export_data_bundle_in_progress) else stringResource(R.string.export_data_bundle_button),
+                                    color = Color(0xFF38BDF8),
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+
+                        // ↩️ UNDO OVERWRITE BUTTON (LIFO Multi-Step Stack)
+                        val undoCount = SaveStateUndoManager.getActiveUndoCount()
+                        val topUndo = SaveStateUndoManager.peekTopUndo()
+                        val effectiveUndoSlot = undoSlotNumber ?: topUndo?.slotNumber
+
+                        if (effectiveUndoSlot != null && onUndoOverwrite != null && (undoCount > 0 || undoSlotNumber != null)) {
+                            val isRu = RussianPlurals.isRussian(context.resources)
+                            val slotLabel = if (effectiveUndoSlot == 0) {
+                                if (isRu) "⚡ Быстрый" else "⚡ Quick"
+                            } else {
+                                if (isRu) "Слот $effectiveUndoSlot" else "Slot $effectiveUndoSlot"
+                            }
+                            val displayCount = if (undoCount > 0) undoCount else 1
+                            val stepLabel = if (isRu) {
+                                RussianPlurals.format(displayCount, "шаг", "шага", "шагов")
+                            } else {
+                                "$displayCount ${if (displayCount == 1) "step" else "steps"}"
+                            }
+
                             Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
@@ -231,7 +312,7 @@ fun SaveStatesOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = stringResource(R.string.undo_overwrite_button),
+                                        text = if (isRu) "Откат: $slotLabel ($stepLabel)" else "Undo: $slotLabel ($stepLabel)",
                                         color = Color(0xFFFF9800),
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.sp,

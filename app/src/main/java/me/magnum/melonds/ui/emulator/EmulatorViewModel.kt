@@ -2262,6 +2262,11 @@ class EmulatorViewModel @Inject constructor(
                     RomPauseMenuOption.SCREEN_LAYOUT -> _uiEvent.tryEmit(EmulatorUiEvent.ShowScreenLayoutDialog)
                     RomPauseMenuOption.RENDERER_DEBUG -> _uiEvent.tryEmit(EmulatorUiEvent.ShowRendererDebugMenu)
                     RomPauseMenuOption.RESET_COMPATIBILITY -> resetCurrentRomCompatibilityMode()
+                    RomPauseMenuOption.QUICK_SLOT_CAROUSEL,
+                    RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE,
+                    RomPauseMenuOption.TAKE_SCREENSHOT,
+                    RomPauseMenuOption.SLOW_MOTION,
+                    RomPauseMenuOption.FRAME_ADVANCE -> Unit
                     RomPauseMenuOption.RESET -> resetEmulator()
                     RomPauseMenuOption.EXIT -> exitEmulator()
                 }
@@ -2373,14 +2378,19 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    fun doQuickSave() {
+    fun doQuickSave(targetSlotNumber: Int? = null) {
         val currentState = _emulatorState.value
         when (currentState) {
             is EmulatorState.RunningRom -> {
                 sessionCoroutineScope.launch {
                     emulatorManager.pauseEmulator()
-                    val quickSlot = getRomQuickSaveStateSlot(currentState.rom)
-                    if (saveRomState(currentState.rom, quickSlot)) {
+                    val targetSlot = if (targetSlotNumber == null || targetSlotNumber == 0) {
+                        getRomQuickSaveStateSlot(currentState.rom)
+                    } else {
+                        saveStatesRepository.getRomSaveStates(currentState.rom).firstOrNull { it.slot == targetSlotNumber }
+                            ?: SaveStateSlot(targetSlotNumber, false, null, null)
+                    }
+                    if (saveRomState(currentState.rom, targetSlot)) {
                         _toastEvent.emit(ToastEvent.QuickSaveSuccessful)
                     }
                     resumeEmulatorIfSessionCanRun()
@@ -2395,15 +2405,20 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    fun doQuickLoad() {
+    fun doQuickLoad(targetSlotNumber: Int? = null) {
         val currentState = _emulatorState.value
         when (currentState) {
             is EmulatorState.RunningRom -> {
                 if (emulatorSession.areSaveStateLoadsAllowed()) {
                     sessionCoroutineScope.launch {
                         emulatorManager.pauseEmulator()
-                        val quickSlot = getRomQuickSaveStateSlot(currentState.rom)
-                        if (loadRomState(currentState.rom, quickSlot)) {
+                        val targetSlot = if (targetSlotNumber == null || targetSlotNumber == 0) {
+                            getRomQuickSaveStateSlot(currentState.rom)
+                        } else {
+                            saveStatesRepository.getRomSaveStates(currentState.rom).firstOrNull { it.slot == targetSlotNumber }
+                                ?: SaveStateSlot(targetSlotNumber, false, null, null)
+                        }
+                        if (loadRomState(currentState.rom, targetSlot)) {
                             _toastEvent.emit(ToastEvent.QuickLoadSuccessful)
                         }
                         resumeEmulatorIfSessionCanRun()
@@ -2419,6 +2434,81 @@ class EmulatorViewModel @Inject constructor(
                 // Do nothing
             }
         }
+    }
+
+    suspend fun doPeriodicAutoSave(): Boolean {
+        val currentState = _emulatorState.value as? EmulatorState.RunningRom ?: return false
+        val rom = currentState.rom
+        val uri = saveStatesRepository.getPeriodicAutoSaveUri(rom)
+        val success = emulatorManager.saveState(uri)
+        if (success) {
+            withContext(Dispatchers.IO) {
+                val slot = SaveStateSlot(
+                    slot = SaveStateSlot.PERIODIC_AUTO_SAVE_SLOT,
+                    exists = true,
+                    lastUsedDate = java.util.Date(),
+                    screenshot = null,
+                    customName = "Periodic Auto-Save"
+                )
+                saveStatesRepository.deleteRomSaveStateScreenshot(rom, slot)
+                emulatorManager.takeScreenshot()
+                val screenshot = screenshotFrameBufferProvider.getScreenshot()
+                saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
+            }
+            _toastEvent.emit(ToastEvent.PeriodicAutoSaveCompleted)
+        }
+        return success
+    }
+
+    fun hasPeriodicAutoSave(rom: Rom): Boolean {
+        return saveStatesRepository.getPeriodicAutoSaveSlot(rom).exists
+    }
+
+    fun loadPeriodicAutoSave() {
+        val currentState = _emulatorState.value as? EmulatorState.RunningRom ?: return
+        if (!emulatorSession.areSaveStateLoadsAllowed()) {
+            _toastEvent.tryEmit(ToastEvent.CannotLoadSaveStatesWhenRAHardcoreIsEnabled)
+            return
+        }
+        val slot = saveStatesRepository.getPeriodicAutoSaveSlot(currentState.rom)
+        if (!slot.exists) {
+            _toastEvent.tryEmit(ToastEvent.StateStateDoesNotExist)
+            return
+        }
+        sessionCoroutineScope.launch {
+            emulatorManager.pauseEmulator()
+            val uri = saveStatesRepository.getPeriodicAutoSaveUri(currentState.rom)
+            val success = emulatorManager.loadState(uri)
+            if (success) {
+                _achievementsEvent.emit(RAEventUi.Reset)
+                _toastEvent.emit(ToastEvent.PeriodicAutoSaveLoaded)
+            } else {
+                _toastEvent.emit(ToastEvent.StateLoadFailed)
+            }
+            resumeEmulatorIfSessionCanRun()
+        }
+    }
+
+    fun isRetroAchievementsHardcoreActive(): Boolean {
+        return emulatorSession.isRetroAchievementsHardcoreModeEnabled || settingsRepository.isRetroAchievementsHardcoreEnabled()
+    }
+
+    fun switchToSoftcore() {
+        settingsRepository.setRetroAchievementsHardcoreEnabled(false)
+        emulatorSession.switchToSoftcore()
+    }
+
+    fun getPeriodicAutoSaveIntervalMinutes(): Int {
+        return settingsRepository.getPeriodicAutoSaveIntervalMinutes()
+    }
+
+    fun getActiveQuickSlot(): Int {
+        return settingsRepository.getActiveQuickSlot()
+    }
+
+    fun setActiveQuickSlot(slot: Int) {
+        settingsRepository.setActiveQuickSlot(slot)
+        _toastEvent.tryEmit(ToastEvent.QuickSlotSelected(slot))
     }
 
     fun deleteSaveStateSlot(slot: SaveStateSlot, onSlotsUpdated: (List<SaveStateSlot>) -> Unit) {
@@ -3194,11 +3284,11 @@ class EmulatorViewModel @Inject constructor(
         return fileRomProcessor?.getRomInfo(rom)
     }
 
-    private suspend fun getRomSaveStateSlots(rom: Rom): List<SaveStateSlot> = withContext(Dispatchers.IO) {
+    suspend fun getRomSaveStateSlots(rom: Rom): List<SaveStateSlot> = withContext(Dispatchers.IO) {
         saveStatesRepository.getRomSaveStates(rom)
     }
 
-    private suspend fun getRomQuickSaveStateSlot(rom: Rom): SaveStateSlot = withContext(Dispatchers.IO) {
+    suspend fun getRomQuickSaveStateSlot(rom: Rom): SaveStateSlot = withContext(Dispatchers.IO) {
         saveStatesRepository.getRomQuickSaveStateSlot(rom)
     }
 
@@ -6603,7 +6693,11 @@ class EmulatorViewModel @Inject constructor(
             RomPauseMenuOption.ROM_SETTINGS -> _emulatorState.value is EmulatorState.RunningRom
             RomPauseMenuOption.SAVE_STATE -> emulatorSession.areSaveStatesAllowed()
             RomPauseMenuOption.REWIND -> settingsRepository.isRewindEnabled() && emulatorSession.areSaveStateLoadsAllowed()
-            RomPauseMenuOption.LOAD_STATE -> emulatorSession.areSaveStateLoadsAllowed()
+            RomPauseMenuOption.LOAD_STATE -> true
+            RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE -> {
+                val rom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+                rom != null && hasPeriodicAutoSave(rom)
+            }
             RomPauseMenuOption.CHEATS -> true
             RomPauseMenuOption.VIEW_ACHIEVEMENTS -> emulatorSession.isRetroAchievementsEnabledForSession()
             RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS -> buildRaPendingSyncMenuState().isVisible

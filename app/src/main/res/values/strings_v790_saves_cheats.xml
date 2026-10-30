@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Export data bundle (.zip)</string>
+    <string name="export_data_bundle_success">Game data bundle saved: %s</string>
+    <string name="export_data_bundle_error">Failed to export data bundle: %s</string>
+    <string name="export_data_bundle_in_progress">Exporting data bundle...</string>
+    <string name="undo_overwrite_multi_step">Undo slot %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d steps</string>
+    <string name="ra_sync_queue_button">Sync now</string>
+    <string name="ra_sync_queue_success">Offline achievement queue successfully submitted to server</string>
+    <string name="ra_sync_queue_error">Error syncing achievement queue: %s</string>
+    <string name="ra_sync_queue_empty">No pending offline achievements to submit</string>
+    <string name="ra_sync_queue_syncing">Syncing queue...</string>
+    <string name="cheat_import_dat_success">DAT cheat database successfully imported</string>
+    <string name="cheat_import_supported_formats">Supports XML, DAT (usrcheat.dat) and ZIP archives</string>
+</resources>

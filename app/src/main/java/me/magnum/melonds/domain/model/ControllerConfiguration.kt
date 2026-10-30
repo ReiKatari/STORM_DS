@@ -32,6 +32,10 @@ class ControllerConfiguration(
             Input.LOCK_ROTATION,
             Input.TOGGLE_EXTRA_BUTTONS,
             Input.TOGGLE_ANALOG_STICK,
+            Input.SLOW_MOTION,
+            Input.FRAME_ADVANCE,
+            Input.TAKE_SCREENSHOT,
+            Input.TOGGLE_HARDWARE_TURBO,
         )
     }
 
@@ -72,6 +76,21 @@ class ControllerConfiguration(
                 } ?: false
             }
         }?.input
+    }
+
+    fun chordToInput(modifierKey: Int, triggerKey: Int): Input? {
+        for (config in inputMapper) {
+            val assignments = listOf(config.assignment, config.altAssignment)
+            for (assignment in assignments) {
+                if (assignment is InputConfig.Assignment.Chord &&
+                    assignment.modifierKeyCode == modifierKey &&
+                    assignment.triggerKeyCode == triggerKey
+                ) {
+                    return config.input
+                }
+            }
+        }
+        return null
     }
 
     fun copy(): ControllerConfiguration {

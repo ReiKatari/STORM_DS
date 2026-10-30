@@ -3,6 +3,7 @@ package me.magnum.melonds.impl
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.VulkanDriverMode
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import org.json.JSONObject
@@ -29,6 +30,44 @@ class AdrenoVulkanDriverManager(
             NoDriver,
             AmbiguousDriver,
         }
+    }
+
+    init {
+        updateActiveDriverPipelineCachePath()
+    }
+
+    fun getPipelineCacheFileForActiveDriver(): File {
+        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+        val config = settingsRepository.getVulkanDriverConfiguration(context.applicationInfo.nativeLibraryDir)
+        val driverKey = when {
+            config.mode == VulkanDriverMode.CUSTOM && !config.customDriverDisplayName.isNullOrBlank() -> {
+                config.customDriverDisplayName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            }
+            config.mode == VulkanDriverMode.CUSTOM && !config.customDriverName.isNullOrBlank() -> {
+                config.customDriverName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            }
+            else -> "system"
+        }
+        return File(cacheDir, "$driverKey.bin")
+    }
+
+    fun updateActiveDriverPipelineCachePath() {
+        val file = getPipelineCacheFileForActiveDriver()
+        MelonEmulator.setVulkanPipelineCacheFile(file.absolutePath)
+    }
+
+    fun setSystemDriver() {
+        settingsRepository.setVulkanDriverMode(VulkanDriverMode.SYSTEM)
+        updateActiveDriverPipelineCachePath()
+    }
+
+    fun selectDriver(id: String) {
+        settingsRepository.setSelectedVulkanDriver(id)
+        settingsRepository.setVulkanDriverMode(VulkanDriverMode.CUSTOM)
+        updateActiveDriverPipelineCachePath()
     }
 
     val isSupported: Boolean
@@ -79,6 +118,7 @@ class AdrenoVulkanDriverManager(
                 displayName = importedDisplayName,
             )
             settingsRepository.setVulkanDriverMode(VulkanDriverMode.CUSTOM)
+            updateActiveDriverPipelineCachePath()
             return ImportResult(driverId, importedDisplayName)
         } catch (e: ImportException) {
             pendingRoot.deleteRecursively()
@@ -96,6 +136,7 @@ class AdrenoVulkanDriverManager(
             ?.let { File(it).parentFile }
             ?.deleteRecursively()
         settingsRepository.removeCustomVulkanDriver(id)
+        updateActiveDriverPipelineCachePath()
     }
 
     private fun queryDisplayName(uri: Uri): String? {
@@ -152,6 +193,7 @@ class AdrenoVulkanDriverManager(
             )
             settingsRepository.setSelectedVulkanDriver(driverId)
             settingsRepository.setVulkanDriverMode(VulkanDriverMode.CUSTOM)
+            updateActiveDriverPipelineCachePath()
             return ImportResult(driverId, importedDisplayName)
         } catch (e: ImportException) {
             pendingRoot.deleteRecursively()

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Exporter le pack de donnees (.zip)</string>
+    <string name="export_data_bundle_success">Pack de donnees du jeu enregistre : %s</string>
+    <string name="export_data_bundle_error">Erreur lors de l\'exportation du pack de donnees : %s</string>
+    <string name="export_data_bundle_in_progress">Exportation du pack de donnees...</string>
+    <string name="undo_overwrite_multi_step">Annuler l\'emplacement %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d etapes</string>
+    <string name="ra_sync_queue_button">Synchroniser maintenant</string>
+    <string name="ra_sync_queue_success">File d\'attente des succes hors ligne transmise avec succes</string>
+    <string name="ra_sync_queue_error">Erreur de synchronisation de la file : %s</string>
+    <string name="ra_sync_queue_empty">Aucun succes hors ligne en attente</string>
+    <string name="ra_sync_queue_syncing">Synchronisation de la file...</string>
+    <string name="cheat_import_dat_success">Base de codes de triche DAT importee avec succes</string>
+    <string name="cheat_import_supported_formats">Prend en charge XML, DAT (usrcheat.dat) et les archives ZIP</string>
+</resources>

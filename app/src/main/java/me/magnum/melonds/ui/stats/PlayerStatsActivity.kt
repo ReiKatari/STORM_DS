@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +41,11 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.DateRange
+import android.widget.Toast
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -93,6 +99,12 @@ enum class StatsSortOption {
     RECENT,
 }
 
+enum class StatsTab {
+    OVERVIEW,
+    DAILY_LOG,
+}
+
+
 @AndroidEntryPoint
 class PlayerStatsActivity : AppCompatActivity() {
 
@@ -109,10 +121,32 @@ class PlayerStatsActivity : AppCompatActivity() {
             MelonTheme {
                 val summary by viewModel.summary.collectAsState()
                 val boxArtByUri by viewModel.boxArtByUri.collectAsState()
+                val dailySessions by viewModel.dailySessions.collectAsState()
                 PlayerStatsScreen(
                     summary = summary,
+                    dailySessions = dailySessions,
                     boxArtByUri = boxArtByUri,
                     onBackClick = { finish() },
+                    onExportJson = {
+                        viewModel.exportJson { file ->
+                            val msg = if (file != null) {
+                                getString(R.string.feature_stats_export_success, file.name)
+                            } else {
+                                getString(R.string.feature_stats_export_error)
+                            }
+                            Toast.makeText(this@PlayerStatsActivity, msg, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    onExportCsv = {
+                        viewModel.exportCsv { file ->
+                            val msg = if (file != null) {
+                                getString(R.string.feature_stats_export_success, file.name)
+                            } else {
+                                getString(R.string.feature_stats_export_error)
+                            }
+                            Toast.makeText(this@PlayerStatsActivity, msg, Toast.LENGTH_LONG).show()
+                        }
+                    },
                 )
             }
         }
@@ -134,6 +168,9 @@ class PlayerStatsViewModel @Inject constructor(
     private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())
     val boxArtByUri: StateFlow<Map<String, String>> = _boxArtByUri.asStateFlow()
 
+    private val _dailySessions = MutableStateFlow<List<PlayStatsStore.DailySessionLog>>(emptyList())
+    val dailySessions: StateFlow<List<PlayStatsStore.DailySessionLog>> = _dailySessions.asStateFlow()
+
     init {
         viewModelScope.launch(Dispatchers.IO) {
             val cached = runCatching { boxArtRepository.getAllCachedMatches() }.getOrDefault(emptyMap())
@@ -144,7 +181,22 @@ class PlayerStatsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             romsRepository.getRoms().collectLatest { roms ->
                 _summary.value = PlayStatsStore.buildSummary(getApplication(), roms)
+                _dailySessions.value = PlayStatsStore.getDailySessionLogs(getApplication())
             }
+        }
+    }
+
+    fun exportJson(onResult: (java.io.File?) -> Unit) {
+        viewModelScope.launch {
+            val file = runCatching { PlayStatsStore.exportToJson(getApplication()) }.getOrNull()
+            withContext(Dispatchers.Main) { onResult(file) }
+        }
+    }
+
+    fun exportCsv(onResult: (java.io.File?) -> Unit) {
+        viewModelScope.launch {
+            val file = runCatching { PlayStatsStore.exportToCsv(getApplication()) }.getOrNull()
+            withContext(Dispatchers.Main) { onResult(file) }
         }
     }
 }
@@ -152,8 +204,11 @@ class PlayerStatsViewModel @Inject constructor(
 @Composable
 private fun PlayerStatsScreen(
     summary: PlayStatsStore.PlayerStatsSummary,
+    dailySessions: List<PlayStatsStore.DailySessionLog>,
     boxArtByUri: Map<String, String>,
     onBackClick: () -> Unit,
+    onExportJson: () -> Unit,
+    onExportCsv: () -> Unit,
 ) {
     val colors = watermelon
     val accentColor = Color(AppThemeManager.getAccentColor())
@@ -200,8 +255,52 @@ private fun PlayerStatsScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                IconButton(onClick = onExportJson, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.Code,
+                        contentDescription = stringResource(R.string.feature_stats_export_json),
+                        tint = colors.text2,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                IconButton(onClick = onExportCsv, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.TableChart,
+                        contentDescription = stringResource(R.string.feature_stats_export_csv),
+                        tint = colors.text2,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+
+            var currentTab by remember { androidx.compose.runtime.mutableStateOf(StatsTab.OVERVIEW) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                StatsSortChip(
+                    label = stringResource(R.string.feature_stats_tab_overview),
+                    isSelected = currentTab == StatsTab.OVERVIEW,
+                    onClick = { currentTab = StatsTab.OVERVIEW },
+                    accentColor = accentColor,
+                    modifier = Modifier.weight(1f),
+                )
+                StatsSortChip(
+                    label = stringResource(R.string.feature_stats_tab_daily_log),
+                    isSelected = currentTab == StatsTab.DAILY_LOG,
+                    onClick = { currentTab = StatsTab.DAILY_LOG },
+                    accentColor = accentColor,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+
+            if (currentTab == StatsTab.DAILY_LOG) {
+                DailySessionsView(dailySessions = dailySessions, accentColor = accentColor)
+            } else {
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -363,6 +462,119 @@ private fun PlayerStatsScreen(
                                 }
                             }
                         }
+                    }
+                }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DailySessionsView(
+    dailySessions: List<PlayStatsStore.DailySessionLog>,
+    accentColor: Color,
+) {
+    val colors = watermelon
+    val context = LocalContext.current
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+    if (dailySessions.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            EmptyStatsCard()
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        items(dailySessions, key = { it.dayKey }) { dayGroup ->
+            val isRu = me.magnum.melonds.utils.RussianPlurals.isRussian(context.resources)
+            val sessionCountText = if (isRu) {
+                me.magnum.melonds.utils.RussianPlurals.format(dayGroup.sessionCount, "сессия", "сессии", "сессий")
+            } else {
+                context.getString(if (dayGroup.sessionCount == 1) R.string.feature_stats_session_single else R.string.feature_stats_sessions_count, dayGroup.sessionCount)
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+                    .padding(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.DateRange,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = dayGroup.dayKey,
+                            color = colors.text,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Text(
+                        text = "${formatStatsDuration(dayGroup.totalDurationMs)} · $sessionCountText",
+                        color = colors.text3,
+                        fontFamily = WatermelonMono,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line.copy(alpha = 0.5f)))
+                Spacer(Modifier.height(8.dp))
+
+                dayGroup.sessions.forEach { sess ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = sess.romName,
+                                color = colors.text,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = timeFormat.format(Date(sess.startedAtMs)),
+                                color = colors.text3,
+                                fontFamily = WatermelonMono,
+                                fontSize = 10.sp,
+                            )
+                        }
+                        Text(
+                            text = formatStatsDuration(sess.durationMs),
+                            color = accentColor,
+                            fontFamily = WatermelonMono,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
                 }
             }

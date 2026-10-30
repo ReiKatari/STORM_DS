@@ -52,6 +52,8 @@ import me.magnum.melonds.R
 fun Slot2PeripheralOverlay(
     addonType: Int,
     solarLevel: Int = -1,
+    currentLux: Float = 0f,
+    currentSensorBars: Int = 0,
     onSolarLevelChanged: ((level: Int) -> Unit)? = null,
     onGuitarFretStateChanged: (fretIndex: Int, pressed: Boolean) -> Unit,
     onPaddleAnalogDelta: (deltaX: Float) -> Unit,
@@ -76,6 +78,8 @@ fun Slot2PeripheralOverlay(
         when (addonType) {
             3 -> SolarSensorOverlay(
                 currentLevel = solarLevel,
+                currentLux = currentLux,
+                currentSensorBars = currentSensorBars,
                 onLevelChanged = { onSolarLevelChanged?.invoke(it) },
                 onDismiss = onDismissOverlay,
             )
@@ -94,12 +98,15 @@ fun Slot2PeripheralOverlay(
 @Composable
 private fun SolarSensorOverlay(
     currentLevel: Int,
+    currentLux: Float = 0f,
+    currentSensorBars: Int = 0,
     onLevelChanged: (level: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var sliderValue by remember(currentLevel) {
-        mutableFloatStateOf(if (currentLevel < 0) 5f else currentLevel.toFloat().coerceIn(0f, 10f))
+        mutableFloatStateOf(if (currentLevel < 0) currentSensorBars.toFloat().coerceIn(0f, 10f) else currentLevel.toFloat().coerceIn(0f, 10f))
     }
+    val isAutoMode = currentLevel < 0
 
     Box(
         modifier = Modifier
@@ -126,6 +133,14 @@ private fun SolarSensorOverlay(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
+                if (isAutoMode) {
+                    Text(
+                        text = stringResource(R.string.solar_sensor_auto_status, currentLux, currentSensorBars),
+                        color = Color(0xFF00D2FF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 Text(
                     text = "✕",
                     color = Color(0xFF94A3B8),
@@ -140,20 +155,21 @@ private fun SolarSensorOverlay(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 4 Instant Light Preset Chips
+            // 5 Instant Light Preset Chips: Auto (-2), 0%, 35%, 70%, 100%
             Row(
                 modifier = Modifier.fillMaxWidth(0.95f),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val presets = listOf(
+                    -2 to stringResource(R.string.solar_sensor_mode_auto),
                     0 to stringResource(R.string.solar_preset_0),
                     4 to stringResource(R.string.solar_preset_35),
                     7 to stringResource(R.string.solar_preset_70),
                     10 to stringResource(R.string.solar_preset_100),
                 )
                 presets.forEach { (level, label) ->
-                    val isSelected = sliderValue.toInt() == level
+                    val isSelected = if (level == -2) isAutoMode else (!isAutoMode && sliderValue.toInt() == level)
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -165,8 +181,12 @@ private fun SolarSensorOverlay(
                                 RoundedCornerShape(8.dp),
                             )
                             .clickable {
-                                sliderValue = level.toFloat()
-                                onLevelChanged(level)
+                                if (level == -2) {
+                                    onLevelChanged(-2)
+                                } else {
+                                    sliderValue = level.toFloat()
+                                    onLevelChanged(level)
+                                }
                             }
                             .padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center,
@@ -174,7 +194,7 @@ private fun SolarSensorOverlay(
                         Text(
                             text = label,
                             color = if (isSelected) Color(0xFFFFB74D) else Color.White,
-                            fontSize = 9.5.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -190,15 +210,16 @@ private fun SolarSensorOverlay(
                 modifier = Modifier.fillMaxWidth(0.92f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val displayLevel = if (isAutoMode) currentSensorBars else sliderValue.toInt()
                 Text(
-                    text = "${(sliderValue * 10).toInt()}%",
+                    text = "${(displayLevel * 10)}%",
                     color = Color(0xFFFFB74D),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.width(36.dp),
                 )
                 Slider(
-                    value = sliderValue,
+                    value = if (isAutoMode) currentSensorBars.toFloat() else sliderValue,
                     onValueChange = { newVal ->
                         sliderValue = newVal
                         onLevelChanged(newVal.toInt())

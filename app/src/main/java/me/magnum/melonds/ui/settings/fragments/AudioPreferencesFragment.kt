@@ -6,7 +6,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.ListPreference
 import androidx.preference.SeekBarPreference
+import androidx.preference.SwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.extensions.isMicrophonePermissionGranted
@@ -18,6 +20,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     private var micSourcePreference: ListPreference? = null
     private var audioLatencyPreference: ListPreference? = null
+    private var agcNoiseGatePreference: SwitchPreference? = null
 
     private val microphonePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -33,6 +36,16 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val volumePreference = findPreference<SeekBarPreference>("volume")
         micSourcePreference = findPreference("mic_source")
         audioLatencyPreference = findPreference("audio_latency")
+        agcNoiseGatePreference = findPreference("mic_agc_noise_gate_enabled")
+
+        agcNoiseGatePreference?.let { pref ->
+            MelonEmulator.setMicrophoneAgcEnabled(pref.isChecked)
+            pref.setOnPreferenceChangeListener { _, newValue ->
+                val enabled = newValue as? Boolean ?: true
+                MelonEmulator.setMicrophoneAgcEnabled(enabled)
+                true
+            }
+        }
 
         volumePreference?.let {
             updateVolumePreferenceSummary(it, it.value)
@@ -71,6 +84,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         super.onResume()
         micSourcePreference?.let { updateMicSourceSummary(it, it.value) }
         audioLatencyPreference?.let { updateAudioLatencySummary(it, it.value) }
+        agcNoiseGatePreference?.let { MelonEmulator.setMicrophoneAgcEnabled(it.isChecked) }
     }
 
     private fun updateAudioLatencySummary(pref: ListPreference, value: String?) {

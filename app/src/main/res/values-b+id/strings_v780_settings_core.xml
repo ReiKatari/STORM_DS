@@ -5,7 +5,7 @@
     <string name="v780_search_no_results">Pengaturan tidak ditemukan</string>
     <string name="v780_search_results_count">Ditemukan: %1$d</string>
     <string name="v780_rewind_summary_title">Estimasi buffer putar mundur</string>
-    <string name="v780_rewind_summary_detail">Jendela: %1$d dtk (%2$d status). Estimasi buffer RAM: ~%3$s (hingga %4$s saat beban puncak).</string>
+    <string name="v780_rewind_summary_detail">Jendela: %1$d dtk (%2$s). Estimasi buffer RAM: ~%3$s (hingga %4$s saat beban puncak).</string>
     <string name="v780_settings_maintenance_title">Pemeliharaan dan cadangan pengaturan</string>
     <string name="v780_settings_export_json_title">Ekspor pengaturan ke berkas JSON</string>
     <string name="v780_settings_export_json_summary">Simpan pengaturan saat ini ke berkas JSON portabel</string>
@@ -31,4 +31,10 @@
     <string name="v780_internal_randomize_mac_summary">Buat alamat MAC acak dengan awalan Nintendo 00:09:BF</string>
     <string name="v780_mac_generated">Alamat MAC Nintendo dibuat: %1$s</string>
     <string name="v780_mac_invalid_format">Format alamat MAC tidak valid (harus XX:XX:XX:XX:XX:XX)</string>
+    <plurals name="v780_rom_folders_count">
+        <item quantity="other">%1$d folder</item>
+    </plurals>
+    <plurals name="v780_rewind_snapshots_count">
+        <item quantity="other">%1$d cuplikan</item>
+    </plurals>
 </resources>

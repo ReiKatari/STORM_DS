@@ -55,6 +55,7 @@ class InputSetupActivity : AppCompatActivity() {
     private val viewModel: InputSetupViewModel by viewModels()
 
     private val referenceAxisValues = mutableMapOf<Pair<Int, Int>, Float>()
+    private var pendingChordModifierKey: Int? = null
 
     private fun MotionEvent.isControllerMotionEvent(): Boolean {
         return isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)
@@ -184,12 +185,34 @@ class InputSetupActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && viewModel.inputUnderAssignment.value != null) {
+        if (viewModel.inputUnderAssignment.value != null) {
             @SuppressLint("GestureBackNavigation")
-            if (event.keyCode != KeyEvent.KEYCODE_BACK) {
-                viewModel.updateInputAssignedKey(event.keyCode)
-                return true
+            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                pendingChordModifierKey = null
+                return super.dispatchKeyEvent(event)
             }
+
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                if (event.repeatCount > 0) return true
+                val heldMod = pendingChordModifierKey
+                if (heldMod == null) {
+                    pendingChordModifierKey = event.keyCode
+                    return true
+                } else if (heldMod != event.keyCode) {
+                    pendingChordModifierKey = null
+                    viewModel.updateInputAssignedChord(heldMod, event.keyCode)
+                    return true
+                }
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                val heldMod = pendingChordModifierKey
+                if (heldMod != null && heldMod == event.keyCode) {
+                    pendingChordModifierKey = null
+                    viewModel.updateInputAssignedKey(heldMod)
+                    return true
+                }
+            }
+        } else {
+            pendingChordModifierKey = null
         }
         return super.dispatchKeyEvent(event)
     }

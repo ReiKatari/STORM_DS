@@ -61,6 +61,7 @@ fun CheatsOverlay(
     val folderCheatsMap = remember { mutableStateMapOf<Long, List<Cheat>>() }
     val expandedFolders = remember { mutableStateMapOf<Long, Boolean>() }
     var isLoading by remember { mutableStateOf(true) }
+    var activeOverlayTab by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(romInfo) {
         isLoading = true
@@ -211,6 +212,62 @@ fun CheatsOverlay(
                         }
                     }
 
+                    // Tab Switcher: Cheats vs RAM Cheat Finder
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val isCheatsTab = activeOverlayTab == 0
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isCheatsTab) colors.green.copy(alpha = 0.22f) else colors.surface2)
+                                .border(
+                                    1.dp,
+                                    if (isCheatsTab) colors.green else colors.line,
+                                    RoundedCornerShape(8.dp),
+                                )
+                                .clickable { activeOverlayTab = 0 }
+                                .padding(vertical = 7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.cheats),
+                                color = if (isCheatsTab) colors.green else colors.text2,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 12.sp,
+                                fontWeight = if (isCheatsTab) FontWeight.Bold else FontWeight.Medium,
+                            )
+                        }
+
+                        val isFinderTab = activeOverlayTab == 1
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isFinderTab) colors.green.copy(alpha = 0.22f) else colors.surface2)
+                                .border(
+                                    1.dp,
+                                    if (isFinderTab) colors.green else colors.line,
+                                    RoundedCornerShape(8.dp),
+                                )
+                                .clickable { activeOverlayTab = 1 }
+                                .padding(vertical = 7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.v790_ram_cheat_finder_tab),
+                                color = if (isFinderTab) colors.green else colors.text2,
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 12.sp,
+                                fontWeight = if (isFinderTab) FontWeight.Bold else FontWeight.Medium,
+                            )
+                        }
+                    }
+
                     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
 
                     // Content Area
@@ -220,7 +277,8 @@ fun CheatsOverlay(
                             .weight(1f)
                             .padding(horizontal = 14.dp),
                     ) {
-                        if (isLoading) {
+                        if (activeOverlayTab == 0) {
+                            if (isLoading) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator(color = colors.green, modifier = Modifier.size(36.dp))
                             }
@@ -355,6 +413,27 @@ fun CheatsOverlay(
                                     }
                                 }
                             }
+                        }
+                        } else {
+                            RamCheatFinderTab(
+                                romInfo = romInfo,
+                                cheatsRepository = cheatsRepository,
+                                onCheatCreated = {
+                                    onCheatsUpdated()
+                                    val resolvedGame = game
+                                    if (resolvedGame != null) {
+                                        coroutineScope.launch {
+                                            val loadedFolders = cheatsRepository.getAllGameCheats(resolvedGame).firstOrNull() ?: emptyList()
+                                            folders = loadedFolders
+                                            loadedFolders.forEach { folder ->
+                                                val folderId = folder.id ?: 0L
+                                                val cheats = cheatsRepository.getFolderCheats(folder).firstOrNull() ?: emptyList()
+                                                folderCheatsMap[folderId] = cheats
+                                            }
+                                        }
+                                    }
+                                },
+                            )
                         }
                     }
                 }

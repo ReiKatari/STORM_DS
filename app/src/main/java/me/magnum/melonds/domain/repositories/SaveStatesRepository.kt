@@ -9,6 +9,8 @@ interface SaveStatesRepository {
     fun getRomSaveStates(rom: Rom): List<SaveStateSlot>
     fun getRomQuickSaveStateSlot(rom: Rom): SaveStateSlot
     fun getRomSaveStateUri(rom: Rom, saveState: SaveStateSlot): Uri
+    fun getPeriodicAutoSaveSlot(rom: Rom): SaveStateSlot
+    fun getPeriodicAutoSaveUri(rom: Rom): Uri
     fun setRomSaveStateScreenshot(rom: Rom, saveState: SaveStateSlot, screenshot: Bitmap)
     fun deleteRomSaveStateScreenshot(rom: Rom, saveState: SaveStateSlot)
     fun deleteRomSaveState(rom: Rom, saveState: SaveStateSlot)

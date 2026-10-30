@@ -20,6 +20,9 @@ abstract class FrontendInputHandler : IInputListener {
             Input.TOGGLE_EXTRA_BUTTONS -> onToggleExtraButtons()
             Input.LOCK_ROTATION -> onLockRotation()
             Input.TOGGLE_ANALOG_STICK -> onToggleAnalogStick()
+            Input.SLOW_MOTION -> onSlowMotion()
+            Input.FRAME_ADVANCE -> onFrameAdvance()
+            Input.TAKE_SCREENSHOT -> onTakeScreenshot()
             else -> {}
         }
     }
@@ -49,4 +52,7 @@ abstract class FrontendInputHandler : IInputListener {
     abstract fun onToggleExtraButtons()
     abstract fun onLockRotation()
     abstract fun onToggleAnalogStick()
+    open fun onSlowMotion() {}
+    open fun onFrameAdvance() {}
+    open fun onTakeScreenshot() {}
 }

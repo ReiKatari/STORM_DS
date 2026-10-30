@@ -1,6 +1,8 @@
 package me.magnum.melonds.ui.emulator
 
 import android.content.BroadcastReceiver
+import me.magnum.melonds.ui.emulator.sensor.RealWorldPeripheralSensorBridge
+import me.magnum.melonds.ui.emulator.ui.QuickSlotCarouselOverlay
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -39,6 +41,29 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.isActive
+import me.magnum.melonds.ui.common.bouncingClickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.LaunchedEffect
@@ -376,11 +401,23 @@ class EmulatorActivity : AppCompatActivity() {
         }
 
         override fun onQuickSave() {
-            viewModel.doQuickSave()
+            viewModel.doQuickSave(viewModel.getActiveQuickSlot())
         }
 
         override fun onQuickLoad() {
-            viewModel.doQuickLoad()
+            requestLoadStateWithHardcoreCheck(targetSlotNumber = viewModel.getActiveQuickSlot())
+        }
+
+        override fun onSlowMotion() {
+            toggleSlowMotion()
+        }
+
+        override fun onFrameAdvance() {
+            advanceFrame()
+        }
+
+        override fun onTakeScreenshot() {
+            takeCleanScreenshot()
         }
 
         override fun onRewind() {
@@ -562,6 +599,26 @@ class EmulatorActivity : AppCompatActivity() {
         val isSaving: Boolean,
         val onSlotPicked: (SaveStateSlot) -> Unit,
     )
+    private val showQuickSlotCarousel = mutableStateOf(false)
+    private val raHardcoreLoadConfirmTarget = mutableStateOf<SaveStateSlot?>(null)
+    private val raHardcorePeriodicLoadConfirm = mutableStateOf(false)
+    private var isSlowMotionActive = false
+    private var slowMotionMultiplier = 0.5f
+    private val peripheralSensorBridge by lazy {
+        RealWorldPeripheralSensorBridge(this) { delta, total ->
+            handler.post { refreshRomSettingsMenuIfOpen() }
+        }
+    }
+    private val requestActivityRecognitionPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            peripheralSensorBridge.startStepCounter()
+            android.widget.Toast.makeText(this, R.string.pedometer_real_sensor_enabled, android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            android.widget.Toast.makeText(this, R.string.pedometer_permission_required, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     private val saveStatesOverlayState = mutableStateOf<SaveStatesOverlayData?>(null)
     private val isLidClosedState = mutableStateOf(false)
     private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
@@ -671,6 +728,26 @@ class EmulatorActivity : AppCompatActivity() {
             }
         })
         emulatorRumbleManager = EmulatorRumbleManager(this, lifecycleScope, connectedControllerManager)
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (isActive) {
+                    val intervalMinutes = viewModel.getPeriodicAutoSaveIntervalMinutes()
+                    if (intervalMinutes > 0) {
+                        delay(intervalMinutes * 60 * 1000L)
+                        if (
+                            pauseMenuState.value == null &&
+                            !activeOverlays.hasActiveOverlays() &&
+                            viewModel.emulatorState.value is EmulatorState.RunningRom
+                        ) {
+                            viewModel.doPeriodicAutoSave()
+                        }
+                    } else {
+                        delay(10000L)
+                    }
+                }
+            }
+        }
         currentPresentationBackend = viewModel.getConfiguredVideoRenderer().toPresentationBackend()
         frameRenderCoordinator = createFrameRenderCoordinator(currentPresentationBackend)
         choreographerFrameRenderer = ChoreographerFrameRendererFactory.createFrameRenderer(frameRenderCoordinator)
@@ -703,6 +780,7 @@ class EmulatorActivity : AppCompatActivity() {
         binding.viewLayoutControls.apply {
             setFrontendInputHandler(frontendInputHandler)
             setSystemInputHandler(melonTouchHandler)
+            onQuickSlotCarouselRequested = { openQuickSlotCarousel() }
         }
         translatorManager.attachOverlay(binding.viewTranslationOverlay)
         translatorManager.requestMediaProjectionPermission = { captureIntent ->
@@ -883,6 +961,36 @@ class EmulatorActivity : AppCompatActivity() {
                             )
                         }
                     }
+                    showQuickSlotCarousel.value -> {
+                        val emulatorState by viewModel.emulatorState.collectAsState()
+                        val currentRom = (emulatorState as? EmulatorState.RunningRom)?.rom
+                        var slots by remember(currentRom) { mutableStateOf<List<SaveStateSlot>>(emptyList()) }
+                        LaunchedEffect(currentRom) {
+                            slots = currentRom?.let { viewModel.getRomSaveStateSlots(it) } ?: emptyList()
+                        }
+                        me.magnum.melonds.ui.emulator.ui.QuickSlotCarouselOverlay(
+                            slots = slots,
+                            activeQuickSlot = viewModel.getActiveQuickSlot(),
+                            onSelectActiveSlot = { slotNum ->
+                                viewModel.setActiveQuickSlot(slotNum)
+                            },
+                            onSaveToSlot = { slot ->
+                                viewModel.saveStateToSlot(slot)
+                                lifecycleScope.launch {
+                                    delay(150L)
+                                    slots = currentRom?.let { viewModel.getRomSaveStateSlots(it) } ?: emptyList()
+                                }
+                            },
+                            onLoadFromSlot = { slot ->
+                                dismissQuickSlotCarousel()
+                                requestLoadStateWithHardcoreCheck(slot)
+                            },
+                            onDismiss = {
+                                dismissQuickSlotCarousel()
+                                reopenPauseMenu()
+                            },
+                        )
+                    }
                     saveStatesData != null -> {
                         val emulatorState by viewModel.emulatorState.collectAsState()
                         val currentRom = (emulatorState as? EmulatorState.RunningRom)?.rom
@@ -967,12 +1075,44 @@ class EmulatorActivity : AppCompatActivity() {
                             rom = currentRom,
                             achievementsSummary = null,
                             sessionDurationMs = android.os.SystemClock.elapsedRealtime() - sessionStartElapsedRealtime,
+                            activeQuickSlot = viewModel.getActiveQuickSlot(),
+                            onQuickSlotCarouselClick = {
+                                dismissPauseMenu()
+                                openQuickSlotCarousel()
+                            },
                             onOptionSelected = { option ->
                                 if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.CALIBRATE_GYRO) {
                                     motionSensorManager.calibrateCenter()
                                     android.widget.Toast.makeText(this@EmulatorActivity, R.string.input_gyro_recenter_quick_action, android.widget.Toast.LENGTH_SHORT).show()
                                     dismissPauseMenu()
                                     viewModel.resumeEmulator()
+                                    return@PauseMenuOverlay
+                                }
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.QUICK_SLOT_CAROUSEL) {
+                                    dismissPauseMenu()
+                                    openQuickSlotCarousel()
+                                    return@PauseMenuOverlay
+                                }
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE) {
+                                    dismissPauseMenu()
+                                    requestLoadPeriodicAutoSaveWithHardcoreCheck()
+                                    return@PauseMenuOverlay
+                                }
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.TAKE_SCREENSHOT) {
+                                    dismissPauseMenu()
+                                    takeCleanScreenshot()
+                                    viewModel.resumeEmulator()
+                                    return@PauseMenuOverlay
+                                }
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.SLOW_MOTION) {
+                                    toggleSlowMotion()
+                                    dismissPauseMenu()
+                                    viewModel.resumeEmulator()
+                                    return@PauseMenuOverlay
+                                }
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.FRAME_ADVANCE) {
+                                    dismissPauseMenu()
+                                    advanceFrame()
                                     return@PauseMenuOverlay
                                 }
                                 val isTerminal = option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.RESET ||
@@ -1002,6 +1142,29 @@ class EmulatorActivity : AppCompatActivity() {
                         )
                     }
                     else -> Unit
+                }
+
+                if (raHardcoreLoadConfirmTarget.value != null || raHardcorePeriodicLoadConfirm.value) {
+                    RaHardcoreLoadConfirmDialog(
+                        onConfirm = {
+                            val target = raHardcoreLoadConfirmTarget.value
+                            val isPeriodic = raHardcorePeriodicLoadConfirm.value
+                            raHardcoreLoadConfirmTarget.value = null
+                            raHardcorePeriodicLoadConfirm.value = false
+                            viewModel.switchToSoftcore()
+                            if (isPeriodic) {
+                                viewModel.loadPeriodicAutoSave()
+                            } else if (target != null) {
+                                viewModel.loadStateFromSlot(target)
+                            } else {
+                                viewModel.doQuickLoad(viewModel.getActiveQuickSlot())
+                            }
+                        },
+                        onDismiss = {
+                            raHardcoreLoadConfirmTarget.value = null
+                            raHardcorePeriodicLoadConfirm.value = false
+                        }
+                    )
                 }
 
                 if (showBootAnimation.value) {
@@ -1037,10 +1200,20 @@ class EmulatorActivity : AppCompatActivity() {
                     me.magnum.melonds.ui.emulator.ui.Slot2PeripheralOverlay(
                         addonType = activeSlot2AddonState.value,
                         solarLevel = solarSensorOverrideLevel,
+                        currentLux = peripheralSensorBridge.currentLux.floatValue,
+                        currentSensorBars = peripheralSensorBridge.currentBars.intValue,
                         onSolarLevelChanged = { level ->
                             solarSensorOverrideLevel = level
-                            motionSensorManager.solarSensorAutoEnabled = (level < 0)
-                            if (level >= 0) {
+                            if (level == -2) {
+                                motionSensorManager.solarSensorAutoEnabled = false
+                                peripheralSensorBridge.startLightSensor()
+                            } else if (level == -1) {
+                                peripheralSensorBridge.stopLightSensor()
+                                motionSensorManager.solarSensorAutoEnabled = true
+                                motionSensorManager.startListening()
+                            } else {
+                                peripheralSensorBridge.stopLightSensor()
+                                motionSensorManager.solarSensorAutoEnabled = false
                                 runCatching { MelonEmulator.setSolarSensorLightLevel(level) }
                             }
                         },
@@ -1177,6 +1350,15 @@ class EmulatorActivity : AppCompatActivity() {
                         ToastEvent.InvalidAutoLoadState -> getString(R.string.invalid_auto_load_state) to Toast.LENGTH_LONG
                         ToastEvent.StateSaveFailed -> getString(R.string.failed_save_state) to Toast.LENGTH_SHORT
                         ToastEvent.StateStateDoesNotExist -> getString(R.string.cant_load_empty_slot) to Toast.LENGTH_SHORT
+                        ToastEvent.PeriodicAutoSaveCompleted -> getString(R.string.periodic_auto_save_completed) to Toast.LENGTH_SHORT
+                        ToastEvent.PeriodicAutoSaveLoaded -> getString(R.string.periodic_auto_save_loaded) to Toast.LENGTH_SHORT
+                        is ToastEvent.ScreenshotSaved -> getString(R.string.screenshot_saved_toast, it.fileName) to Toast.LENGTH_SHORT
+                        ToastEvent.ScreenshotFailed -> getString(R.string.screenshot_failed_toast) to Toast.LENGTH_SHORT
+                        is ToastEvent.SlowMotionToggled -> (if (it.enabled) getString(R.string.slow_motion_active_toast, "${it.factor}x") else getString(R.string.slow_motion_disabled_toast)) to Toast.LENGTH_SHORT
+                        ToastEvent.SlowMotionDisabledInHardcore -> getString(R.string.slow_motion_unavailable_hardcore) to Toast.LENGTH_SHORT
+                        ToastEvent.FrameAdvanceStep -> getString(R.string.frame_advance_step_toast) to Toast.LENGTH_SHORT
+                        ToastEvent.FrameAdvanceDisabledInHardcore -> getString(R.string.frame_advance_unavailable_hardcore) to Toast.LENGTH_SHORT
+                        is ToastEvent.QuickSlotSelected -> getString(R.string.quick_slot_selected_toast, it.slot) to Toast.LENGTH_SHORT
                         ToastEvent.CannotLoadSaveStatesWhenRAHardcoreIsEnabled -> getString(R.string.load_states_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
                         ToastEvent.CannotUseCheatsWhenRAHardcoreIsEnabled -> getString(R.string.cheats_unavailable_ra_hardcore_enabled) to Toast.LENGTH_LONG
                         ToastEvent.CannotLoadStateWhenRunningFirmware,
@@ -1326,7 +1508,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 if (isSaving) {
                                     viewModel.saveStateToSlot(slot)
                                 } else {
-                                    viewModel.loadStateFromSlot(slot)
+                                    requestLoadStateWithHardcoreCheck(slot)
                                 }
                             }
                         }
@@ -1995,6 +2177,9 @@ class EmulatorActivity : AppCompatActivity() {
         startShaderDiagnosticsPolling()
         translatorManager.syncOverlaySettings()
 
+        if (solarSensorOverrideLevel == -2) {
+            peripheralSensorBridge.startLightSensor()
+        }
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         melonTouchHandler.turboMacrosEnabled = prefs.getBoolean("input_turbo_macros_enabled", false)
         val gyroEnabled = prefs.getBoolean("input_gyro_aiming_enabled", false) || prefs.getBoolean("pref_motion_gyro_enabled", false)
@@ -3221,6 +3406,16 @@ class EmulatorActivity : AppCompatActivity() {
             translatorManager.dismissTranslation()
             return
         }
+        if (showQuickSlotCarousel.value) {
+            dismissQuickSlotCarousel()
+            reopenPauseMenu()
+            return
+        }
+        if (raHardcoreLoadConfirmTarget.value != null || raHardcorePeriodicLoadConfirm.value) {
+            raHardcoreLoadConfirmTarget.value = null
+            raHardcorePeriodicLoadConfirm.value = false
+            return
+        }
         if (isRewindWindowOpen()) {
             closeRewindWindow()
         } else {
@@ -3243,6 +3438,9 @@ class EmulatorActivity : AppCompatActivity() {
         showScreenLayoutDialog.value = false
         showAchievementList.value = false
         cheatsOverlayRomInfo.value = null
+        showQuickSlotCarousel.value = false
+        raHardcoreLoadConfirmTarget.value = null
+        raHardcorePeriodicLoadConfirm.value = false
         presentation?.setInfoOverlayContent(null)
         activeOverlays.clear()
         dismissPauseMenu()
@@ -3828,8 +4026,12 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
     }
 
     private fun showSolarSensorChoiceOverlay() {
-        val values = listOf(-1, 0, 2, 4, 6, 8, 10)
+        val values = listOf(-2, -1, 0, 2, 4, 6, 8, 10)
+        val autoStatus = if (peripheralSensorBridge.isLightSensorActive.value) {
+            " (${peripheralSensorBridge.currentLux.floatValue.toInt()} lx, ${peripheralSensorBridge.currentBars.intValue}/10)"
+        } else ""
         val labels = listOf(
+            getString(R.string.solar_sensor_mode_auto) + autoStatus,
             getString(R.string.compat_solar_sensor_auto_full),
             getString(R.string.compat_solar_sensor_level_0),
             getString(R.string.compat_solar_sensor_level_2),
@@ -3847,11 +4049,17 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                 onSelect = { which ->
                     val chosen = values.getOrElse(which) { -1 }
                     solarSensorOverrideLevel = chosen
-                    motionSensorManager.solarSensorAutoEnabled = (chosen < 0)
-                    if (chosen >= 0) {
-                        runCatching { MelonEmulator.setSolarSensorLightLevel(chosen) }
-                    } else {
+                    if (chosen == -2) {
+                        motionSensorManager.solarSensorAutoEnabled = false
+                        peripheralSensorBridge.startLightSensor()
+                    } else if (chosen == -1) {
+                        peripheralSensorBridge.stopLightSensor()
+                        motionSensorManager.solarSensorAutoEnabled = true
                         motionSensorManager.startListening()
+                    } else {
+                        peripheralSensorBridge.stopLightSensor()
+                        motionSensorManager.solarSensorAutoEnabled = false
+                        runCatching { MelonEmulator.setSolarSensorLightLevel(chosen) }
                     }
                     handler.post { refreshRomSettingsMenuIfOpen() }
                 },
@@ -3860,7 +4068,14 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
     }
 
     private fun showIrPedometerChoiceOverlay() {
+        val pedometerActive = peripheralSensorBridge.isPedometerActive.value
+        val toggleLabel = if (pedometerActive) {
+            getString(R.string.pedometer_real_sensor_title) + " (ВКЛ / ON)"
+        } else {
+            getString(R.string.pedometer_real_sensor_title) + " (ВЫКЛ / OFF)"
+        }
         val labels = listOf(
+            toggleLabel,
             getString(R.string.compat_ir_pedometer_add_100),
             getString(R.string.compat_ir_pedometer_add_500),
             getString(R.string.compat_ir_pedometer_add_1000),
@@ -3874,11 +4089,26 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                 selectedIndex = 0,
                 onSelect = { which ->
                     when (which) {
-                        0 -> runCatching { MelonEmulator.addIrPedometerSteps(100) }
-                        1 -> runCatching { MelonEmulator.addIrPedometerSteps(500) }
-                        2 -> runCatching { MelonEmulator.addIrPedometerSteps(1000) }
-                        3 -> runCatching { MelonEmulator.addIrPedometerSteps(5000) }
-                        4 -> runCatching { MelonEmulator.setIrPedometerStepCount(0) }
+                        0 -> {
+                            if (pedometerActive) {
+                                peripheralSensorBridge.stopStepCounter()
+                                android.widget.Toast.makeText(this@EmulatorActivity, R.string.pedometer_real_sensor_disabled, android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                if (peripheralSensorBridge.hasActivityRecognitionPermission()) {
+                                    peripheralSensorBridge.startStepCounter()
+                                    android.widget.Toast.makeText(this@EmulatorActivity, R.string.pedometer_real_sensor_enabled, android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                        requestActivityRecognitionPermissionLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+                                    }
+                                }
+                            }
+                        }
+                        1 -> runCatching { MelonEmulator.addIrPedometerSteps(100) }
+                        2 -> runCatching { MelonEmulator.addIrPedometerSteps(500) }
+                        3 -> runCatching { MelonEmulator.addIrPedometerSteps(1000) }
+                        4 -> runCatching { MelonEmulator.addIrPedometerSteps(5000) }
+                        5 -> runCatching { MelonEmulator.setIrPedometerStepCount(0) }
                     }
                     handler.post { refreshRomSettingsMenuIfOpen() }
                 },
@@ -5389,6 +5619,127 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         }
     }
 
+    private fun openQuickSlotCarousel() {
+        activeOverlays.addActiveOverlay(EmulatorOverlay.QUICK_SLOT_CAROUSEL)
+        showQuickSlotCarousel.value = true
+        requestOverlayHostFocus()
+    }
+
+    private fun dismissQuickSlotCarousel() {
+        if (showQuickSlotCarousel.value) {
+            showQuickSlotCarousel.value = false
+            activeOverlays.removeActiveOverlay(EmulatorOverlay.QUICK_SLOT_CAROUSEL)
+        }
+    }
+
+    private fun requestLoadStateWithHardcoreCheck(slot: SaveStateSlot? = null, targetSlotNumber: Int? = null) {
+        if (viewModel.isRetroAchievementsHardcoreActive()) {
+            lifecycleScope.launch {
+                val target = slot ?: targetSlotNumber?.let { num ->
+                    val rom = (viewModel.emulatorState.value as? EmulatorState.RunningRom)?.rom
+                    rom?.let { r ->
+                        if (num == 0) viewModel.getRomQuickSaveStateSlot(r)
+                        else viewModel.getRomSaveStateSlots(r).firstOrNull { it.slot == num }
+                    }
+                }
+                raHardcoreLoadConfirmTarget.value = target ?: SaveStateSlot(SaveStateSlot.QUICK_SAVE_SLOT, true, null, null)
+            }
+        } else {
+            if (slot != null) {
+                viewModel.loadStateFromSlot(slot)
+            } else {
+                viewModel.doQuickLoad(targetSlotNumber ?: viewModel.getActiveQuickSlot())
+            }
+        }
+    }
+
+    private fun requestLoadPeriodicAutoSaveWithHardcoreCheck() {
+        if (viewModel.isRetroAchievementsHardcoreActive()) {
+            raHardcorePeriodicLoadConfirm.value = true
+        } else {
+            viewModel.loadPeriodicAutoSave()
+        }
+    }
+
+    private fun takeCleanScreenshot() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val screenshotBitmap = runCatching { viewModel.captureScreenshot() }.getOrNull()
+            if (screenshotBitmap == null) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(this@EmulatorActivity, R.string.screenshot_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+            val currentRom = (viewModel.emulatorState.value as? EmulatorState.RunningRom)?.rom
+            val rawName = currentRom?.config?.customName ?: currentRom?.name ?: "Game"
+            val sanitizedName = rawName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val timeStamp = java.text.SimpleDateFormat("dd.MM.yyyy_HH-mm-ss", java.util.Locale.US).format(java.util.Date())
+            val fileName = "${sanitizedName}_${timeStamp}.png"
+
+            val screenshotsDir = File("/storage/emulated/0/STORM DS/screenshots").let {
+                if (it.isDirectory || it.mkdirs()) it
+                else File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES), "STORM DS").apply { mkdirs() }
+            }
+            val destFile = File(screenshotsDir, fileName)
+            var success = false
+            runCatching {
+                java.io.FileOutputStream(destFile).use { out ->
+                    screenshotBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    success = true
+                }
+            }
+
+            if (success) {
+                android.media.MediaScannerConnection.scanFile(
+                    this@EmulatorActivity,
+                    arrayOf(destFile.absolutePath),
+                    arrayOf("image/png"),
+                    null
+                )
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(this@EmulatorActivity, getString(R.string.screenshot_saved_toast, fileName), android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(this@EmulatorActivity, R.string.screenshot_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun toggleSlowMotion(targetMultiplier: Float? = null) {
+        if (viewModel.isRetroAchievementsHardcoreActive()) {
+            android.widget.Toast.makeText(this, R.string.slow_motion_unavailable_hardcore, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (targetMultiplier != null) {
+            slowMotionMultiplier = targetMultiplier
+            isSlowMotionActive = true
+        } else {
+            isSlowMotionActive = !isSlowMotionActive
+        }
+        val mult = if (isSlowMotionActive) slowMotionMultiplier else 1.0f
+        MelonEmulator.setFrameLimitSpeedMultiplier(mult)
+        val msg = if (isSlowMotionActive) {
+            getString(R.string.slow_motion_active_toast, "${mult}x")
+        } else {
+            getString(R.string.slow_motion_disabled_toast)
+        }
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun advanceFrame() {
+        if (viewModel.isRetroAchievementsHardcoreActive()) {
+            android.widget.Toast.makeText(this, R.string.frame_advance_unavailable_hardcore, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (pauseMenuState.value == null) {
+            viewModel.pauseEmulator(false)
+        }
+        runCatching { MelonEmulator.debugStepFrame() }
+        android.widget.Toast.makeText(this, R.string.frame_advance_step_toast, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
     private fun isRewindWindowOpen(): Boolean {
         return rewindOverlayState.value != null
     }
@@ -5494,6 +5845,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     override fun onPause() {
         super.onPause()
+        peripheralSensorBridge.stopAll()
         motionSensorManager.stopListening()
         cancelStartupPresentationRefreshes()
         stopShaderDiagnosticsPolling()
@@ -5707,3 +6059,92 @@ private val renderer2DDebugObjectOrderItems = listOf(
         description = "OAM entries 96-127. Code gate: `sprnum / 32` in `DrawSprites`; highest OBJ indices are drawn first for equal priority and usually sit furthest back.",
     ),
 )
+
+
+@Composable
+private fun RaHardcoreLoadConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xFF0F172A))
+                .border(1.5.dp, Color(0xFFEF4444), RoundedCornerShape(18.dp))
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(text = "⚠️", fontSize = 20.sp)
+                Text(
+                    text = stringResource(R.string.ra_hardcore_dialog_title),
+                    color = Color(0xFFEF4444),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = me.magnum.melonds.ui.theme.Manrope,
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = stringResource(R.string.ra_hardcore_dialog_message),
+                color = Color(0xFFCBD5E1),
+                fontSize = 13.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                fontFamily = me.magnum.melonds.ui.theme.Manrope,
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1E293B))
+                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                        .bouncingClickable { onDismiss() }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFDC2626))
+                        .border(1.dp, Color(0xFFEF4444), RoundedCornerShape(8.dp))
+                        .bouncingClickable { onConfirm() }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.ra_hardcore_dialog_switch_and_load),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}

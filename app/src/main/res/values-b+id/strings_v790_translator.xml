@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_backlog_and_glossary_title">Riwayat dialog dan glosarium pengguna</string>
+    <string name="translator_backlog_title">Riwayat dialog</string>
+    <string name="translator_glossary_title">Glosarium pengguna</string>
+    <string name="translator_backlog_tab_history">Riwayat dialog (hingga 50)</string>
+    <string name="translator_backlog_tab_glossary">Glosarium nama dan istilah</string>
+    <string name="translator_backlog_action_speak">Ucapkan</string>
+    <string name="translator_backlog_action_copy">Salin</string>
+    <string name="translator_backlog_action_add_to_glossary">Ke glosarium</string>
+    <string name="translator_backlog_clear_history">Bersihkan riwayat</string>
+    <string name="translator_backlog_empty_prompt">Belum ada dialog terekam. Jalankan terjemahan saat dialog muncul di game.</string>
+    <string name="translator_backlog_copied_toast">Disalin ke papan klip</string>
+    <string name="translator_glossary_add_term">Tambah istilah</string>
+    <string name="translator_glossary_edit_term">Edit istilah</string>
+    <string name="translator_glossary_delete_term">Hapus</string>
+    <string name="translator_glossary_export_path">Berkas glosarium</string>
+    <string name="translator_glossary_path_copied">Jalur berkas glosarium disalin: %s</string>
+    <string name="translator_glossary_empty_prompt">Glosarium kosong. Tambahkan nama karakter dan istilah agar terjemahan konsisten.</string>
+    <string name="translator_glossary_source_label">Istilah asli (di game)</string>
+    <string name="translator_glossary_target_label">Terjemahan yang benar</string>
+    <string name="translator_glossary_case_sensitive">Peka huruf besar dan kecil</string>
+    <string name="translator_glossary_game_specific">Hanya untuk game ini</string>
+    <string name="translator_glossary_saved_toast">Istilah \'%s\' disimpan ke glosarium</string>
+    <string name="translator_glossary_deleted_toast">Istilah dihapus dari glosarium</string>
+    <string name="translator_glossary_scope_global">Global</string>
+    <string name="translator_glossary_scope_game">Khusus game</string>
+</resources>

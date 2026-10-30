@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">Pintasan kombinasi gamepad (Select + tombol)</string>
+    <string name="pref_input_chord_hotkeys_summary">Tahan Select + tombol (R=Maju cepat, L=Putar ulang, Start=Jeda, Y=Tangkapan layar, X=Gerak lambat)</string>
+    <string name="pref_input_turbo_frequency_title">Frekuensi turbo perangkat keras</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (Bawaan)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">Turbo gamepad: Nyala (%d Hz)</string>
+    <string name="turbo_toast_disabled">Turbo gamepad: Mati</string>
+    <string name="input_slow_motion">Gerak lambat</string>
+    <string name="input_frame_advance">Maju per bingkai</string>
+    <string name="input_take_screenshot">Ambil tangkapan layar</string>
+    <string name="input_toggle_hardware_turbo">Mode turbo gamepad</string>
+    <string name="layout_editor_lock_component">Kunci elemen (cegah pergeseran)</string>
+    <string name="layout_editor_component_locked_toast">Elemen terkunci. Buka kunci untuk memindahkan</string>
+    <string name="action_layout_multiselect">Pilih banyak</string>
+    <string name="action_layout_multiselect_summary">Pilih dan geser beberapa tombol bersamaan</string>
+    <string name="action_layout_live_test">Uji tombol</string>
+    <string name="action_layout_live_test_summary">Pengujian interaktif tombol dan multisentuh</string>
+    <string name="live_test_status_idle">Mode uji: tekan tombol di layar • Kembali untuk keluar</string>
+    <string name="live_test_status_pressed_format">Mode uji: ditekan [%s] • Kembali untuk keluar</string>
+    <string name="live_test_exit">Keluar uji</string>
+</resources>

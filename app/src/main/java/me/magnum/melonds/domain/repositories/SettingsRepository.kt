@@ -124,6 +124,10 @@ interface SettingsRepository {
     fun useSrmExtensionForSaveFiles(): Boolean
     fun isAutoSaveStateOnExitEnabled(): Boolean
     fun isAutoLoadStateOnLaunchEnabled(): Boolean
+    fun getPeriodicAutoSaveIntervalMinutes(): Int
+    fun getActiveQuickSlot(): Int
+    fun setActiveQuickSlot(slot: Int)
+    fun setRetroAchievementsHardcoreEnabled(enabled: Boolean)
     fun getSaveFileDirectory(): Uri?
     fun getSaveFileDirectory(rom: Rom): Uri
     fun getSaveStateLocation(rom: Rom): SaveStateLocation

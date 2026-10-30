@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">Gamepad-Kombinationstasten (Select + Taste)</string>
+    <string name="pref_input_chord_hotkeys_summary">Select gedrückt halten + Taste (R=Vorlauf, L=Rücklauf, Start=Pause, Y=Screenshot, X=Zeitlupe)</string>
+    <string name="pref_input_turbo_frequency_title">Hardware-Turbofrequenz</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (Standard)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">Gamepad-Turbo: Ein (%d Hz)</string>
+    <string name="turbo_toast_disabled">Gamepad-Turbo: Aus</string>
+    <string name="input_slow_motion">Zeitlupe</string>
+    <string name="input_frame_advance">Einzelbildvorlauf</string>
+    <string name="input_take_screenshot">Screenshot aufnehmen</string>
+    <string name="input_toggle_hardware_turbo">Gamepad-Turbomodus</string>
+    <string name="layout_editor_lock_component">Element sperren (vor Verschieben schützen)</string>
+    <string name="layout_editor_component_locked_toast">Element ist gesperrt. Zum Verschieben entsperren</string>
+    <string name="action_layout_multiselect">Mehrfachauswahl</string>
+    <string name="action_layout_multiselect_summary">Mehrere Tasten gemeinsam auswählen und verschieben</string>
+    <string name="action_layout_live_test">Tasten testen</string>
+    <string name="action_layout_live_test_summary">Interaktiver Tasten- und Multitouch-Test</string>
+    <string name="live_test_status_idle">Testmodus: Tasten auf dem Bildschirm drücken • Zurück zum Beenden</string>
+    <string name="live_test_status_pressed_format">Testmodus: gedrückt [%s] • Zurück zum Beenden</string>
+    <string name="live_test_exit">Test beenden</string>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_backlog_and_glossary_title">Журнал реплик и пользовательский словарь</string>
+    <string name="translator_backlog_title">Журнал реплик</string>
+    <string name="translator_glossary_title">Пользовательский словарь</string>
+    <string name="translator_backlog_tab_history">История реплик (до 50)</string>
+    <string name="translator_backlog_tab_glossary">Словарь имён и терминов</string>
+    <string name="translator_backlog_action_speak">Озвучить</string>
+    <string name="translator_backlog_action_copy">Копировать</string>
+    <string name="translator_backlog_action_add_to_glossary">В словарь</string>
+    <string name="translator_backlog_clear_history">Очистить журнал</string>
+    <string name="translator_backlog_empty_prompt">История реплик пуста. Запустите перевод во время диалога в игре.</string>
+    <string name="translator_backlog_copied_toast">Скопировано в буфер обмена</string>
+    <string name="translator_glossary_add_term">Добавить термин</string>
+    <string name="translator_glossary_edit_term">Редактировать термин</string>
+    <string name="translator_glossary_delete_term">Удалить</string>
+    <string name="translator_glossary_export_path">Файл словаря</string>
+    <string name="translator_glossary_path_copied">Путь к словарю скопирован: %s</string>
+    <string name="translator_glossary_empty_prompt">Словарь пуст. Добавьте имена персонажей и термины для точного перевода.</string>
+    <string name="translator_glossary_source_label">Оригинальный термин (в игре)</string>
+    <string name="translator_glossary_target_label">Правильный перевод</string>
+    <string name="translator_glossary_case_sensitive">Учитывать регистр</string>
+    <string name="translator_glossary_game_specific">Только для текущей игры</string>
+    <string name="translator_glossary_saved_toast">Термин «%s» сохранён в словарь</string>
+    <string name="translator_glossary_deleted_toast">Термин удалён из словаря</string>
+    <string name="translator_glossary_scope_global">Глобальный</string>
+    <string name="translator_glossary_scope_game">Для этой игры</string>
+</resources>

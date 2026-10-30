@@ -31,6 +31,7 @@ import com.squareup.picasso.Callback
 import com.squareup.picasso.Picasso
 import me.magnum.melonds.R
 import me.magnum.melonds.databinding.ViewLayoutEditorManagerBinding
+import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.RuntimeBackground
 import me.magnum.melonds.domain.model.consoleAspectRatio
 import me.magnum.melonds.domain.model.layout.LayoutComponent
@@ -538,11 +539,90 @@ class LayoutEditorManagerView(
             binding.viewLayoutEditor.setSelectedScreenOnTop(isChecked)
         }
 
+        binding.checkboxLockComponent.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingScalingControls) {
+                return@setOnCheckedChangeListener
+            }
+            binding.viewLayoutEditor.setSelectedViewLocked(isChecked)
+        }
+
         binding.buttonHideControls.setOnClickListener {
             hideScalingControls()
         }
 
         hideScalingControls(false)
+    }
+
+    fun toggleMultiSelectMode(): Boolean {
+        if (binding.viewLayoutEditor.isLiveTestMode) {
+            stopLiveTestMode()
+        }
+        hideScalingControls()
+        val enabled = !binding.viewLayoutEditor.isMultiSelectMode
+        binding.viewLayoutEditor.setMultiSelectMode(enabled)
+        val msg = if (enabled) {
+            context.getString(R.string.action_layout_multiselect) + ": " + context.getString(R.string.action_layout_multiselect_summary)
+        } else {
+            context.getString(R.string.action_layout_multiselect) + ": " + context.getString(R.string.close)
+        }
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        return enabled
+    }
+
+    fun isMultiSelectMode(): Boolean = binding.viewLayoutEditor.isMultiSelectMode
+
+    fun isLiveTestMode(): Boolean = binding.viewLayoutEditor.isLiveTestMode
+
+    fun startLiveTestMode() {
+        if (binding.viewLayoutEditor.isLiveTestMode) return
+        hideScalingControls(false)
+        hideBottomControls()
+        binding.layoutControls.isVisible = false
+        binding.layoutLiveTestBanner.isVisible = true
+        binding.textLiveTestStatus.text = context.getString(R.string.live_test_status_idle)
+        binding.buttonExitLiveTest.setOnClickListener {
+            stopLiveTestMode()
+        }
+        binding.viewLayoutEditor.startLiveTest { pressedInputs ->
+            if (pressedInputs.isEmpty()) {
+                binding.textLiveTestStatus.text = context.getString(R.string.live_test_status_idle)
+            } else {
+                val inputNames = pressedInputs.joinToString(" + ") { getInputDisplayName(it) }
+                binding.textLiveTestStatus.text = context.getString(R.string.live_test_status_pressed_format, inputNames)
+            }
+        }
+    }
+
+    fun stopLiveTestMode() {
+        if (!binding.viewLayoutEditor.isLiveTestMode) return
+        binding.viewLayoutEditor.stopLiveTest()
+        binding.layoutLiveTestBanner.isVisible = false
+        binding.layoutControls.isVisible = true
+    }
+
+    private fun getInputDisplayName(input: Input): String {
+        return when (input) {
+            Input.A -> "A"
+            Input.B -> "B"
+            Input.X -> "X"
+            Input.Y -> "Y"
+            Input.UP -> context.getString(R.string.input_up)
+            Input.DOWN -> context.getString(R.string.input_down)
+            Input.LEFT -> context.getString(R.string.input_left)
+            Input.RIGHT -> context.getString(R.string.input_right)
+            Input.L -> "L"
+            Input.R -> "R"
+            Input.START -> "START"
+            Input.SELECT -> "SELECT"
+            Input.FAST_FORWARD -> context.getString(R.string.input_fast_forward)
+            Input.REWIND -> context.getString(R.string.rewind)
+            Input.PAUSE -> context.getString(R.string.input_pause)
+            Input.SLOW_MOTION -> context.getString(R.string.input_slow_motion)
+            Input.FRAME_ADVANCE -> context.getString(R.string.input_frame_advance)
+            Input.TAKE_SCREENSHOT -> context.getString(R.string.input_take_screenshot)
+            Input.TOGGLE_HARDWARE_TURBO -> context.getString(R.string.input_toggle_hardware_turbo)
+            else -> input.name
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -670,6 +750,14 @@ class LayoutEditorManagerView(
     }
 
     fun handleBackNavigation() {
+        if (isLiveTestMode()) {
+            stopLiveTestMode()
+            return
+        }
+        if (isMultiSelectMode()) {
+            toggleMultiSelectMode()
+            return
+        }
         if (areScalingControlsShown) {
             hideScalingControls(true)
             binding.viewLayoutEditor.deselectComponent()
@@ -870,6 +958,12 @@ class LayoutEditorManagerView(
                     listener?.onStoreLayoutChanges()
                 }
             }
+            MenuOption.MULTI_SELECT -> {
+                toggleMultiSelectMode()
+            }
+            MenuOption.LIVE_TEST -> {
+                startLiveTestMode()
+            }
             MenuOption.PROPERTIES -> openPropertiesDialog()
             MenuOption.BACKGROUNDS -> openBackgroundsConfigDialog()
             MenuOption.REVERT -> {
@@ -1048,6 +1142,7 @@ class LayoutEditorManagerView(
 
             binding.seekBarAlpha.progress = (alpha * 100).roundToInt().coerceIn(0, binding.seekBarAlpha.max)
             binding.checkboxAboveScreen.isChecked = onTop
+            binding.checkboxLockComponent.isChecked = binding.viewLayoutEditor.getSelectedComponentView()?.locked == true
             updatingAspectSpinner = true
             try {
                 binding.spinnerAspectRatio.setSelection(selectedAspectRatio.ordinal, false)

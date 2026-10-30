@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Exportar pacote de dados (.zip)</string>
+    <string name="export_data_bundle_success">Pacote de dados do jogo salvo: %s</string>
+    <string name="export_data_bundle_error">Falha ao exportar pacote de dados: %s</string>
+    <string name="export_data_bundle_in_progress">Exportando pacote de dados...</string>
+    <string name="undo_overwrite_multi_step">Desfazer slot %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d passos</string>
+    <string name="ra_sync_queue_button">Sincronizar agora</string>
+    <string name="ra_sync_queue_success">Fila de conquistas offline enviada com sucesso para o servidor</string>
+    <string name="ra_sync_queue_error">Erro ao sincronizar fila de conquistas: %s</string>
+    <string name="ra_sync_queue_empty">Nenhuma conquista offline pendente para envio</string>
+    <string name="ra_sync_queue_syncing">Sincronizando fila...</string>
+    <string name="cheat_import_dat_success">Banco de dados de cheats DAT importado com sucesso</string>
+    <string name="cheat_import_supported_formats">Suporta XML, DAT (usrcheat.dat) e arquivos ZIP</string>
+</resources>

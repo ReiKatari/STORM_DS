@@ -52,6 +52,14 @@ data class InputConfigDto(
             @SerialName("axisCode") val axisCode: Int,
             @SerialName("direction") val direction: InputConfig.Assignment.Axis.Direction,
         ) : AssignmentDto()
+
+        @Serializable
+        @SerialName("chord")
+        class Chord(
+            override val deviceId: Int?,
+            @SerialName("modifierKeyCode") val modifierKeyCode: Int,
+            @SerialName("triggerKeyCode") val triggerKeyCode: Int,
+        ) : AssignmentDto()
     }
 
     object AssignmentDtoSerializer : KSerializer<AssignmentDto> {
@@ -77,6 +85,12 @@ data class InputConfigDto(
                             put(AXIS_CODE_FIELD, JsonPrimitive(value.axisCode))
                             put(DIRECTION_FIELD, JsonPrimitive(value.direction.name))
                         }
+                        is AssignmentDto.Chord -> {
+                            put(TYPE_FIELD, JsonPrimitive(TYPE_CHORD))
+                            putNullableInt(DEVICE_ID_FIELD, value.deviceId)
+                            put(MODIFIER_KEY_CODE_FIELD, JsonPrimitive(value.modifierKeyCode))
+                            put(TRIGGER_KEY_CODE_FIELD, JsonPrimitive(value.triggerKeyCode))
+                        }
                     }
                 }
             )
@@ -98,6 +112,11 @@ data class InputConfigDto(
                     axisCode = obj.requiredInt(AXIS_CODE_FIELD),
                     direction = obj.requiredEnum(DIRECTION_FIELD),
                 )
+                TYPE_CHORD -> AssignmentDto.Chord(
+                    deviceId = obj.optionalInt(DEVICE_ID_FIELD),
+                    modifierKeyCode = obj.requiredInt(MODIFIER_KEY_CODE_FIELD),
+                    triggerKeyCode = obj.requiredInt(TRIGGER_KEY_CODE_FIELD),
+                )
                 else -> throw SerializationException("Unknown input assignment type")
             }
         }
@@ -109,6 +128,7 @@ data class InputConfigDto(
             }
 
             return when {
+                containsKey(MODIFIER_KEY_CODE_FIELD) || containsKey(TRIGGER_KEY_CODE_FIELD) -> TYPE_CHORD
                 containsKey(KEY_CODE_FIELD) -> TYPE_KEY
                 containsKey(AXIS_CODE_FIELD) -> TYPE_AXIS
                 else -> TYPE_NONE
@@ -159,6 +179,9 @@ data class InputConfigDto(
         private const val KEY_CODE_FIELD = "keyCode"
         private const val AXIS_CODE_FIELD = "axisCode"
         private const val DIRECTION_FIELD = "direction"
+        private const val TYPE_CHORD = "chord"
+        private const val MODIFIER_KEY_CODE_FIELD = "modifierKeyCode"
+        private const val TRIGGER_KEY_CODE_FIELD = "triggerKeyCode"
     }
 
     companion object {
@@ -169,11 +192,13 @@ data class InputConfigDto(
                     is InputConfig.Assignment.None -> AssignmentDto.None
                     is InputConfig.Assignment.Key -> AssignmentDto.Key(inputConfig.assignment.deviceId, inputConfig.assignment.keyCode)
                     is InputConfig.Assignment.Axis -> AssignmentDto.Axis(inputConfig.assignment.deviceId, inputConfig.assignment.axisCode, inputConfig.assignment.direction)
+                    is InputConfig.Assignment.Chord -> AssignmentDto.Chord(inputConfig.assignment.deviceId, inputConfig.assignment.modifierKeyCode, inputConfig.assignment.triggerKeyCode)
                 },
                 altAssignment = when (inputConfig.altAssignment) {
                     is InputConfig.Assignment.None -> AssignmentDto.None
                     is InputConfig.Assignment.Key -> AssignmentDto.Key(inputConfig.altAssignment.deviceId, inputConfig.altAssignment.keyCode)
                     is InputConfig.Assignment.Axis -> AssignmentDto.Axis(inputConfig.altAssignment.deviceId, inputConfig.altAssignment.axisCode, inputConfig.altAssignment.direction)
+                    is InputConfig.Assignment.Chord -> AssignmentDto.Chord(inputConfig.altAssignment.deviceId, inputConfig.altAssignment.modifierKeyCode, inputConfig.altAssignment.triggerKeyCode)
                 }
             )
         }
@@ -186,11 +211,13 @@ data class InputConfigDto(
                 is AssignmentDto.None -> InputConfig.Assignment.None
                 is AssignmentDto.Key -> InputConfig.Assignment.Key(assignment.deviceId, assignment.keyCode)
                 is AssignmentDto.Axis -> InputConfig.Assignment.Axis(assignment.deviceId, assignment.axisCode, assignment.direction)
+                is AssignmentDto.Chord -> InputConfig.Assignment.Chord(assignment.deviceId, assignment.modifierKeyCode, assignment.triggerKeyCode)
             },
             altAssignment = when (altAssignment) {
                 is AssignmentDto.None -> InputConfig.Assignment.None
                 is AssignmentDto.Key -> InputConfig.Assignment.Key(altAssignment.deviceId, altAssignment.keyCode)
                 is AssignmentDto.Axis -> InputConfig.Assignment.Axis(altAssignment.deviceId, altAssignment.axisCode, altAssignment.direction)
+                is AssignmentDto.Chord -> InputConfig.Assignment.Chord(altAssignment.deviceId, altAssignment.modifierKeyCode, altAssignment.triggerKeyCode)
             }
         )
     }

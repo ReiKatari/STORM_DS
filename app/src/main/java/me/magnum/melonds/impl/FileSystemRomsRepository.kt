@@ -912,14 +912,18 @@ class FileSystemRomsRepository(
 
     private fun collectDirectoryFileStates(directoryUri: Uri, rootDirectory: DocumentFile): List<DirectoryFileState>? {
         val files = mutableListOf<DirectoryFileState>()
+        // 1. Fast direct java.io.File traversal for local storage / STORM DS paths
+        if (collectDirectoryFileStatesFromDirectStorage(directoryUri, files)) {
+            Log.d(TAG, "collectDirectoryFileStates: fast direct storage traversal returned ${files.size} file(s) for $directoryUri")
+            return files
+        }
+        files.clear()
+        // 2. Fast SAF bulk query
         if (collectDirectoryFileStatesFromSaf(directoryUri, files) && files.isNotEmpty()) {
             return files
         }
         files.clear()
-        if (collectDirectoryFileStatesFromDirectStorage(directoryUri, files) && files.isNotEmpty()) {
-            return files
-        }
-        files.clear()
+        // 3. Fallback to recursive DocumentFile traversal
         if (!collectDirectoryFileStatesRecursive(rootDirectory, files)) {
             return null
         }
@@ -927,13 +931,25 @@ class FileSystemRomsRepository(
     }
 
     private fun collectDirectoryFileStatesFromDirectStorage(directoryUri: Uri, accumulator: MutableList<DirectoryFileState>): Boolean {
-        if (directoryUri.authority != EXTERNAL_STORAGE_PROVIDER_AUTHORITY) return false
-        val rootFile = FileUtils.resolveDirectFileFromExternalStorageUri(directoryUri) ?: return false
+        val isFileScheme = directoryUri.scheme == "file"
+        val rootFile = if (isFileScheme) {
+            val path = directoryUri.path ?: return false
+            File(path)
+        } else {
+            if (directoryUri.authority != EXTERNAL_STORAGE_PROVIDER_AUTHORITY) return false
+            FileUtils.resolveDirectFileFromExternalStorageUri(directoryUri) ?: return false
+        }
+
         if (!rootFile.exists() || !rootFile.isDirectory || !rootFile.canRead()) return false
-        val rootDocId = runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull()
-            ?: runCatching { DocumentsContract.getDocumentId(directoryUri) }.getOrNull()
-            ?: return false
-        return collectDirectoryFileStatesFromDirectStorageRecursive(directoryUri, rootFile, rootDocId, accumulator)
+
+        val rootDocId = if (isFileScheme) {
+            rootFile.absolutePath
+        } else {
+            runCatching { DocumentsContract.getTreeDocumentId(directoryUri) }.getOrNull()
+                ?: runCatching { DocumentsContract.getDocumentId(directoryUri) }.getOrNull()
+                ?: return false
+        }
+        return collectDirectoryFileStatesFromDirectStorageRecursive(directoryUri, rootFile, rootDocId, accumulator, isFileScheme)
     }
 
     private fun collectDirectoryFileStatesFromDirectStorageRecursive(
@@ -941,20 +957,34 @@ class FileSystemRomsRepository(
         currentDir: File,
         parentDocId: String,
         accumulator: MutableList<DirectoryFileState>,
+        isFileScheme: Boolean = false,
     ): Boolean {
         val children = currentDir.listFiles() ?: return false
-        val parentUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, parentDocId)
+        val parentUri = if (isFileScheme) {
+            Uri.fromFile(currentDir)
+        } else {
+            DocumentsContract.buildDocumentUriUsingTree(directoryUri, parentDocId)
+        }
         for (file in children) {
-            val childDocId = if (parentDocId.endsWith(":")) "$parentDocId${file.name}" else "$parentDocId/${file.name}"
             if (file.isDirectory) {
-                if (!collectDirectoryFileStatesFromDirectStorageRecursive(directoryUri, file, childDocId, accumulator)) {
+                val childDocId = if (isFileScheme) {
+                    file.absolutePath
+                } else {
+                    if (parentDocId.endsWith(":")) "$parentDocId${file.name}" else "$parentDocId/${file.name}"
+                }
+                if (!collectDirectoryFileStatesFromDirectStorageRecursive(directoryUri, file, childDocId, accumulator, isFileScheme)) {
                     return false
                 }
             } else {
                 val effectiveFileName = file.name
                 val processor = romFileProcessorFactory.getFileRomProcessorForFileName(effectiveFileName)
                 if (processor != null) {
-                    val fileUri = DocumentsContract.buildDocumentUriUsingTree(directoryUri, childDocId)
+                    val fileUri = if (isFileScheme) {
+                        Uri.fromFile(file)
+                    } else {
+                        val childDocId = if (parentDocId.endsWith(":")) "$parentDocId${file.name}" else "$parentDocId/${file.name}"
+                        DocumentsContract.buildDocumentUriUsingTree(directoryUri, childDocId)
+                    }
                     accumulator.add(
                         DirectoryFileState(
                             uri = fileUri,

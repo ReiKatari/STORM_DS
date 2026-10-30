@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="periodic_auto_save_intervals">
+        <item>@string/periodic_auto_save_interval_off</item>
+        <item>@string/periodic_auto_save_interval_5_min</item>
+        <item>@string/periodic_auto_save_interval_10_min</item>
+        <item>@string/periodic_auto_save_interval_15_min</item>
+    </string-array>
+
+    <string name="periodic_auto_save_interval">Autoguardado periódico</string>
+    <string name="periodic_auto_save_interval_off">Desactivado</string>
+    <string name="periodic_auto_save_interval_5_min">Cada 5 minutos</string>
+    <string name="periodic_auto_save_interval_10_min">Cada 10 minutos</string>
+    <string name="periodic_auto_save_interval_15_min">Cada 15 minutos</string>
+    <string name="periodic_auto_save_completed">Autoguardado periódico completado</string>
+    <string name="load_periodic_auto_save">Cargar autoguardado periódico</string>
+    <string name="periodic_auto_save_loaded">Autoguardado periódico cargado</string>
+    <string name="quick_slot_carousel_title">Carrusel de ranuras rápidas</string>
+    <string name="quick_slot_active_badge">ACTIVA</string>
+    <string name="quick_slot_active_slot_header">Ranura activa: Ranura %1$d</string>
+    <string name="quick_slot_slot_format">Ranura %1$d</string>
+    <string name="quick_slot_empty">Vacía</string>
+    <string name="quick_slot_btn_select">Elegir</string>
+    <string name="quick_slot_btn_save">Guardar</string>
+    <string name="quick_slot_btn_load">Cargar</string>
+    <string name="quick_slot_selected_toast">Ranura rápida %1$d seleccionada como activa</string>
+    <string name="ra_hardcore_dialog_title">Modo Hardcore activo</string>
+    <string name="ra_hardcore_dialog_message">En el modo Hardcore de RetroAchievements no se permite cargar estados guardados. ¿Deseas cambiar a modo Softcore para la sesión actual y cargar la ranura?</string>
+    <string name="ra_hardcore_dialog_switch_and_load">Cambiar a Softcore y cargar</string>
+    <string name="take_clean_screenshot">Captura de pantalla limpia</string>
+    <string name="screenshot_saved_toast">Captura guardada: %1$s</string>
+    <string name="screenshot_failed_toast">Error al guardar la captura</string>
+    <string name="slow_motion_toggle">Cámara lenta (Slow-Motion)</string>
+    <string name="slow_motion_active_toast">Cámara lenta %1$s activada</string>
+    <string name="slow_motion_disabled_toast">Cámara lenta desactivada</string>
+    <string name="slow_motion_unavailable_hardcore">La cámara lenta no está disponible en modo Hardcore</string>
+    <string name="frame_advance_step">Siguiente fotograma (+1)</string>
+    <string name="frame_advance_step_toast">Fotograma +1</string>
+    <string name="frame_advance_unavailable_hardcore">El avance por fotogramas no está disponible en modo Hardcore</string>
+    <string name="slow_motion_speed_title">Velocidad de cámara lenta</string>
+    <string name="solar_sensor_mode_auto">Auto (sensor de luz del teléfono)</string>
+    <string name="solar_sensor_auto_status">Auto: %1$.0f lx (%2$d/10)</string>
+    <string name="pedometer_real_sensor_title">Podómetro real del teléfono</string>
+    <string name="pedometer_real_sensor_enabled">Podómetro del teléfono activado</string>
+    <string name="pedometer_real_sensor_disabled">Podómetro del teléfono desactivado</string>
+    <string name="pedometer_permission_required">Se requiere permiso de reconocimiento de actividad física</string>
+</resources>

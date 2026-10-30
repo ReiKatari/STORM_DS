@@ -24,6 +24,9 @@ import me.magnum.melonds.translator.model.TranslatorTriggerMode
 import me.magnum.melonds.translator.ocr.GameTextRecognizer
 import me.magnum.melonds.translator.tts.GameTtsManager
 import me.magnum.melonds.translator.ui.GameTranslationOverlayView
+import me.magnum.melonds.translator.backlog.DialogueBacklogStore
+import me.magnum.melonds.translator.glossary.UserGlossaryManager
+import me.magnum.melonds.translator.ui.DialogueBacklogBottomSheet
 import okhttp3.OkHttpClient
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -94,6 +97,16 @@ class GameTranslatorManager(
     // Two-tier persistent translation cache (memory LRU + ROM disk JSON)
     private val translationCache = TranslationCache(activity)
 
+    // User Glossary Manager (.stormdict.json)
+    val glossaryManager by lazy {
+        UserGlossaryManager(activity) { term ->
+            invalidateGlossaryTerm(term)
+        }
+    }
+
+    // Dialogue Backlog Circular Store (50 turns)
+    val backlogStore by lazy { DialogueBacklogStore(50) }
+
     val isEnabled: Boolean
         get() = preferences.getBoolean(PREF_TRANSLATOR_ENABLED, false)
 
@@ -146,6 +159,7 @@ class GameTranslatorManager(
         val storageKey = getGameStorageKey()
         ocrContextGraph.setActiveGame(activity, storageKey)
         translationCache.setGameKey(storageKey)
+        glossaryManager.setGameKey(storageKey)
         loadRegionsForCurrentGame()
     }
 
@@ -218,6 +232,9 @@ class GameTranslatorManager(
         overlay.onTriggerTranslationRequested = {
             triggerTranslation()
         }
+        overlay.onOpenBacklogRequested = {
+            showDialogueBacklogAndGlossaryDialog(0)
+        }
         overlay.onFloatingButtonLongClickListener = {
             showQuickEngineSelectorDialog()
         }
@@ -276,6 +293,10 @@ class GameTranslatorManager(
                                 "Бэтмен: Город под защитой! Джокер: Ха-ха-ха, попробуй поймай меня! Майя: Феникс, у нас появилась новая улика!",
                                 "ru"
                             )
+                        },
+                        onOpenBacklogAndGlossary = {
+                            bottomSheetDialog.dismiss()
+                            showDialogueBacklogAndGlossaryDialog(0)
                         }
                     )
                 }
@@ -705,7 +726,8 @@ class GameTranslatorManager(
 
                 val preparedTexts = blocks.map { block ->
                     val prepared = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
-                    prepared.ifBlank { block.originalText.trim() }
+                    val textToTranslate = prepared.ifBlank { block.originalText.trim() }
+                    glossaryManager.applyPreTranslation(textToTranslate)
                 }
 
                 val uncachedBlocks = mutableListOf<Int>()
@@ -714,8 +736,9 @@ class GameTranslatorManager(
                     val textToTranslate = preparedTexts[i]
                     val cached = translationCache.get(engineType, sourceLang, targetLang, textToTranslate)
                     if (cached != null) {
-                        blocks[i].translatedText = cached
-                        ocrContextGraph.recordDialogueTurn(textToTranslate, cached)
+                        val postCached = glossaryManager.applyPostTranslation(blocks[i].originalText, cached)
+                        blocks[i].translatedText = postCached
+                        ocrContextGraph.recordDialogueTurn(textToTranslate, postCached)
                     } else {
                         uncachedBlocks.add(i)
                         uncachedTexts.add(textToTranslate)
@@ -746,7 +769,8 @@ class GameTranslatorManager(
                             val rawTranslated = batchResults.getOrNull(k)
                             val sanitized = rawTranslated?.let { raw ->
                                 val polished = me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
-                                ocrContextGraph.sanitizeTranslation(polished, targetLang)
+                                val contextPolished = ocrContextGraph.sanitizeTranslation(polished, targetLang)
+                                glossaryManager.applyPostTranslation(block.originalText, contextPolished)
                             }
                             val finalTranslation = sanitized?.takeIf { it.isNotBlank() } ?: block.originalText
                             if (finalTranslation.isNotBlank() &&
@@ -773,6 +797,21 @@ class GameTranslatorManager(
                     return@coroutineScope
                 }
                 overlayView?.setTranslatedBlocks(blocks)
+
+                // Record into 50-turn dialogue backlog store with smart deduplication
+                if (blocks.isNotEmpty()) {
+                    val fullSource = blocks.map { it.originalText.trim() }.filter { it.isNotBlank() }.joinToString("\n")
+                    val fullTranslation = blocks.map { it.translatedText.trim() }.filter { it.isNotBlank() }.joinToString("\n")
+                    if (fullSource.isNotBlank() && fullTranslation.isNotBlank()) {
+                        backlogStore.addOrUpdate(
+                            sourceText = fullSource,
+                            translatedText = fullTranslation,
+                            sourceLang = sourceLang,
+                            targetLang = targetLang
+                        )
+                    }
+                }
+
                 val ttsOn = preferences.getBoolean(PREF_TRANSLATOR_TTS_ENABLED, false)
                 if (ttsOn) {
                     ttsManager.speakBlocks(blocks, targetLang)
@@ -839,6 +878,28 @@ class GameTranslatorManager(
     private fun stopAutoTranslate() {
         autoTranslateJob?.cancel()
         autoTranslateJob = null
+    }
+
+    fun showDialogueBacklogAndGlossaryDialog(initialTab: Int = 0) {
+        DialogueBacklogBottomSheet.show(
+            activity = activity,
+            backlogStore = backlogStore,
+            glossaryManager = glossaryManager,
+            onSpeakText = { text, lang ->
+                speakTts(text, lang)
+            },
+            onInvalidateCache = { term ->
+                invalidateGlossaryTerm(term)
+            },
+            initialTab = initialTab
+        )
+    }
+
+    fun invalidateGlossaryTerm(term: String) {
+        translationCache.evictContaining(term)
+        lastTranslatedRawText = ""
+        lastFrameDHash = 0L
+        overlayView?.clearTranslations()
     }
 
     fun onDestroy() {

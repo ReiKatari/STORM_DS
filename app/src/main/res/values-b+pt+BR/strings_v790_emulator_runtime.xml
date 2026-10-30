@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="periodic_auto_save_intervals">
+        <item>@string/periodic_auto_save_interval_off</item>
+        <item>@string/periodic_auto_save_interval_5_min</item>
+        <item>@string/periodic_auto_save_interval_10_min</item>
+        <item>@string/periodic_auto_save_interval_15_min</item>
+    </string-array>
+
+    <string name="periodic_auto_save_interval">Salvamento automático periódico</string>
+    <string name="periodic_auto_save_interval_off">Desativado</string>
+    <string name="periodic_auto_save_interval_5_min">A cada 5 minutos</string>
+    <string name="periodic_auto_save_interval_10_min">A cada 10 minutos</string>
+    <string name="periodic_auto_save_interval_15_min">A cada 15 minutos</string>
+    <string name="periodic_auto_save_completed">Salvamento periódico concluído</string>
+    <string name="load_periodic_auto_save">Carregar autosave periódico</string>
+    <string name="periodic_auto_save_loaded">Autosave periódico carregado</string>
+    <string name="quick_slot_carousel_title">Carrossel de slots rápidos</string>
+    <string name="quick_slot_active_badge">ATIVO</string>
+    <string name="quick_slot_active_slot_header">Slot ativo: Slot %1$d</string>
+    <string name="quick_slot_slot_format">Slot %1$d</string>
+    <string name="quick_slot_empty">Vazio</string>
+    <string name="quick_slot_btn_select">Selecionar</string>
+    <string name="quick_slot_btn_save">Salvar</string>
+    <string name="quick_slot_btn_load">Carregar</string>
+    <string name="quick_slot_selected_toast">Slot rápido %1$d selecionado como ativo</string>
+    <string name="ra_hardcore_dialog_title">Modo Hardcore ativo</string>
+    <string name="ra_hardcore_dialog_message">No modo Hardcore do RetroAchievements, o carregamento de save states é desativado. Mudar para o modo Softcore nesta sessão e carregar o slot?</string>
+    <string name="ra_hardcore_dialog_switch_and_load">Mudar para Softcore e carregar</string>
+    <string name="take_clean_screenshot">Capturar tela limpa</string>
+    <string name="screenshot_saved_toast">Captura salva: %1$s</string>
+    <string name="screenshot_failed_toast">Falha ao salvar captura de tela</string>
+    <string name="slow_motion_toggle">Câmera lenta (Slow-Motion)</string>
+    <string name="slow_motion_active_toast">Câmera lenta %1$s ativada</string>
+    <string name="slow_motion_disabled_toast">Câmera lenta desativada</string>
+    <string name="slow_motion_unavailable_hardcore">Câmera lenta indisponível no modo Hardcore</string>
+    <string name="frame_advance_step">Próximo quadro (+1)</string>
+    <string name="frame_advance_step_toast">Quadro +1</string>
+    <string name="frame_advance_unavailable_hardcore">Avanço por quadro indisponível no modo Hardcore</string>
+    <string name="slow_motion_speed_title">Velocidade da câmera lenta</string>
+    <string name="solar_sensor_mode_auto">Auto (sensor de luz do celular)</string>
+    <string name="solar_sensor_auto_status">Auto: %1$.0f lx (%2$d/10)</string>
+    <string name="pedometer_real_sensor_title">Pedômetro real do celular</string>
+    <string name="pedometer_real_sensor_enabled">Pedômetro do celular ativado</string>
+    <string name="pedometer_real_sensor_disabled">Pedômetro do celular desativado</string>
+    <string name="pedometer_permission_required">Permissão de atividade física é necessária</string>
+</resources>

@@ -125,29 +125,23 @@ fun FullScreenCoverDialog(
         }
     }
 
-    val customCoversDir = remember { java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers").apply { mkdirs() } }
-    val cleanTitle = remember(rom.fileName) { rom.fileName.substringBeforeLast('.').trim() }
-    val customCoverFile = remember(cleanTitle) { java.io.File(customCoversDir, "$cleanTitle.png") }
-    var hasCustomCover by remember { mutableStateOf(customCoverFile.exists()) }
+    val boxArtRepo = remember { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }
+    var customCoverFile by remember { mutableStateOf(boxArtRepo.getCustomCoverFile(rom)) }
+    var hasCustomCover by remember { mutableStateOf(customCoverFile != null) }
 
     val pickCoverLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            coroutineScope.launch(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        java.io.FileOutputStream(customCoverFile).use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    withContext(Dispatchers.Main) {
+            coroutineScope.launch {
+                val success = boxArtRepo.saveCustomCover(context, rom, uri)
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        customCoverFile = boxArtRepo.getCustomCoverFile(rom)
                         hasCustomCover = true
                         Toast.makeText(context, context.getString(me.magnum.melonds.R.string.custom_cover_updated), Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Throwable) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, context.getString(me.magnum.melonds.R.string.custom_cover_error), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -265,7 +259,7 @@ fun FullScreenCoverDialog(
                     ) {
                         Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Text(
-                            text = "СОХРАНИТЬ",
+                            text = androidx.compose.ui.res.stringResource(me.magnum.melonds.R.string.save).uppercase(),
                             color = Color.White,
                             fontFamily = WatermelonMono,
                             fontSize = 11.sp,
@@ -284,7 +278,7 @@ fun FullScreenCoverDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "ИЗ ГАЛЕРЕИ",
+                            text = androidx.compose.ui.res.stringResource(me.magnum.melonds.R.string.custom_cover_pick).uppercase(),
                             color = Color.White,
                             fontFamily = WatermelonMono,
                             fontSize = 11.sp,
@@ -299,15 +293,22 @@ fun FullScreenCoverDialog(
                                 .clip(RoundedCornerShape(24.dp))
                                 .background(Color.Red.copy(alpha = 0.4f))
                                 .clickable {
-                                    customCoverFile.delete()
-                                    hasCustomCover = false
-                                    Toast.makeText(context, context.getString(me.magnum.melonds.R.string.custom_cover_removed), Toast.LENGTH_SHORT).show()
+                                    coroutineScope.launch {
+                                        val success = boxArtRepo.clearCustomCover(context, rom)
+                                        withContext(Dispatchers.Main) {
+                                            if (success) {
+                                                customCoverFile = null
+                                                hasCustomCover = false
+                                                Toast.makeText(context, context.getString(me.magnum.melonds.R.string.custom_cover_removed), Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
                                 }
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "СБРОСИТЬ",
+                                text = androidx.compose.ui.res.stringResource(me.magnum.melonds.R.string.custom_cover_reset).uppercase(),
                                 color = Color.White,
                                 fontFamily = WatermelonMono,
                                 fontSize = 11.sp,

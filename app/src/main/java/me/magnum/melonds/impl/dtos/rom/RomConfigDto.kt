@@ -49,6 +49,12 @@ data class RomConfigDto(
     val dualScreenIntegerScale: Boolean? = null,
     @SerializedName("translatorSourceLang")
     val translatorSourceLang: String? = null,
+    @SerializedName("arm9Overclock")
+    val arm9Overclock: Int? = null,
+    @SerializedName("fastForwardSpeedMultiplier")
+    val fastForwardSpeedMultiplier: Float? = null,
+    @SerializedName("customVulkanDriverName")
+    val customVulkanDriverName: String? = null,
 ) {
 
     companion object {
@@ -73,6 +79,9 @@ data class RomConfigDto(
                 romConfig.dualScreenKeepAspectRatio,
                 romConfig.dualScreenIntegerScale,
                 romConfig.translatorSourceLang,
+                romConfig.arm9Overclock,
+                romConfig.fastForwardSpeedMultiplier,
+                romConfig.customVulkanDriverName,
             )
         }
     }
@@ -98,6 +107,9 @@ data class RomConfigDto(
             dualScreenKeepAspectRatio = dualScreenKeepAspectRatio,
             dualScreenIntegerScale = dualScreenIntegerScale,
             translatorSourceLang = translatorSourceLang,
+            arm9Overclock = arm9Overclock,
+            fastForwardSpeedMultiplier = fastForwardSpeedMultiplier,
+            customVulkanDriverName = customVulkanDriverName,
         )
     }
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_cover_pick">Выбрать свою обложку</string>
+    <string name="custom_cover_reset">Сбросить свою обложку</string>
+    <string name="custom_cover_error">Не удалось загрузить изображение</string>
+    <string name="rom_config_overclock_arm9">Разгон ARM9</string>
+    <string name="rom_config_overclock_default">По умолчанию</string>
+    <string name="rom_config_speed_multiplier">Скорость перемотки</string>
+    <string name="rom_config_speed_unlimited">Без ограничений</string>
+    <string name="rom_config_vulkan_driver">Драйвер Vulkan GPU</string>
+    <string name="rom_config_vulkan_driver_global">Глобальный драйвер</string>
+    <string name="rom_config_vulkan_driver_system">Системный драйвер GPU</string>
+    <string name="rom_filter_unplayed">Не запускались</string>
+    <string name="rom_filter_recently_played">Недавно играли</string>
+    <string name="rom_filter_has_saves">С сохранениями</string>
+    <string name="feature_stats_tab_overview">Обзор</string>
+    <string name="feature_stats_tab_daily_log">Журнал по дням</string>
+    <string name="feature_stats_export_json">Экспорт JSON</string>
+    <string name="feature_stats_export_csv">Экспорт CSV</string>
+    <string name="feature_stats_export_success">Статистика экспортирована в: %s</string>
+    <string name="feature_stats_export_error">Не удалось экспортировать статистику</string>
+    <string name="feature_stats_no_sessions">Нет записанных игровых сессий</string>
+    <string name="feature_stats_sessions_count">%d сессий</string>
+    <string name="feature_stats_session_single">%d сессия</string>
+</resources>

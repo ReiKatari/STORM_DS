@@ -34,6 +34,9 @@ class RomConfigParcelable : Parcelable {
             videoFiltering = parcel.readNullableEnum(VideoFiltering.entries),
             retroArchShaderPresetPath = parcel.readString(),
             retroArchShaderParameters = parcel.readString(),
+            arm9Overclock = parcel.readNullableInt(),
+            fastForwardSpeedMultiplier = parcel.readNullableFloat(),
+            customVulkanDriverName = parcel.readString(),
         )
     }
 
@@ -52,6 +55,9 @@ class RomConfigParcelable : Parcelable {
         dest.writeNullableEnum(romConfig.videoFiltering)
         dest.writeString(romConfig.retroArchShaderPresetPath)
         dest.writeString(romConfig.retroArchShaderParameters)
+        dest.writeNullableInt(romConfig.arm9Overclock)
+        dest.writeNullableFloat(romConfig.fastForwardSpeedMultiplier)
+        dest.writeString(romConfig.customVulkanDriverName)
     }
 
     override fun describeContents(): Int {
@@ -103,4 +109,18 @@ private fun Parcel.readNullableInt(): Int? {
 
 private fun Parcel.writeNullableInt(value: Int?) {
     writeInt(value ?: -1)
+}
+
+private fun Parcel.readNullableFloat(): Float? {
+    val isPresent = readByte().toInt() != 0
+    return if (isPresent) readFloat() else null
+}
+
+private fun Parcel.writeNullableFloat(value: Float?) {
+    if (value != null) {
+        writeByte(1)
+        writeFloat(value)
+    } else {
+        writeByte(0)
+    }
 }

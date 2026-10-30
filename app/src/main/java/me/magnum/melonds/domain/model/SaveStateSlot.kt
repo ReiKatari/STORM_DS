@@ -14,5 +14,6 @@ data class SaveStateSlot(
 
     companion object {
         const val QUICK_SAVE_SLOT = 0
+        const val PERIODIC_AUTO_SAVE_SLOT = 99
     }
 }

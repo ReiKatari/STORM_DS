@@ -52,11 +52,41 @@ class FileSystemSaveStatesRepository(
         return slot.copy(screenshot = screenshotUri)
     }
 
+    override fun getPeriodicAutoSaveSlot(rom: Rom): SaveStateSlot {
+        val saveStateDirectoryDocument = getSaveStateDirectoryDocument(rom)
+        val romFileName = getRomFileNameWithoutExtension(rom)
+        val periodicFileName = "$romFileName.periodic_autosave.ml"
+        val file = saveStateDirectoryDocument?.findFile(periodicFileName)
+        val exists = file != null
+        val lastModified = file?.let { Date(it.lastModified()) }
+        val slot = SaveStateSlot(
+            slot = SaveStateSlot.PERIODIC_AUTO_SAVE_SLOT,
+            exists = exists,
+            lastUsedDate = lastModified,
+            screenshot = null,
+            customName = "Periodic Auto-Save"
+        )
+        val screenshotUri = if (exists) saveStateScreenshotProvider.getRomSaveStateScreenshotUri(rom, slot) else null
+        return slot.copy(screenshot = screenshotUri)
+    }
+
+    override fun getPeriodicAutoSaveUri(rom: Rom): Uri {
+        val saveStateDirectoryDocument = getSaveStateDirectoryDocument(rom) ?: throw SaveSlotLoadException("Could not create parent directory document")
+        val romFileName = getRomFileNameWithoutExtension(rom) ?: throw SaveSlotLoadException("Could not determine ROM file name")
+        val periodicFileName = "$romFileName.periodic_autosave.ml"
+        val saveStateFile = saveStateDirectoryDocument.findFile(periodicFileName)
+        return saveStateFile?.uri ?: (saveStateDirectoryDocument.createFile("*/*", periodicFileName)?.uri ?: throw SaveSlotLoadException("Could not create periodic auto-save file"))
+    }
+
     override fun getRomSaveStateUri(rom: Rom, saveState: SaveStateSlot): Uri {
         val saveStateDirectoryDocument = getSaveStateDirectoryDocument(rom) ?: throw SaveSlotLoadException("Could not create parent directory document")
 
         val romFileName = getRomFileNameWithoutExtension(rom) ?: throw SaveSlotLoadException("Could not determine ROM file name")
-        val saveStateName = "$romFileName.ml${saveState.slot}"
+        val saveStateName = if (saveState.slot == SaveStateSlot.PERIODIC_AUTO_SAVE_SLOT) {
+            "$romFileName.periodic_autosave.ml"
+        } else {
+            "$romFileName.ml${saveState.slot}"
+        }
         val saveStateFile = saveStateDirectoryDocument.findFile(saveStateName)
 
         val uri = if (saveStateFile != null) {
@@ -84,7 +114,11 @@ class FileSystemSaveStatesRepository(
         val saveStateDirectoryDocument = getSaveStateDirectoryDocument(rom) ?: throw SaveSlotLoadException("Could not create parent directory document")
         val romFileName = getRomFileNameWithoutExtension(rom) ?: throw SaveSlotLoadException("Could not determine ROM file name")
 
-        val saveStateName = "$romFileName.ml${saveState.slot}"
+        val saveStateName = if (saveState.slot == SaveStateSlot.PERIODIC_AUTO_SAVE_SLOT) {
+            "$romFileName.periodic_autosave.ml"
+        } else {
+            "$romFileName.ml${saveState.slot}"
+        }
         val saveStateFile = saveStateDirectoryDocument.findFile(saveStateName)
 
         saveStateFile?.delete()

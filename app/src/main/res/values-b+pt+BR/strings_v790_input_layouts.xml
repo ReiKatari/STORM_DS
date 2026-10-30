@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">Atalhos combinados do controle (Select + botão)</string>
+    <string name="pref_input_chord_hotkeys_summary">Segure Select + botão (R=Avanço rápido, L=Retroceder, Start=Pausar, Y=Captura, X=Câmera lenta)</string>
+    <string name="pref_input_turbo_frequency_title">Frequência do turbo de hardware</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (Padrão)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">Turbo do controle: Ligado (%d Hz)</string>
+    <string name="turbo_toast_disabled">Turbo do controle: Desligado</string>
+    <string name="input_slow_motion">Câmera lenta</string>
+    <string name="input_frame_advance">Avanço de quadro</string>
+    <string name="input_take_screenshot">Tirar captura de tela</string>
+    <string name="input_toggle_hardware_turbo">Modo turbo do controle</string>
+    <string name="layout_editor_lock_component">Bloquear elemento (evitar movimento)</string>
+    <string name="layout_editor_component_locked_toast">O elemento está bloqueado. Desbloqueie para mover</string>
+    <string name="action_layout_multiselect">Seleção múltipla</string>
+    <string name="action_layout_multiselect_summary">Selecionar e mover vários botões juntos</string>
+    <string name="action_layout_live_test">Testar toques</string>
+    <string name="action_layout_live_test_summary">Teste interativo de botões e multitoque</string>
+    <string name="live_test_status_idle">Modo de teste: pressione botões na tela • Voltar para sair</string>
+    <string name="live_test_status_pressed_format">Modo de teste: pressionados [%s] • Voltar para sair</string>
+    <string name="live_test_exit">Sair do teste</string>
+</resources>

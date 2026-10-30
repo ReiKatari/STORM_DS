@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="periodic_auto_save_intervals">
+        <item>@string/periodic_auto_save_interval_off</item>
+        <item>@string/periodic_auto_save_interval_5_min</item>
+        <item>@string/periodic_auto_save_interval_10_min</item>
+        <item>@string/periodic_auto_save_interval_15_min</item>
+    </string-array>
+
+    <string name="periodic_auto_save_interval">定期自动存档</string>
+    <string name="periodic_auto_save_interval_off">关闭</string>
+    <string name="periodic_auto_save_interval_5_min">每 5 分钟</string>
+    <string name="periodic_auto_save_interval_10_min">每 10 分钟</string>
+    <string name="periodic_auto_save_interval_15_min">每 15 分钟</string>
+    <string name="periodic_auto_save_completed">定期自动存档已完成</string>
+    <string name="load_periodic_auto_save">载入定期自动存档</string>
+    <string name="periodic_auto_save_loaded">已载入定期自动存档</string>
+    <string name="quick_slot_carousel_title">快速槽位轮播</string>
+    <string name="quick_slot_active_badge">当前活动</string>
+    <string name="quick_slot_active_slot_header">活动槽位：槽位 %1$d</string>
+    <string name="quick_slot_slot_format">槽位 %1$d</string>
+    <string name="quick_slot_empty">空</string>
+    <string name="quick_slot_btn_select">选择</string>
+    <string name="quick_slot_btn_save">存档</string>
+    <string name="quick_slot_btn_load">读档</string>
+    <string name="quick_slot_selected_toast">已将快速槽位 %1$d 设为活动槽位</string>
+    <string name="ra_hardcore_dialog_title">硬核模式已启用</string>
+    <string name="ra_hardcore_dialog_message">在 RetroAchievements 硬核竞技模式下禁止载入即时存档。是否在当前会话中切换到普通模式（Softcore）并载入槽位？</string>
+    <string name="ra_hardcore_dialog_switch_and_load">切换至普通模式并读档</string>
+    <string name="take_clean_screenshot">截取纯净画面</string>
+    <string name="screenshot_saved_toast">截图已保存：%1$s</string>
+    <string name="screenshot_failed_toast">保存截图失败</string>
+    <string name="slow_motion_toggle">慢动作减速 (Slow-Motion)</string>
+    <string name="slow_motion_active_toast">已启用慢动作 %1$s</string>
+    <string name="slow_motion_disabled_toast">慢动作已关闭</string>
+    <string name="slow_motion_unavailable_hardcore">硬核模式下无法使用慢动作功能</string>
+    <string name="frame_advance_step">下一帧 (+1)</string>
+    <string name="frame_advance_step_toast">步进 +1 帧</string>
+    <string name="frame_advance_unavailable_hardcore">硬核模式下无法使用单帧步进</string>
+    <string name="slow_motion_speed_title">慢动作倍率</string>
+    <string name="solar_sensor_mode_auto">自动（手机光线传感器）</string>
+    <string name="solar_sensor_auto_status">自动：%1$.0f lx (%2$d/10)</string>
+    <string name="pedometer_real_sensor_title">真实手机计步器</string>
+    <string name="pedometer_real_sensor_enabled">手机计步器已开启</string>
+    <string name="pedometer_real_sensor_disabled">手机计步器已关闭</string>
+    <string name="pedometer_permission_required">需要身体活动识别权限以进行计步</string>
+</resources>

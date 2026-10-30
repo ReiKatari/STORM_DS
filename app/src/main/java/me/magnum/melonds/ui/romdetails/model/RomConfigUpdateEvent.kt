@@ -27,5 +27,8 @@ sealed class RomConfigUpdateEvent {
     data class RetroAchievementsEnabledUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
     data class DualScreenPresetUpdate(val preset: me.magnum.melonds.domain.model.DualScreenPreset?) : RomConfigUpdateEvent()
     data class TranslatorSourceLangUpdate(val sourceLang: String?) : RomConfigUpdateEvent()
+    data class Arm9OverclockUpdate(val arm9Overclock: Int?) : RomConfigUpdateEvent()
+    data class FastForwardSpeedMultiplierUpdate(val speedMultiplier: Float?) : RomConfigUpdateEvent()
+    data class CustomVulkanDriverUpdate(val customVulkanDriverName: String?) : RomConfigUpdateEvent()
     data class ResetToDefaults(val preserveCustomName: Boolean = true) : RomConfigUpdateEvent()
 }

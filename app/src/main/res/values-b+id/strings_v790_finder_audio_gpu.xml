@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">Pencari RAM</string>
+    <string name="v790_ram_finder_title">Pemindai Memori</string>
+    <string name="v790_ram_bitness_8">8-bit (1 bita)</string>
+    <string name="v790_ram_bitness_16">16-bit (2 bita)</string>
+    <string name="v790_ram_bitness_32">32-bit (4 bita)</string>
+    <string name="v790_ram_mode_exact">Nilai tepat</string>
+    <string name="v790_ram_mode_increased">Meningkat</string>
+    <string name="v790_ram_mode_decreased">Menurun</string>
+    <string name="v790_ram_mode_changed">Berubah</string>
+    <string name="v790_ram_mode_unchanged">Tidak berubah</string>
+    <string name="v790_ram_new_search">Pencarian baru</string>
+    <string name="v790_ram_filter">Saring</string>
+    <string name="v790_ram_results_count">Alamat ditemukan: %1$d</string>
+    <string name="v790_ram_results_showing_top">Menampilkan %1$d teratas</string>
+    <string name="v790_ram_no_results">Tidak ada alamat cocok ditemukan</string>
+    <string name="v790_ram_current_val">Saat ini: %1$s</string>
+    <string name="v790_ram_prev_val">Sebelum: %1$s</string>
+    <string name="v790_ram_btn_test">Uji</string>
+    <string name="v790_ram_btn_create_cheat">Buat cheat</string>
+    <string name="v790_ram_test_success">Ditulis ke RAM</string>
+    <string name="v790_ram_test_fail">Gagal menulis</string>
+    <string name="v790_ram_cheat_created">Cheat dibuat dan disalin ke papan klip!</string>
+    <string name="v790_ram_enter_value">Masukkan nilai...</string>
+    <string name="v790_ram_cheat_name">RAM 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">RAM emulator tidak tersedia</string>
+    <string name="v790_ram_searching">Memindai memori...</string>
+    <string name="mic_agc_noise_gate_title">Noise Gate adaptif dan AGC Mikrofon</string>
+    <string name="mic_agc_noise_gate_summary">Filter gemuruh DC, peredam kebisingan ruangan dan normalisasi suara</string>
+    <string name="v790_vulkan_pipeline_cache_status">Tembolok pipeline Vulkan aktif</string>
+</resources>

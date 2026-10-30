@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_cover_pick">カスタムカバーを選択</string>
+    <string name="custom_cover_reset">カスタムカバーをリセット</string>
+    <string name="custom_cover_error">画像を読み込めませんでした</string>
+    <string name="rom_config_overclock_arm9">ARM9 オーバークロック</string>
+    <string name="rom_config_overclock_default">デフォルト</string>
+    <string name="rom_config_speed_multiplier">早送り速度</string>
+    <string name="rom_config_speed_unlimited">無制限</string>
+    <string name="rom_config_vulkan_driver">Vulkan GPU ドライバー</string>
+    <string name="rom_config_vulkan_driver_global">グローバルドライバー</string>
+    <string name="rom_config_vulkan_driver_system">システム GPU ドライバー</string>
+    <string name="rom_filter_unplayed">未プレイ</string>
+    <string name="rom_filter_recently_played">最近プレイしたゲーム</string>
+    <string name="rom_filter_has_saves">セーブデータあり</string>
+    <string name="feature_stats_tab_overview">概要</string>
+    <string name="feature_stats_tab_daily_log">日別ログ</string>
+    <string name="feature_stats_export_json">JSON エクスポート</string>
+    <string name="feature_stats_export_csv">CSV エクスポート</string>
+    <string name="feature_stats_export_success">統計データをエクスポートしました：%s</string>
+    <string name="feature_stats_export_error">統計データのエクスポートに失敗しました</string>
+    <string name="feature_stats_no_sessions">プレイ記録はありません</string>
+    <string name="feature_stats_sessions_count">%d 回のセッション</string>
+    <string name="feature_stats_session_single">%d 回のセッション</string>
+</resources>

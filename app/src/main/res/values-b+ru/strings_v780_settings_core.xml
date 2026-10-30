@@ -5,7 +5,7 @@
     <string name="v780_search_no_results">Параметры не найдены</string>
     <string name="v780_search_results_count">Найдено: %1$d</string>
     <string name="v780_rewind_summary_title">Расчёт буфера перемотки</string>
-    <string name="v780_rewind_summary_detail">Окно перемотки: %1$d сек (%2$d снимков). Расчётный объём буфера в ОЗУ: ~%3$s (до %4$s при пиковой нагрузке).</string>
+    <string name="v780_rewind_summary_detail">Окно перемотки: %1$d сек (%2$s). Расчётный объём буфера в ОЗУ: ~%3$s (до %4$s при пиковой нагрузке).</string>
     <string name="v780_settings_maintenance_title">Обслуживание и резервные копии</string>
     <string name="v780_settings_export_json_title">Экспорт настроек в файл JSON</string>
     <string name="v780_settings_export_json_summary">Сохранить текущие настройки в переносимый файл JSON</string>
@@ -31,4 +31,16 @@
     <string name="v780_internal_randomize_mac_summary">Создать случайный сетевой адрес с префиксом Nintendo 00:09:BF</string>
     <string name="v780_mac_generated">Сгенерирован MAC-адрес Nintendo: %1$s</string>
     <string name="v780_mac_invalid_format">Некорректный формат MAC-адреса (требуется XX:XX:XX:XX:XX:XX)</string>
+    <plurals name="v780_rom_folders_count">
+        <item quantity="one">%1$d папка</item>
+        <item quantity="few">%1$d папки</item>
+        <item quantity="many">%1$d папок</item>
+        <item quantity="other">%1$d папок</item>
+    </plurals>
+    <plurals name="v780_rewind_snapshots_count">
+        <item quantity="one">%1$d снимок</item>
+        <item quantity="few">%1$d снимка</item>
+        <item quantity="many">%1$d снимков</item>
+        <item quantity="other">%1$d снимков</item>
+    </plurals>
 </resources>

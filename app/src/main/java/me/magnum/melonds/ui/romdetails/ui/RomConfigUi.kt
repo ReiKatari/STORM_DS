@@ -121,6 +121,9 @@ private fun Content(
     val retroAchievementsDialogState = rememberSingleChoiceDialogState<Boolean?>()
     val dualScreenPresetDialogState = rememberSingleChoiceDialogState<me.magnum.melonds.domain.model.DualScreenPreset?>()
     val translatorSourceLangDialogState = rememberSingleChoiceDialogState<String?>()
+    val arm9OverclockDialogState = rememberSingleChoiceDialogState<Int?>()
+    val fastForwardSpeedDialogState = rememberSingleChoiceDialogState<Float?>()
+    val customVulkanDriverDialogState = rememberSingleChoiceDialogState<String?>()
     val retroArchPresetPathDialogState = rememberTextInputDialogState()
     val retroArchParametersDialogState = rememberTextInputDialogState()
 
@@ -250,6 +253,78 @@ private fun Content(
             }
         }
 
+        ConfigSection(title = stringResource(R.string.rom_config_overclock_arm9)) {
+            val arm9Label = when (romConfig.arm9Overclock) {
+                null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
+                1 -> "1x (67 MHz)"
+                2 -> "2x (133 MHz)"
+                3 -> "3x (200 MHz)"
+                4 -> "4x (268 MHz)"
+                else -> "${romConfig.arm9Overclock}x"
+            }
+            ConfigRow(
+                title = stringResource(R.string.rom_config_overclock_arm9),
+                value = arm9Label,
+                showDivider = true,
+                onClick = {
+                    arm9OverclockDialogState.show(
+                        title = context.getString(R.string.rom_config_overclock_arm9),
+                        items = listOf(null, 1, 2, 3, 4),
+                        labelOf = {
+                            when (it) {
+                                null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
+                                1 -> "1x (67 MHz)"
+                                2 -> "2x (133 MHz)"
+                                3 -> "3x (200 MHz)"
+                                4 -> "4x (268 MHz)"
+                                else -> "${it}x"
+                            }
+                        },
+                        selected = romConfig.arm9Overclock,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.Arm9OverclockUpdate(it)) },
+                    )
+                },
+            )
+
+            val speedLabel = when (romConfig.fastForwardSpeedMultiplier) {
+                null -> useGlobalWithValue(
+                    if (romConfig.globalFastForwardSpeedMultiplier <= 0f) {
+                        stringResource(R.string.rom_config_speed_unlimited)
+                    } else {
+                        "${romConfig.globalFastForwardSpeedMultiplier}x"
+                    }
+                )
+                -1f -> stringResource(R.string.rom_config_speed_unlimited)
+                else -> "${romConfig.fastForwardSpeedMultiplier}x"
+            }
+            ConfigRow(
+                title = stringResource(R.string.rom_config_speed_multiplier),
+                value = speedLabel,
+                showDivider = false,
+                onClick = {
+                    fastForwardSpeedDialogState.show(
+                        title = context.getString(R.string.rom_config_speed_multiplier),
+                        items = listOf(null, -1f, 1.5f, 2f, 3f, 4f, 8f),
+                        labelOf = {
+                            when (it) {
+                                null -> useGlobalWithValue(
+                                    if (romConfig.globalFastForwardSpeedMultiplier <= 0f) {
+                                        context.getString(R.string.rom_config_speed_unlimited)
+                                    } else {
+                                        "${romConfig.globalFastForwardSpeedMultiplier}x"
+                                    }
+                                )
+                                -1f -> context.getString(R.string.rom_config_speed_unlimited)
+                                else -> "${it}x"
+                            }
+                        },
+                        selected = romConfig.fastForwardSpeedMultiplier,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.FastForwardSpeedMultiplierUpdate(it)) },
+                    )
+                },
+            )
+        }
+
         ConfigSection(title = stringResource(R.string.audio)) {
             ConfigRow(
                 title = stringResource(R.string.microphone_source),
@@ -283,6 +358,32 @@ private fun Content(
         }
 
         ConfigSection(title = stringResource(R.string.label_rom_config_video)) {
+            val vulkanDriverLabel = when (romConfig.customVulkanDriverName) {
+                null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
+                "__SYSTEM__" -> stringResource(R.string.rom_config_vulkan_driver_system)
+                else -> romConfig.availableVulkanDrivers.firstOrNull { it.first == romConfig.customVulkanDriverName }?.second
+                    ?: romConfig.customVulkanDriverName.orEmpty()
+            }
+            ConfigRow(
+                title = stringResource(R.string.rom_config_vulkan_driver),
+                value = vulkanDriverLabel,
+                showDivider = true,
+                onClick = {
+                    customVulkanDriverDialogState.show(
+                        title = context.getString(R.string.rom_config_vulkan_driver),
+                        items = romConfig.availableVulkanDrivers.map { it.first },
+                        labelOf = { driverId ->
+                            when (driverId) {
+                                null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
+                                "__SYSTEM__" -> context.getString(R.string.rom_config_vulkan_driver_system)
+                                else -> romConfig.availableVulkanDrivers.firstOrNull { it.first == driverId }?.second ?: (driverId ?: "")
+                            }
+                        },
+                        selected = romConfig.customVulkanDriverName,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.CustomVulkanDriverUpdate(it)) },
+                    )
+                },
+            )
             ConfigRow(
                 title = stringResource(R.string.renderer),
                 value = selectedRenderer?.let { rendererOptions[it.ordinal] } ?: useGlobalWithValue(globalRendererLabel),

@@ -11,12 +11,14 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import me.magnum.melonds.database.MelonDatabase
 import me.magnum.melonds.database.callback.CustomCheatCreationCallback
+import me.magnum.melonds.database.daos.PlayStatsDao
 import me.magnum.melonds.database.daos.RetroAchievementsDao
 import me.magnum.melonds.database.migrations.Migration1to2
 import me.magnum.melonds.database.migrations.Migration4to5
 import me.magnum.melonds.database.migrations.Migration5to6
 import me.magnum.melonds.database.migrations.Migration7to8
 import me.magnum.melonds.database.migrations.Migration8to9
+import me.magnum.melonds.database.migrations.Migration9to10
 import me.magnum.melonds.impl.retroachievements.NoCacheRetroAchievementsDao
 import javax.inject.Singleton
 
@@ -61,12 +63,17 @@ object DatabaseModule {
                     addCallback(it)
                 }
             }
-            .addMigrations(Migration1to2(), Migration4to5(), Migration5to6(), Migration7to8(), Migration8to9())
+            .addMigrations(Migration1to2(), Migration4to5(), Migration5to6(), Migration7to8(), Migration8to9(), Migration9to10())
             .build()
     }
 
     @Provides
     fun provideRAAchievementsDao(database: MelonDatabase): RetroAchievementsDao {
         return NoCacheRetroAchievementsDao(database.achievementsDao())
+    }
+
+    @Provides
+    fun providePlayStatsDao(database: MelonDatabase): PlayStatsDao {
+        return database.playStatsDao()
     }
 }

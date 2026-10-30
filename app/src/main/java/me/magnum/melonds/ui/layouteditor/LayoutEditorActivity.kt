@@ -54,6 +54,8 @@ class LayoutEditorActivity : AppCompatActivity() {
 
     enum class MenuOption(@field:StringRes val stringRes: Int) {
         UNDO(R.string.action_layout_undo),
+        MULTI_SELECT(R.string.action_layout_multiselect),
+        LIVE_TEST(R.string.action_layout_live_test),
         PROPERTIES(R.string.properties),
         BACKGROUNDS(R.string.background),
         REVERT(R.string.revert_changes),

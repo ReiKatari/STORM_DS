@@ -25,6 +25,9 @@ data class RomConfig(
     val dualScreenKeepAspectRatio: Boolean? = null,
     val dualScreenIntegerScale: Boolean? = null,
     val translatorSourceLang: String? = null,
+    val arm9Overclock: Int? = null,
+    val fastForwardSpeedMultiplier: Float? = null,
+    val customVulkanDriverName: String? = null,
 ) {
 
     fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
@@ -59,6 +62,9 @@ data class RomConfig(
                 dualScreenKeepAspectRatio = null,
                 dualScreenIntegerScale = null,
                 translatorSourceLang = null,
+                arm9Overclock = null,
+                fastForwardSpeedMultiplier = null,
+                customVulkanDriverName = null,
             )
         }
     }

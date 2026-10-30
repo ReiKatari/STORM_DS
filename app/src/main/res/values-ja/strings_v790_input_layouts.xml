@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">ゲームパッド同時押しショートカット (Select + ボタン)</string>
+    <string name="pref_input_chord_hotkeys_summary">Select長押し + ボタン (R=早送り, L=巻き戻し, Start=一時停止, Y=スクショ, X=スローモーション)</string>
+    <string name="pref_input_turbo_frequency_title">ハードウェア連射周波数</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (デフォルト)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">ゲームパッド連射: オン (%d Hz)</string>
+    <string name="turbo_toast_disabled">ゲームパッド連射: オフ</string>
+    <string name="input_slow_motion">スローモーション</string>
+    <string name="input_frame_advance">コマ送り</string>
+    <string name="input_take_screenshot">スクリーンショット</string>
+    <string name="input_toggle_hardware_turbo">ゲームパッド連射モード</string>
+    <string name="layout_editor_lock_component">要素を固定 (位置ずれ防止)</string>
+    <string name="layout_editor_component_locked_toast">要素は固定されています。移動するにはロックを解除してください</string>
+    <string name="action_layout_multiselect">複数選択</string>
+    <string name="action_layout_multiselect_summary">複数のボタンをまとめて選択して移動</string>
+    <string name="action_layout_live_test">ボタン入力をテスト</string>
+    <string name="action_layout_live_test_summary">ボタンとマルチタッチのリアルタイムテスト</string>
+    <string name="live_test_status_idle">テストモード: 画面上のボタンを押してください • 戻るで終了</string>
+    <string name="live_test_status_pressed_format">テストモード: 入力中 [%s] • 戻るで終了</string>
+    <string name="live_test_exit">テスト終了</string>
+</resources>

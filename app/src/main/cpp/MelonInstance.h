@@ -36,6 +36,7 @@ public:
     ~MelonInstance();
 
     int getInstanceId() { return instanceId; };
+    melonDS::NDS* getNDS() const noexcept { return nds; }
     Renderer getCurrentRenderer() const { return currentRenderer; }
 
     bool loadRom(std::string romPath, std::string sramPath);

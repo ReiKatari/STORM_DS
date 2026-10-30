@@ -7,6 +7,7 @@ data class PositionedLayoutComponent(
     val component: LayoutComponent,
     val alpha: Float = 1f,
     val onTop: Boolean = false,
+    val locked: Boolean = false,
 ) {
 
     fun isScreen(): Boolean {

@@ -101,6 +101,13 @@ class InputSetupViewModel @Inject constructor(
         focusOnNextInput(inputUnderAssignment)
     }
 
+    fun updateInputAssignedChord(modifierKey: Int, triggerKey: Int) {
+        val inputUnderAssignment = _inputUnderAssignment.value ?: return
+        val inputType = InputConfig.Assignment.Chord(null, modifierKey, triggerKey)
+        setInputAssignment(inputUnderAssignment, inputType)
+        focusOnNextInput(inputUnderAssignment)
+    }
+
     fun updateInputAssignedAxis(axis: Int, direction: InputConfig.Assignment.Axis.Direction) {
         val inputUnderAssignment = _inputUnderAssignment.value ?: return
         val inputType = InputConfig.Assignment.Axis(null, axis, direction)
@@ -160,6 +167,13 @@ class InputSetupViewModel @Inject constructor(
                                 primary = assignment
                             } else if (secondary == InputConfig.Assignment.None || secondary == assignment) {
                                 secondary = assignment
+                            } else {
+                                secondary = assignment
+                            }
+                        }
+                        is InputConfig.Assignment.Chord -> {
+                            if (primary == InputConfig.Assignment.None || primary == assignment) {
+                                primary = assignment
                             } else {
                                 secondary = assignment
                             }

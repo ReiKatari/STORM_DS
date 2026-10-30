@@ -61,8 +61,24 @@ class RomListFragment : Fragment() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var romSaveFileManager: RomSaveFileManager
+    @Inject lateinit var boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository
 
     private val romListViewModel: RomListViewModel by activityViewModels()
+    private var pendingCoverRom: Rom? = null
+    private val pickCustomCoverLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        val rom = pendingCoverRom
+        pendingCoverRom = null
+        if (uri != null && rom != null) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                val success = boxArtRepository.saveCustomCover(requireContext(), rom, uri)
+                if (success) {
+                    android.widget.Toast.makeText(requireContext(), R.string.custom_cover_updated, android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    android.widget.Toast.makeText(requireContext(), R.string.custom_cover_error, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     private lateinit var backPressedCallback: OnBackPressedCallback
 
     private var romSelectedListener: ((Rom) -> Unit)? = null
@@ -187,6 +203,18 @@ class RomListFragment : Fragment() {
                         onDecryptRom = { rom ->
                             decryptionRom = rom
                             decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
+                        },
+                        onPickCustomCover = { rom ->
+                            pendingCoverRom = rom
+                            pickCustomCoverLauncher.launch("image/*")
+                        },
+                        onClearCustomCover = { rom ->
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                val success = boxArtRepository.clearCustomCover(requireContext(), rom)
+                                if (success) {
+                                    android.widget.Toast.makeText(requireContext(), R.string.custom_cover_removed, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     )
 

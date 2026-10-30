@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">导出游戏数据包 (.zip)</string>
+    <string name="export_data_bundle_success">游戏数据包已保存：%s</string>
+    <string name="export_data_bundle_error">导出数据包失败：%s</string>
+    <string name="export_data_bundle_in_progress">正在导出数据包...</string>
+    <string name="undo_overwrite_multi_step">撤销覆盖槽位 %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d 步</string>
+    <string name="ra_sync_queue_button">立即同步</string>
+    <string name="ra_sync_queue_success">离线成就队列已成功提交至服务器</string>
+    <string name="ra_sync_queue_error">同步成就队列失败：%s</string>
+    <string name="ra_sync_queue_empty">没有待提交的离线成就</string>
+    <string name="ra_sync_queue_syncing">正在同步队列...</string>
+    <string name="cheat_import_dat_success">DAT 金手指数据库导入成功</string>
+    <string name="cheat_import_supported_formats">支持 XML、DAT (usrcheat.dat) 与 ZIP 压缩包</string>
+</resources>

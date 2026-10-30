@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Экспорт пакета данных (.zip)</string>
+    <string name="export_data_bundle_success">Пакет данных игры сохранён: %s</string>
+    <string name="export_data_bundle_error">Ошибка экспорта пакета данных: %s</string>
+    <string name="export_data_bundle_in_progress">Экспорт пакета данных...</string>
+    <string name="undo_overwrite_multi_step">Откат слота %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d шагов</string>
+    <string name="ra_sync_queue_button">Синхронизировать сейчас</string>
+    <string name="ra_sync_queue_success">Офлайн-очередь достижений успешно отправлена на сервер</string>
+    <string name="ra_sync_queue_error">Ошибка синхронизации очереди: %s</string>
+    <string name="ra_sync_queue_empty">Нет ожидающих офлайн-достижений для отправки</string>
+    <string name="ra_sync_queue_syncing">Синхронизация очереди...</string>
+    <string name="cheat_import_dat_success">База читов DAT успешно импортирована</string>
+    <string name="cheat_import_supported_formats">Поддерживаются XML, DAT (usrcheat.dat) и ZIP архивы</string>
+</resources>

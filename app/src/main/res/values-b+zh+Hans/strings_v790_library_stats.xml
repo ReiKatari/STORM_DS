@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_cover_pick">选择自定义封面</string>
+    <string name="custom_cover_reset">重置自定义封面</string>
+    <string name="custom_cover_error">无法加载图像</string>
+    <string name="rom_config_overclock_arm9">ARM9 超频</string>
+    <string name="rom_config_overclock_default">默认</string>
+    <string name="rom_config_speed_multiplier">快进速度</string>
+    <string name="rom_config_speed_unlimited">无限制</string>
+    <string name="rom_config_vulkan_driver">Vulkan GPU 驱动</string>
+    <string name="rom_config_vulkan_driver_global">全局驱动</string>
+    <string name="rom_config_vulkan_driver_system">系统 GPU 驱动</string>
+    <string name="rom_filter_unplayed">未运行过</string>
+    <string name="rom_filter_recently_played">最近游玩</string>
+    <string name="rom_filter_has_saves">有存档</string>
+    <string name="feature_stats_tab_overview">概览</string>
+    <string name="feature_stats_tab_daily_log">每日日志</string>
+    <string name="feature_stats_export_json">导出 JSON</string>
+    <string name="feature_stats_export_csv">导出 CSV</string>
+    <string name="feature_stats_export_success">统计已导出至：%s</string>
+    <string name="feature_stats_export_error">导出统计失败</string>
+    <string name="feature_stats_no_sessions">暂无游戏会话记录</string>
+    <string name="feature_stats_sessions_count">%d 次会话</string>
+    <string name="feature_stats_session_single">%d 次会话</string>
+</resources>

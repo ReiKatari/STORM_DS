@@ -24,6 +24,7 @@
 using namespace melonDS;
 
 namespace MelonDSAndroid {
+    class MelonInstance;
     typedef struct {
         std::vector<u32> code;
     } Cheat;
@@ -111,6 +112,7 @@ namespace MelonDSAndroid {
     extern bool ensureOpenGlContext();
 
     extern void setConfiguration(EmulatorConfiguration emulatorConfiguration);
+    extern std::shared_ptr<MelonInstance> GetInstanceSnapshot();
     extern void setup(AndroidCameraHandler* androidCameraHandler, std::shared_ptr<MelonEventMessenger> androidEventMessenger, u32* screenshotBufferPointer, int instanceId);
     extern void setCodeList(std::list<Cheat> cheats);
     extern bool setupAchievements(

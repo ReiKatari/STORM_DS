@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Datenpaket exportieren (.zip)</string>
+    <string name="export_data_bundle_success">Spieldatenpaket gespeichert: %s</string>
+    <string name="export_data_bundle_error">Fehler beim Exportieren des Datenpakets: %s</string>
+    <string name="export_data_bundle_in_progress">Datenpaket wird exportiert...</string>
+    <string name="undo_overwrite_multi_step">Slot %1$s wiederherstellen (%2$s)</string>
+    <string name="undo_step_count_format">%d Schritte</string>
+    <string name="ra_sync_queue_button">Jetzt synchronisieren</string>
+    <string name="ra_sync_queue_success">Offline-Erfolgewarteschlange erfolgreich an den Server gesendet</string>
+    <string name="ra_sync_queue_error">Fehler beim Synchronisieren der Warteschlange: %s</string>
+    <string name="ra_sync_queue_empty">Keine ausstehenden Offline-Erfolge zu senden</string>
+    <string name="ra_sync_queue_syncing">Warteschlange wird synchronisiert...</string>
+    <string name="cheat_import_dat_success">DAT-Cheat-Datenbank erfolgreich importiert</string>
+    <string name="cheat_import_supported_formats">Unterstützt XML, DAT (usrcheat.dat) und ZIP-Archive</string>
+</resources>

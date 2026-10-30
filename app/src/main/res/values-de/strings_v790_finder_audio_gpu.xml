@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">RAM-Suche</string>
+    <string name="v790_ram_finder_title">Speicherscanner</string>
+    <string name="v790_ram_bitness_8">8-Bit (1 Byte)</string>
+    <string name="v790_ram_bitness_16">16-Bit (2 Bytes)</string>
+    <string name="v790_ram_bitness_32">32-Bit (4 Bytes)</string>
+    <string name="v790_ram_mode_exact">Genaue Zahl</string>
+    <string name="v790_ram_mode_increased">Gestiegen</string>
+    <string name="v790_ram_mode_decreased">Gefallen</string>
+    <string name="v790_ram_mode_changed">Geändert</string>
+    <string name="v790_ram_mode_unchanged">Unverändert</string>
+    <string name="v790_ram_new_search">Neue Suche</string>
+    <string name="v790_ram_filter">Filtern</string>
+    <string name="v790_ram_results_count">Gefundene Adressen: %1$d</string>
+    <string name="v790_ram_results_showing_top">Erste %1$d Treffer angezeigt</string>
+    <string name="v790_ram_no_results">Keine Treffer gefunden</string>
+    <string name="v790_ram_current_val">Akt: %1$s</string>
+    <string name="v790_ram_prev_val">Vor: %1$s</string>
+    <string name="v790_ram_btn_test">Test</string>
+    <string name="v790_ram_btn_create_cheat">Cheat erstellen</string>
+    <string name="v790_ram_test_success">In RAM geschrieben</string>
+    <string name="v790_ram_test_fail">Schreiben fehlgeschlagen</string>
+    <string name="v790_ram_cheat_created">Cheat erstellt und in die Zwischenablage kopiert!</string>
+    <string name="v790_ram_enter_value">Wert eingeben...</string>
+    <string name="v790_ram_cheat_name">RAM 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">Emulator-RAM nicht verfügbar</string>
+    <string name="v790_ram_searching">Speicher wird durchsucht...</string>
+    <string name="mic_agc_noise_gate_title">Adaptives Noise Gate und Mikrofon-AGC</string>
+    <string name="mic_agc_noise_gate_summary">DC-Brummfilter, Raumgeräuschunterdrückung und Sprachnormalisierung</string>
+    <string name="v790_vulkan_pipeline_cache_status">Vulkan-Shader-Pipeline-Cache aktiv</string>
+</resources>

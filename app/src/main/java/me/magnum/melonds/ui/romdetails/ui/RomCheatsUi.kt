@@ -169,12 +169,21 @@ fun RomCheatsUi(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 cheatsRepository.importCheats(uri)
-                // Also copy imported file to STORM DS/cheats/usrcheat.dat for persistence
+                // Also copy imported file to STORM DS/cheats/ for persistence
                 runCatching {
                     val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
                     val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+                    val fileName = runCatching {
+                        androidx.documentfile.provider.DocumentFile.fromSingleUri(context, uri)?.name
+                    }.getOrNull() ?: "usrcheat.dat"
+                    val targetName = when {
+                        fileName.endsWith(".dat", ignoreCase = true) -> "usrcheat.dat"
+                        fileName.endsWith(".xml", ignoreCase = true) -> "cheat.xml"
+                        fileName.endsWith(".zip", ignoreCase = true) -> "cheats.zip"
+                        else -> "usrcheat.dat"
+                    }
                     context.contentResolver.openInputStream(uri)?.use { input ->
-                        val target = File(cheatsDir, "usrcheat.dat")
+                        val target = File(cheatsDir, targetName)
                         FileOutputStream(target).use { output ->
                             input.copyTo(output)
                         }
@@ -312,7 +321,7 @@ fun RomCheatsUi(
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color.White.copy(alpha = 0.15f))
-                                .clickable { importCheatsLauncher.launch(arrayOf("*/*")) }
+                                .clickable { importCheatsLauncher.launch(arrayOf("application/octet-stream", "text/xml", "application/xml", "application/zip", "*/*")) }
                                 .padding(vertical = 8.dp, horizontal = 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -320,7 +329,7 @@ fun RomCheatsUi(
                                 Icon(Icons.Filled.UploadFile, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(
-                                    text = "Импорт usrcheat.dat",
+                                    text = "Импорт чит-базы (.dat, .xml, .zip)",
                                     fontFamily = SpaceGrotesk,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,

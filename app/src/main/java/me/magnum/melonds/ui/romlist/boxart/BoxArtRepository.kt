@@ -1,10 +1,17 @@
 package me.magnum.melonds.ui.romlist.boxart
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -12,6 +19,7 @@ import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.rom.Rom
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
@@ -25,6 +33,7 @@ class BoxArtRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
     companion object {
+        private const val TAG = "BoxArtRepository"
         private const val BASE_URL_DS = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/"
         private const val BASE_URL_DSI = "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DSi/Named_Boxarts/"
         private const val INDEX_MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
@@ -46,6 +55,9 @@ class BoxArtRepository @Inject constructor(
     private var isMatchesLoaded = false
     private var isDirty = false
 
+    private val _coverUpdates = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 32)
+    val coverUpdates: SharedFlow<Pair<String, String?>> = _coverUpdates.asSharedFlow()
+
     private data class IndexEntry(val fullUrl: String, val normalized: String, val tokens: Set<String>)
 
     init {
@@ -62,10 +74,130 @@ class BoxArtRepository @Inject constructor(
         }
     }
 
+    fun getSanitizedCoverKey(rom: Rom): String {
+        val base = rom.fileName.substringBeforeLast('.').ifBlank { rom.name }.ifBlank { "game" }
+        return base.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+    }
+
+    fun getCustomCoverFile(rom: Rom): File? {
+        val key = getSanitizedCoverKey(rom)
+        val primaryDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers")
+        val fallbackDir = File(context.filesDir, "custom_covers")
+
+        val extensions = listOf("png", "jpg", "jpeg", "webp")
+        for (ext in extensions) {
+            val f = File(primaryDir, "$key.$ext")
+            if (f.isFile && f.length() > 0) return f
+        }
+        for (ext in extensions) {
+            val f = File(fallbackDir, "$key.$ext")
+            if (f.isFile && f.length() > 0) return f
+        }
+        return null
+    }
+
+    fun hasCustomCover(rom: Rom): Boolean {
+        return getCustomCoverFile(rom) != null
+    }
+
+    suspend fun saveCustomCover(context: Context, rom: Rom, sourceUri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(sourceUri)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            } ?: return@withContext false
+
+            val origWidth = options.outWidth
+            val origHeight = options.outHeight
+            if (origWidth <= 0 || origHeight <= 0) return@withContext false
+
+            var inSampleSize = 1
+            val maxDimension = 1024
+            while (origWidth / inSampleSize > maxDimension * 2 || origHeight / inSampleSize > maxDimension * 2) {
+                inSampleSize *= 2
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val bitmap = context.contentResolver.openInputStream(sourceUri)?.use {
+                BitmapFactory.decodeStream(it, null, decodeOptions)
+            } ?: return@withContext false
+
+            val scaledBitmap = if (bitmap.width > maxDimension || bitmap.height > maxDimension) {
+                val ratio = minOf(maxDimension.toFloat() / bitmap.width, maxDimension.toFloat() / bitmap.height)
+                val targetW = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+                val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+                if (scaled != bitmap) bitmap.recycle()
+                scaled
+            } else {
+                bitmap
+            }
+
+            val key = getSanitizedCoverKey(rom)
+            val primaryDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers").apply { mkdirs() }
+            val targetFile = if (primaryDir.exists() && primaryDir.canWrite()) {
+                File(primaryDir, "$key.png")
+            } else {
+                val fallbackDir = File(context.filesDir, "custom_covers").apply { mkdirs() }
+                File(fallbackDir, "$key.png")
+            }
+
+            FileOutputStream(targetFile).use { out ->
+                scaledBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.flush()
+            }
+            scaledBitmap.recycle()
+
+            val cacheBustUrl = "file://${targetFile.absolutePath}?t=${targetFile.lastModified()}"
+            val romKey = rom.uri.toString()
+            memoryCache[romKey] = cacheBustUrl
+            schedulePersistMatches()
+            _coverUpdates.emit(romKey to cacheBustUrl)
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to save custom cover for ${rom.name}", e)
+            false
+        }
+    }
+
+    suspend fun clearCustomCover(context: Context, rom: Rom): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val key = getSanitizedCoverKey(rom)
+            val primaryDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers")
+            val fallbackDir = File(context.filesDir, "custom_covers")
+            val extensions = listOf("png", "jpg", "jpeg", "webp")
+            for (ext in extensions) {
+                File(primaryDir, "$key.$ext").takeIf { it.exists() }?.delete()
+                File(fallbackDir, "$key.$ext").takeIf { it.exists() }?.delete()
+            }
+
+            val romKey = rom.uri.toString()
+            memoryCache.remove(romKey)
+            schedulePersistMatches()
+            val fallbackUrl = getBoxArtUrl(rom)
+            _coverUpdates.emit(romKey to fallbackUrl)
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to clear custom cover for ${rom.name}", e)
+            false
+        }
+    }
+
     suspend fun getBoxArtUrl(rom: Rom): String? = withContext(Dispatchers.IO) {
         val key = rom.uri.toString()
 
-        // 1. Instant in-memory check without lock
+        // 1. Check for local user custom cover first
+        val customCover = getCustomCoverFile(rom)
+        if (customCover != null && customCover.exists() && customCover.length() > 0) {
+            val customUrl = "file://${customCover.absolutePath}?t=${customCover.lastModified()}"
+            memoryCache[key] = customUrl
+            return@withContext customUrl
+        }
+
+        // 2. Instant in-memory check without lock
         val cached = memoryCache[key]
         if (cached != null) {
             return@withContext if (cached == NO_MATCH) null else cached

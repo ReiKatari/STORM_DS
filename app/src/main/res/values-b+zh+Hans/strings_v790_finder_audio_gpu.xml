@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">内存作弊查找器</string>
+    <string name="v790_ram_finder_title">内存扫描器</string>
+    <string name="v790_ram_bitness_8">8位 (1字节)</string>
+    <string name="v790_ram_bitness_16">16位 (2字节)</string>
+    <string name="v790_ram_bitness_32">32位 (4字节)</string>
+    <string name="v790_ram_mode_exact">精确数值</string>
+    <string name="v790_ram_mode_increased">数值增加</string>
+    <string name="v790_ram_mode_decreased">数值减少</string>
+    <string name="v790_ram_mode_changed">数值改变</string>
+    <string name="v790_ram_mode_unchanged">数值未变</string>
+    <string name="v790_ram_new_search">新搜索</string>
+    <string name="v790_ram_filter">过滤</string>
+    <string name="v790_ram_results_count">找到地址数：%1$d</string>
+    <string name="v790_ram_results_showing_top">显示前 %1$d 个结果</string>
+    <string name="v790_ram_no_results">未找到匹配地址</string>
+    <string name="v790_ram_current_val">当前：%1$s</string>
+    <string name="v790_ram_prev_val">此前：%1$s</string>
+    <string name="v790_ram_btn_test">测试</string>
+    <string name="v790_ram_btn_create_cheat">创建金手指</string>
+    <string name="v790_ram_test_success">已写入内存</string>
+    <string name="v790_ram_test_fail">写入失败</string>
+    <string name="v790_ram_cheat_created">金手指已创建并复制到剪贴板！</string>
+    <string name="v790_ram_enter_value">输入数值...</string>
+    <string name="v790_ram_cheat_name">内存 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">模拟器内存不可用</string>
+    <string name="v790_ram_searching">正在扫描内存...</string>
+    <string name="mic_agc_noise_gate_title">自适应降噪与麦克风AGC</string>
+    <string name="mic_agc_noise_gate_summary">直流低频消除、环境噪音抑制与语音平滑增益</string>
+    <string name="v790_vulkan_pipeline_cache_status">Vulkan着色器管线缓存已启用</string>
+</resources>

@@ -46,6 +46,8 @@ fun LayoutEditorMenuDialog(
 
     val menuItems = listOf(
         LayoutMenuItem(MenuOption.UNDO, R.string.action_layout_undo, Icons.Filled.Undo),
+        LayoutMenuItem(MenuOption.MULTI_SELECT, R.string.action_layout_multiselect, Icons.Filled.Checklist),
+        LayoutMenuItem(MenuOption.LIVE_TEST, R.string.action_layout_live_test, Icons.Filled.SportsEsports),
         LayoutMenuItem(MenuOption.PROPERTIES, R.string.properties, Icons.Filled.Settings),
         LayoutMenuItem(MenuOption.BACKGROUNDS, R.string.background, Icons.Filled.Image),
         LayoutMenuItem(MenuOption.REVERT, R.string.revert_changes, Icons.Filled.Restore),

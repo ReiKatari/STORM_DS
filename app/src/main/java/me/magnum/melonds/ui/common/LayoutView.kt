@@ -71,6 +71,7 @@ open class LayoutView(context: Context, attrs: AttributeSet?) : FrameLayout(cont
             baseAlpha = layoutComponent.alpha
             setHighlighted(false)
             onTop = layoutComponent.onTop
+            locked = layoutComponent.locked
             initialRect = layoutComponent.rect
         }
 

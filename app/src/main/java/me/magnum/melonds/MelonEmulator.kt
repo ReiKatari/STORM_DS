@@ -272,4 +272,16 @@ object MelonEmulator {
 
     @JvmStatic
     external fun setSlot2AddonType(addonType: Int)
+
+    @JvmStatic
+    external fun readMainRamSnapshot(): ByteArray?
+
+    @JvmStatic
+    external fun writeMainRamValue(offset: Int, byteSize: Int, value: Long): Boolean
+
+    @JvmStatic
+    external fun setMicrophoneAgcEnabled(enabled: Boolean)
+
+    @JvmStatic
+    external fun setVulkanPipelineCacheFile(filePath: String)
 }

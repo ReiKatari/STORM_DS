@@ -851,6 +851,47 @@ bool VulkanContext::initializeLocked()
     if (ResetQueryPool == nullptr)
         TimestampQueriesSupported = false;
 
+    // Load or create VkPipelineCache
+    std::string cachePath = GetPipelineCacheFilePath();
+    std::vector<u8> cacheData;
+    if (!cachePath.empty())
+    {
+        FILE* f = fopen(cachePath.c_str(), "rb");
+        if (f)
+        {
+            fseek(f, 0, SEEK_END);
+            long fsize = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (fsize > 0 && fsize <= (256 * 1024 * 1024))
+            {
+                cacheData.resize(static_cast<size_t>(fsize));
+                size_t readBytes = fread(cacheData.data(), 1, static_cast<size_t>(fsize), f);
+                if (readBytes != static_cast<size_t>(fsize))
+                {
+                    cacheData.clear();
+                }
+            }
+            fclose(f);
+        }
+    }
+
+    VkPipelineCacheCreateInfo cacheCreateInfo{};
+    cacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    cacheCreateInfo.initialDataSize = cacheData.size();
+    cacheCreateInfo.pInitialData = cacheData.empty() ? nullptr : cacheData.data();
+
+    VkResult cacheResult = vkCreatePipelineCache(Device, &cacheCreateInfo, nullptr, &PipelineCache);
+    if (cacheResult != VK_SUCCESS && !cacheData.empty())
+    {
+        cacheCreateInfo.initialDataSize = 0;
+        cacheCreateInfo.pInitialData = nullptr;
+        cacheResult = vkCreatePipelineCache(Device, &cacheCreateInfo, nullptr, &PipelineCache);
+    }
+    if (cacheResult != VK_SUCCESS)
+    {
+        PipelineCache = VK_NULL_HANDLE;
+    }
+
     return true;
 }
 
@@ -868,6 +909,32 @@ void VulkanContext::shutdownLocked()
     if (Device != VK_NULL_HANDLE)
     {
         vkDeviceWaitIdle(Device);
+        if (PipelineCache != VK_NULL_HANDLE)
+        {
+            std::string cachePath = GetPipelineCacheFilePath();
+            if (!cachePath.empty())
+            {
+                size_t cacheSize = 0;
+                if (vkGetPipelineCacheData(Device, PipelineCache, &cacheSize, nullptr) == VK_SUCCESS && cacheSize > 0)
+                {
+                    std::vector<u8> cacheData(cacheSize);
+                    if (vkGetPipelineCacheData(Device, PipelineCache, &cacheSize, cacheData.data()) == VK_SUCCESS && cacheSize > 0)
+                    {
+                        std::string tmpPath = cachePath + ".tmp";
+                        FILE* f = fopen(tmpPath.c_str(), "wb");
+                        if (f)
+                        {
+                            fwrite(cacheData.data(), 1, cacheSize, f);
+                            fflush(f);
+                            fclose(f);
+                            rename(tmpPath.c_str(), cachePath.c_str());
+                        }
+                    }
+                }
+            }
+            vkDestroyPipelineCache(Device, PipelineCache, nullptr);
+            PipelineCache = VK_NULL_HANDLE;
+        }
         vkDestroyDevice(Device, nullptr);
     }
 
@@ -878,6 +945,7 @@ void VulkanContext::shutdownLocked()
     DebugMessenger = VK_NULL_HANDLE;
     PhysicalDevice = VK_NULL_HANDLE;
     Device = VK_NULL_HANDLE;
+    PipelineCache = VK_NULL_HANDLE;
     Queue = VK_NULL_HANDLE;
     QueueFamilyIndex = 0;
     AhbProperties = nullptr;
@@ -918,6 +986,21 @@ void VulkanContext::SetCompatibilityOverrides(bool disableTimelineSemaphores, bo
 {
     gForceDisableTimelineSemaphores.store(disableTimelineSemaphores, std::memory_order_relaxed);
     gForceDisableDynamicTextureIndexing.store(disableDynamicTextureIndexing, std::memory_order_relaxed);
+}
+
+static std::mutex gPipelineCachePathMutex;
+static std::string gPipelineCacheFilePath;
+
+void VulkanContext::SetPipelineCacheFilePath(const std::string& path)
+{
+    std::scoped_lock lock(gPipelineCachePathMutex);
+    gPipelineCacheFilePath = path;
+}
+
+std::string VulkanContext::GetPipelineCacheFilePath()
+{
+    std::scoped_lock lock(gPipelineCachePathMutex);
+    return gPipelineCacheFilePath;
 }
 
 }

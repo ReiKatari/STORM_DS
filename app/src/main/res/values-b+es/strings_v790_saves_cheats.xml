@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="export_data_bundle_button">Exportar paquete de datos (.zip)</string>
+    <string name="export_data_bundle_success">Paquete de datos guardado: %s</string>
+    <string name="export_data_bundle_error">Error al exportar paquete de datos: %s</string>
+    <string name="export_data_bundle_in_progress">Exportando paquete de datos...</string>
+    <string name="undo_overwrite_multi_step">Deshacer ranura %1$s (%2$s)</string>
+    <string name="undo_step_count_format">%d pasos</string>
+    <string name="ra_sync_queue_button">Sincronizar ahora</string>
+    <string name="ra_sync_queue_success">Cola de logros sin conexion enviada con exito al servidor</string>
+    <string name="ra_sync_queue_error">Error al sincronizar cola de logros: %s</string>
+    <string name="ra_sync_queue_empty">No hay logros sin conexion pendientes para enviar</string>
+    <string name="ra_sync_queue_syncing">Sincronizando cola...</string>
+    <string name="cheat_import_dat_success">Base de datos de trucos DAT importada con exito</string>
+    <string name="cheat_import_supported_formats">Soporta XML, DAT (usrcheat.dat) y archivos ZIP</string>
+</resources>

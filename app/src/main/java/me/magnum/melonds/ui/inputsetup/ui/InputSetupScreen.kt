@@ -591,6 +591,19 @@ private fun Input(
                                 val prefix = if (assignment.direction == InputConfig.Assignment.Axis.Direction.NEGATIVE) "-" else ""
                                 "$prefix$axisPrettyName"
                             }
+                            is InputConfig.Assignment.Chord -> {
+                                val modStr = KeyEvent.keyCodeToString(assignment.modifierKeyCode)
+                                    .replace("KEYCODE_", "")
+                                    .replace("BUTTON_", "")
+                                    .replace("_", " ")
+                                    .trim()
+                                val trigStr = KeyEvent.keyCodeToString(assignment.triggerKeyCode)
+                                    .replace("KEYCODE_", "")
+                                    .replace("BUTTON_", "")
+                                    .replace("_", " ")
+                                    .trim()
+                                "$modStr + $trigStr"
+                            }
                             InputConfig.Assignment.None -> ""
                         }
                     }
@@ -689,6 +702,10 @@ private fun getInputName(input: Input): String? {
         Input.LOCK_ROTATION -> R.string.input_lock_rotation
         Input.TOGGLE_EXTRA_BUTTONS -> R.string.input_toggle_extra_buttons
         Input.TOGGLE_ANALOG_STICK -> R.string.input_toggle_analog_stick
+        Input.SLOW_MOTION -> R.string.input_slow_motion
+        Input.FRAME_ADVANCE -> R.string.input_frame_advance
+        Input.TAKE_SCREENSHOT -> R.string.input_take_screenshot
+        Input.TOGGLE_HARDWARE_TURBO -> R.string.input_toggle_hardware_turbo
         else -> return null
     }
 

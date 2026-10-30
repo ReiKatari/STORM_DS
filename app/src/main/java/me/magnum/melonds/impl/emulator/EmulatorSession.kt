@@ -23,6 +23,10 @@ class EmulatorSession {
         this.sessionType = sessionType
     }
 
+    fun switchToSoftcore() {
+        isRetroAchievementsHardcoreModeEnabled = false
+    }
+
     fun reset() {
         areRetroAchievementsEnabled = false
         isRetroAchievementsHardcoreModeEnabled = false

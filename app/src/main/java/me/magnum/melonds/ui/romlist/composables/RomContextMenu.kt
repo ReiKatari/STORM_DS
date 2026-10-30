@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.FilterQuality
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PlayArrow
@@ -62,11 +64,15 @@ fun RomContextMenu(
     onImportSaveFile: (Rom) -> Unit,
     onLaunchRom: (Rom) -> Unit = {},
     onDecryptRom: (Rom) -> Unit = {},
+    onPickCustomCover: ((Rom) -> Unit)? = null,
+    onClearCustomCover: ((Rom) -> Unit)? = null,
 ) {
     if (rom == null) return
     val colors = watermelon
     val context = LocalContext.current
     var showTechnicalInfo by remember { mutableStateOf(false) }
+    val boxArtRepo = remember { runCatching { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }.getOrNull() }
+    val hasCustomCover = remember(rom) { boxArtRepo?.hasCustomCover(rom) ?: false }
 
     if (showTechnicalInfo) {
         RomTechnicalInfoDialog(
@@ -185,6 +191,28 @@ fun RomContextMenu(
                         onDismiss()
                     },
                 )
+                if (onPickCustomCover != null) {
+                    ContextItem(
+                        icon = Icons.Filled.Image,
+                        iconTint = colors.text2,
+                        label = stringResource(R.string.custom_cover_pick),
+                        onClick = {
+                            onPickCustomCover(rom)
+                            onDismiss()
+                        },
+                    )
+                }
+                if (hasCustomCover && onClearCustomCover != null) {
+                    ContextItem(
+                        icon = Icons.Filled.Delete,
+                        iconTint = colors.red,
+                        label = stringResource(R.string.custom_cover_reset),
+                        onClick = {
+                            onClearCustomCover(rom)
+                            onDismiss()
+                        },
+                    )
+                }
             }
         }
         }

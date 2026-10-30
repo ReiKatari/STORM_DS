@@ -535,8 +535,9 @@ private fun AchievementsHeader(
                         )
                     }
                     Spacer(Modifier.height(3.dp))
+                    val softcorePointsStr = me.magnum.melonds.utils.RussianPlurals.format(summary.totalPoints, "очко", "очка", "очков")
                     Text(
-                        text = "${summary.totalPoints} очков (${summary.completedPercentage}%)",
+                        text = "$softcorePointsStr (${summary.completedPercentage}%)",
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 9.sp,
                         color = colors.text3
@@ -585,8 +586,9 @@ private fun AchievementsHeader(
                     }
                     Spacer(Modifier.height(3.dp))
                     val hardcorePoints = if (summary.forHardcoreMode) summary.totalPoints else summary.totalPoints * 2
+                    val hardcorePointsStr = me.magnum.melonds.utils.RussianPlurals.format(hardcorePoints, "очко", "очка", "очков")
                     Text(
-                        text = "$hardcorePoints очков ${if (summary.forHardcoreMode) "(${summary.completedPercentage}%)" else "(Заблокировано)"}",
+                        text = "$hardcorePointsStr ${if (summary.forHardcoreMode) "(${summary.completedPercentage}%)" else "(Заблокировано)"}",
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 9.sp,
                         color = if (summary.forHardcoreMode) androidx.compose.ui.graphics.Color(0xFFFBBF24) else colors.text3

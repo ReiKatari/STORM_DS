@@ -74,13 +74,12 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun setSystemDriver() {
-        settingsRepository.setVulkanDriverMode(VulkanDriverMode.SYSTEM)
+        driverManager.setSystemDriver()
         refresh()
     }
 
     fun selectDriver(id: String) {
-        settingsRepository.setSelectedVulkanDriver(id)
-        settingsRepository.setVulkanDriverMode(VulkanDriverMode.CUSTOM)
+        driverManager.selectDriver(id)
         refresh()
     }
 

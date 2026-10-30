@@ -107,6 +107,10 @@ class RomDetailsViewModel @Inject constructor(
                     globalRetroArchShaderParameters = shaderConfig.second,
                     hasValidRetroArchShaderRoot = shaderConfig.third,
                     globalRetroAchievementsEnabled = globalRetroAchievementsEnabled,
+                    globalArm9Overclock = settingsRepository.getArm9Overclock(),
+                    globalFastForwardSpeedMultiplier = settingsRepository.getFastForwardSpeedMultiplier(),
+                    globalVulkanDriverDisplayName = settingsRepository.getCustomVulkanDriverDisplayName() ?: "System GPU",
+                    availableVulkanDrivers = listOf(Pair(null, "Global driver"), Pair("__SYSTEM__", "System GPU driver")) + settingsRepository.getInstalledVulkanDrivers().map { Pair(it.id, it.displayName) },
                 )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)
@@ -170,6 +174,9 @@ class RomDetailsViewModel @Inject constructor(
             is RomConfigUpdateEvent.RetroAchievementsEnabledUpdate -> currentRomConfig.copy(retroAchievementsEnabled = event.enabled)
             is RomConfigUpdateEvent.DualScreenPresetUpdate -> currentRomConfig.copy(dualScreenPreset = event.preset)
             is RomConfigUpdateEvent.TranslatorSourceLangUpdate -> currentRomConfig.copy(translatorSourceLang = event.sourceLang)
+            is RomConfigUpdateEvent.Arm9OverclockUpdate -> currentRomConfig.copy(arm9Overclock = event.arm9Overclock)
+            is RomConfigUpdateEvent.FastForwardSpeedMultiplierUpdate -> currentRomConfig.copy(fastForwardSpeedMultiplier = event.speedMultiplier)
+            is RomConfigUpdateEvent.CustomVulkanDriverUpdate -> currentRomConfig.copy(customVulkanDriverName = event.customVulkanDriverName)
             is RomConfigUpdateEvent.ResetToDefaults -> {
                 val base = if (_rom.value.isDsiWareTitle) RomConfig.forDsiWareTitle() else RomConfig.default()
                 if (event.preserveCustomName) {

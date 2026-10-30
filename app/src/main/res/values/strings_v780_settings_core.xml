@@ -5,7 +5,7 @@
     <string name="v780_search_no_results">No settings found</string>
     <string name="v780_search_results_count">Found: %1$d</string>
     <string name="v780_rewind_summary_title">Rewind buffer estimation</string>
-    <string name="v780_rewind_summary_detail">Window: %1$d sec (%2$d states). Estimated RAM buffer: ~%3$s (up to %4$s at peak load).</string>
+    <string name="v780_rewind_summary_detail">Window: %1$d sec (%2$s). Estimated RAM buffer: ~%3$s (up to %4$s at peak load).</string>
     <string name="v780_settings_maintenance_title">Settings maintenance and backup</string>
     <string name="v780_settings_export_json_title">Export settings to JSON file</string>
     <string name="v780_settings_export_json_summary">Save current settings to a portable JSON file</string>
@@ -31,4 +31,12 @@
     <string name="v780_internal_randomize_mac_summary">Create a randomized MAC address with Nintendo prefix 00:09:BF</string>
     <string name="v780_mac_generated">Generated Nintendo MAC address: %1$s</string>
     <string name="v780_mac_invalid_format">Invalid MAC address format (must be XX:XX:XX:XX:XX:XX)</string>
+    <plurals name="v780_rom_folders_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="v780_rewind_snapshots_count">
+        <item quantity="one">%1$d snapshot</item>
+        <item quantity="other">%1$d snapshots</item>
+    </plurals>
 </resources>

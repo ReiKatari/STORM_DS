@@ -35,6 +35,8 @@ import javax.inject.Inject
 @HiltAndroidApp
 class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoaderFactory {
     companion object {
+        var appContext: Context? = null
+            private set
         const val NOTIFICATION_CHANNEL_ID_BACKGROUND_TASKS = "channel_cheat_importing"
         private const val NOTIFICATION_ID_HARDCORE_OFFLINE_LOSS = 2002
         private var isMigrating = false
@@ -372,6 +374,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
     }
 
     override fun onCreate() {
+        appContext = this
         super.onCreate()
         runCatching { System.setProperty("http.agent", "melonDS/0.9.5") }
         installCrashHandler()

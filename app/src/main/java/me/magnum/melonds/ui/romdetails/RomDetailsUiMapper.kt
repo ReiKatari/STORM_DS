@@ -29,6 +29,10 @@ class RomDetailsUiMapper(
         globalRetroArchShaderParameters: String?,
         hasValidRetroArchShaderRoot: Boolean,
         globalRetroAchievementsEnabled: Boolean,
+        globalArm9Overclock: Int = 1,
+        globalFastForwardSpeedMultiplier: Float = 2f,
+        globalVulkanDriverDisplayName: String = "System GPU",
+        availableVulkanDrivers: List<Pair<String?, String>> = emptyList(),
     ): RomConfigUiModel {
         return RomConfigUiModel(
             runtimeConsoleType = romConfig.runtimeConsoleType,
@@ -61,6 +65,13 @@ class RomDetailsUiMapper(
             dualScreenKeepAspectRatio = romConfig.dualScreenKeepAspectRatio,
             dualScreenIntegerScale = romConfig.dualScreenIntegerScale,
             translatorSourceLang = romConfig.translatorSourceLang,
+            arm9Overclock = romConfig.arm9Overclock,
+            globalArm9Overclock = globalArm9Overclock,
+            fastForwardSpeedMultiplier = romConfig.fastForwardSpeedMultiplier,
+            globalFastForwardSpeedMultiplier = globalFastForwardSpeedMultiplier,
+            customVulkanDriverName = romConfig.customVulkanDriverName,
+            globalVulkanDriverDisplayName = globalVulkanDriverDisplayName,
+            availableVulkanDrivers = availableVulkanDrivers,
         )
     }
 

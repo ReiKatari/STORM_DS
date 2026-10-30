@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_cover_pick">Pilih sampul kustom</string>
+    <string name="custom_cover_reset">Atur ulang sampul kustom</string>
+    <string name="custom_cover_error">Gagal memuat gambar</string>
+    <string name="rom_config_overclock_arm9">Overclock ARM9</string>
+    <string name="rom_config_overclock_default">Default</string>
+    <string name="rom_config_speed_multiplier">Kecepatan maju cepat</string>
+    <string name="rom_config_speed_unlimited">Tanpa batas</string>
+    <string name="rom_config_vulkan_driver">Driver GPU Vulkan</string>
+    <string name="rom_config_vulkan_driver_global">Driver global</string>
+    <string name="rom_config_vulkan_driver_system">Driver GPU sistem</string>
+    <string name="rom_filter_unplayed">Belum dimainkan</string>
+    <string name="rom_filter_recently_played">Baru dimainkan</string>
+    <string name="rom_filter_has_saves">Ada simpanan</string>
+    <string name="feature_stats_tab_overview">Ringkasan</string>
+    <string name="feature_stats_tab_daily_log">Catatan harian</string>
+    <string name="feature_stats_export_json">Ekspor JSON</string>
+    <string name="feature_stats_export_csv">Ekspor CSV</string>
+    <string name="feature_stats_export_success">Statistik diekspor ke: %s</string>
+    <string name="feature_stats_export_error">Gagal mengekspor statistik</string>
+    <string name="feature_stats_no_sessions">Belum ada sesi permainan tercatat</string>
+    <string name="feature_stats_sessions_count">%d sesi</string>
+    <string name="feature_stats_session_single">%d sesi</string>
+</resources>

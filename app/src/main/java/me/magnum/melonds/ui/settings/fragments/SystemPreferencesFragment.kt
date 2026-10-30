@@ -121,9 +121,10 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_system, rootKey)
-        val jitPreference = findPreference<SwitchPreference>("enable_jit")!!
-        val stormCompilerPreference = findPreference<SwitchPreference>("enable_storm_compiler")!!
-        val mirrorPreference = findPreference<SwitchPreference>("save_internal_config_as_file")!!
+        val jitPreference = findPreference<SwitchPreference>("enable_jit")
+        val stormCompilerPreference = findPreference<SwitchPreference>("enable_storm_compiler")
+        val mirrorPreference = findPreference<SwitchPreference>("save_internal_config_as_file")
+        val sharedPrefs = preferenceManager.sharedPreferences
 
         val appLanguagePreference = findPreference<ListPreference>("app_language")
         appLanguagePreference?.setOnPreferenceChangeListener { _, newValue ->
@@ -136,30 +137,32 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             true
         }
 
-        jitPreference.isVisible = false
+        jitPreference?.isVisible = false
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
-            jitPreference.isChecked = false
-            stormCompilerPreference.isChecked = false
-            stormCompilerPreference.isVisible = false
+            jitPreference?.isChecked = false
+            stormCompilerPreference?.isChecked = false
+            stormCompilerPreference?.isVisible = false
+            sharedPrefs?.edit()?.putBoolean("enable_jit", false)?.apply()
         } else {
-            if (jitPreference.isChecked && !stormCompilerPreference.isChecked) {
+            val legacyJitEnabled = jitPreference?.isChecked == true || sharedPrefs?.getBoolean("enable_jit", false) == true
+            if (legacyJitEnabled && stormCompilerPreference?.isChecked == false) {
                 stormCompilerPreference.isChecked = true
-                preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_storm_compiler", true)?.apply()
+                sharedPrefs?.edit()?.putBoolean("enable_storm_compiler", true)?.apply()
             }
-            if (jitPreference.isChecked) {
-                jitPreference.isChecked = false
-                preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_jit", false)?.apply()
+            if (legacyJitEnabled) {
+                jitPreference?.isChecked = false
+                sharedPrefs?.edit()?.putBoolean("enable_jit", false)?.apply()
             }
-            stormCompilerPreference.setOnPreferenceChangeListener { _, newValue ->
-                if (newValue == false && jitPreference.isChecked) {
-                    jitPreference.isChecked = false
-                    preferenceManager.sharedPreferences?.edit()?.putBoolean("enable_jit", false)?.apply()
+            stormCompilerPreference?.setOnPreferenceChangeListener { _, newValue ->
+                if (newValue == false) {
+                    jitPreference?.isChecked = false
+                    sharedPrefs?.edit()?.putBoolean("enable_jit", false)?.apply()
                 }
                 true
             }
         }
 
-        mirrorPreference.setOnPreferenceChangeListener { _, newValue ->
+        mirrorPreference?.setOnPreferenceChangeListener { _, newValue ->
             if (updatingMirrorPreference) {
                 return@setOnPreferenceChangeListener true
             }
@@ -267,15 +270,22 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     }
 
     private fun updateBiosStatusSummary() {
-        val dsResult = configurationDirectoryVerifier.checkDsConfigurationDirectory()
-        val dsiResult = configurationDirectoryVerifier.checkDsiConfigurationDirectory()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val statusPair = runCatching {
+                val dsResult = configurationDirectoryVerifier.checkDsConfigurationDirectory()
+                val dsiResult = configurationDirectoryVerifier.checkDsiConfigurationDirectory()
+                val dsReady = dsResult.status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
+                val dsiReady = dsiResult.status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
+                dsReady to dsiReady
+            }.getOrNull() ?: return@launch
 
-        val dsReady = dsResult.status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
-        val dsiReady = dsiResult.status == me.magnum.melonds.domain.model.ConfigurationDirResult.Status.VALID
-
-        val dsStatusStr = if (dsReady) getString(R.string.v780_bios_status_ready) else getString(R.string.v780_bios_status_not_ready)
-        val dsiStatusStr = if (dsiReady) getString(R.string.v780_bios_status_ready) else getString(R.string.v780_bios_status_not_ready)
-
-        findPreference<Preference>("custom_bios_firmware")?.summary = getString(R.string.v780_bios_ready_status, dsStatusStr, dsiStatusStr)
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                val (dsReady, dsiReady) = statusPair
+                val dsStatusStr = if (dsReady) getString(R.string.v780_bios_status_ready) else getString(R.string.v780_bios_status_not_ready)
+                val dsiStatusStr = if (dsiReady) getString(R.string.v780_bios_status_ready) else getString(R.string.v780_bios_status_not_ready)
+                findPreference<Preference>("custom_bios_firmware")?.summary = getString(R.string.v780_bios_ready_status, dsStatusStr, dsiStatusStr)
+            }
+        }
     }
 }

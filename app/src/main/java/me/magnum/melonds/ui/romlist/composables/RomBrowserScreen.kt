@@ -1153,6 +1153,9 @@ private fun EmptyState(filter: RomFilter, isScanning: Boolean = false) {
                 RomFilter.DSI_ENHANCED_ONLY -> stringResource(R.string.rom_filter_dsi_enhanced_empty)
                 RomFilter.DSIWARE_ONLY -> stringResource(R.string.rom_filter_dsiware_empty)
                 RomFilter.WITH_RETRO_ACHIEVEMENTS -> stringResource(R.string.rom_filter_retro_achievements_empty)
+                RomFilter.RECENTLY_PLAYED,
+                RomFilter.UNPLAYED,
+                RomFilter.HAS_SAVES -> stringResource(R.string.no_roms_found)
             }
             Text(
                 text = msg,

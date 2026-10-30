@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="pref_input_turbo_frequency_entries">
+        <item>@string/pref_input_turbo_10hz</item>
+        <item>@string/pref_input_turbo_15hz</item>
+        <item>@string/pref_input_turbo_20hz</item>
+        <item>@string/pref_input_turbo_30hz</item>
+    </string-array>
+
+    <string-array name="pref_input_turbo_frequency_values" translatable="false">
+        <item>10</item>
+        <item>15</item>
+        <item>20</item>
+        <item>30</item>
+    </string-array>
+
+    <string name="pref_input_chord_hotkeys_title">Gamepad chord hotkeys (Select + button)</string>
+    <string name="pref_input_chord_hotkeys_summary">Hold Select + button (R=Fast Forward, L=Rewind, Start=Pause, Y=Screenshot, X=Slow Motion)</string>
+    <string name="pref_input_turbo_frequency_title">Hardware turbo frequency</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (Default)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">Gamepad Turbo: On (%d Hz)</string>
+    <string name="turbo_toast_disabled">Gamepad Turbo: Off</string>
+    <string name="input_slow_motion">Slow Motion</string>
+    <string name="input_frame_advance">Frame Advance</string>
+    <string name="input_take_screenshot">Take Screenshot</string>
+    <string name="input_toggle_hardware_turbo">Gamepad Turbo Mode</string>
+    <string name="layout_editor_lock_component">Lock element (prevent moving)</string>
+    <string name="layout_editor_component_locked_toast">Element is locked. Unlock to move</string>
+    <string name="action_layout_multiselect">Multi-select</string>
+    <string name="action_layout_multiselect_summary">Select and move multiple buttons together</string>
+    <string name="action_layout_live_test">Live test inputs</string>
+    <string name="action_layout_live_test_summary">Interactive button and multitouch testing</string>
+    <string name="live_test_status_idle">Test mode: press buttons on screen • Press Back to return</string>
+    <string name="live_test_status_pressed_format">Test mode: pressed [%s] • Press Back to return</string>
+    <string name="live_test_exit">Exit test</string>
+</resources>

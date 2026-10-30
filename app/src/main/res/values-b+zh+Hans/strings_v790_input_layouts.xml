@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_input_chord_hotkeys_title">手柄组合快捷键 (Select + 按键)</string>
+    <string name="pref_input_chord_hotkeys_summary">按住 Select + 按键 (R=快进, L=倒退, Start=暂停, Y=截图, X=慢动作)</string>
+    <string name="pref_input_turbo_frequency_title">硬件连发频率</string>
+    <string name="pref_input_turbo_10hz">10 Hz</string>
+    <string name="pref_input_turbo_15hz">15 Hz (默认)</string>
+    <string name="pref_input_turbo_20hz">20 Hz</string>
+    <string name="pref_input_turbo_30hz">30 Hz</string>
+    <string name="turbo_toast_enabled_format">手柄连发: 开启 (%d Hz)</string>
+    <string name="turbo_toast_disabled">手柄连发: 关闭</string>
+    <string name="input_slow_motion">慢动作</string>
+    <string name="input_frame_advance">逐帧步进</string>
+    <string name="input_take_screenshot">屏幕截图</string>
+    <string name="input_toggle_hardware_turbo">手柄连发模式</string>
+    <string name="layout_editor_lock_component">锁定元素 (防止移动)</string>
+    <string name="layout_editor_component_locked_toast">元素已锁定。解锁后方可移动</string>
+    <string name="action_layout_multiselect">多选模式</string>
+    <string name="action_layout_multiselect_summary">成组多选并整体移动按钮</string>
+    <string name="action_layout_live_test">测试按键</string>
+    <string name="action_layout_live_test_summary">按键与多点触控实时交互测试</string>
+    <string name="live_test_status_idle">测试模式: 请触摸屏幕按键 • 点击返回键退出</string>
+    <string name="live_test_status_pressed_format">测试模式: 已按下 [%s] • 点击返回键退出</string>
+    <string name="live_test_exit">退出测试</string>
+</resources>

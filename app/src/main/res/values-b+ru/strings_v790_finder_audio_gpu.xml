@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v790_ram_cheat_finder_tab">Поиск в ОЗУ</string>
+    <string name="v790_ram_finder_title">Сканер памяти</string>
+    <string name="v790_ram_bitness_8">8 бит (1 байт)</string>
+    <string name="v790_ram_bitness_16">16 бит (2 байта)</string>
+    <string name="v790_ram_bitness_32">32 бита (4 байта)</string>
+    <string name="v790_ram_mode_exact">Точное значение</string>
+    <string name="v790_ram_mode_increased">Увеличилось</string>
+    <string name="v790_ram_mode_decreased">Уменьшилось</string>
+    <string name="v790_ram_mode_changed">Изменилось</string>
+    <string name="v790_ram_mode_unchanged">Не изменилось</string>
+    <string name="v790_ram_new_search">Новый поиск</string>
+    <string name="v790_ram_filter">Отсев</string>
+    <string name="v790_ram_results_count">Найдено адресов: %1$d</string>
+    <string name="v790_ram_results_showing_top">Отображаются первые %1$d</string>
+    <string name="v790_ram_no_results">Совпадений не найдено</string>
+    <string name="v790_ram_current_val">Тек: %1$s</string>
+    <string name="v790_ram_prev_val">Пред: %1$s</string>
+    <string name="v790_ram_btn_test">Тест</string>
+    <string name="v790_ram_btn_create_cheat">Создать чит</string>
+    <string name="v790_ram_test_success">Записано в ОЗУ</string>
+    <string name="v790_ram_test_fail">Ошибка записи</string>
+    <string name="v790_ram_cheat_created">Чит создан и скопирован в буфер!</string>
+    <string name="v790_ram_enter_value">Значение...</string>
+    <string name="v790_ram_cheat_name">ОЗУ 0x%1$08X</string>
+    <string name="v790_ram_hex_input">HEX</string>
+    <string name="v790_ram_dec_input">DEC</string>
+    <string name="v790_ram_not_ready">ОЗУ эмулятора недоступно</string>
+    <string name="v790_ram_searching">Сканирование памяти...</string>
+    <string name="mic_agc_noise_gate_title">Адаптивное шумоподавление и AGC микрофона</string>
+    <string name="mic_agc_noise_gate_summary">Фильтрация DC-гула, подавление шума комнаты и мягкая нормализация голоса</string>
+    <string name="v790_vulkan_pipeline_cache_status">Кэш шейдеров Vulkan активен</string>
+</resources>

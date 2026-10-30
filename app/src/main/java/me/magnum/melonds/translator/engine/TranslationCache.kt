@@ -163,6 +163,31 @@ class TranslationCache(
         }
     }
 
+    fun evictContaining(term: String) {
+        if (term.isBlank()) return
+        val norm = normalize(term)
+        val lowerNorm = norm.lowercase(java.util.Locale.ROOT)
+        val keysToRemove = mutableListOf<String>()
+
+        for ((k, v) in diskCacheMap) {
+            if (k.contains(norm, ignoreCase = true) || v.contains(norm, ignoreCase = true) ||
+                k.lowercase(java.util.Locale.ROOT).contains(lowerNorm) || v.lowercase(java.util.Locale.ROOT).contains(lowerNorm)) {
+                keysToRemove.add(k)
+            }
+        }
+
+        for (k in keysToRemove) {
+            diskCacheMap.remove(k)
+            lru.remove(k)
+        }
+
+        if (keysToRemove.isNotEmpty()) {
+            isDirty = true
+            flush()
+            Log.i("TranslationCache", "Evicted ${keysToRemove.size} cached translations containing '$term'")
+        }
+    }
+
     fun clear() {
         clearAll()
     }

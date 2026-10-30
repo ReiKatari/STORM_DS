@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_cover_pick">Escolher capa personalizada</string>
+    <string name="custom_cover_reset">Redefinir capa personalizada</string>
+    <string name="custom_cover_error">Não foi possível carregar a imagem</string>
+    <string name="rom_config_overclock_arm9">Overclock ARM9</string>
+    <string name="rom_config_overclock_default">Padrão</string>
+    <string name="rom_config_speed_multiplier">Velocidade de avanço rápido</string>
+    <string name="rom_config_speed_unlimited">Sem limite</string>
+    <string name="rom_config_vulkan_driver">Driver GPU Vulkan</string>
+    <string name="rom_config_vulkan_driver_global">Driver global</string>
+    <string name="rom_config_vulkan_driver_system">Driver GPU do sistema</string>
+    <string name="rom_filter_unplayed">Não jogados</string>
+    <string name="rom_filter_recently_played">Jogados recentemente</string>
+    <string name="rom_filter_has_saves">Com salvamentos</string>
+    <string name="feature_stats_tab_overview">Visão geral</string>
+    <string name="feature_stats_tab_daily_log">Registro diário</string>
+    <string name="feature_stats_export_json">Exportar JSON</string>
+    <string name="feature_stats_export_csv">Exportar CSV</string>
+    <string name="feature_stats_export_success">Estatísticas exportadas para: %s</string>
+    <string name="feature_stats_export_error">Falha ao exportar estatísticas</string>
+    <string name="feature_stats_no_sessions">Nenhuma sessão de jogo registrada</string>
+    <string name="feature_stats_sessions_count">%d sessões</string>
+    <string name="feature_stats_session_single">%d sessão</string>
+</resources>

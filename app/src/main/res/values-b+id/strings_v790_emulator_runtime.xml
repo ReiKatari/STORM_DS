@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="periodic_auto_save_intervals">
+        <item>@string/periodic_auto_save_interval_off</item>
+        <item>@string/periodic_auto_save_interval_5_min</item>
+        <item>@string/periodic_auto_save_interval_10_min</item>
+        <item>@string/periodic_auto_save_interval_15_min</item>
+    </string-array>
+
+    <string name="periodic_auto_save_interval">Simpan otomatis berkala</string>
+    <string name="periodic_auto_save_interval_off">Nonaktif</string>
+    <string name="periodic_auto_save_interval_5_min">Setiap 5 menit</string>
+    <string name="periodic_auto_save_interval_10_min">Setiap 10 menit</string>
+    <string name="periodic_auto_save_interval_15_min">Setiap 15 menit</string>
+    <string name="periodic_auto_save_completed">Simpan otomatis berkala selesai</string>
+    <string name="load_periodic_auto_save">Muat simpan otomatis berkala</string>
+    <string name="periodic_auto_save_loaded">Simpan otomatis berkala dimuat</string>
+    <string name="quick_slot_carousel_title">Karusel slot cepat</string>
+    <string name="quick_slot_active_badge">AKTIF</string>
+    <string name="quick_slot_active_slot_header">Slot aktif: Slot %1$d</string>
+    <string name="quick_slot_slot_format">Slot %1$d</string>
+    <string name="quick_slot_empty">Kosong</string>
+    <string name="quick_slot_btn_select">Pilih</string>
+    <string name="quick_slot_btn_save">Simpan</string>
+    <string name="quick_slot_btn_load">Muat</string>
+    <string name="quick_slot_selected_toast">Slot cepat %1$d dipilih sebagai aktif</string>
+    <string name="ra_hardcore_dialog_title">Mode Hardcore aktif</string>
+    <string name="ra_hardcore_dialog_message">Dalam mode Hardcore RetroAchievements, memuat save state dinonaktifkan. Beralih ke mode Softcore untuk sesi ini dan memuat slot?</string>
+    <string name="ra_hardcore_dialog_switch_and_load">Beralih ke Softcore dan muat</string>
+    <string name="take_clean_screenshot">Ambil tangkapan layar bersih</string>
+    <string name="screenshot_saved_toast">Tangkapan layar disimpan: %1$s</string>
+    <string name="screenshot_failed_toast">Gagal menyimpan tangkapan layar</string>
+    <string name="slow_motion_toggle">Gerakan lambat (Slow-Motion)</string>
+    <string name="slow_motion_active_toast">Gerakan lambat %1$s diaktifkan</string>
+    <string name="slow_motion_disabled_toast">Gerakan lambat dinonaktifkan</string>
+    <string name="slow_motion_unavailable_hardcore">Gerakan lambat tidak tersedia dalam mode Hardcore</string>
+    <string name="frame_advance_step">Bingkai berikutnya (+1)</string>
+    <string name="frame_advance_step_toast">Bingkai +1</string>
+    <string name="frame_advance_unavailable_hardcore">Langkah per bingkai tidak tersedia dalam mode Hardcore</string>
+    <string name="slow_motion_speed_title">Kecepatan gerakan lambat</string>
+    <string name="solar_sensor_mode_auto">Otomatis (sensor cahaya ponsel)</string>
+    <string name="solar_sensor_auto_status">Otomatis: %1$.0f lx (%2$d/10)</string>
+    <string name="pedometer_real_sensor_title">Penghitung langkah ponsel nyata</string>
+    <string name="pedometer_real_sensor_enabled">Penghitung langkah ponsel diaktifkan</string>
+    <string name="pedometer_real_sensor_disabled">Penghitung langkah ponsel dinonaktifkan</string>
+    <string name="pedometer_permission_required">Izin aktivitas fisik diperlukan untuk menghitung langkah</string>
+</resources>

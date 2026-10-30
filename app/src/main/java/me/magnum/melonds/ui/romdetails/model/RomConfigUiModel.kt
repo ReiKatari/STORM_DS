@@ -40,4 +40,11 @@ data class RomConfigUiModel(
     val dualScreenKeepAspectRatio: Boolean? = null,
     val dualScreenIntegerScale: Boolean? = null,
     val translatorSourceLang: String? = null,
+    val arm9Overclock: Int? = null,
+    val globalArm9Overclock: Int = 1,
+    val fastForwardSpeedMultiplier: Float? = null,
+    val globalFastForwardSpeedMultiplier: Float = 2f,
+    val customVulkanDriverName: String? = null,
+    val globalVulkanDriverDisplayName: String = "System GPU",
+    val availableVulkanDrivers: List<Pair<String?, String>> = emptyList(),
 )

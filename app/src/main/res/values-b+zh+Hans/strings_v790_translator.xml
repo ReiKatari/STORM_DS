@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_backlog_and_glossary_title">对话记录与用户词典</string>
+    <string name="translator_backlog_title">对话记录</string>
+    <string name="translator_glossary_title">用户词典</string>
+    <string name="translator_backlog_tab_history">台词记录（最多50条）</string>
+    <string name="translator_backlog_tab_glossary">人名与术语词典</string>
+    <string name="translator_backlog_action_speak">朗读</string>
+    <string name="translator_backlog_action_copy">复制</string>
+    <string name="translator_backlog_action_add_to_glossary">存入词典</string>
+    <string name="translator_backlog_clear_history">清空记录</string>
+    <string name="translator_backlog_empty_prompt">暂无对话记录。请在游戏中出现对话时启动翻译。</string>
+    <string name="translator_backlog_copied_toast">已复制到剪贴板</string>
+    <string name="translator_glossary_add_term">添加词条</string>
+    <string name="translator_glossary_edit_term">编辑词条</string>
+    <string name="translator_glossary_delete_term">删除</string>
+    <string name="translator_glossary_export_path">词典文件</string>
+    <string name="translator_glossary_path_copied">词典路径已复制：%s</string>
+    <string name="translator_glossary_empty_prompt">词典为空。添加角色人名和专属术语以保持翻译精准统一。</string>
+    <string name="translator_glossary_source_label">游戏内原文词条</string>
+    <string name="translator_glossary_target_label">目标规范翻译</string>
+    <string name="translator_glossary_case_sensitive">区分大小写</string>
+    <string name="translator_glossary_game_specific">仅限当前游戏</string>
+    <string name="translator_glossary_saved_toast">词条“%s”已保存到词典</string>
+    <string name="translator_glossary_deleted_toast">词条已从词典中删除</string>
+    <string name="translator_glossary_scope_global">全局</string>
+    <string name="translator_glossary_scope_game">当前游戏</string>
+</resources>
