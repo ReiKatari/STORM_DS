@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">ハードコアモード有効</string>
     <string name="ra_hardcore_dialog_message">RetroAchievements ハードコアモードではステートロードが禁止されています。このセッションでソフトコアモードに切り替えてスロットをロードしますか？</string>
     <string name="ra_hardcore_dialog_switch_and_load">ソフトコアに切り替えてロード</string>
-    <string name="take_clean_screenshot">画面スクリーンショット保存</string>
+    <string name="take_clean_screenshot">スクリーンショット保存</string>
     <string name="screenshot_saved_toast">スクリーンショットを保存しました: %1$s</string>
     <string name="screenshot_failed_toast">スクリーンショットの保存に失敗しました</string>
     <string name="slow_motion_toggle">スローモーション (Slow-Motion)</string>

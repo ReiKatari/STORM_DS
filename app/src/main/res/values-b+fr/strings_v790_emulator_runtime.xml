@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Mode Hardcore actif</string>
     <string name="ra_hardcore_dialog_message">Dans le mode Hardcore de RetroAchievements, le chargement d\'états de sauvegarde est interdit. Passer en mode Softcore pour cette session et charger l\'emplacement ?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Passer en Softcore et charger</string>
-    <string name="take_clean_screenshot">Prendre une capture d\'écran nette</string>
+    <string name="take_clean_screenshot">Prendre une capture d\'écran</string>
     <string name="screenshot_saved_toast">Capture enregistrée : %1$s</string>
     <string name="screenshot_failed_toast">Échec de l\'enregistrement de la capture</string>
     <string name="slow_motion_toggle">Ralenti (Slow-Motion)</string>

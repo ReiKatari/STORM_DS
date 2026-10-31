@@ -105,8 +105,8 @@ fun QuickSlotCarouselOverlay(
             modifier = Modifier
                 .fillMaxWidth(0.96f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF0F172A).copy(alpha = 0.95f))
-                .border(1.dp, Color(0x6600D2FF), RoundedCornerShape(20.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.line, RoundedCornerShape(20.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -125,7 +125,7 @@ fun QuickSlotCarouselOverlay(
                 Column {
                     Text(
                         text = stringResource(R.string.quick_slot_carousel_title),
-                        color = Color(0xFF00D2FF),
+                        color = colors.text,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -133,9 +133,9 @@ fun QuickSlotCarouselOverlay(
                         text = if (activeQuickSlot in 1..8) {
                             stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
                         } else {
-                            "Слот 0 (По умолчанию)"
+                            stringResource(R.string.quick_slot_default_slot_header)
                         },
-                        color = Color(0xFF94A3B8),
+                        color = colors.text2,
                         fontSize = 12.sp,
                     )
                 }
@@ -144,15 +144,15 @@ fun QuickSlotCarouselOverlay(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E293B))
-                        .border(1.dp, Color(0x3300D2FF), CircleShape)
+                        .background(colors.surface2)
+                        .border(1.dp, colors.line, CircleShape)
                         .clickable { onDismiss() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
-                        tint = Color(0xFFE2E8F0),
+                        tint = colors.text,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -192,8 +192,9 @@ private fun QuickSlotCard(
     onSave: () -> Unit,
     onLoad: () -> Unit,
 ) {
-    val borderColor = if (isActive) Color(0xFF00D2FF) else Color(0x3338BDF8)
-    val cardBackground = if (isActive) Color(0xFF1E293B) else Color(0xFF131D2E)
+    val colors = watermelon
+    val borderColor = if (isActive) colors.green else colors.line
+    val cardBackground = if (isActive) colors.surface2 else colors.surface
 
     Column(
         modifier = Modifier
@@ -212,7 +213,7 @@ private fun QuickSlotCard(
         ) {
             Text(
                 text = stringResource(R.string.quick_slot_slot_format, slot.slot),
-                color = if (isActive) Color(0xFF00D2FF) else Color.White,
+                color = if (isActive) colors.green else colors.text,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -221,13 +222,13 @@ private fun QuickSlotCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF00D2FF).copy(alpha = 0.25f))
-                        .border(1.dp, Color(0xFF00D2FF), RoundedCornerShape(6.dp))
+                        .background(colors.greenDim)
+                        .border(1.dp, colors.green, RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.quick_slot_active_badge),
-                        color = Color(0xFF00D2FF),
+                        color = colors.green,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -243,8 +244,8 @@ private fun QuickSlotCard(
                 .fillMaxWidth()
                 .height(100.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF0A0E17))
-                .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(8.dp)),
+                .background(if (colors.isDark) colors.bg else colors.surface2)
+                .border(1.dp, colors.line, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (slot.screenshot != null) {
@@ -261,7 +262,7 @@ private fun QuickSlotCard(
             } else {
                 Text(
                     text = stringResource(R.string.quick_slot_empty),
-                    color = Color(0xFF64748B),
+                    color = colors.text3,
                     fontSize = 11.sp,
                 )
             }
@@ -272,7 +273,7 @@ private fun QuickSlotCard(
         // Date text
         Text(
             text = dateText,
-            color = if (slot.exists) Color(0xFFCBD5E1) else Color(0xFF64748B),
+            color = if (slot.exists) colors.text2 else colors.text3,
             fontSize = 10.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -291,15 +292,15 @@ private fun QuickSlotCard(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(if (isActive) Color(0xFF00D2FF).copy(alpha = 0.35f) else Color(0xFF26334D))
-                    .border(1.dp, if (isActive) Color(0xFF00D2FF) else Color(0x3300D2FF), RoundedCornerShape(6.dp))
+                    .background(if (isActive) colors.greenDim else colors.surface2)
+                    .border(1.dp, if (isActive) colors.green else colors.line, RoundedCornerShape(6.dp))
                     .bouncingClickable { onSelect() }
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = if (isActive) "✓" else stringResource(R.string.quick_slot_btn_select),
-                    color = if (isActive) Color(0xFF00D2FF) else Color.White,
+                    color = if (isActive) colors.green else colors.text,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -311,15 +312,15 @@ private fun QuickSlotCard(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF0284C7).copy(alpha = 0.35f))
-                    .border(1.dp, Color(0xFF0284C7), RoundedCornerShape(6.dp))
+                    .background(colors.greenDim)
+                    .border(1.dp, colors.green, RoundedCornerShape(6.dp))
                     .bouncingClickable { onSave() }
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = stringResource(R.string.quick_slot_btn_save),
-                    color = Color(0xFF38BDF8),
+                    color = colors.green,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -332,15 +333,15 @@ private fun QuickSlotCard(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(if (loadEnabled) Color(0xFF10B981).copy(alpha = 0.35f) else Color(0xFF1E293B))
-                    .border(1.dp, if (loadEnabled) Color(0xFF10B981) else Color(0x2264748B), RoundedCornerShape(6.dp))
+                    .background(if (loadEnabled) colors.surface3 else colors.surface2.copy(alpha = 0.4f))
+                    .border(1.dp, if (loadEnabled) colors.line else colors.line.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
                     .bouncingClickable(enabled = loadEnabled) { onLoad() }
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = stringResource(R.string.quick_slot_btn_load),
-                    color = if (loadEnabled) Color(0xFF34D399) else Color(0xFF64748B),
+                    color = if (loadEnabled) colors.text else colors.text3,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,

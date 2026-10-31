@@ -219,4 +219,8 @@ interface SettingsRepository {
     fun setDisplayColorProfile(profile: Int)
     fun getHingeGapPixels(): Int
     fun setHingeGapPixels(pixels: Int)
+    fun isExtendedPauseMenuEnabled(): Boolean
+    fun setExtendedPauseMenuEnabled(enabled: Boolean)
+    fun getSlowMotionSpeed(): Float
+    fun setSlowMotionSpeed(speed: Float)
 }

@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Modo Hardcore activo</string>
     <string name="ra_hardcore_dialog_message">En el modo Hardcore de RetroAchievements no se permite cargar estados guardados. ¿Deseas cambiar a modo Softcore para la sesión actual y cargar la ranura?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Cambiar a Softcore y cargar</string>
-    <string name="take_clean_screenshot">Captura de pantalla limpia</string>
+    <string name="take_clean_screenshot">Tomar captura de pantalla</string>
     <string name="screenshot_saved_toast">Captura guardada: %1$s</string>
     <string name="screenshot_failed_toast">Error al guardar la captura</string>
     <string name="slow_motion_toggle">Cámara lenta (Slow-Motion)</string>

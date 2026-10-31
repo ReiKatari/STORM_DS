@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">Расширенное подменю паузы</string>
+    <string name="pref_extended_pause_menu_summary">Показывать дополнительные инструменты в меню паузы (скриншот, замедление, покадровый шаг и автосохранение)</string>
+    <string name="extended_pause_menu_toggle">Расширенное подменю</string>
+    <string name="frame_advance_paused_status">Пауза: покадровый режим</string>
+    <string name="frame_advance_step_btn">+1 кадр</string>
+    <string name="frame_advance_resume_btn">Продолжить</string>
+    <string name="slow_motion_title">Скорость замедления</string>
+    <string name="slow_motion_subtitle">Выберите шаблон или настройте вручную</string>
+    <string name="slow_motion_preset_025">0.25× — Четверть скорости</string>
+    <string name="slow_motion_preset_050">0.50× — Половина скорости</string>
+    <string name="slow_motion_preset_075">0.75× — Плавное замедление</string>
+    <string name="slow_motion_preset_085">0.85× — Лёгкое замедление</string>
+    <string name="slow_motion_preset_100">1.00× — Обычная скорость (выкл.)</string>
+    <string name="slow_motion_custom_slider">Точная скорость: %1$.2f×</string>
+    <string name="slow_motion_turn_off">Отключить замедление</string>
+    <string name="slow_motion_apply">Применить</string>
+    <string name="quick_slot_default_slot_header">Слот 0 (По умолчанию)</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

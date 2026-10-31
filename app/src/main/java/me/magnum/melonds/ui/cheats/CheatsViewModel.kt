@@ -26,6 +26,7 @@ import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatFolder
 import me.magnum.melonds.domain.model.CheatInFolder
 import me.magnum.melonds.domain.model.Game
+import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.repositories.CheatsRepository
 import me.magnum.melonds.extensions.removeFirst
 import me.magnum.melonds.parcelables.RomInfoParcelable
@@ -57,6 +58,9 @@ class CheatsViewModel @Inject constructor(
 
     private val selectedGame = savedStateHandle.getStateFlow<GameParcelable?>(KEY_SELECTED_GAME, null).map { it?.toGame() }
     private val selectedCheatFolder = savedStateHandle.getStateFlow<CheatFolderParcelable?>(KEY_SELECTED_FOLDER, null).map { it?.toCheatFolder() }
+
+    val cheatsRepo: CheatsRepository get() = cheatsRepository
+    val currentRomInfo: RomInfo? get() = romInfo
 
     val games by lazy {
         flow {

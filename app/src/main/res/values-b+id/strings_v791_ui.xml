@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">Menu jeda yang diperluas</string>
+    <string name="pref_extended_pause_menu_summary">Tampilkan alat tambahan di menu jeda (tangkapan layar, gerakan lambat, jeda bingkai, dan penyimpanan otomatis)</string>
+    <string name="extended_pause_menu_toggle">Submenu yang diperluas</string>
+    <string name="frame_advance_paused_status">Jeda: mode bingkai demi bingkai</string>
+    <string name="frame_advance_step_btn">+1 bingkai</string>
+    <string name="frame_advance_resume_btn">Lanjutkan</string>
+    <string name="slow_motion_title">Kecepatan gerakan lambat</string>
+    <string name="slow_motion_subtitle">Pilih prasetel atau atur secara manual</string>
+    <string name="slow_motion_preset_025">0.25× — Seperempat kecepatan</string>
+    <string name="slow_motion_preset_050">0.50× — Setengah kecepatan</string>
+    <string name="slow_motion_preset_075">0.75× — Perlambatan halus</string>
+    <string name="slow_motion_preset_085">0.85× — Perlambatan ringan</string>
+    <string name="slow_motion_preset_100">1.00× — Kecepatan normal (mati)</string>
+    <string name="slow_motion_custom_slider">Kecepatan khusus: %1$.2f×</string>
+    <string name="slow_motion_turn_off">Nonaktifkan gerakan lambat</string>
+    <string name="slow_motion_apply">Terapkan</string>
+    <string name="quick_slot_default_slot_header">Slot 0 (Bawaan)</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

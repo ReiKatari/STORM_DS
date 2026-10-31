@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">扩展暂停菜单</string>
+    <string name="pref_extended_pause_menu_summary">在暂停菜单中显示更多工具（截图、慢动作、逐帧前进与自动保存）</string>
+    <string name="extended_pause_menu_toggle">扩展子菜单</string>
+    <string name="frame_advance_paused_status">暂停：逐帧模式</string>
+    <string name="frame_advance_step_btn">+1 帧</string>
+    <string name="frame_advance_resume_btn">继续</string>
+    <string name="slow_motion_title">慢动作速度</string>
+    <string name="slow_motion_subtitle">选择预设或手动调整</string>
+    <string name="slow_motion_preset_025">0.25× — 四分之一速度</string>
+    <string name="slow_motion_preset_050">0.50× — 半速</string>
+    <string name="slow_motion_preset_075">0.75× — 平滑减速</string>
+    <string name="slow_motion_preset_085">0.85× — 轻微减速</string>
+    <string name="slow_motion_preset_100">1.00× — 正常速度（关闭）</string>
+    <string name="slow_motion_custom_slider">自定义速度：%1$.2f×</string>
+    <string name="slow_motion_turn_off">关闭慢动作</string>
+    <string name="slow_motion_apply">应用</string>
+    <string name="quick_slot_default_slot_header">槽位 0（默认）</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">Menu de pausa estendido</string>
+    <string name="pref_extended_pause_menu_summary">Exibir ferramentas adicionais no menu de pausa (captura de tela, câmera lenta, avanço de quadros e salvamento automático)</string>
+    <string name="extended_pause_menu_toggle">Submenu estendido</string>
+    <string name="frame_advance_paused_status">Pausa: modo quadro a quadro</string>
+    <string name="frame_advance_step_btn">+1 quadro</string>
+    <string name="frame_advance_resume_btn">Continuar</string>
+    <string name="slow_motion_title">Velocidade da câmera lenta</string>
+    <string name="slow_motion_subtitle">Escolha um perfil ou ajuste manualmente</string>
+    <string name="slow_motion_preset_025">0.25× — Um quarto da velocidade</string>
+    <string name="slow_motion_preset_050">0.50× — Metade da velocidade</string>
+    <string name="slow_motion_preset_075">0.75× — Desaceleração suave</string>
+    <string name="slow_motion_preset_085">0.85× — Leve desaceleração</string>
+    <string name="slow_motion_preset_100">1.00× — Velocidade normal (desativado)</string>
+    <string name="slow_motion_custom_slider">Velocidade personalizada: %1$.2f×</string>
+    <string name="slow_motion_turn_off">Desativar câmera lenta</string>
+    <string name="slow_motion_apply">Aplicar</string>
+    <string name="quick_slot_default_slot_header">Slot 0 (Padrão)</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

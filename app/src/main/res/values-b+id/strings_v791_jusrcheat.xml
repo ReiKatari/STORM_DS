@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v791_jusrcheat_tab_game_cheats">Cheat game</string>
+    <string name="v791_jusrcheat_tab_all_games">Jusrcheat (semua game)</string>
+    <string name="v791_jusrcheat_search_hint">Cari game atau kode (mis. Assassin, VACE)...</string>
+    <string name="v791_jusrcheat_filter_all">Semua</string>
+    <string name="v791_jusrcheat_filter_similar">Wilayah serupa</string>
+    <string name="v791_jusrcheat_filter_usa">AS</string>
+    <string name="v791_jusrcheat_filter_europe">Eropa</string>
+    <string name="v791_jusrcheat_filter_japan">Jepang</string>
+    <string name="v791_jusrcheat_cross_region_title">Cheat lintas wilayah serupa</string>
+    <string name="v791_jusrcheat_cross_region_desc">Cheat ditemukan untuk edisi regional lain (%s). Aktifkan dengan satu ketukan!</string>
+    <string name="v791_jusrcheat_btn_enable_for_rom">Aktifkan untuk game ini</string>
+    <string name="v791_jusrcheat_btn_attach_folder">Sematkan folder</string>
+    <string name="v791_jusrcheat_attached_success">Cheat berhasil diaktifkan untuk game ini</string>
+    <string name="v791_jusrcheat_no_games_found">Game tidak ditemukan</string>
+    <string name="v791_jusrcheat_browser_title">Jusrcheat — Semua game dan wilayah (usrcheat.dat)</string>
+    <string name="v791_jusrcheat_edit_cheat_title">Edit cheat</string>
+    <string name="v791_jusrcheat_add_cheat_title">Tambah cheat baru</string>
+    <string name="v791_jusrcheat_cheat_name">Nama cheat</string>
+    <string name="v791_jusrcheat_cheat_note">Catatan</string>
+    <string name="v791_jusrcheat_cheat_code">Kode AR (XXXXXXXX YYYYYYYY)</string>
+    <string name="v791_jusrcheat_btn_save">Simpan</string>
+    <string name="v791_jusrcheat_btn_cancel">Batal</string>
+    <string name="v791_jusrcheat_code_copied">Kode disalin ke papan klip</string>
+    <string name="v791_jusrcheat_export_success">Basis data usrcheat.dat berhasil disimpan</string>
+    <string name="v791_jusrcheat_one_hot_badge">Pilihan tunggal</string>
+    <string name="v791_jusrcheat_master_code">Kode master</string>
+    <string name="v791_jusrcheat_open_browser_btn">Jelajahi semua game dan wilayah (Jusrcheat)</string>
+    <string name="v791_jusrcheat_db_stats">4.079 game dan wilayah di usrcheat.dat</string>
+</resources>

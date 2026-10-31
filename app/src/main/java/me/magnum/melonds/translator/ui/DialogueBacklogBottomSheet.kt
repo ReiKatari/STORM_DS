@@ -123,13 +123,14 @@ fun DialogueBacklogContent(
     // Dialog state for confirming deletion
     var termToDelete by remember { mutableStateOf<UserGlossaryManager.GlossaryEntry?>(null) }
 
-    val bgDark = Color(0xFF0F172A)
-    val cardDark = Color(0xFF1E293B)
-    val borderDark = Color(0xFF334155)
-    val accentCyan = Color(0xFF00E5FF)
-    val accentGreen = Color(0xFF10B981)
-    val textPrimary = Color(0xFFF8FAFC)
-    val textMuted = Color(0xFF94A3B8)
+    val colors = watermelon
+    val bgDark = colors.surface
+    val cardDark = colors.surface2
+    val borderDark = colors.line
+    val accentCyan = colors.green
+    val accentGreen = if (colors.isDark) Color(0xFF10B981) else Color(0xFF059669)
+    val textPrimary = colors.text
+    val textMuted = colors.text2
 
     Column(
         modifier = Modifier
@@ -338,7 +339,7 @@ fun DialogueBacklogContent(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = accentGreen,
-                        contentColor = Color(0xFF0F172A)
+                        contentColor = Color.White
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
@@ -506,12 +507,13 @@ fun BacklogItemCard(
     onAddToGlossary: () -> Unit
 ) {
     val context = LocalContext.current
-    val cardDark = Color(0xFF1E293B)
-    val borderDark = Color(0xFF334155)
-    val accentCyan = Color(0xFF00E5FF)
-    val accentGreen = Color(0xFF10B981)
-    val textPrimary = Color(0xFFF8FAFC)
-    val textMuted = Color(0xFF94A3B8)
+    val colors = watermelon
+    val cardDark = colors.surface2
+    val borderDark = colors.line
+    val accentCyan = colors.green
+    val accentGreen = if (colors.isDark) Color(0xFF10B981) else Color(0xFF059669)
+    val textPrimary = colors.text
+    val textMuted = colors.text2
 
     Card(
         modifier = Modifier
@@ -662,12 +664,13 @@ fun GlossaryEntryCard(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
-    val cardDark = Color(0xFF1E293B)
-    val borderDark = Color(0xFF334155)
-    val accentCyan = Color(0xFF00E5FF)
-    val accentGreen = Color(0xFF10B981)
-    val textPrimary = Color(0xFFF8FAFC)
-    val textMuted = Color(0xFF94A3B8)
+    val colors = watermelon
+    val cardDark = colors.surface2
+    val borderDark = colors.line
+    val accentCyan = colors.green
+    val accentGreen = if (colors.isDark) Color(0xFF10B981) else Color(0xFF059669)
+    val textPrimary = colors.text
+    val textMuted = colors.text2
 
     Card(
         modifier = Modifier
@@ -766,11 +769,12 @@ fun AddOrEditGlossaryTermDialog(
     var caseSensitive by remember { mutableStateOf(initialCaseSensitive) }
     var isGameSpecific by remember { mutableStateOf(initialGameSpecific && activeGameKey != "global") }
 
-    val cardDark = Color(0xFF1E293B)
-    val textPrimary = Color(0xFFF8FAFC)
-    val textMuted = Color(0xFF94A3B8)
-    val accentCyan = Color(0xFF00E5FF)
-    val accentGreen = Color(0xFF10B981)
+    val colors = watermelon
+    val cardDark = colors.surface2
+    val textPrimary = colors.text
+    val textMuted = colors.text2
+    val accentCyan = colors.green
+    val accentGreen = if (colors.isDark) Color(0xFF10B981) else Color(0xFF059669)
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -908,7 +912,7 @@ fun AddOrEditGlossaryTermDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
                             backgroundColor = accentGreen,
-                            contentColor = Color(0xFF0F172A)
+                            contentColor = Color.White
                         )
                     ) {
                         Text(

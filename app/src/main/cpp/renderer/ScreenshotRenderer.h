@@ -46,13 +46,16 @@ public:
     void notifyScreenshotReady();
     u32* getScreenshot();
 
-    bool takeScreenshot();
+    bool takeScreenshot(bool isPaused = false);
     bool isScreenshotPending();
+    bool hasCachedScreenshot() const noexcept { return hasValidCachedScreenshot.load(std::memory_order_relaxed); }
+    void setHasValidCachedScreenshot(bool valid) noexcept { hasValidCachedScreenshot.store(valid, std::memory_order_relaxed); }
 
     void cleanup();
 
 private:
     bool initialized = false;
+    std::atomic<bool> hasValidCachedScreenshot{false};
 };
 
 }

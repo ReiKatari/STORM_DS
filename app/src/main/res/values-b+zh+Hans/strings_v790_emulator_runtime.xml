@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">硬核模式已启用</string>
     <string name="ra_hardcore_dialog_message">在 RetroAchievements 硬核竞技模式下禁止载入即时存档。是否在当前会话中切换到普通模式（Softcore）并载入槽位？</string>
     <string name="ra_hardcore_dialog_switch_and_load">切换至普通模式并读档</string>
-    <string name="take_clean_screenshot">截取纯净画面</string>
+    <string name="take_clean_screenshot">屏幕截图</string>
     <string name="screenshot_saved_toast">截图已保存：%1$s</string>
     <string name="screenshot_failed_toast">保存截图失败</string>
     <string name="slow_motion_toggle">慢动作减速 (Slow-Motion)</string>

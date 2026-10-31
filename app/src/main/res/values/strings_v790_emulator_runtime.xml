@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Hardcore mode active</string>
     <string name="ra_hardcore_dialog_message">In RetroAchievements hardcore mode, loading save states is disabled. Switch to standard (Softcore) mode for the current session and load the slot?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Switch to Softcore and load</string>
-    <string name="take_clean_screenshot">Take clean screenshot</string>
+    <string name="take_clean_screenshot">Take screenshot</string>
     <string name="screenshot_saved_toast">Screenshot saved: %1$s</string>
     <string name="screenshot_failed_toast">Failed to save screenshot</string>
     <string name="slow_motion_toggle">Slow-motion (0.5x)</string>

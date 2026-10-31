@@ -223,7 +223,7 @@ fun SaveStatesOverlay(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(colors.surface2)
-                                .border(1.2.dp, Color(0xFF38BDF8).copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                                .border(1.2.dp, (if (colors.isDark) Color(0xFF38BDF8) else colors.green).copy(alpha = 0.8f), RoundedCornerShape(8.dp))
                                 .clickable(enabled = !isExportingBundle) {
                                     isExportingBundle = true
                                     Toast.makeText(context, context.getString(R.string.export_data_bundle_in_progress), Toast.LENGTH_SHORT).show()
@@ -259,13 +259,13 @@ fun SaveStatesOverlay(
                                 Icon(
                                     imageVector = Icons.Filled.Archive,
                                     contentDescription = stringResource(R.string.export_data_bundle_button),
-                                    tint = Color(0xFF38BDF8),
+                                    tint = if (colors.isDark) Color(0xFF38BDF8) else colors.green,
                                     modifier = Modifier.size(15.dp),
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     text = if (isExportingBundle) stringResource(R.string.export_data_bundle_in_progress) else stringResource(R.string.export_data_bundle_button),
-                                    color = Color(0xFF38BDF8),
+                                    color = if (colors.isDark) Color(0xFF38BDF8) else colors.green,
                                     fontFamily = SpaceGrotesk,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -298,7 +298,7 @@ fun SaveStatesOverlay(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(colors.surface2)
-                                    .border(1.2.dp, Color(0xFFFF9800), RoundedCornerShape(8.dp))
+                                    .border(1.2.dp, if (colors.isDark) Color(0xFFFF9800) else Color(0xFFD97706), RoundedCornerShape(8.dp))
                                     .clickable { onUndoOverwrite() }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center,
@@ -307,13 +307,13 @@ fun SaveStatesOverlay(
                                     Icon(
                                         imageVector = Icons.Filled.Undo,
                                         contentDescription = stringResource(R.string.undo_overwrite_button),
-                                        tint = Color(0xFFFF9800),
+                                        tint = if (colors.isDark) Color(0xFFFF9800) else Color(0xFFD97706),
                                         modifier = Modifier.size(15.dp),
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
                                         text = if (isRu) "Откат: $slotLabel ($stepLabel)" else "Undo: $slotLabel ($stepLabel)",
-                                        color = Color(0xFFFF9800),
+                                        color = if (colors.isDark) Color(0xFFFF9800) else Color(0xFFD97706),
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,

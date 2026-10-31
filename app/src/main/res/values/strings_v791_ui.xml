@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">Extended pause menu</string>
+    <string name="pref_extended_pause_menu_summary">Show additional tools in the pause menu (screenshot, slow motion, frame advance, and autosave)</string>
+    <string name="extended_pause_menu_toggle">Extended pause menu</string>
+    <string name="frame_advance_paused_status">Paused: frame advance</string>
+    <string name="frame_advance_step_btn">+1 frame</string>
+    <string name="frame_advance_resume_btn">Resume</string>
+    <string name="slow_motion_title">Slow motion speed</string>
+    <string name="slow_motion_subtitle">Select preset or adjust manually</string>
+    <string name="slow_motion_preset_025">0.25× — Quarter speed</string>
+    <string name="slow_motion_preset_050">0.50× — Half speed</string>
+    <string name="slow_motion_preset_075">0.75× — Smooth slowdown</string>
+    <string name="slow_motion_preset_085">0.85× — Light slowdown</string>
+    <string name="slow_motion_preset_100">1.00× — Normal speed (off)</string>
+    <string name="slow_motion_custom_slider">Custom speed: %1$.2f×</string>
+    <string name="slow_motion_turn_off">Disable slow motion</string>
+    <string name="slow_motion_apply">Apply</string>
+    <string name="quick_slot_default_slot_header">Slot 0 (Default)</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

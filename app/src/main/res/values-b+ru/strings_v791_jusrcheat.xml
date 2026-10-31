@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v791_jusrcheat_tab_game_cheats">Читы игры</string>
+    <string name="v791_jusrcheat_tab_all_games">Jusrcheat (все игры)</string>
+    <string name="v791_jusrcheat_search_hint">Поиск игры или кода (например, Assassin, VACE)...</string>
+    <string name="v791_jusrcheat_filter_all">Все</string>
+    <string name="v791_jusrcheat_filter_similar">Похожие регионы</string>
+    <string name="v791_jusrcheat_filter_usa">USA</string>
+    <string name="v791_jusrcheat_filter_europe">Европа</string>
+    <string name="v791_jusrcheat_filter_japan">Япония</string>
+    <string name="v791_jusrcheat_cross_region_title">Коды похожих регионов (Cross-Region)</string>
+    <string name="v791_jusrcheat_cross_region_desc">Найдены читы для других версий этой игры (%s). Вы можете включить их в один клик!</string>
+    <string name="v791_jusrcheat_btn_enable_for_rom">Включить для этой игры</string>
+    <string name="v791_jusrcheat_btn_attach_folder">Подключить раздел</string>
+    <string name="v791_jusrcheat_attached_success">Чит успешно подключен к игре</string>
+    <string name="v791_jusrcheat_no_games_found">Игры не найдены</string>
+    <string name="v791_jusrcheat_browser_title">Jusrcheat — Все игры и регионы (usrcheat.dat)</string>
+    <string name="v791_jusrcheat_edit_cheat_title">Редактировать чит</string>
+    <string name="v791_jusrcheat_add_cheat_title">Добавить новый чит</string>
+    <string name="v791_jusrcheat_cheat_name">Название чита</string>
+    <string name="v791_jusrcheat_cheat_note">Примечание</string>
+    <string name="v791_jusrcheat_cheat_code">AR-код (XXXXXXXX YYYYYYYY)</string>
+    <string name="v791_jusrcheat_btn_save">Сохранить</string>
+    <string name="v791_jusrcheat_btn_cancel">Отмена</string>
+    <string name="v791_jusrcheat_code_copied">Код скопирован в буфер обмена</string>
+    <string name="v791_jusrcheat_export_success">База usrcheat.dat успешно сохранена</string>
+    <string name="v791_jusrcheat_one_hot_badge">Один выбор</string>
+    <string name="v791_jusrcheat_master_code">Мастер-код</string>
+    <string name="v791_jusrcheat_open_browser_btn">Обзор всех 4000+ игр и регионов (Jusrcheat)</string>
+    <string name="v791_jusrcheat_db_stats">4 079 игр и регионов в usrcheat.dat</string>
+</resources>

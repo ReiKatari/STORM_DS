@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v791_jusrcheat_tab_game_cheats">游戏金手指</string>
+    <string name="v791_jusrcheat_tab_all_games">Jusrcheat（全部游戏）</string>
+    <string name="v791_jusrcheat_search_hint">搜索游戏或代码（如 Assassin, VACE）...</string>
+    <string name="v791_jusrcheat_filter_all">全部</string>
+    <string name="v791_jusrcheat_filter_similar">相近区域</string>
+    <string name="v791_jusrcheat_filter_usa">美版</string>
+    <string name="v791_jusrcheat_filter_europe">欧版</string>
+    <string name="v791_jusrcheat_filter_japan">日版</string>
+    <string name="v791_jusrcheat_cross_region_title">跨区域关联金手指</string>
+    <string name="v791_jusrcheat_cross_region_desc">发现其他区域版本的金手指（%s）。可一键为此游戏启用！</string>
+    <string name="v791_jusrcheat_btn_enable_for_rom">为此游戏启用</string>
+    <string name="v791_jusrcheat_btn_attach_folder">关联文件夹</string>
+    <string name="v791_jusrcheat_attached_success">金手指已成功为此游戏启用</string>
+    <string name="v791_jusrcheat_no_games_found">未找到相关游戏</string>
+    <string name="v791_jusrcheat_browser_title">Jusrcheat — 全部游戏与区域（usrcheat.dat）</string>
+    <string name="v791_jusrcheat_edit_cheat_title">编辑金手指</string>
+    <string name="v791_jusrcheat_add_cheat_title">添加新金手指</string>
+    <string name="v791_jusrcheat_cheat_name">金手指名称</string>
+    <string name="v791_jusrcheat_cheat_note">说明备注</string>
+    <string name="v791_jusrcheat_cheat_code">AR代码（XXXXXXXX YYYYYYYY）</string>
+    <string name="v791_jusrcheat_btn_save">保存</string>
+    <string name="v791_jusrcheat_btn_cancel">取消</string>
+    <string name="v791_jusrcheat_code_copied">代码已复制到剪贴板</string>
+    <string name="v791_jusrcheat_export_success">usrcheat.dat数据库已成功保存</string>
+    <string name="v791_jusrcheat_one_hot_badge">单选项目</string>
+    <string name="v791_jusrcheat_master_code">主代码</string>
+    <string name="v791_jusrcheat_open_browser_btn">浏览全部4000+游戏与区域（Jusrcheat）</string>
+    <string name="v791_jusrcheat_db_stats">usrcheat.dat内置4,079个游戏与版本</string>
+</resources>

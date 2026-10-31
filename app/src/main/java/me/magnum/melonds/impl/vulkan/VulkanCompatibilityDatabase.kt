@@ -88,6 +88,9 @@ object VulkanCompatibilityDatabase {
         }.trim()
 
         if (haystack.isNotEmpty()) {
+            if (haystack.contains("assassin's creed") || haystack.contains("assassins creed")) {
+                profiles.firstOrNull { it.id == "assassins_creed_ds" }?.let { return it }
+            }
             return profiles.firstOrNull { profile ->
                 profile.titleKeywords.any { keyword ->
                     keyword.isNotBlank() && haystack.contains(keyword.lowercase(Locale.ROOT))

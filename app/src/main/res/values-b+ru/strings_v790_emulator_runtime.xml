@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Режим Хардкор активен</string>
     <string name="ra_hardcore_dialog_message">В соревновательном режиме RetroAchievements загрузка быстрых сохранений запрещена. Переключиться в обычный режим (Softcore) для текущей сессии и загрузить слот?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Перейти в Softcore и загрузить</string>
-    <string name="take_clean_screenshot">Сделать чистый скриншот</string>
+    <string name="take_clean_screenshot">Сделать скриншот</string>
     <string name="screenshot_saved_toast">Скриншот сохранён: %1$s</string>
     <string name="screenshot_failed_toast">Не удалось сохранить скриншот</string>
     <string name="slow_motion_toggle">Замедление времени (Slow-Motion)</string>

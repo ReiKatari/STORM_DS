@@ -2671,4 +2671,34 @@ class SharedPreferencesSettingsRepository(
             MelonEmulator.setHingeGapPixels(getHingeGapPixels())
         }
     }
+    override fun isExtendedPauseMenuEnabled(): Boolean {
+        return preferences.getBoolean("extended_pause_menu_enabled", false)
+    }
+
+    override fun setExtendedPauseMenuEnabled(enabled: Boolean) {
+        preferences.edit {
+            putBoolean("extended_pause_menu_enabled", enabled)
+        }
+    }
+
+    override fun getSlowMotionSpeed(): Float {
+        val speed = try {
+            if (preferences.contains("slow_motion_speed")) {
+                preferences.getFloat("slow_motion_speed", 0.5f)
+            } else {
+                preferences.getString("slow_motion_speed", "0.5")?.toFloatOrNull() ?: 0.5f
+            }
+        } catch (_: ClassCastException) {
+            preferences.getString("slow_motion_speed", "0.5")?.toFloatOrNull() ?: 0.5f
+        }
+        return speed.coerceIn(0.1f, 1.0f)
+    }
+
+    override fun setSlowMotionSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.1f, 1.0f)
+        preferences.edit {
+            putFloat("slow_motion_speed", clamped)
+            putString("slow_motion_speed_str", clamped.toString())
+        }
+    }
 }

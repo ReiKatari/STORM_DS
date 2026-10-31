@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Modalità Hardcore attiva</string>
     <string name="ra_hardcore_dialog_message">Nella modalità Hardcore di RetroAchievements il caricamento dei salvataggi rapidi è disabilitato. Passare alla modalità Softcore per la sessione corrente e caricare lo slot?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Passa a Softcore e carica</string>
-    <string name="take_clean_screenshot">Cattura screenshot pulito</string>
+    <string name="take_clean_screenshot">Cattura screenshot</string>
     <string name="screenshot_saved_toast">Screenshot salvato: %1$s</string>
     <string name="screenshot_failed_toast">Impossibile salvare lo screenshot</string>
     <string name="slow_motion_toggle">Rallentatore (Slow-Motion)</string>

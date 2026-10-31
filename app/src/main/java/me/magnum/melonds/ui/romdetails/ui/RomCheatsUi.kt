@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +30,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
@@ -48,14 +50,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.R
 import me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats
 import me.magnum.melonds.di.entrypoint.CheatsEntryPoint
 import me.magnum.melonds.domain.model.Cheat
@@ -63,6 +69,7 @@ import me.magnum.melonds.domain.model.CheatFolder
 import me.magnum.melonds.domain.model.Game
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.ui.emulator.ui.JusrcheatAllGamesTab
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
@@ -93,6 +100,7 @@ fun RomCheatsUi(
     var cheatFolders by remember(rom) { mutableStateOf<List<CheatFolder>>(emptyList()) }
     var isLoading by remember(rom) { mutableStateOf(true) }
     var isDownloadingDb by remember { mutableStateOf(false) }
+    var showJusrcheatBrowser by remember { mutableStateOf(false) }
 
     val expandedFolders = remember(rom) { mutableStateMapOf<Long, Boolean>() }
 
@@ -364,6 +372,29 @@ fun RomCheatsUi(
                             }
                         }
                     }
+
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .clickable { showJusrcheatBrowser = true }
+                            .padding(vertical = 9.dp, horizontal = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Bolt, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.size(6.dp))
+                            Text(
+                                text = stringResource(R.string.v791_jusrcheat_open_browser_btn),
+                                fontFamily = SpaceGrotesk,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -410,6 +441,32 @@ fun RomCheatsUi(
                             color = Color(0xFF64748B),
                             textAlign = TextAlign.Center
                         )
+                        Spacer(Modifier.height(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.green)
+                                .clickable { showJusrcheatBrowser = true }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Bolt,
+                                    contentDescription = null,
+                                    tint = if (colors.isDark) Color.Black else Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.v791_jusrcheat_open_browser_btn),
+                                    color = if (colors.isDark) Color.Black else Color.White,
+                                    fontFamily = SpaceGrotesk,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -480,6 +537,67 @@ fun RomCheatsUi(
 
         item {
             Spacer(Modifier.height(32.dp))
+        }
+    }
+
+    if (showJusrcheatBrowser) {
+        Dialog(
+            onDismissRequest = { showJusrcheatBrowser = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .padding(horizontal = 12.dp, vertical = 20.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.surface)
+                        .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Bolt, contentDescription = null, tint = colors.green, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.v791_jusrcheat_browser_title),
+                                color = colors.text,
+                                fontFamily = SpaceGrotesk,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Close",
+                            tint = colors.text2,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable { showJusrcheatBrowser = false }
+                        )
+                    }
+
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
+
+                    JusrcheatAllGamesTab(
+                        romInfo = romInfo,
+                        cheatsRepository = cheatsRepository,
+                        onCheatAttached = {
+                            refreshCheats()
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
         }
     }
 }

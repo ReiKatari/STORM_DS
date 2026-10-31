@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Hardcore-Modus aktiv</string>
     <string name="ra_hardcore_dialog_message">Im RetroAchievements-Hardcore-Modus ist das Laden von Spielständen deaktiviert. Für diese Sitzung in den Softcore-Modus wechseln und Spielstand laden?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Zu Softcore wechseln und laden</string>
-    <string name="take_clean_screenshot">Sauberen Screenshot aufnehmen</string>
+    <string name="take_clean_screenshot">Screenshot aufnehmen</string>
     <string name="screenshot_saved_toast">Screenshot gespeichert: %1$s</string>
     <string name="screenshot_failed_toast">Screenshot konnte nicht gespeichert werden</string>
     <string name="slow_motion_toggle">Zeitlupe (Slow-Motion)</string>

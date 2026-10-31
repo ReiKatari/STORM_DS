@@ -29,6 +29,9 @@ interface GameDao {
     @Query("SELECT * FROM game WHERE game_code LIKE :codePrefix || '%' LIMIT 1")
     suspend fun findGameByPrefix(codePrefix: String): GameEntity?
 
+    @Query("SELECT * FROM game WHERE game_code LIKE :codePrefix || '%'")
+    suspend fun findGamesByPrefix(codePrefix: String): List<GameEntity>
+
     @Query("SELECT * FROM game WHERE name LIKE '%' || :titleKeyword || '%' LIMIT 1")
     suspend fun findGameByTitle(titleKeyword: String): GameEntity?
 

@@ -6694,6 +6694,7 @@ class EmulatorViewModel @Inject constructor(
             RomPauseMenuOption.SAVE_STATE -> emulatorSession.areSaveStatesAllowed()
             RomPauseMenuOption.REWIND -> settingsRepository.isRewindEnabled() && emulatorSession.areSaveStateLoadsAllowed()
             RomPauseMenuOption.LOAD_STATE -> true
+            RomPauseMenuOption.QUICK_SLOT_CAROUSEL -> false
             RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE -> {
                 val rom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
                 rom != null && hasPeriodicAutoSave(rom)

@@ -143,4 +143,5 @@ cd STORM_DS
 * **Zenju** — за алгоритм высококачественного масштабирования пиксельной графики xBRZ.
 * **SnowflakePowered (librashader)** — за кроссплатформенную реализацию конвейера шейдеров RetroArch Slang на языке Rust.
 * **bylaws (libadrenotools)** — за библиотеку динамической загрузки кастомных видеодрайверов Qualcomm Adreno и Mesa Turnip.
-* **TakWolf (Fusion Pixel Font, Ark Pixel Font), Galmuri и Cubic 11** — за пиксельные шрифты с поддержкой кириллицы, латиницы и CJK для нативной отрисовки перевода в играх (лицензия SIL OFL 1.1).
+* **TakWolf (Fusion Pixel Font, Ark Pixel Font), Galmuri и Cubic 11** — за пиксельные шрифты с поддержкой кириллицы, латиницы и CJK для нативной отрисовки перевода в играх.
+* **xperia64 (Jusrcheat) и DeadSkullzJr** — за архитектуру бинарного редактора чит-кодов формата R4 и полную базу кодов Action Replay для библиотеки игр Nintendo DS и DSi.

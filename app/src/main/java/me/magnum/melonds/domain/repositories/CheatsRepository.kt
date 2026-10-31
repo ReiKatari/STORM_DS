@@ -2,6 +2,7 @@ package me.magnum.melonds.domain.repositories
 
 import android.net.Uri
 import kotlinx.coroutines.flow.Flow
+import me.magnum.melonds.common.cheats.jusrcheat.JusrcheatRepository
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatDatabase
 import me.magnum.melonds.domain.model.CheatFolder
@@ -28,4 +29,6 @@ interface CheatsRepository {
     fun importCheats(uri: Uri)
     fun isCheatImportOngoing(): Boolean
     fun getCheatImportProgress(): Flow<CheatImportProgress>
+
+    fun getJusrcheatRepository(): JusrcheatRepository? = null
 }

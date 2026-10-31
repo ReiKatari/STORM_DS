@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">拡張ポーズメニュー</string>
+    <string name="pref_extended_pause_menu_summary">ポーズメニューに追加ツールを表示（スクリーンショット、スローモーション、コマ送り、自動保存）</string>
+    <string name="extended_pause_menu_toggle">拡張サブメニュー</string>
+    <string name="frame_advance_paused_status">一時停止：コマ送りモード</string>
+    <string name="frame_advance_step_btn">+1 コマ</string>
+    <string name="frame_advance_resume_btn">再開</string>
+    <string name="slow_motion_title">スローモーション速度</string>
+    <string name="slow_motion_subtitle">プリセットを選択するか手動で調整</string>
+    <string name="slow_motion_preset_025">0.25× — 4分の1速度</string>
+    <string name="slow_motion_preset_050">0.50× — 半分速度</string>
+    <string name="slow_motion_preset_075">0.75× — なめらかな減速</string>
+    <string name="slow_motion_preset_085">0.85× — わずかな減速</string>
+    <string name="slow_motion_preset_100">1.00× — 通常速度（オフ）</string>
+    <string name="slow_motion_custom_slider">カスタム速度: %1$.2f×</string>
+    <string name="slow_motion_turn_off">スローモーションを無効化</string>
+    <string name="slow_motion_apply">適用</string>
+    <string name="quick_slot_default_slot_header">スロット 0（デフォルト）</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

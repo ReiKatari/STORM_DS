@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Mode Hardcore aktif</string>
     <string name="ra_hardcore_dialog_message">Dalam mode Hardcore RetroAchievements, memuat save state dinonaktifkan. Beralih ke mode Softcore untuk sesi ini dan memuat slot?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Beralih ke Softcore dan muat</string>
-    <string name="take_clean_screenshot">Ambil tangkapan layar bersih</string>
+    <string name="take_clean_screenshot">Ambil tangkapan layar</string>
     <string name="screenshot_saved_toast">Tangkapan layar disimpan: %1$s</string>
     <string name="screenshot_failed_toast">Gagal menyimpan tangkapan layar</string>
     <string name="slow_motion_toggle">Gerakan lambat (Slow-Motion)</string>

@@ -120,6 +120,7 @@ fun RamCheatFinderTab(
     modifier: Modifier = Modifier,
 ) {
     val colors = watermelon
+    val onAccent = if (colors.isDark) Color.Black else Color.White
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
@@ -483,13 +484,13 @@ fun RamCheatFinderTab(
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = onAccent,
                     modifier = Modifier.size(15.dp),
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = stringResource(R.string.v790_ram_new_search),
-                    color = Color.Black,
+                    color = onAccent,
                     fontFamily = SpaceGrotesk,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
@@ -730,13 +731,13 @@ fun RamCheatFinderTab(
                                         Icon(
                                             imageVector = Icons.Filled.Add,
                                             contentDescription = null,
-                                            tint = Color.Black,
+                                            tint = onAccent,
                                             modifier = Modifier.size(13.dp),
                                         )
                                         Spacer(Modifier.width(3.dp))
                                         Text(
                                             text = stringResource(R.string.v790_ram_btn_create_cheat),
-                                            color = Color.Black,
+                                            color = onAccent,
                                             fontFamily = SpaceGrotesk,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -749,7 +750,7 @@ fun RamCheatFinderTab(
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = statusText,
-                                    color = if (statusText == context.getString(R.string.v790_ram_test_success)) colors.green else Color.Red,
+                                    color = if (statusText == context.getString(R.string.v790_ram_test_success)) colors.green else colors.red,
                                     fontFamily = WatermelonMono,
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Medium,

@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
+import androidx.compose.material.Switch
+import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -113,6 +115,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import me.magnum.melonds.ui.theme.Manrope
 import me.magnum.melonds.ui.theme.WatermelonColors
+import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import kotlin.time.Duration
 
@@ -163,6 +166,9 @@ fun PauseMenuOverlay(
     achievementsSummary: String?,
     sessionDurationMs: Long? = null,
     activeQuickSlot: Int = 0,
+    isExtendedPauseMenuEnabled: Boolean = false,
+    onToggleExtendedPauseMenu: ((Boolean) -> Unit)? = null,
+    slowMotionSpeed: Float = 0.5f,
     onQuickSlotCarouselClick: (() -> Unit)? = null,
     onOptionSelected: (PauseMenuOption) -> Unit,
     onResume: () -> Unit,
@@ -436,8 +442,8 @@ fun PauseMenuOverlay(
                         .fillMaxWidth()
                         .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF0F172A).copy(alpha = 0.85f))
-                        .border(1.dp, Color(0x4400D2FF), RoundedCornerShape(12.dp))
+                        .background(colors.surface2)
+                        .border(1.dp, colors.line, RoundedCornerShape(12.dp))
                         .clickable {
                             if (onQuickSlotCarouselClick != null) {
                                 onQuickSlotCarouselClick()
@@ -456,12 +462,12 @@ fun PauseMenuOverlay(
                         Icon(
                             imageVector = Icons.Default.Layers,
                             contentDescription = null,
-                            tint = Color(0xFF00D2FF),
+                            tint = colors.green,
                             modifier = Modifier.size(16.dp),
                         )
                         Text(
                             text = stringResource(R.string.quick_slot_carousel_title),
-                            color = Color.White,
+                            color = colors.text,
                             fontFamily = Manrope,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -472,9 +478,9 @@ fun PauseMenuOverlay(
                         text = if (activeQuickSlot in 1..8) {
                             stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
                         } else {
-                            "Слот 0 (По умолчанию)"
+                            stringResource(R.string.quick_slot_default_slot_header)
                         },
-                        color = Color(0xFF00D2FF),
+                        color = colors.green,
                         fontFamily = Manrope,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -483,6 +489,22 @@ fun PauseMenuOverlay(
             }
 
             Spacer(Modifier.height(4.dp))
+
+            val extendedOptions = remember {
+                setOf(
+                    RomPauseMenuOption.TAKE_SCREENSHOT,
+                    RomPauseMenuOption.SLOW_MOTION,
+                    RomPauseMenuOption.FRAME_ADVANCE,
+                    RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE,
+                )
+            }
+            val displayedOptions = remember(pauseMenu.options, isExtendedPauseMenuEnabled) {
+                if (isExtendedPauseMenuEnabled) {
+                    pauseMenu.options
+                } else {
+                    pauseMenu.options.filterNot { it in extendedOptions }
+                }
+            }
 
             // Options Grid
             LazyVerticalGrid(
@@ -493,13 +515,19 @@ fun PauseMenuOverlay(
                     .fillMaxWidth()
                     .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 6.dp),
             ) {
-                items(pauseMenu.options, key = { it.toString() }) { option ->
+                items(displayedOptions, key = { it.toString() }) { option ->
+                    val slowMoBadge = if (option == RomPauseMenuOption.SLOW_MOTION) {
+                        val formatted = String.format(java.util.Locale.US, "%.2f", slowMotionSpeed).trimEnd('0').trimEnd('.')
+                        "${formatted}×"
+                    } else null
+
                     PauseOptionRow(
                         label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
                         icon = optionIcon(option),
+                        badge = slowMoBadge,
                         highlighted = false,
                         destructive = isDestructive(option),
-                        focusRequester = if (option == pauseMenu.options.firstOrNull()) resumeFocusRequester else null,
+                        focusRequester = if (option == displayedOptions.firstOrNull()) resumeFocusRequester else null,
                         onClick = {
                             if (needsConfirmation(option)) {
                                 confirmingOption = option
@@ -507,6 +535,52 @@ fun PauseMenuOverlay(
                                 onOptionSelected(option)
                             }
                         },
+                    )
+                }
+            }
+
+            // Extended Pause Menu Inline Toggle Row
+            if (onToggleExtendedPauseMenu != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surface2)
+                        .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                        .clickable { onToggleExtendedPauseMenu(!isExtendedPauseMenuEnabled) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DashboardCustomize,
+                            contentDescription = null,
+                            tint = if (isExtendedPauseMenuEnabled) colors.green else colors.text2,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.extended_pause_menu_toggle),
+                            color = colors.text,
+                            fontFamily = Manrope,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+
+                    Switch(
+                        checked = isExtendedPauseMenuEnabled,
+                        onCheckedChange = { onToggleExtendedPauseMenu(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = colors.green,
+                            checkedTrackColor = colors.greenDim,
+                            uncheckedThumbColor = colors.surface3,
+                            uncheckedTrackColor = colors.line,
+                        ),
                     )
                 }
             }
@@ -538,6 +612,7 @@ fun PauseMenuOverlay(
 private fun PauseOptionRow(
     label: String,
     icon: ImageVector,
+    badge: String? = null,
     highlighted: Boolean,
     destructive: Boolean,
     onClick: () -> Unit,
@@ -602,7 +677,26 @@ private fun PauseOptionRow(
             fontWeight = if (highlighted || isFocused) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        if (badge != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.greenDim)
+                    .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = badge,
+                    color = colors.green,
+                    fontFamily = WatermelonMono,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
     }
 }
 

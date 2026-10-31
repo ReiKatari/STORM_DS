@@ -27,7 +27,7 @@
     <string name="ra_hardcore_dialog_title">Modo Hardcore ativo</string>
     <string name="ra_hardcore_dialog_message">No modo Hardcore do RetroAchievements, o carregamento de save states é desativado. Mudar para o modo Softcore nesta sessão e carregar o slot?</string>
     <string name="ra_hardcore_dialog_switch_and_load">Mudar para Softcore e carregar</string>
-    <string name="take_clean_screenshot">Capturar tela limpa</string>
+    <string name="take_clean_screenshot">Tirar captura de tela</string>
     <string name="screenshot_saved_toast">Captura salva: %1$s</string>
     <string name="screenshot_failed_toast">Falha ao salvar captura de tela</string>
     <string name="slow_motion_toggle">Câmera lenta (Slow-Motion)</string>

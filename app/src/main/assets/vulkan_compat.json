@@ -221,6 +221,30 @@
       "compositorMode": "precise",
       "thickEdges": false,
       "notes": "Eliminates 30 Hz bottom screen swap flicker and preserves dual-screen capture synchronization"
+    },
+    {
+      "id": "assassins_creed_ds",
+      "title": "Assassin's Creed: Altair's Chronicles and Assassin's Creed II: Discovery",
+      "gameCodes": [
+        "YAH",
+        "YAHE",
+        "YAHP",
+        "VAC",
+        "VACE",
+        "VACV",
+        "VACP",
+        "VACX"
+      ],
+      "titleKeywords": [
+        "assassin's creed",
+        "assassins creed",
+        "altair's chronicles",
+        "altairs chronicles",
+        "discovery"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Fixes 2D UI menu planes and 3D character preview layer priority sandwiching"
     }
   ]
 }

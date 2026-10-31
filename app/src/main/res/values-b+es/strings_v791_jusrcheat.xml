@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v791_jusrcheat_tab_game_cheats">Trucos del juego</string>
+    <string name="v791_jusrcheat_tab_all_games">Jusrcheat (todos los juegos)</string>
+    <string name="v791_jusrcheat_search_hint">Buscar juego o código (ej. Assassin, VACE)...</string>
+    <string name="v791_jusrcheat_filter_all">Todos</string>
+    <string name="v791_jusrcheat_filter_similar">Regiones afines</string>
+    <string name="v791_jusrcheat_filter_usa">EE. UU.</string>
+    <string name="v791_jusrcheat_filter_europe">Europa</string>
+    <string name="v791_jusrcheat_filter_japan">Japón</string>
+    <string name="v791_jusrcheat_cross_region_title">Trucos entre regiones afines</string>
+    <string name="v791_jusrcheat_cross_region_desc">Se encontraron trucos de otras regiones (%s). ¡Actívalos con un toque!</string>
+    <string name="v791_jusrcheat_btn_enable_for_rom">Activar para este juego</string>
+    <string name="v791_jusrcheat_btn_attach_folder">Adjuntar carpeta</string>
+    <string name="v791_jusrcheat_attached_success">Truco activado correctamente para este juego</string>
+    <string name="v791_jusrcheat_no_games_found">No se encontraron juegos</string>
+    <string name="v791_jusrcheat_browser_title">Jusrcheat — Todos los juegos y regiones (usrcheat.dat)</string>
+    <string name="v791_jusrcheat_edit_cheat_title">Editar truco</string>
+    <string name="v791_jusrcheat_add_cheat_title">Añadir nuevo truco</string>
+    <string name="v791_jusrcheat_cheat_name">Nombre del truco</string>
+    <string name="v791_jusrcheat_cheat_note">Nota</string>
+    <string name="v791_jusrcheat_cheat_code">Código AR (XXXXXXXX YYYYYYYY)</string>
+    <string name="v791_jusrcheat_btn_save">Guardar</string>
+    <string name="v791_jusrcheat_btn_cancel">Cancelar</string>
+    <string name="v791_jusrcheat_code_copied">Código copiado al portapapeles</string>
+    <string name="v791_jusrcheat_export_success">Base de datos usrcheat.dat guardada con éxito</string>
+    <string name="v791_jusrcheat_one_hot_badge">Selección única</string>
+    <string name="v791_jusrcheat_master_code">Código maestro</string>
+    <string name="v791_jusrcheat_open_browser_btn">Explorar todos los juegos y regiones (Jusrcheat)</string>
+    <string name="v791_jusrcheat_db_stats">4.079 juegos y regiones en usrcheat.dat</string>
+</resources>

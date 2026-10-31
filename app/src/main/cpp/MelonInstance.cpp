@@ -1543,8 +1543,8 @@ bool CopyCompositedFrameToScreenshot(
 
         for (int x = 0; x < kScreenshotScreenWidth; x++)
         {
-            destinationTopLine[x] = sourceTopLine[x * scale];
-            destinationBottomLine[x] = sourceBottomLine[x * scale];
+            destinationTopLine[x] = sourceTopLine[x * scale] | 0xFF000000;
+            destinationBottomLine[x] = sourceBottomLine[x * scale] | 0xFF000000;
         }
     }
 
@@ -3084,27 +3084,79 @@ void MelonInstance::setAudioOutputSkew(double skew)
 
 bool MelonInstance::takeScreenshot()
 {
-    if (currentConfiguration->renderer == Renderer::Vulkan)
+    if (currentRenderer == Renderer::Vulkan || currentConfiguration->renderer == Renderer::Vulkan)
     {
-        int frontBuffer = nds->GPU.FrontBuffer;
-        if (!nds->GPU.Framebuffer[frontBuffer][0] || !nds->GPU.Framebuffer[frontBuffer][1])
-            return false;
-
-        u32* dst = screenshotRenderer->getScreenshot();
-        if (!dst)
-            return false;
-
-        const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
-        const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
-
-        for (int i = 0; i < 256 * 192; i++)
+        if (lastCompletedVulkanFrame != nullptr)
         {
-            dst[i] = top[i] | 0xFF000000;
-            dst[256 * 192 + i] = bottom[i] | 0xFF000000;
+            if (updateVulkanScreenshot(lastCompletedVulkanFrame, lastCompletedVulkanScale, false))
+            {
+                screenshotRenderer->setHasValidCachedScreenshot(true);
+                return true;
+            }
         }
+
+        if (screenshotRenderer->hasCachedScreenshot())
+        {
+            return true;
+        }
+
+        if (nds != nullptr)
+        {
+            int frontBuffer = nds->GPU.FrontBuffer;
+            if (nds->GPU.Framebuffer[frontBuffer][0] && nds->GPU.Framebuffer[frontBuffer][1])
+            {
+                u32* dst = screenshotRenderer->getScreenshot();
+                if (dst)
+                {
+                    const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
+                    const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
+
+                    for (int i = 0; i < 256 * 192; i++)
+                    {
+                        dst[i] = top[i] | 0xFF000000;
+                        dst[256 * 192 + i] = bottom[i] | 0xFF000000;
+                    }
+                    screenshotRenderer->setHasValidCachedScreenshot(true);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    if (screenshotRenderer->takeScreenshot())
+    {
         return true;
     }
-    return screenshotRenderer->takeScreenshot();
+
+    if (screenshotRenderer->hasCachedScreenshot())
+    {
+        return true;
+    }
+
+    if (nds != nullptr)
+    {
+        int frontBuffer = nds->GPU.FrontBuffer;
+        if (nds->GPU.Framebuffer[frontBuffer][0] && nds->GPU.Framebuffer[frontBuffer][1])
+        {
+            u32* dst = screenshotRenderer->getScreenshot();
+            if (dst)
+            {
+                const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
+                const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
+
+                for (int i = 0; i < 256 * 192; i++)
+                {
+                    dst[i] = top[i] | 0xFF000000;
+                    dst[256 * 192 + i] = bottom[i] | 0xFF000000;
+                }
+                screenshotRenderer->setHasValidCachedScreenshot(true);
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 void MelonInstance::loadCheats(std::list<Cheat> cheats)
@@ -5854,6 +5906,7 @@ bool MelonInstance::updateVulkanScreenshot(Frame* frame, int scale, bool clearOn
         return false;
     }
 
+    screenshotRenderer->setHasValidCachedScreenshot(true);
     return true;
 }
 

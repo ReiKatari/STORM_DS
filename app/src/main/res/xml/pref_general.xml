@@ -33,6 +33,14 @@
                 android:entries="@array/rom_card_style_options"
                 android:entryValues="@array/rom_card_style_values"
                 android:defaultValue="glassmorphism" />
+        <SwitchPreference
+                android:key="extended_pause_menu_enabled"
+                app:key="extended_pause_menu_enabled"
+                android:title="@string/pref_extended_pause_menu_title"
+                android:summary="@string/pref_extended_pause_menu_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false"
+                app:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">Erweitertes Pausemenü</string>
+    <string name="pref_extended_pause_menu_summary">Zusätzliche Werkzeuge im Pausemenü anzeigen (Screenshot, Zeitlupe, Einzelbildschaltung und automatisches Speichern)</string>
+    <string name="extended_pause_menu_toggle">Erweitertes Menü</string>
+    <string name="frame_advance_paused_status">Pause: Einzelbildmodus</string>
+    <string name="frame_advance_step_btn">+1 Einzelbild</string>
+    <string name="frame_advance_resume_btn">Fortsetzen</string>
+    <string name="slow_motion_title">Zeitlupengeschwindigkeit</string>
+    <string name="slow_motion_subtitle">Voreinstellung wählen oder manuell anpassen</string>
+    <string name="slow_motion_preset_025">0.25× — Viertelgeschwindigkeit</string>
+    <string name="slow_motion_preset_050">0.50× — Halbe Geschwindigkeit</string>
+    <string name="slow_motion_preset_075">0.75× — Sanfte Verlangsamung</string>
+    <string name="slow_motion_preset_085">0.85× — Leichte Verlangsamung</string>
+    <string name="slow_motion_preset_100">1.00× — Normale Geschwindigkeit (aus)</string>
+    <string name="slow_motion_custom_slider">Benutzerdefinierte Geschwindigkeit: %1$.2f×</string>
+    <string name="slow_motion_turn_off">Zeitlupe deaktivieren</string>
+    <string name="slow_motion_apply">Anwenden</string>
+    <string name="quick_slot_default_slot_header">Slot 0 (Standard)</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

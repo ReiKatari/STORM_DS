@@ -13,7 +13,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 object GameCompatibilityManager {
-    private const val PREFS_NAME = "storm_game_compat_guard_v4"
+    private const val PREFS_NAME = "storm_game_compat_guard_v5"
     private const val KEY_LAST_MARKER_GAME_KEY = "last_launch_marker_key"
     private const val KEY_MARKER_PREFIX = "launch_marker_"
     private const val KEY_PROFILE_PREFIX = "safe_profile_"
@@ -400,6 +400,10 @@ object GameCompatibilityManager {
         failedRenderer: VideoRenderer,
         openGlSupported: Boolean = isOpenGlEs32Supported(context),
     ): VideoRenderer? {
+        val upperCode = gameCode?.trim()?.uppercase().orEmpty()
+        if (upperCode.startsWith("B2K")) {
+            return null
+        }
         val nextRenderer = getNextSaferRenderer(failedRenderer, openGlSupported) ?: return null
         val key = resolveGameKey(gameCode, romName, fileName) ?: return nextRenderer
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

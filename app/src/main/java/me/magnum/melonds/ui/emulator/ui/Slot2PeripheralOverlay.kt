@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
+import me.magnum.melonds.ui.theme.watermelon
 
 @Composable
 fun Slot2PeripheralOverlay(
@@ -106,6 +107,7 @@ private fun SolarSensorOverlay(
     var sliderValue by remember(currentLevel) {
         mutableFloatStateOf(if (currentLevel < 0) currentSensorBars.toFloat().coerceIn(0f, 10f) else currentLevel.toFloat().coerceIn(0f, 10f))
     }
+    val colors = watermelon
     val isAutoMode = currentLevel < 0
 
     Box(
@@ -117,8 +119,8 @@ private fun SolarSensorOverlay(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xCC0D111A))
-                .border(1.dp, Color(0x5500D2FF), RoundedCornerShape(18.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.line, RoundedCornerShape(18.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -129,21 +131,21 @@ private fun SolarSensorOverlay(
             ) {
                 Text(
                     text = "☀️ " + stringResource(R.string.solar_sensor_slider_label).uppercase(),
-                    color = Color(0xFFFFB74D),
+                    color = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 if (isAutoMode) {
                     Text(
                         text = stringResource(R.string.solar_sensor_auto_status, currentLux, currentSensorBars),
-                        color = Color(0xFF00D2FF),
+                        color = colors.green,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
                 Text(
                     text = "✕",
-                    color = Color(0xFF94A3B8),
+                    color = colors.text2,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
@@ -174,10 +176,10 @@ private fun SolarSensorOverlay(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) Color(0xFFFFB74D).copy(alpha = 0.35f) else Color(0xFF1E293B))
+                            .background(if (isSelected) (if (colors.isDark) Color(0x55FFB74D) else Color(0xFFFEF3C7)) else colors.surface2)
                             .border(
                                 1.dp,
-                                if (isSelected) Color(0xFFFFB74D) else Color(0x3300D2FF),
+                                if (isSelected) (if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706)) else colors.line,
                                 RoundedCornerShape(8.dp),
                             )
                             .clickable {
@@ -193,7 +195,7 @@ private fun SolarSensorOverlay(
                     ) {
                         Text(
                             text = label,
-                            color = if (isSelected) Color(0xFFFFB74D) else Color.White,
+                            color = if (isSelected) (if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFB45309)) else colors.text,
                             fontSize = 8.5.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             maxLines = 1,
@@ -213,7 +215,7 @@ private fun SolarSensorOverlay(
                 val displayLevel = if (isAutoMode) currentSensorBars else sliderValue.toInt()
                 Text(
                     text = "${(displayLevel * 10)}%",
-                    color = Color(0xFFFFB74D),
+                    color = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.width(36.dp),
@@ -228,9 +230,9 @@ private fun SolarSensorOverlay(
                     steps = 9,
                     modifier = Modifier.weight(1f),
                     colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFFFFB74D),
-                        activeTrackColor = Color(0xFFFFB74D),
-                        inactiveTrackColor = Color(0xFF334155),
+                        thumbColor = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
+                        activeTrackColor = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
+                        inactiveTrackColor = colors.surface3,
                     ),
                 )
             }
@@ -243,6 +245,7 @@ private fun GuitarGripOverlay(
     onFretStateChanged: (fretIndex: Int, pressed: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val colors = watermelon
     val pressedStates = remember { mutableStateListOf(false, false, false, false) }
     val view = LocalView.current
 
@@ -273,8 +276,8 @@ private fun GuitarGripOverlay(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xCC0D111A))
-                .border(1.dp, Color(0x5500D2FF), RoundedCornerShape(18.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.line, RoundedCornerShape(18.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -285,13 +288,13 @@ private fun GuitarGripOverlay(
             ) {
                 Text(
                     text = "🎸 GUITAR GRIP (SLOT-2)",
-                    color = Color(0xFF94A3B8),
+                    color = colors.text,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "✕",
-                    color = Color(0xFF94A3B8),
+                    color = colors.text2,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
@@ -380,6 +383,7 @@ private fun PaddleControllerOverlay(
     onPaddleDelta: (deltaX: Float) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val colors = watermelon
     var knobPosition by remember { mutableFloatStateOf(0f) }
 
     Box(
@@ -391,8 +395,8 @@ private fun PaddleControllerOverlay(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xCC0D111A))
-                .border(1.dp, Color(0x5500D2FF), RoundedCornerShape(18.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.line, RoundedCornerShape(18.dp))
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -403,13 +407,13 @@ private fun PaddleControllerOverlay(
             ) {
                 Text(
                     text = "🎛️ TAITO PADDLE CONTROLLER (SLOT-2)",
-                    color = Color(0xFF38BDF8),
+                    color = colors.green,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "✕",
-                    color = Color(0xFF94A3B8),
+                    color = colors.text2,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
@@ -424,8 +428,8 @@ private fun PaddleControllerOverlay(
                     .fillMaxWidth(0.88f)
                     .height(48.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFF1E293B))
-                    .border(1.5.dp, Color(0xFF00D2FF), RoundedCornerShape(24.dp))
+                    .background(colors.surface2)
+                    .border(1.5.dp, colors.green, RoundedCornerShape(24.dp))
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
@@ -448,7 +452,7 @@ private fun PaddleControllerOverlay(
             ) {
                 Text(
                     text = "◀  ПОВОРОТ КОЛЕСА PADDLE  ▶",
-                    color = Color(0x99E2E8F0),
+                    color = colors.text2,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                 )

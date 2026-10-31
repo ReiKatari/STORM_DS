@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v791_jusrcheat_tab_game_cheats">ゲームのチート</string>
+    <string name="v791_jusrcheat_tab_all_games">Jusrcheat（全ゲーム）</string>
+    <string name="v791_jusrcheat_search_hint">ゲームまたはコードを検索（例: Assassin, VACE）...</string>
+    <string name="v791_jusrcheat_filter_all">すべて</string>
+    <string name="v791_jusrcheat_filter_similar">関連地域</string>
+    <string name="v791_jusrcheat_filter_usa">北米</string>
+    <string name="v791_jusrcheat_filter_europe">欧州</string>
+    <string name="v791_jusrcheat_filter_japan">日本</string>
+    <string name="v791_jusrcheat_cross_region_title">関連地域のクロスチート</string>
+    <string name="v791_jusrcheat_cross_region_desc">他地域版のチートが見つかりました（%s）。1タップで有効化できます！</string>
+    <string name="v791_jusrcheat_btn_enable_for_rom">このゲームで有効化</string>
+    <string name="v791_jusrcheat_btn_attach_folder">フォルダを適用</string>
+    <string name="v791_jusrcheat_attached_success">チートが正常に有効化されました</string>
+    <string name="v791_jusrcheat_no_games_found">ゲームが見つかりません</string>
+    <string name="v791_jusrcheat_browser_title">Jusrcheat — 全ゲームと全地域（usrcheat.dat）</string>
+    <string name="v791_jusrcheat_edit_cheat_title">チートを編集</string>
+    <string name="v791_jusrcheat_add_cheat_title">新しいチートを追加</string>
+    <string name="v791_jusrcheat_cheat_name">チート名</string>
+    <string name="v791_jusrcheat_cheat_note">説明</string>
+    <string name="v791_jusrcheat_cheat_code">ARコード（XXXXXXXX YYYYYYYY）</string>
+    <string name="v791_jusrcheat_btn_save">保存</string>
+    <string name="v791_jusrcheat_btn_cancel">キャンセル</string>
+    <string name="v791_jusrcheat_code_copied">コードをクリップボードにコピーしました</string>
+    <string name="v791_jusrcheat_export_success">usrcheat.datデータベースが正常に保存されました</string>
+    <string name="v791_jusrcheat_one_hot_badge">単一選択</string>
+    <string name="v791_jusrcheat_master_code">マスターコード</string>
+    <string name="v791_jusrcheat_open_browser_btn">全ゲームと地域を一覧（Jusrcheat）</string>
+    <string name="v791_jusrcheat_db_stats">usrcheat.datに4,079作品と地域を収録</string>
+</resources>

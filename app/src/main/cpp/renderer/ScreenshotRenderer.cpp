@@ -37,8 +37,14 @@ void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* re
     if (renderer == Renderer::Software)
     {
         int frontBuffer = gpu->FrontBuffer;
-        memcpy(screenshotBuffer, gpu->Framebuffer[frontBuffer][0].get(), 256 * 192 * 4);
-        memcpy(&screenshotBuffer[256 * 192], gpu->Framebuffer[frontBuffer][1].get(), 256 * 192 * 4);
+        if (gpu->Framebuffer[frontBuffer][0] && gpu->Framebuffer[frontBuffer][1])
+        {
+            memcpy(screenshotBuffer, gpu->Framebuffer[frontBuffer][0].get(), 256 * 192 * 4);
+            memcpy(&screenshotBuffer[256 * 192], gpu->Framebuffer[frontBuffer][1].get(), 256 * 192 * 4);
+            for (size_t i = 0; i < 256 * 192 * 2; ++i)
+                screenshotBuffer[i] |= 0xFF000000;
+            hasValidCachedScreenshot.store(true, std::memory_order_relaxed);
+        }
     }
     else
     {
@@ -68,6 +74,9 @@ void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* re
         glBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         glReadPixels(0, 0, SCREENSHOT_WIDTH, SCREENSHOT_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, screenshotBuffer);
+        for (size_t i = 0; i < 256 * 192 * 2; ++i)
+            screenshotBuffer[i] |= 0xFF000000;
+        hasValidCachedScreenshot.store(true, std::memory_order_relaxed);
 
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -83,8 +92,13 @@ u32* ScreenshotRenderer::getScreenshot()
     return screenshotBuffer;
 }
 
-bool ScreenshotRenderer::takeScreenshot()
+bool ScreenshotRenderer::takeScreenshot(bool isPaused)
 {
+    if (isPaused && hasValidCachedScreenshot.load(std::memory_order_relaxed))
+    {
+        return true;
+    }
+
     std::unique_lock lock(screenshotMutex);
 
     screenshotRequested = true;
@@ -95,6 +109,8 @@ bool ScreenshotRenderer::takeScreenshot()
     if (!success)
     {
         screenshotRequested = false;
+        if (hasValidCachedScreenshot.load(std::memory_order_relaxed) && !stopped)
+            return true;
     }
 
     return success && !stopped;
@@ -255,6 +271,7 @@ void ScreenshotRenderer::cleanup()
     if (!initialized)
         return;
 
+    hasValidCachedScreenshot.store(false, std::memory_order_relaxed);
     {
         std::lock_guard lock(screenshotMutex);
         stopped = true;

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pref_extended_pause_menu_title">Menu di pausa esteso</string>
+    <string name="pref_extended_pause_menu_summary">Mostra strumenti aggiuntivi nel menu di pausa (screenshot, rallentatore, avanzamento fotogramma e salvataggio automatico)</string>
+    <string name="extended_pause_menu_toggle">Sottomenu esteso</string>
+    <string name="frame_advance_paused_status">Pausa: modalità fotogramma per fotogramma</string>
+    <string name="frame_advance_step_btn">+1 fotogramma</string>
+    <string name="frame_advance_resume_btn">Riprendi</string>
+    <string name="slow_motion_title">Velocità del rallentatore</string>
+    <string name="slow_motion_subtitle">Scegli un profilo o regola manualmente</string>
+    <string name="slow_motion_preset_025">0.25× — Un quarto della velocità</string>
+    <string name="slow_motion_preset_050">0.50× — Metà velocità</string>
+    <string name="slow_motion_preset_075">0.75× — Rallentamento fluido</string>
+    <string name="slow_motion_preset_085">0.85× — Rallentamento leggero</string>
+    <string name="slow_motion_preset_100">1.00× — Velocità normale (disattivato)</string>
+    <string name="slow_motion_custom_slider">Velocità personalizzata: %1$.2f×</string>
+    <string name="slow_motion_turn_off">Disattiva rallentatore</string>
+    <string name="slow_motion_apply">Applica</string>
+    <string name="quick_slot_default_slot_header">Slot 0 (Predefinito)</string>
+    <string name="clean_screenshot">@string/take_clean_screenshot</string>
+    <string name="pause_clean_screenshot">@string/take_clean_screenshot</string>
+</resources>

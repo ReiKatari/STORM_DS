@@ -35,6 +35,8 @@ class VulkanFrameRenderCoordinator(
         var background: RuntimeBackground = RuntimeBackground.None,
         var generation: Int = 0,
         var pendingSurface: Surface? = null,
+        var pendingWidth: Int = 0,
+        var pendingHeight: Int = 0,
     )
 
     private val coordinatorScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -201,16 +203,38 @@ class VulkanFrameRenderCoordinator(
         }
         val shouldAttach = synchronized(surfacesLock) {
             val managedSurface = managedSurfaces[surfaceView] ?: return@synchronized false
-            if (managedSurface.surfaceId != 0 || managedSurface.pendingSurface != null) {
-                false
-            } else {
-                managedSurface.pendingSurface = surface
-                true
-            }
+            managedSurface.pendingSurface = surface
+            managedSurface.pendingWidth = width
+            managedSurface.pendingHeight = height
+            managedSurface.surfaceId == 0
         }
 
         if (shouldAttach) {
             frameRenderThread.requestSurfaceAttachment(surfaceView, surface, width, height)
+        }
+    }
+
+    fun reattachPendingSurfaces() {
+        if (stopped) return
+        val toAttach = mutableListOf<Triple<EmulatorSurfaceView, Surface, Pair<Int, Int>>>()
+        synchronized(surfacesLock) {
+            for ((view, managed) in managedSurfaces) {
+                val curSurface = view.getCurrentSurface() ?: managed.pendingSurface
+                if (managed.surfaceId == 0 && curSurface != null && curSurface.isValid) {
+                    val (w, h) = view.getCurrentSurfaceSize()
+                    val effW = if (w > 0) w else managed.pendingWidth
+                    val effH = if (h > 0) h else managed.pendingHeight
+                    if (effW > 0 && effH > 0) {
+                        managed.pendingSurface = curSurface
+                        managed.pendingWidth = effW
+                        managed.pendingHeight = effH
+                        toAttach.add(Triple(view, curSurface, effW to effH))
+                    }
+                }
+            }
+        }
+        for ((view, surf, size) in toAttach) {
+            frameRenderThread.requestSurfaceAttachment(view, surf, size.first, size.second)
         }
     }
 
@@ -445,6 +469,12 @@ class VulkanFrameRenderCoordinator(
             if (!running) {
                 return
             }
+            val hasPending = synchronized(surfacesLock) {
+                managedSurfaces.values.any { it.surfaceId == 0 && it.pendingSurface?.isValid == true }
+            }
+            if (hasPending) {
+                reattachPendingSurfaces()
+            }
             val deadline = frameDeadlineNanos.takeIf { it > 0L } ?: 0L
             val budgetDeadline = if (deadline > 0L) {
                 (deadline - renderStatistics.getPresentationBudgetMarginNs()).coerceAtLeast(0L)
@@ -482,13 +512,21 @@ class VulkanFrameRenderCoordinator(
             var immediateConfig: VulkanPresentationConfig? = null
             synchronized(surfacesLock) {
                 val managedSurface = managedSurfaces[surfaceView]
-                if (managedSurface == null || managedSurface.pendingSurface !== surface || surfaceView.getCurrentSurface() !== surface) {
+                if (managedSurface == null || surfaceView.getCurrentSurface() !== surface) {
                     staleSurfaceId = surfaceId
-                } else {
+                } else if (surfaceId != 0) {
                     managedSurface.pendingSurface = null
                     managedSurface.surfaceId = surfaceId
                     immediateConfig = managedSurface.config
-                    shouldRefreshPresentation = surfaceId != 0
+                    shouldRefreshPresentation = true
+                } else {
+                    // Native MelonInstance was not ready yet (surfaceId == 0).
+                    // Preserve pendingSurface so reattachPendingSurfaces() will bind it immediately once ready.
+                    if (surface.isValid) {
+                        managedSurface.pendingSurface = surface
+                        managedSurface.pendingWidth = width
+                        managedSurface.pendingHeight = height
+                    }
                 }
             }
 

@@ -157,7 +157,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
         // 10. About
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.0").removePrefix("v").removePrefix("V")
+            val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.1").removePrefix("v").removePrefix("V")
             pref.summary = "STORM DS $vName"
         }
     }

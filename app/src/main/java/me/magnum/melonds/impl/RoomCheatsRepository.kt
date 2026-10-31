@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import me.magnum.melonds.common.cheats.jusrcheat.JusrcheatRepository
 import me.magnum.melonds.common.workers.CheatImportWorker
 import me.magnum.melonds.database.MelonDatabase
 import me.magnum.melonds.database.entities.CheatDatabaseEntity
@@ -34,6 +35,15 @@ class RoomCheatsRepository(
 ) : CheatsRepository {
     companion object {
         private const val IMPORT_WORKER_NAME = "cheat_import_worker"
+    }
+
+    @get:JvmName("jusrcheatRepositoryProp")
+    val jusrcheatRepository: JusrcheatRepository by lazy {
+        JusrcheatRepository.getInstance(context, database)
+    }
+
+    override fun getJusrcheatRepository(): JusrcheatRepository {
+        return jusrcheatRepository
     }
 
     override suspend fun getGames(): List<Game> {
@@ -126,9 +136,21 @@ class RoomCheatsRepository(
 
     override suspend fun getRomEnabledCheats(romInfo: RomInfo): List<Cheat> {
         val lookupCode = romInfo.cheatGameCode
-        val cheats = database.cheatDao().getEnabledRomCheats(lookupCode, romInfo.headerChecksumString())
-        val effectiveCheats = if (cheats.isNotEmpty()) cheats else database.cheatDao().getEnabledRomCheats(romInfo.gameCode, romInfo.headerChecksumString())
-        return effectiveCheats.map { cheat ->
+        val cleanGameCode = romInfo.gameCode.take(4).uppercase()
+        val checksumStr = romInfo.headerChecksumString()
+
+        // 1. Exact checksum + null checksum query
+        val primaryCheats = database.cheatDao().getEnabledRomCheats(lookupCode, checksumStr)
+        val codeCheats = if (primaryCheats.isNotEmpty()) primaryCheats else database.cheatDao().getEnabledRomCheats(cleanGameCode, checksumStr)
+
+        // 2. Fallback CRC-agnostic query for patched ROMs ([T+Rus]) and attached cross-region/custom cheats
+        val crcAgnosticLookup = database.cheatDao().getEnabledRomCheatsIgnoreCrc(lookupCode)
+        val crcAgnosticCode = if (cleanGameCode != lookupCode) database.cheatDao().getEnabledRomCheatsIgnoreCrc(cleanGameCode) else emptyList()
+
+        val allCandidates = (primaryCheats + codeCheats + crcAgnosticLookup + crcAgnosticCode)
+            .distinctBy { it.id ?: (it.code.hashCode().toLong() xor it.name.hashCode().toLong()) }
+
+        return allCandidates.map { cheat ->
             Cheat(
                 cheat.id,
                 cheat.cheatDatabaseId,
@@ -150,79 +172,57 @@ class RoomCheatsRepository(
     }
 
     override suspend fun addCheatFolder(folderName: String, game: Game) {
-        val gameId = if (game.id == null) {
-            // It's a new game. Insert it first
-            val gameEntity = GameEntity(
-                id = null,
-                name = game.name,
-                gameCode = game.gameCode,
-                gameChecksum = game.gameChecksum
-            )
-            database.gameDao().insertGame(gameEntity)
-        } else {
-            game.id
-        }
+        val cheatFolderEntity = CheatFolderEntity(
+            id = null,
+            gameId = game.id!!,
+            name = folderName,
+        )
 
-        val cheatFolderEntity = CheatFolderEntity(null, gameId, folderName)
         database.cheatFolderDao().insertCheatFolder(cheatFolderEntity)
         settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun deleteCheatDatabaseIfExists(databaseName: String) {
-        if (databaseName == CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_NAME) {
-            // Don't allow the custom cheat database to be deleted
-            return
-        }
-
         database.cheatDatabaseDao().deleteCheatDatabase(databaseName)
-        database.cheatFolderDao().deleteEmptyFolders()
         database.gameDao().deleteEmptyGames()
+        database.cheatFolderDao().deleteEmptyFolders()
         settingsBackupManager.requestMirrorWrite()
     }
 
     override suspend fun addCheatDatabase(databaseName: String): CheatDatabase {
-        val cheatDatabaseEntity = CheatDatabaseEntity(
-            null,
-            databaseName,
+        val databaseEntity = CheatDatabaseEntity(
+            id = null,
+            name = databaseName,
         )
 
-        val databaseId = database.cheatDatabaseDao().insertCheatDatabase(cheatDatabaseEntity)
+        val id = database.cheatDatabaseDao().insertCheatDatabase(databaseEntity)
         settingsBackupManager.requestMirrorWrite()
-        return CheatDatabase(databaseId, databaseName)
+        return CheatDatabase(id, databaseName)
     }
 
     override suspend fun addGameCheats(game: Game): Game {
-        val gameEntity = GameEntity(
-            null,
-            game.name,
-            game.gameCode,
-            game.gameChecksum
-        )
+        var insertedGame = database.gameDao().findGame(game.gameCode, game.gameChecksum)
+        if (insertedGame == null) {
+            val gameEntity = GameEntity(
+                id = null,
+                name = game.name,
+                gameCode = game.gameCode,
+                gameChecksum = game.gameChecksum,
+            )
 
-        // Insertion may do nothing if the game already exists
-        database.gameDao().insertGame(gameEntity)
-        val insertedGame = database.gameDao().findGame(game.gameCode, game.gameChecksum)!!
-        val gameId = insertedGame.id!!
+            val id = database.gameDao().insertGame(gameEntity)
+            insertedGame = gameEntity.copy(id = id)
+        }
 
-        val existingFolders = database.cheatFolderDao().getFoldersForGame(gameId)
-        val existingFolderMap = existingFolders.associateBy { it.name }.toMutableMap()
+        game.cheats.forEach { folder ->
+            val folderEntity = CheatFolderEntity(
+                id = null,
+                gameId = insertedGame.id!!,
+                name = folder.name,
+            )
 
-        for (category in game.cheats) {
-            val folderId = existingFolderMap[category.name]?.id ?: run {
-                val newFolder = CheatFolderEntity(null, gameId, category.name)
-                val newId = database.cheatFolderDao().insertCheatFolder(newFolder)
-                val createdEntity = newFolder.copy(id = newId)
-                existingFolderMap[category.name] = createdEntity
-                newId
-            }
-
-            val existingCheats = database.cheatDao().getFolderCheatsList(folderId)
-            val existingCheatKeys = existingCheats.map { (it.name.trim().lowercase()) to (it.code.trim().replace(" ", "").lowercase()) }.toSet()
-
-            val newCheats = category.cheats.filter {
-                val key = (it.name.trim().lowercase()) to (it.code.trim().replace(" ", "").lowercase())
-                key !in existingCheatKeys
-            }.map {
+            val folderId = database.cheatFolderDao().insertCheatFolder(folderEntity)
+            val newCheats = folder.cheats.map {
                 CheatEntity(
                     id = null,
                     cheatFolderId = folderId,
