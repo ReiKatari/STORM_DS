@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">esperado</string>
     <string name="v793_bios_missing">ausente</string>
+    <string name="v794_cat_main_emulation_hardware">Emulação e hardware</string>
+    <string name="v794_cat_main_features_tools">Tradutor, trapaças e conquistas</string>
+    <string name="v794_cat_main_library_data">Biblioteca e salvamentos</string>
+    <string name="v794_cat_main_app_system">Interface e informações</string>
+    <string name="v794_cat_video_depth_color">Profundidade 3D, efeitos e cor</string>
+    <string name="v794_video_quick_profile_title">Perfis gráficos rápidos</string>
+    <string name="v794_video_quick_profile_summary">Alterne em um toque entre Desempenho, Equilibrado e Qualidade Ultra</string>
+    <string name="v794_video_preset_performance">Desempenho (1x, Pipeline rápido)</string>
+    <string name="v794_video_preset_balanced">Equilibrado (2x, Filtragem linear)</string>
+    <string name="v794_video_preset_ultra">Qualidade Ultra (4x, SSAO, Profundidade 3D)</string>
+    <string name="v794_video_preset_applied">Perfil gráfico aplicado: %s</string>
+    <string name="v794_cat_general_pause_menu">Menu de pausa e ferramentas</string>
+    <string name="v794_audio_dsp_preset_title">Perfis de áudio (Predefinições DSP)</string>
+    <string name="v794_audio_dsp_preset_summary">Seleção rápida de predefinições de equalizador e efeitos</string>
+    <string name="v794_audio_preset_studio">Original de estúdio</string>
+    <string name="v794_audio_preset_cyber_bass">Graves profundos (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">Palco espacial 3D</string>
+    <string name="v794_audio_preset_night_mode">Modo noturno (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">Perfil de áudio aplicado: %s</string>
+    <string name="v794_cat_cfw_mode">Modo de firmware e BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">Imagens de BIOS e firmware de DS</string>
+    <string name="v794_cat_cfw_dsi_bios">Imagens de BIOS, NAND e firmware de DSi</string>
 </resources>

@@ -49,6 +49,7 @@ import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.impl.AdrenoVulkanDriverManager
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
 import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.text.format.DateFormat
 import android.text.format.Formatter
 import android.widget.ArrayAdapter
@@ -162,6 +163,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
         updateInternalResolutionSummary(internalResolutionPreference)
+
+        findPreference<Preference>("video_quick_profile")?.setOnPreferenceClickListener {
+            showVideoQuickProfileDialog()
+            true
+        }
 
         findPreference<Preference>("video_reset_enhancements")?.setOnPreferenceClickListener {
             AlertDialog.Builder(requireContext())
@@ -481,13 +487,15 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         val fpsCounterPref = findPreference<ListPreference>("fps_counter_position")
         val resolutionHudPref = findPreference<ListPreference>("resolution_hud_position")
-        val consoleSkinTypePref = findPreference<ListPreference>("video_console_skin_type")
-        if (consoleSkinTypePref != null) {
-            val validValues = resources.getStringArray(R.array.console_skin_values_v792)
-            if (consoleSkinTypePref.value == null || !validValues.contains(consoleSkinTypePref.value)) {
-                consoleSkinTypePref.value = "aurora_auto_theme"
+        runCatching {
+            val consoleSkinTypePref = findPreference<ListPreference>("video_console_skin_type")
+            if (consoleSkinTypePref != null) {
+                val validValues = resources.getStringArray(R.array.console_skin_values_v792)
+                if (consoleSkinTypePref.value == null || !validValues.contains(consoleSkinTypePref.value)) {
+                    consoleSkinTypePref.value = "aurora_auto_theme"
+                }
+                helper.bindPreferenceSummaryToValue(consoleSkinTypePref)
             }
-            helper.bindPreferenceSummaryToValue(consoleSkinTypePref)
         }
         if (fpsCounterPref != null && resolutionHudPref != null) {
             helper.bindPreferenceSummaryToValue(fpsCounterPref)
@@ -2220,5 +2228,73 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<androidx.preference.TwoStatePreference>("video_debug_3d_clear_magenta")?.isChecked = false
 
         Toast.makeText(requireContext(), R.string.v780_video_reset_enhancements_success, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showVideoQuickProfileDialog() {
+        val options = arrayOf(
+            getString(R.string.v794_video_preset_performance),
+            getString(R.string.v794_video_preset_balanced),
+            getString(R.string.v794_video_preset_ultra)
+        )
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.v794_video_quick_profile_title)
+            .setItems(options) { _, which ->
+                applyVideoQuickProfile(which, options[which])
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyVideoQuickProfile(presetIndex: Int, presetTitle: String) {
+        val resValue = when (presetIndex) {
+            0 -> "1"
+            1 -> "2"
+            2 -> "4"
+            else -> "2"
+        }
+        val filteringValue = when (presetIndex) {
+            0 -> "none"
+            1 -> "linear"
+            2 -> "linear"
+            else -> "linear"
+        }
+        val threaded = true
+        val fastpath = true
+        val ssao = presetIndex == 2
+        val depthMode = if (presetIndex == 2) "anaglyph_depth" else null
+
+        preferenceManager.sharedPreferences?.edit()?.apply {
+            putString("video_internal_resolution", resValue)
+            putBoolean("enable_threaded_rendering", threaded)
+            putString("video_filtering", filteringValue)
+            putBoolean("video_vulkan_fastpath_enabled", fastpath)
+            putBoolean("video_vulkan_ssao", ssao)
+            if (depthMode != null) {
+                putString("video_vulkan_3d_depth_mode", depthMode)
+            }
+            apply()
+        }
+
+        findPreference<ListPreference>("video_internal_resolution")?.let {
+            it.value = resValue
+            updateInternalResolutionSummary(it)
+        }
+        findPreference<androidx.preference.TwoStatePreference>("enable_threaded_rendering")?.isChecked = threaded
+        findPreference<ListPreference>("video_filtering")?.let {
+            it.value = filteringValue
+            val idx = it.findIndexOfValue(filteringValue)
+            it.summary = if (idx >= 0 && idx < it.entries.size) it.entries[idx] else filteringValue
+        }
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_fastpath_enabled")?.isChecked = fastpath
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_ssao")?.isChecked = ssao
+        if (depthMode != null) {
+            findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let {
+                it.value = depthMode
+                val idx = it.findIndexOfValue(depthMode)
+                it.summary = if (idx >= 0 && idx < it.entries.size) it.entries[idx] else depthMode
+            }
+        }
+
+        Toast.makeText(requireContext(), getString(R.string.v794_video_preset_applied, presetTitle), Toast.LENGTH_SHORT).show()
     }
 }

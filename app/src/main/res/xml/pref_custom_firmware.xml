@@ -3,63 +3,80 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <SwitchPreference
-            android:key="use_custom_bios"
-            android:title="@string/use_custom_bios"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+    <PreferenceCategory
+            android:key="pref_cat_cfw_mode"
+            android:title="@string/v794_cat_cfw_mode"
+            app:iconSpaceReserved="false">
 
-    <ListPreference
-            android:key="console_type"
-            android:title="@string/console_type"
-            android:entries="@array/console_type_options"
-            android:entryValues="@array/console_type_values"
-            android:defaultValue="ds"
-            app:useSimpleSummaryProvider="true"
-            app:iconSpaceReserved="false" />
+        <SwitchPreference
+                android:key="use_custom_bios"
+                android:title="@string/use_custom_bios"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
 
-    <SwitchPreference
-            android:key="show_bios"
-            android:title="@string/show_boot_screen"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+        <ListPreference
+                android:key="console_type"
+                android:title="@string/console_type"
+                android:entries="@array/console_type_options"
+                android:entryValues="@array/console_type_values"
+                android:defaultValue="ds"
+                app:useSimpleSummaryProvider="true"
+                app:iconSpaceReserved="false" />
 
-    <SwitchPreference
-            android:key="block_bios_download"
-            android:title="@string/block_bios_download_title"
-            android:summary="@string/block_bios_download_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+        <SwitchPreference
+                android:key="show_bios"
+                android:title="@string/show_boot_screen"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
 
-    <Preference
-            android:key="auto_download_ds_bios"
-            android:title="@string/auto_download_ds_bios_title"
-            android:summary="@string/auto_download_ds_bios_summary"
-            app:iconSpaceReserved="false" />
+        <SwitchPreference
+                android:key="custom_randomize_mac_address"
+                android:title="@string/randomize_mac_address"
+                android:summary="@string/randomize_mac_address_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
 
-    <me.magnum.melonds.ui.settings.preferences.BiosDirectoryPickerPreference
-            android:key="bios_dir"
-            android:title="@string/bios_directory"
-            app:iconSpaceReserved="false"
-            app:consoleType="ds" />
+        <SwitchPreference
+                android:key="block_bios_download"
+                android:title="@string/block_bios_download_title"
+                android:summary="@string/block_bios_download_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
+    </PreferenceCategory>
 
-    <Preference
-            android:key="auto_download_dsi_bios"
-            android:title="@string/auto_download_dsi_bios_title"
-            android:summary="@string/auto_download_dsi_bios_summary"
-            app:iconSpaceReserved="false" />
+    <PreferenceCategory
+            android:key="pref_cat_cfw_ds_bios"
+            android:title="@string/v794_cat_cfw_ds_bios"
+            app:iconSpaceReserved="false">
 
-    <me.magnum.melonds.ui.settings.preferences.BiosDirectoryPickerPreference
-            android:key="dsi_bios_dir"
-            android:title="@string/dsi_bios_directory"
-            app:iconSpaceReserved="false"
-            app:consoleType="dsi" />
+        <Preference
+                android:key="auto_download_ds_bios"
+                android:title="@string/auto_download_ds_bios_title"
+                android:summary="@string/auto_download_ds_bios_summary"
+                app:iconSpaceReserved="false" />
 
+        <me.magnum.melonds.ui.settings.preferences.BiosDirectoryPickerPreference
+                android:key="bios_dir"
+                android:title="@string/bios_directory"
+                app:iconSpaceReserved="false"
+                app:consoleType="ds" />
+    </PreferenceCategory>
 
-    <SwitchPreference
-            android:key="custom_randomize_mac_address"
-            android:title="@string/randomize_mac_address"
-            android:summary="@string/randomize_mac_address_summary"
-            app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+    <PreferenceCategory
+            android:key="pref_cat_cfw_dsi_bios"
+            android:title="@string/v794_cat_cfw_dsi_bios"
+            app:iconSpaceReserved="false">
+
+        <Preference
+                android:key="auto_download_dsi_bios"
+                android:title="@string/auto_download_dsi_bios_title"
+                android:summary="@string/auto_download_dsi_bios_summary"
+                app:iconSpaceReserved="false" />
+
+        <me.magnum.melonds.ui.settings.preferences.BiosDirectoryPickerPreference
+                android:key="dsi_bios_dir"
+                android:title="@string/dsi_bios_directory"
+                app:iconSpaceReserved="false"
+                app:consoleType="dsi" />
+    </PreferenceCategory>
 </PreferenceScreen>

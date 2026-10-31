@@ -105,6 +105,7 @@ class PreferenceFragmentHelper(
         if (preference == null)
             return
 
+        preference.summaryProvider = null
         preference.addOnPreferenceChangeListener(sBindPreferenceSummaryToValueListener)
 
         val initialValue: Any? = when (preference) {

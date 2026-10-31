@@ -308,8 +308,8 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.dsiFirmwarePath = dsiFirmwarePath;
     finalEmulatorConfiguration.dsiNandPath = dsiNandPath;
     finalEmulatorConfiguration.internalFilesDir = internalDir;
-    finalEmulatorConfiguration.fastForwardSpeedMultiplier = fastForwardMaxSpeed <= 0.0f ? 1.0f : fastForwardMaxSpeed;
-    finalEmulatorConfiguration.frameLimitSpeedMultiplier = frameLimitSpeed <= 0.0f ? 1.0f : frameLimitSpeed;
+    finalEmulatorConfiguration.fastForwardSpeedMultiplier = fastForwardMaxSpeed;
+    finalEmulatorConfiguration.frameLimitSpeedMultiplier = frameLimitSpeed;
     finalEmulatorConfiguration.showBootScreen = showBootScreen;
     finalEmulatorConfiguration.useJit = useJit;
     jfieldID audioSoftLimiterEnabledField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioSoftLimiterEnabled", "Z");
@@ -363,9 +363,6 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
             ? static_cast<uint32_t>(env->GetLongField(emulatorConfiguration, dsiWareAutoloadTitleIdField))
             : 0u;
     finalEmulatorConfiguration.arm9OverclockMultiplier = arm9OverclockMultiplierField != nullptr ? env->GetIntField(emulatorConfiguration, arm9OverclockMultiplierField) : 1;
-    if (finalEmulatorConfiguration.arm9OverclockMultiplier <= 0) {
-        finalEmulatorConfiguration.arm9OverclockMultiplier = 1;
-    }
     finalEmulatorConfiguration.enable3dWidescreen = enable3dWidescreenField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable3dWidescreenField) : false;
     finalEmulatorConfiguration.enable60FpsPatch = enable60FpsPatchField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable60FpsPatchField) : false;
     finalEmulatorConfiguration.wfcDnsIp = 0;

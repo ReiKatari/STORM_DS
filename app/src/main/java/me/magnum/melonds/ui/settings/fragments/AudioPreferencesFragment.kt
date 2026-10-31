@@ -3,7 +3,10 @@ package me.magnum.melonds.ui.settings.fragments
 import android.Manifest
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.preference.Preference
 import androidx.preference.ListPreference
 import androidx.preference.SeekBarPreference
 import androidx.preference.SwitchPreference
@@ -77,7 +80,12 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
 
-        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency", "audio_soft_limiter_enabled", "audio_bass_boost_enabled", "audio_bass_boost_strength", "audio_spatial_audio_enabled", "audio_reverb_enabled")
+        findPreference<Preference>("audio_dsp_preset")?.setOnPreferenceClickListener {
+            showAudioDspPresetDialog()
+            true
+        }
+
+        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency", "audio_dsp_preset", "audio_soft_limiter_enabled", "audio_bass_boost_enabled", "audio_bass_boost_strength", "audio_spatial_audio_enabled", "audio_reverb_enabled")
     }
 
     override fun onResume() {
@@ -117,8 +125,15 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun updateVolumePreferenceSummary(volumePreference: SeekBarPreference, volume: Int) {
-        val volumePercentage = kotlin.math.round(volume / 256f * 100f).toInt().coerceIn(0, 200)
-        volumePreference.summary = getString(R.string.volume_percentage, volumePercentage)
+        val pct = kotlin.math.round(volume / 256f * 100f).toInt().coerceIn(0, 200)
+        volumePreference.summary = when {
+            pct == 0 || volume <= 0 -> "0% (-∞ dB)"
+            pct == 100 -> "100% (0.0 dB)"
+            else -> {
+                val db = 20.0 * kotlin.math.log10(volume / 256.0)
+                String.format(java.util.Locale.US, "%d%% (%+.1f dB)", pct, db)
+            }
+        }
     }
 
     private fun requestMicrophonePermission(overrideRationaleRequest: Boolean) {
@@ -131,5 +146,78 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    private fun showAudioDspPresetDialog() {
+        val options = arrayOf(
+            getString(R.string.v794_audio_preset_studio),
+            getString(R.string.v794_audio_preset_cyber_bass),
+            getString(R.string.v794_audio_preset_spatial_3d),
+            getString(R.string.v794_audio_preset_night_mode)
+        )
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.v794_audio_dsp_preset_title)
+            .setItems(options) { _, which ->
+                applyAudioDspPreset(which, options[which])
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyAudioDspPreset(presetIndex: Int, presetTitle: String) {
+        val softLimit: Boolean
+        val bassBoost: Boolean
+        val bassStrength: Int
+        val spatial: Boolean
+        val reverb: Boolean
+
+        when (presetIndex) {
+            0 -> { // Studio Original
+                softLimit = false
+                bassBoost = false
+                bassStrength = 5
+                spatial = false
+                reverb = false
+            }
+            1 -> { // Deep Bass (Cyber Bass)
+                softLimit = true
+                bassBoost = true
+                bassStrength = 8
+                spatial = false
+                reverb = false
+            }
+            2 -> { // 3D Spatial
+                softLimit = true
+                bassBoost = false
+                bassStrength = 5
+                spatial = true
+                reverb = true
+            }
+            3 -> { // Night Mode
+                softLimit = true
+                bassBoost = false
+                bassStrength = 5
+                spatial = false
+                reverb = false
+            }
+            else -> return
+        }
+
+        preferenceManager.sharedPreferences?.edit()?.apply {
+            putBoolean("audio_soft_limiter_enabled", softLimit)
+            putBoolean("audio_bass_boost_enabled", bassBoost)
+            putInt("audio_bass_boost_strength", bassStrength)
+            putBoolean("audio_spatial_audio_enabled", spatial)
+            putBoolean("audio_reverb_enabled", reverb)
+            apply()
+        }
+
+        findPreference<SwitchPreference>("audio_soft_limiter_enabled")?.isChecked = softLimit
+        findPreference<SwitchPreference>("audio_bass_boost_enabled")?.isChecked = bassBoost
+        findPreference<SeekBarPreference>("audio_bass_boost_strength")?.value = bassStrength
+        findPreference<SwitchPreference>("audio_spatial_audio_enabled")?.isChecked = spatial
+        findPreference<SwitchPreference>("audio_reverb_enabled")?.isChecked = reverb
+
+        Toast.makeText(requireContext(), getString(R.string.v794_audio_preset_applied, presetTitle), Toast.LENGTH_SHORT).show()
     }
 }

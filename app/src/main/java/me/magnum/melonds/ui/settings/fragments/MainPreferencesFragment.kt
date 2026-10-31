@@ -11,6 +11,7 @@ import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
 import androidx.lifecycle.Lifecycle
 import androidx.preference.Preference
+import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -222,9 +223,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             }
         }
 
-        // 11. About (STORM DS 7.9.3 • Android version • CPU ABI • Device model • RAM)
+        // 11. About (STORM DS 7.9.4 • Android version • CPU ABI • Device model • RAM)
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "7.9.3")
+            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "7.9.4")
                 .removePrefix("v").removePrefix("V")
             val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
             val model = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
@@ -242,7 +243,19 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     override fun onCreateRecyclerView(inflater: LayoutInflater, parent: ViewGroup, savedInstanceState: Bundle?): RecyclerView {
         val recyclerView = super.onCreateRecyclerView(inflater, parent, savedInstanceState)
         if (resources.configuration.screenWidthDp >= 600) {
-            recyclerView.layoutManager = GridLayoutManager(requireContext(), 2)
+            val gridLayout = GridLayoutManager(requireContext(), 2)
+            gridLayout.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                override fun getSpanSize(position: Int): Int {
+                    val adapter = recyclerView.adapter as? androidx.preference.PreferenceGroupAdapter
+                    val item = adapter?.getItem(position)
+                    return if (item is androidx.preference.PreferenceCategory) {
+                        gridLayout.spanCount
+                    } else {
+                        1
+                    }
+                }
+            }
+            recyclerView.layoutManager = gridLayout
         }
         return recyclerView
     }

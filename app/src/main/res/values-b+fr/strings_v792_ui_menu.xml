@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">attendu</string>
     <string name="v793_bios_missing">manquant</string>
+    <string name="v794_cat_main_emulation_hardware">Émulation et matériel</string>
+    <string name="v794_cat_main_features_tools">Traducteur, codes et succès</string>
+    <string name="v794_cat_main_library_data">Bibliothèque et sauvegardes</string>
+    <string name="v794_cat_main_app_system">Interface et informations</string>
+    <string name="v794_cat_video_depth_color">Profondeur 3D, effets et couleur</string>
+    <string name="v794_video_quick_profile_title">Profils graphiques rapides</string>
+    <string name="v794_video_quick_profile_summary">Bascule en un clic entre Performance, Équilibré et Ultra qualité</string>
+    <string name="v794_video_preset_performance">Performance (1x, Pipeline rapide)</string>
+    <string name="v794_video_preset_balanced">Équilibré (2x, Filtrage linéaire)</string>
+    <string name="v794_video_preset_ultra">Ultra qualité (4x, SSAO, Profondeur 3D)</string>
+    <string name="v794_video_preset_applied">Profil graphique appliqué : %s</string>
+    <string name="v794_cat_general_pause_menu">Menu pause et outils</string>
+    <string name="v794_audio_dsp_preset_title">Profils audio (Préréglages DSP)</string>
+    <string name="v794_audio_dsp_preset_summary">Sélection rapide des réglages d\'égaliseur et d\'effets</string>
+    <string name="v794_audio_preset_studio">Original de studio</string>
+    <string name="v794_audio_preset_cyber_bass">Basses profondes (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">Scène spatiale 3D</string>
+    <string name="v794_audio_preset_night_mode">Mode nuit (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">Profil audio appliqué : %s</string>
+    <string name="v794_cat_cfw_mode">Mode de micrologiciel et BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">Images BIOS et micrologiciel DS</string>
+    <string name="v794_cat_cfw_dsi_bios">Images BIOS, NAND et micrologiciel DSi</string>
 </resources>

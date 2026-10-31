@@ -146,6 +146,12 @@ class GameTranslatorManager(
     private var lastErrorToastTimeMs: Long = 0L
 
     init {
+        if (!preferences.getBoolean("pref_migrated_translator_floating_btn_v794", false)) {
+            preferences.edit()
+                .putBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, false)
+                .putBoolean("pref_migrated_translator_floating_btn_v794", true)
+                .apply()
+        }
         preferences.registerOnSharedPreferenceChangeListener(prefChangeListener)
         ocrContextGraph.setActiveGame(activity, getGameStorageKey())
     }
@@ -326,7 +332,7 @@ class GameTranslatorManager(
     fun syncOverlaySettings() {
         val overlay = overlayView ?: return
         val enabled = isEnabled
-        val showBtn = enabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
+        val showBtn = enabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, false)
         overlay.visibility = if (enabled) View.VISIBLE else View.GONE
         overlay.showFloatingButton = showBtn
         val btnOpacity = preferences.getInt(PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY, 35).coerceIn(5, 100) / 100f
@@ -396,7 +402,7 @@ class GameTranslatorManager(
 
         overlayView?.visibility = View.VISIBLE
         overlayView?.isTranslating = true
-        val prevShowFloating = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
+        val prevShowFloating = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, false)
         overlayView?.showFloatingButton = false
         overlayView?.invalidate()
 
@@ -585,7 +591,7 @@ class GameTranslatorManager(
         overlayView?.isEditRegionsMode = false
         overlayView?.clearTranslations()
         overlayView?.isTranslating = false
-        overlayView?.showFloatingButton = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
+        overlayView?.showFloatingButton = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, false)
         overlayView?.invalidate()
         if (isPausedByTranslator) {
             isPausedByTranslator = false

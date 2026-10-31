@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">diharapkan</string>
     <string name="v793_bios_missing">tidak ada</string>
+    <string name="v794_cat_main_emulation_hardware">Emulasi dan Perangkat Keras</string>
+    <string name="v794_cat_main_features_tools">Penerjemah, Cheat dan Pencapaian</string>
+    <string name="v794_cat_main_library_data">Pustaka dan Penyimpanan</string>
+    <string name="v794_cat_main_app_system">Antarmuka dan Informasi</string>
+    <string name="v794_cat_video_depth_color">Kedalaman 3D, Efek dan Warna</string>
+    <string name="v794_video_quick_profile_title">Profil Grafis Cepat</string>
+    <string name="v794_video_quick_profile_summary">Beralih cepat antara Performa, Seimbang, dan Kualitas Ultra</string>
+    <string name="v794_video_preset_performance">Performa (1x, Jalur Cepat)</string>
+    <string name="v794_video_preset_balanced">Seimbang (2x, Pemfilteran Linear)</string>
+    <string name="v794_video_preset_ultra">Kualitas Ultra (4x, SSAO, Kedalaman 3D)</string>
+    <string name="v794_video_preset_applied">Profil grafis diterapkan: %s</string>
+    <string name="v794_cat_general_pause_menu">Menu Jeda dan Alat</string>
+    <string name="v794_audio_dsp_preset_title">Profil Audio (Preset DSP)</string>
+    <string name="v794_audio_dsp_preset_summary">Pilihan cepat preset equalizer dan efek</string>
+    <string name="v794_audio_preset_studio">Studio Asli</string>
+    <string name="v794_audio_preset_cyber_bass">Bass Dalam (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">Panggung Spasial 3D</string>
+    <string name="v794_audio_preset_night_mode">Mode Malam (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">Profil audio diterapkan: %s</string>
+    <string name="v794_cat_cfw_mode">Mode Firmware dan BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">Citra BIOS dan Firmware DS</string>
+    <string name="v794_cat_cfw_dsi_bios">Citra BIOS, NAND dan Firmware DSi</string>
 </resources>

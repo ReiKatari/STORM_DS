@@ -57,7 +57,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     var onRegionsSaved: ((List<TranslationRegion>) -> Unit)? = null
     var onSpeakWordRequested: ((String) -> Unit)? = null
 
-    var showFloatingButton: Boolean = true
+    var showFloatingButton: Boolean = false
         set(value) {
             field = value
             invalidate()

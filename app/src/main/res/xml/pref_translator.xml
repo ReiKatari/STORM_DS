@@ -64,7 +64,7 @@
             android:key="translator_show_floating_button"
             android:title="@string/translator_show_floating_button"
             android:summary="@string/translator_show_floating_button_summary"
-            android:defaultValue="true"
+            android:defaultValue="false"
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
 

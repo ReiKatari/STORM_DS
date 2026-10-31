@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">expected</string>
     <string name="v793_bios_missing">missing</string>
+    <string name="v794_cat_main_emulation_hardware">Emulation and Hardware</string>
+    <string name="v794_cat_main_features_tools">Translator, Cheats and Achievements</string>
+    <string name="v794_cat_main_library_data">Library and Saves</string>
+    <string name="v794_cat_main_app_system">Interface and Info</string>
+    <string name="v794_cat_video_depth_color">3D Depth, Effects and Color</string>
+    <string name="v794_video_quick_profile_title">Quick Graphics Presets</string>
+    <string name="v794_video_quick_profile_summary">One-tap switch between Performance, Balanced, and Ultra quality</string>
+    <string name="v794_video_preset_performance">Performance (1x, Fast Pipeline)</string>
+    <string name="v794_video_preset_balanced">Balanced (2x, Linear Filtering)</string>
+    <string name="v794_video_preset_ultra">Ultra Quality (4x, SSAO, 3D Depth)</string>
+    <string name="v794_video_preset_applied">Graphics preset applied: %s</string>
+    <string name="v794_cat_general_pause_menu">Pause Menu and Tools</string>
+    <string name="v794_audio_dsp_preset_title">Audio Presets (DSP Presets)</string>
+    <string name="v794_audio_dsp_preset_summary">Quick selection of equalizer and effect presets</string>
+    <string name="v794_audio_preset_studio">Studio Original</string>
+    <string name="v794_audio_preset_cyber_bass">Deep Bass (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">3D Spatial Stage</string>
+    <string name="v794_audio_preset_night_mode">Night Mode (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">Audio preset applied: %s</string>
+    <string name="v794_cat_cfw_mode">Firmware Mode and BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">DS BIOS and Firmware Images</string>
+    <string name="v794_cat_cfw_dsi_bios">DSi BIOS, NAND and Firmware Images</string>
 </resources>

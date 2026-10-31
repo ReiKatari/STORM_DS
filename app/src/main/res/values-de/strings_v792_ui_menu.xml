@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">erwartet</string>
     <string name="v793_bios_missing">fehlt</string>
+    <string name="v794_cat_main_emulation_hardware">Emulation und Hardware</string>
+    <string name="v794_cat_main_features_tools">Übersetzer, Cheats und Erfolge</string>
+    <string name="v794_cat_main_library_data">Bibliothek und Speicherdaten</string>
+    <string name="v794_cat_main_app_system">Benutzeroberfläche und Info</string>
+    <string name="v794_cat_video_depth_color">3D-Tiefe, Effekte und Farbe</string>
+    <string name="v794_video_quick_profile_title">Grafik-Voreinstellungen</string>
+    <string name="v794_video_quick_profile_summary">Schneller Wechsel zwischen Leistung, Balance und Ultra-Qualität</string>
+    <string name="v794_video_preset_performance">Leistung (1x, Schnelle Pipeline)</string>
+    <string name="v794_video_preset_balanced">Balance (2x, Lineare Filterung)</string>
+    <string name="v794_video_preset_ultra">Ultra-Qualität (4x, SSAO, 3D-Tiefe)</string>
+    <string name="v794_video_preset_applied">Grafikprofil angewendet: %s</string>
+    <string name="v794_cat_general_pause_menu">Pausenmenü und Werkzeuge</string>
+    <string name="v794_audio_dsp_preset_title">Audio-Profile (DSP-Voreinstellungen)</string>
+    <string name="v794_audio_dsp_preset_summary">Schnellauswahl vordefinierter Equalizer- und Effekteinstellungen</string>
+    <string name="v794_audio_preset_studio">Studio-Original</string>
+    <string name="v794_audio_preset_cyber_bass">Tiefer Bass (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">Räumliche 3D-Bühne</string>
+    <string name="v794_audio_preset_night_mode">Nachtmodus (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">Audioprofil angewendet: %s</string>
+    <string name="v794_cat_cfw_mode">Firmware-Modus und BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">DS-BIOS- und Firmware-Abbilder</string>
+    <string name="v794_cat_cfw_dsi_bios">DSi-BIOS-, NAND- und Firmware-Abbilder</string>
 </resources>

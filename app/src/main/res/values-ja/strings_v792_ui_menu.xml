@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">必要</string>
     <string name="v793_bios_missing">未検出</string>
+    <string name="v794_cat_main_emulation_hardware">エミュレーションとハードウェア</string>
+    <string name="v794_cat_main_features_tools">翻訳、チート、実績</string>
+    <string name="v794_cat_main_library_data">ライブラリとセーブデータ</string>
+    <string name="v794_cat_main_app_system">インターフェースと情報</string>
+    <string name="v794_cat_video_depth_color">3D深度、エフェクト、カラー</string>
+    <string name="v794_video_quick_profile_title">グラフィック クイックプリセット</string>
+    <string name="v794_video_quick_profile_summary">パフォーマンス、バランス、ウルトラ品質をワンタップで切り替え</string>
+    <string name="v794_video_preset_performance">パフォーマンス (1x, 高速パイプライン)</string>
+    <string name="v794_video_preset_balanced">バランス (2x, リニアフィルタリング)</string>
+    <string name="v794_video_preset_ultra">ウルトラ品質 (4x, SSAO, 3D深度)</string>
+    <string name="v794_video_preset_applied">グラフィックプリセットを適用しました: %s</string>
+    <string name="v794_cat_general_pause_menu">ポーズメニューとツール</string>
+    <string name="v794_audio_dsp_preset_title">オーディオプロファイル (DSPプリセット)</string>
+    <string name="v794_audio_dsp_preset_summary">イコライザーとエフェクトのプリセットをすばやく選択</string>
+    <string name="v794_audio_preset_studio">スタジオオリジナル</string>
+    <string name="v794_audio_preset_cyber_bass">ディープバス (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">3D空間ステージ</string>
+    <string name="v794_audio_preset_night_mode">ナイトモード (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">オーディオプリセットを適用しました: %s</string>
+    <string name="v794_cat_cfw_mode">ファームウェアモードとBIOS</string>
+    <string name="v794_cat_cfw_ds_bios">DS BIOSおよびファームウェアイメージ</string>
+    <string name="v794_cat_cfw_dsi_bios">DSi BIOS、NANDおよびファームウェアイメージ</string>
 </resources>

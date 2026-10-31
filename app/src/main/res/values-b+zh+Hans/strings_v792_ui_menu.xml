@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">预期</string>
     <string name="v793_bios_missing">缺失</string>
+    <string name="v794_cat_main_emulation_hardware">模拟与硬件</string>
+    <string name="v794_cat_main_features_tools">翻译器、金手指与成就</string>
+    <string name="v794_cat_main_library_data">游戏库与存档</string>
+    <string name="v794_cat_main_app_system">界面与信息</string>
+    <string name="v794_cat_video_depth_color">3D深度、特效与色彩</string>
+    <string name="v794_video_quick_profile_title">快捷图形预设</string>
+    <string name="v794_video_quick_profile_summary">一键在性能、平衡与极致画质间切换</string>
+    <string name="v794_video_preset_performance">性能 (1x, 快速管线)</string>
+    <string name="v794_video_preset_balanced">平衡 (2x, 线性过滤)</string>
+    <string name="v794_video_preset_ultra">极致画质 (4x, SSAO, 3D深度)</string>
+    <string name="v794_video_preset_applied">已应用图形预设：%s</string>
+    <string name="v794_cat_general_pause_menu">暂停菜单与工具</string>
+    <string name="v794_audio_dsp_preset_title">音频配置文件 (DSP预设)</string>
+    <string name="v794_audio_dsp_preset_summary">快速选择均衡器与音效预设</string>
+    <string name="v794_audio_preset_studio">原声工作室</string>
+    <string name="v794_audio_preset_cyber_bass">深沉重低音 (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">3D空间声场</string>
+    <string name="v794_audio_preset_night_mode">夜间模式 (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">已应用音频预设：%s</string>
+    <string name="v794_cat_cfw_mode">固件模式与BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">DS BIOS与固件镜像</string>
+    <string name="v794_cat_cfw_dsi_bios">DSi BIOS、NAND与固件镜像</string>
 </resources>

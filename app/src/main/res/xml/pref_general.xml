@@ -33,6 +33,13 @@
                 android:entries="@array/rom_card_style_options"
                 android:entryValues="@array/rom_card_style_values"
                 android:defaultValue="glassmorphism" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:key="pref_cat_pause_menu_tools"
+            android:title="@string/v794_cat_general_pause_menu"
+            app:iconSpaceReserved="false">
+
         <SwitchPreference
                 android:key="extended_pause_menu_enabled"
                 app:key="extended_pause_menu_enabled"
@@ -124,12 +131,6 @@
                 android:summary="@string/restore_settings_summary"
                 app:isPreferenceVisible="@bool/settings_backup_restore_enabled"
                 app:iconSpaceReserved="false" />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-            android:key="category_settings_maintenance"
-            android:title="@string/v780_settings_maintenance_title"
-            app:iconSpaceReserved="false">
 
         <Preference
                 android:key="settings_export_json"

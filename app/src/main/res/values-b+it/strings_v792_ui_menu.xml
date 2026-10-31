@@ -50,4 +50,26 @@
     <string name="v793_bios_unit_kb">KB</string>
     <string name="v793_bios_expected">previsto</string>
     <string name="v793_bios_missing">mancante</string>
+    <string name="v794_cat_main_emulation_hardware">Emulazione e hardware</string>
+    <string name="v794_cat_main_features_tools">Traduttore, trucchi e obiettivi</string>
+    <string name="v794_cat_main_library_data">Libreria e salvataggi</string>
+    <string name="v794_cat_main_app_system">Interfaccia e informazioni</string>
+    <string name="v794_cat_video_depth_color">Profondità 3D, effetti e colore</string>
+    <string name="v794_video_quick_profile_title">Profili grafici rapidi</string>
+    <string name="v794_video_quick_profile_summary">Passa con un tocco tra Prestazioni, Bilanciato e Qualità Ultra</string>
+    <string name="v794_video_preset_performance">Prestazioni (1x, Pipeline rapida)</string>
+    <string name="v794_video_preset_balanced">Bilanciato (2x, Filtro lineare)</string>
+    <string name="v794_video_preset_ultra">Qualità Ultra (4x, SSAO, Profondità 3D)</string>
+    <string name="v794_video_preset_applied">Profilo grafico applicato: %s</string>
+    <string name="v794_cat_general_pause_menu">Menu di pausa e strumenti</string>
+    <string name="v794_audio_dsp_preset_title">Profili audio (Preset DSP)</string>
+    <string name="v794_audio_dsp_preset_summary">Selezione rapida di preset per equalizzatore ed effetti</string>
+    <string name="v794_audio_preset_studio">Originale da studio</string>
+    <string name="v794_audio_preset_cyber_bass">Bassi profondi (Cyber Bass)</string>
+    <string name="v794_audio_preset_spatial_3d">Palcoscenico spaziale 3D</string>
+    <string name="v794_audio_preset_night_mode">Modalità notte (Soft Limit)</string>
+    <string name="v794_audio_preset_applied">Profilo audio applicato: %s</string>
+    <string name="v794_cat_cfw_mode">Modalità firmware e BIOS</string>
+    <string name="v794_cat_cfw_ds_bios">Immagini BIOS e firmware DS</string>
+    <string name="v794_cat_cfw_dsi_bios">Immagini BIOS, NAND e firmware DSi</string>
 </resources>

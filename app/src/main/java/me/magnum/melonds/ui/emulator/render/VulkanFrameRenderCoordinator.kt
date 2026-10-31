@@ -469,12 +469,6 @@ class VulkanFrameRenderCoordinator(
             if (!running) {
                 return
             }
-            val hasPending = synchronized(surfacesLock) {
-                managedSurfaces.values.any { it.surfaceId == 0 && it.pendingSurface?.isValid == true }
-            }
-            if (hasPending) {
-                reattachPendingSurfaces()
-            }
             val deadline = frameDeadlineNanos.takeIf { it > 0L } ?: 0L
             val budgetDeadline = if (deadline > 0L) {
                 (deadline - renderStatistics.getPresentationBudgetMarginNs()).coerceAtLeast(0L)

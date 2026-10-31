@@ -64,8 +64,16 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+            android:key="pref_cat_dsp_effects"
             android:title="@string/pref_cat_dsp_effects"
             app:iconSpaceReserved="false">
+
+        <Preference
+                android:key="audio_dsp_preset"
+                android:title="@string/v794_audio_dsp_preset_title"
+                android:summary="@string/v794_audio_dsp_preset_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false" />
 
         <SwitchPreference
                 android:key="audio_soft_limiter_enabled"
