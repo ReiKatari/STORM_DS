@@ -16,6 +16,8 @@ import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 @AndroidEntryPoint
 class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
+    private var ttsManagerInstance: GameTtsManager? = null
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_translator, rootKey)
 
@@ -27,7 +29,35 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
         val voiceModelPref = findPreference<ListPreference>("translator_local_voice_model")
         val pitchVariancePref = findPreference<SeekBarPreference>(GameTtsManager.PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE)
         val ttsSpeedPref = findPreference<SeekBarPreference>(GameTtsManager.PREF_TRANSLATOR_TTS_SPEED)
+        val voicePitchPref = findPreference<SeekBarPreference>("translator_voice_pitch")
+        val floatingOpacityPref = findPreference<SeekBarPreference>("translator_floating_button_opacity")
+        val testVoicePref = findPreference<Preference>("pref_translator_test_voice")
 
+        // 1. Floating button opacity live % summary
+        floatingOpacityPref?.apply {
+            val baseSummary = summary?.toString().orEmpty()
+            summary = "${value}% — $baseSummary"
+            setOnPreferenceChangeListener { _, newValue ->
+                val intVal = (newValue as? Int) ?: 35
+                summary = "${intVal}% — $baseSummary"
+                true
+            }
+        }
+
+        // 2. Voice pitch live % summary
+        voicePitchPref?.apply {
+            val baseSummary = summary?.toString().orEmpty()
+            val sign = if (value >= 0) "+" else ""
+            summary = "${sign}${value}% — $baseSummary"
+            setOnPreferenceChangeListener { _, newValue ->
+                val intVal = (newValue as? Int) ?: 0
+                val s = if (intVal >= 0) "+" else ""
+                summary = "${s}${intVal}% — $baseSummary"
+                true
+            }
+        }
+
+        // 3. Speech speed live % summary
         ttsSpeedPref?.apply {
             title = when (lang) {
                 "ru" -> "Скорость речи озвучки (%)"
@@ -38,12 +68,24 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
                 else -> "Speech rate (%)"
             }
             summary = when (lang) {
-                "ru" -> "Темп произношения переведённых реплик (100% — стандартный)"
-                "de" -> "Sprechtempo für übersetzte Dialoge (100% ist Standard)"
-                "fr" -> "Cadence de lecture des dialogues traduits (100% par défaut)"
-                "zh" -> "调整已翻译对话的朗读速度（100% 为标准语速）"
-                "ja" -> "翻訳されたセリフの読み上げテンポ（100%が標準）"
-                else -> "Playback speed for translated dialogue (100% is normal)"
+                "ru" -> "${value}% — Темп произношения переведённых реплик (100% — стандартный)"
+                "de" -> "${value}% — Sprechtempo für übersetzte Dialoge (100% ist Standard)"
+                "fr" -> "${value}% — Cadence de lecture des dialogues traduits (100% par défaut)"
+                "zh" -> "${value}% — 调整已翻译对话的朗读速度（100% 为标准语速）"
+                "ja" -> "${value}% — 翻訳されたセリフの読み上げテンポ（100%が標準）"
+                else -> "${value}% — Playback speed for translated dialogue (100% is normal)"
+            }
+            setOnPreferenceChangeListener { _, newValue ->
+                val intVal = (newValue as? Int) ?: 100
+                summary = when (lang) {
+                    "ru" -> "${intVal}% — Темп произношения переведённых реплик (100% — стандартный)"
+                    "de" -> "${intVal}% — Sprechtempo für übersetzte Dialoge (100% ist Standard)"
+                    "fr" -> "${intVal}% — Cadence de lecture des dialogues traduits (100% par défaut)"
+                    "zh" -> "${intVal}% — 调整已翻译对话的朗读速度（100% 为标准语速）"
+                    "ja" -> "${intVal}% — 翻訳されたセリフの読み上げテンポ（100%が標準）"
+                    else -> "${intVal}% — Playback speed for translated dialogue (100% is normal)"
+                }
+                true
             }
         }
 
@@ -53,6 +95,9 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
             voiceModelPref?.isEnabled = isMultiVoice && ttsActive
             pitchVariancePref?.isVisible = isMultiVoice
             pitchVariancePref?.isEnabled = isMultiVoice && ttsActive
+            voicePitchPref?.isVisible = isMultiVoice
+            voicePitchPref?.isEnabled = isMultiVoice && ttsActive
+            testVoicePref?.isEnabled = ttsActive
         }
 
         updateMultiVoiceControlsState(voiceEnginePref?.value, ttsEnabledPref?.isChecked == true)
@@ -75,6 +120,33 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
         voiceEnginePref?.setOnPreferenceChangeListener { _, newValue ->
             val chosen = newValue as? String ?: "neural_edge"
             updateMultiVoiceControlsState(chosen, ttsEnabledPref?.isChecked == true)
+            true
+        }
+
+        // 4. Test Voice Button
+        testVoicePref?.setOnPreferenceClickListener {
+            try {
+                if (ttsManagerInstance == null) {
+                    ttsManagerInstance = GameTtsManager(requireContext())
+                }
+                val selectedModel = voiceModelPref?.value ?: "auto_gender_neural"
+                val toastMsg = getString(R.string.translator_test_voice_playing)
+                Toast.makeText(requireContext(), toastMsg, Toast.LENGTH_SHORT).show()
+
+                if (selectedModel == "auto_gender_neural") {
+                    ttsManagerInstance?.speak(
+                        "Майя: Феникс, смотри! Мы нашли важную улику!\nФеникс: Отлично, Майя! Теперь у нас есть шанс в суде!",
+                        "ru"
+                    )
+                } else {
+                    ttsManagerInstance?.speak(
+                        "Система голосовой озвучки STORM DS настроена и готова к игре!",
+                        "ru"
+                    )
+                }
+            } catch (e: Throwable) {
+                Toast.makeText(requireContext(), e.message ?: "TTS Error", Toast.LENGTH_SHORT).show()
+            }
             true
         }
 
@@ -163,6 +235,12 @@ class TranslatorPreferencesFragment : BasePreferenceFragment(), PreferenceFragme
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        ttsManagerInstance?.stop()
+        ttsManagerInstance = null
     }
 
     override fun isPasswordPreference(preference: EditTextPreference): Boolean {

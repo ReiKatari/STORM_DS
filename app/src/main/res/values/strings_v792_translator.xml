@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>Auto Director (Male and female voice by character gender)</item>
+        <item>Svetlana Neural HD (Female, warm)</item>
+        <item>Dmitry Neural HD (Male, deep)</item>
+        <item>Ava Multilingual HD (Female, expressive anime/JRPG)</item>
+        <item>Andrew Multilingual HD (Male, cinematic)</item>
+        <item>Emma Multilingual HD (Young / bright timbre)</item>
+        <item>Brian Multilingual HD (Calm narrator)</item>
+        <item>Vivienne Multilingual HD (Soft velvety female)</item>
+        <item>Florian Multilingual HD (Charismatic baritone)</item>
+        <item>JRPG Heroine (Svetlana HD - Bright lively tone)</item>
+        <item>Antagonist / Knight (Dmitry HD - Deep dramatic tone)</item>
+        <item>Device offline system voice (No internet required)</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">Floating button opacity</string>
+    <string name="translator_floating_button_opacity_summary">Adjust the opacity of the floating TR | LOG button (default 35%)</string>
+    <string name="translator_voice_pitch_title">Voice pitch</string>
+    <string name="translator_voice_pitch_summary">Fine-tune speech pitch offset (-20%..+20%)</string>
+    <string name="translator_test_voice_title">Test selected voice</string>
+    <string name="translator_test_voice_summary">Play a voice sample to verify speech synthesis</string>
+    <string name="translator_test_voice_playing">Playing voice sample...</string>
+    <string name="translator_glossary_gender_label">Character gender</string>
+    <string name="translator_glossary_gender_male">Male (♂)</string>
+    <string name="translator_glossary_gender_female">Female (♀)</string>
+    <string name="translator_glossary_gender_neutral">Neutral / Unspecified</string>
+</resources>

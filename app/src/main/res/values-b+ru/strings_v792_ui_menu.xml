@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">Настройка игрового подменю</string>
+    <string name="v792_pause_customizer_subtitle">Порядок и видимость пунктов меню</string>
+    <string name="v792_pause_customizer_btn">Настроить</string>
+    <string name="v792_pause_badge_standard">Основное</string>
+    <string name="v792_pause_badge_extended">Расширенное</string>
+    <string name="v792_pause_reset_defaults">Сбросить по умолчанию</string>
+    <string name="v792_pause_done">Готово</string>
+    <string name="v792_pause_move_up">Переместить вверх</string>
+    <string name="v792_pause_move_down">Переместить вниз</string>
+    <string name="v792_pause_item_visible">Отображать в подменю</string>
+    <string name="v792_pause_settings_protected">Всегда активно</string>
+    <string name="v792_general_pause_menu_title">Управление игровым подменю</string>
+    <string name="v792_general_pause_menu_summary">Настройка порядка и видимости пунктов паузы</string>
+    <string name="v792_general_pause_menu_reset_confirm">Сбросить порядок и видимость пунктов подменю по умолчанию?</string>
+    <string name="v792_general_pause_menu_reset_done">Настройки подменю паузы сброшены по умолчанию</string>
+</resources>

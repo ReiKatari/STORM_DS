@@ -255,13 +255,13 @@ fun ConsolePresetsOverlay(
                                             Icon(
                                                 Icons.Filled.Info,
                                                 null,
-                                                tint = WatermelonColors.gold,
+                                                tint = colors.green,
                                                 modifier = Modifier.size(16.dp),
                                             )
                                             Spacer(Modifier.width(6.dp))
                                             Text(
                                                 text = stringResource(R.string.dual_screen_info_title),
-                                                color = WatermelonColors.gold,
+                                                color = colors.green,
                                                 fontFamily = Manrope,
                                                 fontSize = 12.5.sp,
                                                 fontWeight = FontWeight.Bold,

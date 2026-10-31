@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">暂停菜单配置</string>
+    <string name="v792_pause_customizer_subtitle">自定义选项排序与可见性</string>
+    <string name="v792_pause_customizer_btn">自定义菜单</string>
+    <string name="v792_pause_badge_standard">基础</string>
+    <string name="v792_pause_badge_extended">扩展</string>
+    <string name="v792_pause_reset_defaults">恢复默认设置</string>
+    <string name="v792_pause_done">完成</string>
+    <string name="v792_pause_move_up">上移</string>
+    <string name="v792_pause_move_down">下移</string>
+    <string name="v792_pause_item_visible">在暂停菜单中显示</string>
+    <string name="v792_pause_settings_protected">始终可用</string>
+    <string name="v792_general_pause_menu_title">暂停子菜单管理</string>
+    <string name="v792_general_pause_menu_summary">配置暂停菜单项的排序与显示状态</string>
+    <string name="v792_general_pause_menu_reset_confirm">将暂停子菜单排序与可见性恢复默认？</string>
+    <string name="v792_general_pause_menu_reset_done">暂停子菜单已恢复默认设置</string>
+</resources>

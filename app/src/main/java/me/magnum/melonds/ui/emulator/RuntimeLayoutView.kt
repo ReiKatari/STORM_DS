@@ -235,32 +235,65 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
     }
 
     fun applyConsoleSkinButtonShift(isConsoleSkinEnabled: Boolean, shiftPx: Int) {
+        val w = width
         val h = height
         val density = resources.displayMetrics.density
+        val isLandscape = w > h && h > 0
+
         val bottomLipLiftPx = (24f * density).toInt()
         val mainPadLiftPx = (20f * density).toInt()
         val shoulderDropPx = (6f * density).toInt()
+
         getLayoutComponentViews().forEach { compView ->
             if (!compView.component.isScreen()) {
                 val v = compView.view
                 val lp = v.layoutParams as? FrameLayout.LayoutParams
                 if (lp != null) {
                     val baseTop = compView.initialRect?.y ?: lp.topMargin
-                    val deltaY = if (!isConsoleSkinEnabled) {
-                        0
+                    val baseLeft = compView.initialRect?.x ?: lp.leftMargin
+
+                    val deltaY: Int
+                    val deltaX: Int
+
+                    if (!isConsoleSkinEnabled) {
+                        deltaY = 0
+                        deltaX = 0
+                    } else if (isLandscape) {
+                        deltaY = when (compView.component) {
+                            LayoutComponent.BUTTON_L,
+                            LayoutComponent.BUTTON_R -> (4f * density).toInt()
+                            LayoutComponent.BUTTON_SELECT,
+                            LayoutComponent.BUTTON_START -> -(4f * density).toInt()
+                            else -> 0
+                        }
+                        deltaX = 0
                     } else {
-                        when (compView.component) {
+                        deltaY = when (compView.component) {
                             LayoutComponent.BUTTON_SELECT,
                             LayoutComponent.BUTTON_START -> -bottomLipLiftPx
                             LayoutComponent.DPAD,
                             LayoutComponent.BUTTONS -> -mainPadLiftPx
                             else -> shoulderDropPx
                         }
+                        deltaX = 0
                     }
+
                     val maxTop = if (h > 0 && lp.height > 0) (h - lp.height - 4).coerceAtLeast(0) else Int.MAX_VALUE
                     val newTop = (baseTop + deltaY).coerceIn(0, maxTop)
+
+                    val maxLeft = if (w > 0 && lp.width > 0) (w - lp.width - 4).coerceAtLeast(0) else Int.MAX_VALUE
+                    val newLeft = (baseLeft + deltaX).coerceIn(0, maxLeft)
+
+                    var changed = false
                     if (newTop != lp.topMargin) {
                         lp.topMargin = newTop
+                        changed = true
+                    }
+                    if (newLeft != lp.leftMargin) {
+                        lp.leftMargin = newLeft
+                        changed = true
+                    }
+                    if (changed) {
                         v.layoutParams = lp
                     }
                 }

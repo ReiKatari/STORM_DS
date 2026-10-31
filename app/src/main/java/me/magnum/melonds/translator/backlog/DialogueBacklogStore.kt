@@ -12,6 +12,7 @@ import kotlin.math.abs
  * Thread-Safe Circular Dialogue Backlog Buffer.
  *
  * Stores the last 50 recognized and translated dialogue turns with:
+ * - Speaker name & character gender indicator
  * - Smart Levenshtein-based OCR deduplication (difference <= 1 noise char updates top entry)
  * - Exact 24-hour time formatting (HH:mm:ss / HH:mm)
  * - Observers notification on new or updated dialogue lines
@@ -26,7 +27,9 @@ class DialogueBacklogStore(
         val sourceText: String,
         val translatedText: String,
         val sourceLang: String,
-        val targetLang: String
+        val targetLang: String,
+        val speakerName: String = "",
+        val speakerGender: String = "N" // "M", "F", "N"
     ) {
         val formattedTimeShort: String
             get() = formatTimeShort(timestampMs)
@@ -45,6 +48,8 @@ class DialogueBacklogStore(
         translatedText: String,
         sourceLang: String,
         targetLang: String,
+        speakerName: String = "",
+        speakerGender: String = "N",
         allowDeduplication: Boolean = true
     ): DialogueItem {
         synchronized(lock) {
@@ -63,7 +68,9 @@ class DialogueBacklogStore(
                         sourceText = if (cleanSource.length >= top.sourceText.length) cleanSource else top.sourceText,
                         translatedText = if (cleanTrans.length >= top.translatedText.length) cleanTrans else top.translatedText,
                         sourceLang = sourceLang,
-                        targetLang = targetLang
+                        targetLang = targetLang,
+                        speakerName = if (speakerName.isNotBlank()) speakerName else top.speakerName,
+                        speakerGender = if (speakerGender != "N" && speakerGender.isNotBlank()) speakerGender else top.speakerGender
                     )
                     buffer.removeFirst()
                     buffer.addFirst(updated)
@@ -80,7 +87,9 @@ class DialogueBacklogStore(
                 sourceText = cleanSource,
                 translatedText = cleanTrans,
                 sourceLang = sourceLang,
-                targetLang = targetLang
+                targetLang = targetLang,
+                speakerName = speakerName,
+                speakerGender = speakerGender
             )
             buffer.addFirst(newItem)
             notifyListeners()

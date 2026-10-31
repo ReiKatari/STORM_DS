@@ -61,7 +61,7 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
             addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
                 override fun onChildViewAttachedToWindow(view: View) {
                     view.post {
-                        val color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
+                        val color = context?.let { me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(it) } ?: me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
                         val states = arrayOf(
                             intArrayOf(-android.R.attr.state_checked),
                             intArrayOf(android.R.attr.state_checked),
@@ -119,7 +119,7 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
     }
 
     protected fun applyAccentColorToViews() {
-        val color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
+        val color = context?.let { me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(it) } ?: me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
         val states = arrayOf(
             intArrayOf(-android.R.attr.state_checked),
             intArrayOf(android.R.attr.state_checked),
@@ -137,8 +137,14 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
 
         val rv = listView ?: return
         rv.post {
+            val adapter = rv.adapter as? PreferenceGroupAdapter
             for (i in 0 until rv.childCount) {
                 val child = rv.getChildAt(i)
+                val pos = rv.getChildAdapterPosition(child)
+                val pref = if (pos != RecyclerView.NO_POSITION) adapter?.getItem(pos) else null
+                if (pref is androidx.preference.PreferenceCategory) {
+                    (child as? android.widget.TextView ?: child.findViewById(android.R.id.title))?.setTextColor(color)
+                }
                 tintChildControls(child, thumbColorStateList, trackColorStateList, color)
             }
         }
@@ -165,6 +171,10 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
             val id = view.id
             if (id == android.R.id.icon || id == me.magnum.melonds.R.id.buttonResetDefault || view.tag == "tint_accent") {
                 androidx.core.widget.ImageViewCompat.setImageTintList(view, android.content.res.ColorStateList.valueOf(accent))
+            }
+        } else if (view is android.widget.TextView) {
+            if (view.tag == "category_title" || (view.id == android.R.id.title && view.parent is RecyclerView)) {
+                view.setTextColor(accent)
             }
         }
         if (view is ViewGroup) {

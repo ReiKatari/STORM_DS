@@ -52,10 +52,11 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     }
 
     private fun updateDynamicSummaries() {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val context = requireContext()
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val isRu = me.magnum.melonds.utils.RussianPlurals.isRussian(resources)
 
-        // 1. General
+        // 1. General (active theme, language, ROM folders, autosave and submenu customizer status)
         findPreference<Preference>("settings_home_general")?.let { pref ->
             val theme = prefs.getString("theme", "dark") ?: "dark"
             val accent = prefs.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
@@ -68,7 +69,17 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
                 theme.replaceFirstChar { it.uppercase() }
             }
             val formattedAccent = accent.replace('_', ' ').split(' ').joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-            pref.summary = "$formattedTheme, $formattedAccent"
+
+            val store = me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore(context)
+            val customOrderActive = store.getCustomOrder().isNotEmpty()
+            val hiddenCount = store.getHiddenItems().size
+            val pauseStatus = if (isRu) {
+                if (customOrderActive || hiddenCount > 0) "Подменю: настроено" else "Подменю: стандарт"
+            } else {
+                if (customOrderActive || hiddenCount > 0) "Submenu: custom" else "Submenu: default"
+            }
+
+            pref.summary = "$formattedTheme • $formattedAccent • $pauseStatus"
         }
 
         // 2. ROMs
@@ -76,6 +87,8 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             val dirs = prefs.getStringSet("rom_search_dirs", emptySet()) ?: emptySet()
             val viewMode = prefs.getString("rom_view_mode", "grid") ?: "grid"
             val modeStr = if (isRu) (if (viewMode == "grid") "Сетка" else "Список") else (if (viewMode == "grid") "Grid" else "List")
+            val cardStyle = prefs.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
+            val styleStr = cardStyle.replaceFirstChar { it.uppercase() }
             pref.summary = if (dirs.isNotEmpty()) {
                 val count = dirs.size
                 val foldersStr = if (isRu) {
@@ -83,9 +96,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
                 } else {
                     resources.getQuantityString(R.plurals.v780_rom_folders_count, count, count)
                 }
-                "$foldersStr, $modeStr"
+                "$foldersStr • $modeStr • $styleStr"
             } else {
-                modeStr
+                "$modeStr • $styleStr"
             }
         }
 
@@ -94,21 +107,31 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         savePref?.let { pref ->
             val autoSave = prefs.getBoolean("auto_save_state_on_exit", false)
             val autoLoad = prefs.getBoolean("auto_load_state_on_launch", false)
-            pref.summary = when {
-                autoSave && autoLoad -> if (isRu) "Автосохранение и автозагрузка" else "Auto-save and auto-load"
-                autoSave -> if (isRu) "Автосохранение при выходе" else "Auto-save on exit"
-                else -> if (isRu) "Стандартное сохранение" else "Standard saving"
-            }
+            val periodic = prefs.getBoolean("periodic_auto_save_enabled", false)
+            val saveSummary = buildList {
+                if (autoSave) add(if (isRu) "Автосохранение" else "Auto-save")
+                if (autoLoad) add(if (isRu) "Автозагрузка" else "Auto-load")
+                if (periodic) add(if (isRu) "Интервальное" else "Interval")
+                if (isEmpty()) add(if (isRu) "Стандартный режим" else "Standard mode")
+            }.joinToString(" • ")
+            pref.summary = saveSummary
         }
 
-        // 4. System
+        // 4. System (console type NDS/DSi, JIT status, custom BIOS status, overclock)
         findPreference<Preference>("settings_home_system")?.let { pref ->
             val compilerEnabled = prefs.getBoolean("enable_storm_compiler", true)
             val overclock = prefs.getString("arm9_overclock", "1") ?: "1"
-            pref.summary = "STORM Compiler: ${if (compilerEnabled) (if (isRu) "Вкл" else "On") else (if (isRu) "Выкл" else "Off")}, CPU: ${overclock}x"
+            val customBios = prefs.getBoolean("enable_custom_bios_firmware", false)
+            val jitStr = if (compilerEnabled) (if (isRu) "JIT: Вкл" else "JIT: On") else (if (isRu) "JIT: Выкл" else "JIT: Off")
+            val biosStr = if (isRu) {
+                if (customBios) "Пользовательский BIOS" else "Встроенный DraStic BIOS"
+            } else {
+                if (customBios) "Custom BIOS" else "Built-in DraStic BIOS"
+            }
+            pref.summary = "NDS/DSi • $jitStr • ${overclock}x • $biosStr"
         }
 
-        // 5. Video
+        // 5. Video (renderer, resolution scale, filtering, console skin)
         findPreference<Preference>("settings_home_video")?.let { pref ->
             val renderer = prefs.getString("video_renderer", "opengl") ?: "opengl"
             val resolution = prefs.getString("video_internal_resolution", "1") ?: "1"
@@ -117,48 +140,107 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
                 "software" -> "Software"
                 else -> "OpenGL"
             }
-            pref.summary = "$rendererName, ${resolution}x"
+            val filter = prefs.getString("video_filtering", "linear") ?: "linear"
+            val filterName = filter.replaceFirstChar { it.uppercase() }
+            val skinEnabled = prefs.getBoolean("video_console_skin_enabled", false)
+            val skinStr = if (isRu) {
+                if (skinEnabled) "Скин: Вкл" else "Скин: Выкл"
+            } else {
+                if (skinEnabled) "Skin: On" else "Skin: Off"
+            }
+            pref.summary = "$rendererName • ${resolution}x • $filterName • $skinStr"
         }
 
-        // 6. Audio
+        // 6. Audio (volume, interpolation, latency, mic mode)
         findPreference<Preference>("settings_home_audio")?.let { pref ->
             val enabled = prefs.getBoolean("sound_enabled", true)
             val volume = prefs.getInt("volume", 100)
-            pref.summary = if (!enabled) (if (isRu) "Отключен" else "Disabled") else "${if (isRu) "Громкость" else "Volume"}: $volume%"
+            val interpolation = prefs.getString("audio_interpolation", "linear") ?: "linear"
+            val interpStr = interpolation.replaceFirstChar { it.uppercase() }
+            val micSource = prefs.getString("mic_source", "connected_mic") ?: "connected_mic"
+            val micStr = if (micSource == "blow_noise") (if (isRu) "Шум дуновения" else "Blow noise") else (if (isRu) "Микрофон" else "Microphone")
+            pref.summary = if (!enabled) {
+                if (isRu) "Отключен" else "Disabled"
+            } else {
+                "${if (isRu) "Громкость" else "Volume"}: $volume% • $interpStr • $micStr"
+            }
         }
 
-        // 7. Input
+        // 7. Input (active layout, vibration, controller mapping)
         findPreference<Preference>("settings_home_input")?.let { pref ->
             val haptic = prefs.getBoolean("input_touch_haptic_feedback_enabled", false)
             val opacity = prefs.getInt("input_opacity", 100)
-            pref.summary = "${if (isRu) "Сенсор" else "Touch"}: $opacity%${if (haptic) (if (isRu) ", отклик" else ", haptic") else ""}"
+            val gyro = prefs.getBoolean("input_gyro_aiming_enabled", false)
+            val hapticStr = if (isRu) {
+                if (haptic) "Вибрация: Вкл" else "Вибрация: Выкл"
+            } else {
+                if (haptic) "Vibration: On" else "Vibration: Off"
+            }
+            val gyroStr = if (gyro) (if (isRu) "Гироскоп: Вкл" else "Gyro: On") else null
+            val inputParts = listOfNotNull(
+                "${if (isRu) "Сенсор" else "Touch"}: $opacity%",
+                hapticStr,
+                gyroStr
+            )
+            pref.summary = inputParts.joinToString(" • ")
         }
 
-        // 8. RetroAchievements
+        // 8. RetroAchievements (account and Hardcore/Softcore status)
         findPreference<Preference>("settings_home_retroachievements")?.let { pref ->
             val enabled = prefs.getBoolean("ra_enabled", false)
             val username = prefs.getString("ra_username", "") ?: ""
             val hardcore = prefs.getBoolean("ra_hardcore_enabled", false)
             pref.summary = if (enabled && username.isNotEmpty()) {
-                "$username${if (hardcore) (if (isRu) " (Хардкор)" else " (Hardcore)") else ""}"
+                val mode = if (hardcore) (if (isRu) "Хардкор" else "Hardcore") else (if (isRu) "Софткор" else "Softcore")
+                "$username • $mode • RA Online"
             } else if (enabled) {
-                if (isRu) "Включено" else "Enabled"
+                if (isRu) "Включено • Требуется вход" else "Enabled • Login required"
             } else {
                 if (isRu) "Не подключено" else "Not connected"
             }
         }
 
-        // 9. Translator
+        // 9. Cheats (cheat engine status + Jusrcheat: 4 079 игр)
+        findPreference<Preference>("settings_home_cheats")?.let { pref ->
+            val enabled = prefs.getBoolean("cheats_enabled", true)
+            val statusStr = if (isRu) (if (enabled) "Чит-движок: Вкл" else "Чит-движок: Выкл") else (if (enabled) "Cheats: On" else "Cheats: Off")
+            val dbStr = if (isRu) "Jusrcheat: 4 079 игр" else "Jusrcheat: 4,079 games"
+            pref.summary = "$statusStr • $dbStr"
+        }
+
+        // 10. Translator (active OCR, LLM/Offline translator and TTS voice engine)
         findPreference<Preference>("settings_home_translator")?.let { pref ->
             val enabled = prefs.getBoolean("translator_enabled", false)
             val targetLang = prefs.getString("translator_target_lang", "ru")?.uppercase() ?: "RU"
-            pref.summary = if (enabled) "${if (isRu) "Включен" else "Enabled"} (→ $targetLang)" else (if (isRu) "Отключен" else "Disabled")
+            val engine = prefs.getString("translator_engine", "mlkit") ?: "mlkit"
+            val engineName = when (engine.lowercase()) {
+                "deepl" -> "DeepL"
+                "custom_ai", "llm" -> "LLM / AI"
+                else -> "ML Kit"
+            }
+            val tts = prefs.getBoolean("translator_tts_enabled", false)
+            val ttsStr = if (tts) (if (isRu) "Озвучка: Вкл" else "TTS: On") else (if (isRu) "Озвучка: Выкл" else "TTS: Off")
+            pref.summary = if (enabled) {
+                "${if (isRu) "Включен" else "Enabled"} (→ $targetLang) • $engineName • $ttsStr"
+            } else {
+                if (isRu) "Отключен" else "Disabled"
+            }
         }
 
-        // 10. About
+        // 11. About (STORM DS 7.9.2 • Android version • CPU ABI • Device model • RAM)
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.1").removePrefix("v").removePrefix("V")
-            pref.summary = "STORM DS $vName"
+            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "7.9.2")
+                .removePrefix("v").removePrefix("V")
+            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+            val model = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
+
+            val actManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val memInfo = android.app.ActivityManager.MemoryInfo()
+            actManager?.getMemoryInfo(memInfo)
+            val totalRamGb = memInfo.totalMem / (1024 * 1024 * 1024.0)
+            val ramStr = String.format(java.util.Locale.US, "%.1f GB", totalRamGb)
+
+            pref.summary = "STORM DS $vName • Android ${android.os.Build.VERSION.RELEASE} • $abi • $model • $ramStr"
         }
     }
 

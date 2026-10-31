@@ -30,7 +30,7 @@
     <string name="take_clean_screenshot">Сделать скриншот</string>
     <string name="screenshot_saved_toast">Скриншот сохранён: %1$s</string>
     <string name="screenshot_failed_toast">Не удалось сохранить скриншот</string>
-    <string name="slow_motion_toggle">Замедление времени (Slow-Motion)</string>
+    <string name="slow_motion_toggle">Замедление времени</string>
     <string name="slow_motion_active_toast">Замедление %1$s включено</string>
     <string name="slow_motion_disabled_toast">Замедление времени выключено</string>
     <string name="slow_motion_unavailable_hardcore">Замедление времени недоступно в режиме Хардкор</string>

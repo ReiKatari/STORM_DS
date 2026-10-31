@@ -2075,7 +2075,10 @@ u32* VulkanRenderer3D::GetLineActiveBackend(int line)
 
     if (exactCaptureOnly)
     {
-        if (line == 0)
+        if (line == 0
+            || needsExactCaptureLatch
+            || SweepLineCacheIdentity.Sequence != LineCacheIdentity.Sequence
+            || SweepLineCacheIdentity.Valid != LineCacheIdentity.Valid)
         {
             SweepLineCache = LineCache;
             SweepLineCacheIdentity = LineCacheIdentity;
@@ -11392,23 +11395,26 @@ bool VulkanRenderer3D::dispatchRasterAndReadback(
     constexpr u32 kRasterTranslucencyModeOpaque = 0u;
     constexpr u32 kRasterTranslucencyModeTranslucent = 1u;
     constexpr u32 kRasterTranslucencyModeAny = 2u;
-    const bool frameWBufferMode = !Triangles.empty() && ((Triangles[0].flags & kTriangleFlagWBuffer) != 0u);
+    const bool frameWBufferMode = std::any_of(
+        Triangles.begin(),
+        Triangles.end(),
+        [](const TriangleGpu& t) { return (t.flags & kTriangleFlagWBuffer) != 0u; }
+    );
     for (TriangleGpu& triangle : Triangles)
     {
-        if (frameWBufferMode)
+        if ((triangle.flags & kTriangleFlagWBuffer) != 0u)
         {
-            triangle.flags |= kTriangleFlagWBuffer;
             triangle.variantKey |= kVariantFlagWBuffer;
         }
         else
         {
-            triangle.flags &= ~kTriangleFlagWBuffer;
             triangle.variantKey &= ~kVariantFlagWBuffer;
         }
     }
-    auto resolveRasterWMode = [frameWBufferMode](u32 variantKey) -> u32 {
-        (void)variantKey;
-        return frameWBufferMode ? kRasterWModeW : kRasterWModeZ;
+    auto resolveRasterWMode = [](u32 variantKey) -> u32 {
+        if (variantKey == kVariantWildcard)
+            return kRasterWModeAny;
+        return (variantKey & kVariantFlagWBuffer) != 0u ? kRasterWModeW : kRasterWModeZ;
     };
     auto resolveRasterShadeMode = [](u32 variantKey) -> u32 {
         if (variantKey == kVariantWildcard)
@@ -13810,11 +13816,6 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     };
     bool graphicsFogWriteObserved = false;
     const auto fastOpaqueModulatePipelineFor = [&](const GraphicsPolygonDraw& draw, u32 pipelineIndex, bool noAttr, bool noDepthNoAttr = false) -> VkPipeline {
-        (void)draw;
-        (void)pipelineIndex;
-        (void)noAttr;
-        (void)noDepthNoAttr;
-        return VK_NULL_HANDLE;
         if ((dispCnt & (1u << 0u)) == 0u
             || draw.firstTriangle >= Triangles.size()
             || pipelineIndex >= GraphicsOpaqueFastModulatePipelines.size())
@@ -15002,7 +15003,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
 
     const u64 graphicsAlphaCpuStartNs = PerfNowNs();
     currentGraphicsDebugPassKind = GraphicsDebugPassKind::Alpha;
-    if (clearPlaneAlphaZero)
+    if (clearPlaneAlphaZero && alphaBlendEnabled)
     {
         for (const GraphicsPolygonDraw& draw : GraphicsPolygons)
         {
@@ -15015,19 +15016,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
             const bool needOpaque = (draw.flags & AcceleratedPolygonFlagNeedOpaquePass) != 0u;
             const u32 polyId = (draw.polyAttr >> 24u) & 0x3Fu;
 
-            if (isShadowMask)
-            {
-                const bool wBuffer = (Triangles[draw.firstTriangle].flags & kTriangleFlagWBuffer) != 0u;
-                const u32 wMode = wBuffer ? 1u : 0u;
-                const VkPipeline pipeline = wMode < GraphicsShadowMaskBgZeroPipelines.size()
-                    ? GraphicsShadowMaskBgZeroPipelines[wMode]
-                    : VK_NULL_HANDLE;
-                if (bindAndDrawGraphics(draw, pipeline, 0xFFu, 0x01u, 0xFFu))
-                    graphicsPassDebugStats.bgZeroShadowMask++;
-                continue;
-            }
-
-            if (!isTranslucent)
+            if (isShadowMask || !isTranslucent)
                 continue;
 
             if (needOpaque)
@@ -15123,7 +15112,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
         if (!isTranslucent)
             continue;
 
-        if (needOpaque)
+        if (needOpaque && (!clearPlaneAlphaZero || !alphaBlendEnabled))
         {
             drawNeedOpaquePass(draw);
             graphicsPassDebugStats.mainNeedOpaque++;
@@ -16419,7 +16408,7 @@ bool VulkanRenderer3D::submitGraphicsCaptureExportForCurrentFrame()
     CaptureLineExportCpuWindow.Add(0);
     PendingCaptureLineContext = nullptr;
     CaptureLinePending = true;
-    CaptureLineDataIsRgba8 = true;
+    CaptureLineDataIsRgba8 = false;
     PendingCaptureLineBufferSlot = static_cast<int>(ActiveCaptureLineBufferSlot);
     PendingCaptureLineRequiresPrimaryFence =
         useFastPathCaptureSource
@@ -20836,7 +20825,10 @@ bool VulkanRenderer3D::copyReadyCaptureLineToLineCache()
         std::memcpy(LineCache.data(), captureSource, LineCache.size() * sizeof(u32));
     }
 
-    constexpr u32 minUsefulExactCapturePixels = 256u;
+    // Legitimate dark, fade-in, or sparse 3D menu scenes in Display Capture
+    // are completely valid hardware frames and must never be rejected or replaced
+    // by stale phantom frames from older scenes.
+    constexpr u32 minUsefulExactCapturePixels = 0u;
     if (ActiveBackendMode == BackendMode::GraphicsHardware
         && !lineCacheHasUsefulColor(minUsefulExactCapturePixels))
     {

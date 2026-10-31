@@ -21,33 +21,50 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
-        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.1")
+        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.2")
             .removePrefix("v")
             .removePrefix("V")
         findPreference<Preference>("about_version")?.summary = vName
 
+        val actManager = requireContext().getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val memInfo = android.app.ActivityManager.MemoryInfo()
+        actManager?.getMemoryInfo(memInfo)
+        val totalRamGb = memInfo.totalMem / (1024 * 1024 * 1024.0)
+        val availRamGb = memInfo.availMem / (1024 * 1024 * 1024.0)
+        val ramFormatted = String.format(java.util.Locale.US, "%.1f / %.1f GB", availRamGb, totalRamGb)
+
+        val pm = requireContext().packageManager
+        val vulkanSupported = pm.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION)
+        val glesVersion = actManager?.deviceConfigurationInfo?.glEsVersion ?: "3.2"
+        val storagePath = requireContext().getExternalFilesDir(null)?.absolutePath ?: requireContext().filesDir.absolutePath
+
+        val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Build.SOC_MODEL.takeIf { !it.isNullOrBlank() } ?: Build.HARDWARE
+        } else {
+            Build.HARDWARE
+        }
+        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+
+        findPreference<Preference>("about_copy_diagnostics")?.summary =
+            "${Build.MANUFACTURER} ${Build.MODEL} • Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) • RAM: $ramFormatted • Vulkan: ${if (vulkanSupported) "Да" else "Нет"}"
+
         findPreference<Preference>("about_copy_diagnostics")?.setOnPreferenceClickListener {
-            val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Build.SOC_MODEL.takeIf { !it.isNullOrBlank() } ?: Build.HARDWARE
-            } else {
-                Build.HARDWARE
-            }
-            val pm = requireContext().packageManager
-            val vulkanSupported = pm.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION)
             val vulkanStatus = if (vulkanSupported) {
                 getString(R.string.v780_diagnostics_vulkan_supported)
             } else {
                 getString(R.string.v780_diagnostics_vulkan_unsupported)
             }
-            val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
 
             val diagnosticsText = buildString {
                 appendLine("STORM DS $vName")
                 appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE})")
                 appendLine("SoC: $soc (Hardware: ${Build.HARDWARE})")
                 appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-                appendLine("ABI: $abi")
+                appendLine("ABI: $abi (Supported: ${Build.SUPPORTED_ABIS.joinToString(", ")})")
+                appendLine("RAM: $ramFormatted (Available / Total)")
+                appendLine("OpenGL ES: $glesVersion")
                 appendLine("Vulkan: $vulkanStatus")
+                appendLine("Storage: $storagePath")
             }.trimEnd()
 
             val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager

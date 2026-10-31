@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.emulator.ui
 
 import androidx.compose.animation.core.animate
+import me.magnum.melonds.ui.theme.Manrope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -950,6 +951,7 @@ private sealed class LeaderboardRankingUiState {
 
 @Composable
 private fun EmptyAchievements(modifier: Modifier) {
+    val colors = watermelon
     Box(
         modifier = modifier.padding(32.dp),
         contentAlignment = Alignment.Center,
@@ -957,6 +959,8 @@ private fun EmptyAchievements(modifier: Modifier) {
         Text(
             text = stringResource(id = R.string.retro_achievements_no_achievements),
             textAlign = TextAlign.Center,
+            color = colors.text2,
+            fontFamily = Manrope,
         )
     }
 }

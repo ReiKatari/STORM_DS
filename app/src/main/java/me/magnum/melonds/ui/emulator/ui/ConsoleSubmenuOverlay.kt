@@ -304,13 +304,13 @@ fun ConsoleSubmenuOverlayDetailed(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0x22F59E0B))
-                                                .border(0.5.dp, Color(0x66F59E0B), RoundedCornerShape(6.dp))
+                                                .background(colors.green.copy(alpha = if (colors.isDark) 0.16f else 0.12f))
+                                                .border(0.5.dp, colors.green.copy(alpha = if (colors.isDark) 0.45f else 0.38f), RoundedCornerShape(6.dp))
                                                 .padding(horizontal = 6.dp, vertical = 2.dp),
                                         ) {
                                             Text(
                                                 text = item.value,
-                                                color = Color(0xFFFBBF24),
+                                                color = colors.green,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 lineHeight = 13.sp,

@@ -87,7 +87,7 @@ fun HeroCircleButton(
             .size(38.dp)
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.28f))
-            .let { if (isFocused) it.background(colors.red.copy(alpha = 0.6f)) else it }
+            .let { if (isFocused) it.background(colors.green.copy(alpha = 0.6f)) else it }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -147,7 +147,7 @@ fun SaveActionsButton(
                 .size(size)
                 .clip(RoundedCornerShape(13.dp))
                 .background(Color.Black.copy(alpha = 0.3f))
-                .let { if (isFocused) it.background(colors.red.copy(alpha = 0.5f)) else it }
+                .let { if (isFocused) it.background(colors.green.copy(alpha = 0.5f)) else it }
                 .clickable(interactionSource = interactionSource, indication = null) { menuOpen = true },
             contentAlignment = Alignment.Center,
         ) {
@@ -192,14 +192,14 @@ fun NetplayLobbyButton(
             .size(size)
             .clip(RoundedCornerShape(13.dp))
             .background(Color.Black.copy(alpha = 0.3f))
-            .let { if (isFocused) it.background(colors.red.copy(alpha = 0.5f)) else it }
+            .let { if (isFocused) it.background(colors.green.copy(alpha = 0.5f)) else it }
             .clickable(interactionSource = interactionSource, indication = null) { dialogOpen = true },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Filled.Wifi,
             contentDescription = "Netplay / NiFi",
-            tint = Color(0xFF00E5FF),
+            tint = colors.green,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -692,7 +692,7 @@ fun RomDetailsTabRow(
                     Text(
                         text = label.uppercase(),
                         color = when {
-                            isFocused -> colors.red
+                            isFocused -> colors.green
                             selected -> colors.text
                             else -> colors.text3
                         },

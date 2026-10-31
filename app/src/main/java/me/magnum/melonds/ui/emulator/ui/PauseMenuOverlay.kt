@@ -105,6 +105,8 @@ import me.magnum.melonds.ui.common.GamepadHintsFooter
 import me.magnum.melonds.ui.emulator.PauseMenuOption
 import me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption
 import me.magnum.melonds.ui.emulator.model.PauseMenu
+import androidx.compose.runtime.mutableIntStateOf
+import me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore
 import me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -119,7 +121,7 @@ import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import kotlin.time.Duration
 
-private fun optionIcon(option: PauseMenuOption): ImageVector {
+internal fun pauseOptionIcon(option: PauseMenuOption): ImageVector {
     return when (option) {
         RomPauseMenuOption.SAVE_STATE -> Icons.Filled.Download
         RomPauseMenuOption.LOAD_STATE -> Icons.Filled.Upload
@@ -179,6 +181,9 @@ fun PauseMenuOverlay(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     val context = LocalContext.current
+    val store = remember(context) { PauseMenuCustomizationStore(context) }
+    var showCustomizer by remember { mutableStateOf(false) }
+    var customizationVersion by remember { mutableIntStateOf(0) }
 
     val batteryManager = remember(context) {
         context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager
@@ -490,20 +495,8 @@ fun PauseMenuOverlay(
 
             Spacer(Modifier.height(4.dp))
 
-            val extendedOptions = remember {
-                setOf(
-                    RomPauseMenuOption.TAKE_SCREENSHOT,
-                    RomPauseMenuOption.SLOW_MOTION,
-                    RomPauseMenuOption.FRAME_ADVANCE,
-                    RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE,
-                )
-            }
-            val displayedOptions = remember(pauseMenu.options, isExtendedPauseMenuEnabled) {
-                if (isExtendedPauseMenuEnabled) {
-                    pauseMenu.options
-                } else {
-                    pauseMenu.options.filterNot { it in extendedOptions }
-                }
+            val displayedOptions = remember(pauseMenu.options, isExtendedPauseMenuEnabled, customizationVersion) {
+                store.getVisibleOrderedOptions(pauseMenu.options, isExtendedPauseMenuEnabled)
             }
 
             // Options Grid
@@ -513,6 +506,7 @@ fun PauseMenuOverlay(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
                     .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 6.dp),
             ) {
                 items(displayedOptions, key = { it.toString() }) { option ->
@@ -523,7 +517,7 @@ fun PauseMenuOverlay(
 
                     PauseOptionRow(
                         label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
-                        icon = optionIcon(option),
+                        icon = pauseOptionIcon(option),
                         badge = slowMoBadge,
                         highlighted = false,
                         destructive = isDestructive(option),
@@ -539,49 +533,89 @@ fun PauseMenuOverlay(
                 }
             }
 
-            // Extended Pause Menu Inline Toggle Row
-            if (onToggleExtendedPauseMenu != null) {
-                Row(
+            // Bottom Controls: Extended Pause Menu Toggle + Submenu Customizer Pill
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (onToggleExtendedPauseMenu != null) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                            .clickable { onToggleExtendedPauseMenu(!isExtendedPauseMenuEnabled) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f, fill = false),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DashboardCustomize,
+                                contentDescription = null,
+                                tint = if (isExtendedPauseMenuEnabled) colors.green else colors.text2,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.extended_pause_menu_toggle),
+                                color = colors.text,
+                                fontFamily = Manrope,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        Switch(
+                            checked = isExtendedPauseMenuEnabled,
+                            onCheckedChange = { onToggleExtendedPauseMenu(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = colors.green,
+                                checkedTrackColor = colors.greenDim,
+                                uncheckedThumbColor = colors.surface3,
+                                uncheckedTrackColor = colors.line,
+                            ),
+                        )
+                    }
+                }
+
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp)
+                        .height(44.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.surface2)
                         .border(1.dp, colors.line, RoundedCornerShape(12.dp))
-                        .clickable { onToggleExtendedPauseMenu(!isExtendedPauseMenuEnabled) }
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .bouncingClickable { showCustomizer = true }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.DashboardCustomize,
+                            imageVector = Icons.Filled.Tune,
                             contentDescription = null,
-                            tint = if (isExtendedPauseMenuEnabled) colors.green else colors.text2,
+                            tint = colors.green,
                             modifier = Modifier.size(16.dp),
                         )
                         Text(
-                            text = stringResource(R.string.extended_pause_menu_toggle),
+                            text = stringResource(R.string.v792_pause_customizer_btn),
                             color = colors.text,
                             fontFamily = Manrope,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
-
-                    Switch(
-                        checked = isExtendedPauseMenuEnabled,
-                        onCheckedChange = { onToggleExtendedPauseMenu(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = colors.green,
-                            checkedTrackColor = colors.greenDim,
-                            uncheckedThumbColor = colors.surface3,
-                            uncheckedTrackColor = colors.line,
-                        ),
-                    )
                 }
             }
 
@@ -589,6 +623,15 @@ fun PauseMenuOverlay(
             UnifiedBackButton(
                 onClick = onResume,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        }
+
+        if (showCustomizer) {
+            PauseMenuCustomizerDialog(
+                availableOptions = pauseMenu.options,
+                store = store,
+                onDismiss = { showCustomizer = false },
+                onApplied = { customizationVersion++ },
             )
         }
 

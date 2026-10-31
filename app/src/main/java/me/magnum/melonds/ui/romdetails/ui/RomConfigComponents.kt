@@ -90,7 +90,7 @@ fun ConfigRow(
                 if (isFocused) {
                     Modifier
                         .background(colors.surface3)
-                        .border(2.dp, colors.red, rowShape)
+                        .border(2.dp, colors.green, rowShape)
                 } else {
                     Modifier
                 },

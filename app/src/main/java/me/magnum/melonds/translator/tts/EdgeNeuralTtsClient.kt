@@ -12,6 +12,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -23,7 +24,10 @@ import java.util.concurrent.TimeUnit
  * Features:
  * - Direct 24kHz HD Edge Neural WebSocket streaming with Sec-MS-GEC token generation.
  * - Multi-Actor voice pool (native + multilingual neural voices) with automatic voice failover.
+ * - Proper SSML <lang xml:lang='...'> tagging for multilingual voices.
  * - Dynamic SSML prosody contours (pitch, rate, volume, and emotional intonation contour).
+ * - Optional OpenAI-compatible /v1/audio/speech neural endpoint fallback.
+ * - High-speed chunked HTTPS audio fallback.
  * - 16 MB in-memory LRU audio cache for zero-latency studio dialogue playback.
  */
 object EdgeNeuralTtsClient {
@@ -52,7 +56,9 @@ object EdgeNeuralTtsClient {
         volume: String = "default",
         contour: String = "",
         fallbackVoiceName: String? = null,
-        targetLangHint: String = "ru"
+        targetLangHint: String = "ru",
+        customAiKey: String = "",
+        customAiEndpoint: String = ""
     ): ByteArray? {
         val clean = text.trim()
         if (clean.isBlank()) return null
@@ -64,7 +70,11 @@ object EdgeNeuralTtsClient {
         }
 
         // 1. Primary: Edge Neural WebSocket Stream (24kHz HD Studio Quality) with requested actor
-        val wsAudio = synthesizeViaWebSocket(clean, voiceName, pitch, rate, volume, contour)
+        var wsAudio = synthesizeViaWebSocket(clean, voiceName, pitch, rate, volume, contour, targetLangHint)
+        // Retry once on reset / failure
+        if (wsAudio == null || wsAudio.isEmpty()) {
+            wsAudio = synthesizeViaWebSocket(clean, voiceName, pitch, rate, volume, contour, targetLangHint)
+        }
         if (wsAudio != null && wsAudio.isNotEmpty()) {
             synchronized(audioCache) {
                 audioCache.put(cacheKey, wsAudio)
@@ -74,7 +84,7 @@ object EdgeNeuralTtsClient {
 
         // 1b. Secondary Actor Failover: if a Multilingual voice was requested and failed, retry with native voice
         if (!fallbackVoiceName.isNullOrBlank() && fallbackVoiceName != voiceName) {
-            val fallbackWsAudio = synthesizeViaWebSocket(clean, fallbackVoiceName, pitch, rate, volume, contour)
+            val fallbackWsAudio = synthesizeViaWebSocket(clean, fallbackVoiceName, pitch, rate, volume, contour, targetLangHint)
             if (fallbackWsAudio != null && fallbackWsAudio.isNotEmpty()) {
                 synchronized(audioCache) {
                     audioCache.put(cacheKey, fallbackWsAudio)
@@ -83,17 +93,18 @@ object EdgeNeuralTtsClient {
             }
         }
 
-        // 2. Secondary Endpoint: Edge Cognitive Voice Endpoint
-        val effectiveVoice = fallbackVoiceName ?: voiceName
-        val cognitiveAudio = synthesizeViaCognitiveEdge(clean, effectiveVoice, pitch, rate)
-        if (cognitiveAudio != null && cognitiveAudio.isNotEmpty()) {
-            synchronized(audioCache) {
-                audioCache.put(cacheKey, cognitiveAudio)
+        // 2. Secondary Endpoint: Optional OpenAI-compatible /v1/audio/speech if custom AI key is present
+        if (customAiKey.isNotBlank()) {
+            val openAiAudio = synthesizeViaOpenAiCompatible(clean, customAiKey, customAiEndpoint, voiceName)
+            if (openAiAudio != null && openAiAudio.isNotEmpty()) {
+                synchronized(audioCache) {
+                    audioCache.put(cacheKey, openAiAudio)
+                }
+                return openAiAudio
             }
-            return cognitiveAudio
         }
 
-        // 3. Tertiary: High-speed Neural Stream Fallback (Zero-Failure)
+        // 3. Tertiary: High-speed Chunked Neural Stream Fallback (Zero-Failure)
         val fallbackAudio = synthesizeViaFallback(clean, targetLangHint.ifBlank { voiceName })
         if (fallbackAudio != null && fallbackAudio.isNotEmpty()) {
             synchronized(audioCache) {
@@ -119,7 +130,7 @@ object EdgeNeuralTtsClient {
         }
     }
 
-    private fun resolveVoiceLocale(voiceName: String): String {
+    fun resolveVoiceLocale(voiceName: String): String {
         val parts = voiceName.split("-")
         if (parts.size >= 2 && parts[0].length == 2 && parts[1].length == 2) {
             return "${parts[0].lowercase()}-${parts[1].uppercase()}"
@@ -138,13 +149,39 @@ object EdgeNeuralTtsClient {
         }
     }
 
+    private fun resolveTargetLangTag(targetLangHint: String): String {
+        val lower = targetLangHint.lowercase()
+        return when {
+            lower.startsWith("ru") -> "ru-RU"
+            lower.startsWith("ja") -> "ja-JP"
+            lower.startsWith("zh") -> "zh-CN"
+            lower.startsWith("de") -> "de-DE"
+            lower.startsWith("fr") -> "fr-FR"
+            lower.startsWith("es") -> "es-ES"
+            lower.startsWith("it") -> "it-IT"
+            lower.startsWith("ko") -> "ko-KR"
+            lower.startsWith("uk") -> "uk-UA"
+            else -> "en-US"
+        }
+    }
+
+    private fun escapeXml(text: String): String {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
+    }
+
     private suspend fun synthesizeViaWebSocket(
         text: String,
         voiceName: String,
         pitch: String,
         rate: String,
         volume: String,
-        contour: String
+        contour: String,
+        targetLangHint: String
     ): ByteArray? {
         var webSocketRef: WebSocket? = null
         return try {
@@ -177,18 +214,24 @@ object EdgeNeuralTtsClient {
                                 "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}"
                         webSocket.send(configMsg)
 
-                        val cleanText = text
-                            .replace("&", "&amp;")
-                            .replace("<", "&lt;")
-                            .replace(">", "&gt;")
-                            .replace("\"", "&quot;")
-                            .replace("'", "&apos;")
-                        val lang = resolveVoiceLocale(voiceName)
+                        val cleanText = escapeXml(text)
+                        val voiceLocale = resolveVoiceLocale(voiceName)
+                        val targetLangTag = resolveTargetLangTag(targetLangHint)
+                        val isMultilingual = voiceName.contains("Multilingual", ignoreCase = true)
+
+                        val speakLang = if (isMultilingual) voiceLocale else targetLangTag
                         val contourAttr = if (contour.isNotBlank()) " contour='$contour'" else ""
+
+                        val innerContent = if (isMultilingual && targetLangTag != voiceLocale) {
+                            "<lang xml:lang='$targetLangTag'>$cleanText</lang>"
+                        } else {
+                            cleanText
+                        }
+
                         val ssml = "X-RequestId:$requestId\r\nX-Timestamp:$timestamp\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n" +
-                                "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='$lang'>" +
+                                "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='$speakLang'>" +
                                 "<voice name='$voiceName'>" +
-                                "<prosody pitch='$pitch' rate='$rate' volume='$volume'$contourAttr>$cleanText</prosody>" +
+                                "<prosody pitch='$pitch' rate='$rate' volume='$volume'$contourAttr>$innerContent</prosody>" +
                                 "</voice></speak>"
                         webSocket.send(ssml)
                     }
@@ -210,7 +253,6 @@ object EdgeNeuralTtsClient {
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         if (text.contains("Path:turn.end")) {
-                            webSocket.close(1000, "Done")
                             val result = audioBuffer.toByteArray()
                             deferred.complete(if (result.isNotEmpty()) result else null)
                         }
@@ -240,22 +282,37 @@ object EdgeNeuralTtsClient {
         }
     }
 
-    private fun synthesizeViaCognitiveEdge(text: String, voiceName: String, pitch: String, rate: String): ByteArray? {
+    private fun synthesizeViaOpenAiCompatible(
+        text: String,
+        apiKey: String,
+        endpoint: String,
+        voiceName: String
+    ): ByteArray? {
         return try {
-            val cleanText = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
-            val lang = resolveVoiceLocale(voiceName)
-            val ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$lang'>" +
-                    "<voice name='$voiceName'>" +
-                    "<prosody pitch='$pitch' rate='$rate'>$cleanText</prosody>" +
-                    "</voice></speak>"
-
-            val mediaType = "application/ssml+xml; charset=utf-8".toMediaTypeOrNull()
-            val body = ssml.toRequestBody(mediaType)
+            val targetUrl = if (endpoint.contains("/v1/")) {
+                endpoint.substringBefore("/v1/") + "/v1/audio/speech"
+            } else {
+                "https://api.openai.com/v1/audio/speech"
+            }
+            val openAiVoice = when {
+                voiceName.contains("Svetlana", true) || voiceName.contains("Ava", true) -> "nova"
+                voiceName.contains("Emma", true) || voiceName.contains("Vivienne", true) -> "shimmer"
+                voiceName.contains("Brian", true) -> "fable"
+                voiceName.contains("Florian", true) -> "onyx"
+                else -> "alloy"
+            }
+            val json = JSONObject().apply {
+                put("model", "tts-1")
+                put("input", text)
+                put("voice", openAiVoice)
+                put("response_format", "mp3")
+            }
+            val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+            val body = json.toString().toRequestBody(mediaType)
             val request = Request.Builder()
-                .url("https://eastus.tts.speech.microsoft.com/cognitiveservices/v1")
-                .header("X-Microsoft-OutputFormat", "audio-24khz-48kbitrate-mono-mp3")
-                .header("Content-Type", "application/ssml+xml")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .url(targetUrl)
+                .header("Authorization", "Bearer $apiKey")
+                .header("Content-Type", "application/json")
                 .post(body)
                 .build()
 
@@ -291,7 +348,7 @@ object EdgeNeuralTtsClient {
                 val url = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=$lang&q=$encoded"
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile)")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
                     .build()
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful && response.body != null) {
@@ -305,7 +362,7 @@ object EdgeNeuralTtsClient {
                     val url = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=$lang&q=$encoded"
                     val request = Request.Builder()
                         .url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile)")
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
                         .build()
                     val response = client.newCall(request).execute()
                     if (response.isSuccessful && response.body != null) {

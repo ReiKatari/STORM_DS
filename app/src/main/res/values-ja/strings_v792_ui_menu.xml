@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">ポーズメニュー設定</string>
+    <string name="v792_pause_customizer_subtitle">項目の並び順と表示設定のカスタマイズ</string>
+    <string name="v792_pause_customizer_btn">メニュー設定</string>
+    <string name="v792_pause_badge_standard">基本</string>
+    <string name="v792_pause_badge_extended">拡張</string>
+    <string name="v792_pause_reset_defaults">初期設定に戻す</string>
+    <string name="v792_pause_done">完了</string>
+    <string name="v792_pause_move_up">上へ移動</string>
+    <string name="v792_pause_move_down">下へ移動</string>
+    <string name="v792_pause_item_visible">ポーズメニューに表示</string>
+    <string name="v792_pause_settings_protected">常時有効</string>
+    <string name="v792_general_pause_menu_title">ポーズサブメニュー管理</string>
+    <string name="v792_general_pause_menu_summary">ポーズ項目の表示と順序の管理</string>
+    <string name="v792_general_pause_menu_reset_confirm">ポーズ項目の並び順と表示設定を初期値に戻しますか？</string>
+    <string name="v792_general_pause_menu_reset_done">ポーズサブメニュー設定を初期値に戻しました</string>
+</resources>

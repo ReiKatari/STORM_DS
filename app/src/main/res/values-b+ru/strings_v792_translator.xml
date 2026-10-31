@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>Авто-режиссёр (Мужской и женский голос по полу персонажа)</item>
+        <item>Светлана Neural HD (Женский, тёплый)</item>
+        <item>Дмитрий Neural HD (Мужской, глубокий)</item>
+        <item>Ава Multilingual HD (Женский, выразительный аниме/JRPG)</item>
+        <item>Эндрю Multilingual HD (Мужской, кинематографичный)</item>
+        <item>Эмма Multilingual HD (Юный / звонкий тембр)</item>
+        <item>Брайан Multilingual HD (Спокойный рассказчик)</item>
+        <item>Вивьен Multilingual HD (Мягкий бархатный женский)</item>
+        <item>Флориан Multilingual HD (Харизматичный баритон)</item>
+        <item>Героиня JRPG (Светлана HD - Высокий живой тембр)</item>
+        <item>Антагонист / Рыцарь (Дмитрий HD - Низкий драматичный)</item>
+        <item>Системный офлайн-голос устройства (Без интернета)</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">Прозрачность кнопки перевода</string>
+    <string name="translator_floating_button_opacity_summary">Настройка прозрачности плавающей кнопки TR | LOG (по умолчанию 35%)</string>
+    <string name="translator_voice_pitch_title">Тембр голоса</string>
+    <string name="translator_voice_pitch_summary">Тонкая настройка высоты тона речи (-20%..+20%)</string>
+    <string name="translator_test_voice_title">Прослушать выбранный голос</string>
+    <string name="translator_test_voice_summary">Воспроизвести образец речи для проверки озвучки</string>
+    <string name="translator_test_voice_playing">Воспроизведение образца голоса...</string>
+    <string name="translator_glossary_gender_label">Пол персонажа</string>
+    <string name="translator_glossary_gender_male">Мужской (♂)</string>
+    <string name="translator_glossary_gender_female">Женский (♀)</string>
+    <string name="translator_glossary_gender_neutral">Нейтральный / Не задан</string>
+</resources>

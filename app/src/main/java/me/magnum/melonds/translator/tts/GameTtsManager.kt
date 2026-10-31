@@ -49,12 +49,69 @@ import kotlin.math.abs
  */
 class GameTtsManager(private val context: Context) {
 
+    private val memoryAudioCache = object : android.util.LruCache<String, ByteArray>(24 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+    private val diskCacheDir by lazy {
+        File(context.cacheDir, "storm_tts_cache").apply { if (!exists()) mkdirs() }
+    }
+
+    private data class QuadrupleVoice(
+        val primaryVoice: String,
+        val fallbackVoice: String,
+        val extraPitchHz: Int,
+        val extraRatePercent: Int
+    )
+
+    fun mapVoiceModel(rawModel: String?): String {
+        return when (rawModel?.trim()) {
+            null, "", "auto_multi", "auto_gender_neural" -> "auto_gender_neural"
+            "piper_ru_dmitri_medium" -> "edge_ru_dmitry"
+            "piper_ru_elena_medium" -> "edge_ru_svetlana"
+            "piper_ru_hero" -> "edge_multi_andrew"
+            "piper_ru_dark_knight" -> "edge_villain_deep"
+            "piper_ru_boss_grunt" -> "edge_villain_deep"
+            "piper_ru_joker_manic" -> "edge_multi_florian"
+            "piper_ru_deep_demon" -> "edge_villain_deep"
+            "piper_ru_elder" -> "edge_multi_brian"
+            "piper_ru_young_boy" -> "edge_multi_emma"
+            "piper_ru_young_girl" -> "edge_heroine_bright"
+            "piper_ru_royal_queen" -> "edge_multi_vivienne"
+            "piper_ru_merchant" -> "edge_multi_andrew"
+            "piper_ru_soldier" -> "edge_ru_dmitry"
+            "piper_ru_robot" -> "edge_villain_deep"
+            "piper_ru_narrator" -> "edge_multi_brian"
+            "piper_ru_tsundere" -> "edge_heroine_bright"
+            "piper_ru_whisper" -> "edge_ru_svetlana"
+            "piper_ru_fairy" -> "edge_multi_emma"
+            "piper_ru_pirate" -> "edge_villain_deep"
+            "piper_ru_mad_scientist" -> "edge_multi_florian"
+            "piper_ru_gentleman" -> "edge_multi_brian"
+            "piper_ru_ghost" -> "edge_multi_vivienne"
+            "piper_ru_knight" -> "edge_ru_dmitry"
+            "piper_ru_angelic" -> "edge_multi_ava"
+            else -> rawModel
+        }
+    }
+
+    private fun cleanOldDiskCache() {
+        try {
+            val files = diskCacheDir.listFiles() ?: return
+            if (files.size > 40) {
+                files.sortedBy { it.lastModified() }
+                    .take(files.size - 40)
+                    .forEach { it.delete() }
+            }
+        } catch (_: Throwable) {}
+    }
+
     companion object {
         private const val TAG = "GameTtsManager"
         const val PREF_TRANSLATOR_TTS_VOICE_ENGINE = "translator_tts_voice_engine"
         const val PREF_TRANSLATOR_TTS_LANG = "translator_tts_lang"
         const val PREF_TRANSLATOR_TTS_SPEED = "translator_tts_speed"
         const val PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE = "translator_local_voice_pitch_variance"
+        const val PREF_TRANSLATOR_VOICE_PITCH = "translator_voice_pitch"
 
         // 1. Dark Vigilantes & Heroes
         private val HERO_DARK_VIGILANTE_KEYWORDS = setOf(
@@ -872,16 +929,46 @@ class GameTtsManager(private val context: Context) {
         langCode: String,
         pitchVariance: Float
     ): ByteArray? {
-        val (primaryVoice, fallbackVoice) = selectNeuralVoiceActors(langCode, turn.profile, turn.persona)
+        val rawModel = preferences.getString("translator_local_voice_model", "auto_gender_neural")
+        val effectiveModel = mapVoiceModel(rawModel)
 
-        val basePitch = turn.profile.pitchHzOffset + turn.emotion.pitchDeltaHz
+        if (effectiveModel == "system_offline_best") {
+            return null
+        }
+
+        val userVoicePitchOffset = preferences.getInt(PREF_TRANSLATOR_VOICE_PITCH, 0).coerceIn(-20, 20)
+        val (primaryVoice, fallbackVoice, voiceExtraPitch, voiceExtraRate) = resolveVoiceActorsAndProsody(
+            effectiveModel, langCode, turn.profile, turn.persona
+        )
+
+        val basePitch = turn.profile.pitchHzOffset + turn.emotion.pitchDeltaHz + voiceExtraPitch + (userVoicePitchOffset * 2)
         val scaledPitchHz = (basePitch * pitchVariance.coerceIn(0.35f, 1.6f)).toInt().coerceIn(-48, 48)
-        val effectiveRatePct = (turn.profile.ratePercentOffset + turn.emotion.rateDeltaPercent).coerceIn(-28, 35)
+        val effectiveRatePct = (turn.profile.ratePercentOffset + turn.emotion.rateDeltaPercent + voiceExtraRate).coerceIn(-28, 35)
 
         val ssmlPitch = "${if (scaledPitchHz >= 0) "+" else ""}${scaledPitchHz}Hz"
         val ssmlRate = "${if (effectiveRatePct >= 0) "+" else ""}${effectiveRatePct}%"
 
-        return withTimeoutOrNull(5500L) {
+        val cacheKey = "$primaryVoice|$ssmlRate|$ssmlPitch|${turn.speechText}"
+        synchronized(memoryAudioCache) {
+            val mem = memoryAudioCache.get(cacheKey)
+            if (mem != null) return mem
+        }
+
+        val diskFile = File(diskCacheDir, "${cacheKey.hashCode()}.mp3")
+        if (diskFile.exists() && diskFile.length() > 0) {
+            try {
+                val bytes = diskFile.readBytes()
+                synchronized(memoryAudioCache) {
+                    memoryAudioCache.put(cacheKey, bytes)
+                }
+                return bytes
+            } catch (_: Throwable) {}
+        }
+
+        val customAiKey = preferences.getString("translator_custom_ai_key", "").orEmpty()
+        val customAiEndpoint = preferences.getString("translator_custom_ai_endpoint", "").orEmpty()
+
+        val audio = withTimeoutOrNull(5500L) {
             EdgeNeuralTtsClient.synthesize(
                 text = turn.speechText,
                 voiceName = primaryVoice,
@@ -890,8 +977,47 @@ class GameTtsManager(private val context: Context) {
                 volume = turn.emotion.volumeAttr,
                 contour = turn.emotion.ssmlContour,
                 fallbackVoiceName = fallbackVoice,
-                targetLangHint = langCode
+                targetLangHint = langCode,
+                customAiKey = customAiKey,
+                customAiEndpoint = customAiEndpoint
             )
+        }
+
+        if (audio != null && audio.isNotEmpty()) {
+            synchronized(memoryAudioCache) {
+                memoryAudioCache.put(cacheKey, audio)
+            }
+            try {
+                diskFile.writeBytes(audio)
+                cleanOldDiskCache()
+            } catch (_: Throwable) {}
+        }
+
+        return audio
+    }
+
+    private fun resolveVoiceActorsAndProsody(
+        modelKey: String,
+        langCode: String,
+        profile: SpeakerVoiceProfile,
+        persona: CharacterPersona
+    ): QuadrupleVoice {
+        return when (modelKey) {
+            "edge_ru_svetlana" -> QuadrupleVoice("ru-RU-SvetlanaNeural", "ru-RU-SvetlanaNeural", 0, 0)
+            "edge_ru_dmitry" -> QuadrupleVoice("ru-RU-DmitryNeural", "ru-RU-DmitryNeural", 0, 0)
+            "edge_multi_ava" -> QuadrupleVoice("en-US-AvaMultilingualNeural", "ru-RU-SvetlanaNeural", 0, 0)
+            "edge_multi_andrew" -> QuadrupleVoice("en-US-AndrewMultilingualNeural", "ru-RU-DmitryNeural", 0, 0)
+            "edge_multi_emma" -> QuadrupleVoice("en-US-EmmaMultilingualNeural", "ru-RU-SvetlanaNeural", 0, 0)
+            "edge_multi_brian" -> QuadrupleVoice("en-US-BrianMultilingualNeural", "ru-RU-DmitryNeural", 0, 0)
+            "edge_multi_vivienne" -> QuadrupleVoice("fr-FR-VivienneMultilingualNeural", "ru-RU-SvetlanaNeural", 0, 0)
+            "edge_multi_florian" -> QuadrupleVoice("de-DE-FlorianMultilingualNeural", "ru-RU-DmitryNeural", 0, 0)
+            "edge_heroine_bright" -> QuadrupleVoice("ru-RU-SvetlanaNeural", "en-US-AvaMultilingualNeural", 8, 6)
+            "edge_villain_deep" -> QuadrupleVoice("ru-RU-DmitryNeural", "en-US-AndrewMultilingualNeural", -12, -4)
+            else -> {
+                val (p, f) = selectNeuralVoiceActors(langCode, profile, persona)
+                val perCharacterPitch = (abs(profile.voiceActorIndex) % 3) * 3
+                QuadrupleVoice(p, f, perCharacterPitch, 0)
+            }
         }
     }
 

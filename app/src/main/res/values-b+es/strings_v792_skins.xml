@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="console_skin_entries_v792">
+        <item>STORM AURORA FLUID (Adaptable al tema)</item>
+        <item>STORM AURORA FLUID (Midnight Cyan-Violet)</item>
+        <item>STORM AURORA FLUID (Cyber Neon)</item>
+        <item>STORM AURORA FLUID (Imperial Gold)</item>
+        <item>Nintendo Switch (Neon Blue y Neon Red)</item>
+        <item>Nintendo Switch OLED (Pure White)</item>
+        <item>Nintendo Switch (Pro Gray)</item>
+        <item>Nintendo Switch Lite (Turquoise)</item>
+        <item>Nintendo DS Lite (Onyx Black)</item>
+        <item>Nintendo DS Lite (Polar White)</item>
+        <item>Nintendo DS Lite (Ice Blue)</item>
+        <item>Nintendo DS Lite (Coral Pink)</item>
+        <item>Nintendo DS Lite (Crimson Red)</item>
+        <item>Nintendo DSi XL (Matte Black)</item>
+        <item>Nintendo DSi XL (Burgundy Wine)</item>
+        <item>Nintendo DSi XL (Midnight Blue)</item>
+        <item>New Nintendo 3DS XL (Metallic Black)</item>
+        <item>New Nintendo 3DS XL (Galaxy Purple)</item>
+        <item>New Nintendo 3DS XL (SNES Retro)</item>
+        <item>New Nintendo 3DS XL (Hyrule Gold)</item>
+        <item>Nintendo 3DS (Aqua Blue)</item>
+    </string-array>
+    <string-array name="console_skin_values_v792">
+        <item>aurora_auto_theme</item>
+        <item>aurora_midnight</item>
+        <item>aurora_cyberpunk</item>
+        <item>aurora_imperial_gold</item>
+        <item>switch_neon</item>
+        <item>switch_oled_white</item>
+        <item>switch_pro_gray</item>
+        <item>switch_lite_turquoise</item>
+        <item>ds_lite_black</item>
+        <item>ds_lite_white</item>
+        <item>ds_lite_ice_blue</item>
+        <item>ds_lite_coral_pink</item>
+        <item>crimson_red</item>
+        <item>dsi_xl_black</item>
+        <item>dsi_xl_burgundy</item>
+        <item>dsi_xl_blue</item>
+        <item>n3ds_black</item>
+        <item>n3ds_galaxy</item>
+        <item>n3ds_snes</item>
+        <item>n3ds_hyrule</item>
+        <item>n3ds_aqua</item>
+    </string-array>
+</resources>

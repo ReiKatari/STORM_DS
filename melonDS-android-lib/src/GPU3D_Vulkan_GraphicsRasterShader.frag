@@ -281,15 +281,15 @@ Color6A5 sampleTexture(uint polyAttr)
     int sampleS = int(floor(texcoord.x));
     int sampleT = int(floor(texcoord.y));
 
+    sampleS = wrapTexelCoord(sampleS, int(texWidth), repeatS, mirrorS);
+    sampleT = wrapTexelCoord(sampleT, int(texHeight), repeatT, mirrorT);
+
 #if MELONDS_FAST_OPAQUE_MODULATE != 0 && MELONDS_FAST_TEXTURE_PUSH_CONSTANTS != 0
     vec2 sampledTexelCenter = vec2(float(sampleS) + 0.5, float(sampleT) + 0.5);
     vec2 sampledUv = sampledTexelCenter / vec2(float(texWidth), float(texHeight));
     vec4 normalizedTexel = texture(normTexArrays[texArrayIndex], vec3(sampledUv, float(texLayer)));
     uvec4 texel = uvec4(clamp(floor(normalizedTexel * 255.0 + vec4(0.5)), vec4(0.0), vec4(255.0)));
 #else
-    sampleS = wrapTexelCoord(sampleS, int(texWidth), repeatS, mirrorS);
-    sampleT = wrapTexelCoord(sampleT, int(texHeight), repeatT, mirrorT);
-
     uvec4 texel = fetchTextureArrayTexel(texArrayIndex, ivec3(sampleS, sampleT, int(texLayer)));
 #endif
 #if MELONDS_FAST_OPAQUE_FULL_ALPHA != 0
@@ -306,7 +306,14 @@ vec3 sampleFastNormalizedTexel()
     uint texArrayIndex = pc.variantKey & 0xFFFFu;
     uint texHeight = (pc.passIndex >> 16u) & 0xFFFFu;
     uint texWidth = pc.passIndex & 0xFFFFu;
-    vec2 sampledTexelCenter = floor(fTexcoord) + vec2(0.5);
+    uint texParam = pc.triangleBase;
+    bool repeatS = (texParam & (1u << 16u)) != 0u;
+    bool repeatT = (texParam & (1u << 17u)) != 0u;
+    bool mirrorS = (texParam & (1u << 18u)) != 0u;
+    bool mirrorT = (texParam & (1u << 19u)) != 0u;
+    int sampleS = wrapTexelCoord(int(floor(fTexcoord.x)), int(texWidth), repeatS, mirrorS);
+    int sampleT = wrapTexelCoord(int(floor(fTexcoord.y)), int(texHeight), repeatT, mirrorT);
+    vec2 sampledTexelCenter = vec2(float(sampleS) + 0.5, float(sampleT) + 0.5);
     vec2 sampledUv = sampledTexelCenter / vec2(float(texWidth), float(texHeight));
     vec4 normalizedTexel = texture(normTexArrays[texArrayIndex], vec3(sampledUv, float(texLayer)));
     return clamp(normalizedTexel.rgb * 255.0, vec3(0.0), vec3(63.0));

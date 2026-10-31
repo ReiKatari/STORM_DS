@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import me.magnum.melonds.domain.model.VulkanDriverInfo
 import me.magnum.melonds.domain.model.VulkanDriverMode
 import me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriver
+import me.magnum.melonds.ui.theme.watermelon
 
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -90,10 +91,11 @@ enum class DriverStatus {
 
 @Composable
 fun DriverStatusBadge(status: DriverStatus, modifier: Modifier = Modifier) {
+    val colors = watermelon
     val (bg, fg, label) = when (status) {
-        DriverStatus.ACTIVE -> Triple(Color(0xFF059669), Color.White, "Включен")
-        DriverStatus.INSTALLED -> Triple(Color(0xFF0284C7), Color.White, "Установлен")
-        DriverStatus.NOT_INSTALLED -> Triple(Color(0xFF64748B), Color.White, "Отсутствует")
+        DriverStatus.ACTIVE -> Triple(colors.green, if (colors.isDark) Color.Black else Color.White, "Включен")
+        DriverStatus.INSTALLED -> Triple(colors.green.copy(alpha = 0.2f), colors.green, "Установлен")
+        DriverStatus.NOT_INSTALLED -> Triple(colors.text3.copy(alpha = 0.3f), colors.text2, "Отсутствует")
     }
     Surface(
         shape = RoundedCornerShape(6.dp),
@@ -347,13 +349,14 @@ fun RecommendedDriverBanner(
     isActive: Boolean,
     onActionClick: () -> Unit,
 ) {
+    val colors = watermelon
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        backgroundColor = if (isActive) Color(0xFF059669).copy(alpha = 0.15f)
-            else if (isInstalled) MaterialTheme.colors.primary.copy(alpha = 0.15f)
+        backgroundColor = if (isActive) colors.green.copy(alpha = if (colors.isDark) 0.18f else 0.12f)
+            else if (isInstalled) colors.green.copy(alpha = 0.10f)
             else MaterialTheme.colors.surface,
         elevation = 2.dp
     ) {
@@ -367,7 +370,7 @@ fun RecommendedDriverBanner(
                     Icon(
                         Icons.Default.Star,
                         contentDescription = null,
-                        tint = Color(0xFFFFB300),
+                        tint = colors.green,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -375,7 +378,7 @@ fun RecommendedDriverBanner(
                         text = "Рекомендуемый драйвер",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = MaterialTheme.colors.primary
+                        color = colors.green
                     )
                 }
                 val status = if (isActive) DriverStatus.ACTIVE else if (isInstalled) DriverStatus.INSTALLED else DriverStatus.NOT_INSTALLED
@@ -421,7 +424,7 @@ fun RecommendedDriverBanner(
                         enabled = !isActive,
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
-                            backgroundColor = if (isActive) Color(0xFF059669) else MaterialTheme.colors.primary
+                            backgroundColor = colors.green
                         )
                     ) {
                         Icon(
@@ -514,10 +517,11 @@ fun OnlineDriverCard(
     onDownloadClick: () -> Unit,
     onSelectClick: () -> Unit,
 ) {
+    val colors = watermelon
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        backgroundColor = if (isActive) Color(0xFF059669).copy(alpha = 0.12f)
+        backgroundColor = if (isActive) colors.green.copy(alpha = if (colors.isDark) 0.16f else 0.10f)
         else MaterialTheme.colors.surface,
         elevation = 2.dp
     ) {
@@ -538,14 +542,14 @@ fun OnlineDriverCard(
                         if (driver.isRecommended) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
-                                color = Color(0xFFFFB300),
+                                color = colors.green,
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
                                     text = "ТОП",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.Black,
+                                    color = if (colors.isDark) Color.Black else Color.White,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                 )
                             }
@@ -594,16 +598,16 @@ fun OnlineDriverCard(
                     if (isActive) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF059669).copy(alpha = 0.2f),
+                            color = colors.green.copy(alpha = 0.2f),
                             modifier = Modifier.padding(4.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF059669))
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.green)
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Включен", fontWeight = FontWeight.Bold, color = Color(0xFF059669), fontSize = 13.sp)
+                                Text("Включен", fontWeight = FontWeight.Bold, color = colors.green, fontSize = 13.sp)
                             }
                         }
                     } else if (isInstalled) {
@@ -648,6 +652,7 @@ fun InstalledDriversList(
     ) {
         // System Default Option
         item {
+            val colors = watermelon
             val isSysActive = driverMode == VulkanDriverMode.SYSTEM
             Card(
                 modifier = Modifier
@@ -655,7 +660,7 @@ fun InstalledDriversList(
                     .clickable { onSelectSystem() },
                 shape = RoundedCornerShape(12.dp),
                 backgroundColor = if (isSysActive)
-                    Color(0xFF059669).copy(alpha = 0.15f)
+                    colors.green.copy(alpha = if (colors.isDark) 0.18f else 0.12f)
                 else MaterialTheme.colors.surface,
                 elevation = 2.dp
             ) {
@@ -669,7 +674,7 @@ fun InstalledDriversList(
                         selected = isSysActive,
                         onClick = { onSelectSystem() },
                         colors = androidx.compose.material.RadioButtonDefaults.colors(
-                            selectedColor = if (isSysActive) Color(0xFF059669) else MaterialTheme.colors.primary
+                            selectedColor = colors.green
                         )
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -693,6 +698,7 @@ fun InstalledDriversList(
 
         // Custom Installed Drivers
         items(installedDrivers, key = { it.id }) { driver ->
+            val colors = watermelon
             val isSelected = driverMode == VulkanDriverMode.CUSTOM && selectedDriverId == driver.id
 
             Card(
@@ -701,7 +707,7 @@ fun InstalledDriversList(
                     .clickable { onSelectCustom(driver.id) },
                 shape = RoundedCornerShape(12.dp),
                 backgroundColor = if (isSelected)
-                    Color(0xFF059669).copy(alpha = 0.15f)
+                    colors.green.copy(alpha = if (colors.isDark) 0.18f else 0.12f)
                 else MaterialTheme.colors.surface,
                 elevation = 2.dp
             ) {
@@ -715,7 +721,7 @@ fun InstalledDriversList(
                         selected = isSelected,
                         onClick = { onSelectCustom(driver.id) },
                         colors = androidx.compose.material.RadioButtonDefaults.colors(
-                            selectedColor = if (isSelected) Color(0xFF059669) else MaterialTheme.colors.primary
+                            selectedColor = colors.green
                         )
                     )
                     Spacer(modifier = Modifier.width(8.dp))

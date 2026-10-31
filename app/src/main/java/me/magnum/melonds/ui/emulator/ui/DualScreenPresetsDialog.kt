@@ -283,13 +283,13 @@ private fun DualScreenPresetsContent(
                         androidx.compose.material.Icon(
                             imageVector = Icons.Filled.Info,
                             contentDescription = null,
-                            tint = WatermelonColors.gold,
+                            tint = colors.green,
                             modifier = Modifier.size(17.dp),
                         )
                         Spacer(Modifier.width(7.dp))
                         Text(
                             text = stringResource(R.string.dual_screen_info_title),
-                            color = WatermelonColors.gold,
+                            color = colors.green,
                             fontFamily = Manrope,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,

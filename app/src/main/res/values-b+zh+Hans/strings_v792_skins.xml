@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="console_skin_entries_v792">
+        <item>STORM AURORA FLUID (跟随应用主题)</item>
+        <item>STORM AURORA FLUID (午夜青紫)</item>
+        <item>STORM AURORA FLUID (赛博霓虹)</item>
+        <item>STORM AURORA FLUID (帝国璀璨金)</item>
+        <item>Nintendo Switch (霓虹红蓝)</item>
+        <item>Nintendo Switch OLED (纯白)</item>
+        <item>Nintendo Switch (专业灰)</item>
+        <item>Nintendo Switch Lite (孔雀青)</item>
+        <item>Nintendo DS Lite (玛瑙黑)</item>
+        <item>Nintendo DS Lite (极光白)</item>
+        <item>Nintendo DS Lite (冰雪蓝)</item>
+        <item>Nintendo DS Lite (珊瑚粉)</item>
+        <item>Nintendo DS Lite (绯红黑)</item>
+        <item>Nintendo DSi XL (哑光黑)</item>
+        <item>Nintendo DSi XL (勃艮第红)</item>
+        <item>Nintendo DSi XL (午夜蓝)</item>
+        <item>New Nintendo 3DS XL (金属黑)</item>
+        <item>New Nintendo 3DS XL (银河紫)</item>
+        <item>New Nintendo 3DS XL (SFC复古)</item>
+        <item>New Nintendo 3DS XL (海拉鲁金)</item>
+        <item>Nintendo 3DS (水光蓝)</item>
+    </string-array>
+    <string-array name="console_skin_values_v792">
+        <item>aurora_auto_theme</item>
+        <item>aurora_midnight</item>
+        <item>aurora_cyberpunk</item>
+        <item>aurora_imperial_gold</item>
+        <item>switch_neon</item>
+        <item>switch_oled_white</item>
+        <item>switch_pro_gray</item>
+        <item>switch_lite_turquoise</item>
+        <item>ds_lite_black</item>
+        <item>ds_lite_white</item>
+        <item>ds_lite_ice_blue</item>
+        <item>ds_lite_coral_pink</item>
+        <item>crimson_red</item>
+        <item>dsi_xl_black</item>
+        <item>dsi_xl_burgundy</item>
+        <item>dsi_xl_blue</item>
+        <item>n3ds_black</item>
+        <item>n3ds_galaxy</item>
+        <item>n3ds_snes</item>
+        <item>n3ds_hyrule</item>
+        <item>n3ds_aqua</item>
+    </string-array>
+</resources>

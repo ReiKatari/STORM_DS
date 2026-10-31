@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.romdetails.ui
 
 import android.widget.Toast
+import me.magnum.melonds.ui.theme.Manrope
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -709,6 +710,7 @@ private fun Loading(modifier: Modifier) {
 
 @Composable
 private fun NoAchievements(modifier: Modifier) {
+    val colors = watermelon
     Box(
         modifier = modifier.padding(32.dp),
         contentAlignment = Alignment.Center,
@@ -717,6 +719,8 @@ private fun NoAchievements(modifier: Modifier) {
             modifier = Modifier.focusable(),
             text = stringResource(id = R.string.retro_achievements_no_achievements),
             textAlign = TextAlign.Center,
+            color = colors.text2,
+            fontFamily = Manrope,
         )
     }
 }

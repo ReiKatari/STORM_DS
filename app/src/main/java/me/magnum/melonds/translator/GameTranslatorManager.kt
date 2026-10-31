@@ -50,6 +50,7 @@ class GameTranslatorManager(
         const val PREF_TRANSLATOR_BUBBLE_OPACITY = "translator_bubble_opacity"
         const val PREF_TRANSLATOR_FONT_SIZE_SCALE = "translator_font_size_scale"
         const val PREF_TRANSLATOR_SHOW_FLOATING_BUTTON = "translator_show_floating_button"
+        const val PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY = "translator_floating_button_opacity"
         const val PREF_TRANSLATOR_SAVED_REGIONS = "translator_saved_regions"
         const val PREF_TRANSLATOR_TTS_ENABLED = "translator_tts_enabled"
         const val PREF_TRANSLATOR_DEEPL_KEY = "translator_deepl_key"
@@ -98,6 +99,8 @@ class GameTranslatorManager(
     private val translationCache = TranslationCache(activity)
 
     // User Glossary Manager (.stormdict.json)
+    val characterGenderStore by lazy { me.magnum.melonds.translator.grammar.CharacterGenderStore(activity) }
+
     val glossaryManager by lazy {
         UserGlossaryManager(activity) { term ->
             invalidateGlossaryTerm(term)
@@ -114,6 +117,7 @@ class GameTranslatorManager(
         when (key) {
             PREF_TRANSLATOR_ENABLED,
             PREF_TRANSLATOR_SHOW_FLOATING_BUTTON,
+            PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY,
             PREF_TRANSLATOR_OVERLAY_STYLE,
             PREF_TRANSLATOR_BUBBLE_OPACITY,
             PREF_TRANSLATOR_FONT_SIZE_SCALE,
@@ -160,6 +164,7 @@ class GameTranslatorManager(
         ocrContextGraph.setActiveGame(activity, storageKey)
         translationCache.setGameKey(storageKey)
         glossaryManager.setGameKey(storageKey)
+        characterGenderStore.loadForGame(storageKey)
         loadRegionsForCurrentGame()
     }
 
@@ -310,12 +315,22 @@ class GameTranslatorManager(
         overlayView?.enterRegionEditMode()
     }
 
+    fun setTemporarilySuppressedByModal(suppressed: Boolean) {
+        overlayView?.setTemporarilySuppressedByModal(suppressed)
+    }
+
+    fun setFloatingButtonOpacity(opacity: Float) {
+        overlayView?.setFloatingButtonOpacity(opacity)
+    }
+
     fun syncOverlaySettings() {
         val overlay = overlayView ?: return
         val enabled = isEnabled
         val showBtn = enabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, true)
         overlay.visibility = if (enabled) View.VISIBLE else View.GONE
         overlay.showFloatingButton = showBtn
+        val btnOpacity = preferences.getInt(PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY, 35).coerceIn(5, 100) / 100f
+        overlay.setFloatingButtonOpacity(btnOpacity)
         overlay.overlayStyle = TranslatorOverlayStyle.fromPreference(preferences.getString(PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match"))
         overlay.bubbleOpacity = preferences.getInt(PREF_TRANSLATOR_BUBBLE_OPACITY, 90) / 100f
         overlay.fontSizeScale = preferences.getInt(PREF_TRANSLATOR_FONT_SIZE_SCALE, 100) / 100f
@@ -720,9 +735,17 @@ class GameTranslatorManager(
                 }
                 lastTranslatedRawText = currentMerged
 
+                val (activeSpeakerName, activeSpeakerGender) = me.magnum.melonds.translator.grammar.SpeakerAndGenderResolver.resolveSpeakerAndGender(
+                    blocks = blocks,
+                    gameKey = getGameStorageKey(),
+                    genderStore = characterGenderStore,
+                    glossary = glossaryManager
+                )
+                ocrContextGraph.setExplicitActiveSpeaker(activeSpeakerName, activeSpeakerGender)
+
                 val engine = resolveEngine()
                 val engineType = preferences.getString(PREF_TRANSLATOR_ENGINE, "google") ?: "google"
-                Log.i(TAG, "Translating ${blocks.size} blocks with ${engine.javaClass.simpleName} ($sourceLang -> $targetLang)")
+                Log.i(TAG, "Translating ${blocks.size} blocks with ${engine.javaClass.simpleName} ($sourceLang -> $targetLang) [Speaker: $activeSpeakerName, Gender: $activeSpeakerGender]")
 
                 val preparedTexts = blocks.map { block ->
                     val prepared = me.magnum.melonds.translator.util.GameTextCleaner.prepareForTranslation(block.originalText)
@@ -736,9 +759,15 @@ class GameTranslatorManager(
                     val textToTranslate = preparedTexts[i]
                     val cached = translationCache.get(engineType, sourceLang, targetLang, textToTranslate)
                     if (cached != null) {
-                        val postCached = glossaryManager.applyPostTranslation(blocks[i].originalText, cached)
-                        blocks[i].translatedText = postCached
-                        ocrContextGraph.recordDialogueTurn(textToTranslate, postCached)
+                        val postCached = glossaryManager.applyPostTranslation(blocks[i].originalText, cached, targetLang)
+                        val harmonizedCached = me.magnum.melonds.translator.grammar.RussianGrammarAndDeclensionEngine.harmonizeGenderAndStyle(
+                            text = postCached,
+                            speakerGender = activeSpeakerGender,
+                            speakerName = activeSpeakerName,
+                            targetLang = targetLang
+                        )
+                        blocks[i].translatedText = harmonizedCached
+                        ocrContextGraph.recordDialogueTurn(textToTranslate, harmonizedCached)
                     } else {
                         uncachedBlocks.add(i)
                         uncachedTexts.add(textToTranslate)
@@ -770,7 +799,13 @@ class GameTranslatorManager(
                             val sanitized = rawTranslated?.let { raw ->
                                 val polished = me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
                                 val contextPolished = ocrContextGraph.sanitizeTranslation(polished, targetLang)
-                                glossaryManager.applyPostTranslation(block.originalText, contextPolished)
+                                val postGlossary = glossaryManager.applyPostTranslation(block.originalText, contextPolished, targetLang)
+                                me.magnum.melonds.translator.grammar.RussianGrammarAndDeclensionEngine.harmonizeGenderAndStyle(
+                                    text = postGlossary,
+                                    speakerGender = activeSpeakerGender,
+                                    speakerName = activeSpeakerName,
+                                    targetLang = targetLang
+                                )
                             }
                             val finalTranslation = sanitized?.takeIf { it.isNotBlank() } ?: block.originalText
                             if (finalTranslation.isNotBlank() &&
@@ -807,7 +842,9 @@ class GameTranslatorManager(
                             sourceText = fullSource,
                             translatedText = fullTranslation,
                             sourceLang = sourceLang,
-                            targetLang = targetLang
+                            targetLang = targetLang,
+                            speakerName = activeSpeakerName,
+                            speakerGender = activeSpeakerGender.name
                         )
                     }
                 }

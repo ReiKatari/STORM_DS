@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="console_skin_entries_v792">
+        <item>STORM AURORA FLUID (アプリテーマ連動)</item>
+        <item>STORM AURORA FLUID (ミッドナイトシアンバイオレット)</item>
+        <item>STORM AURORA FLUID (サイバーネオン)</item>
+        <item>STORM AURORA FLUID (インペリアルゴールド)</item>
+        <item>Nintendo Switch (ネオンブルーとネオンレッド)</item>
+        <item>Nintendo Switch OLED (ピュアホワイト)</item>
+        <item>Nintendo Switch (プログレー)</item>
+        <item>Nintendo Switch Lite (ターコイズ)</item>
+        <item>Nintendo DS Lite (オニキスブラック)</item>
+        <item>Nintendo DS Lite (ポーラーホワイト)</item>
+        <item>Nintendo DS Lite (アイスブルー)</item>
+        <item>Nintendo DS Lite (コーラルピンク)</item>
+        <item>Nintendo DS Lite (クリムゾンレッド)</item>
+        <item>Nintendo DSi XL (マットブラック)</item>
+        <item>Nintendo DSi XL (バーガンディワイン)</item>
+        <item>Nintendo DSi XL (ミッドナイトブルー)</item>
+        <item>New Nintendo 3DS XL (メタリックブラック)</item>
+        <item>New Nintendo 3DS XL (ギャラクシーパープル)</item>
+        <item>New Nintendo 3DS XL (スーファミエディション)</item>
+        <item>New Nintendo 3DS XL (ハイラルゴールド)</item>
+        <item>Nintendo 3DS (アクアブルー)</item>
+    </string-array>
+    <string-array name="console_skin_values_v792">
+        <item>aurora_auto_theme</item>
+        <item>aurora_midnight</item>
+        <item>aurora_cyberpunk</item>
+        <item>aurora_imperial_gold</item>
+        <item>switch_neon</item>
+        <item>switch_oled_white</item>
+        <item>switch_pro_gray</item>
+        <item>switch_lite_turquoise</item>
+        <item>ds_lite_black</item>
+        <item>ds_lite_white</item>
+        <item>ds_lite_ice_blue</item>
+        <item>ds_lite_coral_pink</item>
+        <item>crimson_red</item>
+        <item>dsi_xl_black</item>
+        <item>dsi_xl_burgundy</item>
+        <item>dsi_xl_blue</item>
+        <item>n3ds_black</item>
+        <item>n3ds_galaxy</item>
+        <item>n3ds_snes</item>
+        <item>n3ds_hyrule</item>
+        <item>n3ds_aqua</item>
+    </string-array>
+</resources>

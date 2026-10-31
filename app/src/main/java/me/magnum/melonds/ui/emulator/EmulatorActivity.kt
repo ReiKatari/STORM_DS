@@ -627,7 +627,7 @@ class EmulatorActivity : AppCompatActivity() {
     private val isLidClosedState = mutableStateOf(false)
     private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
     private val consoleSkinEnabledState = mutableStateOf(false)
-    private val consoleSkinThemeState = mutableStateOf(me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK)
+    private val consoleSkinThemeState = mutableStateOf(me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.AURORA_AUTO_THEME)
     private val activeSlot2AddonState = mutableStateOf(0)
     private var solarSensorOverrideLevel = -1 // -1 = Auto (phone ambient light sensor), 0..10 = manual bars
 
@@ -876,6 +876,24 @@ class EmulatorActivity : AppCompatActivity() {
                 val topConsoleNode = consoleOverlayStack.lastOrNull()
                 val pauseMenu = pauseMenuState.value
                 val rewindWindow = rewindOverlayState.value
+
+                val isAnyComposeModalOpen = rewindWindow != null ||
+                    showDualScreenPresets.value ||
+                    showScreenLayoutDialog.value ||
+                    topConsoleNode != null ||
+                    showQuickSlotCarousel.value ||
+                    saveStatesData != null ||
+                    showAchievementList.value ||
+                    cheatsOverlayRomInfo.value != null ||
+                    pauseMenu != null ||
+                    showSlowMotionSpeedDialog.value ||
+                    raHardcoreLoadConfirmTarget.value != null ||
+                    raHardcorePeriodicLoadConfirm.value ||
+                    showBootAnimation.value ||
+                    isLidClosedState.value
+                LaunchedEffect(isAnyComposeModalOpen) {
+                    translatorManager.setTemporarilySuppressedByModal(isAnyComposeModalOpen)
+                }
 
                 Box(Modifier.fillMaxSize()) {
                 when {
@@ -3596,6 +3614,9 @@ class EmulatorActivity : AppCompatActivity() {
                     dumpVulkanDebugReportFromMenu()
                 })
             }
+            add(romSettingsMenuLabel(getString(R.string.video_console_skin_type_title), currentConsoleSkinLabel(prefs)) to {
+                showConsoleSkinChoiceOverlay()
+            })
             add(romSettingsMenuLabel(getString(R.string.rom_settings_slot2_addon_title), slot2AddonLabel(activeSlot2AddonState.value)) to {
                 showSlot2AddonChoiceOverlay()
             })
@@ -3620,6 +3641,53 @@ class EmulatorActivity : AppCompatActivity() {
         } else {
             pushConsoleOverlay(newNode)
         }
+    }
+
+    private fun currentConsoleSkinLabel(prefs: android.content.SharedPreferences): String {
+        if (!prefs.getBoolean("video_console_skin_enabled", false)) {
+            return getString(R.string.off)
+        }
+        val skinValues = resources.getStringArray(R.array.console_skin_values_v792)
+        val skinEntries = resources.getStringArray(R.array.console_skin_entries_v792)
+        val currentKey = prefs.getString("video_console_skin_type", "aurora_auto_theme") ?: "aurora_auto_theme"
+        val idx = skinValues.indexOf(currentKey)
+        return if (idx in skinEntries.indices) skinEntries[idx] else skinEntries.firstOrNull().orEmpty()
+    }
+
+    private fun showConsoleSkinChoiceOverlay() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val skinValues = resources.getStringArray(R.array.console_skin_values_v792)
+        val skinEntries = resources.getStringArray(R.array.console_skin_entries_v792)
+        val allLabels = listOf(getString(R.string.off)) + skinEntries.toList()
+        val isEnabled = prefs.getBoolean("video_console_skin_enabled", false)
+        val currentKey = prefs.getString("video_console_skin_type", "aurora_auto_theme") ?: "aurora_auto_theme"
+        val selectedIdx = if (!isEnabled) {
+            0
+        } else {
+            val found = skinValues.indexOf(currentKey)
+            if (found >= 0) found + 1 else 1
+        }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_console_skin_type_title),
+                labels = allLabels,
+                selectedIndex = selectedIdx,
+                onSelect = { which ->
+                    if (which == 0) {
+                        prefs.edit().putBoolean("video_console_skin_enabled", false).apply()
+                    } else {
+                        val chosenKey = skinValues.getOrElse(which - 1) { "aurora_auto_theme" }
+                        prefs.edit()
+                            .putBoolean("video_console_skin_enabled", true)
+                            .putString("video_console_skin_type", chosenKey)
+                            .apply()
+                    }
+                    setupConsoleSkin()
+                    updateRendererScreenAreas()
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
     }
 
         private fun fastForwardMultiplierLabel(valueStr: String): String {
@@ -3708,15 +3776,8 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
         }
         val skinEnabled = isConsoleSkinActive()
-        val skinType = prefs.getString("video_console_skin_type", "ds_lite_black") ?: "ds_lite_black"
-        consoleSkinThemeState.value = when (skinType) {
-            "ds_lite_white" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_WHITE
-            "dsi_xl_blue" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DSI_XL_BLUE
-            "crimson_red" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.CRIMSON_RED
-            "n3ds_aqua" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_AQUA
-            "n3ds_black" -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.N3DS_BLACK
-            else -> me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.DS_LITE_BLACK
-        }
+        val skinType = prefs.getString("video_console_skin_type", "aurora_auto_theme") ?: "aurora_auto_theme"
+        consoleSkinThemeState.value = me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.fromKey(skinType)
         consoleSkinEnabledState.value = skinEnabled
         binding.layoutConsoleSkin.visibility = if (skinEnabled) View.VISIBLE else View.GONE
         val shiftPx = (14f * resources.displayMetrics.density).toInt()

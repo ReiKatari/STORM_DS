@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>Sutradara otomatis (Suara pria dan wanita berdasarkan gender)</item>
+        <item>Svetlana Neural HD (Wanita, ramah)</item>
+        <item>Dmitry Neural HD (Pria, dalam)</item>
+        <item>Ava Multilingual HD (Wanita, ekspresif anime/JRPG)</item>
+        <item>Andrew Multilingual HD (Pria, sinematik)</item>
+        <item>Emma Multilingual HD (Timbre muda / jernih)</item>
+        <item>Brian Multilingual HD (Narator tenang)</item>
+        <item>Vivienne Multilingual HD (Suara wanita lembut beludru)</item>
+        <item>Florian Multilingual HD (Bariton karismatik)</item>
+        <item>Pahlawan wanita JRPG (Svetlana HD - Nada cerah dan hidup)</item>
+        <item>Antagonis / Ksatria (Dmitry HD - Nada dramatis mendalam)</item>
+        <item>Suara sistem offline perangkat (Tanpa internet)</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">Transparansi tombol terjemahan</string>
+    <string name="translator_floating_button_opacity_summary">Sesuaikan opasitas tombol melayang TR | LOG (bawaan 35%)</string>
+    <string name="translator_voice_pitch_title">Tinggi nada suara</string>
+    <string name="translator_voice_pitch_summary">Penyesuaian nada suara percakapan (-20%..+20%)</string>
+    <string name="translator_test_voice_title">Uji suara yang dipilih</string>
+    <string name="translator_test_voice_summary">Putar sampel suara untuk memeriksa sintesis suara</string>
+    <string name="translator_test_voice_playing">Memutar sampel suara...</string>
+    <string name="translator_glossary_gender_label">Gender karakter</string>
+    <string name="translator_glossary_gender_male">Pria (♂)</string>
+    <string name="translator_glossary_gender_female">Wanita (♀)</string>
+    <string name="translator_glossary_gender_neutral">Netral / Tidak ditentukan</string>
+</resources>

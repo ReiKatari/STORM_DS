@@ -229,6 +229,11 @@
         "YAH",
         "YAHE",
         "YAHP",
+        "BA2",
+        "BA2E",
+        "BA2P",
+        "BA2X",
+        "BA2J",
         "VAC",
         "VACE",
         "VACV",
@@ -240,7 +245,10 @@
         "assassins creed",
         "altair's chronicles",
         "altairs chronicles",
-        "discovery"
+        "discovery",
+        "ac2",
+        "assassin's creed ii",
+        "assassins creed ii"
       ],
       "compositorMode": "precise",
       "thickEdges": false,

@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.Colors
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
@@ -16,25 +17,25 @@ val watermelon: WatermelonColors
 private fun watermelonMaterialColors(colors: WatermelonColors): Colors {
     return if (colors.isDark) {
         darkColors(
-            primary = colors.red,
-            primaryVariant = colors.red,
+            primary = colors.green,
+            primaryVariant = colors.greenDim,
             secondary = colors.green,
-            secondaryVariant = colors.green,
+            secondaryVariant = colors.greenDim,
             background = colors.bg,
             surface = colors.surface,
             error = colors.red,
-            onPrimary = Color.White,
-            onSecondary = Color.White,
+            onPrimary = Color.Black,
+            onSecondary = Color.Black,
             onBackground = colors.text,
             onSurface = colors.text,
             onError = Color.White,
         )
     } else {
         lightColors(
-            primary = colors.red,
-            primaryVariant = colors.red,
+            primary = colors.green,
+            primaryVariant = colors.greenDim,
             secondary = colors.green,
-            secondaryVariant = colors.green,
+            secondaryVariant = colors.greenDim,
             background = colors.bg,
             surface = colors.surface,
             error = colors.red,
@@ -67,7 +68,10 @@ fun MelonTheme(
     val accentKey = AppThemeManager.accentColorState.value
     val watermelonColors = getCustomizedAccentColors(baseColors, accentKey)
 
-    CompositionLocalProvider(LocalWatermelonColors provides watermelonColors) {
+    CompositionLocalProvider(
+        LocalWatermelonColors provides watermelonColors,
+        LocalContentColor provides watermelonColors.text,
+    ) {
         MaterialTheme(
             colors = watermelonMaterialColors(watermelonColors),
             typography = MelonTypography,

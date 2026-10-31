@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>自动导播（根据角色性别切换男女声）</item>
+        <item>斯韦特兰娜 Neural HD（女性，温暖）</item>
+        <item>德米特里 Neural HD（男性，深沉）</item>
+        <item>艾娃 多语言 HD（女性，富有表现力的动漫/JRPG）</item>
+        <item>安德鲁 多语言 HD（男性，电影质感）</item>
+        <item>艾玛 多语言 HD（年轻/清脆音色）</item>
+        <item>布莱恩 多语言 HD（沉稳叙述者）</item>
+        <item>薇薇安 多语言 HD（柔和天鹅绒般女声）</item>
+        <item>弗洛里安 多语言 HD（富有魅力的男中音）</item>
+        <item>JRPG 女主角（斯韦特兰娜 HD - 明快活泼音色）</item>
+        <item>反派/骑士（德米特里 HD - 深沉戏剧性音色）</item>
+        <item>设备离线系统语音（无需互联网）</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">翻译按钮透明度</string>
+    <string name="translator_floating_button_opacity_summary">调整悬浮 TR | LOG 按钮的不透明度（默认 35%）</string>
+    <string name="translator_voice_pitch_title">声音音调</string>
+    <string name="translator_voice_pitch_summary">微调语音音调偏移（-20%..+20%）</string>
+    <string name="translator_test_voice_title">试听选定声音</string>
+    <string name="translator_test_voice_summary">播放语音样本以验证朗读效果</string>
+    <string name="translator_test_voice_playing">正在播放语音样本...</string>
+    <string name="translator_glossary_gender_label">角色性别</string>
+    <string name="translator_glossary_gender_male">男性 (♂)</string>
+    <string name="translator_glossary_gender_female">女性 (♀)</string>
+    <string name="translator_glossary_gender_neutral">中性 / 未设置</string>
+</resources>

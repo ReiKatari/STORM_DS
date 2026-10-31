@@ -63,6 +63,43 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             invalidate()
         }
 
+    var floatingButtonOpacity: Float = 0.35f
+        private set
+
+    var temporarilySuppressedByModal: Boolean = false
+        private set
+
+    fun setTemporarilySuppressedByModal(suppressed: Boolean) {
+        if (temporarilySuppressedByModal != suppressed) {
+            temporarilySuppressedByModal = suppressed
+            postInvalidate()
+        }
+    }
+
+    fun setFloatingButtonOpacity(opacity: Float) {
+        val normalized = if (opacity > 1.0f) opacity / 100f else opacity
+        floatingButtonOpacity = normalized.coerceIn(0.05f, 1.0f)
+        applyFloatingButtonOpacity()
+        postInvalidate()
+    }
+
+    private fun applyFloatingButtonOpacity() {
+        val alpha = floatingButtonOpacity
+        val accent = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(context)
+        val r = Color.red(accent)
+        val g = Color.green(accent)
+        val b = Color.blue(accent)
+        // Ultra-airy translucent glass fill (#0F172A): scales smoothly across 5%..100%
+        floatBtnPaint.alpha = (alpha * 230f).toInt().coerceIn(12, 230)
+        floatBtnGlowPaint.color = Color.argb((alpha * 77f).toInt().coerceIn(8, 90), r, g, b)
+        // Keep subtle touchable ghost outline even at low 5%-15% opacity
+        floatBtnStrokePaint.color = Color.argb((alpha * 255f).toInt().coerceIn(40, 255), r, g, b)
+        floatBtnDividerPaint.alpha = (alpha * 180f).toInt().coerceIn(30, 200)
+        floatBtnTextPaint.color = Color.argb((alpha * 255f).toInt().coerceIn(55, 255), r, g, b)
+        floatBtnBacklogTextPaint.alpha = (alpha * 255f).toInt().coerceIn(55, 255)
+        shadowPaint.alpha = (alpha * 128f).toInt().coerceIn(10, 128)
+    }
+
     var isEditRegionsMode: Boolean = false
         set(value) {
             field = value
@@ -159,6 +196,10 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         textSize = 24f
+    }
+
+    init {
+        applyFloatingButtonOpacity()
     }
     private val pixelFont12: Typeface? by lazy {
         try {
@@ -604,7 +645,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         }
 
         // 6. FLOATING DUAL-ACTION PANEL (TR + LOG)
-        if (showFloatingButton) {
+        if (showFloatingButton && !temporarilySuppressedByModal) {
+            applyFloatingButtonOpacity()
             val halfW = floatBtnPanelWidth / 2f
             val halfH = floatBtnPanelHeight / 2f
             val cornerR = floatBtnRadius
@@ -673,7 +715,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         canvas.drawRoundRect(RectF(dictCardRect.left + 4f, dictCardRect.top + 6f, dictCardRect.right + 4f, dictCardRect.bottom + 6f), 18f, 18f, shadowPaint)
         bgPaint.color = Color.parseColor("#F20F172A")
         canvas.drawRoundRect(dictCardRect, 18f, 18f, bgPaint)
-        borderPaint.color = Color.parseColor("#FF00E5FF")
+        borderPaint.color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(context)
         borderPaint.strokeWidth = 3f
         canvas.drawRoundRect(dictCardRect, 18f, 18f, borderPaint)
 
@@ -736,7 +778,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         canvas.drawRoundRect(dockRect, 20f, 20f, shadowPaint)
         bgPaint.color = Color.parseColor("#E60F172A")
         canvas.drawRoundRect(dockRect, 20f, 20f, bgPaint)
-        borderPaint.color = Color.parseColor("#4D00E5FF")
+        val dockAccent = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(context)
+        borderPaint.color = Color.argb(77, Color.red(dockAccent), Color.green(dockAccent), Color.blue(dockAccent))
         canvas.drawRoundRect(dockRect, 20f, 20f, borderPaint)
 
         var curY = startY + padV
@@ -1097,7 +1140,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                     floatBtnX + halfW + 12f,
                     floatBtnY + halfH + 12f
                 )
-                if (showFloatingButton && touchRect.contains(x, y)) {
+                if (showFloatingButton && !temporarilySuppressedByModal && touchRect.contains(x, y)) {
                     isDraggingFloatBtn = true
                     hasMovedFloatBtn = false
                     dragStartX = x

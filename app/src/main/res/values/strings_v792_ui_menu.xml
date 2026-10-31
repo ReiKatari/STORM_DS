@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">Pause menu configuration</string>
+    <string name="v792_pause_customizer_subtitle">Customize order and visibility of items</string>
+    <string name="v792_pause_customizer_btn">Configure menu</string>
+    <string name="v792_pause_badge_standard">Standard</string>
+    <string name="v792_pause_badge_extended">Extended</string>
+    <string name="v792_pause_reset_defaults">Reset to default</string>
+    <string name="v792_pause_done">Done</string>
+    <string name="v792_pause_move_up">Move up</string>
+    <string name="v792_pause_move_down">Move down</string>
+    <string name="v792_pause_item_visible">Show in pause menu</string>
+    <string name="v792_pause_settings_protected">Always active</string>
+    <string name="v792_general_pause_menu_title">Pause submenu management</string>
+    <string name="v792_general_pause_menu_summary">Configure order and visibility of pause items</string>
+    <string name="v792_general_pause_menu_reset_confirm">Reset pause submenu order and visibility to default?</string>
+    <string name="v792_general_pause_menu_reset_done">Pause submenu settings restored to defaults</string>
+</resources>

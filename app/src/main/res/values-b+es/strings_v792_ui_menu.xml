@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">Configuración del menú de pausa</string>
+    <string name="v792_pause_customizer_subtitle">Personalizar orden y visibilidad de elementos</string>
+    <string name="v792_pause_customizer_btn">Configurar</string>
+    <string name="v792_pause_badge_standard">Estándar</string>
+    <string name="v792_pause_badge_extended">Extendido</string>
+    <string name="v792_pause_reset_defaults">Restablecer valores</string>
+    <string name="v792_pause_done">Listo</string>
+    <string name="v792_pause_move_up">Subir</string>
+    <string name="v792_pause_move_down">Bajar</string>
+    <string name="v792_pause_item_visible">Mostrar en el menú</string>
+    <string name="v792_pause_settings_protected">Siempre activo</string>
+    <string name="v792_general_pause_menu_title">Gestión del submenú de pausa</string>
+    <string name="v792_general_pause_menu_summary">Configurar orden y visibilidad de las opciones de pausa</string>
+    <string name="v792_general_pause_menu_reset_confirm">¿Restablecer orden y visibilidad del submenú por defecto?</string>
+    <string name="v792_general_pause_menu_reset_done">Submenú restablecido a valores predeterminados</string>
+</resources>

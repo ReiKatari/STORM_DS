@@ -33,6 +33,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import me.magnum.melonds.R
 import me.magnum.melonds.translator.backlog.DialogueBacklogStore
 import me.magnum.melonds.translator.glossary.UserGlossaryManager
+import me.magnum.melonds.translator.grammar.Gender
 import me.magnum.melonds.ui.theme.MelonTheme
 import me.magnum.melonds.ui.theme.watermelon
 
@@ -119,6 +120,7 @@ fun DialogueBacklogContent(
     var termDialogInitialTarget by remember { mutableStateOf("") }
     var termDialogInitialCaseSensitive by remember { mutableStateOf(false) }
     var termDialogInitialGameSpecific by remember { mutableStateOf(false) }
+    var termDialogInitialGender by remember { mutableStateOf(Gender.NEUTRAL) }
 
     // Dialog state for confirming deletion
     var termToDelete by remember { mutableStateOf<UserGlossaryManager.GlossaryEntry?>(null) }
@@ -426,6 +428,7 @@ fun DialogueBacklogContent(
                                 termDialogInitialTarget = entry.targetTerm
                                 termDialogInitialCaseSensitive = entry.caseSensitive
                                 termDialogInitialGameSpecific = isGame
+                                termDialogInitialGender = entry.gender
                                 showTermDialog = true
                             },
                             onDelete = {
@@ -445,10 +448,11 @@ fun DialogueBacklogContent(
             initialTarget = termDialogInitialTarget,
             initialCaseSensitive = termDialogInitialCaseSensitive,
             initialGameSpecific = termDialogInitialGameSpecific,
+            initialGender = termDialogInitialGender,
             activeGameKey = glossaryManager.getActiveGameKey(),
             onDismiss = { showTermDialog = false },
-            onSave = { source, target, caseSens, gameSpec ->
-                val entry = UserGlossaryManager.GlossaryEntry(source, target, caseSens)
+            onSave = { source, target, caseSens, gameSpec, gender ->
+                val entry = UserGlossaryManager.GlossaryEntry(source, target, caseSens, gender)
                 glossaryManager.addOrUpdateEntry(entry, isGameSpecific = gameSpec)
                 onInvalidateCache(source)
                 glossaryVersion++
@@ -544,6 +548,35 @@ fun BacklogItemCard(
                 )
             }
 
+            if (item.speakerName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                val genderBadge = when (item.speakerGender.uppercase()) {
+                    "M", "MALE" -> " ♂"
+                    "F", "FEMALE" -> " ♀"
+                    else -> ""
+                }
+                val speakerColor = if (item.speakerGender.equals("F", true) || item.speakerGender.equals("FEMALE", true)) {
+                    Color(0xFFFF69B4)
+                } else {
+                    accentCyan
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(speakerColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "${item.speakerName}$genderBadge",
+                            color = speakerColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             // Original Text (muted font)
@@ -631,17 +664,17 @@ fun BacklogItemCard(
                     onClick = onAddToGlossary,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA855F7).copy(alpha = 0.5f)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, accentCyan.copy(alpha = 0.5f)),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        backgroundColor = Color(0xFFA855F7).copy(alpha = 0.12f),
-                        contentColor = Color(0xFFA855F7)
+                        backgroundColor = accentCyan.copy(alpha = 0.12f),
+                        contentColor = accentCyan
                     ),
                     contentPadding = PaddingValues(vertical = 4.dp, horizontal = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Translate,
                         contentDescription = null,
-                        tint = Color(0xFFA855F7),
+                        tint = accentCyan,
                         modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -708,6 +741,16 @@ fun GlossaryEntryCard(
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    if (entry.gender != Gender.NEUTRAL) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val gColor = if (entry.gender == Gender.FEMALE) Color(0xFFFF69B4) else accentCyan
+                        Text(
+                            text = entry.gender.symbol,
+                            color = gColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -723,7 +766,7 @@ fun GlossaryEntryCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "[Aa]",
-                            color = Color(0xFFF59E0B),
+                            color = accentCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -759,22 +802,25 @@ fun AddOrEditGlossaryTermDialog(
     initialTarget: String,
     initialCaseSensitive: Boolean,
     initialGameSpecific: Boolean,
+    initialGender: Gender = Gender.NEUTRAL,
     activeGameKey: String,
     onDismiss: () -> Unit,
-    onSave: (source: String, target: String, caseSensitive: Boolean, isGameSpecific: Boolean) -> Unit
+    onSave: (source: String, target: String, caseSensitive: Boolean, isGameSpecific: Boolean, gender: Gender) -> Unit
 ) {
     val context = LocalContext.current
     var sourceText by remember { mutableStateOf(initialSource) }
     var targetText by remember { mutableStateOf(initialTarget) }
     var caseSensitive by remember { mutableStateOf(initialCaseSensitive) }
     var isGameSpecific by remember { mutableStateOf(initialGameSpecific && activeGameKey != "global") }
+    var selectedGender by remember { mutableStateOf(initialGender) }
 
     val colors = watermelon
     val cardDark = colors.surface2
+    val borderDark = colors.line
     val textPrimary = colors.text
     val textMuted = colors.text2
     val accentCyan = colors.green
-    val accentGreen = if (colors.isDark) Color(0xFF10B981) else Color(0xFF059669)
+    val accentGreen = colors.green
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -836,6 +882,52 @@ fun AddOrEditGlossaryTermDialog(
                     ),
                     singleLine = true
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Character Gender Selector
+                Text(
+                    text = context.getString(R.string.translator_glossary_gender_label),
+                    color = textMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val genders = listOf(
+                        Gender.MALE to context.getString(R.string.translator_glossary_gender_male),
+                        Gender.FEMALE to context.getString(R.string.translator_glossary_gender_female),
+                        Gender.NEUTRAL to context.getString(R.string.translator_glossary_gender_neutral)
+                    )
+                    for ((g, label) in genders) {
+                        val isSelected = selectedGender == g
+                        val chipColor = when (g) {
+                            Gender.FEMALE -> Color(0xFFFF69B4)
+                            Gender.MALE -> accentCyan
+                            Gender.NEUTRAL -> textMuted
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) chipColor.copy(alpha = 0.25f) else Color.Transparent)
+                                .border(1.dp, if (isSelected) chipColor else borderDark, RoundedCornerShape(8.dp))
+                                .clickable { selectedGender = g }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) chipColor else textPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -905,7 +997,7 @@ fun AddOrEditGlossaryTermDialog(
                             val cleanS = sourceText.trim()
                             val cleanT = targetText.trim()
                             if (cleanS.isNotBlank() && cleanT.isNotBlank()) {
-                                onSave(cleanS, cleanT, caseSensitive, isGameSpecific)
+                                onSave(cleanS, cleanT, caseSensitive, isGameSpecific, selectedGender)
                             }
                         },
                         enabled = sourceText.isNotBlank() && targetText.isNotBlank(),

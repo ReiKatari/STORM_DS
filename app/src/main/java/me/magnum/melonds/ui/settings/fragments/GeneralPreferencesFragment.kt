@@ -186,6 +186,36 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             }
             true
         }
+                // Manage pause submenu
+        findPreference<Preference>("manage_pause_menu")?.let { pref ->
+            val isRu = me.magnum.melonds.utils.RussianPlurals.isRussian(resources)
+            val store = me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore(requireContext())
+            val hiddenCount = store.getHiddenItems().size
+            val hasCustom = store.getCustomOrder().isNotEmpty()
+            pref.summary = if (isRu) {
+                "Скрыто пунктов: $hiddenCount • Порядок: ${if (hasCustom) "Пользовательский" else "По умолчанию"}"
+            } else {
+                "Hidden items: $hiddenCount • Order: ${if (hasCustom) "Custom" else "Default"}"
+            }
+            pref.setOnPreferenceClickListener {
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.v792_general_pause_menu_title)
+                    .setMessage(R.string.v792_general_pause_menu_reset_confirm)
+                    .setPositiveButton(R.string.v792_pause_reset_defaults) { _, _ ->
+                        store.resetToDefaults()
+                        pref.summary = if (isRu) {
+                            "Скрыто пунктов: 0 • Порядок: По умолчанию"
+                        } else {
+                            "Hidden items: 0 • Order: Default"
+                        }
+                        Toast.makeText(requireContext(), R.string.v792_general_pause_menu_reset_done, Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                true
+            }
+        }
+
         findPreference<Preference>("manage_setting_snapshots")?.setOnPreferenceClickListener {
             showSnapshotsDialog()
             true
@@ -358,7 +388,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.1").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.2").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 

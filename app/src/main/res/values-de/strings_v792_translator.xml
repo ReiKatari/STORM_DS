@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>Auto-Regisseur (Männliche und weibliche Stimme nach Geschlecht)</item>
+        <item>Svetlana Neural HD (Weiblich, warm)</item>
+        <item>Dmitry Neural HD (Männlich, tief)</item>
+        <item>Ava Multilingual HD (Weiblich, ausdrucksstark Anime/JRPG)</item>
+        <item>Andrew Multilingual HD (Männlich, filmisch)</item>
+        <item>Emma Multilingual HD (Jugendlicher / heller Ton)</item>
+        <item>Brian Multilingual HD (Ruhiger Erzähler)</item>
+        <item>Vivienne Multilingual HD (Sanfte samtige Frauenstimme)</item>
+        <item>Florian Multilingual HD (Charismatischer Bariton)</item>
+        <item>JRPG-Heldin (Svetlana HD - Heller lebendiger Ton)</item>
+        <item>Antagonist / Ritter (Dmitry HD - Tiefer dramatischer Ton)</item>
+        <item>System-Offline-Stimme des Geräts (Kein Internet erforderlich)</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">Transparenz der Übersetzungstaste</string>
+    <string name="translator_floating_button_opacity_summary">Transparenz der schwebenden TR | LOG-Taste anpassen (Standard 35%)</string>
+    <string name="translator_voice_pitch_title">Stimmlage</string>
+    <string name="translator_voice_pitch_summary">Feinabstimmung der Tonhöhe (-20%..+20%)</string>
+    <string name="translator_test_voice_title">Ausgewählte Stimme testen</string>
+    <string name="translator_test_voice_summary">Sprachprobe zur Überprüfung der Sprachsynthese abspielen</string>
+    <string name="translator_test_voice_playing">Sprachprobe wird abgespielt...</string>
+    <string name="translator_glossary_gender_label">Geschlecht der Figur</string>
+    <string name="translator_glossary_gender_male">Männlich (♂)</string>
+    <string name="translator_glossary_gender_female">Weiblich (♀)</string>
+    <string name="translator_glossary_gender_neutral">Neutral / Nicht angegeben</string>
+</resources>

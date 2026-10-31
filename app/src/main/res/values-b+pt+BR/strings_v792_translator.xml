@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>Diretor automático (Voz masculina e feminina por gênero)</item>
+        <item>Svetlana Neural HD (Feminino, caloroso)</item>
+        <item>Dmitry Neural HD (Masculino, profundo)</item>
+        <item>Ava Multilingual HD (Feminino, expressivo anime/JRPG)</item>
+        <item>Andrew Multilingual HD (Masculino, cinematográfico)</item>
+        <item>Emma Multilingual HD (Timbre jovem / claro)</item>
+        <item>Brian Multilingual HD (Narrador calmo)</item>
+        <item>Vivienne Multilingual HD (Voz feminina aveludada e suave)</item>
+        <item>Florian Multilingual HD (Barítono carismático)</item>
+        <item>Heroína JRPG (Svetlana HD - Timbre vivo e brilhante)</item>
+        <item>Antagonista / Cavaleiro (Dmitry HD - Timbre grave e dramático)</item>
+        <item>Voz do sistema offline do dispositivo (Sem internet)</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">Opacidade do botão de tradução</string>
+    <string name="translator_floating_button_opacity_summary">Ajustar a opacidade do botão flutuante TR | LOG (padrão 35%)</string>
+    <string name="translator_voice_pitch_title">Tom da voz</string>
+    <string name="translator_voice_pitch_summary">Ajuste fino do tom de voz (-20%..+20%)</string>
+    <string name="translator_test_voice_title">Testar voz selecionada</string>
+    <string name="translator_test_voice_summary">Reproduzir uma amostra de voz para verificar a síntese</string>
+    <string name="translator_test_voice_playing">Reproduzindo amostra de voz...</string>
+    <string name="translator_glossary_gender_label">Gênero do personagem</string>
+    <string name="translator_glossary_gender_male">Masculino (♂)</string>
+    <string name="translator_glossary_gender_female">Feminino (♀)</string>
+    <string name="translator_glossary_gender_neutral">Neutro / Não especificado</string>
+</resources>

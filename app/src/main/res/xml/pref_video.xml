@@ -253,9 +253,9 @@
                 android:title="@string/video_console_skin_type_title"
                 app:iconSpaceReserved="false"
                 app:useSimpleSummaryProvider="true"
-                android:entries="@array/video_console_skin_type_options"
-                android:entryValues="@array/video_console_skin_type_values"
-                android:defaultValue="ds_lite_black"
+                android:entries="@array/console_skin_entries_v792"
+                android:entryValues="@array/console_skin_values_v792"
+                android:defaultValue="aurora_auto_theme"
                 android:dependency="video_console_skin_enabled" />
 
         <ListPreference

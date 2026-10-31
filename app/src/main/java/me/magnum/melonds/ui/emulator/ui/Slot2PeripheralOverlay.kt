@@ -131,7 +131,7 @@ private fun SolarSensorOverlay(
             ) {
                 Text(
                     text = "☀️ " + stringResource(R.string.solar_sensor_slider_label).uppercase(),
-                    color = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
+                    color = colors.green,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -176,10 +176,10 @@ private fun SolarSensorOverlay(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) (if (colors.isDark) Color(0x55FFB74D) else Color(0xFFFEF3C7)) else colors.surface2)
+                            .background(if (isSelected) colors.greenDim else colors.surface2)
                             .border(
                                 1.dp,
-                                if (isSelected) (if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706)) else colors.line,
+                                if (isSelected) colors.green else colors.line,
                                 RoundedCornerShape(8.dp),
                             )
                             .clickable {
@@ -195,7 +195,7 @@ private fun SolarSensorOverlay(
                     ) {
                         Text(
                             text = label,
-                            color = if (isSelected) (if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFB45309)) else colors.text,
+                            color = if (isSelected) colors.green else colors.text,
                             fontSize = 8.5.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             maxLines = 1,
@@ -215,7 +215,7 @@ private fun SolarSensorOverlay(
                 val displayLevel = if (isAutoMode) currentSensorBars else sliderValue.toInt()
                 Text(
                     text = "${(displayLevel * 10)}%",
-                    color = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
+                    color = colors.green,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.width(36.dp),
@@ -230,8 +230,8 @@ private fun SolarSensorOverlay(
                     steps = 9,
                     modifier = Modifier.weight(1f),
                     colors = SliderDefaults.colors(
-                        thumbColor = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
-                        activeTrackColor = if (colors.isDark) Color(0xFFFFB74D) else Color(0xFFD97706),
+                        thumbColor = colors.green,
+                        activeTrackColor = colors.green,
                         inactiveTrackColor = colors.surface3,
                     ),
                 )

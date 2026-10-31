@@ -68,6 +68,17 @@
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
 
+        <SeekBarPreference
+            android:key="translator_floating_button_opacity"
+            android:title="@string/translator_floating_button_opacity"
+            android:summary="@string/translator_floating_button_opacity_summary"
+            app:min="5"
+            android:max="100"
+            android:defaultValue="35"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
         <Preference
             android:key="pref_translator_regions"
             android:title="@string/translator_regions_title"
@@ -116,10 +127,21 @@
         <ListPreference
             android:key="translator_local_voice_model"
             android:title="@string/translator_local_voice_model_title"
-            android:entries="@array/translator_local_voice_model_options"
-            android:entryValues="@array/translator_local_voice_model_values"
-            android:defaultValue="auto_multi"
+            android:entries="@array/translator_tts_voices_entries_v792"
+            android:entryValues="@array/translator_tts_voices_values_v792"
+            android:defaultValue="auto_gender_neural"
             app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_tts_enabled" />
+
+        <SeekBarPreference
+            android:key="translator_voice_pitch"
+            android:title="@string/translator_voice_pitch_title"
+            android:summary="@string/translator_voice_pitch_summary"
+            app:min="-20"
+            android:max="20"
+            android:defaultValue="0"
+            app:showSeekBarValue="true"
             app:iconSpaceReserved="false"
             app:dependency="translator_tts_enabled" />
 
@@ -140,6 +162,13 @@
             android:max="200"
             android:defaultValue="100"
             app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_tts_enabled" />
+
+        <Preference
+            android:key="pref_translator_test_voice"
+            android:title="@string/translator_test_voice_title"
+            android:summary="@string/translator_test_voice_summary"
             app:iconSpaceReserved="false"
             app:dependency="translator_tts_enabled" />
     </PreferenceCategory>

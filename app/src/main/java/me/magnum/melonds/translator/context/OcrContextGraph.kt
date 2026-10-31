@@ -107,6 +107,34 @@ object OcrContextGraph {
     private var lastActiveSpeaker: CharacterEntity? = null
     private var lastActiveProfile: SpeakerVoiceProfile? = null
     private var previousSpeakerWasMale = true
+    var activeSpeakerName: String = ""
+    var activeSpeakerGender: me.magnum.melonds.translator.grammar.Gender = me.magnum.melonds.translator.grammar.Gender.NEUTRAL
+
+    fun setExplicitActiveSpeaker(name: String, gender: me.magnum.melonds.translator.grammar.Gender) {
+        activeSpeakerName = name
+        activeSpeakerGender = gender
+        val ocrGender = when (gender) {
+            me.magnum.melonds.translator.grammar.Gender.MALE -> Gender.MALE
+            me.magnum.melonds.translator.grammar.Gender.FEMALE -> Gender.FEMALE
+            me.magnum.melonds.translator.grammar.Gender.NEUTRAL -> Gender.NEUTRAL
+        }
+        val existing = entities[name.trim().lowercase()]
+            ?: entities.values.firstOrNull { e ->
+                e.name.equals(name, ignoreCase = true) || e.aliases.any { it.equals(name, ignoreCase = true) }
+            }
+        if (existing != null) {
+            lastActiveSpeaker = existing.copy(gender = ocrGender)
+        } else if (name.isNotBlank()) {
+            val entity = CharacterEntity(
+                name = name,
+                aliases = listOf(name),
+                gender = ocrGender,
+                role = "character",
+                defaultPersona = if (ocrGender == Gender.FEMALE) "HEROINE" else "HERO"
+            )
+            lastActiveSpeaker = entity
+        }
+    }
 
     // Russian/English first-person past-tense verb & short-adjective markers for grammatical gender detection
     private val FEMALE_SELF_GRAMMAR = Regex(
@@ -826,11 +854,24 @@ object OcrContextGraph {
 
     fun buildTranslationContextPrompt(): List<String> {
         val list = mutableListOf<String>()
-        lastActiveSpeaker?.let { speaker ->
-            list.add("Active speaker: ${speaker.name} (${speaker.gender.name.lowercase()}, ${speaker.role})")
+        val spk = lastActiveSpeaker
+        val speakerName = spk?.name?.ifBlank { null } ?: activeSpeakerName
+        val gender = if (activeSpeakerGender != me.magnum.melonds.translator.grammar.Gender.NEUTRAL) {
+            activeSpeakerGender.name
+        } else {
+            spk?.gender?.name ?: "NEUTRAL"
+        }
+
+        if (speakerName.isNotBlank()) {
+            list.add("Active speaker: $speakerName (gender: $gender)")
+            if (gender == "FEMALE") {
+                list.add("Localization rule: Active speaker is FEMALE. Translate first-person past tense verbs in Russian with female endings (e.g., 'я сказала', 'я поняла', 'я готова'). Do not use bracketed forms like 'понял(а)'.")
+            } else if (gender == "MALE") {
+                list.add("Localization rule: Active speaker is MALE. Translate first-person past tense verbs in Russian with male endings (e.g., 'я сказал', 'я понял', 'я готов').")
+            }
         }
         synchronized(dialogueHistory) {
-            list.addAll(dialogueHistory)
+            list.addAll(dialogueHistory.takeLast(4))
         }
         return list
     }

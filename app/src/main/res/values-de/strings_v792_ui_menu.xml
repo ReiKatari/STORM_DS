@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">Pausemenü-Konfiguration</string>
+    <string name="v792_pause_customizer_subtitle">Reihenfolge und Sichtbarkeit anpassen</string>
+    <string name="v792_pause_customizer_btn">Menü anpassen</string>
+    <string name="v792_pause_badge_standard">Standard</string>
+    <string name="v792_pause_badge_extended">Erweitert</string>
+    <string name="v792_pause_reset_defaults">Standard wiederherstellen</string>
+    <string name="v792_pause_done">Fertig</string>
+    <string name="v792_pause_move_up">Nach oben</string>
+    <string name="v792_pause_move_down">Nach unten</string>
+    <string name="v792_pause_item_visible">Im Menü anzeigen</string>
+    <string name="v792_pause_settings_protected">Immer aktiv</string>
+    <string name="v792_general_pause_menu_title">Pause-Untermenü-Verwaltung</string>
+    <string name="v792_general_pause_menu_summary">Reihenfolge und Sichtbarkeit der Optionen anpassen</string>
+    <string name="v792_general_pause_menu_reset_confirm">Reihenfolge und Sichtbarkeit auf Standard zurücksetzen?</string>
+    <string name="v792_general_pause_menu_reset_done">Pause-Untermenü auf Standard zurückgesetzt</string>
+</resources>

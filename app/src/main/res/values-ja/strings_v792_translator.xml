@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_tts_voices_entries_v792">
+        <item>オート演出（性別に応じた男性と女性の音声）</item>
+        <item>スヴェトラーナ Neural HD（女性、温かみ）</item>
+        <item>ドミトリー Neural HD（男性、重厚）</item>
+        <item>エヴァ Multilingual HD（女性、表情豊かなアニメ・JRPG）</item>
+        <item>アンドリュー Multilingual HD（男性、シネマティック）</item>
+        <item>エマ Multilingual HD（若々しい・澄んだ音色）</item>
+        <item>ブライアン Multilingual HD（落ち着いた語り手）</item>
+        <item>ヴィヴィアン Multilingual HD（柔らかなベルベット女性声）</item>
+        <item>フロリアン Multilingual HD（カリスマバリトン）</item>
+        <item>JRPGヒロイン（スヴェトラーナ HD - 高音の生き生きとした声）</item>
+        <item>悪役・騎士（ドミトリー HD - 低音のドラマティックな声）</item>
+        <item>デバイスのオフラインシステム音声（インターネット不要）</item>
+    </string-array>
+    <string-array name="translator_tts_voices_values_v792">
+        <item>auto_gender_neural</item>
+        <item>edge_ru_svetlana</item>
+        <item>edge_ru_dmitry</item>
+        <item>edge_multi_ava</item>
+        <item>edge_multi_andrew</item>
+        <item>edge_multi_emma</item>
+        <item>edge_multi_brian</item>
+        <item>edge_multi_vivienne</item>
+        <item>edge_multi_florian</item>
+        <item>edge_heroine_bright</item>
+        <item>edge_villain_deep</item>
+        <item>system_offline_best</item>
+    </string-array>
+    <string name="translator_floating_button_opacity">翻訳ボタンの透明度</string>
+    <string name="translator_floating_button_opacity_summary">フローティング TR | LOG ボタンの透明度を調整（デフォルト 35%）</string>
+    <string name="translator_voice_pitch_title">音声のピッチ</string>
+    <string name="translator_voice_pitch_summary">音声の高さの微調整（-20%..+20%）</string>
+    <string name="translator_test_voice_title">選択した音声をテスト</string>
+    <string name="translator_test_voice_summary">音声合成を確認するためにサンプル音声を再生します</string>
+    <string name="translator_test_voice_playing">サンプル音声を再生中...</string>
+    <string name="translator_glossary_gender_label">キャラクターの性別</string>
+    <string name="translator_glossary_gender_male">男性 (♂)</string>
+    <string name="translator_glossary_gender_female">女性 (♀)</string>
+    <string name="translator_glossary_gender_neutral">中立 / 未設定</string>
+</resources>

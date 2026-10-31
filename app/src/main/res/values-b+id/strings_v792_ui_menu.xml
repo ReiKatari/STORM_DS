@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v792_pause_customizer_title">Konfigurasi menu jeda</string>
+    <string name="v792_pause_customizer_subtitle">Sesuaikan urutan dan visibilitas item</string>
+    <string name="v792_pause_customizer_btn">Konfigurasi</string>
+    <string name="v792_pause_badge_standard">Standar</string>
+    <string name="v792_pause_badge_extended">Lanjutan</string>
+    <string name="v792_pause_reset_defaults">Atur ulang bawaan</string>
+    <string name="v792_pause_done">Selesai</string>
+    <string name="v792_pause_move_up">Pindah ke atas</string>
+    <string name="v792_pause_move_down">Pindah ke bawah</string>
+    <string name="v792_pause_item_visible">Tampilkan di menu jeda</string>
+    <string name="v792_pause_settings_protected">Selalu aktif</string>
+    <string name="v792_general_pause_menu_title">Manajemen submenu jeda</string>
+    <string name="v792_general_pause_menu_summary">Konfigurasi urutan dan visibilitas item jeda</string>
+    <string name="v792_general_pause_menu_reset_confirm">Atur ulang urutan dan visibilitas submenu ke bawaan?</string>
+    <string name="v792_general_pause_menu_reset_done">Pengaturan submenu jeda dikembalikan ke bawaan</string>
+</resources>

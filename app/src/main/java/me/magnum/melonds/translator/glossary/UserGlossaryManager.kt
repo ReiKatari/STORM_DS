@@ -7,6 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import me.magnum.melonds.translator.grammar.Gender
+import me.magnum.melonds.translator.grammar.RussianGrammarAndDeclensionEngine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -15,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Matcher
 
 /**
- * User Glossary & Character Name Dictionary Manager.
+ * User Glossary & Character Name Dictionary Manager with 6-Case Declension & Gender Support.
  *
  * Persists custom translation dictionaries in .stormdict.json format:
  * - Primary storage: /storage/emulated/0/STORM DS/translator/dictionaries/global.stormdict.json
@@ -31,7 +33,8 @@ class UserGlossaryManager(
     data class GlossaryEntry(
         val sourceTerm: String,
         val targetTerm: String,
-        val caseSensitive: Boolean = false
+        val caseSensitive: Boolean = false,
+        val gender: Gender = Gender.NEUTRAL
     )
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -58,16 +61,9 @@ class UserGlossaryManager(
     }
 
     private fun getStorageDir(): File {
-        return try {
-            val extState = Environment.getExternalStorageState()
-            if (extState == Environment.MEDIA_MOUNTED && (primaryBaseDir.exists() || primaryBaseDir.mkdirs()) && primaryBaseDir.canWrite()) {
-                primaryBaseDir
-            } else {
-                if (!fallbackBaseDir.exists()) fallbackBaseDir.mkdirs()
-                fallbackBaseDir
-            }
-        } catch (_: Throwable) {
-            if (!fallbackBaseDir.exists()) fallbackBaseDir.mkdirs()
+        return if (primaryBaseDir.exists() && primaryBaseDir.canWrite()) {
+            primaryBaseDir
+        } else {
             fallbackBaseDir
         }
     }
@@ -75,46 +71,46 @@ class UserGlossaryManager(
     fun getDictionaryFile(gameKey: String = "global"): File {
         val safeKey = sanitizeKey(gameKey)
         val dir = getStorageDir()
-        val file = File(dir, "$safeKey.stormdict.json")
-        // If file doesn't exist in primary but exists in fallback, return fallback
-        if (!file.exists() && dir != fallbackBaseDir) {
-            val fallbackFile = File(fallbackBaseDir, "$safeKey.stormdict.json")
-            if (fallbackFile.exists()) return fallbackFile
+        return if (safeKey == "global") {
+            File(dir, "global.stormdict.json")
+        } else {
+            File(dir, "${safeKey}.stormdict.json")
         }
-        return file
     }
 
     fun getDictionaryFilePath(isGameSpecific: Boolean = false): String {
-        val key = if (isGameSpecific && activeGameKey != "global") activeGameKey else "global"
-        return getDictionaryFile(key).absolutePath
+        return getDictionaryFile(if (isGameSpecific) activeGameKey else "global").absolutePath
     }
 
     fun setGameKey(gameKey: String?) {
-        val safeKey = sanitizeKey(gameKey ?: "global")
-        if (safeKey == activeGameKey && gameEntries.isNotEmpty()) return
-
-        activeGameKey = safeKey
-        gameEntries.clear()
-        if (safeKey != "global") {
-            loadEntriesFromFile(getDictionaryFile(safeKey), gameEntries)
+        val sanitized = sanitizeKey(gameKey ?: "global")
+        if (sanitized != activeGameKey) {
+            activeGameKey = sanitized
+            gameEntries.clear()
+            if (activeGameKey != "global") {
+                val file = getDictionaryFile(activeGameKey)
+                loadEntriesFromFile(file, gameEntries)
+            }
         }
     }
 
     fun getActiveGameKey(): String = activeGameKey
 
-    @Synchronized
     fun loadDictionaries() {
         globalEntries.clear()
-        loadEntriesFromFile(getDictionaryFile("global"), globalEntries)
+        gameEntries.clear()
+
+        val globalFile = getDictionaryFile("global")
+        loadEntriesFromFile(globalFile, globalEntries)
 
         if (activeGameKey != "global") {
-            gameEntries.clear()
-            loadEntriesFromFile(getDictionaryFile(activeGameKey), gameEntries)
+            val gameFile = getDictionaryFile(activeGameKey)
+            loadEntriesFromFile(gameFile, gameEntries)
         }
     }
 
     private fun loadEntriesFromFile(file: File, targetMap: MutableMap<String, GlossaryEntry>) {
-        if (!file.exists() || !file.isFile) return
+        if (!file.exists() || !file.canRead()) return
         try {
             val content = file.readText(Charsets.UTF_8).trim()
             if (content.isEmpty()) return
@@ -128,18 +124,18 @@ class UserGlossaryManager(
                         val source = obj.optString("sourceTerm", "").trim()
                         val target = obj.optString("targetTerm", "").trim()
                         val caseSens = obj.optBoolean("caseSensitive", false)
-                        if (source.isNotBlank() && target.isNotBlank()) {
-                            targetMap[normalizeTermKey(source, caseSens)] = GlossaryEntry(source, target, caseSens)
+                        val gender = Gender.fromString(obj.optString("gender", "NEUTRAL"))
+                        if (source.isNotEmpty() && target.isNotEmpty()) {
+                            targetMap[normalizeTermKey(source, caseSens)] = GlossaryEntry(source, target, caseSens, gender)
                         }
                     }
                 } else {
-                    // Flat key-value format support
                     val keys = json.keys()
                     while (keys.hasNext()) {
                         val k = keys.next()
                         val v = json.optString(k, "").trim()
-                        if (k.isNotBlank() && v.isNotBlank()) {
-                            targetMap[normalizeTermKey(k, false)] = GlossaryEntry(k, v, false)
+                        if (k.isNotEmpty() && v.isNotEmpty()) {
+                            targetMap[normalizeTermKey(k, false)] = GlossaryEntry(k, v, false, Gender.NEUTRAL)
                         }
                     }
                 }
@@ -150,19 +146,18 @@ class UserGlossaryManager(
                     val source = obj.optString("sourceTerm", "").trim()
                     val target = obj.optString("targetTerm", "").trim()
                     val caseSens = obj.optBoolean("caseSensitive", false)
-                    if (source.isNotBlank() && target.isNotBlank()) {
-                        targetMap[normalizeTermKey(source, caseSens)] = GlossaryEntry(source, target, caseSens)
+                    val gender = Gender.fromString(obj.optString("gender", "NEUTRAL"))
+                    if (source.isNotEmpty() && target.isNotEmpty()) {
+                        targetMap[normalizeTermKey(source, caseSens)] = GlossaryEntry(source, target, caseSens, gender)
                     }
                 }
             }
-            Log.i(TAG, "Loaded ${targetMap.size} glossary entries from [${file.name}]")
         } catch (e: Throwable) {
-            Log.w(TAG, "Failed to load glossary from [${file.absolutePath}]: ${e.message}")
+            Log.w(TAG, "Failed to load glossary from ${file.name}: ${e.message}")
         }
     }
 
     fun getAllEntries(): List<GlossaryEntry> {
-        // Game-specific entries override global entries for identical source terms
         val merged = LinkedHashMap<String, GlossaryEntry>()
         for ((k, v) in globalEntries) {
             merged[k] = v
@@ -181,6 +176,18 @@ class UserGlossaryManager(
         val exactKey = normalizeTermKey(sourceTerm, true)
         val lowerKey = normalizeTermKey(sourceTerm, false)
         return gameEntries.containsKey(exactKey) || gameEntries.containsKey(lowerKey)
+    }
+
+    fun getCharacterGender(name: String): Gender? {
+        val clean = name.trim()
+        val exact = normalizeTermKey(clean, true)
+        val lower = normalizeTermKey(clean, false)
+
+        val entry = gameEntries[exact] ?: gameEntries[lower] ?: globalEntries[exact] ?: globalEntries[lower]
+            ?: gameEntries.values.firstOrNull { it.sourceTerm.equals(clean, true) || it.targetTerm.equals(clean, true) }
+            ?: globalEntries.values.firstOrNull { it.sourceTerm.equals(clean, true) || it.targetTerm.equals(clean, true) }
+
+        return entry?.gender?.takeIf { it != Gender.NEUTRAL }
     }
 
     fun addOrUpdateEntry(
@@ -240,14 +247,11 @@ class UserGlossaryManager(
     private fun saveToFileAsync(file: File, entries: List<GlossaryEntry>, gameKey: String) {
         scope.launch {
             try {
-                val parent = file.parentFile
-                if (parent != null && !parent.exists()) {
-                    parent.mkdirs()
-                }
-
+                ensureDirectories()
                 val json = JSONObject()
                 json.put("version", 1)
                 json.put("gameKey", gameKey)
+                json.put("exportedAt", System.currentTimeMillis())
 
                 val array = JSONArray()
                 for (entry in entries) {
@@ -255,39 +259,37 @@ class UserGlossaryManager(
                     obj.put("sourceTerm", entry.sourceTerm)
                     obj.put("targetTerm", entry.targetTerm)
                     obj.put("caseSensitive", entry.caseSensitive)
+                    obj.put("gender", entry.gender.name)
                     array.put(obj)
                 }
                 json.put("entries", array)
 
                 file.writeText(json.toString(2), Charsets.UTF_8)
-                Log.i(TAG, "Saved ${entries.size} glossary entries to [${file.name}]")
             } catch (e: Throwable) {
-                Log.e(TAG, "Failed to save glossary file [${file.absolutePath}]", e)
+                Log.e(TAG, "Failed to save dictionary to ${file.name}", e)
             }
         }
     }
 
     fun exportDictionaryJson(isGameSpecific: Boolean = false): String {
-        val entries = if (isGameSpecific && activeGameKey != "global") getGameEntries() else getGlobalEntries()
+        val list = if (isGameSpecific) getGameEntries() else getGlobalEntries()
         val json = JSONObject()
         json.put("version", 1)
         json.put("gameKey", if (isGameSpecific) activeGameKey else "global")
+        json.put("exportedAt", System.currentTimeMillis())
         val array = JSONArray()
-        for (e in entries) {
+        for (e in list) {
             val obj = JSONObject()
             obj.put("sourceTerm", e.sourceTerm)
             obj.put("targetTerm", e.targetTerm)
             obj.put("caseSensitive", e.caseSensitive)
+            obj.put("gender", e.gender.name)
             array.put(obj)
         }
         json.put("entries", array)
         return json.toString(2)
     }
 
-    /**
-     * Pre-translation replacement: replaces terms and names in source text
-     * so that target character names or specific game terms remain pristine.
-     */
     fun applyPreTranslation(text: String): String {
         if (text.isBlank()) return text
         var result = text
@@ -302,9 +304,9 @@ class UserGlossaryManager(
     /**
      * Post-translation replacement: checks if the source text contained a glossary term,
      * or if the untranslated source term is present in the translated text,
-     * and guarantees substitution with the canonical targetTerm.
+     * and guarantees substitution with the canonical targetTerm, matching 6-case declensions.
      */
-    fun applyPostTranslation(sourceText: String, translatedText: String): String {
+    fun applyPostTranslation(sourceText: String, translatedText: String, targetLang: String = "ru"): String {
         if (translatedText.isBlank()) return translatedText
         var result = translatedText
         val sortedEntries = getAllEntries().sortedByDescending { it.sourceTerm.length }
@@ -317,6 +319,16 @@ class UserGlossaryManager(
             val inTranslation = containsTerm(result, entry.sourceTerm, entry.caseSensitive)
 
             if (inTranslation || inSource) {
+                if (targetLang.lowercase().startsWith("ru")) {
+                    val cases = RussianGrammarAndDeclensionEngine.generateAllCases(entry.targetTerm, entry.gender)
+                    val prepPattern = Regex("(?i)\\b([а-яёА-ЯЁ]{1,12})\\s+" + Regex.escape(entry.sourceTerm) + "\\b")
+                    result = prepPattern.replace(result) { match ->
+                        val prep = match.groupValues[1]
+                        val rCase = RussianGrammarAndDeclensionEngine.matchCaseByPrecedingPreposition(prep)
+                            ?: RussianGrammarAndDeclensionEngine.RussianCase.NOMINATIVE
+                        "$prep ${cases[rCase] ?: entry.targetTerm}"
+                    }
+                }
                 result = replaceTerm(result, entry.sourceTerm, entry.targetTerm, entry.caseSensitive)
             }
         }

@@ -481,6 +481,14 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         val fpsCounterPref = findPreference<ListPreference>("fps_counter_position")
         val resolutionHudPref = findPreference<ListPreference>("resolution_hud_position")
+        val consoleSkinTypePref = findPreference<ListPreference>("video_console_skin_type")
+        if (consoleSkinTypePref != null) {
+            val validValues = resources.getStringArray(R.array.console_skin_values_v792)
+            if (consoleSkinTypePref.value == null || !validValues.contains(consoleSkinTypePref.value)) {
+                consoleSkinTypePref.value = "aurora_auto_theme"
+            }
+            helper.bindPreferenceSummaryToValue(consoleSkinTypePref)
+        }
         if (fpsCounterPref != null && resolutionHudPref != null) {
             helper.bindPreferenceSummaryToValue(fpsCounterPref)
             helper.bindPreferenceSummaryToValue(resolutionHudPref)

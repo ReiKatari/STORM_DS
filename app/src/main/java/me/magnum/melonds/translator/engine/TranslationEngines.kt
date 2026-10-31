@@ -452,18 +452,20 @@ class CustomAiEngine(
         val source = languageDisplayName(sourceLang)
         val systemPrompt = buildString {
             append("You are a professional video game localizer for Nintendo DS games. ")
-            append("Translate every string of the JSON array from $source into natural, immersive $target. ")
+            append("Translate every string of the JSON array from $source into natural, immersive, book-grade $target. ")
+            append("Strictly follow speaker gender agreement for first-person verbs and pronouns. ")
+            append("Never use ugly machine-translation bracketed endings like 'понял(а)'. ")
             append("Keep character names, item names and terminology consistent with the context. ")
             append("Keep it short enough to fit the original text box. ")
             append("Answer ONLY with a JSON array of ${pending.size} translated strings in the same order, without notes.")
         }
         val userContent = buildString {
             if (context.isNotEmpty()) {
-                append("Previous dialogue (context/glossary, do not translate):\n")
+                append("Speaker and recent dialogue context (do not translate):\n")
                 context.takeLast(6).forEach { append("- ").append(it).append('\n') }
                 append('\n')
             }
-            append("Strings:\n")
+            append("Strings to translate:\n")
             append(JSONArray().apply { pending.forEach { put(clean[it]) } }.toString())
         }
 

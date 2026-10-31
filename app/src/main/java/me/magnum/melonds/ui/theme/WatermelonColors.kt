@@ -175,23 +175,41 @@ val SakuraWatermelonColors = WatermelonColors(
 )
 
 fun getCustomizedAccentColors(base: WatermelonColors, accentKey: String): WatermelonColors {
-    val accent = when (accentKey) {
-        "electric_cyan" -> Color(0xFF00E5FF)
-        "matrix_emerald", "emerald_jade", "acid_green" -> Color(0xFF00E676)
-        "amber_gold", "plasma_amber", "cyber_gold" -> Color(0xFFFFB300)
-        "cyber_red", "crimson_red" -> Color(0xFFFF2A55)
-        "neon_magenta" -> Color(0xFFF50057)
-        "royal_violet", "cyber_purple" -> Color(0xFF7C4DFF)
-        "deep_sapphire", "electric_blue" -> Color(0xFF2979FF)
-        "solar_orange", "solar_flare" -> Color(0xFFFF6D00)
-        "mint_frost", "ice_cyan" -> Color(0xFF00BFA5)
-        "toxic_lime" -> Color(0xFFAEEA00)
-        "hot_pink" -> Color(0xFFFF4081)
-        "oled_white", "pure_white" -> Color(0xFFE2E8F0)
-        else -> Color(0xFF00E5FF)
+    val accent = if (base.isDark) {
+        when (accentKey) {
+            "electric_cyan" -> Color(0xFF00E5FF)
+            "matrix_emerald", "emerald_jade", "acid_green" -> Color(0xFF00E676)
+            "amber_gold", "plasma_amber", "cyber_gold" -> Color(0xFFFBBF24)
+            "cyber_red", "crimson_red" -> Color(0xFFFF2A55)
+            "neon_magenta" -> Color(0xFFF50057)
+            "royal_violet", "cyber_purple" -> Color(0xFF7C4DFF)
+            "deep_sapphire", "electric_blue" -> Color(0xFF2979FF)
+            "solar_orange", "solar_flare" -> Color(0xFFFF6D00)
+            "mint_frost", "ice_cyan" -> Color(0xFF00BFA5)
+            "toxic_lime" -> Color(0xFFAEEA00)
+            "hot_pink" -> Color(0xFFFF4081)
+            "oled_white", "pure_white" -> Color(0xFFE2E8F0)
+            else -> Color(0xFF00E5FF)
+        }
+    } else {
+        when (accentKey) {
+            "electric_cyan" -> Color(0xFF0284C7)
+            "matrix_emerald", "emerald_jade", "acid_green" -> Color(0xFF047857)
+            "amber_gold", "plasma_amber", "cyber_gold" -> Color(0xFFB45309)
+            "cyber_red", "crimson_red" -> Color(0xFFDC2626)
+            "neon_magenta" -> Color(0xFFC026D3)
+            "royal_violet", "cyber_purple" -> Color(0xFF7C3AED)
+            "deep_sapphire", "electric_blue" -> Color(0xFF1D4ED8)
+            "solar_orange", "solar_flare" -> Color(0xFFC2410C)
+            "mint_frost", "ice_cyan" -> Color(0xFF0F766E)
+            "toxic_lime" -> Color(0xFF4D7C0F)
+            "hot_pink" -> Color(0xFFDB2777)
+            "oled_white", "pure_white" -> Color(0xFF334155)
+            else -> Color(0xFF0284C7)
+        }
     }
-    val accentGlow = accent.copy(alpha = 0.45f)
-    val accentDim = accent.copy(alpha = 0.20f)
+    val accentGlow = accent.copy(alpha = if (base.isDark) 0.45f else 0.35f)
+    val accentDim = accent.copy(alpha = if (base.isDark) 0.20f else 0.14f)
 
     return base.copy(
         green = accent,

@@ -41,6 +41,12 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false"
                 app:defaultValue="false" />
+
+        <Preference
+                android:key="manage_pause_menu"
+                android:title="@string/v792_general_pause_menu_title"
+                android:summary="@string/v792_general_pause_menu_summary"
+                app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
