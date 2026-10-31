@@ -1,4 +1,5 @@
 #include "OboeCallback.h"
+#include <algorithm>
 #include "types.h"
 #include "Platform.h"
 #include "SPU.h"
@@ -8,7 +9,7 @@ using namespace melonDS;
 
 #define INTERNAL_FRAME_RATE 59.8260982880808f
 
-OboeCallback::OboeCallback(int volume, void (*onErrorCallback)(void), std::ostream* recordingStream) : _volume(volume), onErrorCallback(onErrorCallback), _recordingStream(recordingStream) {
+OboeCallback::OboeCallback(int volume, void (*onErrorCallback)(void), std::ostream* recordingStream) : _volume(std::clamp(volume, 0, 512)), onErrorCallback(onErrorCallback), _recordingStream(recordingStream) {
     audioSampleFrac = 0;
 }
 
@@ -70,10 +71,10 @@ OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t n
         s32 sampleL = (s32)samples[i * 2];
         s32 sampleR = (s32)samples[i * 2 + 1];
 
-        if (_volume < 256)
+        if (_volume != 256)
         {
-            sampleL = (sampleL * _volume) >> 8;
-            sampleR = (sampleR * _volume) >> 8;
+            sampleL = (static_cast<melonDS::s32>(sampleL) * _volume) >> 8;
+            sampleR = (static_cast<melonDS::s32>(sampleR) * _volume) >> 8;
         }
 
         // 1. Dynamic Bass Boost
@@ -124,18 +125,20 @@ OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t n
 inline melonDS::s16 OboeCallback::applySoftLimit(melonDS::s32 sample)
 {
     if (!softLimiterEnabled) {
-        return (s16)std::clamp<s32>(sample, -32768, 32767);
+        return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(sample, -32768, 32767));
     }
     if (sample > 24576) {
         float x = (float)(sample - 24576) / 8191.0f;
-        float y = x / (1.0f + x * 0.8f);
-        return (s16)(24576.0f + y * 8191.0f);
+        float y = x / (1.0f + x);
+        melonDS::s32 out = static_cast<melonDS::s32>(24576.0f + y * 8191.0f);
+        return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(out, -32768, 32767));
     } else if (sample < -24576) {
         float x = (float)(-sample - 24576) / 8192.0f;
-        float y = x / (1.0f + x * 0.8f);
-        return (s16)(-24576.0f - y * 8192.0f);
+        float y = x / (1.0f + x);
+        melonDS::s32 out = static_cast<melonDS::s32>(-24576.0f - y * 8192.0f);
+        return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(out, -32768, 32767));
     }
-    return (s16)sample;
+    return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(sample, -32768, 32767));
 }
 
 void OboeCallback::onErrorAfterClose(oboe::AudioStream* stream, oboe::Result result)

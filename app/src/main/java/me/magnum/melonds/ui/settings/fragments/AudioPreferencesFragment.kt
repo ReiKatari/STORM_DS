@@ -117,7 +117,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun updateVolumePreferenceSummary(volumePreference: SeekBarPreference, volume: Int) {
-        val volumePercentage = (volume / volumePreference.max.toFloat() * 100f).toInt()
+        val volumePercentage = kotlin.math.round(volume / 256f * 100f).toInt().coerceIn(0, 200)
         volumePreference.summary = getString(R.string.volume_percentage, volumePercentage)
     }
 

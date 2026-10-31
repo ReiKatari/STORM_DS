@@ -65,11 +65,7 @@ class RewindPreferencesFragment : MasterSwitchPreferenceFragment(), PreferenceFr
         val maxUsageStr = SizeUtils.getBestSizeStringRepresentation(requireContext(), maximumMemoryUsage, 1)
 
         val summaryStringBuilder = StringBuilder()
-        val snapshotsStr = if (me.magnum.melonds.utils.RussianPlurals.isRussian(resources)) {
-            me.magnum.melonds.utils.RussianPlurals.format(maximumRewindStates, "снимок", "снимка", "снимков")
-        } else {
-            resources.getQuantityString(R.plurals.v780_rewind_snapshots_count, maximumRewindStates, maximumRewindStates)
-        }
+        val snapshotsStr = resources.getQuantityString(R.plurals.v780_rewind_snapshots_count, maximumRewindStates, maximumRewindStates)
         summaryStringBuilder.append(getString(R.string.v780_rewind_summary_detail, rewindWindow, snapshotsStr, estimatedUsageStr, maxUsageStr))
 
         if (recommendedMaximumMemoryUsage != null && maximumMemoryUsage > recommendedMaximumMemoryUsage) {

@@ -12,13 +12,13 @@ import java.util.UUID
 
 data class RomConfigDto(
     @SerializedName("runtimeConsoleType")
-    val runtimeConsoleType: RuntimeConsoleType,
+    val runtimeConsoleType: RuntimeConsoleType? = null,
     @SerializedName("runtimeMicSource")
-    val runtimeMicSource: RuntimeMicSource,
+    val runtimeMicSource: RuntimeMicSource? = null,
     @SerializedName("layoutId")
-    val layoutId: String?,
+    val layoutId: String? = null,
     @SerializedName("gbaSlotConfig")
-    val gbaSlotConfig: RomGbaSlotConfigDto,
+    val gbaSlotConfig: RomGbaSlotConfigDto? = null,
     @SerializedName("customName")
     val customName: String? = null,
     @SerializedName(value = "useHgEngineFix", alternate = ["useHgInputWorkaround"])
@@ -60,56 +60,56 @@ data class RomConfigDto(
     companion object {
         fun fromModel(romConfig: RomConfig): RomConfigDto {
             return RomConfigDto(
-                romConfig.runtimeConsoleType,
-                romConfig.runtimeMicSource,
-                romConfig.layoutId?.toString(),
-                RomGbaSlotConfigDto.fromModel(romConfig.gbaSlotConfig),
-                romConfig.customName,
-                romConfig.useHgEngineFix,
-                romConfig.inputMode,
-                romConfig.customControllerConfiguration?.let { ControllerConfigurationDto.fromControllerConfiguration(it) },
-                romConfig.videoRenderer,
-                romConfig.threadedRendering,
-                romConfig.internalResolutionScaling,
-                romConfig.videoFiltering,
-                romConfig.retroArchShaderPresetPath,
-                romConfig.retroArchShaderParameters,
-                romConfig.retroAchievementsEnabled,
-                romConfig.dualScreenPreset,
-                romConfig.dualScreenKeepAspectRatio,
-                romConfig.dualScreenIntegerScale,
-                romConfig.translatorSourceLang,
-                romConfig.arm9Overclock,
-                romConfig.fastForwardSpeedMultiplier,
-                romConfig.customVulkanDriverName,
+                runtimeConsoleType = romConfig.runtimeConsoleType,
+                runtimeMicSource = romConfig.runtimeMicSource,
+                layoutId = romConfig.layoutId?.toString(),
+                gbaSlotConfig = RomGbaSlotConfigDto.fromModel(romConfig.gbaSlotConfig),
+                customName = romConfig.customName,
+                useHgEngineFix = romConfig.useHgEngineFix,
+                inputMode = romConfig.inputMode,
+                customControllerConfiguration = romConfig.customControllerConfiguration?.let { ControllerConfigurationDto.fromControllerConfiguration(it) },
+                videoRenderer = romConfig.videoRenderer,
+                threadedRendering = romConfig.threadedRendering,
+                internalResolutionScaling = romConfig.internalResolutionScaling?.takeIf { it > 0 },
+                videoFiltering = romConfig.videoFiltering,
+                retroArchShaderPresetPath = romConfig.retroArchShaderPresetPath?.takeIf { it.isNotBlank() },
+                retroArchShaderParameters = romConfig.retroArchShaderParameters?.takeIf { it.isNotBlank() },
+                retroAchievementsEnabled = romConfig.retroAchievementsEnabled,
+                dualScreenPreset = romConfig.dualScreenPreset,
+                dualScreenKeepAspectRatio = romConfig.dualScreenKeepAspectRatio,
+                dualScreenIntegerScale = romConfig.dualScreenIntegerScale,
+                translatorSourceLang = romConfig.translatorSourceLang?.takeIf { it.isNotBlank() },
+                arm9Overclock = romConfig.arm9Overclock?.takeIf { it > 0 },
+                fastForwardSpeedMultiplier = romConfig.fastForwardSpeedMultiplier?.takeIf { it > 0f },
+                customVulkanDriverName = romConfig.customVulkanDriverName?.takeIf { it.isNotBlank() },
             )
         }
     }
 
     fun toModel(): RomConfig {
         return RomConfig(
-            runtimeConsoleType,
-            runtimeMicSource,
-            layoutId?.let { UUID.fromString(it) },
-            gbaSlotConfig.toModel(),
+            runtimeConsoleType = runtimeConsoleType ?: RuntimeConsoleType.DEFAULT,
+            runtimeMicSource = runtimeMicSource ?: RuntimeMicSource.DEFAULT,
+            layoutId = layoutId?.let { runCatching { UUID.fromString(it) }.getOrNull() },
+            gbaSlotConfig = gbaSlotConfig?.toModel() ?: me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig.None,
             customName = customName,
             useHgEngineFix = useHgEngineFix ?: false,
             inputMode = inputMode ?: RomInputMode.GLOBAL,
             customControllerConfiguration = customControllerConfiguration?.toControllerConfiguration(),
             videoRenderer = videoRenderer,
             threadedRendering = threadedRendering,
-            internalResolutionScaling = internalResolutionScaling,
+            internalResolutionScaling = internalResolutionScaling?.takeIf { it > 0 },
             videoFiltering = videoFiltering,
-            retroArchShaderPresetPath = retroArchShaderPresetPath,
-            retroArchShaderParameters = retroArchShaderParameters,
+            retroArchShaderPresetPath = retroArchShaderPresetPath?.takeIf { it.isNotBlank() },
+            retroArchShaderParameters = retroArchShaderParameters?.takeIf { it.isNotBlank() },
             retroAchievementsEnabled = retroAchievementsEnabled,
             dualScreenPreset = dualScreenPreset,
             dualScreenKeepAspectRatio = dualScreenKeepAspectRatio,
             dualScreenIntegerScale = dualScreenIntegerScale,
-            translatorSourceLang = translatorSourceLang,
-            arm9Overclock = arm9Overclock,
-            fastForwardSpeedMultiplier = fastForwardSpeedMultiplier,
-            customVulkanDriverName = customVulkanDriverName,
+            translatorSourceLang = translatorSourceLang?.takeIf { it.isNotBlank() },
+            arm9Overclock = arm9Overclock?.takeIf { it > 0 },
+            fastForwardSpeedMultiplier = fastForwardSpeedMultiplier?.takeIf { it > 0f },
+            customVulkanDriverName = customVulkanDriverName?.takeIf { it.isNotBlank() },
         )
     }
 }

@@ -792,7 +792,7 @@ object PlayStatsStore {
 
         val rootObj = JSONObject().apply {
             put("app", "STORM DS")
-            put("appVersion", "7.9.2")
+            put("appVersion", "7.9.3")
             put("exportedAt", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()))
             put("playerLevel", summary.levelInfo.level)
             put("totalXp", summary.levelInfo.totalXp)
@@ -881,7 +881,7 @@ object PlayStatsStore {
 
         val sb = StringBuilder()
         val exportTime = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.US).format(Date())
-        sb.append("# STORM DS 7.9.2 - Extended Player Statistics Export\n")
+        sb.append("# STORM DS 7.9.3 - Extended Player Statistics Export\n")
         sb.append("Exported At,Player Level,Total XP,Rank Tier,Current Streak (days),Best Streak (days),Total Play Time (min),Average Session (min),Total Launches,Total Sessions\n")
         sb.append("\"$exportTime\",${summary.levelInfo.level},${summary.levelInfo.totalXp},${summary.levelInfo.rankTierIndex},${summary.currentStreakDays},${summary.bestStreakDays},${summary.totalPlayTimeMs / 60000L},${summary.averageSessionMs / 60000L},${summary.totalLaunches},${summary.totalSessionsCount}\n\n")
 

@@ -37,7 +37,7 @@ class AdrenoVulkanDriverManager(
     }
 
     fun getPipelineCacheFileForActiveDriver(): File {
-        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache")
+        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache_v793")
         if (!cacheDir.exists()) {
             cacheDir.mkdirs()
         }
@@ -51,7 +51,7 @@ class AdrenoVulkanDriverManager(
             }
             else -> "system"
         }
-        return File(cacheDir, "$driverKey.bin")
+        return File(cacheDir, "${driverKey}_v793.bin")
     }
 
     fun updateActiveDriverPipelineCachePath() {

@@ -57,21 +57,19 @@ data class RomDto(
 
     fun toModel(): Rom {
         return Rom(
-            name,
-            developerName,
-            fileName,
-            uri.toUri(),
-            parentTreeUri?.toUri(),
-            config.toModel(),
-            lastPlayed,
-            isDsiWareTitle,
-            retroAchievementsHash,
-            totalPlayTime.milliseconds,
-            isFavorite,
-            null,
-            null,
-            isDsiEnhanced,
-            gameCode,
+            name = name.takeIf { !it.isNullOrBlank() } ?: fileName?.substringBeforeLast('.') ?: "Unknown",
+            developerName = developerName ?: "Unknown",
+            fileName = fileName ?: "unknown.nds",
+            uri = (uri ?: "").toUri(),
+            parentTreeUri = parentTreeUri?.toUri(),
+            config = config?.toModel() ?: me.magnum.melonds.domain.model.rom.config.RomConfig.default(),
+            lastPlayed = lastPlayed,
+            isDsiWareTitle = isDsiWareTitle,
+            retroAchievementsHash = retroAchievementsHash ?: "",
+            totalPlayTime = totalPlayTime.coerceAtLeast(0L).milliseconds,
+            isFavorite = isFavorite,
+            isDsiEnhanced = isDsiEnhanced,
+            gameCode = gameCode ?: "",
         )
     }
 }

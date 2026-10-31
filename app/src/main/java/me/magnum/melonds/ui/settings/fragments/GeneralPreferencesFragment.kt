@@ -188,26 +188,19 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
                 // Manage pause submenu
         findPreference<Preference>("manage_pause_menu")?.let { pref ->
-            val isRu = me.magnum.melonds.utils.RussianPlurals.isRussian(resources)
             val store = me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore(requireContext())
             val hiddenCount = store.getHiddenItems().size
             val hasCustom = store.getCustomOrder().isNotEmpty()
-            pref.summary = if (isRu) {
-                "Скрыто пунктов: $hiddenCount • Порядок: ${if (hasCustom) "Пользовательский" else "По умолчанию"}"
-            } else {
-                "Hidden items: $hiddenCount • Order: ${if (hasCustom) "Custom" else "Default"}"
-            }
+            val orderStr = getString(if (hasCustom) R.string.v793_general_order_custom else R.string.v793_general_order_default)
+            pref.summary = getString(R.string.v793_general_pause_summary_fmt, hiddenCount, orderStr)
             pref.setOnPreferenceClickListener {
                 AlertDialog.Builder(requireContext())
                     .setTitle(R.string.v792_general_pause_menu_title)
                     .setMessage(R.string.v792_general_pause_menu_reset_confirm)
                     .setPositiveButton(R.string.v792_pause_reset_defaults) { _, _ ->
                         store.resetToDefaults()
-                        pref.summary = if (isRu) {
-                            "Скрыто пунктов: 0 • Порядок: По умолчанию"
-                        } else {
-                            "Hidden items: 0 • Order: Default"
-                        }
+                        val defaultOrderStr = getString(R.string.v793_general_order_default)
+                        pref.summary = getString(R.string.v793_general_pause_summary_fmt, 0, defaultOrderStr)
                         Toast.makeText(requireContext(), R.string.v792_general_pause_menu_reset_done, Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton(android.R.string.cancel, null)
@@ -235,16 +228,15 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     }
 
     private fun showSnapshotsDialog() {
-        val isRu = java.util.Locale.getDefault().language.startsWith("ru")
         lifecycleScope.launch(Dispatchers.IO) {
             val snapshots = settingsBackupManager.listSnapshots()
             withContext(Dispatchers.Main) {
-                val createLabel = if (isRu) "➕ Создать снимок настроек сейчас" else "➕ Create settings snapshot now"
+                val createLabel = getString(R.string.v793_general_snapshot_create_now)
                 val items = mutableListOf(createLabel)
                 snapshots.forEach { snap ->
                     val reasonLabel = when (snap.reason) {
-                        "auto" -> if (isRu) "Авто перед импортом" else "Auto before import"
-                        else -> if (isRu) "Вручную" else "Manual"
+                        "auto" -> getString(R.string.v793_general_snapshot_auto_before_import)
+                        else -> getString(R.string.v793_general_snapshot_manual)
                     }
                     items.add("📦 ${snap.displayDate} — $reasonLabel")
                 }
@@ -257,7 +249,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                                 val created = settingsBackupManager.createSnapshot("manual")
                                 withContext(Dispatchers.Main) {
                                     val msg = if (created != null) {
-                                        if (isRu) "Снимок сохранён: ${created.displayDate}" else "Snapshot saved: ${created.displayDate}"
+                                        getString(R.string.v793_general_snapshot_saved_fmt, created.displayDate)
                                     } else {
                                         getString(R.string.settings_backup_error)
                                     }
@@ -290,18 +282,10 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     }
 
     private fun showStormLayoutDialog() {
-        val isRu = java.util.Locale.getDefault().language.startsWith("ru")
-        val options = if (isRu) {
-            arrayOf(
-                "📤 Экспортировать раскладки (layouts_backup.stormlayout)",
-                "📥 Импортировать раскладки (.stormlayout / layouts.json)"
-            )
-        } else {
-            arrayOf(
-                "📤 Export layouts (layouts_backup.stormlayout)",
-                "📥 Import layouts (.stormlayout / layouts.json)"
-            )
-        }
+        val options = arrayOf(
+            getString(R.string.v793_general_export_layouts_opt),
+            getString(R.string.v793_general_import_layouts_opt)
+        )
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.export_import_stormlayout)
             .setItems(options) { _, which ->
@@ -310,7 +294,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                         val exported = settingsBackupManager.exportLayoutsToStormFolder()
                         withContext(Dispatchers.Main) {
                             val msg = if (exported != null) {
-                                if (isRu) "Раскладки сохранены: ${exported.name}" else "Layouts exported: ${exported.name}"
+                                getString(R.string.v793_general_layouts_saved_fmt, exported.name)
                             } else {
                                 getString(R.string.settings_backup_error)
                             }
@@ -322,7 +306,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                         val count = settingsBackupManager.importLayoutsFromStormFolder()
                         withContext(Dispatchers.Main) {
                             if (count >= 0) {
-                                val msg = if (isRu) "Импортировано раскладок: $count" else "Imported layouts: $count"
+                                val msg = getString(R.string.v793_general_layouts_imported_fmt, count)
                                 Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
                                 activity?.recreate()
                             } else {
@@ -388,7 +372,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.2").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.3").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 

@@ -472,7 +472,31 @@ class AndroidEmulatorManager(
                     )
                     if (!retryResult.isTerminal && isActive) {
                         messageQueue.start()
-                        precompileVulkanPipelines(fallbackConfig)
+                        if (!precompileVulkanPipelines(fallbackConfig)) {
+                            val fallbackRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                                context = context,
+                                gameCode = rom.gameCode,
+                                romName = rom.config.customName ?: rom.name,
+                                fileName = rom.fileName,
+                                failedRenderer = VideoRenderer.VULKAN,
+                            ) ?: GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                            writeGameExecutionLog(rom, rom.fileName, true, "Vulkan pipeline precompilation failed in DS fallback; switching renderer to ${fallbackRenderer.name}", "loadRom (Renderer Fallback)")
+                            messageQueue.stop()
+                            MelonEmulator.stopEmulation()
+                            val glConfig = fallbackConfig.copy(
+                                rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
+                            )
+                            setupEmulator(glConfig, rom.config.customVulkanDriverName)
+                            MelonEmulator.loadRom(
+                                romUri = romUri,
+                                sramUri = sram,
+                                gbaSlotType = gbaSlotType,
+                                gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
+                                gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
+                            )
+                            messageQueue.start()
+                            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+                        }
                         MelonEmulator.setupCheats(cheats.toTypedArray())
                         MelonEmulator.startEmulation(startPaused = true)
                         delay(10)
@@ -494,7 +518,40 @@ class AndroidEmulatorManager(
                     RomLaunchResult.LaunchFailed(loadResult)
                 } else {
                     messageQueue.start()
-                    precompileVulkanPipelines(emulatorConfiguration)
+                    if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                        val fallbackRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                            context = context,
+                            gameCode = rom.gameCode,
+                            romName = rom.config.customName ?: rom.name,
+                            fileName = rom.fileName,
+                            failedRenderer = VideoRenderer.VULKAN,
+                        ) ?: GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                        val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
+                        val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
+                        val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
+                        writeGameExecutionLog(rom, rom.fileName, true, "Vulkan pipeline precompilation failed; automatically falling back to ${fallbackRenderer.name}\n$fullDiag", "loadRom (Renderer Fallback)")
+                        messageQueue.stop()
+                        MelonEmulator.stopEmulation()
+                        val glFallbackConfig = emulatorConfiguration.copy(
+                            rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
+                        )
+                        setupEmulator(glFallbackConfig, rom.config.customVulkanDriverName)
+                        val glRetryResult = MelonEmulator.loadRom(
+                            romUri = romUri,
+                            sramUri = sram,
+                            gbaSlotType = gbaSlotType,
+                            gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
+                            gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
+                        )
+                        if (glRetryResult.isTerminal || !isActive) {
+                            cameraManager.stopCurrentCameraSource()
+                            MelonEmulator.stopEmulation()
+                            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
+                            return@withContext RomLaunchResult.LaunchFailed(glRetryResult)
+                        }
+                        messageQueue.start()
+                        _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+                    }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
                     MelonEmulator.startEmulation(startPaused = true)
                     delay(10)
@@ -706,7 +763,31 @@ class AndroidEmulatorManager(
                 )
                 if (!retryResult.isTerminal && isActive) {
                     messageQueue.start()
-                    precompileVulkanPipelines(fallbackConfig)
+                    if (!precompileVulkanPipelines(fallbackConfig)) {
+                        val fallbackRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                            context = context,
+                            gameCode = rom.gameCode,
+                            romName = rom.config.customName ?: rom.name,
+                            fileName = rom.fileName,
+                            failedRenderer = VideoRenderer.VULKAN,
+                        ) ?: GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                        writeGameExecutionLog(rom, titleIdHex, true, "Vulkan pipeline precompilation failed in DSiWare DS fallback; switching renderer to ${fallbackRenderer.name}", "loadDsiWare (Renderer Fallback)")
+                        messageQueue.stop()
+                        MelonEmulator.stopEmulation()
+                        val glConfig = fallbackConfig.copy(
+                            rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
+                        )
+                        setupEmulator(glConfig, rom.config.customVulkanDriverName)
+                        MelonEmulator.loadRom(
+                            romUri = playableRomUri,
+                            sramUri = sram,
+                            gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                            gbaRomUri = null,
+                            gbaSramUri = null,
+                        )
+                        messageQueue.start()
+                        _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+                    }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
                     activeDsiWareSession = null
                     MelonEmulator.startEmulation(startPaused = true)
@@ -726,7 +807,38 @@ class AndroidEmulatorManager(
             }
 
             messageQueue.start()
-            precompileVulkanPipelines(emulatorConfiguration)
+            if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                val fallbackRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                    context = context,
+                    gameCode = rom.gameCode,
+                    romName = rom.config.customName ?: rom.name,
+                    fileName = rom.fileName,
+                    failedRenderer = VideoRenderer.VULKAN,
+                ) ?: GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                val diag = MelonEmulator.stopAndGetBootDiagnostic()
+                writeGameExecutionLog(rom, titleIdHex, true, "Vulkan pipeline precompilation failed in DSiWare; falling back to ${fallbackRenderer.name}\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare (Renderer Fallback)")
+                messageQueue.stop()
+                MelonEmulator.stopEmulation()
+                val glConfig = emulatorConfiguration.copy(
+                    rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
+                )
+                setupEmulator(glConfig, rom.config.customVulkanDriverName)
+                val glRetry = MelonEmulator.loadRom(
+                    romUri = playableRomUri,
+                    sramUri = sram,
+                    gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                    gbaRomUri = null,
+                    gbaSramUri = null,
+                )
+                if (glRetry.isTerminal || !isActive) {
+                    cameraManager.stopCurrentCameraSource()
+                    MelonEmulator.stopEmulation()
+                    _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
+                    return@withContext RomLaunchResult.LaunchFailed(glRetry)
+                }
+                messageQueue.start()
+                _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+            }
             MelonEmulator.setupCheats(cheats.toTypedArray())
             activeDsiWareSession = ActiveDsiWareSession(
                 rom = rom,
@@ -871,7 +983,30 @@ class AndroidEmulatorManager(
             )
             if (!retryResult.isTerminal && isActive) {
                 messageQueue.start()
-                precompileVulkanPipelines(fallbackConfig)
+                if (!precompileVulkanPipelines(fallbackConfig)) {
+                    val fallbackRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                        context = context,
+                        gameCode = rom.gameCode,
+                        romName = rom.config.customName ?: rom.name,
+                        fileName = rom.fileName,
+                        failedRenderer = VideoRenderer.VULKAN,
+                    ) ?: GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                    messageQueue.stop()
+                    MelonEmulator.stopEmulation()
+                    val glConfig = fallbackConfig.copy(
+                        rendererConfiguration = fallbackConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
+                    )
+                    setupEmulator(glConfig, rom.config.customVulkanDriverName)
+                    MelonEmulator.loadRom(
+                        romUri = playableRomUri,
+                        sramUri = sram,
+                        gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                        gbaRomUri = null,
+                        gbaSramUri = null,
+                    )
+                    messageQueue.start()
+                    _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+                }
                 MelonEmulator.setupCheats(cheats.toTypedArray())
                 MelonEmulator.startEmulation(startPaused = true)
                 delay(10)
@@ -890,7 +1025,38 @@ class AndroidEmulatorManager(
         }
 
         messageQueue.start()
-        precompileVulkanPipelines(emulatorConfiguration)
+        if (!precompileVulkanPipelines(emulatorConfiguration)) {
+            val fallbackRenderer = GameCompatibilityManager.stepDownForLoadFailure(
+                context = context,
+                gameCode = rom.gameCode,
+                romName = rom.config.customName ?: rom.name,
+                fileName = rom.fileName,
+                failedRenderer = VideoRenderer.VULKAN,
+            ) ?: GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+            val diag = MelonEmulator.stopAndGetBootDiagnostic()
+            writeGameExecutionLog(rom, titleIdHex, true, "Vulkan pipeline precompilation failed in DSiWare; falling back to ${fallbackRenderer.name}\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare (Renderer Fallback)")
+            messageQueue.stop()
+            MelonEmulator.stopEmulation()
+            val glConfig = emulatorConfiguration.copy(
+                rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
+            )
+            setupEmulator(glConfig, rom.config.customVulkanDriverName)
+            val glRetry = MelonEmulator.loadRom(
+                romUri = playableRomUri,
+                sramUri = sram,
+                gbaSlotType = MelonEmulator.GbaSlotType.NONE,
+                gbaRomUri = null,
+                gbaSramUri = null,
+            )
+            if (glRetry.isTerminal || !isActive) {
+                cameraManager.stopCurrentCameraSource()
+                MelonEmulator.stopEmulation()
+                _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
+                return@withContext RomLaunchResult.LaunchFailed(glRetry)
+            }
+            messageQueue.start()
+            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+        }
         MelonEmulator.setupCheats(cheats.toTypedArray())
         activeDsiWareSession = ActiveDsiWareSession(
             rom = rom,
@@ -1139,7 +1305,24 @@ class AndroidEmulatorManager(
                     FirmwareLaunchResult.LaunchFailed(result)
                 } else {
                     messageQueue.start()
-                    precompileVulkanPipelines(emulatorConfiguration)
+                    if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                        val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                        messageQueue.stop()
+                        MelonEmulator.stopEmulation()
+                        val glConfig = emulatorConfiguration.copy(
+                            rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
+                        )
+                        setupEmulator(glConfig)
+                        val glResult = MelonEmulator.bootFirmware()
+                        if (glResult != MelonEmulator.FirmwareLoadResult.SUCCESS) {
+                            cameraManager.stopCurrentCameraSource()
+                            MelonEmulator.stopEmulation()
+                            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
+                            return@withContext FirmwareLaunchResult.LaunchFailed(glResult)
+                        }
+                        messageQueue.start()
+                        _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+                    }
                     MelonEmulator.startEmulation(startPaused = true)
                     FirmwareLaunchResult.LaunchSuccessful
                 }
@@ -1459,21 +1642,31 @@ class AndroidEmulatorManager(
         )
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
         val isDsiWare = rom.isDsiWareTitle || isRealDsiWareTitle(rom)
-        val consoleType = if (isDsiWare) {
+        val dsiBiosValid = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == ConfigurationDirResult.Status.VALID
+        val candidateConsoleType = if (isDsiWare) {
             ConsoleType.DSi
         } else if (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT) {
             getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
         } else {
             baseConfiguration.consoleType
         }
-        val mustUseCustomBios = baseConfiguration.useCustomBios || (consoleType == ConsoleType.DSi) || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT)
+        val consoleType = if (candidateConsoleType == ConsoleType.DSi && !dsiBiosValid && !isDsiWare) {
+            ConsoleType.DS
+        } else {
+            candidateConsoleType
+        }
+        val mustUseCustomBios = if (consoleType == ConsoleType.DSi) {
+            true
+        } else {
+            baseConfiguration.useCustomBios
+        }
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
             showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
-            fastForwardSpeedMultiplier = rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier,
-            frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
-            arm9OverclockMultiplier = rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier,
+            fastForwardSpeedMultiplier = rom.config.fastForwardSpeedMultiplier?.takeIf { it > 0f } ?: baseConfiguration.fastForwardSpeedMultiplier.coerceAtLeast(0.1f),
+            frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier.coerceAtLeast(0.1f),
+            arm9OverclockMultiplier = rom.config.arm9Overclock?.takeIf { it > 0 } ?: baseConfiguration.arm9OverclockMultiplier.coerceAtLeast(1),
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),

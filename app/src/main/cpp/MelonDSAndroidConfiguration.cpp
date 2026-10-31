@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -277,7 +278,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jobject consoleTypeEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "consoleType", "Lme/magnum/melonds/domain/model/ConsoleType;"));
     jint consoleType = env->GetIntField(consoleTypeEnum, env->GetFieldID(consoleTypeEnumClass, "consoleType", "I"));
     jboolean soundEnabled = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "soundEnabled", "Z"));
-    jint volume = env->GetIntField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "volume", "I"));
+    jint volume = std::clamp<jint>(env->GetIntField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "volume", "I")), 0, 512);
     jobject audioInterpolationEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "audioInterpolation", "Lme/magnum/melonds/domain/model/AudioInterpolation;"));
     jint audioInterpolation = env->GetIntField(audioInterpolationEnum, env->GetFieldID(audioInterpolationEnumClass, "interpolationValue", "I"));
     jobject audioBitrateEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "audioBitrate", "Lme/magnum/melonds/domain/model/AudioBitrate;"));
@@ -307,8 +308,8 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.dsiFirmwarePath = dsiFirmwarePath;
     finalEmulatorConfiguration.dsiNandPath = dsiNandPath;
     finalEmulatorConfiguration.internalFilesDir = internalDir;
-    finalEmulatorConfiguration.fastForwardSpeedMultiplier = fastForwardMaxSpeed;
-    finalEmulatorConfiguration.frameLimitSpeedMultiplier = frameLimitSpeed;
+    finalEmulatorConfiguration.fastForwardSpeedMultiplier = fastForwardMaxSpeed <= 0.0f ? 1.0f : fastForwardMaxSpeed;
+    finalEmulatorConfiguration.frameLimitSpeedMultiplier = frameLimitSpeed <= 0.0f ? 1.0f : frameLimitSpeed;
     finalEmulatorConfiguration.showBootScreen = showBootScreen;
     finalEmulatorConfiguration.useJit = useJit;
     jfieldID audioSoftLimiterEnabledField = getFieldIdOrClear(env, emulatorConfigurationClass, "audioSoftLimiterEnabled", "Z");
@@ -362,6 +363,9 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
             ? static_cast<uint32_t>(env->GetLongField(emulatorConfiguration, dsiWareAutoloadTitleIdField))
             : 0u;
     finalEmulatorConfiguration.arm9OverclockMultiplier = arm9OverclockMultiplierField != nullptr ? env->GetIntField(emulatorConfiguration, arm9OverclockMultiplierField) : 1;
+    if (finalEmulatorConfiguration.arm9OverclockMultiplier <= 0) {
+        finalEmulatorConfiguration.arm9OverclockMultiplier = 1;
+    }
     finalEmulatorConfiguration.enable3dWidescreen = enable3dWidescreenField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable3dWidescreenField) : false;
     finalEmulatorConfiguration.enable60FpsPatch = enable60FpsPatchField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable60FpsPatchField) : false;
     finalEmulatorConfiguration.wfcDnsIp = 0;

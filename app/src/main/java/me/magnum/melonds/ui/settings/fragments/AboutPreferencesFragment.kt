@@ -21,7 +21,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
-        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.2")
+        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.3")
             .removePrefix("v")
             .removePrefix("V")
         findPreference<Preference>("about_version")?.summary = vName
@@ -46,7 +46,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
 
         findPreference<Preference>("about_copy_diagnostics")?.summary =
-            "${Build.MANUFACTURER} ${Build.MODEL} • Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) • RAM: $ramFormatted • Vulkan: ${if (vulkanSupported) "Да" else "Нет"}"
+            "${Build.MANUFACTURER} ${Build.MODEL} • Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) • RAM: $ramFormatted • Vulkan: ${getString(if (vulkanSupported) R.string.yes else R.string.no)}"
 
         findPreference<Preference>("about_copy_diagnostics")?.setOnPreferenceClickListener {
             val vulkanStatus = if (vulkanSupported) {

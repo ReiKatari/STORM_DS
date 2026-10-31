@@ -29,7 +29,7 @@
                 app:updatesContinuously="true"
                 android:defaultValue="256"
                 app:min="0"
-                android:max="256" />
+                android:max="512" />
 
         <ListPreference
                 android:key="audio_interpolation"

@@ -155,20 +155,30 @@ class SramProvider(
             }
         }
 
-        var sramDocument = rootDocument.findFile(sramFileName)
+        var sramDocument = runCatching { rootDocument.findFile(sramFileName) }.getOrNull()
         if (sramDocument == null) {
-            val legacyBinDoc = rootDocument.findFile("$sramFileName.bin")
+            val legacyBinDoc = runCatching { rootDocument.findFile("$sramFileName.bin") }.getOrNull()
             if (legacyBinDoc != null) {
                 runCatching { legacyBinDoc.renameTo(sramFileName) }
-                sramDocument = rootDocument.findFile(sramFileName) ?: legacyBinDoc
+                sramDocument = runCatching { rootDocument.findFile(sramFileName) }.getOrNull() ?: legacyBinDoc
             }
         }
         return if (sramDocument != null) {
             if (sramDocument.length() == 0L) {
                 Log.w("SramProvider", "Detected 0-byte corrupt save stub '$sramFileName', purging and recreating")
                 runCatching { sramDocument.delete() }
-                val recreated = rootDocument.createFile("*/*", sramFileName)?.uri
-                val resolvedUri = recreated ?: (rootDocument.findFile(sramFileName)?.uri ?: rootDocument.findFile("$sramFileName.bin")?.uri ?: throw SramLoadException("Could not recreate SRAM file at ${rootDocument.uri}"))
+                val recreated = runCatching { rootDocument.createFile("*/*", sramFileName)?.uri }.getOrNull()
+                val resolvedUri = recreated
+                    ?: runCatching { rootDocument.findFile(sramFileName)?.uri }.getOrNull()
+                    ?: runCatching { rootDocument.findFile("$sramFileName.bin")?.uri }.getOrNull()
+                    ?: runCatching {
+                        val stormDsRoot = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+                        val fallbackDir = File(if (stormDsRoot.exists() || stormDsRoot.mkdirs()) stormDsRoot else (context.getExternalFilesDir(null) ?: context.filesDir), "saves").apply { mkdirs() }
+                        val fallbackFile = File(fallbackDir, sramFileName)
+                        if (!fallbackFile.exists()) fallbackFile.createNewFile()
+                        Uri.fromFile(fallbackFile)
+                    }.getOrNull()
+                    ?: throw SramLoadException("Could not recreate SRAM file at ${rootDocument.uri}")
                 lastSramUri = resolvedUri
                 resolvedUri
             } else {
@@ -193,10 +203,17 @@ class SramProvider(
                 resolvedUri
             }
         } else {
-            val newSramUri = rootDocument.createFile("*/*", sramFileName)?.uri
+            val newSramUri = runCatching { rootDocument.createFile("*/*", sramFileName)?.uri }.getOrNull()
             val resolvedUri = if (newSramUri == null) {
-                rootDocument.findFile(sramFileName)?.uri
-                    ?: rootDocument.findFile("$sramFileName.bin")?.uri
+                runCatching { rootDocument.findFile(sramFileName)?.uri }.getOrNull()
+                    ?: runCatching { rootDocument.findFile("$sramFileName.bin")?.uri }.getOrNull()
+                    ?: runCatching {
+                        val stormDsRoot = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+                        val fallbackDir = File(if (stormDsRoot.exists() || stormDsRoot.mkdirs()) stormDsRoot else (context.getExternalFilesDir(null) ?: context.filesDir), "saves").apply { mkdirs() }
+                        val fallbackFile = File(fallbackDir, sramFileName)
+                        if (!fallbackFile.exists()) fallbackFile.createNewFile()
+                        Uri.fromFile(fallbackFile)
+                    }.getOrNull()
                     ?: throw SramLoadException("Could not create temporary SRAM file at ${rootDocument.uri}")
             } else {
                 newSramUri

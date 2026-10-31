@@ -29,6 +29,9 @@ data class RomConfig(
     val fastForwardSpeedMultiplier: Float? = null,
     val customVulkanDriverName: String? = null,
 ) {
+    val safeArm9Overclock: Int? get() = arm9Overclock?.takeIf { it > 0 }
+    val safeFastForwardSpeedMultiplier: Float? get() = fastForwardSpeedMultiplier?.takeIf { it > 0f }
+    val safeCustomVulkanDriverName: String? get() = customVulkanDriverName?.takeIf { it.isNotBlank() }
 
     fun getEffectiveControllerConfiguration(globalConfiguration: ControllerConfiguration): ControllerConfiguration {
         return if (inputMode == RomInputMode.CUSTOM) {

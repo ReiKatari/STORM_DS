@@ -228,10 +228,9 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             }.getOrDefault(-1L)
         }
 
-        val isRu = java.util.Locale.getDefault().language.startsWith("ru")
-        val unitKb = if (isRu) "КБ" else "KB"
-        val expectedWord = if (isRu) "ожидается" else "expected"
-        val missingWord = if (isRu) "отсутствует" else "missing"
+        val unitKb = getString(R.string.v793_bios_unit_kb)
+        val expectedWord = getString(R.string.v793_bios_expected)
+        val missingWord = getString(R.string.v793_bios_missing)
         val sb = StringBuilder(decodedPath).append("\n")
         if (consoleType == ConsoleType.DS) {
             val f7 = findDoc("bios7.bin", "ds_bios7.bin", "arm7.bin")

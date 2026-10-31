@@ -1829,7 +1829,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun getVolume(): Int {
-        return preferences.getInt("volume", 256).coerceIn(0, 256)
+        return preferences.getInt("volume", 256).coerceIn(0, 512)
     }
 
     private fun getAudioInterpolation(): AudioInterpolation {
