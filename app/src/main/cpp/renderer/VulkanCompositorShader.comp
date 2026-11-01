@@ -567,7 +567,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
             && pixel3DFromLive \
             && (pixel3D.a & 0x1F) > 0 \
             && ((pixel3D.r | pixel3D.g | pixel3D.b) == 0); \
-        if (compModeSamples3D \
+        if (false && compModeSamples3D \
             && screenOwnsLive3D \
             && screenHasPrevious3D \
             && brightnessMode == 0 \
@@ -598,7 +598,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
             && (((pixel3D.r | pixel3D.g | pixel3D.b) != 0) \
                 || pixel3DLiveBlackHasSupport \
                 || (!pixel3DFromLive && screenHasPrevious3D)); \
-        if (regularCaptureUses3d \
+        if (false && regularCaptureUses3d \
             && pixel3DFromLive \
             && screenHasPrevious3D \
             && !pixel3DHasVisibleColor \

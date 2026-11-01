@@ -586,7 +586,7 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
             pixel3D = cachedPrevious3D; \
             pixel3DFromLive = false; \
         } \
-        if (compModeSamples3D \
+        if (false && compModeSamples3D \
             && screenOwnsLive3D \
             && screenHasPrevious3D \
             && brightnessMode == 0 \

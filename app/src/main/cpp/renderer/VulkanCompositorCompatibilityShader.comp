@@ -498,7 +498,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 : samplePreviousBottom3DColorAtScaledPixel(shiftedScaledX, scaledY); \
             pixel3DFromLive = false; \
         } \
-        if (compModeSamples3D \
+        if (false && compModeSamples3D \
             && screenOwnsLive3D \
             && screenHasPrevious3D \
             && brightnessMode == 0 \

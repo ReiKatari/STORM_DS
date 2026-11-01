@@ -3600,7 +3600,11 @@ void SoftRenderer::DrawScanlineActivePipeline(u32 line, Unit* unit)
                 const u16* vramLineForStructured = vram;
                 if (useStructuredVulkan2D)
                 {
-                    if (activeVulkan2DPipelineStrategy()
+                    if (true)
+                    {
+                        FillStructuredVulkan2DVramDisplayLine(line, vram);
+                    }
+                    else if (activeVulkan2DPipelineStrategy()
                             .UsesHistoricalVramDisplayCopy())
                     {
                         CopyStructuredVulkan2DCaptureLineToCurrentScreenCompatibility(
@@ -3916,14 +3920,7 @@ void SoftRenderer::DoCapture(u32 line, u32 width, u32 sourceLine)
     u32 dstaddr = (((captureCnt >> 18) & 0x3) << 14) + (line * width);
 
     const u32 captureDisplayMode = (CurUnit->DispCnt >> 16u) & (CurUnit->Num ? 0x1u : 0x3u);
-    const bool canUsePure3DStructuredCapture =
-        useStructuredVulkan2D
-        && CurUnit->Num == 0
-        && GPU.GPU3D.IsRendererAccelerated()
-        && !captureUsesDirect3D
-        && !CurUnit->CaptureLatch
-        && captureMode == 0u
-        && CanUseStructuredVulkan2DPure3DLine(captureDisplayMode);
+    const bool canUsePure3DStructuredCapture = false;
     if (canUsePure3DStructuredCapture)
     {
         dstaddr &= 0xFFFFu;
@@ -5841,6 +5838,7 @@ void SoftRenderer::PushRawPixel_Accel(u32* dst, u32 value)
 
 bool SoftRenderer::TryDrawStructuredVulkan2DCapturePixel(u32* dst, u32 flatByteAddress)
 {
+    return false;
     if (!UseStructuredVulkan2D())
         return false;
 
@@ -6455,7 +6453,7 @@ void SoftRenderer::DrawBG_Extended(u32 line, u32 bgnum)
                 };
 
             bool fastLineSaw3d = false;
-            if (tryDrawStructuredCaptureLineView(BGOBJLine, fastLineSaw3d))
+            if (false && tryDrawStructuredCaptureLineView(BGOBJLine, fastLineSaw3d))
             {
                 CurrentLineRegularCaptureUses3d =
                     CurrentLineRegularCaptureUses3d || fastLineSaw3d;

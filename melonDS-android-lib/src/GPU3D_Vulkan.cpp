@@ -1391,14 +1391,7 @@ void VulkanRenderer3D::RenderFrameActiveBackend(GPU& gpu)
     const bool bg0Uses3d = (gpu.GPU2D_A.DispCnt & 0x0108u) == 0x0108u;
     const bool sourceAHasDominant2dReplay =
         gpu.GetRenderer2D().StructuredVulkan2DSourceACaptureHasDominant2DReplay();
-    const bool structuredSourceACaptureCanStayHighres =
-        UsesStructured2DMetadata()
-        && ActiveBackendMode == BackendMode::GraphicsHardware
-        && captureMode == 0u
-        && !captureSource3d
-        && bg0Uses3d
-        && sourceAContributes
-        && !sourceAHasDominant2dReplay;
+    const bool structuredSourceACaptureCanStayHighres = false;
     const bool captureNeedsCpuReadback = false;
     const bool captureNeedsGpuCaptureLineBase =
         captureEnabled
@@ -1980,11 +1973,7 @@ u32* VulkanRenderer3D::GetLineActiveBackend(int line)
         }
 
         const auto readyCaptureMatchesHint = [&]() {
-            return !exactCaptureOnly
-                || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint
-                || (!IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u)
-                    && IsParitySubmitFresh(ReadyCaptureLineScreenSwap, 2u));
+            return true;
         };
 
         if (!HasCpuFrame && CaptureLineReady && ReadyCaptureLineData != nullptr && readyCaptureMatchesHint())
@@ -2116,9 +2105,7 @@ u32* VulkanRenderer3D::GetLineCompatibilityBackend(int line)
         }
 
         const auto readyCaptureMatchesHint = [&]() {
-            return !exactCaptureOnly
-                || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+            return true;
         };
 
         if (!HasCpuFrame && CaptureLineReady && ReadyCaptureLineData != nullptr && readyCaptureMatchesHint())
@@ -2300,10 +2287,7 @@ void VulkanRenderer3D::PrepareCaptureFrameActiveBackend()
     {
         if (finalizeCaptureLineFrame(exactCaptureOnly))
         {
-            const bool readyMatchesHint =
-                !exactCaptureOnly
-                || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+            const bool readyMatchesHint = true;
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             return;
         }
@@ -2337,9 +2321,7 @@ void VulkanRenderer3D::PrepareCaptureFrameActiveBackend()
         if (submitGraphicsCaptureExportForCurrentFrame()
             && finalizeCaptureLineFrame(true))
         {
-            const bool readyMatchesHint =
-                !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+            const bool readyMatchesHint = true;
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             if (HasCpuFrame)
                 return;
@@ -2382,10 +2364,7 @@ void VulkanRenderer3D::PrepareCaptureFrameCompatibilityBackend()
     {
         if (finalizeCaptureLineFrame(exactCaptureOnly))
         {
-            const bool readyMatchesHint =
-                !exactCaptureOnly
-                || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+            const bool readyMatchesHint = true;
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             return;
         }
@@ -2496,13 +2475,7 @@ void VulkanRenderer3D::BlitActiveBackend(const GPU& gpu)
     const bool bg0Uses3d = (gpu.GPU2D_A.DispCnt & 0x0108u) == 0x0108u;
     const bool sourceAHasDominant2dReplay =
         gpu.GetRenderer2D().StructuredVulkan2DSourceACaptureHasDominant2DReplay();
-    const bool structuredSourceACaptureCanStayHighres =
-        UsesStructured2DMetadata()
-        && captureMode == 0u
-        && !captureSource3d
-        && bg0Uses3d
-        && sourceAContributes
-        && !sourceAHasDominant2dReplay;
+    const bool structuredSourceACaptureCanStayHighres = false;
     const bool captureNeedsGpuCaptureLine =
         captureEnabled
         && (captureMode != 1u)
@@ -2522,6 +2495,12 @@ void VulkanRenderer3D::BlitActiveBackend(const GPU& gpu)
     // consume a stale/empty replacement on the next capture pass.
     if (CaptureLinePending || CaptureLineReady)
         return;
+
+    resetCaptureLineState();
+    ExactCaptureLineCachePrepared = false;
+    ExactCaptureLineCacheFresh = false;
+    HasCpuFrame = false;
+    (void)submitGraphicsCaptureExportForCurrentFrame();
 }
 
 void VulkanRenderer3D::BlitCompatibilityBackend(const GPU& gpu)
@@ -20894,11 +20873,6 @@ bool VulkanRenderer3D::restoreLastValidExactCaptureToLineCache()
 {
     if (!HasLastValidExactCapture)
         return false;
-    if (HasCurrentCaptureScreenSwapHint
-        && LastValidExactCaptureScreenSwap != CurrentCaptureScreenSwapHint)
-    {
-        return false;
-    }
 
     LineCache = LastValidExactCaptureLineCache;
     LineCacheIdentity = LastValidExactCaptureIdentity;

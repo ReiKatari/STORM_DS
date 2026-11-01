@@ -255,6 +255,8 @@ void GPU::Reset() noexcept
     GPU2D_B.Reset();
     GPU3D.Reset();
 
+    FrontBufferScreenSwap[0] = false;
+    FrontBufferScreenSwap[1] = false;
     int backbuf = FrontBuffer ? 0 : 1;
     GPU2D_Renderer->SetFramebuffer(Framebuffer[backbuf][1].get(), Framebuffer[backbuf][0].get());
 
@@ -986,6 +988,8 @@ void GPU::StartHBlank(u32 line) noexcept
 
         if (line == 191)
         {
+            const int backbuf = FrontBuffer ? 0 : 1;
+            FrontBufferScreenSwap[backbuf] = (NDS.PowerControl9 & (1u << 15u)) != 0u;
             if (ShouldMeasureStructured2D(*this))
             {
                 gStructured2DDrawWindow.Add(gStructured2DFrameDrawNs);
@@ -1051,6 +1055,7 @@ void GPU::BlankFrame() noexcept
     memset(Framebuffer[backbuf][0].get(), 0, fbsize*4);
     memset(Framebuffer[backbuf][1].get(), 0, fbsize*4);
 
+    FrontBufferScreenSwap[backbuf] = (NDS.PowerControl9 & (1u << 15u)) != 0u;
     FrontBuffer = backbuf;
     AssignFramebuffers();
 
