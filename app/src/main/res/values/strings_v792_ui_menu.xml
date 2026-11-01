@@ -25,7 +25,7 @@
     <string name="v793_summary_interval_save">Interval save</string>
     <string name="v793_summary_standard_mode">Standard mode</string>
     <string name="v793_summary_custom_bios">Custom BIOS</string>
-    <string name="v793_summary_builtin_drastic_bios">Built-in DraStic BIOS</string>
+    <string name="v793_summary_builtin_drastic_bios">Built-in BIOS</string>
     <string name="v793_summary_skin">Skin</string>
     <string name="v793_summary_touch">Touch</string>
     <string name="v793_summary_vibration">Vibration</string>
@@ -72,4 +72,15 @@
     <string name="v794_cat_cfw_mode">Firmware Mode and BIOS</string>
     <string name="v794_cat_cfw_ds_bios">DS BIOS and Firmware Images</string>
     <string name="v794_cat_cfw_dsi_bios">DSi BIOS, NAND and Firmware Images</string>
+
+    <!-- v800 Manual Update Checker -->
+    <string name="v800_check_updates_title">Check for updates</string>
+    <string name="v800_check_updates_summary">Check GitHub for new versions of STORM DS</string>
+    <string name="v800_checking_updates">Checking for updates…</string>
+    <string name="v800_update_available_title">Update available: %s</string>
+    <string name="v800_update_download">Download update</string>
+    <string name="v800_update_later">Later</string>
+    <string name="v800_update_up_to_date_title">Latest version installed</string>
+    <string name="v800_update_up_to_date_msg">STORM DS %s is currently the newest version.</string>
+    <string name="v800_update_error">Failed to check for updates. Check internet connection.</string>
 </resources>

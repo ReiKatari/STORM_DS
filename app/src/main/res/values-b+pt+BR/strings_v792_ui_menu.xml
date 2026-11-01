@@ -25,7 +25,7 @@
     <string name="v793_summary_interval_save">Salvamento por intervalo</string>
     <string name="v793_summary_standard_mode">Modo padrão</string>
     <string name="v793_summary_custom_bios">BIOS personalizado</string>
-    <string name="v793_summary_builtin_drastic_bios">BIOS integrado DraStic</string>
+    <string name="v793_summary_builtin_drastic_bios">BIOS integrado</string>
     <string name="v793_summary_skin">Skin</string>
     <string name="v793_summary_touch">Toque</string>
     <string name="v793_summary_vibration">Vibração</string>
@@ -72,4 +72,15 @@
     <string name="v794_cat_cfw_mode">Modo de firmware e BIOS</string>
     <string name="v794_cat_cfw_ds_bios">Imagens de BIOS e firmware de DS</string>
     <string name="v794_cat_cfw_dsi_bios">Imagens de BIOS, NAND e firmware de DSi</string>
+
+    <!-- v800 Manual Update Checker -->
+    <string name="v800_check_updates_title">Verificar atualizações</string>
+    <string name="v800_check_updates_summary">Verificar novas versões do STORM DS no GitHub</string>
+    <string name="v800_checking_updates">Verificando atualizações…</string>
+    <string name="v800_update_available_title">Atualização disponível: %s</string>
+    <string name="v800_update_download">Baixar atualização</string>
+    <string name="v800_update_later">Mais tarde</string>
+    <string name="v800_update_up_to_date_title">Versão mais recente instalada</string>
+    <string name="v800_update_up_to_date_msg">O STORM DS %s já é a versão mais recente.</string>
+    <string name="v800_update_error">Falha ao verificar atualizações. Verifique a conexão com a internet.</string>
 </resources>

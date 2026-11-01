@@ -31,6 +31,12 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        findPreference<Preference>("manual_check_updates")?.setOnPreferenceClickListener {
+            me.magnum.melonds.ui.settings.ManualUpdateChecker.checkNow(requireContext())
+            true
+        }
+
         val menuHost: MenuHost = requireActivity()
         menuHost.addMenuProvider(object : MenuProvider {
             override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -223,9 +229,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             }
         }
 
-        // 11. About (STORM DS 7.9.4 • Android version • CPU ABI • Device model • RAM)
+        // 11. About (STORM DS 8.0.0 • Android version • CPU ABI • Device model • RAM)
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "7.9.4")
+            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "8.0.0")
                 .removePrefix("v").removePrefix("V")
             val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
             val model = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()

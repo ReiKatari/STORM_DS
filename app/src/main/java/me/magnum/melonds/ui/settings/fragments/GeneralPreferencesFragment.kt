@@ -94,6 +94,11 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         runCatching { setPreferencesFromResource(R.xml.pref_general, rootKey) }
         runCatching { addPreferencesFromResource(R.xml.pref_general_updates) }
 
+        findPreference<Preference>("manual_check_updates")?.setOnPreferenceClickListener {
+            me.magnum.melonds.ui.settings.ManualUpdateChecker.checkNow(requireContext())
+            true
+        }
+
         findPreference<Preference>("settings_export_json")?.setOnPreferenceClickListener {
             val dateStr = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
             exportJsonLauncher.launch("storm_ds_settings_$dateStr.json")
@@ -372,7 +377,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.4").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.0.0").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 

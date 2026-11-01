@@ -13,7 +13,6 @@ import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.github.GitHubApi
 import me.magnum.melonds.github.GitHubReleaseSelector
 import me.magnum.melonds.github.GitHubUpdateChannel
-import me.magnum.melonds.github.GitHubUpdateCheckPolicy
 import me.magnum.melonds.github.PREF_KEY_GITHUB_CHECK_FOR_UPDATES
 import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
 import me.magnum.melonds.github.StormUpdateMirrorClient
@@ -29,11 +28,27 @@ class GitHubProdUpdatesRepository(
     companion object {
         private const val KEY_SKIP_VERSION = "github_updates_skip_version"
         private const val KEY_LAST_UPDATE_CHECK = "github_updates_last_check"
-        private const val UPDATE_CHECK_DELAY_HOURS = 1
+    }
+
+    private var sessionSkippedVersion: Version? = null
+
+    init {
+        // Clear old persistent keys on startup so updates are never permanently blocked
+        statePreferences.edit {
+            remove(KEY_SKIP_VERSION)
+            remove(KEY_LAST_UPDATE_CHECK)
+        }
     }
 
     override suspend fun checkNewUpdate(): Result<AppUpdate?> {
-        if (!shouldCheckUpdates()) {
+        // Clear old persistent restrictions on check
+        statePreferences.edit {
+            remove(KEY_SKIP_VERSION)
+            remove(KEY_LAST_UPDATE_CHECK)
+        }
+
+        val updatesEnabled = settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)
+        if (!updatesEnabled) {
             return Result.success(null)
         }
 
@@ -52,9 +67,6 @@ class GitHubProdUpdatesRepository(
             val currentVersion = Version.fromString(
                 requireNotNull(packageInfo.versionName) { "Installed versionName is missing" },
             )
-            val skippedVersion = Version.parseOrNull(
-                statePreferences.getString(KEY_SKIP_VERSION, null),
-            )
             val channel = GitHubUpdateChannel.fromPreference(
                 settingsPreferences.getString(
                     PREF_KEY_GITHUB_UPDATE_CHANNEL,
@@ -69,7 +81,7 @@ class GitHubProdUpdatesRepository(
                 releases = releases,
                 currentVersion = currentVersion,
                 channel = channel,
-                skippedVersion = skippedVersion,
+                skippedVersion = sessionSkippedVersion,
                 preferLegacyApk = preferLegacyApk,
             )?.let { candidate ->
                 AppUpdate(
@@ -87,22 +99,17 @@ class GitHubProdUpdatesRepository(
         }
     }
 
+    override suspend fun checkNewUpdateManually(): Result<AppUpdate?> {
+        sessionSkippedVersion = null
+        return checkNewUpdate()
+    }
+
     override fun skipUpdate(update: AppUpdate) {
-        statePreferences.edit {
-            putString(KEY_SKIP_VERSION, update.newVersion.toString())
-        }
+        // In-memory dismissal only for the active app session
+        sessionSkippedVersion = update.newVersion
     }
 
     override fun notifyUpdateDownloaded(update: AppUpdate) = Unit
-
-    private fun shouldCheckUpdates(): Boolean {
-        return GitHubUpdateCheckPolicy.shouldCheckProduction(
-            enabled = settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true),
-            lastCheckMillis = statePreferences.getLong(KEY_LAST_UPDATE_CHECK, -1L),
-            nowMillis = nowMillis(),
-            delayHours = UPDATE_CHECK_DELAY_HOURS.toLong(),
-        )
-    }
 
     private fun updateLastUpdateCheckTime() {
         statePreferences.edit {

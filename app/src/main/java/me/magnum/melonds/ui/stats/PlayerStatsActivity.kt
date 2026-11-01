@@ -461,6 +461,9 @@ private fun OverviewTabContent(
                 totalLaunches = summary.totalLaunches,
                 averageSessionMs = summary.averageSessionMs,
                 accentColor = accentColor,
+                gamesPlayedCount = summary.gamesPlayedCount,
+                totalSessionsCount = summary.totalSessionsCount,
+                longestSessionMs = summary.longestSessionMs,
             )
         }
 
@@ -640,6 +643,9 @@ private fun HeroPlayerRankCard(
     totalLaunches: Int,
     averageSessionMs: Long,
     accentColor: Color,
+    gamesPlayedCount: Int = 0,
+    totalSessionsCount: Int = 0,
+    longestSessionMs: Long = 0L,
 ) {
     val colors = watermelon
     val shape = RoundedCornerShape(16.dp)
@@ -757,43 +763,60 @@ private fun HeroPlayerRankCard(
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line.copy(alpha = 0.6f)))
         Spacer(Modifier.height(12.dp))
 
-        // 4 Compact KPI Tiles
-        Row(
+        // 4 KPI Tiles in 2x2 Grid with uniform width and height
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StatMetricTile(
-                icon = Icons.Filled.Schedule,
-                label = stringResource(R.string.v792_stats_kpi_total_time),
-                value = formatStatsDuration(totalPlayTimeMs),
-                subtitle = null,
-                accentColor = accentColor,
-                modifier = Modifier.weight(1f),
-            )
-            StatMetricTile(
-                icon = Icons.Filled.Timeline,
-                label = stringResource(R.string.v792_stats_kpi_streak),
-                value = stringResource(R.string.v792_stats_kpi_streak_days, currentStreakDays),
-                subtitle = stringResource(R.string.v792_stats_kpi_streak_best, bestStreakDays),
-                accentColor = colors.green,
-                modifier = Modifier.weight(1f),
-            )
-            StatMetricTile(
-                icon = Icons.Filled.PlayArrow,
-                label = stringResource(R.string.v792_stats_kpi_total_launches),
-                value = totalLaunches.toString(),
-                subtitle = null,
-                accentColor = colors.red,
-                modifier = Modifier.weight(1f),
-            )
-            StatMetricTile(
-                icon = Icons.Filled.SportsEsports,
-                label = stringResource(R.string.v792_stats_kpi_avg_session),
-                value = formatStatsDuration(averageSessionMs),
-                subtitle = null,
-                accentColor = colors.green,
-                modifier = Modifier.weight(1f),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                StatMetricTile(
+                    icon = Icons.Filled.Schedule,
+                    label = stringResource(R.string.v792_stats_kpi_total_time),
+                    value = formatStatsDuration(totalPlayTimeMs),
+                    subtitle = stringResource(R.string.v792_stats_platform_games_count, gamesPlayedCount),
+                    accentColor = accentColor,
+                    modifier = Modifier.weight(1f),
+                )
+                StatMetricTile(
+                    icon = Icons.Filled.Timeline,
+                    label = stringResource(R.string.v792_stats_kpi_streak),
+                    value = stringResource(R.string.v792_stats_kpi_streak_days, currentStreakDays),
+                    subtitle = stringResource(R.string.v792_stats_kpi_streak_best, bestStreakDays),
+                    accentColor = colors.green,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                StatMetricTile(
+                    icon = Icons.Filled.PlayArrow,
+                    label = stringResource(R.string.v792_stats_kpi_total_launches),
+                    value = totalLaunches.toString(),
+                    subtitle = stringResource(
+                        R.string.feature_stats_sessions_count,
+                        totalSessionsCount.coerceAtLeast(totalLaunches),
+                    ),
+                    accentColor = colors.red,
+                    modifier = Modifier.weight(1f),
+                )
+                StatMetricTile(
+                    icon = Icons.Filled.SportsEsports,
+                    label = stringResource(R.string.v792_stats_kpi_avg_session),
+                    value = formatStatsDuration(averageSessionMs),
+                    subtitle = if (longestSessionMs > 0L) {
+                        "Max: ${formatStatsDuration(longestSessionMs)}"
+                    } else {
+                        stringResource(R.string.v792_stats_avg_time_val, formatStatsDuration(averageSessionMs))
+                    },
+                    accentColor = colors.green,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
@@ -811,47 +834,65 @@ private fun StatMetricTile(
     val shape = RoundedCornerShape(12.dp)
     Column(
         modifier = modifier
+            .height(92.dp)
             .clip(shape)
             .background(colors.surface2)
             .border(1.dp, colors.line.copy(alpha = 0.5f), shape)
-            .padding(horizontal = 8.dp, vertical = 9.dp),
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = accentColor,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.height(6.dp))
+        // 1. Top row: glowing icon badge + uppercase/clean label
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(accentColor.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = colors.text3,
+                fontFamily = WatermelonMono,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        // 2. Middle row: large value
         Text(
             text = value,
             color = colors.text,
             fontFamily = SpaceGrotesk,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.ExtraBold,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis,
         )
+
+        // 3. Bottom row: reserved subtitle slot
         Text(
-            text = label,
-            color = colors.text3,
+            text = subtitle ?: " ",
+            color = if (subtitle != null) accentColor else Color.Transparent,
             fontFamily = WatermelonMono,
-            fontSize = 9.sp,
-            lineHeight = 11.sp,
+            fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (subtitle != null) {
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                color = accentColor,
-                fontFamily = WatermelonMono,
-                fontSize = 8.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }
 
@@ -1408,10 +1449,12 @@ private fun PlatformBreakdownCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .height(86.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(colors.surface2)
                     .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                     .padding(10.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -1448,10 +1491,12 @@ private fun PlatformBreakdownCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .height(86.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(colors.surface2)
                     .border(1.dp, colors.green.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                     .padding(10.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(

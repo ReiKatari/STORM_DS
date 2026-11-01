@@ -25,7 +25,7 @@
     <string name="v793_summary_interval_save">インターバルセーブ</string>
     <string name="v793_summary_standard_mode">標準モード</string>
     <string name="v793_summary_custom_bios">カスタムBIOS</string>
-    <string name="v793_summary_builtin_drastic_bios">内蔵DraStic BIOS</string>
+    <string name="v793_summary_builtin_drastic_bios">内蔵BIOS</string>
     <string name="v793_summary_skin">スキン</string>
     <string name="v793_summary_touch">タッチ</string>
     <string name="v793_summary_vibration">振動</string>
@@ -72,4 +72,15 @@
     <string name="v794_cat_cfw_mode">ファームウェアモードとBIOS</string>
     <string name="v794_cat_cfw_ds_bios">DS BIOSおよびファームウェアイメージ</string>
     <string name="v794_cat_cfw_dsi_bios">DSi BIOS、NANDおよびファームウェアイメージ</string>
+
+    <!-- v800 Manual Update Checker -->
+    <string name="v800_check_updates_title">アップデートを確認</string>
+    <string name="v800_check_updates_summary">GitHubでSTORM DSの最新バージョンを確認します</string>
+    <string name="v800_checking_updates">アップデートを確認中…</string>
+    <string name="v800_update_available_title">利用可能なアップデート: %s</string>
+    <string name="v800_update_download">アップデートをダウンロード</string>
+    <string name="v800_update_later">後で</string>
+    <string name="v800_update_up_to_date_title">最新バージョンです</string>
+    <string name="v800_update_up_to_date_msg">STORM DS %s は現在最新のバージョンです。</string>
+    <string name="v800_update_error">アップデートの確認に失敗しました。ネットワーク接続を確認してください。</string>
 </resources>

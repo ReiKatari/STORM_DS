@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.util.zip.GZIPInputStream
 
@@ -108,45 +109,79 @@ class JusrcheatRepository private constructor(
         }
     }
 
+    private fun isValidDatFile(file: File): Boolean {
+        if (!file.exists() || file.length() < 1_000_000L) return false
+        return try {
+            FileInputStream(file).use { fis ->
+                val header = ByteArray(12)
+                var read = 0
+                while (read < 12) {
+                    val count = fis.read(header, read, 12 - read)
+                    if (count <= 0) break
+                    read += count
+                }
+                read == 12 && String(header, Charsets.US_ASCII).startsWith("R4 CheatCode")
+            }
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     private fun resolveOrCreateDatFile(): File? {
         // 1. Check external storage /storage/emulated/0/STORM DS/cheats/usrcheat.dat
         val extDir = File(Environment.getExternalStorageDirectory(), "STORM DS/cheats")
         val extDat = File(extDir, LOCAL_DAT_NAME)
-        if (extDat.exists() && extDat.length() > 1_000_000) {
+        if (isValidDatFile(extDat)) {
             return extDat
         }
 
         // 2. Check internal filesDir / cheats / usrcheat.dat
         val internalDir = File(context.filesDir, "cheats").apply { mkdirs() }
         val internalDat = File(internalDir, LOCAL_DAT_NAME)
-        if (internalDat.exists() && internalDat.length() > 1_000_000) {
+        if (isValidDatFile(internalDat)) {
             return internalDat
+        } else if (internalDat.exists()) {
+            internalDat.delete()
         }
 
         // 3. Atomically extract bundled assets/cheats/usrcheat.dat.gz
         try {
             val tmpFile = File(internalDir, "$LOCAL_DAT_NAME.tmp")
-            context.assets.open(ASSET_DAT_GZ).use { assetStream ->
-                GZIPInputStream(assetStream).use { gzStream ->
-                    BufferedOutputStream(FileOutputStream(tmpFile)).use { fos ->
+            context.assets.open(ASSET_DAT_GZ).use { raw ->
+                val bis = BufferedInputStream(raw, 65536)
+                bis.mark(4)
+                val b0 = bis.read()
+                val b1 = bis.read()
+                bis.reset()
+
+                val dataStream: InputStream = if (b0 == 0x1F && b1 == 0x8B) {
+                    GZIPInputStream(bis)
+                } else {
+                    bis
+                }
+
+                dataStream.use { inStream ->
+                    BufferedOutputStream(FileOutputStream(tmpFile), 65536).use { fos ->
                         val buffer = ByteArray(64 * 1024)
                         var read: Int
-                        while (gzStream.read(buffer).also { read = it } != -1) {
+                        while (inStream.read(buffer).also { read = it } != -1) {
                             fos.write(buffer, 0, read)
                         }
                     }
                 }
             }
-            if (tmpFile.exists() && tmpFile.length() > 1_000_000) {
+            if (isValidDatFile(tmpFile)) {
                 if (internalDat.exists()) internalDat.delete()
                 tmpFile.renameTo(internalDat)
                 return internalDat
+            } else {
+                if (tmpFile.exists()) tmpFile.delete()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error extracting asset usrcheat.dat.gz", e)
         }
 
-        return if (internalDat.exists()) internalDat else null
+        return if (isValidDatFile(internalDat)) internalDat else null
     }
 
     fun getAllGames(): List<JusrcheatGameMeta> {

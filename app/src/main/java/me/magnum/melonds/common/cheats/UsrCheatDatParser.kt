@@ -102,6 +102,11 @@ class UsrCheatDatParser : CheatDatabaseParser {
                 val folders = mutableListOf<CheatFolder>()
                 val rootCheats = mutableListOf<Cheat>()
 
+                // Master code: 8 ints = 32 bytes before the first folder/cheat item
+                if (cursor + 32 <= bytes.size) {
+                    cursor += 32
+                }
+
                 for (itemIndex in 0 until itemCount) {
                     if (cursor + 4 > bytes.size) break
                     val itemHeader = readInt32LE(bytes, cursor)

@@ -21,6 +21,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.ui.draw.clip
+import me.magnum.melonds.ui.theme.SpaceGrotesk
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.font.FontWeight
+import me.magnum.melonds.ui.theme.watermelon
+
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -96,6 +113,18 @@ private fun Loading(modifier: Modifier) {
             color = MaterialTheme.colors.secondary,
         )
     }
+}
+
+
+enum class RomConfigCategory(val titleRu: String, val titleEn: String) {
+    ALL("Все разделы", "All Sections"),
+    SYSTEM_CPU("Система и CPU", "System and CPU"),
+    GRAPHICS_VULKAN("Графика и Vulkan", "Graphics and Vulkan"),
+    SCREENS_LAYOUT("Экраны и корпус", "Screens and Layout"),
+    AUDIO_CONTROLS("Управление и звук", "Controls and Audio"),
+    GBA_SLOT("Слот GBA", "GBA Slot");
+
+    fun title(isRu: Boolean): String = if (isRu) titleRu else titleEn
 }
 
 @Composable
@@ -206,6 +235,39 @@ private fun Content(
         supportsFiltering(effectiveRenderer, filtering)
     }
 
+    val colors = watermelon
+    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
+    var selectedFilter by remember { mutableStateOf(RomConfigCategory.ALL) }
+
+    val activeOverridesCount = remember(romConfig) {
+        var count = 0
+        if (romConfig.customName != null) count++
+        if (romConfig.runtimeConsoleType != me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT) count++
+        if (romConfig.arm9Overclock != null) count++
+        if (romConfig.fastForwardSpeedMultiplier != null) count++
+        if (romConfig.runtimeMicSource != RuntimeMicSource.DEFAULT) count++
+        if (romConfig.videoRenderer != null) count++
+        if (romConfig.threadedRendering != null) count++
+        if (romConfig.internalResolutionScaling != null) count++
+        if (romConfig.videoFiltering != null) count++
+        if (romConfig.retroArchShaderPresetPath != null) count++
+        if (romConfig.retroArchShaderParameters != null) count++
+        if (romConfig.customVulkanDriverName != null) count++
+        if (romConfig.inputMode != RomInputMode.GLOBAL) count++
+        if (romConfig.retroAchievementsEnabled != null) count++
+        if (romConfig.dualScreenPreset != null) count++
+        if (romConfig.layoutId != null) count++
+        if (romConfig.translatorSourceLang != null) count++
+        if (romConfig.gbaSlotConfig.type != RomGbaSlotConfigUiModel.Type.None) count++
+        count
+    }
+
+    val showSystemCpu = selectedFilter == RomConfigCategory.ALL || selectedFilter == RomConfigCategory.SYSTEM_CPU
+    val showGraphics = selectedFilter == RomConfigCategory.ALL || selectedFilter == RomConfigCategory.GRAPHICS_VULKAN
+    val showScreens = selectedFilter == RomConfigCategory.ALL || selectedFilter == RomConfigCategory.SCREENS_LAYOUT
+    val showAudioControls = selectedFilter == RomConfigCategory.ALL || selectedFilter == RomConfigCategory.AUDIO_CONTROLS
+    val showGbaSlot = selectedFilter == RomConfigCategory.ALL || selectedFilter == RomConfigCategory.GBA_SLOT
+
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -214,6 +276,103 @@ private fun Content(
                 end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
             ),
     ) {
+        // Summary Banner Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (activeOverridesCount > 0) colors.green.copy(alpha = 0.12f) else colors.surface2)
+                .border(
+                    width = 1.dp,
+                    color = if (activeOverridesCount > 0) colors.green.copy(alpha = 0.45f) else colors.line,
+                    shape = RoundedCornerShape(12.dp),
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (activeOverridesCount > 0) colors.green.copy(alpha = 0.22f) else colors.surface3),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Tune,
+                        contentDescription = null,
+                        tint = if (activeOverridesCount > 0) colors.green else colors.text3,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Column {
+                    Text(
+                        text = if (activeOverridesCount > 0) {
+                            if (isRu) "Активных настроек: $activeOverridesCount" else "Custom Overrides: $activeOverridesCount"
+                        } else {
+                            if (isRu) "Используются глобальные настройки" else "Using Global Defaults"
+                        },
+                        color = colors.text,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (activeOverridesCount > 0) {
+                            if (isRu) "Параметры переопределены специально для этой игры" else "Settings overridden specifically for this game"
+                        } else {
+                            if (isRu) "Все параметры наследуются из главного меню" else "All settings inherited from main preferences"
+                        },
+                        color = colors.text3,
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                    )
+                }
+            }
+        }
+
+        // Quick Category Filter / Jump Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RomConfigCategory.values().forEach { cat ->
+                val isSelected = (selectedFilter == cat)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) colors.green.copy(alpha = 0.22f) else colors.surface2)
+                        .border(
+                            width = if (isSelected) 1.dp else 0.5.dp,
+                            color = if (isSelected) colors.green else colors.line,
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                        .clickable { selectedFilter = cat }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = cat.title(isRu),
+                        color = if (isSelected) colors.green else colors.text2,
+                        fontSize = 11.5.sp,
+                        fontFamily = SpaceGrotesk,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.rom_details_configuration_tab)) {
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_custom_name),
@@ -252,7 +411,9 @@ private fun Content(
                 )
             }
         }
+        }
 
+        if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.rom_config_overclock_arm9)) {
             val arm9Label = when (romConfig.arm9Overclock) {
                 null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
@@ -324,7 +485,9 @@ private fun Content(
                 },
             )
         }
+        }
 
+        if (showAudioControls) {
         ConfigSection(title = stringResource(R.string.audio)) {
             ConfigRow(
                 title = stringResource(R.string.microphone_source),
@@ -356,7 +519,9 @@ private fun Content(
                 onToggle = { onConfigUpdate(RomConfigUpdateEvent.UseHgEngineFixUpdate(it)) },
             )
         }
+        }
 
+        if (showGraphics) {
         ConfigSection(title = stringResource(R.string.label_rom_config_video)) {
             val vulkanDriverLabel = when (romConfig.customVulkanDriverName) {
                 null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
@@ -493,7 +658,9 @@ private fun Content(
                 }
             }
         }
+        }
 
+        if (showAudioControls) {
         ConfigSection(title = stringResource(R.string.label_rom_config_input_mode)) {
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_input_mode),
@@ -529,7 +696,9 @@ private fun Content(
                 )
             }
         }
+        }
 
+        if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.label_rom_config_retroachievements)) {
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_retroachievements_for_rom),
@@ -555,7 +724,9 @@ private fun Content(
                 },
             )
         }
+        }
 
+        if (showScreens) {
         ConfigSection(title = stringResource(R.string.controller_layout)) {
             ConfigRow(
                 title = stringResource(R.string.controller_layout),
@@ -590,7 +761,9 @@ private fun Content(
                 },
             )
         }
+        }
 
+        if (showScreens) {
         ConfigSection(title = stringResource(R.string.label_rom_config_translator_section)) {
             fun translatorLangLabel(langCode: String?): String {
                 if (langCode.isNullOrBlank()) return useGlobal
@@ -611,7 +784,9 @@ private fun Content(
                 },
             )
         }
+        }
 
+        if (showGbaSlot) {
         ConfigSection(title = stringResource(R.string.label_rom_config_gba_slot)) {
             val isGbaRom = romConfig.gbaSlotConfig.type == RomGbaSlotConfigUiModel.Type.GbaRom
             ConfigRow(
@@ -644,13 +819,16 @@ private fun Content(
                 }
             }
         }
+        }
 
+        if (showGbaSlot || activeOverridesCount > 0) {
         ConfigSection(title = stringResource(R.string.reset_rom_config_section)) {
             ConfigRow(
                 title = stringResource(R.string.reset_rom_config_title),
                 value = stringResource(R.string.action_reset),
                 onClick = { showResetConfirmDialog = true },
             )
+        }
         }
 
         Spacer(Modifier.height(contentPadding.calculateBottomPadding() + 96.dp))

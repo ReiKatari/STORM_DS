@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,7 +91,7 @@ fun RomContextMenu(
             shape = RoundedCornerShape(17.dp),
             color = colors.surface,
             elevation = 22.dp,
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.widthIn(max = 345.dp),
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 Row(
@@ -134,82 +135,107 @@ fun RomContextMenu(
                         )
                     }
                 }
+                val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
                 Spacer(Modifier.height(6.dp))
-                ContextItem(
-                    icon = Icons.Filled.PlayArrow,
-                    iconTint = colors.red,
-                    label = stringResource(R.string.play),
-                    onClick = {
-                        onLaunchRom(rom)
-                        onDismiss()
-                    },
-                )
-                ContextItem(
-                    icon = if (rom.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                    iconTint = if (rom.isFavorite) WatermelonColors.favoriteStar else colors.text2,
-                    label = stringResource(
-                        if (rom.isFavorite) R.string.rom_action_unfavorite
-                        else R.string.rom_action_favorite,
-                    ),
-                    onClick = {
-                        onToggleFavorite(rom)
-                    },
-                )
-                ContextItem(
-                    icon = Icons.Filled.Info,
-                    iconTint = colors.text2,
-                    label = stringResource(R.string.rom_action_details),
-                    onClick = {
-                        onShowDetails(rom)
-                        onDismiss()
-                    },
-                )
-                ContextItem(
-                    icon = Icons.Filled.Info,
-                    iconTint = colors.text2,
-                    label = stringResource(R.string.rom_technical_info_title),
-                    onClick = {
-                        showTechnicalInfo = true
-                    },
-                )
-                ContextItem(
-                    icon = Icons.Filled.Share,
-                    iconTint = colors.text2,
-                    label = stringResource(R.string.rom_action_send_save_file),
-                    onClick = {
-                        onSendSaveFile(rom)
-                        onDismiss()
-                    },
-                )
-                ContextItem(
-                    icon = Icons.Filled.FileDownload,
-                    iconTint = colors.text2,
-                    label = stringResource(R.string.rom_action_import_save_file),
-                    onClick = {
-                        onImportSaveFile(rom)
-                        onDismiss()
-                    },
-                )
-                if (onPickCustomCover != null) {
+
+                // Group 1: Launch and Game Profile
+                ContextMenuGroup(title = if (isRu) "Запуск и профиль игры" else "Launch and Profile") {
                     ContextItem(
-                        icon = Icons.Filled.Image,
-                        iconTint = colors.text2,
-                        label = stringResource(R.string.custom_cover_pick),
+                        icon = Icons.Filled.PlayArrow,
+                        iconTint = colors.red,
+                        label = stringResource(R.string.play),
+                        subtitle = if (isRu) "Запустить игру в эмуляторе" else "Launch game in emulator",
                         onClick = {
-                            onPickCustomCover(rom)
+                            onLaunchRom(rom)
+                            onDismiss()
+                        },
+                    )
+                    ContextItem(
+                        icon = if (rom.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                        iconTint = if (rom.isFavorite) WatermelonColors.favoriteStar else colors.text2,
+                        label = stringResource(
+                            if (rom.isFavorite) R.string.rom_action_unfavorite
+                            else R.string.rom_action_favorite,
+                        ),
+                        subtitle = if (isRu) "Закрепить в начале библиотеки" else "Pin to top of library",
+                        onClick = {
+                            onToggleFavorite(rom)
+                        },
+                    )
+                    ContextItem(
+                        icon = Icons.Filled.Info,
+                        iconTint = colors.green,
+                        label = stringResource(R.string.rom_action_details),
+                        subtitle = if (isRu) "Конфигурация, читы и достижения" else "Config, cheats and achievements",
+                        onClick = {
+                            onShowDetails(rom)
                             onDismiss()
                         },
                     )
                 }
-                if (hasCustomCover && onClearCustomCover != null) {
+
+                Spacer(Modifier.height(4.dp))
+
+                // Group 2: Cover and Save Data
+                ContextMenuGroup(title = if (isRu) "Обложка и данные" else "Cover and Save Data") {
                     ContextItem(
-                        icon = Icons.Filled.Delete,
-                        iconTint = colors.red,
-                        label = stringResource(R.string.custom_cover_reset),
+                        icon = Icons.Filled.Share,
+                        iconTint = colors.text2,
+                        label = stringResource(R.string.rom_action_send_save_file),
+                        subtitle = if (isRu) "Поделиться или бэкап .sav" else "Share or backup .sav file",
                         onClick = {
-                            onClearCustomCover(rom)
+                            onSendSaveFile(rom)
                             onDismiss()
+                        },
+                    )
+                    ContextItem(
+                        icon = Icons.Filled.FileDownload,
+                        iconTint = colors.text2,
+                        label = stringResource(R.string.rom_action_import_save_file),
+                        subtitle = if (isRu) "Восстановить .sav из файла" else "Restore .sav from external file",
+                        onClick = {
+                            onImportSaveFile(rom)
+                            onDismiss()
+                        },
+                    )
+                    if (onPickCustomCover != null) {
+                        ContextItem(
+                            icon = Icons.Filled.Image,
+                            iconTint = colors.text2,
+                            label = stringResource(R.string.custom_cover_pick),
+                            subtitle = if (isRu) "Установить свою обложку" else "Set custom cover image",
+                            onClick = {
+                                onPickCustomCover(rom)
+                                onDismiss()
+                            },
+                        )
+                    }
+                    if (hasCustomCover && onClearCustomCover != null) {
+                        ContextItem(
+                            icon = Icons.Filled.Delete,
+                            iconTint = colors.red,
+                            label = stringResource(R.string.custom_cover_reset),
+                            subtitle = if (isRu) "Вернуть стандартную обложку" else "Reset to default cover",
+                            onClick = {
+                                onClearCustomCover(rom)
+                                onDismiss()
+                            },
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // Group 3: Technical Specs & Export
+                ContextMenuGroup(title = if (isRu) "Технический паспорт и экспорт" else "Technical Specs and Export") {
+                    ContextItem(
+                        icon = Icons.Filled.Info,
+                        iconTint = colors.green,
+                        label = stringResource(R.string.rom_technical_info_title),
+                        subtitle = if (isRu) "GameCode, CRC, размер и путь" else "GameCode, CRC, size and path",
+                        onClick = {
+                            showTechnicalInfo = true
                         },
                     )
                 }
@@ -220,10 +246,39 @@ fun RomContextMenu(
 }
 
 @Composable
+private fun ContextMenuGroup(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = watermelon
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.surface2.copy(alpha = 0.5f))
+            .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+            .padding(vertical = 4.dp),
+    ) {
+        Text(
+            text = title.uppercase(),
+            color = colors.text3,
+            fontFamily = SpaceGrotesk,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp,
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp),
+        )
+        content()
+    }
+}
+
+@Composable
 private fun ContextItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     iconTint: androidx.compose.ui.graphics.Color,
     label: String,
+    subtitle: String? = null,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -233,20 +288,39 @@ private fun ContextItem(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (enabled) iconTint else colors.green,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(14.dp))
-        Text(
-            text = label,
-            color = if (enabled) colors.text else colors.green,
-            fontSize = 14.sp,
-            fontWeight = if (enabled) FontWeight.Medium else FontWeight.SemiBold,
-        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.surface2),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (enabled) iconTint else colors.green,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = if (enabled) colors.text else colors.green,
+                fontSize = 13.sp,
+                fontFamily = SpaceGrotesk,
+                fontWeight = if (enabled) FontWeight.SemiBold else FontWeight.Bold,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    color = colors.text3,
+                    fontSize = 10.5.sp,
+                    lineHeight = 12.sp,
+                )
+            }
+        }
     }
 }

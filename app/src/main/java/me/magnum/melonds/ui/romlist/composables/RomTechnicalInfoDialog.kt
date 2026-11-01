@@ -93,16 +93,25 @@ fun RomTechnicalInfoDialog(
         }
     }
 
+    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
     val playTimeStr = remember(rom.totalPlayTime) {
         val hours = rom.totalPlayTime.inWholeHours
         val minutes = (rom.totalPlayTime.inWholeMinutes % 60)
         val seconds = (rom.totalPlayTime.inWholeSeconds % 60)
         if (hours > 0) {
-            "${hours}h ${minutes}m"
+            "${hours}ч ${minutes}м"
         } else if (minutes > 0) {
-            "${minutes}m ${seconds}s"
+            "${minutes}м ${seconds}с"
         } else {
-            "${seconds}s"
+            "${seconds}с"
+        }
+    }
+
+    val unitCodeStr = remember(rom.isDsiWareTitle, rom.isDsiEnhanced, rom.isInstalledDsiWareShortcut) {
+        when {
+            rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut -> "0x03 (DSi)"
+            rom.isDsiEnhanced -> "0x02 (DSi+)"
+            else -> "0x00 (NDS)"
         }
     }
 
@@ -124,6 +133,8 @@ fun RomTechnicalInfoDialog(
     val copyToClipboard = {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         val textBuilder = StringBuilder()
+        textBuilder.appendLine("STORM DS - ТЕХНИЧЕСКИЙ ПАСПОРТ ROM")
+        textBuilder.appendLine("========================================")
         textBuilder.appendLine("${context.getString(R.string.rom_info_title_label)}: ${romDisplayName(rom)}")
         if (rom.name != romDisplayName(rom)) {
             textBuilder.appendLine("Internal Title: ${rom.name}")
@@ -132,11 +143,15 @@ fun RomTechnicalInfoDialog(
         textBuilder.appendLine("URI: ${rom.uri}")
         textBuilder.appendLine("${context.getString(R.string.rom_info_file_size_label)}: $formattedSize")
         textBuilder.appendLine("${context.getString(R.string.rom_info_platform_label)}: $platformStr")
+        textBuilder.appendLine("UnitCode: $unitCodeStr")
         if (rom.gameCode.isNotBlank()) {
             textBuilder.appendLine("${context.getString(R.string.rom_info_game_code_label)}: ${rom.gameCode}")
         }
+        val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.uppercase() else "—"
+        textBuilder.appendLine("CRC32 / RA Hash: $hashStr")
         textBuilder.appendLine("${context.getString(R.string.rom_info_play_time_label)}: $playTimeStr")
         textBuilder.appendLine("${context.getString(R.string.rom_info_last_played_label)}: $lastPlayedStr")
+        textBuilder.appendLine("========================================")
 
         val clip = ClipData.newPlainText("ROM Technical Info", textBuilder.toString())
         clipboard?.setPrimaryClip(clip)
@@ -146,11 +161,11 @@ fun RomTechnicalInfoDialog(
     Dialog(onDismissRequest = onDismiss) {
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material.LocalElevationOverlay provides null) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 color = colors.surface,
-                elevation = 20.dp,
+                elevation = 22.dp,
                 modifier = Modifier
-                    .widthIn(max = 380.dp)
+                    .widthIn(max = 400.dp)
                     .fillMaxWidth(),
             ) {
                 Column(
@@ -158,13 +173,63 @@ fun RomTechnicalInfoDialog(
                         .padding(20.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    Text(
-                        text = stringResource(R.string.rom_technical_info_title),
-                        color = colors.text,
-                        fontFamily = SpaceGrotesk,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(16.dp)
+                                .clip(RoundedCornerShape(1.5.dp))
+                                .background(colors.green),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.rom_technical_info_title),
+                            color = colors.text,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    // 2-Column Hardware Badges Grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            HardwareBadge(
+                                label = "GAME CODE",
+                                value = rom.gameCode.ifBlank { "NTR-XXXX" },
+                                isAccent = true,
+                            )
+                            HardwareBadge(
+                                label = if (isRu) "РАЗМЕР ROM" else "ROM SIZE",
+                                value = formattedSize.split(" (").first(),
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            HardwareBadge(
+                                label = "UNIT CODE",
+                                value = unitCodeStr,
+                            )
+                            HardwareBadge(
+                                label = "CRC32 / HASH",
+                                value = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(10).uppercase() else "—",
+                            )
+                        }
+                    }
+
                     Spacer(Modifier.height(14.dp))
                     WatermelonRowSeparator()
                     Spacer(Modifier.height(10.dp))
@@ -174,11 +239,7 @@ fun RomTechnicalInfoDialog(
                         TechInfoRow("Internal Name", rom.name)
                     }
                     TechInfoRow(stringResource(R.string.rom_info_file_name_label), rom.fileName)
-                    TechInfoRow(stringResource(R.string.rom_info_file_size_label), formattedSize)
                     TechInfoRow(stringResource(R.string.rom_info_platform_label), platformStr)
-                    if (rom.gameCode.isNotBlank()) {
-                        TechInfoRow(stringResource(R.string.rom_info_game_code_label), rom.gameCode)
-                    }
                     TechInfoRow(stringResource(R.string.rom_info_play_time_label), playTimeStr)
                     TechInfoRow(stringResource(R.string.rom_info_last_played_label), lastPlayedStr)
                     TechInfoRow("URI", rom.uri.toString(), isMono = true)
@@ -194,22 +255,24 @@ fun RomTechnicalInfoDialog(
                     ) {
                         OutlinedButton(
                             onClick = copyToClipboard,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 backgroundColor = colors.surface2,
                                 contentColor = colors.text,
                             ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.line),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.green.copy(alpha = 0.5f)),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.ContentCopy,
                                 contentDescription = null,
-                                tint = colors.text2,
+                                tint = colors.green,
                                 modifier = Modifier.padding(end = 6.dp),
                             )
                             Text(
                                 text = stringResource(R.string.rom_technical_info_copy),
                                 fontSize = 12.5.sp,
+                                fontFamily = SpaceGrotesk,
+                                fontWeight = FontWeight.SemiBold,
                                 color = colors.text,
                             )
                         }
@@ -231,9 +294,49 @@ fun RomTechnicalInfoDialog(
 }
 
 @Composable
+private fun HardwareBadge(
+    label: String,
+    value: String,
+    isAccent: Boolean = false,
+) {
+    val colors = watermelon
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isAccent) colors.green.copy(alpha = 0.12f) else colors.surface2)
+            .border(
+                width = 1.dp,
+                color = if (isAccent) colors.green.copy(alpha = 0.5f) else colors.line,
+                shape = RoundedCornerShape(10.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (isAccent) colors.green else colors.text3,
+            fontFamily = WatermelonMono,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = value,
+            color = colors.text,
+            fontFamily = WatermelonMono,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun TechInfoRow(label: String, value: String, isMono: Boolean = false) {
     val colors = watermelon
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(
             text = label,
             color = colors.text3,
@@ -244,8 +347,8 @@ private fun TechInfoRow(label: String, value: String, isMono: Boolean = false) {
             text = value,
             color = colors.text,
             fontFamily = if (isMono) WatermelonMono else null,
-            fontSize = 13.sp,
-            lineHeight = 16.sp,
+            fontSize = 12.5.sp,
+            lineHeight = 15.sp,
             fontWeight = FontWeight.Normal,
             modifier = Modifier.padding(top = 1.dp),
         )

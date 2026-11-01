@@ -8,6 +8,13 @@
         android:title="@string/pref_cat_updates"
         app:iconSpaceReserved="false">
 
+        <Preference
+            android:key="manual_check_updates"
+            android:title="@string/v800_check_updates_title"
+            android:summary="@string/v800_check_updates_summary"
+            app:icon="@drawable/ic_refresh"
+            app:iconSpaceReserved="false" />
+
         <SwitchPreference
             android:key="github_check_for_updates"
             android:title="@string/check_for_updates"

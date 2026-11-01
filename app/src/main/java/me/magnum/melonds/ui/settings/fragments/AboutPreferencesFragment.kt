@@ -21,10 +21,15 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
-        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "7.9.4")
+        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.0.0")
             .removePrefix("v")
             .removePrefix("V")
         findPreference<Preference>("about_version")?.summary = vName
+
+        findPreference<Preference>("manual_check_updates")?.setOnPreferenceClickListener {
+            me.magnum.melonds.ui.settings.ManualUpdateChecker.checkNow(requireContext())
+            true
+        }
 
         val actManager = requireContext().getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
         val memInfo = android.app.ActivityManager.MemoryInfo()

@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.romdetails.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Wifi
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -340,6 +353,198 @@ private fun HeroBackdrop(rom: Rom, boxArtUrl: String?, modifier: Modifier = Modi
     }
 }
 
+
+@Composable
+fun QuickActionTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val colors = watermelon
+    val shape = RoundedCornerShape(12.dp)
+
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .clip(shape)
+            .background(Color.Black.copy(alpha = 0.35f))
+            .let { if (isFocused) it.border(1.5.dp, colors.green, shape) else it.border(1.dp, Color.White.copy(alpha = 0.12f), shape) }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                color = Color.White,
+                fontFamily = SpaceGrotesk,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+fun RomTechPassportCard(
+    rom: Rom,
+    onShowCover: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val colors = watermelon
+    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
+    var isExpanded by remember { mutableStateOf(false) }
+
+    val fileExt = remember(rom.fileName) {
+        rom.fileName.substringAfterLast('.', "NDS").uppercase()
+    }
+    val gameCodeStr = remember(rom.gameCode) {
+        rom.gameCode.ifBlank { "NTR-XXXX" }
+    }
+    val platformStr = remember(rom) { romPlatformLabel(rom) }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth(0.94f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+            .padding(10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isExpanded = !isExpanded },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(1.5.dp))
+                        .background(colors.green),
+                )
+                Text(
+                    text = if (isRu) "ТЕХНИЧЕСКИЙ ПАСПОРТ И СТАТУС" else "TECHNICAL SPECS AND STATUS",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.6.sp,
+                )
+            }
+            Text(
+                text = if (isExpanded) "▲" else "▼",
+                color = colors.green,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        // 4 Specs Badges Row
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            RomInfoChip(
+                label = "GAME CODE",
+                value = gameCodeStr,
+                modifier = Modifier.weight(1f),
+            )
+            RomInfoChip(
+                label = if (isRu) "ПЛАТФОРМА" else "PLATFORM",
+                value = platformStr,
+                modifier = Modifier.weight(1f),
+            )
+            RomInfoChip(
+                label = if (isRu) "ФОРМАТ" else "FORMAT",
+                value = fileExt,
+                modifier = Modifier.weight(0.8f),
+            )
+            RomInfoChip(
+                label = if (isRu) "СТАТУС .SAV" else "SAVE STATUS",
+                value = if (isRu) "АКТИВЕН" else "READY",
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        if (isExpanded) {
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.1f)))
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Button to copy GameCode / info
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .border(1.dp, colors.green.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = ClipData.newPlainText("GameCode", "$gameCodeStr (${rom.fileName})")
+                            clipboard?.setPrimaryClip(clip)
+                            Toast.makeText(context, if (isRu) "GameCode $gameCodeStr скопирован!" else "GameCode copied!", Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isRu) "Скопировать GameCode" else "Copy GameCode",
+                        color = colors.green,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                // Button to open full cover preview
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                        .clickable(onClick = onShowCover)
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isRu) "Открыть обложку" else "View Cover",
+                        color = Color.White,
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun RomHeroVertical(
     rom: Rom,
@@ -470,53 +675,41 @@ fun RomHeroVertical(
 
             Spacer(Modifier.height(10.dp))
 
-            // Game metadata chips row (Filename, Last Played, RetroAchievements Hash)
-            val dateFormat = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()) }
-            val lastPlayedStr = rom.lastPlayed?.let { dateFormat.format(it) } ?: stringResource(R.string.rom_info_never)
-            val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(8).uppercase() else "NTR-ROM"
+            // Technical Passport & Save Status Card
+            RomTechPassportCard(
+                rom = rom,
+                onShowCover = { showFullScreenCover = true },
+            )
 
+            Spacer(Modifier.height(10.dp))
+
+            // Balanced 2-Row Action Deck
+            // Row 1: Primary Hero Play Button
+            PlayButton(
+                height = 48.dp,
+                onClick = onLaunchRom,
+                focusRequester = initialFocusRequester,
+                modifier = Modifier.fillMaxWidth(0.94f),
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Row 2: Structured Quick Action Tiles
+            val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
             Row(
                 modifier = Modifier.fillMaxWidth(0.94f),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                RomInfoChip(
-                    label = stringResource(R.string.rom_info_file),
-                    value = rom.fileName,
-                    maxLines = 3,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
-                    horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.weight(1.3f),
-                )
-                RomInfoChip(
-                    label = stringResource(R.string.rom_info_last_played),
-                    value = lastPlayedStr,
-                    modifier = Modifier.weight(0.9f),
-                )
-                RomInfoChip(
-                    label = "ID / HASH",
-                    value = hashStr,
-                    modifier = Modifier.weight(0.8f),
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // 6. Action buttons centered
-            Row(
-                Modifier.fillMaxWidth(0.92f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
             ) {
-                PlayButton(
-                    height = 50.dp,
-                    onClick = onLaunchRom,
-                    focusRequester = initialFocusRequester,
-                    modifier = Modifier.weight(1f),
+                NetplayLobbyButton(size = 44.dp, rom = rom, onLaunchRom = onLaunchRom, modifier = Modifier.weight(1f))
+                SaveActionsButton(size = 44.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile, modifier = Modifier.weight(1f))
+                QuickActionTile(
+                    icon = Icons.Filled.Image,
+                    label = if (isRu) "Обложка" else "Cover",
+                    tint = Color.White,
+                    onClick = { showFullScreenCover = true },
+                    modifier = Modifier.weight(1.2f),
                 )
-                Spacer(Modifier.width(8.dp))
-                NetplayLobbyButton(size = 50.dp, rom = rom, onLaunchRom = onLaunchRom)
-                Spacer(Modifier.width(8.dp))
-                SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
             }
         }
     }
@@ -666,50 +859,75 @@ fun RomDetailsTabRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = watermelon
+    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
     Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
             RomDetailsTab.entries.forEach { tab ->
-                val label = when (tab) {
-                    RomDetailsTab.CONFIG -> stringResource(R.string.rom_details_configuration_tab)
-                    RomDetailsTab.CHEATS -> stringResource(R.string.cheats)
-                    RomDetailsTab.RETRO_ACHIEVEMENTS -> stringResource(R.string.retro_achievements_tab)
-                    RomDetailsTab.OFFLINE_ACHIEVEMENTS -> stringResource(R.string.rom_details_offline_achievements_tab)
+                val (label, icon) = when (tab) {
+                    RomDetailsTab.CONFIG -> stringResource(R.string.rom_details_configuration_tab) to Icons.Filled.Tune
+                    RomDetailsTab.CHEATS -> stringResource(R.string.cheats) to Icons.Filled.SportsEsports
+                    RomDetailsTab.RETRO_ACHIEVEMENTS -> stringResource(R.string.retro_achievements_tab) to Icons.Filled.EmojiEvents
+                    RomDetailsTab.OFFLINE_ACHIEVEMENTS -> stringResource(R.string.rom_details_offline_achievements_tab) to Icons.Filled.Star
+                    RomDetailsTab.AUDIO -> (if (isRu) "Музыка SDAT" else "Soundtrack") to Icons.Filled.MusicNote
                 }
                 val selected = tab == currentTab
                 val interactionSource = remember { MutableInteractionSource() }
                 val isFocused by interactionSource.collectIsFocusedAsState()
-                Column(
+                val shape = RoundedCornerShape(10.dp)
+
+                Box(
                     modifier = Modifier
-                        .width(IntrinsicSize.Max)
-                        .clickable(interactionSource = interactionSource, indication = null) { onTabClicked(tab) },
+                        .clip(shape)
+                        .background(
+                            when {
+                                selected -> colors.green.copy(alpha = 0.22f)
+                                isFocused -> colors.surface2
+                                else -> colors.surface.copy(alpha = 0.6f)
+                            }
+                        )
+                        .border(
+                            width = if (selected) 1.dp else 0.5.dp,
+                            color = when {
+                                selected -> colors.green
+                                isFocused -> colors.green.copy(alpha = 0.5f)
+                                else -> colors.line
+                            },
+                            shape = shape,
+                        )
+                        .clickable(interactionSource = interactionSource, indication = null) { onTabClicked(tab) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = label.uppercase(),
-                        color = when {
-                            isFocused -> colors.green
-                            selected -> colors.text
-                            else -> colors.text3
-                        },
-                        fontFamily = WatermelonMono,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.7.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 10.dp),
-                    )
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(if (selected) colors.green else Color.Transparent),
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (selected) colors.green else colors.text3,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Text(
+                            text = label,
+                            color = when {
+                                selected -> colors.green
+                                isFocused -> colors.text
+                                else -> colors.text2
+                            },
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }

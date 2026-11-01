@@ -35,8 +35,6 @@ class VulkanFrameRenderCoordinator(
         var background: RuntimeBackground = RuntimeBackground.None,
         var generation: Int = 0,
         var pendingSurface: Surface? = null,
-        var pendingWidth: Int = 0,
-        var pendingHeight: Int = 0,
     )
 
     private val coordinatorScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -203,38 +201,16 @@ class VulkanFrameRenderCoordinator(
         }
         val shouldAttach = synchronized(surfacesLock) {
             val managedSurface = managedSurfaces[surfaceView] ?: return@synchronized false
-            managedSurface.pendingSurface = surface
-            managedSurface.pendingWidth = width
-            managedSurface.pendingHeight = height
-            managedSurface.surfaceId == 0
+            if (managedSurface.surfaceId != 0 || managedSurface.pendingSurface != null) {
+                false
+            } else {
+                managedSurface.pendingSurface = surface
+                true
+            }
         }
 
         if (shouldAttach) {
             frameRenderThread.requestSurfaceAttachment(surfaceView, surface, width, height)
-        }
-    }
-
-    fun reattachPendingSurfaces() {
-        if (stopped) return
-        val toAttach = mutableListOf<Triple<EmulatorSurfaceView, Surface, Pair<Int, Int>>>()
-        synchronized(surfacesLock) {
-            for ((view, managed) in managedSurfaces) {
-                val curSurface = view.getCurrentSurface() ?: managed.pendingSurface
-                if (managed.surfaceId == 0 && curSurface != null && curSurface.isValid) {
-                    val (w, h) = view.getCurrentSurfaceSize()
-                    val effW = if (w > 0) w else managed.pendingWidth
-                    val effH = if (h > 0) h else managed.pendingHeight
-                    if (effW > 0 && effH > 0) {
-                        managed.pendingSurface = curSurface
-                        managed.pendingWidth = effW
-                        managed.pendingHeight = effH
-                        toAttach.add(Triple(view, curSurface, effW to effH))
-                    }
-                }
-            }
-        }
-        for ((view, surf, size) in toAttach) {
-            frameRenderThread.requestSurfaceAttachment(view, surf, size.first, size.second)
         }
     }
 
@@ -506,21 +482,13 @@ class VulkanFrameRenderCoordinator(
             var immediateConfig: VulkanPresentationConfig? = null
             synchronized(surfacesLock) {
                 val managedSurface = managedSurfaces[surfaceView]
-                if (managedSurface == null || surfaceView.getCurrentSurface() !== surface) {
+                if (managedSurface == null || managedSurface.pendingSurface !== surface || surfaceView.getCurrentSurface() !== surface) {
                     staleSurfaceId = surfaceId
-                } else if (surfaceId != 0) {
+                } else {
                     managedSurface.pendingSurface = null
                     managedSurface.surfaceId = surfaceId
                     immediateConfig = managedSurface.config
-                    shouldRefreshPresentation = true
-                } else {
-                    // Native MelonInstance was not ready yet (surfaceId == 0).
-                    // Preserve pendingSurface so reattachPendingSurfaces() will bind it immediately once ready.
-                    if (surface.isValid) {
-                        managedSurface.pendingSurface = surface
-                        managedSurface.pendingWidth = width
-                        managedSurface.pendingHeight = height
-                    }
+                    shouldRefreshPresentation = surfaceId != 0
                 }
             }
 

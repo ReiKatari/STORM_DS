@@ -142,8 +142,13 @@ fun CheatsOverlay(
 
         withContext(Dispatchers.IO) {
             jusrcheatRepo.ensureInitialized()
-            val matches = jusrcheatRepo.findCrossRegionFamily(romInfo.gameCode)
-                .filter { !it.gameId.equals(romInfo.gameCode, ignoreCase = true) }
+            var matches = jusrcheatRepo.findCrossRegionFamily(romInfo.gameCode)
+            if (matches.isEmpty() && romInfo.gameTitle.isNotBlank()) {
+                val cleanTitle = romInfo.gameTitle.replace(Regex("\\[.*?\\]|\\(.*?\\)"), "").trim()
+                matches = jusrcheatRepo.searchGames(cleanTitle).ifEmpty {
+                    jusrcheatRepo.searchGames(romInfo.gameTitle)
+                }
+            }
             val loaded = matches.mapNotNull { jusrcheatRepo.loadGame(it) }
             crossRegionGames = loaded
             // Expand first cross-region game by default if current ROM has 0 cheats

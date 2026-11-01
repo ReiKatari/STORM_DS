@@ -4,6 +4,7 @@ import me.magnum.melonds.domain.model.appupdate.AppUpdate
 
 interface UpdatesRepository {
     suspend fun checkNewUpdate(): Result<AppUpdate?>
+    suspend fun checkNewUpdateManually(): Result<AppUpdate?> = checkNewUpdate()
     fun skipUpdate(update: AppUpdate)
     fun notifyUpdateDownloaded(update: AppUpdate)
 }

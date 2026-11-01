@@ -175,8 +175,13 @@ object RomProcessor {
 		return runCatching {
 			context.contentResolver.openInputStream(uri)?.use { stream ->
 				val buf = ByteArray(16)
-				val read = stream.read(buf)
-				if (read >= 16) {
+				var totalRead = 0
+				while (totalRead < buf.size) {
+					val r = stream.read(buf, totalRead, buf.size - totalRead)
+					if (r <= 0) break
+					totalRead += r
+				}
+				if (totalRead >= 16) {
 					String(buf, 12, 4, StandardCharsets.US_ASCII).trim()
 				} else ""
 			} ?: ""
@@ -306,7 +311,13 @@ object RomProcessor {
 	fun getRomInfo(rom: Rom, inputStream: InputStream): RomInfo? {
 		return runCatching {
 			val romHeader = ByteArray(0x200)
-			if (inputStream.read(romHeader) < 0x200) {
+			var totalRead = 0
+			while (totalRead < romHeader.size) {
+				val r = inputStream.read(romHeader, totalRead, romHeader.size - totalRead)
+				if (r <= 0) break
+				totalRead += r
+			}
+			if (totalRead < 0x200) {
 				return null
 			}
 

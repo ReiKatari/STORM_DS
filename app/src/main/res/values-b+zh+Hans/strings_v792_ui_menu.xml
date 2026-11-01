@@ -25,7 +25,7 @@
     <string name="v793_summary_interval_save">定时保存</string>
     <string name="v793_summary_standard_mode">标准模式</string>
     <string name="v793_summary_custom_bios">自定义BIOS</string>
-    <string name="v793_summary_builtin_drastic_bios">内置 DraStic BIOS</string>
+    <string name="v793_summary_builtin_drastic_bios">内置 BIOS</string>
     <string name="v793_summary_skin">皮肤</string>
     <string name="v793_summary_touch">触控</string>
     <string name="v793_summary_vibration">震动</string>
@@ -72,4 +72,15 @@
     <string name="v794_cat_cfw_mode">固件模式与BIOS</string>
     <string name="v794_cat_cfw_ds_bios">DS BIOS与固件镜像</string>
     <string name="v794_cat_cfw_dsi_bios">DSi BIOS、NAND与固件镜像</string>
+
+    <!-- v800 Manual Update Checker -->
+    <string name="v800_check_updates_title">检查更新</string>
+    <string name="v800_check_updates_summary">在 GitHub 上检查 STORM DS 的新版本</string>
+    <string name="v800_checking_updates">正在检查更新…</string>
+    <string name="v800_update_available_title">发现新版本：%s</string>
+    <string name="v800_update_download">下载更新</string>
+    <string name="v800_update_later">稍后</string>
+    <string name="v800_update_up_to_date_title">已是最新版本</string>
+    <string name="v800_update_up_to_date_msg">STORM DS %s 当前已是最新版本。</string>
+    <string name="v800_update_error">检查更新失败，请检查网络连接。</string>
 </resources>

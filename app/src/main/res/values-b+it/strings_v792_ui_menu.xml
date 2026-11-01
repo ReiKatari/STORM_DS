@@ -25,7 +25,7 @@
     <string name="v793_summary_interval_save">Salvataggio a intervalli</string>
     <string name="v793_summary_standard_mode">Modalità standard</string>
     <string name="v793_summary_custom_bios">BIOS personalizzato</string>
-    <string name="v793_summary_builtin_drastic_bios">BIOS DraStic integrato</string>
+    <string name="v793_summary_builtin_drastic_bios">BIOS integrato</string>
     <string name="v793_summary_skin">Skin</string>
     <string name="v793_summary_touch">Tocco</string>
     <string name="v793_summary_vibration">Vibrazione</string>
@@ -72,4 +72,15 @@
     <string name="v794_cat_cfw_mode">Modalità firmware e BIOS</string>
     <string name="v794_cat_cfw_ds_bios">Immagini BIOS e firmware DS</string>
     <string name="v794_cat_cfw_dsi_bios">Immagini BIOS, NAND e firmware DSi</string>
+
+    <!-- v800 Manual Update Checker -->
+    <string name="v800_check_updates_title">Controlla aggiornamenti</string>
+    <string name="v800_check_updates_summary">Controlla nuove versioni di STORM DS su GitHub</string>
+    <string name="v800_checking_updates">Controllo aggiornamenti in corso…</string>
+    <string name="v800_update_available_title">Aggiornamento disponibile: %s</string>
+    <string name="v800_update_download">Scarica aggiornamento</string>
+    <string name="v800_update_later">Più tardi</string>
+    <string name="v800_update_up_to_date_title">Ultima versione installata</string>
+    <string name="v800_update_up_to_date_msg">STORM DS %s è attualmente la versione più recente.</string>
+    <string name="v800_update_error">Impossibile verificare gli aggiornamenti. Controlla la connessione internet.</string>
 </resources>

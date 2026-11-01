@@ -408,10 +408,10 @@ fun LibrarySectionHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(10.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.weight(2f, fill = false),
+            modifier = Modifier.weight(1f, fill = false),
         ) {
             items(
                 listOf(
@@ -443,7 +443,7 @@ fun LibrarySectionHeader(
                 )
             }
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.weight(1f))
         Text(
             text = stringResource(R.string.rom_games_count, gamesCount),
             color = colors.text3,

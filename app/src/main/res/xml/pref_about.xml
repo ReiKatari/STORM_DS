@@ -18,6 +18,13 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
+                android:key="manual_check_updates"
+                android:title="@string/v800_check_updates_title"
+                android:summary="@string/v800_check_updates_summary"
+                app:icon="@drawable/ic_refresh"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="about_copy_diagnostics"
                 android:title="@string/v780_about_copy_diagnostics_title"
                 android:summary="@string/v780_about_copy_diagnostics_summary"

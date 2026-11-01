@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.widthIn
 import me.magnum.melonds.ui.common.UnifiedBackButton
 import me.magnum.melonds.ui.common.bouncingClickable
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -159,6 +160,85 @@ private fun formatHoursLabel(duration: Duration): String {
     val h = totalMins / 60
     val m = totalMins % 60
     return if (h > 0) "${h}ч ${m}м" else "${m}м"
+}
+
+
+private enum class PauseMenuCategory(val titleRu: String, val titleEn: String) {
+    STATES_AND_TIME("СОСТОЯНИЯ И ВРЕМЯ", "STATES AND TIME"),
+    SCREEN_AND_CONTROLS("ЭКРАН И УПРАВЛЕНИЕ", "SCREEN AND CONTROLS"),
+    TOOLS_AND_PROFILE("ИНСТРУМЕНТЫ И ПРОФИЛЬ", "TOOLS AND PROFILE"),
+    SYSTEM("СИСТЕМА", "SYSTEM");
+
+    fun title(isRu: Boolean): String = if (isRu) titleRu else titleEn
+}
+
+private fun getOptionCategory(option: PauseMenuOption): PauseMenuCategory {
+    return when (option) {
+        RomPauseMenuOption.SAVE_STATE,
+        RomPauseMenuOption.LOAD_STATE,
+        RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE,
+        RomPauseMenuOption.REWIND,
+        RomPauseMenuOption.SLOW_MOTION,
+        RomPauseMenuOption.FRAME_ADVANCE,
+        RomPauseMenuOption.QUICK_SLOT_CAROUSEL -> PauseMenuCategory.STATES_AND_TIME
+
+        RomPauseMenuOption.PRESETS,
+        RomPauseMenuOption.SCREEN_LAYOUT,
+        RomPauseMenuOption.CALIBRATE_GYRO,
+        RomPauseMenuOption.TAKE_SCREENSHOT,
+        RomPauseMenuOption.RENDERER_DEBUG,
+        FirmwarePauseMenuOption.SCREEN_LAYOUT -> PauseMenuCategory.SCREEN_AND_CONTROLS
+
+        RomPauseMenuOption.ROM_SETTINGS,
+        RomPauseMenuOption.CHEATS,
+        RomPauseMenuOption.VIEW_ACHIEVEMENTS,
+        RomPauseMenuOption.SYNC_RETRO_ACHIEVEMENTS,
+        RomPauseMenuOption.SETTINGS,
+        FirmwarePauseMenuOption.SETTINGS -> PauseMenuCategory.TOOLS_AND_PROFILE
+
+        RomPauseMenuOption.RESET_COMPATIBILITY,
+        RomPauseMenuOption.RESET,
+        RomPauseMenuOption.EXIT,
+        FirmwarePauseMenuOption.RESET,
+        FirmwarePauseMenuOption.EXIT -> PauseMenuCategory.SYSTEM
+
+        else -> PauseMenuCategory.TOOLS_AND_PROFILE
+    }
+}
+
+@Composable
+private fun PauseMenuSectionHeader(title: String) {
+    val colors = watermelon
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 4.dp, start = 4.dp, end = 4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(11.dp)
+                .clip(RoundedCornerShape(1.5.dp))
+                .background(colors.green),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = title,
+            color = colors.text2,
+            fontFamily = Manrope,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(colors.line.copy(alpha = 0.6f)),
+        )
+    }
 }
 
 @Composable
@@ -456,7 +536,7 @@ fun PauseMenuOverlay(
                                 onOptionSelected(RomPauseMenuOption.QUICK_SLOT_CAROUSEL)
                             }
                         }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -479,17 +559,64 @@ fun PauseMenuOverlay(
                         )
                     }
 
-                    Text(
-                        text = if (activeQuickSlot in 1..8) {
-                            stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
-                        } else {
-                            stringResource(R.string.quick_slot_default_slot_header)
-                        },
-                        color = colors.green,
-                        fontFamily = Manrope,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        (0..4).forEach { slotIdx ->
+                            val isActive = (activeQuickSlot == slotIdx)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isActive) colors.green.copy(alpha = 0.22f) else colors.surface3)
+                                    .border(
+                                        width = if (isActive) 1.dp else 0.5.dp,
+                                        color = if (isActive) colors.green else colors.line,
+                                        shape = RoundedCornerShape(6.dp),
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "#$slotIdx",
+                                    color = if (isActive) colors.green else colors.text3,
+                                    fontFamily = WatermelonMono,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(4.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(colors.green.copy(alpha = 0.15f))
+                                .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = if (activeQuickSlot in 1..8) {
+                                    stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
+                                } else {
+                                    stringResource(R.string.quick_slot_default_slot_header)
+                                },
+                                color = colors.green,
+                                fontFamily = Manrope,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = colors.text3,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
                 }
             }
 
@@ -499,7 +626,15 @@ fun PauseMenuOverlay(
                 store.getVisibleOrderedOptions(pauseMenu.options, isExtendedPauseMenuEnabled)
             }
 
-            // Options Grid
+            val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
+            val categorizedOptions = remember(displayedOptions) {
+                PauseMenuCategory.values().mapNotNull { cat ->
+                    val items = displayedOptions.filter { getOptionCategory(it) == cat }
+                    if (items.isNotEmpty()) cat to items else null
+                }
+            }
+
+            // Options Grid (Structured by Categories)
             LazyVerticalGrid(
                 columns = GridCells.Fixed(if (isLandscape) 3 else 1),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -509,27 +644,36 @@ fun PauseMenuOverlay(
                     .weight(1f, fill = false)
                     .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 6.dp),
             ) {
-                items(displayedOptions, key = { it.toString() }) { option ->
-                    val slowMoBadge = if (option == RomPauseMenuOption.SLOW_MOTION) {
-                        val formatted = String.format(java.util.Locale.US, "%.2f", slowMotionSpeed).trimEnd('0').trimEnd('.')
-                        "${formatted}×"
-                    } else null
+                categorizedOptions.forEach { (category, categoryOptions) ->
+                    item(
+                        span = { GridItemSpan(maxLineSpan) },
+                        key = "header_${category.name}",
+                    ) {
+                        PauseMenuSectionHeader(title = category.title(isRu))
+                    }
 
-                    PauseOptionRow(
-                        label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
-                        icon = pauseOptionIcon(option),
-                        badge = slowMoBadge,
-                        highlighted = false,
-                        destructive = isDestructive(option),
-                        focusRequester = if (option == displayedOptions.firstOrNull()) resumeFocusRequester else null,
-                        onClick = {
-                            if (needsConfirmation(option)) {
-                                confirmingOption = option
-                            } else {
-                                onOptionSelected(option)
-                            }
-                        },
-                    )
+                    items(categoryOptions, key = { it.toString() }) { option ->
+                        val slowMoBadge = if (option == RomPauseMenuOption.SLOW_MOTION) {
+                            val formatted = String.format(java.util.Locale.US, "%.2f", slowMotionSpeed).trimEnd('0').trimEnd('.')
+                            "${formatted}×"
+                        } else null
+
+                        PauseOptionRow(
+                            label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
+                            icon = pauseOptionIcon(option),
+                            badge = slowMoBadge,
+                            highlighted = false,
+                            destructive = isDestructive(option),
+                            focusRequester = if (option == displayedOptions.firstOrNull()) resumeFocusRequester else null,
+                            onClick = {
+                                if (needsConfirmation(option)) {
+                                    confirmingOption = option
+                                } else {
+                                    onOptionSelected(option)
+                                }
+                            },
+                        )
+                    }
                 }
             }
 

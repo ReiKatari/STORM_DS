@@ -189,6 +189,33 @@ class RomListActivity : AppCompatActivity() {
                 }
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                updatesViewModel.manualUpdateResult.collectLatest { result ->
+                    when (result) {
+                        is ManualUpdateResult.Checking -> {
+                            Toast.makeText(this@RomListActivity, R.string.v800_checking_updates, Toast.LENGTH_SHORT).show()
+                        }
+                        is ManualUpdateResult.UpdateAvailable -> {
+                            // Handled by appUpdate flow
+                        }
+                        is ManualUpdateResult.UpToDate -> {
+                            val curVer = runCatching {
+                                packageManager.getPackageInfo(packageName, 0).versionName
+                            }.getOrNull() ?: "8.0.0"
+                            AlertDialog.Builder(this@RomListActivity)
+                                .setTitle(R.string.v800_update_up_to_date_title)
+                                .setMessage(getString(R.string.v800_update_up_to_date_msg, curVer))
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show()
+                        }
+                        is ManualUpdateResult.Error -> {
+                            Toast.makeText(this@RomListActivity, R.string.v800_update_error, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -349,6 +376,7 @@ class RomListActivity : AppCompatActivity() {
             }
             R.id.action_rom_list_refresh -> {
                 viewModel.refreshRoms()
+                updatesViewModel.checkForUpdatesManually()
                 return true
             }
             R.id.action_player_stats -> {
@@ -366,6 +394,10 @@ class RomListActivity : AppCompatActivity() {
             }
         }
         return false
+    }
+
+    fun checkForUpdatesManually() {
+        updatesViewModel.checkForUpdatesManually()
     }
 
     internal fun bootFirmware(consoleType: ConsoleType) {

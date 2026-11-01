@@ -1738,7 +1738,6 @@ class EmulatorActivity : AppCompatActivity() {
                             setupConsoleSkin()
                             binding.surfaceMain.visibility = View.VISIBLE
                             binding.viewLayoutControls.visibility = View.VISIBLE
-                            (frameRenderCoordinator as? me.magnum.melonds.ui.emulator.render.VulkanFrameRenderCoordinator)?.reattachPendingSurfaces()
                             backPressedCallback.isEnabled = true
                             scheduleStartupPresentationRefreshes()
                             if (
