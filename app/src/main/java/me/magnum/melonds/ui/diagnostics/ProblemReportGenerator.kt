@@ -35,7 +35,7 @@ import java.util.zip.ZipOutputStream
 
 object ProblemReportGenerator {
 
-    private const val APP_VERSION_FALLBACK = "8.0.1"
+    private const val APP_VERSION_FALLBACK = "8.0.2"
     private const val MAX_LOG_ATTACHMENT_BYTES = 512 * 1024L
 
     private val SENSITIVE_KEY_TOKENS = listOf(

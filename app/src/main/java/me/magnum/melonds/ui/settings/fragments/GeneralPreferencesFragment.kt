@@ -377,7 +377,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.0.1").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.0.2").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 

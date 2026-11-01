@@ -3520,6 +3520,10 @@ bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
 
     if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
     {
+        const bool topStructuredAboveDominantPrecise =
+            screenUsesFullRegularComp7WithDominantAbove(softPackedSnapshot.topScreenStats);
+        const bool bottomStructuredAboveDominantPrecise =
+            screenUsesFullRegularComp7WithDominantAbove(softPackedSnapshot.bottomScreenStats);
         for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
         {
             const size_t packedRowBase = y * static_cast<size_t>(kAcceleratedStride);
@@ -3537,7 +3541,8 @@ bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
                 softPackedSnapshot.packedTopControl.data() + snapshotRowBase,
                 SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
             topPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-                softPackedSnapshot.packedTopLineMeta[y];
+                softPackedSnapshot.packedTopLineMeta[y]
+                | (topStructuredAboveDominantPrecise ? kMetaFlagStructuredAboveDominant : 0u);
 
             std::memcpy(
                 bottomPacked + packedRowBase,
@@ -3552,7 +3557,8 @@ bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
                 softPackedSnapshot.packedBottomControl.data() + snapshotRowBase,
                 SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
             bottomPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-                softPackedSnapshot.packedBottomLineMeta[y];
+                softPackedSnapshot.packedBottomLineMeta[y]
+                | (bottomStructuredAboveDominantPrecise ? kMetaFlagStructuredAboveDominant : 0u);
         }
         resource.fastHighresOnlyTop = false;
         resource.fastHighresOnlyBottom = false;
@@ -5221,8 +5227,11 @@ bool VulkanOutput::prepareFrameForPresentation(
     const bool bottomUsesFullStructured2dOnlyDisplay =
         screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.bottomScreenStats);
     resource.screenSwapToggledFromPrevious =
-        previousResource != nullptr
-        && previousResource->screenSwap != resource.screenSwap;
+        (previousResource != nullptr
+            && previousResource->screenSwap != resource.screenSwap)
+        || (softPackedSnapshot.valid
+            && (softPackedSnapshot.screenSwapToggledFromPreviousEmulatedFrame
+                || softPackedSnapshot.isInAlternatingMode));
     const bool asymmetricFullRegularComp7 =
         topUsesFullRegularComp7 != bottomUsesFullRegularComp7;
     const bool preservePackedOwnerForPlainRegularComp7Pair =
@@ -6067,7 +6076,9 @@ bool VulkanOutput::prepareFrameForPresentation(
         if (framesSinceBottomLive3D < 1024)
             framesSinceBottomLive3D++;
     }
-    if (lastLive3dOwnerValid && lastLive3dOwnerWasTop != live3dOwnerIsTop)
+    if (lastLive3dOwnerValid
+        && (lastLive3dOwnerWasTop != live3dOwnerIsTop
+            || (softPackedSnapshot.valid && softPackedSnapshot.isInAlternatingMode)))
     {
         if (consecutiveLive3dOwnerFlips < 1024)
             consecutiveLive3dOwnerFlips++;

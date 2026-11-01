@@ -169,16 +169,22 @@ bool isStructured2DVisible(Rgba6 color)
 
 bool isStructured2DVisibleOrProtectedBlack(Rgba6 color, Rgba6 control)
 {
-    return isStructured2DVisible(color)
-        && (((color.r | color.g | color.b) != 0)
-            || hasStructured2DProtectedBlack(control));
+    if (isStructured2DVisible(color) && ((color.r | color.g | color.b) != 0))
+        return true;
+    return color.a != 0
+        && !isPacked3dLayerSlot(color)
+        && !hasStructured2D3DSlot(control)
+        && hasStructured2DProtectedBlack(control);
 }
 
 bool isStructured2DVisibleOrOwnedProtectedBlack(Rgba6 color, Rgba6 control, bool topScreen)
 {
-    return isStructured2DVisible(color)
-        && (((color.r | color.g | color.b) != 0)
-            || hasStructured2DProtectedBlackOwned(control, topScreen));
+    if (isStructured2DVisible(color) && ((color.r | color.g | color.b) != 0))
+        return true;
+    return color.a != 0
+        && !isPacked3dLayerSlot(color)
+        && !hasStructured2D3DSlot(control)
+        && hasStructured2DProtectedBlackOwned(control, topScreen);
 }
 
 bool rgbClose6(Rgba6 a, Rgba6 b, int tolerance)

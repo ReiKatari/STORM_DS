@@ -80,7 +80,10 @@ void DSi_TSC::SetMode(u8 mode)
 {
     TSCMode = mode;
     DataPos = 0;
-    NDS.KeyInput |= (1 << (16+6));
+    if (mode == 0x00 || LegacyPenBitTracking)
+        NDS.KeyInput |= (1 << (16+6));
+    else
+        NDS.KeyInput &= ~(1 << (16+6));
 }
 
 void DSi_TSC::SetTouchCoords(u16 x, u16 y)
@@ -103,7 +106,8 @@ void DSi_TSC::SetTouchCoords(u16 x, u16 y)
         Bank3Regs[0x09] = 0x40;
         //Bank3Regs[0x09] &= ~0x80;
         Bank3Regs[0x0E] |= 0x01;
-        NDS.KeyInput |= (1 << (16+6));
+        if (LegacyPenBitTracking)
+            NDS.KeyInput |= (1 << (16+6));
     }
     else
     {
@@ -115,7 +119,8 @@ void DSi_TSC::SetTouchCoords(u16 x, u16 y)
         Bank3Regs[0x09] = 0x80;
         //Bank3Regs[0x09] |= 0x80;
         Bank3Regs[0x0E] &= ~0x01;
-        NDS.KeyInput &= ~(1 << (16+6));
+        if (LegacyPenBitTracking)
+            NDS.KeyInput &= ~(1 << (16+6));
     }
 
     if (oldpress ^ (Bank3Regs[0x0E] & 0x01))

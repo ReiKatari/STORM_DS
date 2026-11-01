@@ -143,6 +143,8 @@ struct SoftPackedFrameSnapshot
     u64 frameId = 0;
     int frontBufferLatched = -1;
     bool screenSwapLatched = false;
+    bool screenSwapToggledFromPreviousEmulatedFrame = false;
+    bool isInAlternatingMode = false;
     u32 captureCntLatched = 0;
     u32 dispCntALatched = 0;
     u32 dispCntBLatched = 0;

@@ -304,9 +304,16 @@ void FrameQueue::commitPresentedFrame(Frame* frame, const FrameQueuePolicy& requ
 
     if (!policy.PreserveBacklogOnPresent)
     {
-        for (auto f : presentQueue)
+        const size_t keepCount = (policy.TreatBacklogTrimAsFastForwardSkip && (presentQueue.size() % 2u) == 1u)
+            ? 1u
+            : 0u;
+        u64 droppedCount = 0;
+        while (presentQueue.size() > keepCount)
         {
+            Frame* f = presentQueue.front();
+            presentQueue.pop_front();
             freeQueue.push(f);
+            droppedCount++;
             if (policy.TreatBacklogTrimAsFastForwardSkip)
             {
                 f->queuedAtNs = 0;
@@ -317,13 +324,11 @@ void FrameQueue::commitPresentedFrame(Frame* frame, const FrameQueuePolicy& requ
                 recordDroppedFrameLocked(f, PresentDropCause::Stale, nowNs);
             }
         }
-        const u64 staleFrameCount = static_cast<u64>(presentQueue.size());
         if (!policy.TreatBacklogTrimAsFastForwardSkip)
         {
-            stats.StaleFramesDropped += staleFrameCount;
-            stats.PresentFramesDroppedByPolicy += staleFrameCount;
+            stats.StaleFramesDropped += droppedCount;
+            stats.PresentFramesDroppedByPolicy += droppedCount;
         }
-        presentQueue.clear();
         freeFrameReadyCondition.notify_all();
     }
 

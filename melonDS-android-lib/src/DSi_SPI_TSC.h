@@ -38,7 +38,7 @@ public:
 
     // 00=DS-mode 01=normal
     void SetMode(u8 mode);
-    void SetLegacyPenBitTracking(bool /*enabled*/) noexcept {}
+    void SetLegacyPenBitTracking(bool enabled) noexcept { LegacyPenBitTracking = enabled; }
 
     void SetTouchCoords(u16 x, u16 y) override;
 
@@ -51,7 +51,7 @@ private:
 
     u8 Bank3Regs[0x80];
     u8 TSCMode;
-
+    bool LegacyPenBitTracking = false;
 };
 
 }
