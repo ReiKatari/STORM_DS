@@ -102,6 +102,7 @@ private data class ConsoleSkinPalette(
     val isLightSkin: Boolean = false,
     val isSwitch: Boolean = false,
     val isAurora: Boolean = false,
+    val is3ds: Boolean = false,
     val leftBody: Color = primaryBody,
     val leftBodyShade: Color = secondaryBody,
     val rightBody: Color = primaryBody,
@@ -347,7 +348,8 @@ private fun resolveSkinPalette(
             bezelAccent = Color(0xFF52525E),
             innerBevelDark = Color(0xCC000000),
             innerBevelLight = Color(0x44A1A1AA),
-            brandTitle = "New Nintendo 3DS XL"
+            brandTitle = "New Nintendo 3DS XL",
+            is3ds = true
         )
         ConsoleSkinTheme.N3DS_GALAXY -> ConsoleSkinPalette(
             primaryBody = Color(0xFF3B0764),
@@ -355,7 +357,8 @@ private fun resolveSkinPalette(
             bezelAccent = Color(0xFF9333EA),
             innerBevelDark = Color(0xAA1E0338),
             innerBevelLight = Color(0x66C084FC),
-            brandTitle = "New Nintendo 3DS XL Galaxy"
+            brandTitle = "New Nintendo 3DS XL Galaxy",
+            is3ds = true
         )
         ConsoleSkinTheme.N3DS_SNES -> ConsoleSkinPalette(
             primaryBody = Color(0xFFD1D5DB),
@@ -365,6 +368,7 @@ private fun resolveSkinPalette(
             innerBevelLight = Color(0xDDFFFFFF),
             brandTitle = "New Nintendo 3DS XL SNES",
             isLightSkin = true,
+            is3ds = true,
             controlsColor = Color(0xFFE5E7EB),
             controlsAccent = Color(0xFF1F2937)
         )
@@ -374,7 +378,8 @@ private fun resolveSkinPalette(
             bezelAccent = Color(0xFFF59E0B),
             innerBevelDark = Color(0xAA451A03),
             innerBevelLight = Color(0x66FDE68A),
-            brandTitle = "New Nintendo 3DS XL Hyrule"
+            brandTitle = "New Nintendo 3DS XL Hyrule",
+            is3ds = true
         )
         ConsoleSkinTheme.N3DS_AQUA -> ConsoleSkinPalette(
             primaryBody = Color(0xFF0369A1),
@@ -382,7 +387,8 @@ private fun resolveSkinPalette(
             bezelAccent = Color(0xFF0EA5E9),
             innerBevelDark = Color(0xAA082F49),
             innerBevelLight = Color(0x667DD3FC),
-            brandTitle = "Nintendo 3DS"
+            brandTitle = "Nintendo 3DS",
+            is3ds = true
         )
     }
 }
@@ -430,6 +436,11 @@ fun ConsoleSkinFullFrame(
         initialValue = 0.25f, targetValue = 0.95f,
         animationSpec = infiniteRepeatable(tween(420, easing = LinearEasing), RepeatMode.Reverse),
         label = "wifiAlpha"
+    )
+    val threeDAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.65f, targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
+        label = "threeDAlpha"
     )
 
     val currentAppTheme = AppThemeManager.themeState.value
@@ -518,6 +529,7 @@ fun ConsoleSkinFullFrame(
                     palette = palette,
                     ledAlpha = ledAlpha,
                     wifiAlpha = wifiAlpha,
+                    threeDAlpha = threeDAlpha,
                     density = density.density
                 )
             } else {
@@ -944,6 +956,85 @@ private fun DrawScope.drawLandscapeLayout(
     }
 }
 
+private fun DrawScope.drawGlowingLed(
+    center: Offset,
+    baseColor: Color,
+    alpha: Float,
+    density: Float,
+    radiusDp: Float = 2.4f,
+    hasHalo: Boolean = true
+) {
+    val r = radiusDp * density
+    val effectiveColor = baseColor.copy(alpha = alpha.coerceIn(0f, 1f))
+
+    if (hasHalo) {
+        val haloRadius = r * 3.0f
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    baseColor.copy(alpha = (0.45f * alpha).coerceIn(0f, 1f)),
+                    baseColor.copy(alpha = (0.12f * alpha).coerceIn(0f, 1f)),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = haloRadius
+            ),
+            radius = haloRadius,
+            center = center
+        )
+    }
+
+    // Outer dark recessed bezel socket ring
+    drawCircle(
+        color = Color.Black.copy(alpha = 0.85f),
+        radius = r + 0.8f * density,
+        center = center
+    )
+    drawCircle(
+        color = Color.White.copy(alpha = 0.25f),
+        radius = r + 0.8f * density,
+        center = center,
+        style = Stroke(width = 0.5f * density)
+    )
+
+    // Inner bright glowing LED core
+    drawCircle(
+        color = effectiveColor,
+        radius = r,
+        center = center
+    )
+
+    // Specular white highlight
+    drawCircle(
+        color = Color.White.copy(alpha = 0.90f * alpha),
+        radius = r * 0.36f,
+        center = Offset(center.x - r * 0.28f, center.y - r * 0.28f)
+    )
+}
+
+private fun DrawScope.drawPerforatedSpeakerGrille(
+    centerX: Float,
+    centerY: Float,
+    density: Float,
+    palette: ConsoleSkinPalette
+) {
+    val dotR = 1.6f * density
+    val spacingX = 4.2f * density
+    val spacingY = 4.2f * density
+    val dotColor = Color.Black.copy(alpha = 0.90f)
+    val rimColor = if (palette.isLightSkin) Color(0xFF94A3B8).copy(alpha = 0.75f) else palette.innerBevelLight.copy(alpha = 0.40f)
+
+    // 6 perforated speaker holes (2 columns x 3 rows) with depth & rim highlight
+    for (row in -1..1) {
+        for (col in 0..1) {
+            val dx = centerX + (col - 0.5f) * spacingX
+            val dy = centerY + row * spacingY
+            drawCircle(dotColor, dotR, Offset(dx, dy))
+            drawCircle(rimColor, dotR, Offset(dx, dy), style = Stroke(width = 0.5f * density))
+        }
+    }
+}
+
 private fun DrawScope.drawPortraitLayout(
     s1: Rect,
     s2: Rect,
@@ -952,12 +1043,17 @@ private fun DrawScope.drawPortraitLayout(
     palette: ConsoleSkinPalette,
     ledAlpha: Float,
     wifiAlpha: Float,
+    threeDAlpha: Float,
     density: Float
 ) {
     val upperScreen = if (s1.y <= s2.y) s1 else s2
     val lowerScreen = if (s1.y <= s2.y) s2 else s1
 
-    val verticalGap = lowerScreen.y - upperScreen.bottom
+    val upperTop = upperScreen.y.toFloat()
+    val upperBottom = upperScreen.bottom.toFloat()
+    val lowerTop = lowerScreen.y.toFloat()
+    val lowerBottom = lowerScreen.bottom.toFloat()
+    val verticalGap = (lowerTop - upperBottom).coerceAtLeast(0f)
 
     // 1. Overall Handheld Chassis Background
     drawRect(
@@ -967,189 +1063,313 @@ private fun DrawScope.drawPortraitLayout(
         )
     )
 
-    // 2. Top Lid Accents (Above and around upperScreen)
-    val upperTop = upperScreen.y.toFloat()
-    if (upperTop >= 16f * density) {
-        // Inner Camera Lens centered above upper screen
-        val camY = upperTop * 0.45f
-        drawCircle(
-            color = Color.Black.copy(alpha = 0.90f),
-            radius = 3.5f * density,
-            center = Offset(w / 2f, camY)
-        )
-        drawCircle(
-            color = Color(0xFF00D2FF).copy(alpha = 0.65f),
-            radius = 1.5f * density,
-            center = Offset(w / 2f - 0.8f * density, camY - 0.8f * density)
-        )
-
-        // Brand Title
-        if (upperTop >= 22f * density) {
-            drawBrandText(
-                text = palette.brandTitle,
-                centerX = w / 2f,
-                centerY = upperTop * 0.80f,
-                palette = palette,
-                density = density
-            )
-        }
-    }
-
-    // Stereo Speaker Grilles beside upperScreen
-    val upperH = upperScreen.height.toFloat()
-    val speakerCenterY = upperScreen.y + upperH / 2f
-    if (upperScreen.x >= 20f * density) {
-        drawSpeakerDotArray(
-            centerX = upperScreen.x / 2f,
-            centerY = speakerCenterY,
-            density = density,
-            palette = palette
-        )
-    }
-    val rightMargin = w - upperScreen.right
-    if (rightMargin >= 20f * density) {
-        drawSpeakerDotArray(
-            centerX = upperScreen.right + rightMargin / 2f,
-            centerY = speakerCenterY,
-            density = density,
-            palette = palette
-        )
-    }
-
-    // 3. 3D Cylindrical Hinge Barrel spanning the gap between screens
-    if (verticalGap >= 6f * density) {
-        val hingeY = upperScreen.bottom.toFloat()
-        val hingeH = verticalGap.toFloat()
-        // Cylindrical 3D lighting gradient
+    // Nintendo Switch Mode portrait rails: Left Neon Blue and Right Neon Red Joy-Con side strips
+    if (palette.isSwitch) {
+        val sideRailW = upperScreen.x.toFloat().coerceAtLeast(8f * density)
+        // Left rail (Neon Blue)
         drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.30f),
-                    palette.primaryBody,
-                    palette.secondaryBody,
-                    Color.Black.copy(alpha = 0.65f)
-                ),
-                startY = hingeY, endY = hingeY + hingeH
+            brush = Brush.horizontalGradient(
+                colors = listOf(palette.leftBody, palette.leftBodyShade),
+                startX = 0f, endX = sideRailW
             ),
-            topLeft = Offset(0f, hingeY),
-            size = Size(w, hingeH)
+            topLeft = Offset(0f, 0f),
+            size = Size(sideRailW, h)
         )
-
-        // Hinge End Pivot Rings / Knuckles
-        val knuckleW = 14f * density
+        // Right rail (Neon Red)
+        val rightRailX = w - sideRailW
         drawRect(
-            color = palette.bezelAccent.copy(alpha = 0.65f),
-            topLeft = Offset(0f, hingeY),
-            size = Size(knuckleW, hingeH)
+            brush = Brush.horizontalGradient(
+                colors = listOf(palette.rightBodyShade, palette.rightBody),
+                startX = rightRailX, endX = w
+            ),
+            topLeft = Offset(rightRailX, 0f),
+            size = Size(sideRailW, h)
         )
-        drawRect(
-            color = palette.bezelAccent.copy(alpha = 0.65f),
-            topLeft = Offset(w - knuckleW, hingeY),
-            size = Size(knuckleW, hingeH)
-        )
-
-        // Centered MIC Pinhole and lettering
-        val micCenterX = w / 2f
-        val micCenterY = hingeY + hingeH / 2f
-        drawCircle(
-            color = Color.Black.copy(alpha = 0.85f),
-            radius = 2f * density,
-            center = Offset(micCenterX, micCenterY)
-        )
-        if (hingeH >= 12f * density) {
-            drawContext.canvas.nativeCanvas.drawText(
-                "MIC",
-                micCenterX,
-                micCenterY + 5f * density,
-                Paint().apply {
-                    isAntiAlias = true
-                    textSize = 6.5f * density
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    color = if (palette.isLightSkin) Color(0xFF64748B).toArgb() else Color(0xFF94A3B8).toArgb()
-                }
+        // Metallic rail locks and player indicator LEDs
+        val ledSpacing = 8f * density
+        val ledStartY = h * 0.5f - 1.5f * ledSpacing
+        for (i in 0 until 4) {
+            val ly = ledStartY + i * ledSpacing
+            drawGlowingLed(
+                center = Offset(sideRailW * 0.5f, ly),
+                baseColor = Color(0xFF00FF66),
+                alpha = if (i == 0) ledAlpha else 0.25f,
+                density = density,
+                radiusDp = 1.6f,
+                hasHalo = (i == 0)
             )
         }
+    }
 
-        // Status LEDs on the right side of hinge
-        val ledY = micCenterY
-        val ledSpacing = 8f * density
-        val ledStartX = w - knuckleW - 24f * density
-        // Power LED (Blue/Green pulsing)
+    // 2. Top Lid Accents (ALWAYS rendered using coerceAtLeast fallback positions)
+    val effectiveLidH = upperTop.coerceAtLeast(24f * density)
+    val camY = (effectiveLidH * 0.40f).coerceAtLeast(8f * density)
+    val brandY = (effectiveLidH * 0.82f).coerceAtLeast(camY + 8f * density)
+
+    // Top Lid Brushed 3D metallic/shell gradient
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                palette.innerBevelLight.copy(alpha = 0.45f),
+                palette.secondaryBody,
+                palette.primaryBody,
+                palette.secondaryBody
+            ),
+            startY = 0f, endY = effectiveLidH
+        ),
+        topLeft = Offset(0f, 0f),
+        size = Size(w, effectiveLidH)
+    )
+
+    // Top shell edge highlight line
+    drawLine(
+        color = palette.innerBevelLight.copy(alpha = 0.6f),
+        start = Offset(0f, 0.5f * density),
+        end = Offset(w, 0.5f * density),
+        strokeWidth = 1f * density
+    )
+
+    // Recessed Inner Camera Lens with optical glint + dark bezel ring
+    val camCenter = Offset(w / 2f, camY)
+    drawCircle(
+        color = Color(0xFF09090B),
+        radius = 4.2f * density,
+        center = camCenter
+    )
+    drawCircle(
+        color = palette.bezelAccent.copy(alpha = 0.85f),
+        radius = 4.2f * density,
+        center = camCenter,
+        style = Stroke(width = 0.8f * density)
+    )
+    drawCircle(
+        color = Color(0xFF020617),
+        radius = 2.4f * density,
+        center = camCenter
+    )
+    // Cyan / Violet optical glint
+    drawCircle(
+        color = Color(0xFF38BDF8).copy(alpha = 0.85f),
+        radius = 1.1f * density,
+        center = Offset(camCenter.x - 0.7f * density, camCenter.y - 0.7f * density)
+    )
+    drawCircle(
+        color = Color(0xFFA855F7).copy(alpha = 0.65f),
+        radius = 0.6f * density,
+        center = Offset(camCenter.x + 0.6f * density, camCenter.y + 0.6f * density)
+    )
+    if (palette.is3ds) {
+        // IR eye-tracking tracking emitter
         drawCircle(
-            color = Color(0xFF00FF66).copy(alpha = ledAlpha),
-            radius = 1.8f * density,
-            center = Offset(ledStartX, ledY)
-        )
-        // Battery LED
-        drawCircle(
-            color = Color(0xFFF59E0B).copy(alpha = 0.85f),
-            radius = 1.8f * density,
-            center = Offset(ledStartX + ledSpacing, ledY)
-        )
-        // Wireless LED
-        drawCircle(
-            color = Color(0xFF38BDF8).copy(alpha = wifiAlpha),
-            radius = 1.8f * density,
-            center = Offset(ledStartX + 2 * ledSpacing, ledY)
+            color = Color(0xFF3B0764).copy(alpha = 0.85f),
+            radius = 1.6f * density,
+            center = Offset(w / 2f + 9f * density, camY)
         )
     }
 
-    // 4. Bottom Deck Accents (Below and around lowerScreen)
-    val lowerBottom = lowerScreen.bottom.toFloat()
+    // Model Badge / Brand Title
+    drawBrandText(
+        text = palette.brandTitle,
+        centerX = w / 2f,
+        centerY = brandY,
+        palette = palette,
+        density = density
+    )
+
+    // Stereo 6+6 Perforated Speaker Grilles
+    if (upperScreen.x >= 20f * density) {
+        val speakerCenterY = upperScreen.y + upperScreen.height / 2f
+        drawPerforatedSpeakerGrille(upperScreen.x / 2f, speakerCenterY, density, palette)
+        drawPerforatedSpeakerGrille(upperScreen.right + (w - upperScreen.right) / 2f, speakerCenterY, density, palette)
+    } else {
+        // Draw in top lid on left & right
+        val speakerY = camY
+        val speakerLeftX = (w * 0.14f).coerceAtLeast(18f * density)
+        val speakerRightX = (w * 0.86f).coerceAtMost(w - 18f * density)
+        drawPerforatedSpeakerGrille(speakerLeftX, speakerY, density, palette)
+        drawPerforatedSpeakerGrille(speakerRightX, speakerY, density, palette)
+    }
+
+    // Glowing 3D Indicator Slider / LED on the right
+    if (palette.is3ds) {
+        val threeDX = w - 24f * density
+        val threeDY = camY
+        drawContext.canvas.nativeCanvas.drawText(
+            "3D",
+            threeDX - 8f * density,
+            threeDY + 3f * density,
+            Paint().apply {
+                isAntiAlias = true
+                textSize = 7.5f * density
+                textAlign = Paint.Align.RIGHT
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color(0xFF00D2FF).toArgb()
+            }
+        )
+        drawGlowingLed(
+            center = Offset(threeDX, threeDY),
+            baseColor = Color(0xFF00E5FF),
+            alpha = threeDAlpha,
+            density = density,
+            radiusDp = 2.4f,
+            hasHalo = true
+        )
+    }
+
+    // 3. Center 3D Cylindrical Hinge (ALWAYS rendered between screens using fallback)
+    val effectiveHingeH = verticalGap.coerceAtLeast(20f * density)
+    val hingeCenterY = (upperBottom + lowerTop) / 2f
+    val hingeY = hingeCenterY - effectiveHingeH / 2f
+
+    // Multi-stop cylindrical barrel gradient (shadow -> highlight -> midtone -> deep shadow)
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.35f),
+                palette.innerBevelLight.copy(alpha = 0.60f),
+                palette.secondaryBody,
+                palette.primaryBody,
+                Color.Black.copy(alpha = 0.85f)
+            ),
+            startY = hingeY, endY = hingeY + effectiveHingeH
+        ),
+        topLeft = Offset(0f, hingeY),
+        size = Size(w, effectiveHingeH)
+    )
+
+    // Left & Right Mechanical Hinge Barrel Seams / Knuckles
+    val knuckleW = 16f * density
+    drawRect(
+        color = palette.bezelAccent.copy(alpha = 0.50f),
+        topLeft = Offset(0f, hingeY),
+        size = Size(knuckleW, effectiveHingeH)
+    )
+    drawRect(
+        color = palette.bezelAccent.copy(alpha = 0.50f),
+        topLeft = Offset(w - knuckleW, hingeY),
+        size = Size(knuckleW, effectiveHingeH)
+    )
+    drawLine(
+        color = Color.Black.copy(alpha = 0.85f),
+        start = Offset(knuckleW, hingeY),
+        end = Offset(knuckleW, hingeY + effectiveHingeH),
+        strokeWidth = 1.5f * density
+    )
+    drawLine(
+        color = palette.innerBevelLight.copy(alpha = 0.45f),
+        start = Offset(knuckleW + 1.2f * density, hingeY),
+        end = Offset(knuckleW + 1.2f * density, hingeY + effectiveHingeH),
+        strokeWidth = 0.8f * density
+    )
+    drawLine(
+        color = Color.Black.copy(alpha = 0.85f),
+        start = Offset(w - knuckleW, hingeY),
+        end = Offset(w - knuckleW, hingeY + effectiveHingeH),
+        strokeWidth = 1.5f * density
+    )
+    drawLine(
+        color = palette.innerBevelLight.copy(alpha = 0.45f),
+        start = Offset(w - knuckleW - 1.2f * density, hingeY),
+        end = Offset(w - knuckleW - 1.2f * density, hingeY + effectiveHingeH),
+        strokeWidth = 0.8f * density
+    )
+
+    // Centered Recessed MIC Port hole + label
+    val micCenterX = w / 2f
+    val micCenterY = hingeCenterY
+    drawRoundRect(
+        color = Color.Black.copy(alpha = 0.95f),
+        topLeft = Offset(micCenterX - 4.5f * density, micCenterY - 1.5f * density),
+        size = Size(9f * density, 3f * density),
+        cornerRadius = CornerRadius(1.5f * density, 1.5f * density)
+    )
+    drawRoundRect(
+        color = palette.innerBevelLight.copy(alpha = 0.35f),
+        topLeft = Offset(micCenterX - 4.5f * density, micCenterY - 1.5f * density),
+        size = Size(9f * density, 3f * density),
+        cornerRadius = CornerRadius(1.5f * density, 1.5f * density),
+        style = Stroke(0.5f * density)
+    )
+    drawContext.canvas.nativeCanvas.drawText(
+        "MIC",
+        micCenterX,
+        micCenterY + 6.5f * density,
+        Paint().apply {
+            isAntiAlias = true
+            textSize = 6.0f * density
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = if (palette.isLightSkin) Color(0xFF64748B).toArgb() else Color(0xFF94A3B8).toArgb()
+        }
+    )
+
+    // The 3 Vivid Glowing LEDs on the Right of Hinge:
+    // LED 1: 3D / System Status LED (Cyan / Green)
+    // LED 2: Wireless / Wi-Fi LED (Warm Amber #FFB300 with subtle breathing glow)
+    // LED 3: Power / Battery LED (Bright Emerald #00E676 / Electric Blue #00B0FF + Charge indicator #FF6D00)
+    val ledSpacing = 11.5f * density
+    val led3X = w - knuckleW - 14f * density // Power / Battery
+    val led2X = led3X - ledSpacing          // Wi-Fi
+    val led1X = led2X - ledSpacing          // 3D / Status
+    val ledY = hingeCenterY
+
+    // 1. 3D / System Status LED
+    val statusLedColor = if (palette.is3ds) Color(0xFF00E5FF) else if (palette.isAurora) Color(0xFF00F0FF) else Color(0xFF00FF66)
+    drawGlowingLed(
+        center = Offset(led1X, ledY),
+        baseColor = statusLedColor,
+        alpha = threeDAlpha,
+        density = density,
+        radiusDp = 2.4f,
+        hasHalo = true
+    )
+
+    // 2. Wireless / Wi-Fi LED (Warm Amber #FFB300 with animated breathing glow)
+    drawGlowingLed(
+        center = Offset(led2X, ledY),
+        baseColor = Color(0xFFFFB300),
+        alpha = wifiAlpha,
+        density = density,
+        radiusDp = 2.4f,
+        hasHalo = true
+    )
+
+    // 3. Power / Battery LED (Bright Emerald #00E676 / Electric Blue #00B0FF)
+    val powerLedColor = if (palette.is3ds) Color(0xFF00B0FF) else Color(0xFF00E676)
+    drawGlowingLed(
+        center = Offset(led3X, ledY),
+        baseColor = powerLedColor,
+        alpha = ledAlpha,
+        density = density,
+        radiusDp = 2.4f,
+        hasHalo = true
+    )
+
+    // Charge indicator dot (Amber/Orange #FF6D00) next to power
+    drawGlowingLed(
+        center = Offset(led3X + 6.5f * density, ledY),
+        baseColor = Color(0xFFFF6D00),
+        alpha = 0.85f,
+        density = density,
+        radiusDp = 1.4f,
+        hasHalo = false
+    )
+
+    // 4. Bottom Deck Accents (Clean, NO floating SELECT/START buttons)
     if (lowerBottom < h) {
         val deckH = h - lowerBottom
-        val startSelectY = lowerBottom + (deckH * 0.40f)
-        if (deckH >= 20f * density) {
-            val btnW = 16f * density
-            val btnH = 5.5f * density
-            val spacing = 24f * density
-            // SELECT Pill Button
-            val selectX = w / 2f - spacing - btnW
-            drawRoundRect(
-                color = palette.controlsColor,
-                topLeft = Offset(selectX, startSelectY),
-                size = Size(btnW, btnH),
-                cornerRadius = CornerRadius(2.75f * density, 2.75f * density)
-            )
-            drawContext.canvas.nativeCanvas.drawText(
-                "SELECT",
-                selectX + btnW / 2f,
-                startSelectY + btnH + 6f * density,
-                Paint().apply {
-                    isAntiAlias = true
-                    textSize = 6.5f * density
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    color = if (palette.isLightSkin) Color(0xFF475569).toArgb() else Color(0xFFA1A1AA).toArgb()
-                }
-            )
-
-            // START Pill Button
-            val startX = w / 2f + spacing
-            drawRoundRect(
-                color = palette.controlsColor,
-                topLeft = Offset(startX, startSelectY),
-                size = Size(btnW, btnH),
-                cornerRadius = CornerRadius(2.75f * density, 2.75f * density)
-            )
-            drawContext.canvas.nativeCanvas.drawText(
-                "START",
-                startX + btnW / 2f,
-                startSelectY + btnH + 6f * density,
-                Paint().apply {
-                    isAntiAlias = true
-                    textSize = 6.5f * density
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    color = if (palette.isLightSkin) Color(0xFF475569).toArgb() else Color(0xFFA1A1AA).toArgb()
-                }
+        // Subtle tactile chassis contour
+        if (deckH >= 14f * density) {
+            drawLine(
+                color = palette.innerBevelLight.copy(alpha = 0.35f),
+                start = Offset(w * 0.10f, lowerBottom + 3f * density),
+                end = Offset(w * 0.90f, lowerBottom + 3f * density),
+                strokeWidth = 0.8f * density
             )
         }
-
-        // Lower Lip Seam (Cartridge slot dust cover)
+        // Cartridge slot dust cover seam & headphone port at bottom lip
         drawLine(
-            color = Color.Black.copy(alpha = 0.55f),
+            color = Color.Black.copy(alpha = 0.65f),
             start = Offset(w * 0.15f, h - 3f * density),
             end = Offset(w * 0.85f, h - 3f * density),
             strokeWidth = 1.5f * density
@@ -1193,8 +1413,8 @@ private fun DrawScope.drawScreenWellBezel(
     val sw = screen.width.toFloat()
     val sh = screen.height.toFloat()
 
-    val bezelW = 4f * density
-    val specularW = 1.5f * density
+    val bezelW = 4.5f * density
+    val specularW = 1.6f * density
 
     // Outer beveled frame around screen boundary
     drawRect(
@@ -1204,38 +1424,68 @@ private fun DrawScope.drawScreenWellBezel(
         style = Stroke(width = bezelW)
     )
 
-    // Top & Left recessed dark shadow
+    // Top & Left recessed dark shadow (deep socket effect)
     drawRect(
-        color = palette.innerBevelDark,
+        brush = Brush.verticalGradient(
+            colors = listOf(palette.innerBevelDark, Color.Transparent),
+            startY = y - bezelW,
+            endY = y + bezelW
+        ),
         topLeft = Offset(x - bezelW, y - bezelW),
-        size = Size(sw + 2 * bezelW, bezelW)
+        size = Size(sw + 2 * bezelW, bezelW * 2f)
     )
     drawRect(
-        color = palette.innerBevelDark,
+        brush = Brush.horizontalGradient(
+            colors = listOf(palette.innerBevelDark, Color.Transparent),
+            startX = x - bezelW,
+            endX = x + bezelW
+        ),
         topLeft = Offset(x - bezelW, y - bezelW),
-        size = Size(bezelW, sh + 2 * bezelW)
+        size = Size(bezelW * 2f, sh + 2 * bezelW)
     )
 
-    // Bottom & Right specular light bevel
+    // Bottom & Right specular light bevel (lighting catch)
     drawRect(
-        color = palette.innerBevelLight,
-        topLeft = Offset(x - bezelW, y + sh),
-        size = Size(sw + 2 * bezelW, bezelW)
+        brush = Brush.verticalGradient(
+            colors = listOf(Color.Transparent, palette.innerBevelLight.copy(alpha = 0.75f)),
+            startY = y + sh - bezelW,
+            endY = y + sh + bezelW
+        ),
+        topLeft = Offset(x - bezelW, y + sh - bezelW),
+        size = Size(sw + 2 * bezelW, bezelW * 2f)
     )
     drawRect(
-        color = palette.innerBevelLight,
-        topLeft = Offset(x + sw, y - bezelW),
-        size = Size(bezelW, sh + 2 * bezelW)
+        brush = Brush.horizontalGradient(
+            colors = listOf(Color.Transparent, palette.innerBevelLight.copy(alpha = 0.75f)),
+            startX = x + sw - bezelW,
+            endX = x + sw + bezelW
+        ),
+        topLeft = Offset(x + sw - bezelW, y - bezelW),
+        size = Size(bezelW * 2f, sh + 2 * bezelW)
     )
 
     // Inner Specular Aurora / Metallic Rim immediately meeting the cutout
     if (palette.isAurora) {
         drawRect(
             brush = Brush.linearGradient(
-                colors = listOf(Color(0xFF00F0FF), Color(0xFFA855F7), Color(0xFFFF007F)),
+                colors = listOf(
+                    Color(0xFF00F0FF),
+                    Color(0xFFA855F7),
+                    Color(0xFFFF007F),
+                    Color(0xFF00FF66),
+                    Color(0xFF00F0FF)
+                ),
                 start = Offset(x - specularW, y - specularW),
                 end = Offset(x + sw + specularW, y + sh + specularW)
             ),
+            topLeft = Offset(x - specularW, y - specularW),
+            size = Size(sw + 2 * specularW, sh + 2 * specularW),
+            style = Stroke(width = specularW)
+        )
+    } else if (palette.isSwitch) {
+        // Recessed Switch glass bezel ring
+        drawRect(
+            color = Color(0xFF0F1115),
             topLeft = Offset(x - specularW, y - specularW),
             size = Size(sw + 2 * specularW, sh + 2 * specularW),
             style = Stroke(width = specularW)

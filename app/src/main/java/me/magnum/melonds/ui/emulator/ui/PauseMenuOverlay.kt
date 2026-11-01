@@ -536,13 +536,19 @@ fun PauseMenuOverlay(
                                 onOptionSelected(RomPauseMenuOption.QUICK_SLOT_CAROUSEL)
                             }
                         }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val activeQuickSlotLabel = if (activeQuickSlot in 1..8) {
+                        stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
+                    } else {
+                        stringResource(R.string.quick_slot_default_slot_header)
+                    }
+
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Layers,
@@ -550,73 +556,29 @@ fun PauseMenuOverlay(
                             tint = colors.green,
                             modifier = Modifier.size(16.dp),
                         )
+                        Spacer(Modifier.width(10.dp))
                         Text(
                             text = stringResource(R.string.quick_slot_carousel_title),
                             color = colors.text,
                             fontFamily = Manrope,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        (0..4).forEach { slotIdx ->
-                            val isActive = (activeQuickSlot == slotIdx)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (isActive) colors.green.copy(alpha = 0.22f) else colors.surface3)
-                                    .border(
-                                        width = if (isActive) 1.dp else 0.5.dp,
-                                        color = if (isActive) colors.green else colors.line,
-                                        shape = RoundedCornerShape(6.dp),
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = "#$slotIdx",
-                                    color = if (isActive) colors.green else colors.text3,
-                                    fontFamily = WatermelonMono,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                                )
-                            }
-                        }
+                    Spacer(Modifier.width(8.dp))
 
-                        Spacer(Modifier.width(4.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(colors.green.copy(alpha = 0.15f))
-                                .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 7.dp, vertical = 2.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = if (activeQuickSlot in 1..8) {
-                                    stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
-                                } else {
-                                    stringResource(R.string.quick_slot_default_slot_header)
-                                },
-                                color = colors.green,
-                                fontFamily = Manrope,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = colors.text3,
-                            modifier = Modifier.size(15.dp),
-                        )
-                    }
+                    Text(
+                        text = activeQuickSlotLabel,
+                        color = colors.green,
+                        fontFamily = Manrope,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
                 }
             }
 

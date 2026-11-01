@@ -42,7 +42,7 @@ object ManualUpdateChecker {
             try {
                 val currentVersion = (runCatching {
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                }.getOrNull() ?: "8.0.0").removePrefix("v").removePrefix("V")
+                }.getOrNull() ?: "8.0.1").removePrefix("v").removePrefix("V")
 
                 val result = withContext(Dispatchers.IO) {
                     val url = URL("https://api.github.com/repos/ReiKatari/STORM_DS/releases/latest")

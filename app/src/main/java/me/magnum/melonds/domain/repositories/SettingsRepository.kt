@@ -156,6 +156,7 @@ interface SettingsRepository {
     fun areRetroAchievementsLeaderboardIndicatorsEnabled(): Boolean
 
     fun areCheatsEnabled(): Boolean
+    fun setCheatsEnabled(enabled: Boolean)
 
     fun observeTheme(): Flow<Theme>
     fun observeRomIconFiltering(): Flow<RomIconFiltering>

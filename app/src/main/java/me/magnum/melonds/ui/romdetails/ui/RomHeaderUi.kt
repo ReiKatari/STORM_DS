@@ -37,7 +37,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
@@ -875,7 +874,6 @@ fun RomDetailsTabRow(
                     RomDetailsTab.CHEATS -> stringResource(R.string.cheats) to Icons.Filled.SportsEsports
                     RomDetailsTab.RETRO_ACHIEVEMENTS -> stringResource(R.string.retro_achievements_tab) to Icons.Filled.EmojiEvents
                     RomDetailsTab.OFFLINE_ACHIEVEMENTS -> stringResource(R.string.rom_details_offline_achievements_tab) to Icons.Filled.Star
-                    RomDetailsTab.AUDIO -> (if (isRu) "Музыка SDAT" else "Soundtrack") to Icons.Filled.MusicNote
                 }
                 val selected = tab == currentTab
                 val interactionSource = remember { MutableInteractionSource() }

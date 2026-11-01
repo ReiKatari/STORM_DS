@@ -7425,8 +7425,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                 }
 
                 const bool alternatingSwapBlankVram =
-                    !topScreen
-                    && screenSwapToggledThisFrame
+                    screenSwapToggledThisFrame
                     && ((currentMeta >> 16u) & 0x3u) == 2u
                     && (currentMeta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u
                     && currentPlane0IsBlank
@@ -8108,8 +8107,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                     || (isInAlternatingMode
                         && (cachedBottomIsScreenWideCaptureBackedComp4
                             || (!captureBackedHasStructured2DSource
-                                && !currentBottomHasExplicitContent
-                                && cachedBottomHasStructured2DOnlyContent))));
+                                && !currentBottomHasExplicitContent))));
             if (shouldReplaceBottom)
             {
                 applyCachedEngineASnapshot(
@@ -8156,8 +8154,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                     || (isInAlternatingMode
                         && (cachedTopIsScreenWideCaptureBackedComp4
                             || (!captureBackedHasStructured2DSource
-                                && !currentTopHasExplicitContent
-                                && cachedTopHasStructured2DOnlyContent))));
+                                && !currentTopHasExplicitContent))));
             if (shouldReplaceTop)
             {
                 applyCachedEngineASnapshot(
@@ -10622,19 +10619,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
         && captureStats.StructuredCopyAbovePixels == 0u
         && captureStats.StructuredCopy2DOnlyPixels == 0u
         && captureStats.StructuredCopySourceBOverlayPixels == 0u;
-    if (hasStructuredVulkan2D)
-    {
-        if (topVramDisplayLineCount > (kScreenshotScreenHeight / 2)
-            && bottomVramDisplayLineCount <= (kScreenshotScreenHeight / 2))
-        {
-            lastSoftPackedFrameSnapshot.screenSwapLatched = true;
-        }
-        else if (bottomVramDisplayLineCount > (kScreenshotScreenHeight / 2)
-            && topVramDisplayLineCount <= (kScreenshotScreenHeight / 2))
-        {
-            lastSoftPackedFrameSnapshot.screenSwapLatched = false;
-        }
-    }
+// Screen swap is authentically tracked by (PowerControl9 & (1<<15))
     const bool screenSwapToggledThisFrame =
         previousSoftPackedFrameSnapshot.valid
         && (previousSoftPackedFrameSnapshot.screenSwapLatched
@@ -11902,8 +11887,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                 }
 
                 const bool alternatingSwapBlankVram =
-                    !topScreen
-                    && screenSwapToggledThisFrame
+                    screenSwapToggledThisFrame
                     && ((currentMeta >> 16u) & 0x3u) == 2u
                     && (currentMeta & kSoftPackedMetaFlagVramCaptureUses3d) == 0u
                     && currentPlane0IsBlank
@@ -13116,8 +13100,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                     || (isInAlternatingMode
                         && (cachedBottomIsScreenWideCaptureBackedComp4
                             || (!captureBackedHasStructured2DSource
-                                && !currentBottomHasExplicitContent
-                                && cachedBottomHasStructured2DOnlyContent))));
+                                && !currentBottomHasExplicitContent))));
             if (shouldReplaceBottom)
             {
                 applyCachedEngineASnapshot(
@@ -13159,8 +13142,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                     || (isInAlternatingMode
                         && (cachedTopIsScreenWideCaptureBackedComp4
                             || (!captureBackedHasStructured2DSource
-                                && !currentTopHasExplicitContent
-                                && cachedTopHasStructured2DOnlyContent))));
+                                && !currentTopHasExplicitContent))));
             if (shouldReplaceTop)
             {
                 applyCachedEngineASnapshot(

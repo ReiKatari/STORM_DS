@@ -89,3 +89,5 @@ data class JusrcheatGame(
     val crcHex: String get() = String.format("%08X", crc32 and 0xFFFFFFFFL)
     val totalCheatsCount: Int get() = directCheats.size + folders.sumOf { it.cheats.size }
 }
+
+typealias JusrcheatGameEntry = JusrcheatGameMeta

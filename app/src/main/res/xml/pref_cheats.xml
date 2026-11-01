@@ -7,7 +7,7 @@
             android:key="cheats_enabled"
             android:title="@string/enable_cheats"
             app:iconSpaceReserved="false"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
 
     <Preference
             android:key="cheats_download_online"

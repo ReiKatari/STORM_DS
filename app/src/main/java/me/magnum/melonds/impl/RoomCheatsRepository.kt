@@ -85,6 +85,23 @@ class RoomCheatsRepository(
             }
         }
 
+        if (gameEntity == null || database.cheatFolderDao().getFoldersForGame(gameEntity.id ?: -1).isEmpty()) {
+            val jusrGames = jusrcheatRepository.findGamesForRom(
+                romInfo.gameCode,
+                romInfo.gameTitle.ifBlank { romInfo.gameName }
+            )
+            val matchedJusrGame = jusrGames.firstOrNull { it.totalCheatsCount > 0 }
+            if (matchedJusrGame != null) {
+                jusrcheatRepository.attachEntireGameToActiveRom(romInfo, matchedJusrGame, enableAll = false)
+                settingsBackupManager.requestMirrorWrite()
+                gameEntity = database.gameDao().findGame(lookupCode, checksumStr)
+                    ?: (if (checksumStr.isNotBlank()) database.gameDao().findGameByChecksum(checksumStr) else null)
+                    ?: database.gameDao().findGameByCode(lookupCode)
+                    ?: (if (!romInfo.isDsiWareTitle && cleanGameCode.length == 4) database.gameDao().findGameByCode(cleanGameCode) else null)
+                    ?: (if (cleanGameCode.length >= 3) database.gameDao().findGameByPrefix(cleanGameCode.take(3)) else null)
+            }
+        }
+
         return gameEntity?.let {
             Game(
                 it.id,

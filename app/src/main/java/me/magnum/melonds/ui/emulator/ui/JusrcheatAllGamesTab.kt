@@ -86,7 +86,10 @@ fun JusrcheatAllGamesTab(
     romInfo: RomInfo?,
     cheatsRepository: CheatsRepository,
     onCheatAttached: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository? = null,
+    isHardcoreActive: Boolean = false,
+    onSwitchToSoftcore: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -125,7 +128,26 @@ fun JusrcheatAllGamesTab(
         withContext(Dispatchers.IO) {
             jusrcheatRepo.ensureInitialized()
             val games = jusrcheatRepo.getAllGames()
-            allGames = games
+            if (romInfo != null) {
+                val cleanCode = romInfo.gameCode.trim().uppercase()
+                val prefix = if (cleanCode.length >= 3) cleanCode.take(3) else ""
+                val titleWords = romInfo.gameTitle.replace(Regex("""\[.*?\]|\(.*?\)"""), "")
+                    .lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 3 }
+
+                allGames = games.sortedWith(Comparator { g1, g2 ->
+                    val match1 = (prefix.isNotEmpty() && g1.gameId.startsWith(prefix, ignoreCase = true)) ||
+                        (titleWords.isNotEmpty() && titleWords.any { g1.title.lowercase().contains(it) })
+                    val match2 = (prefix.isNotEmpty() && g2.gameId.startsWith(prefix, ignoreCase = true)) ||
+                        (titleWords.isNotEmpty() && titleWords.any { g2.title.lowercase().contains(it) })
+                    when {
+                        match1 && !match2 -> -1
+                        !match1 && match2 -> 1
+                        else -> g1.title.compareTo(g2.title, ignoreCase = true)
+                    }
+                })
+            } else {
+                allGames = games.sortedBy { it.title }
+            }
         }
         isLoading = false
     }
@@ -160,6 +182,49 @@ fun JusrcheatAllGamesTab(
             .fillMaxSize()
             .background(colors.surface)
     ) {
+        if (isHardcoreActive) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFE53935).copy(alpha = 0.18f))
+                    .border(1.dp, Color(0xFFE53935).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                    .clickable {
+                        settingsRepository?.setCheatsEnabled(true)
+                        onSwitchToSoftcore?.invoke()
+                        onCheatAttached()
+                        Toast.makeText(context, "Режим Softcore включён. Чит-коды активированы!", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Bolt,
+                        contentDescription = null,
+                        tint = Color(0xFFE53935),
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Активен режим Hardcore — читы заблокированы",
+                            color = colors.text,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Нажмите здесь, чтобы переключить в Softcore и разрешить чит-коды",
+                            color = colors.text2,
+                            fontFamily = SpaceGrotesk,
+                            fontSize = 10.sp,
+                        )
+                    }
+                }
+            }
+        }
+
         // Search and Region Filter Header
         Column(
             modifier = Modifier
@@ -520,6 +585,9 @@ fun JusrcheatAllGamesTab(
                                             onAccent = onAccent,
                                             attachedCheatsState = attachedCheatsState,
                                             onCheatAttached = onCheatAttached,
+                                            settingsRepository = settingsRepository,
+                                            isHardcoreActive = isHardcoreActive,
+                                            onSwitchToSoftcore = onSwitchToSoftcore,
                                             onCopy = { code ->
                                                 clipboardManager.setText(AnnotatedString(code))
                                                 Toast.makeText(context, context.getString(R.string.v791_jusrcheat_code_copied), Toast.LENGTH_SHORT).show()
@@ -547,6 +615,9 @@ fun JusrcheatAllGamesTab(
                                             onAccent = onAccent,
                                             attachedCheatsState = attachedCheatsState,
                                             onCheatAttached = onCheatAttached,
+                                            settingsRepository = settingsRepository,
+                                            isHardcoreActive = isHardcoreActive,
+                                            onSwitchToSoftcore = onSwitchToSoftcore,
                                             onCopy = { code ->
                                                 clipboardManager.setText(AnnotatedString(code))
                                                 Toast.makeText(context, context.getString(R.string.v791_jusrcheat_code_copied), Toast.LENGTH_SHORT).show()
@@ -747,7 +818,10 @@ private fun FolderCheatsGroup(
     attachedCheatsState: MutableMap<String, Boolean>,
     onCheatAttached: () -> Unit,
     onCopy: (String) -> Unit,
-    onEdit: (JusrcheatCode) -> Unit
+    onEdit: (JusrcheatCode) -> Unit,
+    settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository? = null,
+    isHardcoreActive: Boolean = false,
+    onSwitchToSoftcore: (() -> Unit)? = null,
 ) {
     var isFolderExpanded by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -852,6 +926,9 @@ private fun FolderCheatsGroup(
                         onAccent = onAccent,
                         attachedCheatsState = attachedCheatsState,
                         onCheatAttached = onCheatAttached,
+                        settingsRepository = settingsRepository,
+                        isHardcoreActive = isHardcoreActive,
+                        onSwitchToSoftcore = onSwitchToSoftcore,
                         onCopy = onCopy,
                         onEdit = onEdit
                     )
@@ -873,7 +950,10 @@ private fun CheatItemRow(
     attachedCheatsState: MutableMap<String, Boolean>,
     onCheatAttached: () -> Unit,
     onCopy: (String) -> Unit,
-    onEdit: (JusrcheatCode) -> Unit
+    onEdit: (JusrcheatCode) -> Unit,
+    settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository? = null,
+    isHardcoreActive: Boolean = false,
+    onSwitchToSoftcore: (() -> Unit)? = null,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -947,6 +1027,10 @@ private fun CheatItemRow(
                         onCheckedChange = { checked ->
                             attachedCheatsState[cheatKey] = checked
                             coroutineScope.launch {
+                                settingsRepository?.setCheatsEnabled(true)
+                                if (isHardcoreActive) {
+                                    onSwitchToSoftcore?.invoke()
+                                }
                                 jusrcheatRepo.attachCheatToActiveRom(
                                     romInfo = romInfo,
                                     sourceGameId = sourceGameId,

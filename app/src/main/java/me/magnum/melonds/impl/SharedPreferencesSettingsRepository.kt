@@ -2066,7 +2066,17 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun areCheatsEnabled(): Boolean {
-        return preferences.getBoolean("cheats_enabled", false)
+        if (!preferences.getBoolean("cheats_enabled_default_migrated_801", false)) {
+            preferences.edit()
+                .putBoolean("cheats_enabled", true)
+                .putBoolean("cheats_enabled_default_migrated_801", true)
+                .apply()
+        }
+        return preferences.getBoolean("cheats_enabled", true)
+    }
+
+    override fun setCheatsEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("cheats_enabled", enabled).apply()
     }
 
     override fun observeRomSearchDirectories(): Flow<Array<Uri>> {

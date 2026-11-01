@@ -153,12 +153,6 @@ fun RomDetailsScreen(
                         onSyncOfflineNow = onOfflineSyncNow,
                     )
                 }
-                RomDetailsTab.AUDIO.tabIndex -> {
-                    RomAudioUi(
-                        rom = rom,
-                        modifier = Modifier.fillMaxSize().focusRequester(pageFocusRequester),
-                    )
-                }
             }
         }
     }

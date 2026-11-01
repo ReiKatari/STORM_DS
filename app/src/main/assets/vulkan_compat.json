@@ -195,7 +195,12 @@
       "gameCodes": [
         "KAL",
         "KALE",
-        "KALP"
+        "KALP",
+        "KALJ",
+        "KBO",
+        "KBOE",
+        "KBOP",
+        "KBOJ"
       ],
       "titleKeywords": [
         "alphabounce"
@@ -211,7 +216,15 @@
         "KDM",
         "KDME",
         "KDMP",
-        "KDMJ"
+        "KDMJ",
+        "AMQ",
+        "AMQE",
+        "AMQP",
+        "AMQJ",
+        "V2G",
+        "V2GE",
+        "V2GP",
+        "V2GJ"
       ],
       "titleKeywords": [
         "minis march again",

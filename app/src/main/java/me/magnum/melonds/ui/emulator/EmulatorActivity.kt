@@ -1,5 +1,7 @@
 package me.magnum.melonds.ui.emulator
 
+import kotlin.math.roundToInt
+
 import android.content.BroadcastReceiver
 import me.magnum.melonds.ui.emulator.sensor.RealWorldPeripheralSensorBridge
 import me.magnum.melonds.ui.emulator.ui.QuickSlotCarouselOverlay
@@ -1089,6 +1091,13 @@ class EmulatorActivity : AppCompatActivity() {
                                 reopenPauseMenu()
                             },
                             onResumeGame = { resumeGameDirectly() },
+                            isHardcoreActive = viewModel.isRetroAchievementsHardcoreActive(),
+                            onSwitchToSoftcore = {
+                                viewModel.switchToSoftcore()
+                                settingsRepository.setCheatsEnabled(true)
+                                viewModel.onCheatsChanged()
+                            },
+                            settingsRepository = settingsRepository,
                         )
                     }
                     pauseMenu != null -> {
@@ -2924,14 +2933,38 @@ class EmulatorActivity : AppCompatActivity() {
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.EVEN_PORTRAIT_LOCKED -> {
                 // 3. Ровная портретная: 2 экрана в портретном режиме друг под другом (100% ширины)
-                val sWidth = surfaceW
-                val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
-                val first = Rect(0, 0, sWidth, sHeight)
-                val second = Rect(0, sHeight, sWidth, sHeight)
-                binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, first)
-                binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, second)
-                topRect = if (areScreensSwapped) second else first
-                bottomRect = if (areScreensSwapped) first else second
+                val isSkin = isConsoleSkinActive()
+                val density = resources.displayMetrics.density
+                if (isSkin) {
+                    val topInsetPx = (24f * density).roundToInt()
+                    val sideInsetPx = (6f * density).roundToInt()
+                    val hingeGapPx = (22f * density).roundToInt()
+
+                    val availableWidth = (surfaceW - 2 * sideInsetPx).coerceAtLeast(100)
+                    var sWidth = availableWidth
+                    var sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                    val maxCombinedHeight = surfaceH - topInsetPx - hingeGapPx
+                    if (sHeight * 2 > maxCombinedHeight && maxCombinedHeight > 100) {
+                        sHeight = maxCombinedHeight / 2
+                        sWidth = (sHeight * me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(availableWidth)
+                    }
+                    val leftOffset = sideInsetPx + (availableWidth - sWidth) / 2
+                    val first = Rect(leftOffset, topInsetPx, sWidth, sHeight)
+                    val second = Rect(leftOffset, topInsetPx + sHeight + hingeGapPx, sWidth, sHeight)
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, first)
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, second)
+                    topRect = if (areScreensSwapped) second else first
+                    bottomRect = if (areScreensSwapped) first else second
+                } else {
+                    val sWidth = surfaceW
+                    val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                    val first = Rect(0, 0, sWidth, sHeight)
+                    val second = Rect(0, sHeight, sWidth, sHeight)
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.TOP_SCREEN, first)
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, second)
+                    topRect = if (areScreensSwapped) second else first
+                    bottomRect = if (areScreensSwapped) first else second
+                }
             }
             me.magnum.melonds.ui.emulator.ui.ScreenLayoutMode.PROPORTIONAL_LANDSCAPE -> {
                 // 4. Пропорциональная альбомная: один большой экран по центру (4:3), второй скрыт
@@ -3025,15 +3058,64 @@ class EmulatorActivity : AppCompatActivity() {
                         val vMargin = ((surfaceH - sHeight) / 2).coerceAtLeast(0)
                         Rect(0, vMargin, sWidth, sHeight) to Rect(sWidth, vMargin, sWidth, sHeight)
                     } else {
-                        val sWidth = surfaceW
-                        val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
-                        Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
+                        val isSkin = isConsoleSkinActive()
+                        val density = resources.displayMetrics.density
+                        if (isSkin) {
+                            val topInsetPx = (24f * density).roundToInt()
+                            val sideInsetPx = (6f * density).roundToInt()
+                            val hingeGapPx = (22f * density).roundToInt()
+                            val availableWidth = (surfaceW - 2 * sideInsetPx).coerceAtLeast(100)
+                            var sWidth = availableWidth
+                            var sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                            val maxCombinedHeight = surfaceH - topInsetPx - hingeGapPx
+                            if (sHeight * 2 > maxCombinedHeight && maxCombinedHeight > 100) {
+                                sHeight = maxCombinedHeight / 2
+                                sWidth = (sHeight * me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(availableWidth)
+                            }
+                            val leftOffset = sideInsetPx + (availableWidth - sWidth) / 2
+                            Rect(leftOffset, topInsetPx, sWidth, sHeight) to Rect(leftOffset, topInsetPx + sHeight + hingeGapPx, sWidth, sHeight)
+                        } else {
+                            val sWidth = surfaceW
+                            val sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(surfaceH / 2)
+                            Rect(0, 0, sWidth, sHeight) to Rect(0, sHeight, sWidth, sHeight)
+                        }
                     }
 
                     val validLastTop = lastKnownGoodTopRect?.takeIf { isRectValidForSurface(it, surfaceW, surfaceH) }
                     val validLastBottom = lastKnownGoodBottomRect?.takeIf { isRectValidForSurface(it, surfaceW, surfaceH) }
-                    val rTop = rawTop ?: validLastTop ?: defLayout.first
-                    val rBottom = rawBottom ?: validLastBottom ?: defLayout.second
+                    var rTop = rawTop ?: validLastTop ?: defLayout.first
+                    var rBottom = rawBottom ?: validLastBottom ?: defLayout.second
+
+                    if (isConsoleSkinActive() && !isLandscape) {
+                        val density = resources.displayMetrics.density
+                        val upperIsTop = rTop.y <= rBottom.y
+                        val upper = if (upperIsTop) rTop else rBottom
+                        val lower = if (upperIsTop) rBottom else rTop
+                        val currentGap = lower.y - upper.bottom
+                        if (upper.y < 20f * density || currentGap < 20f * density) {
+                            val topInsetPx = (24f * density).roundToInt()
+                            val sideInsetPx = (6f * density).roundToInt()
+                            val hingeGapPx = (22f * density).roundToInt()
+                            val availableWidth = (surfaceW - 2 * sideInsetPx).coerceAtLeast(100)
+                            var sWidth = availableWidth
+                            var sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
+                            val maxCombinedHeight = surfaceH - topInsetPx - hingeGapPx
+                            if (sHeight * 2 > maxCombinedHeight && maxCombinedHeight > 100) {
+                                sHeight = maxCombinedHeight / 2
+                                sWidth = (sHeight * me.magnum.melonds.domain.model.consoleAspectRatio).toInt().coerceAtMost(availableWidth)
+                            }
+                            val leftOffset = sideInsetPx + (availableWidth - sWidth) / 2
+                            val adjustedUpper = Rect(leftOffset, topInsetPx, sWidth, sHeight)
+                            val adjustedLower = Rect(leftOffset, topInsetPx + sHeight + hingeGapPx, sWidth, sHeight)
+                            if (upperIsTop) {
+                                rTop = adjustedUpper
+                                rBottom = adjustedLower
+                            } else {
+                                rTop = adjustedLower
+                                rBottom = adjustedUpper
+                            }
+                        }
+                    }
 
                     if (areScreensSwapped) {
                         topRect = rBottom
@@ -3766,6 +3848,8 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         return prefs.getBoolean("video_console_skin_enabled", false)
     }
+
+    fun isConsoleSkinEnabled(): Boolean = isConsoleSkinActive()
 
     private fun setupConsoleSkin() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)

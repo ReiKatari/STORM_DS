@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,6 +89,9 @@ fun CheatsOverlay(
     onCheatsUpdated: () -> Unit,
     onDismiss: () -> Unit,
     onResumeGame: (() -> Unit)? = null,
+    isHardcoreActive: Boolean = false,
+    onSwitchToSoftcore: (() -> Unit)? = null,
+    settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository? = null,
 ) {
     val context = LocalContext.current
     val colors = watermelon
@@ -109,6 +113,7 @@ fun CheatsOverlay(
     val expandedFolders = remember { mutableStateMapOf<Long, Boolean>() }
     var isLoading by remember { mutableStateOf(true) }
     var activeOverlayTab by remember { mutableIntStateOf(0) }
+    var hardcoreDismissed by remember { mutableStateOf(false) }
 
     // Cross-region games (e.g. VACE for Russian VACV)
     var crossRegionGames by remember { mutableStateOf<List<JusrcheatGame>>(emptyList()) }
@@ -288,6 +293,51 @@ fun CheatsOverlay(
                         }
                     }
 
+                    if (isHardcoreActive && !hardcoreDismissed) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFE53935).copy(alpha = 0.18f))
+                                .border(1.dp, Color(0xFFE53935).copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                .clickable {
+                                    settingsRepository?.setCheatsEnabled(true)
+                                    onSwitchToSoftcore?.invoke()
+                                    hardcoreDismissed = true
+                                    reloadCurrentCheats()
+                                    onCheatsUpdated()
+                                    Toast.makeText(context, "Режим Softcore включён. Чит-коды активированы!", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFE53935),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Активен режим Hardcore — читы заблокированы",
+                                        color = colors.text,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(
+                                        text = "Нажмите здесь, чтобы переключить в Softcore и разрешить чит-коды",
+                                        color = colors.text2,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 10.5.sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // 3-Tab Switcher: 1) Game Cheats, 2) Jusrcheat (all games), 3) RAM Scanner
                     Row(
                         modifier = Modifier
@@ -445,6 +495,9 @@ fun CheatsOverlay(
                                                                         sourceGameId = crGame.gameId,
                                                                         romInfo = romInfo,
                                                                         jusrcheatRepo = jusrcheatRepo,
+                                                                        settingsRepository = settingsRepository,
+                                                                        isHardcoreActive = isHardcoreActive,
+                                                                        onSwitchToSoftcore = onSwitchToSoftcore,
                                                                         colors = colors,
                                                                         onCheatAttached = {
                                                                             reloadCurrentCheats()
@@ -470,6 +523,9 @@ fun CheatsOverlay(
                                                                             romInfo = romInfo,
                                                                             jusrcheatRepo = jusrcheatRepo,
                                                                             colors = colors,
+                                                                            settingsRepository = settingsRepository,
+                                                                            isHardcoreActive = isHardcoreActive,
+                                                                            onSwitchToSoftcore = onSwitchToSoftcore,
                                                                             onCheatAttached = {
                                                                                 reloadCurrentCheats()
                                                                                 onCheatsUpdated()
@@ -588,6 +644,11 @@ fun CheatsOverlay(
                                                                 checked = cheat.enabled,
                                                                 onCheckedChange = { isChecked ->
                                                                     coroutineScope.launch {
+                                                                        settingsRepository?.setCheatsEnabled(true)
+                                                                        if (isHardcoreActive) {
+                                                                            onSwitchToSoftcore?.invoke()
+                                                                            hardcoreDismissed = true
+                                                                        }
                                                                         val updatedCheat = cheat.copy(enabled = isChecked)
                                                                         cheatsRepository.updateCheat(updatedCheat)
                                                                         val currentList = folderCheatsMap[folderId].orEmpty()
@@ -621,7 +682,10 @@ fun CheatsOverlay(
                                     onCheatAttached = {
                                         reloadCurrentCheats()
                                         onCheatsUpdated()
-                                    }
+                                    },
+                                    settingsRepository = settingsRepository,
+                                    isHardcoreActive = isHardcoreActive,
+                                    onSwitchToSoftcore = onSwitchToSoftcore
                                 )
                             }
 
@@ -690,6 +754,9 @@ private fun CrossRegionCheatRow(
     romInfo: RomInfo,
     jusrcheatRepo: JusrcheatRepository,
     colors: me.magnum.melonds.ui.theme.WatermelonColors,
+    settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository?,
+    isHardcoreActive: Boolean,
+    onSwitchToSoftcore: (() -> Unit)?,
     onCheatAttached: () -> Unit
 ) {
     var isEnabled by remember { mutableStateOf(cheat.enabled) }
@@ -730,6 +797,10 @@ private fun CrossRegionCheatRow(
             onCheckedChange = { checked ->
                 isEnabled = checked
                 coroutineScope.launch {
+                    settingsRepository?.setCheatsEnabled(true)
+                    if (isHardcoreActive) {
+                        onSwitchToSoftcore?.invoke()
+                    }
                     jusrcheatRepo.attachCheatToActiveRom(
                         romInfo = romInfo,
                         sourceGameId = sourceGameId,

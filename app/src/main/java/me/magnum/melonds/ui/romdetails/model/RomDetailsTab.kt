@@ -5,5 +5,4 @@ enum class RomDetailsTab(val tabIndex: Int) {
     CHEATS(1),
     RETRO_ACHIEVEMENTS(2),
     OFFLINE_ACHIEVEMENTS(3),
-    AUDIO(4),
 }

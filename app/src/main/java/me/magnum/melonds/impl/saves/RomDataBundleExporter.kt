@@ -168,7 +168,7 @@ object RomDataBundleExporter {
 
                 // 4. Export JSON Metadata (rom.config)
                 val configJson = JSONObject().apply {
-                    put("version", "8.0.0")
+                    put("version", "8.0.1")
                     put("exportDate", SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.US).format(Date()))
                     put("romName", effectiveRom?.name ?: rawName)
                     put("fileName", effectiveRom?.fileName ?: "")

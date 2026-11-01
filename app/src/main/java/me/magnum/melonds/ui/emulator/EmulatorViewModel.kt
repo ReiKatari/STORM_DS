@@ -825,10 +825,13 @@ class EmulatorViewModel @Inject constructor(
                 )
             }
 
+            val shouldStartHardcore = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE &&
+                !settingsRepository.areCheatsEnabled() &&
+                isRetroAchievementsEnabledForLaunch
             startEmulatorSession(
                 sessionType = EmulatorSession.SessionType.RomSession(rom),
                 areRetroAchievementsEnabled = isRetroAchievementsEnabledForLaunch,
-                isRetroAchievementsHardcoreModeEnabled = launchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE,
+                isRetroAchievementsHardcoreModeEnabled = shouldStartHardcore,
             )
             startObservingMainScreenBackground()
             startObservingSecondaryScreenBackground()
@@ -993,7 +996,9 @@ class EmulatorViewModel @Inject constructor(
         endpointSnapshot: RetroAchievementsEndpointSnapshot,
     ): RetroAchievementsLaunchDecision {
         val startedOnline = networkStatusProvider.isOnline()
-        val hardcoreSettingEnabled = settingsRepository.isRetroAchievementsHardcoreEnabled()
+        val hardcoreSettingEnabled = settingsRepository.isRetroAchievementsHardcoreEnabled() &&
+            !settingsRepository.areCheatsEnabled() &&
+            retroAchievementsRepository.isUserAuthenticated()
         val offlineSoftcoreEnabled = settingsRepository.isRetroAchievementsOfflineSoftcoreEnabled()
         val userAuth = retroAchievementsRepository.getUserAuthentication()
 
@@ -3328,8 +3333,12 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun getRomEnabledCheats(romInfo: RomInfo): List<Cheat> {
-        if (!settingsRepository.areCheatsEnabled() || !emulatorSession.areCheatsEnabled()) {
+        if (!settingsRepository.areCheatsEnabled()) {
             return emptyList()
+        }
+        if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
+            emulatorSession.switchToSoftcore()
+            retroAchievementsSessionMode = RetroAchievementsSessionMode.SOFTCORE
         }
 
         return cheatsRepository.getRomEnabledCheats(romInfo)
