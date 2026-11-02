@@ -1725,11 +1725,8 @@ void DSi::SetupDirectBoot()
     ARM7.CPSR = 0x0000001F;
     ARM7.JumpTo(header.ARM7EntryAddress);
 
-    if (NtrIpcMirrorHack)
-    {
-        PowerControl9 = 0x820F;
-        GPU.SetPowerCnt(PowerControl9);
-    }
+    PowerControl9 = 0x820F;
+    GPU.SetPowerCnt(PowerControl9);
 
     Log(LogLevel::Info,
         "DSi::SetupDirectBoot: Initialized CPU EntryPoints: ARM9.PC=0x%08X (R12/R14=0x%08X), ARM7.PC=0x%08X (R12/R14=0x%08X)\n",

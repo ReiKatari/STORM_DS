@@ -1980,7 +1980,11 @@ u32* VulkanRenderer3D::GetLineActiveBackend(int line)
         }
 
         const auto readyCaptureMatchesHint = [&]() {
-            return true;
+            return !exactCaptureOnly
+                || !HasCurrentCaptureScreenSwapHint
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint
+                || (!IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u)
+                    && IsParitySubmitFresh(ReadyCaptureLineScreenSwap, 2u));
         };
 
         if (!HasCpuFrame && CaptureLineReady && ReadyCaptureLineData != nullptr && readyCaptureMatchesHint())
@@ -2112,7 +2116,9 @@ u32* VulkanRenderer3D::GetLineCompatibilityBackend(int line)
         }
 
         const auto readyCaptureMatchesHint = [&]() {
-            return true;
+            return !exactCaptureOnly
+                || !HasCurrentCaptureScreenSwapHint
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
         };
 
         if (!HasCpuFrame && CaptureLineReady && ReadyCaptureLineData != nullptr && readyCaptureMatchesHint())
@@ -2294,7 +2300,10 @@ void VulkanRenderer3D::PrepareCaptureFrameActiveBackend()
     {
         if (finalizeCaptureLineFrame(exactCaptureOnly))
         {
-            const bool readyMatchesHint = true;
+            const bool readyMatchesHint =
+                !exactCaptureOnly
+                || !HasCurrentCaptureScreenSwapHint
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             return;
         }

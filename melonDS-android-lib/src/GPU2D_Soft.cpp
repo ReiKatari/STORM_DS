@@ -3598,12 +3598,7 @@ void SoftRenderer::DrawScanlineActivePipeline(u32 line, Unit* unit)
                 const u16* vramLineForStructured = vram;
                 if (useStructuredVulkan2D)
                 {
-                    if (true)
-                    {
-                        FillStructuredVulkan2DVramDisplayLine(line, vram);
-                    }
-                    else if (activeVulkan2DPipelineStrategy()
-                            .UsesHistoricalVramDisplayCopy())
+                    if (activeVulkan2DPipelineStrategy().UsesHistoricalVramDisplayCopy())
                     {
                         CopyStructuredVulkan2DCaptureLineToCurrentScreenCompatibility(
                             line,
@@ -3918,14 +3913,7 @@ void SoftRenderer::DoCapture(u32 line, u32 width, u32 sourceLine)
     u32 dstaddr = (((captureCnt >> 18) & 0x3) << 14) + (line * width);
 
     const u32 captureDisplayMode = (CurUnit->DispCnt >> 16u) & (CurUnit->Num ? 0x1u : 0x3u);
-    const bool canUsePure3DStructuredCapture =
-        useStructuredVulkan2D
-        && CurUnit->Num == 0
-        && GPU.GPU3D.IsRendererAccelerated()
-        && !captureUsesDirect3D
-        && !CurUnit->CaptureLatch
-        && captureMode == 0u
-        && CanUseStructuredVulkan2DPure3DLine(captureDisplayMode);
+    const bool canUsePure3DStructuredCapture = false;
     if (canUsePure3DStructuredCapture)
     {
         dstaddr &= 0xFFFFu;

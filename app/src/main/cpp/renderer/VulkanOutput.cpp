@@ -7759,8 +7759,38 @@ bool VulkanOutput::prepareFrameForPresentation(
         && screenUsesSourceAReplayHighresSlot(softPackedSnapshot.bottomScreenStats)
         && (screenUsesSourceAReplay2DOnly(softPackedSnapshot.topScreenStats)
             || screenUsesSourceAReplayHighresSlot(softPackedSnapshot.topScreenStats));
-    resource.replayTopComposedFromPrevious = false;
-    resource.replayBottomComposedFromPrevious = false;
+    resource.replayTopComposedFromPrevious =
+        currentBackendIsGraphics
+        && !topCurrentFullStructured2D
+        && !topSourceAReplayHighresSide
+        && ((topStructuredHandoffIncomplete && !resource.topPackedCarryFromPrevious)
+            || topMissingHighresSourceCarry
+            || topFullRegularRepeatComposed
+            || topStructuredHandoffBlankCarry
+            || topStructuredComp7LostSlotCarry
+            || topPlainStructuredComp7ReplayComposed
+            || topEmptyStructured2dReplayComposed
+            || topPlainStructuredSlotDuringOppositeNoCurrentHandoff
+            || topRegularComp7BottomComp2ReplayComposed
+            || topMissingPreparedCaptureReplayComposed
+            || (softPackedSnapshot.valid && resource.screenSwapToggledFromPrevious))
+        && topHasRecentComposedFrame;
+    resource.replayBottomComposedFromPrevious =
+        currentBackendIsGraphics
+        && !resource.pinnedCrossReplayBottomForFrame
+        && !bottomCurrentFullStructured2D
+        && !bottomSourceAReplayHighresSide
+        && ((bottomStructuredHandoffIncomplete && !resource.bottomPackedCarryFromPrevious)
+            || bottomMissingHighresSourceCarry
+            || bottomFullRegularRepeatComposed
+            || bottomStructuredHandoffBlankCarry
+            || bottomStructuredComp7LostSlotCarry
+            || bottomPlainStructuredComp7ReplayComposed
+            || bottomEmptyStructured2dReplayComposed
+            || bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff
+            || bottomMissingPreparedCaptureReplayComposed
+            || (softPackedSnapshot.valid && resource.screenSwapToggledFromPrevious))
+        && bottomHasRecentComposedFrame;
     resource.replayTopComposedFromLatest = topRegularComp7BottomComp2ReplayComposed;
     resource.previousTopComposedFrame =
         (resource.replayTopComposedFromPrevious && !resource.replayTopComposedFromLatest)
