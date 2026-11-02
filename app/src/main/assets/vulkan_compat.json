@@ -195,7 +195,12 @@
       "gameCodes": [
         "KAL",
         "KALE",
-        "KALP"
+        "KALP",
+        "KALJ",
+        "KBO",
+        "KBOE",
+        "KBOP",
+        "KBOJ"
       ],
       "titleKeywords": [
         "alphabounce"
@@ -211,7 +216,15 @@
         "KDM",
         "KDME",
         "KDMP",
-        "KDMJ"
+        "KDMJ",
+        "AMQ",
+        "AMQE",
+        "AMQP",
+        "AMQJ",
+        "V2G",
+        "V2GE",
+        "V2GP",
+        "V2GJ"
       ],
       "titleKeywords": [
         "minis march again",
@@ -221,6 +234,62 @@
       "compositorMode": "precise",
       "thickEdges": false,
       "notes": "Eliminates 30 Hz bottom screen swap flicker and preserves dual-screen capture synchronization"
+    },
+    {
+      "id": "anonymous_notes_abyss",
+      "title": "Anonymous Notes 1-4: From the Abyss",
+      "gameCodes": [
+        "KVI",
+        "KVIE",
+        "KVIP",
+        "KVIJ",
+        "KV2",
+        "KV2E",
+        "KV2P",
+        "KV2J",
+        "KV3",
+        "KV3E",
+        "KV3P",
+        "KV3J",
+        "KV4",
+        "KV4E",
+        "KV4P",
+        "KV4J",
+        "KAN",
+        "K2N",
+        "K3N",
+        "K4N",
+        "KJY"
+      ],
+      "titleKeywords": [
+        "anonymous notes",
+        "from the abyss"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Preserves protected black 2D dungeon backdrops and structured 2D sprite overlays"
+    },
+    {
+      "id": "gameloft_dsiware_exidia_sod",
+      "title": "Legends of Exidia and Soul of Darkness",
+      "gameCodes": [
+        "KLE",
+        "KLEE",
+        "KLEP",
+        "KLEJ",
+        "KSD",
+        "KSDE",
+        "KSDP",
+        "KSDJ"
+      ],
+      "titleKeywords": [
+        "legends of exidia",
+        "legend of exidia",
+        "soul of darkness"
+      ],
+      "compositorMode": "precise",
+      "thickEdges": false,
+      "notes": "Prevents dark HUD and dialogue box false-positive frame cache replacement flicker"
     }
   ]
 }

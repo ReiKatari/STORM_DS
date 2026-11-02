@@ -1323,7 +1323,7 @@ void main()
         scaledY -= int((192u + 2u) * safeScale);
 
     Rgba6 pixel;
-    if (pc.debugView != 0u || pc.compositorMode == 0u)
+    if (pc.debugView != 0u)
         pixel = composeScreenPixelPrecise(isTopScreen, sourceX, dsY, int(gid.x), scaledY, safeScale);
     else if (isTopScreen)
         pixel = composeTopScreenPixel(sourceX, dsY, int(gid.x), scaledY, safeScale);

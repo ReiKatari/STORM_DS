@@ -1532,7 +1532,7 @@ void main()
     }
 
     Rgba6 pixel;
-    if (pc.debugView != 0u || pc.compositorMode == 0u)
+    if (pc.debugView != 0u)
         pixel = composeScreenPixelPrecise(isTopScreen, sourceX, dsY, scaledX, scaledY, safeScale);
     else if ((isTopScreen && pc.fastHighresOnlyTop != 0u)
         || (isBottomScreen && pc.fastHighresOnlyBottom != 0u))

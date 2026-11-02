@@ -582,6 +582,8 @@ public:
     u8* VRAMPtr_BOBJ[0x8] {};
 
     int FrontBuffer = 0;
+    bool FrontBufferScreenSwap[2] = {true, true};
+    bool GetFrontBufferScreenSwap(int buf) const noexcept { return FrontBufferScreenSwap[buf & 1]; }
     std::unique_ptr<u32[]> Framebuffer[2][2] {};
 
     GPU2D::Unit GPU2D_A;
