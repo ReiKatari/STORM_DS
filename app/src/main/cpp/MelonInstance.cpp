@@ -1543,8 +1543,8 @@ bool CopyCompositedFrameToScreenshot(
 
         for (int x = 0; x < kScreenshotScreenWidth; x++)
         {
-            destinationTopLine[x] = sourceTopLine[x * scale] | 0xFF000000;
-            destinationBottomLine[x] = sourceBottomLine[x * scale] | 0xFF000000;
+            destinationTopLine[x] = sourceTopLine[x * scale];
+            destinationBottomLine[x] = sourceBottomLine[x * scale];
         }
     }
 
@@ -2237,7 +2237,8 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
     }
     else if (currentRenderer == Renderer::Vulkan
         && renderFrame == nullptr
-        && nds != nullptr)
+        && nds != nullptr
+        && framesSinceLastScreenSwapToggle <= 2)
     {
         // WHY: fast-forward skips frame-queue slots. Wiping the latched history here broke
         // 30 Hz alternating screen-swap titles (AlphaBounce, Mario vs. Donkey Kong): the swap
@@ -2783,12 +2784,10 @@ u32 MelonInstance::runFrame()
     if (currentRenderer == Renderer::Vulkan
         && UsesVulkanFastPath(vulkanSessionProfile.get()))
         fillCaptureStagingFromRenderer();
-    const bool frontBufferScreenSwap =
-        nds->GPU.GetFrontBufferScreenSwap(nds->GPU.FrontBuffer);
     const VulkanFrameTailInputs tailInputs {
         nds->GPU.FrontBuffer,
-        frontBufferScreenSwap,
-        frontBufferScreenSwap,
+        nds->GPU.GPU3D.RenderScreenSwapAt3D,
+        (nds->PowerControl9 & (1u << 15u)) != 0u,
         (nds->CPUStop & CPUStop_Sleep) != 0,
         rewindManager.ShouldCaptureState(frame + 1),
     };
@@ -3085,79 +3084,27 @@ void MelonInstance::setAudioOutputSkew(double skew)
 
 bool MelonInstance::takeScreenshot()
 {
-    if (currentRenderer == Renderer::Vulkan || currentConfiguration->renderer == Renderer::Vulkan)
-    {
-        if (lastCompletedVulkanFrame != nullptr)
-        {
-            if (updateVulkanScreenshot(lastCompletedVulkanFrame, lastCompletedVulkanScale, false))
-            {
-                screenshotRenderer->setHasValidCachedScreenshot(true);
-                return true;
-            }
-        }
-
-        if (screenshotRenderer->hasCachedScreenshot())
-        {
-            return true;
-        }
-
-        if (nds != nullptr)
-        {
-            int frontBuffer = nds->GPU.FrontBuffer;
-            if (nds->GPU.Framebuffer[frontBuffer][0] && nds->GPU.Framebuffer[frontBuffer][1])
-            {
-                u32* dst = screenshotRenderer->getScreenshot();
-                if (dst)
-                {
-                    const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
-                    const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
-
-                    for (int i = 0; i < 256 * 192; i++)
-                    {
-                        dst[i] = top[i] | 0xFF000000;
-                        dst[256 * 192 + i] = bottom[i] | 0xFF000000;
-                    }
-                    screenshotRenderer->setHasValidCachedScreenshot(true);
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    if (screenshotRenderer->takeScreenshot())
-    {
-        return true;
-    }
-
-    if (screenshotRenderer->hasCachedScreenshot())
-    {
-        return true;
-    }
-
-    if (nds != nullptr)
+    if (currentConfiguration->renderer == Renderer::Vulkan)
     {
         int frontBuffer = nds->GPU.FrontBuffer;
-        if (nds->GPU.Framebuffer[frontBuffer][0] && nds->GPU.Framebuffer[frontBuffer][1])
+        if (!nds->GPU.Framebuffer[frontBuffer][0] || !nds->GPU.Framebuffer[frontBuffer][1])
+            return false;
+
+        u32* dst = screenshotRenderer->getScreenshot();
+        if (!dst)
+            return false;
+
+        const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
+        const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
+
+        for (int i = 0; i < 256 * 192; i++)
         {
-            u32* dst = screenshotRenderer->getScreenshot();
-            if (dst)
-            {
-                const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
-                const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
-
-                for (int i = 0; i < 256 * 192; i++)
-                {
-                    dst[i] = top[i] | 0xFF000000;
-                    dst[256 * 192 + i] = bottom[i] | 0xFF000000;
-                }
-                screenshotRenderer->setHasValidCachedScreenshot(true);
-                return true;
-            }
+            dst[i] = top[i] | 0xFF000000;
+            dst[256 * 192 + i] = bottom[i] | 0xFF000000;
         }
+        return true;
     }
-
-    return false;
+    return screenshotRenderer->takeScreenshot();
 }
 
 void MelonInstance::loadCheats(std::list<Cheat> cheats)
@@ -5907,7 +5854,6 @@ bool MelonInstance::updateVulkanScreenshot(Frame* frame, int scale, bool clearOn
         return false;
     }
 
-    screenshotRenderer->setHasValidCachedScreenshot(true);
     return true;
 }
 
@@ -7906,8 +7852,6 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
     else if (framesSinceLastScreenSwapToggle < 1024)
         framesSinceLastScreenSwapToggle++;
     const bool isInAlternatingMode = framesSinceLastScreenSwapToggle <= 1;
-    lastSoftPackedFrameSnapshot.screenSwapToggledFromPreviousEmulatedFrame = screenSwapToggledThisFrame;
-    lastSoftPackedFrameSnapshot.isInAlternatingMode = isInAlternatingMode;
     if (isInAlternatingMode != wasInAlternatingMode)
     {
         cachedEngineATopValid = false;
@@ -8081,7 +8025,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                 && !currentTopHasExplicitCompositedContent
                 && screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.packedTopLineMeta)
                 && cachedTopHasStructured2DOnlyContent;
-            if (false && shouldRepairTopFromCachedEngineA)
+            if (shouldRepairTopFromCachedEngineA)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedTopPlane0,
@@ -8107,12 +8051,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             const bool cachedBottomHasStructured2DOnlyContent =
                 screenHasStructured2DOnlyContent(cachedEngineABottomPlane0, cachedEngineABottomControl);
             const bool shouldReplaceBottom = cachedEngineABottomValid
-                && isInAlternatingMode
-                && (cachedBottomIsScreenWideCaptureBackedComp4
-                    || (!captureBackedHasStructured2DSource
-                        && !currentBottomHasExplicitContent
-                        && cachedBottomHasStructured2DOnlyContent));
-            if (false && shouldReplaceBottom)
+                && ((!isInAlternatingMode && !currentBottomHasExplicitContent)
+                    || (isInAlternatingMode
+                        && (cachedBottomIsScreenWideCaptureBackedComp4
+                            || (!captureBackedHasStructured2DSource
+                                && !currentBottomHasExplicitContent
+                                && cachedBottomHasStructured2DOnlyContent))));
+            if (shouldReplaceBottom)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedBottomPlane0,
@@ -8154,12 +8099,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             const bool cachedTopHasStructured2DOnlyContent =
                 screenHasStructured2DOnlyContent(cachedEngineATopPlane0, cachedEngineATopControl);
             const bool shouldReplaceTop = cachedEngineATopValid
-                && isInAlternatingMode
-                && (cachedTopIsScreenWideCaptureBackedComp4
-                    || (!captureBackedHasStructured2DSource
-                        && !currentTopHasExplicitContent
-                        && cachedTopHasStructured2DOnlyContent));
-            if (false && shouldReplaceTop)
+                && ((!isInAlternatingMode && !currentTopHasExplicitContent)
+                    || (isInAlternatingMode
+                        && (cachedTopIsScreenWideCaptureBackedComp4
+                            || (!captureBackedHasStructured2DSource
+                                && !currentTopHasExplicitContent
+                                && cachedTopHasStructured2DOnlyContent))));
+            if (shouldReplaceTop)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedTopPlane0,
@@ -8182,7 +8128,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                 && !currentBottomHasExplicitCompositedContent
                 && screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.packedBottomLineMeta)
                 && cachedBottomHasStructured2DOnlyContent;
-            if (false && shouldRepairBottomFromCachedEngineA)
+            if (shouldRepairBottomFromCachedEngineA)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedBottomPlane0,
@@ -10385,7 +10331,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
         && packedScreenHasUniformLineMeta(bottomPackedRaw, 0x00290000u)
         && packedControlHasOnlyBottomTargetProtectedBlack(
             structuredBottomControl);
-    if (false && exactAlternatingTopOwnedComp7Replay)
+    if (exactAlternatingTopOwnedComp7Replay)
     {
         std::swap(topPackedRaw, bottomPackedRaw);
         std::swap(structuredTopPlane0, structuredBottomPlane0);
@@ -10623,7 +10569,19 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
         && captureStats.StructuredCopyAbovePixels == 0u
         && captureStats.StructuredCopy2DOnlyPixels == 0u
         && captureStats.StructuredCopySourceBOverlayPixels == 0u;
-
+    if (hasStructuredVulkan2D)
+    {
+        if (topVramDisplayLineCount > (kScreenshotScreenHeight / 2)
+            && bottomVramDisplayLineCount <= (kScreenshotScreenHeight / 2))
+        {
+            lastSoftPackedFrameSnapshot.screenSwapLatched = true;
+        }
+        else if (bottomVramDisplayLineCount > (kScreenshotScreenHeight / 2)
+            && topVramDisplayLineCount <= (kScreenshotScreenHeight / 2))
+        {
+            lastSoftPackedFrameSnapshot.screenSwapLatched = false;
+        }
+    }
     const bool screenSwapToggledThisFrame =
         previousSoftPackedFrameSnapshot.valid
         && (previousSoftPackedFrameSnapshot.screenSwapLatched
@@ -12603,8 +12561,6 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
     else if (framesSinceLastScreenSwapToggle < 1024)
         framesSinceLastScreenSwapToggle++;
     const bool isInAlternatingMode = framesSinceLastScreenSwapToggle <= 1;
-    lastSoftPackedFrameSnapshot.screenSwapToggledFromPreviousEmulatedFrame = screenSwapToggledThisFrame;
-    lastSoftPackedFrameSnapshot.isInAlternatingMode = isInAlternatingMode;
     if (isInAlternatingMode != wasInAlternatingMode)
     {
         cachedEngineATopValid = false;
@@ -12807,7 +12763,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
         && (exactTopLiveOwnerNormalizationApplied
             || exactAlternatingTopOwnedComp7Replay
             || exactProducerFollowsNormalizedConsumer);
-    if (false && exactPassiveBottomNormalization)
+    if (exactPassiveBottomNormalization)
     {
         lastSoftPackedFrameSnapshot.packedBottomPlane0.fill(0xFF000000u);
         lastSoftPackedFrameSnapshot.packedBottomPlane1.fill(0u);
@@ -12896,7 +12852,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
             exactDrainTopComp2Slot
             && exactDrainBottomComp7ProtectedBlack;
     }
-    if (false && exactBottomProtectedBlackDrainPayload)
+    if (exactBottomProtectedBlackDrainPayload)
         lastSoftPackedFrameSnapshot.packedBottomPlane0.fill(0xFF000000u);
 
     const bool exactBottomProtectedBlackProducerTuple =
@@ -13077,11 +13033,10 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                 cachedEngineATopValid
                 && screenHasStructured2DOnlyContent(cachedEngineATopStats);
             const bool shouldRepairTopFromCachedEngineA = cachedEngineATopValid
-                && isInAlternatingMode
                 && !currentTopHasExplicitCompositedContent
                 && screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.topScreenStats)
                 && cachedTopHasStructured2DOnlyContent;
-            if (false && shouldRepairTopFromCachedEngineA)
+            if (shouldRepairTopFromCachedEngineA)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedTopPlane0,
@@ -13104,12 +13059,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                 cachedEngineABottomValid
                 && screenHasStructured2DOnlyContent(cachedEngineABottomStats);
             const bool shouldReplaceBottom = cachedEngineABottomValid
-                && isInAlternatingMode
-                && (cachedBottomIsScreenWideCaptureBackedComp4
-                    || (!captureBackedHasStructured2DSource
-                        && !currentBottomHasExplicitContent
-                        && cachedBottomHasStructured2DOnlyContent));
-            if (false && shouldReplaceBottom)
+                && ((!isInAlternatingMode && !currentBottomHasExplicitContent)
+                    || (isInAlternatingMode
+                        && (cachedBottomIsScreenWideCaptureBackedComp4
+                            || (!captureBackedHasStructured2DSource
+                                && !currentBottomHasExplicitContent
+                                && cachedBottomHasStructured2DOnlyContent))));
+            if (shouldReplaceBottom)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedBottomPlane0,
@@ -13146,12 +13102,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                 cachedEngineATopValid
                 && screenHasStructured2DOnlyContent(cachedEngineATopStats);
             const bool shouldReplaceTop = cachedEngineATopValid
-                && isInAlternatingMode
-                && (cachedTopIsScreenWideCaptureBackedComp4
-                    || (!captureBackedHasStructured2DSource
-                        && !currentTopHasExplicitContent
-                        && cachedTopHasStructured2DOnlyContent));
-            if (false && shouldReplaceTop)
+                && ((!isInAlternatingMode && !currentTopHasExplicitContent)
+                    || (isInAlternatingMode
+                        && (cachedTopIsScreenWideCaptureBackedComp4
+                            || (!captureBackedHasStructured2DSource
+                                && !currentTopHasExplicitContent
+                                && cachedTopHasStructured2DOnlyContent))));
+            if (shouldReplaceTop)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedTopPlane0,
@@ -13171,11 +13128,10 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                 cachedEngineABottomValid
                 && screenHasStructured2DOnlyContent(cachedEngineABottomStats);
             const bool shouldRepairBottomFromCachedEngineA = cachedEngineABottomValid
-                && isInAlternatingMode
                 && !currentBottomHasExplicitCompositedContent
                 && screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.bottomScreenStats)
                 && cachedBottomHasStructured2DOnlyContent;
-            if (false && shouldRepairBottomFromCachedEngineA)
+            if (shouldRepairBottomFromCachedEngineA)
             {
                 applyCachedEngineASnapshot(
                     lastSoftPackedFrameSnapshot.packedBottomPlane0,

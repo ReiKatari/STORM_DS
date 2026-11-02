@@ -178,7 +178,7 @@ fun NetplayLobbyDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.90f))
+                .background(Color.Black.copy(alpha = if (colors.isDark) 0.90f else 0.60f))
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -203,12 +203,12 @@ fun NetplayLobbyDialog(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.12f)),
+                                .background(colors.surface2),
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Назад",
-                                tint = Color.White,
+                                tint = colors.text,
                                 modifier = Modifier.size(18.dp),
                             )
                         }
@@ -216,14 +216,14 @@ fun NetplayLobbyDialog(
                         Column {
                             Text(
                                 text = "Сетевая и локальная игра",
-                                color = Color.White,
+                                color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Локальный мультиплеер NiFi (Wi-Fi / Hotspot) и серверы WFC",
-                                color = Color.White.copy(alpha = 0.65f),
+                                color = colors.text2,
                                 fontFamily = WatermelonMono,
                                 fontSize = 9.5.sp
                             )
@@ -238,7 +238,7 @@ fun NetplayLobbyDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF1E2433))
+                        .background(colors.surface2)
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -252,9 +252,9 @@ fun NetplayLobbyDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Wifi, contentDescription = null, tint = if (selectedTab == 0) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Wifi, contentDescription = null, tint = if (selectedTab == 0) Color(0xFF00E5FF) else colors.text2, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Локальная сеть NiFi", color = if (selectedTab == 0) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.7f), fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("Локальная сеть NiFi", color = if (selectedTab == 0) Color(0xFF00E5FF) else colors.text2, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -268,9 +268,9 @@ fun NetplayLobbyDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Language, contentDescription = null, tint = if (selectedTab == 1) Color(0xFF10B981) else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Language, contentDescription = null, tint = if (selectedTab == 1) Color(0xFF10B981) else colors.text2, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("WFC онлайн", color = if (selectedTab == 1) Color(0xFF10B981) else Color.White.copy(alpha = 0.7f), fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("WFC онлайн", color = if (selectedTab == 1) Color(0xFF10B981) else colors.text2, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -290,7 +290,7 @@ fun NetplayLobbyDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF1E2433))
+                                .background(colors.surface2)
                                 .padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -312,7 +312,7 @@ fun NetplayLobbyDialog(
                                 }
                                 Text(
                                     text = "Игрок: $defaultNickname",
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = colors.text2,
                                     fontFamily = WatermelonMono,
                                     fontSize = 10.sp,
                                 )
@@ -320,7 +320,7 @@ fun NetplayLobbyDialog(
 
                             Text(
                                 text = "Подключите смартфоны к одной Wi-Fi сети или точке доступа. Один игрок создаёт комнату (Хост), второй подключается к найденной комнате ниже или вводит IP хоста.",
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = colors.text2,
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp,
                             )
@@ -380,7 +380,7 @@ fun NetplayLobbyDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E2433))
+                                .background(colors.surface2)
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -389,13 +389,13 @@ fun NetplayLobbyDialog(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color.Black.copy(alpha = 0.35f))
+                                    .background(colors.surface)
                                     .padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
                                 if (manualHostIp.isEmpty()) {
                                     Text(
                                         text = "IP хоста (напр. 192.168.1.10)",
-                                        color = Color.White.copy(alpha = 0.4f),
+                                        color = colors.text3,
                                         fontFamily = WatermelonMono,
                                         fontSize = 10.5.sp
                                     )
@@ -405,7 +405,7 @@ fun NetplayLobbyDialog(
                                     onValueChange = { manualHostIp = it.trim() },
                                     singleLine = true,
                                     textStyle = TextStyle(
-                                        color = Color.White,
+                                        color = colors.text,
                                         fontFamily = WatermelonMono,
                                         fontSize = 11.sp
                                     ),
@@ -465,7 +465,7 @@ fun NetplayLobbyDialog(
                         ) {
                             Text(
                                 text = "Найденные комнаты в локальной сети (${discoveredRooms.size})",
-                                color = Color.White.copy(alpha = 0.85f),
+                                color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -473,7 +473,7 @@ fun NetplayLobbyDialog(
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color.White.copy(alpha = 0.1f))
+                                    .background(colors.surface2)
                                     .clickable {
                                         val raw = runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
                                         discoveredRooms = parseDiscoveredLanRooms(raw, romTitle)
@@ -482,9 +482,9 @@ fun NetplayLobbyDialog(
                                     .padding(horizontal = 10.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Filled.Refresh, contentDescription = "Обновить", tint = Color.White, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Filled.Refresh, contentDescription = "Обновить", tint = colors.text, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Обновить", color = Color.White, fontFamily = WatermelonMono, fontSize = 9.5.sp)
+                                Text("Обновить", color = colors.text, fontFamily = WatermelonMono, fontSize = 9.5.sp)
                             }
                         }
 
@@ -494,13 +494,13 @@ fun NetplayLobbyDialog(
                                     .fillMaxWidth()
                                     .weight(1f)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0xFF1E2433).copy(alpha = 0.6f))
+                                    .background(colors.surface2.copy(alpha = 0.6f))
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "Поиск активных хостов в Wi-Fi сети...\nЕсли второй телефон раздаёт точку доступа и комната не появляется автоматически, введите его IP-адрес выше.",
-                                    color = Color.White.copy(alpha = 0.6f),
+                                    color = colors.text2,
                                     fontFamily = WatermelonMono,
                                     fontSize = 10.sp,
                                     lineHeight = 15.sp
@@ -546,7 +546,7 @@ fun NetplayLobbyDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0xFF1E2433))
+                                    .background(colors.surface2)
                                     .padding(14.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -554,7 +554,7 @@ fun NetplayLobbyDialog(
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         text = "Сервер Nintendo Wi-Fi Connection (WFC)",
-                                        color = Color.White,
+                                        color = colors.text,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
@@ -563,7 +563,7 @@ fun NetplayLobbyDialog(
                                 Spacer(Modifier.height(6.dp))
                                 Text(
                                     text = "Выберите онлайн-сервер WFC. STORM DS автоматически прописывает его DNS в точку доступа melonAP и перенаправляет трафик игры на выбранный сервер без ручной настройки.",
-                                    color = Color.White.copy(alpha = 0.8f),
+                                    color = colors.text2,
                                     fontSize = 11.sp,
                                     lineHeight = 15.sp
                                 )
@@ -579,10 +579,10 @@ fun NetplayLobbyDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(14.dp))
-                                            .background(if (isSelected) Color(0xFF10B981).copy(alpha = 0.16f) else Color(0xFF1E2433))
+                                            .background(if (isSelected) Color(0xFF10B981).copy(alpha = 0.16f) else colors.surface2)
                                             .border(
                                                 width = if (isSelected) 1.5.dp else 1.dp,
-                                                color = if (isSelected) Color(0xFF10B981) else Color.White.copy(alpha = 0.08f),
+                                                color = if (isSelected) Color(0xFF10B981) else colors.line,
                                                 shape = RoundedCornerShape(14.dp)
                                             )
                                             .clickable {
@@ -597,13 +597,13 @@ fun NetplayLobbyDialog(
                                             modifier = Modifier
                                                 .size(36.dp)
                                                 .clip(CircleShape)
-                                                .background(if (isSelected) Color(0xFF10B981).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f)),
+                                                .background(if (isSelected) Color(0xFF10B981).copy(alpha = 0.25f) else colors.line),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.Language,
                                                 contentDescription = null,
-                                                tint = if (isSelected) Color(0xFF10B981) else Color.White.copy(alpha = 0.7f),
+                                                tint = if (isSelected) Color(0xFF10B981) else colors.text2,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
@@ -616,7 +616,7 @@ fun NetplayLobbyDialog(
                                             ) {
                                                 Text(
                                                     text = server.title,
-                                                    color = Color.White,
+                                                    color = colors.text,
                                                     fontFamily = SpaceGrotesk,
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.Bold
@@ -632,7 +632,7 @@ fun NetplayLobbyDialog(
                                             Spacer(Modifier.height(3.dp))
                                             Text(
                                                 text = server.description,
-                                                color = Color.White.copy(alpha = 0.7f),
+                                                color = colors.text2,
                                                 fontSize = 10.5.sp,
                                                 lineHeight = 14.sp
                                             )
@@ -696,11 +696,12 @@ fun NetplayLobbyDialog(
 
 @Composable
 private fun RoomCard(room: NetplayRoom, onJoin: () -> Unit) {
+    val colors = watermelon
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF1E2433))
+            .background(colors.surface2)
             .clickable { onJoin() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -720,14 +721,14 @@ private fun RoomCard(room: NetplayRoom, onJoin: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = room.hostName,
-                color = Color.White,
+                color = colors.text,
                 fontFamily = SpaceGrotesk,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = "${room.gameTitle} • ${room.serverType}",
-                color = Color.White.copy(alpha = 0.65f),
+                color = colors.text2,
                 fontFamily = WatermelonMono,
                 fontSize = 9.5.sp
             )

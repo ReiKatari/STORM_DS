@@ -6,6 +6,8 @@
     <color name="launcherBackground">#000000</color>
     <color name="colorAccent">#00E5FF</color>
     <color name="colorSecondary">#7B2CBF</color>
+    <color name="colorOnPrimary">#000000</color>
+    <color name="colorOnSecondary">#FFFFFF</color>
     <color name="colorSurface">#0D0D10</color>
     <color name="colorBackground">#000000</color>
 

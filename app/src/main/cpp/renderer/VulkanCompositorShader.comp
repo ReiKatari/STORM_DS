@@ -567,7 +567,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
             && pixel3DFromLive \
             && (pixel3D.a & 0x1F) > 0 \
             && ((pixel3D.r | pixel3D.g | pixel3D.b) == 0); \
-        if (false && compModeSamples3D \
+        if (compModeSamples3D \
             && screenOwnsLive3D \
             && screenHasPrevious3D \
             && brightnessMode == 0 \
@@ -598,7 +598,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
             && (((pixel3D.r | pixel3D.g | pixel3D.b) != 0) \
                 || pixel3DLiveBlackHasSupport \
                 || (!pixel3DFromLive && screenHasPrevious3D)); \
-        if (false && regularCaptureUses3d \
+        if (regularCaptureUses3d \
             && pixel3DFromLive \
             && screenHasPrevious3D \
             && !pixel3DHasVisibleColor \
@@ -1317,7 +1317,7 @@ Rgba6 composeScreenPixelPrecise(bool topScreen, int sourceX, int dsY, int scaled
     int xoffset = int((masterBrightness >> 24u) & 0xFFu)
         - ((((masterBrightness >> 16u) & 0x80u) != 0u) ? 256 : 0);
 
-    bool screenOwnsLive3D = topScreen ? (pc.liveSourceScreenSwap != 0u) : (pc.liveSourceScreenSwap == 0u);
+    bool screenOwnsLive3D = topScreen ? (pc.screenSwap != 0u) : (pc.screenSwap == 0u);
     bool screenHasCapturedHighres3D = !screenOwnsLive3D
         && (topScreen ? (pc.previousTopSourceValid != 0u) : (pc.previousBottomSourceValid != 0u))
         && ((dispmode == 2 && (masterBrightness & kMetaFlagVramCaptureUses3d) != 0u)
@@ -1532,7 +1532,7 @@ void main()
     }
 
     Rgba6 pixel;
-    if (pc.debugView != 0u)
+    if (pc.debugView != 0u || pc.compositorMode == 0u)
         pixel = composeScreenPixelPrecise(isTopScreen, sourceX, dsY, scaledX, scaledY, safeScale);
     else if ((isTopScreen && pc.fastHighresOnlyTop != 0u)
         || (isBottomScreen && pc.fastHighresOnlyBottom != 0u))

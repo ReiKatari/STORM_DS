@@ -98,8 +98,7 @@ class SettingsActivity :
     override fun onCreate(savedInstanceState: Bundle?) {
         me.magnum.melonds.ui.theme.AppThemeManager.init(this)
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        val currentTheme = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme
-        val isLight = currentTheme == me.magnum.melonds.ui.Theme.LIGHT || currentTheme == me.magnum.melonds.ui.Theme.SAKURA
+        val isLight = !me.magnum.melonds.ui.theme.AppThemeManager.isDarkTheme(this)
         if (isLight) {
             enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
         } else {

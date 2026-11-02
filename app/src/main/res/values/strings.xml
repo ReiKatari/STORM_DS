@@ -351,7 +351,7 @@
     <string name="rewind_memory_usage_above_recommended_limit">Memory usage above recommended limit</string>
     <string name="sustained_performance_mode">Sustained performance mode</string>
     <string name="sustained_performance_mode_summary">When enabled, peak performance will be lower but thermal throttling will be less pronounced.</string>
-    <string name="check_for_updates">Check for updates</string>
+    <string name="check_for_updates">Automatic update check</string>
     <string name="check_for_updates_summary">When enabled, the app will periodically check for available updates</string>
     <string name="rom_icon_filtering">Icon filtering</string>
     <string name="rom_view_mode">Default ROM list view</string>

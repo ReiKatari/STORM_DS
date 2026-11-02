@@ -190,7 +190,7 @@ fun ExternalBootInfo(
     statusText: String? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    Box(Modifier.fillMaxSize().background(Color(0xFF121116))) {
+    Box(Modifier.fillMaxSize().background(me.magnum.melonds.ui.theme.watermelon.bg)) {
         Box(Modifier.fillMaxSize().background(romGradient(romDisplayName(rom))))
         if (boxArtUrl != null) {
             AsyncImage(
@@ -351,7 +351,7 @@ fun ExternalAchievementInfo(achievementModel: AchievementUiModel) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier.fillMaxSize().background(Color(0xFF121116)).padding(horizontal = 56.dp, vertical = 36.dp),
+        modifier = Modifier.fillMaxSize().background(me.magnum.melonds.ui.theme.watermelon.bg).padding(horizontal = 56.dp, vertical = 36.dp),
     ) {
         AsyncImage(
             model = if (unlocked) achievement.badgeUrlUnlocked.toString() else achievement.badgeUrlLocked.toString(),

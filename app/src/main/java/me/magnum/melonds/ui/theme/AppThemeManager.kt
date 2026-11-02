@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.theme
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.mutableStateOf
 import androidx.preference.PreferenceManager
 import me.magnum.melonds.ui.Theme
@@ -16,18 +17,29 @@ object AppThemeManager {
     val currentTheme: Theme
         get() = themeState.value
 
+    fun applyNightMode(theme: Theme) {
+        if (AppCompatDelegate.getDefaultNightMode() != theme.nightMode) {
+            AppCompatDelegate.setDefaultNightMode(theme.nightMode)
+        }
+    }
+
     fun init(context: Context) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val themeKey = prefs.getString("theme", "dark") ?: "dark"
-        themeState.value = Theme.fromPreference(themeKey)
+        val resolvedTheme = Theme.fromPreference(themeKey)
+        themeState.value = resolvedTheme
+        applyNightMode(resolvedTheme)
         accentColorState.value = prefs.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
         cardStyleState.value = prefs.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
 
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
-            if (key == "theme") {
-                val newKey = sp.getString("theme", "dark") ?: "dark"
-                themeState.value = Theme.fromPreference(newKey)
-            } else if (key == "theme_accent_color") {
+        if (prefChangeListener == null) {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
+                if (key == "theme") {
+                    val newKey = sp.getString("theme", "dark") ?: "dark"
+                    val newTheme = Theme.fromPreference(newKey)
+                    themeState.value = newTheme
+                    applyNightMode(newTheme)
+                } else if (key == "theme_accent_color") {
                 val newAccent = sp.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
                 accentColorState.value = newAccent
                 accentChangeListeners.forEach { it.invoke(newAccent) }
@@ -35,8 +47,9 @@ object AppThemeManager {
                 cardStyleState.value = sp.getString("rom_card_style", "glassmorphism") ?: "glassmorphism"
             }
         }
-        prefChangeListener = listener
-        prefs.registerOnSharedPreferenceChangeListener(listener)
+            prefChangeListener = listener
+            prefs.registerOnSharedPreferenceChangeListener(listener)
+        }
     }
 
     private val accentChangeListeners = mutableListOf<(String) -> Unit>()
@@ -107,6 +120,7 @@ object AppThemeManager {
     fun updateTheme(context: Context, themeKey: String) {
         val theme = Theme.fromPreference(themeKey)
         themeState.value = theme
+        applyNightMode(theme)
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         prefs.edit().putString("theme", themeKey).apply()
     }

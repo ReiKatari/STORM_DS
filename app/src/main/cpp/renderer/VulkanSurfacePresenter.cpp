@@ -822,8 +822,12 @@ bool VulkanSurfacePresenter::createCommonResources()
         return false;
 
     auto createShaderModule = [&](const unsigned char* data, size_t length, VkShaderModule* shaderModule) -> bool {
+        if (device == VK_NULL_HANDLE || data == nullptr || length < 20 || (length % 4 != 0) || shaderModule == nullptr)
+            return false;
         std::vector<u32> shaderWords((length + sizeof(u32) - 1u) / sizeof(u32));
         std::memcpy(shaderWords.data(), data, length);
+        if (shaderWords[0] != 0x07230203u)
+            return false;
 
         VkShaderModuleCreateInfo shaderModuleInfo{};
         shaderModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;

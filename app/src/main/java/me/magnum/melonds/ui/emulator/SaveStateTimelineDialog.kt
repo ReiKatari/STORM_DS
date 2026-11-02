@@ -97,10 +97,11 @@ fun SaveStateTimelineDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val colors = me.magnum.melonds.ui.theme.watermelon
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f))
+                .background(Color.Black.copy(alpha = if (colors.isDark) 0.85f else 0.60f))
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -108,7 +109,7 @@ fun SaveStateTimelineDialog(
                 modifier = Modifier
                     .fillMaxWidth(0.96f)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF18181B))
+                    .background(colors.surface)
                     .padding(20.dp)
             ) {
                 // Header
@@ -121,20 +122,20 @@ fun SaveStateTimelineDialog(
                         Icon(
                             Icons.Filled.History,
                             contentDescription = null,
-                            tint = Color(0xFF10B981),
+                            tint = colors.green,
                             modifier = Modifier.size(26.dp).padding(end = 8.dp)
                         )
                         Column {
                             Text(
                                 text = "ТАЙМЛАЙН СОХРАНЕНИЙ (STATE TIMELINE)",
-                                color = Color.White,
+                                color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Мгновенная перемотка сюжета по слотам и скриншотам",
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = colors.text2,
                                 fontFamily = WatermelonMono,
                                 fontSize = 9.sp
                             )
@@ -142,7 +143,7 @@ fun SaveStateTimelineDialog(
                     }
 
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = colors.text)
                     }
                 }
 
@@ -181,11 +182,12 @@ private fun SlotCard(
     onSave: () -> Unit,
 ) {
     val context = LocalContext.current
+    val colors = me.magnum.melonds.ui.theme.watermelon
     Column(
         modifier = Modifier
             .width(180.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF27272A))
+            .background(colors.surface2)
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -198,7 +200,7 @@ private fun SlotCard(
                     if (slot.hasData) {
                         Brush.verticalGradient(listOf(Color(0xFF064E3B), Color(0xFF022C22)))
                     } else {
-                        Brush.verticalGradient(listOf(Color(0xFF3F3F46), Color(0xFF27272A)))
+                        Brush.verticalGradient(listOf(colors.surface3, colors.surface2))
                     }
                 ),
             contentAlignment = Alignment.Center
@@ -213,7 +215,7 @@ private fun SlotCard(
             } else {
                 Text(
                     text = if (slot.hasData) "SLOT ${slot.slotNumber}" else "EMPTY",
-                    color = Color.White.copy(alpha = 0.4f),
+                    color = if (slot.hasData) Color.White.copy(alpha = 0.7f) else colors.text3,
                     fontFamily = WatermelonMono,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
@@ -225,7 +227,7 @@ private fun SlotCard(
 
         Text(
             text = slot.title,
-            color = Color.White,
+            color = colors.text,
             fontFamily = SpaceGrotesk,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -234,7 +236,7 @@ private fun SlotCard(
 
         Text(
             text = slot.timestamp,
-            color = Color.White.copy(alpha = 0.5f),
+            color = colors.text2,
             fontFamily = WatermelonMono,
             fontSize = 8.5.sp
         )
@@ -266,15 +268,15 @@ private fun SlotCard(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.15f))
+                    .background(colors.surface3)
                     .clickable(onClick = onSave)
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Save, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    Icon(Icons.Filled.Save, contentDescription = null, tint = colors.text, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.width(2.dp))
-                    Text("СОХРАНИТЬ", color = Color.White, fontFamily = WatermelonMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                    Text("СОХРАНИТЬ", color = colors.text, fontFamily = WatermelonMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

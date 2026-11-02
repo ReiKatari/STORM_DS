@@ -23,7 +23,11 @@ enum class Theme(val nightMode: Int, val preferenceValue: String) {
             MATRIX -> me.magnum.melonds.R.style.AppTheme_Matrix
             SOLAR -> me.magnum.melonds.R.style.AppTheme_Solar
             SAKURA -> me.magnum.melonds.R.style.AppTheme_Sakura
-            SYSTEM -> me.magnum.melonds.R.style.AppTheme_Dark
+            SYSTEM -> {
+                val sysDark = (android.content.res.Resources.getSystem().configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                if (sysDark) me.magnum.melonds.R.style.AppTheme_Dark else me.magnum.melonds.R.style.AppTheme_Light
+            }
         }
     }
 

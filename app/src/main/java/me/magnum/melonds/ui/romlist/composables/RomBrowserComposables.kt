@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -179,13 +180,21 @@ fun WatermelonLibraryHeader(
                             onSearchQueryChanged(null)
                         }
                     },
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Icon(
                         Icons.Filled.Close,
                         contentDescription = stringResource(R.string.close),
                         tint = colors.text2,
                         modifier = Modifier.size(18.dp),
+                    )
+                }
+                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                        contentDescription = stringResource(R.string.rom_view_toggle),
+                        tint = colors.text2,
+                        modifier = Modifier.size(19.dp),
                     )
                 }
             } else {
@@ -365,6 +374,8 @@ fun LibrarySectionHeader(
     sortingMode: SortingMode,
     sortingOrder: SortingOrder,
     gamesCount: Int,
+    viewMode: RomViewMode? = null,
+    onToggleViewMode: (() -> Unit)? = null,
     onNavigateUp: () -> Unit,
     onSortSelected: (SortingMode) -> Unit,
     modifier: Modifier = Modifier,
@@ -373,25 +384,26 @@ fun LibrarySectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (inFolder) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    .widthIn(max = 148.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onNavigateUp),
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.rom_browser_navigate_up), tint = colors.text2, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(3.dp))
                 Icon(Icons.Filled.Folder, contentDescription = null, tint = colors.green, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(5.dp))
                 Text(
                     text = title,
                     color = colors.text,
                     fontFamily = SpaceGrotesk,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -402,16 +414,17 @@ fun LibrarySectionHeader(
                 text = title,
                 color = colors.text,
                 fontFamily = SpaceGrotesk,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 132.dp),
             )
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f),
         ) {
             items(
                 listOf(
@@ -438,19 +451,38 @@ fun LibrarySectionHeader(
                     onClick = { onSortSelected(mode) },
                     fontSize = 8.5.sp,
                     cornerRadius = 12.dp,
-                    horizontalPadding = 9.dp,
+                    horizontalPadding = 8.dp,
                     verticalPadding = 4.dp,
                 )
             }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.rom_games_count, gamesCount),
             color = colors.text3,
             fontFamily = WatermelonMono,
-            fontSize = 10.5.sp,
+            fontSize = 10.sp,
             maxLines = 1,
         )
+        if (viewMode != null && onToggleViewMode != null) {
+            Spacer(Modifier.width(4.dp))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surface2)
+                    .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                    .clickable(onClick = onToggleViewMode),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                    contentDescription = stringResource(R.string.rom_view_toggle),
+                    tint = colors.green,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+        }
     }
 }
 

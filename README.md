@@ -107,7 +107,7 @@
 ### **Требования к окружению**
 * **JDK**: OpenJDK `21` или новее
 * **Android SDK**: API Level `36` (Android 16)
-* **Android NDK**: версия `28.0.33004108`
+* **Android NDK**: версия `28.0.13004108`
 * **CMake**: версия `3.22.1` или новее
 * **Rust Toolchain**: с установленными таргетами Android ABI (`aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`) для компиляции нативной библиотеки `librashader`
 

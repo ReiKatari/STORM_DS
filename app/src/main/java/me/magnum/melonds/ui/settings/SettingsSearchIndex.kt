@@ -222,13 +222,13 @@ class SettingsSearchDialog(
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE)
 
-        val accentColor = AppThemeManager.getAccentColor()
-        val isDark = AppThemeManager.currentTheme != me.magnum.melonds.ui.Theme.LIGHT
+        val isDark = AppThemeManager.isDarkTheme(context)
+        val accentColor = AppThemeManager.getAccentColor(context)
         val backgroundColor = if (isDark) 0xFF141923.toInt() else 0xFFF8FAFC.toInt()
         val cardBgColor = if (isDark) 0xFF1E2638.toInt() else 0xFFFFFFFF.toInt()
         val strokeColor = if (isDark) 0xFF334155.toInt() else 0xFFE2E8F0.toInt()
         val textColorPrimary = if (isDark) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt()
-        val textColorSecondary = 0xFF94A3B8.toInt()
+        val textColorSecondary = if (isDark) 0xFF94A3B8.toInt() else 0xFF475569.toInt()
 
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -384,11 +384,11 @@ class SettingsSearchDialog(
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val isDark = AppThemeManager.currentTheme != me.magnum.melonds.ui.Theme.LIGHT
+            val isDark = AppThemeManager.isDarkTheme(parent.context)
             val itemBg = if (isDark) 0xFF182030.toInt() else 0xFFF1F5F9.toInt()
-            val accentColor = AppThemeManager.getAccentColor()
+            val accentColor = AppThemeManager.getAccentColor(parent.context)
             val textColorPrimary = if (isDark) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt()
-            val textColorSecondary = 0xFF94A3B8.toInt()
+            val textColorSecondary = if (isDark) 0xFF94A3B8.toInt() else 0xFF475569.toInt()
 
             val row = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.HORIZONTAL

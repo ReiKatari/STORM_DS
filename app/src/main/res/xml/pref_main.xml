@@ -96,13 +96,6 @@
                 android:fragment="me.magnum.melonds.ui.settings.fragments.GeneralPreferencesFragment" />
 
         <Preference
-                android:key="manual_check_updates"
-                android:title="@string/v800_check_updates_title"
-                android:summary="@string/v800_check_updates_summary"
-                app:icon="@drawable/ic_refresh"
-                app:iconSpaceReserved="false" />
-
-        <Preference
                 android:key="settings_home_about"
                 android:title="@string/about_app_title"
                 android:summary="@string/about_app_summary"

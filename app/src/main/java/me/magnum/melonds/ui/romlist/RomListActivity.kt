@@ -100,9 +100,10 @@ class RomListActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        me.magnum.melonds.ui.theme.AppThemeManager.init(this)
         setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         installSplashScreen()
-        val isLight = me.magnum.melonds.ui.theme.AppThemeManager.currentTheme == me.magnum.melonds.ui.Theme.LIGHT
+        val isLight = !me.magnum.melonds.ui.theme.AppThemeManager.isDarkTheme(this)
         if (isLight) {
             enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
         } else {

@@ -106,9 +106,9 @@ compile_shader() {
   local output="$3"
   shift 3
   if [[ "${SHADER_COMPILER[0]##*/}" == glslc* ]]; then
-    "${SHADER_COMPILER[@]}" -fshader-stage="$stage" "$@" -o "$output" "$source"
+    "${SHADER_COMPILER[@]}" --target-env=vulkan1.0 -O -fshader-stage="$stage" "$@" -o "$output" "$source"
   else
-    "${SHADER_COMPILER[@]}" -V -S "$stage" "$@" -o "$output" "$source"
+    "${SHADER_COMPILER[@]}" --target-env vulkan1.0 -V -S "$stage" "$@" -o "$output" "$source"
   fi
 }
 

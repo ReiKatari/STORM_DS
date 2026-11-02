@@ -792,7 +792,7 @@
   <string name="rewind_memory_usage_above_recommended_limit">Превышен рекомендуемый лимит оперативной памяти</string>
   <string name="sustained_performance_mode">Режим стабильной производительности</string>
   <string name="sustained_performance_mode_summary">Предотвращает сброс частот процессора при нагреве</string>
-  <string name="check_for_updates">Проверка обновлений</string>
+  <string name="check_for_updates">Автопроверка обновлений</string>
   <string name="check_for_updates_summary">Периодическая проверка доступных обновлений</string>
   <string name="rom_icon_filtering">Фильтрация иконок игр</string>
   <string name="rom_ra_cover_enabled">Бейджи RetroAchievements</string>

@@ -120,17 +120,18 @@ private fun BackgroundItemBase(
     var isOptionsPopupVisible by remember { mutableStateOf(false) }
 
     val cardShape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
-    val accentColor = me.magnum.melonds.ui.theme.LocalWatermelonColors.current.green
+    val colors = me.magnum.melonds.ui.theme.LocalWatermelonColors.current
+    val accentColor = colors.green
 
     Card(
         modifier = Modifier
             .border(
                 width = if (isSelected) 2.5.dp else 1.dp,
-                color = if (isSelected) accentColor else Color(0x25FFFFFF),
+                color = if (isSelected) accentColor else colors.line,
                 shape = cardShape,
             ),
         shape = cardShape,
-        backgroundColor = if (isSelected) Color(0xFF1A2234) else Color(0xFF161820),
+        backgroundColor = if (isSelected) colors.surface3 else colors.surface2,
         elevation = if (isSelected) 6.dp else 2.dp,
         onClick = onClick,
     ) {
@@ -145,7 +146,7 @@ private fun BackgroundItemBase(
                     .fillMaxWidth()
                     .aspectRatio(1.0f)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0D0E13))
+                    .background(colors.bg)
 
                 if (sharedTransitionScope != null && animatedContentScope != null) {
                     with(sharedTransitionScope) {
@@ -177,7 +178,7 @@ private fun BackgroundItemBase(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.subtitle2,
-                        color = if (isSelected) accentColor else Color.White,
+                        color = if (isSelected) accentColor else colors.text,
                         fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
                     )
                     if (dimensions != null) {
@@ -186,7 +187,7 @@ private fun BackgroundItemBase(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.caption,
-                            color = Color(0xFFAAAAAA),
+                            color = colors.text2,
                         )
                     }
                 }
@@ -197,13 +198,13 @@ private fun BackgroundItemBase(
                         Icon(
                             painter = rememberVectorPainter(Icons.Filled.MoreVert),
                             contentDescription = stringResource(R.string.options),
-                            tint = if (isSelected) accentColor else Color(0xFFB0B0B0),
+                            tint = if (isSelected) accentColor else colors.text2,
                         )
 
                         DropdownMenu(
                             expanded = isOptionsPopupVisible,
                             onDismissRequest = { isOptionsPopupVisible = false },
-                            modifier = Modifier.background(Color(0xFF1E212B)),
+                            modifier = Modifier.background(colors.surface),
                         ) {
                             DropdownMenuItem(
                                 onClick = {
@@ -211,7 +212,7 @@ private fun BackgroundItemBase(
                                     onPreviewClick()
                                 },
                             ) {
-                                Text(stringResource(R.string.preview), color = Color.White)
+                                Text(stringResource(R.string.preview), color = colors.text)
                             }
                             DropdownMenuItem(
                                 onClick = {
@@ -219,7 +220,7 @@ private fun BackgroundItemBase(
                                     onDeleteClick()
                                 },
                             ) {
-                                Text(stringResource(R.string.delete), color = Color(0xFFFF5252))
+                                Text(stringResource(R.string.delete), color = colors.red)
                             }
                         }
                     }

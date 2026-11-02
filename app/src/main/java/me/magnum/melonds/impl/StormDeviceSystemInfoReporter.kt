@@ -25,7 +25,7 @@ import java.util.Locale
 
 object StormDeviceSystemInfoReporter {
     private const val TAG = "StormSystemInfo"
-    const val INFO_FILE_NAME = "!STORM_INFO.txt"
+    const val INFO_FILE_NAME = "STORM_INFO.txt"
 
     fun isLoggingEnabled(context: Context): Boolean {
         return runCatching {
@@ -222,7 +222,7 @@ object StormDeviceSystemInfoReporter {
             appendLine("================================================================================")
         }
 
-        // Save system report to /storage/emulated/0/STORM DS/logs/!STORM_INFO.txt
+        // Save system report to /storage/emulated/0/STORM DS/logs/STORM_INFO.txt
         runCatching {
             val rootLogsDir = File(Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
             val infoFile = File(rootLogsDir, INFO_FILE_NAME)

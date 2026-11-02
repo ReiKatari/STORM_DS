@@ -417,10 +417,10 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     appendLine("========================================================")
                 }
 
-                // Write crash report into /storage/emulated/0/STORM DS/logs/!STORM_INFO.txt
+                // Write crash report into /storage/emulated/0/STORM DS/logs/STORM_INFO.txt
                 runCatching {
                     val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
-                    val crashFile = File(rootBase, "!STORM_INFO.txt")
+                    val crashFile = File(rootBase, "STORM_INFO.txt")
                     crashFile.appendText("\n\n$report")
                 }
             }

@@ -1238,8 +1238,6 @@ bool SoftRenderer::CanUseStructuredVulkan2DPure3DLine(u32 dispmode) const noexce
         return false;
     if (!Renderer2DDebugShouldDraw3DBg(CurUnit->Num, CurUnit->BGCnt[0]))
         return false;
-    if (GPU.GPU3D.RenderNumPolygons == 0u)
-        return false;
 
     return true;
 }
@@ -1320,8 +1318,7 @@ bool SoftRenderer::TryPromoteStructuredVulkan2DComposedPure3DLine(u32 line, u32 
 
         const bool real0 = StructuredVulkan2DSourceIsReal2D(StructuredVulkan2DSourceClass(val0));
         const bool real1 = StructuredVulkan2DSourceIsReal2D(StructuredVulkan2DSourceClass(val1));
-        const bool real2 = StructuredVulkan2DSourceIsReal2D(StructuredVulkan2DSourceClass(val2));
-        if (real0 || real1 || real2)
+        if ((slot1 && real0) || (slot2 && (real0 || real1)))
             return false;
     }
 
@@ -3531,8 +3528,6 @@ void SoftRenderer::DrawScanlineActivePipeline(u32 line, Unit* unit)
         {
             for (int i = 0; i < 256; i++)
                 dst[i] = 0x003F3F3F;
-            if (GPU.GPU3D.IsRendererAccelerated())
-                std::fill_n(dst + 256, 512, 0u);
         }
         break;
 
@@ -3600,11 +3595,7 @@ void SoftRenderer::DrawScanlineActivePipeline(u32 line, Unit* unit)
                 const u16* vramLineForStructured = vram;
                 if (useStructuredVulkan2D)
                 {
-                    if (true)
-                    {
-                        FillStructuredVulkan2DVramDisplayLine(line, vram);
-                    }
-                    else if (activeVulkan2DPipelineStrategy()
+                    if (activeVulkan2DPipelineStrategy()
                             .UsesHistoricalVramDisplayCopy())
                     {
                         CopyStructuredVulkan2DCaptureLineToCurrentScreenCompatibility(
@@ -3703,10 +3694,6 @@ void SoftRenderer::DrawScanlineActivePipeline(u32 line, Unit* unit)
 
                 dst[i] = r | (g << 8) | (b << 16);
             }
-            if (GPU.GPU3D.IsRendererAccelerated())
-                std::fill_n(dst + 256, 512, 0u);
-            if (useStructuredVulkan2D)
-                FillStructuredVulkan2DVramDisplayLine(line, CurUnit->DispFIFOBuffer);
         }
         break;
     }
@@ -3920,7 +3907,14 @@ void SoftRenderer::DoCapture(u32 line, u32 width, u32 sourceLine)
     u32 dstaddr = (((captureCnt >> 18) & 0x3) << 14) + (line * width);
 
     const u32 captureDisplayMode = (CurUnit->DispCnt >> 16u) & (CurUnit->Num ? 0x1u : 0x3u);
-    const bool canUsePure3DStructuredCapture = false;
+    const bool canUsePure3DStructuredCapture =
+        useStructuredVulkan2D
+        && CurUnit->Num == 0
+        && GPU.GPU3D.IsRendererAccelerated()
+        && !captureUsesDirect3D
+        && !CurUnit->CaptureLatch
+        && captureMode == 0u
+        && CanUseStructuredVulkan2DPure3DLine(captureDisplayMode);
     if (canUsePure3DStructuredCapture)
     {
         dstaddr &= 0xFFFFu;
@@ -5838,7 +5832,6 @@ void SoftRenderer::PushRawPixel_Accel(u32* dst, u32 value)
 
 bool SoftRenderer::TryDrawStructuredVulkan2DCapturePixel(u32* dst, u32 flatByteAddress)
 {
-    return false;
     if (!UseStructuredVulkan2D())
         return false;
 
@@ -5966,9 +5959,6 @@ void SoftRenderer::DrawBG_3D()
 
     if (GPU.GPU3D.IsRendererAccelerated())
     {
-        if (GPU.GPU3D.RenderNumPolygons == 0u && ((GPU.GPU3D.RenderClearAttr1 >> 16) & 0x1Fu) == 0u && !CurUnit->CaptureLatch)
-            return;
-
         if (TrackComposedObjCaptureIdentity)
         {
             for (i = 0; i < 256; i++)
@@ -6453,7 +6443,7 @@ void SoftRenderer::DrawBG_Extended(u32 line, u32 bgnum)
                 };
 
             bool fastLineSaw3d = false;
-            if (false && tryDrawStructuredCaptureLineView(BGOBJLine, fastLineSaw3d))
+            if (tryDrawStructuredCaptureLineView(BGOBJLine, fastLineSaw3d))
             {
                 CurrentLineRegularCaptureUses3d =
                     CurrentLineRegularCaptureUses3d || fastLineSaw3d;

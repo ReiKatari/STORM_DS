@@ -1100,7 +1100,7 @@ class AndroidEmulatorManager(
                     "DIRECT"
                 }
 
-                // 1. Save unified system report (!STORM_INFO.txt)
+                // 1. Save unified system report (STORM_INFO.txt)
                 StormDeviceSystemInfoReporter.saveUnifiedReport(
                     context = context,
                     rom = rom,

@@ -24,7 +24,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -318,7 +322,7 @@ fun RomBrowserScreen(
     }
 
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+        Box(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
             Column(modifier = Modifier.fillMaxSize()) {
                 WatermelonLibraryHeader(
                     isSearchActive = state.isSearchActive,
@@ -427,6 +431,8 @@ fun RomBrowserScreen(
                                     sortingMode = state.sortingMode,
                                     sortingOrder = state.sortingOrder,
                                     gamesCount = romsCount,
+                                    viewMode = state.viewMode,
+                                    onToggleViewMode = onToggleViewMode,
                                     onNavigateUp = onNavigateUp,
                                     onSortSelected = onSortSelected,
                                     modifier = Modifier.padding(horizontal = 0.dp),
@@ -558,6 +564,8 @@ fun RomBrowserScreen(
                                 sortingMode = state.sortingMode,
                                 sortingOrder = state.sortingOrder,
                                 gamesCount = romsCount,
+                                viewMode = state.viewMode,
+                                onToggleViewMode = onToggleViewMode,
                                 onNavigateUp = onNavigateUp,
                                 onSortSelected = onSortSelected,
                                 modifier = Modifier.padding(horizontal = 0.dp),

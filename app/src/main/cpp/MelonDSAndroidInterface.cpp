@@ -62,9 +62,9 @@ static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
     mkdir("/sdcard/STORM DS/logs", 0777);
     mkdir("/storage/emulated/0/STORM DS", 0777);
     mkdir("/storage/emulated/0/STORM DS/logs", 0777);
-    FILE* f = fopen("/storage/emulated/0/STORM DS/logs/!STORM_INFO.txt", "a");
+    FILE* f = fopen("/storage/emulated/0/STORM DS/logs/STORM_INFO.txt", "a");
     if (!f) {
-        f = fopen("/sdcard/STORM DS/logs/!STORM_INFO.txt", "a");
+        f = fopen("/sdcard/STORM DS/logs/STORM_INFO.txt", "a");
     }
     if (f) {
         time_t now = time(nullptr);

@@ -124,8 +124,8 @@ object ProblemReportGenerator {
 
             val rootStormDir = File(Environment.getExternalStorageDirectory(), "STORM DS")
             val candidateFiles = listOf(
-                "STORM_INFO.txt" to File(rootStormDir, "logs/!STORM_INFO.txt"),
-                "STORM_INFO_alt.txt" to File(rootStormDir, "logs/STORM_INFO.txt"),
+                "STORM_INFO.txt" to File(rootStormDir, "logs/STORM_INFO.txt"),
+                "STORM_INFO_legacy.txt" to File(rootStormDir, "logs/!STORM_INFO.txt"),
                 "STORM_INFO_root.txt" to File(rootStormDir, "STORM_INFO.txt"),
                 "vulkan_debug_report.json" to File(rootStormDir, "debug/vulkan_debug_report.json"),
                 "vulkan_debug_report_logs.json" to File(rootStormDir, "logs/vulkan_debug_report.json"),

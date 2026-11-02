@@ -94,6 +94,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -322,10 +323,10 @@ fun PauseMenuOverlay(
     ) {
         Column(
             modifier = Modifier
-                .widthIn(max = 760.dp)
+                .widthIn(max = if (isLandscape) 860.dp else 760.dp)
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(bottom = 16.dp)
+                .padding(bottom = if (isLandscape) 6.dp else 12.dp)
                 .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -333,15 +334,17 @@ fun PauseMenuOverlay(
                 ) { /* consume clicks inside panel */ },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Top Information Bar: Game Icon, Title, Paused, Time, Achievements (at top edge)
+            val horizontalEdge = if (isLandscape) 16.dp else 12.dp
+
+            // Top Information Bar: Game Icon, Title, Paused, Session Telemetry & Resume Button
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (isLandscape) 16.dp else 10.dp, vertical = 6.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .padding(horizontal = horizontalEdge, vertical = if (isLandscape) 3.dp else 4.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(colors.surface)
-                    .border(1.dp, colors.line, RoundedCornerShape(18.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 11.dp, vertical = if (isLandscape) 6.dp else 7.dp),
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -351,7 +354,7 @@ fun PauseMenuOverlay(
                         // Game Icon
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(if (isLandscape) 34.dp else 36.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(colors.surface2)
                                 .border(1.dp, colors.line, RoundedCornerShape(8.dp)),
@@ -369,12 +372,12 @@ fun PauseMenuOverlay(
                                     imageVector = Icons.Filled.VideogameAsset,
                                     contentDescription = null,
                                     tint = colors.green,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         }
 
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(9.dp))
 
                         // Title & Paused info
                         Column(Modifier.weight(1f)) {
@@ -382,7 +385,7 @@ fun PauseMenuOverlay(
                                 text = rom?.let { it.config.customName ?: it.name } ?: stringResource(R.string.pause),
                                 color = colors.text,
                                 fontFamily = Manrope,
-                                fontSize = 14.5.sp,
+                                fontSize = if (isLandscape) 13.5.sp else 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -398,9 +401,9 @@ fun PauseMenuOverlay(
                                         text = stringResource(R.string.pause_paused_label),
                                         color = colors.red,
                                         fontFamily = Manrope,
-                                        fontSize = 8.5.sp,
+                                        fontSize = 8.sp,
                                         fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.6.sp,
+                                        letterSpacing = 0.5.sp,
                                     )
                                 }
                                 val hours = rom?.totalPlayTime?.takeIf { it != Duration.ZERO }?.let { formatHoursLabel(it) }
@@ -410,21 +413,40 @@ fun PauseMenuOverlay(
                                         color = colors.text2,
                                         fontFamily = Manrope,
                                         fontSize = 9.sp,
-                                        modifier = Modifier.padding(start = 8.dp),
+                                        modifier = Modifier.padding(start = 6.dp),
+                                    )
+                                }
+                                if (isLandscape) {
+                                    Text(
+                                        text = buildString {
+                                            append(" • ")
+                                            append(currentTimeStr)
+                                            if (batteryLevel != null) {
+                                                append(" • ")
+                                                append(stringResource(R.string.battery_format, batteryLevel))
+                                            }
+                                            append(" • ")
+                                            append(formattedSession)
+                                        },
+                                        color = colors.text2,
+                                        fontFamily = Manrope,
+                                        fontSize = 9.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
                         }
 
                         // Resume to game pill in the banner
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(colors.surface2)
                                 .border(1.5.dp, colors.green.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
                                 .bouncingClickable(onClick = onResume)
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                                .padding(horizontal = 11.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -432,14 +454,14 @@ fun PauseMenuOverlay(
                                     imageVector = Icons.Filled.PlayArrow,
                                     contentDescription = stringResource(R.string.pause_resume),
                                     tint = colors.green,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(15.dp),
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     text = stringResource(R.string.pause_resume_button),
                                     color = colors.green,
                                     fontFamily = Manrope,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                 )
@@ -447,88 +469,86 @@ fun PauseMenuOverlay(
                         }
                     }
 
-                    // Compact session info bar: System Time (HH:mm) • Battery (%) • Session Duration
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.surface2.copy(alpha = 0.65f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Current System Time
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.AccessTime,
-                                contentDescription = null,
-                                tint = colors.text2,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = currentTimeStr,
-                                color = colors.text,
-                                fontFamily = Manrope,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                            )
-                        }
-
-                        // Battery Percentage
-                        if (batteryLevel != null) {
+                    if (!isLandscape) {
+                        Spacer(Modifier.height(5.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.surface2.copy(alpha = 0.65f))
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Filled.BatteryStd,
+                                    imageVector = Icons.Filled.AccessTime,
                                     contentDescription = null,
-                                    tint = if (batteryLevel <= 20) colors.red else colors.green,
-                                    modifier = Modifier.size(13.dp),
+                                    tint = colors.text2,
+                                    modifier = Modifier.size(12.dp),
                                 )
-                                Spacer(Modifier.width(3.dp))
+                                Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = stringResource(R.string.battery_format, batteryLevel),
+                                    text = currentTimeStr,
                                     color = colors.text,
                                     fontFamily = Manrope,
-                                    fontSize = 10.5.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                 )
                             }
-                        }
 
-                        // Current Session Duration
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.HourglassTop,
-                                contentDescription = null,
-                                tint = colors.text2,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(R.string.pause_session_duration_format, formattedSession),
-                                color = colors.text2,
-                                fontFamily = Manrope,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            if (batteryLevel != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.BatteryStd,
+                                        contentDescription = null,
+                                        tint = if (batteryLevel <= 20) colors.red else colors.green,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = stringResource(R.string.battery_format, batteryLevel),
+                                        color = colors.text,
+                                        fontFamily = Manrope,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.HourglassTop,
+                                    contentDescription = null,
+                                    tint = colors.text2,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.pause_session_duration_format, formattedSession),
+                                    color = colors.text2,
+                                    fontFamily = Manrope,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            if (rom != null) {
+            if (rom != null && !isLandscape) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .padding(horizontal = horizontalEdge, vertical = 3.dp)
+                        .clip(RoundedCornerShape(11.dp))
                         .background(colors.surface2)
-                        .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                        .border(1.dp, colors.line, RoundedCornerShape(11.dp))
                         .clickable {
                             if (onQuickSlotCarouselClick != null) {
                                 onQuickSlotCarouselClick()
@@ -536,7 +556,7 @@ fun PauseMenuOverlay(
                                 onOptionSelected(RomPauseMenuOption.QUICK_SLOT_CAROUSEL)
                             }
                         }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -554,14 +574,14 @@ fun PauseMenuOverlay(
                             imageVector = Icons.Default.Layers,
                             contentDescription = null,
                             tint = colors.green,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(15.dp),
                         )
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             text = stringResource(R.string.quick_slot_carousel_title),
                             color = colors.text,
                             fontFamily = Manrope,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -575,106 +595,134 @@ fun PauseMenuOverlay(
                         text = activeQuickSlotLabel,
                         color = colors.green,
                         fontFamily = Manrope,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                     )
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
-
             val displayedOptions = remember(pauseMenu.options, isExtendedPauseMenuEnabled, customizationVersion) {
                 store.getVisibleOrderedOptions(pauseMenu.options, isExtendedPauseMenuEnabled)
             }
 
-            val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
-            val categorizedOptions = remember(displayedOptions) {
-                PauseMenuCategory.values().mapNotNull { cat ->
-                    val items = displayedOptions.filter { getOptionCategory(it) == cat }
-                    if (items.isNotEmpty()) cat to items else null
-                }
+            val gridColumns = if (isLandscape) {
+                if (configuration.screenWidthDp >= 640) 5 else 4
+            } else {
+                3
             }
 
-            // Options Grid (Structured by Categories)
+            // DuckStation-Style Compact Customizable Tile Grid (Zero Section Headers, Zero Scroll)
             LazyVerticalGrid(
-                columns = GridCells.Fixed(if (isLandscape) 3 else 1),
+                columns = GridCells.Fixed(gridColumns),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = false)
-                    .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 6.dp),
+                    .padding(horizontal = horizontalEdge, vertical = 4.dp),
             ) {
-                categorizedOptions.forEach { (category, categoryOptions) ->
-                    item(
-                        span = { GridItemSpan(maxLineSpan) },
-                        key = "header_${category.name}",
-                    ) {
-                        PauseMenuSectionHeader(title = category.title(isRu))
-                    }
+                items(displayedOptions, key = { it.toString() }) { option ->
+                    val slowMoBadge = if (option == RomPauseMenuOption.SLOW_MOTION) {
+                        val formatted = String.format(java.util.Locale.US, "%.2f", slowMotionSpeed).trimEnd('0').trimEnd('.')
+                        "${formatted}×"
+                    } else null
 
-                    items(categoryOptions, key = { it.toString() }) { option ->
-                        val slowMoBadge = if (option == RomPauseMenuOption.SLOW_MOTION) {
-                            val formatted = String.format(java.util.Locale.US, "%.2f", slowMotionSpeed).trimEnd('0').trimEnd('.')
-                            "${formatted}×"
-                        } else null
-
-                        PauseOptionRow(
-                            label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
-                            icon = pauseOptionIcon(option),
-                            badge = slowMoBadge,
-                            highlighted = false,
-                            destructive = isDestructive(option),
-                            focusRequester = if (option == displayedOptions.firstOrNull()) resumeFocusRequester else null,
-                            onClick = {
-                                if (needsConfirmation(option)) {
-                                    confirmingOption = option
-                                } else {
-                                    onOptionSelected(option)
-                                }
-                            },
-                        )
-                    }
+                    PauseOptionTile(
+                        label = pauseMenu.labelOverride(option) ?: stringResource(option.textResource),
+                        icon = pauseOptionIcon(option),
+                        badge = slowMoBadge,
+                        isLandscape = isLandscape,
+                        destructive = isDestructive(option),
+                        focusRequester = if (option == displayedOptions.firstOrNull()) resumeFocusRequester else null,
+                        onClick = {
+                            if (needsConfirmation(option)) {
+                                confirmingOption = option
+                            } else {
+                                onOptionSelected(option)
+                            }
+                        },
+                    )
                 }
             }
 
-            // Bottom Controls: Extended Pause Menu Toggle + Submenu Customizer Pill
+            // Bottom Controls: Quick Slot (in Landscape) + Extended Pause Menu Toggle + Tile Customizer
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (isLandscape) 20.dp else 14.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = horizontalEdge, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (rom != null && isLandscape) {
+                    val activeQuickSlotLabel = if (activeQuickSlot in 1..8) {
+                        stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
+                    } else {
+                        stringResource(R.string.quick_slot_default_slot_header)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(colors.surface2)
+                            .border(1.dp, colors.line, RoundedCornerShape(11.dp))
+                            .clickable {
+                                if (onQuickSlotCarouselClick != null) {
+                                    onQuickSlotCarouselClick()
+                                } else {
+                                    onOptionSelected(RomPauseMenuOption.QUICK_SLOT_CAROUSEL)
+                                }
+                            }
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Text(
+                            text = activeQuickSlotLabel,
+                            color = colors.green,
+                            fontFamily = Manrope,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
+                }
+
                 if (onToggleExtendedPauseMenu != null) {
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .height(if (isLandscape) 38.dp else 40.dp)
+                            .clip(RoundedCornerShape(11.dp))
                             .background(colors.surface2)
-                            .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                            .border(1.dp, colors.line, RoundedCornerShape(11.dp))
                             .clickable { onToggleExtendedPauseMenu(!isExtendedPauseMenuEnabled) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.weight(1f, fill = false),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.DashboardCustomize,
                                 contentDescription = null,
                                 tint = if (isExtendedPauseMenuEnabled) colors.green else colors.text2,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(15.dp),
                             )
                             Text(
                                 text = stringResource(R.string.extended_pause_menu_toggle),
                                 color = colors.text,
                                 fontFamily = Manrope,
-                                fontSize = 12.sp,
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -696,29 +744,29 @@ fun PauseMenuOverlay(
 
                 Box(
                     modifier = Modifier
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .height(if (isLandscape) 38.dp else 40.dp)
+                        .clip(RoundedCornerShape(11.dp))
                         .background(colors.surface2)
-                        .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                        .border(1.dp, colors.line, RoundedCornerShape(11.dp))
                         .bouncingClickable { showCustomizer = true }
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Tune,
                             contentDescription = null,
                             tint = colors.green,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(15.dp),
                         )
                         Text(
                             text = stringResource(R.string.v792_pause_customizer_btn),
                             color = colors.text,
                             fontFamily = Manrope,
-                            fontSize = 12.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
@@ -758,90 +806,86 @@ fun PauseMenuOverlay(
 }
 
 @Composable
-private fun PauseOptionRow(
+private fun PauseOptionTile(
     label: String,
     icon: ImageVector,
     badge: String? = null,
-    highlighted: Boolean,
-    destructive: Boolean,
+    isLandscape: Boolean = false,
+    destructive: Boolean = false,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
 ) {
     val colors = watermelon
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(13.dp)
 
     val bg = when {
         isFocused -> colors.surface3
-        highlighted -> colors.greenDim
+        destructive -> colors.red.copy(alpha = if (colors.isDark) 0.10f else 0.07f)
         else -> colors.surface2
     }
     val border = when {
         isFocused -> colors.green
-        highlighted -> colors.green.copy(alpha = 0.7f)
-        destructive -> colors.red.copy(alpha = 0.35f)
+        destructive -> colors.red.copy(alpha = 0.40f)
         else -> colors.line
     }
-    val contentColor = when {
-        destructive -> colors.red
-        highlighted -> colors.green
-        else -> colors.text
-    }
+    val iconColor = if (destructive) colors.red else colors.green
+    val textColor = if (destructive) colors.red else colors.text
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
+            .height(if (isLandscape) 52.dp else 60.dp)
             .clip(shape)
             .background(bg)
-            .border(1.dp, border, shape)
+            .border(if (isFocused) 1.5.dp else 1.dp, border, shape)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
             .bouncingClickable(interactionSource = interactionSource, onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        if (highlighted) {
-            Box(
-                Modifier
-                    .width(3.dp)
-                    .height(20.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(colors.green),
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.height(if (isLandscape) 2.dp else 3.dp))
+            Text(
+                text = label,
+                color = textColor,
+                fontFamily = Manrope,
+                fontSize = if (isLandscape) 10.sp else 10.5.sp,
+                lineHeight = if (isLandscape) 11.5.sp else 12.sp,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (destructive) colors.red else if (highlighted) colors.green else colors.text2,
-            modifier = Modifier.size(19.dp),
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = label,
-            color = contentColor,
-            fontFamily = Manrope,
-            fontSize = 14.sp,
-            fontWeight = if (highlighted || isFocused) FontWeight.Bold else FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+
         if (badge != null) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .align(Alignment.TopEnd)
+                    .clip(RoundedCornerShape(5.dp))
                     .background(colors.greenDim)
-                    .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .border(1.dp, colors.green.copy(alpha = 0.55f), RoundedCornerShape(5.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = badge,
                     color = colors.green,
                     fontFamily = WatermelonMono,
-                    fontSize = 10.sp,
+                    fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
