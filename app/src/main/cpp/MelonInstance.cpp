@@ -2783,10 +2783,12 @@ u32 MelonInstance::runFrame()
     if (currentRenderer == Renderer::Vulkan
         && UsesVulkanFastPath(vulkanSessionProfile.get()))
         fillCaptureStagingFromRenderer();
+    const bool frontBufferScreenSwap =
+        nds->GPU.GetFrontBufferScreenSwap(nds->GPU.FrontBuffer);
     const VulkanFrameTailInputs tailInputs {
         nds->GPU.FrontBuffer,
-        nds->GPU.GPU3D.RenderScreenSwapAt3D,
-        (nds->PowerControl9 & (1u << 15u)) != 0u,
+        frontBufferScreenSwap,
+        frontBufferScreenSwap,
         (nds->CPUStop & CPUStop_Sleep) != 0,
         rewindManager.ShouldCaptureState(frame + 1),
     };

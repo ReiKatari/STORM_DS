@@ -112,6 +112,9 @@ void DSi_TSC::SetTouchCoords(u16 x, u16 y)
         TouchX <<= 4;
         TouchY <<= 4;
 
+        TouchX |= 0x8000;
+        TouchY |= 0x8000;
+
         Bank3Regs[0x09] = 0x80;
         //Bank3Regs[0x09] |= 0x80;
         Bank3Regs[0x0E] &= ~0x01;
@@ -161,7 +164,8 @@ void DSi_TSC::Write(u8 val)
                 if (id & 0x01) Data = TouchX >> 8;
                 else           Data = TouchX & 0xFF;
 
-                TouchX &= 0x7FFF;
+                if (Bank3Regs[0x0E] & 0x01)
+                    TouchX &= 0x7FFF;
             }
             else if (id < 0x15)
             {
@@ -170,7 +174,8 @@ void DSi_TSC::Write(u8 val)
                 if (id & 0x01) Data = TouchY >> 8;
                 else           Data = TouchY & 0xFF;
 
-                TouchY &= 0x7FFF; // checkme
+                if (Bank3Regs[0x0E] & 0x01)
+                    TouchY &= 0x7FFF; // checkme
             }
             else
             {

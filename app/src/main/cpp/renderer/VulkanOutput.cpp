@@ -5312,7 +5312,7 @@ bool VulkanOutput::prepareFrameForPresentation(
         && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
         && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u;
     bool liveSourceScreenSwap = resource.screenSwap;
-    if (false && topStructuredSlotUsesPreviousWhileBottom2dOnly)
+    if (topStructuredSlotUsesPreviousWhileBottom2dOnly)
     {
         liveSourceScreenSwap = false;
     }
@@ -5424,7 +5424,7 @@ bool VulkanOutput::prepareFrameForPresentation(
         currentBackendIsGraphics
         && !frameHasExplicitCurrent3dSource
         && (topUsesScreenWideCaptureBackedComp4 || bottomUsesScreenWideCaptureBackedComp4);
-    if (false && needsDsTimedCaptureBackedComp4Source
+    if (needsDsTimedCaptureBackedComp4Source
         && topUsesScreenWideCaptureBackedComp4 != bottomUsesScreenWideCaptureBackedComp4)
     {
         liveSourceScreenSwap = topUsesScreenWideCaptureBackedComp4;
@@ -5451,7 +5451,7 @@ bool VulkanOutput::prepareFrameForPresentation(
     {
         regularComp7PackedOwnerDebugActive = false;
     }
-    if (false && class4AsymmetricBottomDominantPair)
+    if (class4AsymmetricBottomDominantPair)
     {
         if (!class4AsymmetricCadenceActive)
         {
@@ -7772,8 +7772,7 @@ bool VulkanOutput::prepareFrameForPresentation(
             || topEmptyStructured2dReplayComposed
             || topPlainStructuredSlotDuringOppositeNoCurrentHandoff
             || topRegularComp7BottomComp2ReplayComposed
-            || topMissingPreparedCaptureReplayComposed
-            || (softPackedSnapshot.valid && resource.screenSwapToggledFromPrevious))
+            || topMissingPreparedCaptureReplayComposed)
         && topHasRecentComposedFrame;
     resource.replayBottomComposedFromPrevious =
         currentBackendIsGraphics
@@ -7788,8 +7787,7 @@ bool VulkanOutput::prepareFrameForPresentation(
             || bottomPlainStructuredComp7ReplayComposed
             || bottomEmptyStructured2dReplayComposed
             || bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff
-            || bottomMissingPreparedCaptureReplayComposed
-            || (softPackedSnapshot.valid && resource.screenSwapToggledFromPrevious))
+            || bottomMissingPreparedCaptureReplayComposed)
         && bottomHasRecentComposedFrame;
     resource.replayTopComposedFromLatest = topRegularComp7BottomComp2ReplayComposed;
     resource.previousTopComposedFrame =
