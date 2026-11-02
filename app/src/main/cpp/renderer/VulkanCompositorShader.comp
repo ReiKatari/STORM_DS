@@ -789,8 +789,6 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 && structuredFullRegularCapture3d \
                 && !structured2DAbove \
                 && !structured2DProtectedBlackOwned \
-                && (screenOwnsLive3D || forceLive3dCompMode7) \
-                && !screenHasPrevious3D \
                 && screenMatchesCapture3DSource \
                 && capture3DHasVisibleColor \
                 && !pixel3DHasVisibleColor) \
@@ -883,7 +881,7 @@ Rgba6 FUNC_NAME(int sourceX, int dsY, int scaledX, int scaledY, uint safeScale) 
                 && (pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
-                if (compMode <= 4 || belowIs3DSlot) \
+                if (compMode <= 4 || compMode == 7 || belowIs3DSlot) \
                 { \
                     composed = pixel3D; \
                     if (compMode == 4) \

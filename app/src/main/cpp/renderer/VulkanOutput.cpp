@@ -2302,8 +2302,7 @@ bool VulkanOutput::recordAccumulateMerge(
         && !resource.preparedCapture3dRgbaValid
         && !resource.capture3dSourceScreenSwapHintValid
         && !resource.alternatingLive3dPingPong
-        && !resource.sharedCaptureReplayPairStable
-        && VulkanRuntime::GetCompositorMode() != VulkanRuntime::CompositorMode::Precise;
+        && !resource.sharedCaptureReplayPairStable;
     const bool resolvedBottomPackedPair =
         screenProvidesResolvedMixedComp4Comp7(resource.topScreenStats)
         && screenProvidesResolvedMixedRegularComp4Comp7(resource.bottomScreenStats);
@@ -2319,8 +2318,7 @@ bool VulkanOutput::recordAccumulateMerge(
         && !resource.sourceAFullHighresOnlyTop
         && !resource.sourceAFullHighresOnlyBottom
         && !resource.preparedCapture3dRgbaValid
-        && resolvedBottomPackedPair
-        && VulkanRuntime::GetCompositorMode() != VulkanRuntime::CompositorMode::Precise;
+        && resolvedBottomPackedPair;
     const bool clearSparseResolvedTopPackedHandoff =
         resource.snapshotFromGraphicsBackend
         && resource.hasSoftPackedDebugData
@@ -2333,8 +2331,7 @@ bool VulkanOutput::recordAccumulateMerge(
         && !resource.captureBackedClass4Only
         && !resource.sourceAFullHighresOnlyTop
         && !resource.sourceAFullHighresOnlyBottom
-        && !resource.preparedCapture3dRgbaValid
-        && VulkanRuntime::GetCompositorMode() != VulkanRuntime::CompositorMode::Precise;
+        && !resource.preparedCapture3dRgbaValid;
     const bool canCopyPureHighres =
         fastHighresOnly
         || (screenStats.Plane0VisiblePixels == 0u
@@ -3518,7 +3515,7 @@ bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
     if (topPacked == nullptr || bottomPacked == nullptr)
         return false;
 
-    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
+    if (VulkanRuntime::GetDebugView() != VulkanRuntime::DebugView::None)
     {
         for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
         {
@@ -3837,7 +3834,7 @@ bool VulkanOutput::updateCompositorPackedBuffersFastPath(
     if (!softPackedSnapshot.valid)
         return false;
 
-    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise)
+    if (VulkanRuntime::GetDebugView() != VulkanRuntime::DebugView::None)
     {
         return updateCompositorPackedBuffersCompatibility(frame, resource, softPackedSnapshot);
     }
@@ -5335,12 +5332,15 @@ bool VulkanOutput::prepareFrameForPresentation(
     else if (asymmetricFullRegularComp7
         && !preservePackedOwnerForPlainRegularComp7Pair)
     {
-        liveSourceScreenSwap = topUsesFullRegularComp7;
+        liveSourceScreenSwap = !topUsesFullRegularComp7;
     }
     else if (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d
         && !preservePackedOwnerForPlainRegularComp7Pair)
     {
-        liveSourceScreenSwap = topUsesCurrentCapture3d;
+        liveSourceScreenSwap =
+            (topUsesVramCapture3d != bottomUsesVramCapture3d)
+                ? topUsesVramCapture3d
+                : !topUsesRegularCapture3d;
     }
     else if (topUsesVramCapture3d
         && !topUsesRegularCapture3d
@@ -5718,7 +5718,9 @@ bool VulkanOutput::prepareFrameForPresentation(
             && !bottomCanUseAccumulatedHighres
             && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == kScreenHeight
             && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u;
-        const bool accumulateRequestParityIsTop = directPresentationSourceScreenSwap;
+        const bool accumulateRequestParityIsTop = currentTopFullCaptureRequestTuple
+            ? directPresentationSourceScreenSwap
+            : recycledSnapshotParityIsTop;
         const bool accumulateCurrentTopHighres =
             ((accumulateRequestParityIsTop && topCanUseAccumulatedHighres)
                 || bottomVramToTopStructuredComp7Replay)
@@ -12060,8 +12062,7 @@ bool VulkanOutput::recordDirectPresentationPrep(
     resource.sameBankMode2CacheWriteBank = 0xFFu;
     resource.sameBankMode2CacheWriteIdentity = {};
     const bool needsRenderer3dSource =
-        renderer3D.HasColorTarget()
-        || allowRetainedLiveSource
+        allowRetainedLiveSource
         || accumulateTopHighres
         || accumulateBottomHighres
         || replaceAccumulatedHighres;

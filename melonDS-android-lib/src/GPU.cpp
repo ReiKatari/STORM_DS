@@ -18,6 +18,7 @@
 
 #include <string.h>
 #include "NDS.h"
+#include "DSi.h"
 #include "GPU.h"
 
 #include "ARMJIT.h"
@@ -946,6 +947,8 @@ void GPU::StartFrame() noexcept
 
 void GPU::StartHBlank(u32 line) noexcept
 {
+    if (NDS.ConsoleType == 1)
+        static_cast<DSi&>(NDS).SyncNtrIpcMirror();
     DispStat[0] |= (1<<1);
     DispStat[1] |= (1<<1);
 

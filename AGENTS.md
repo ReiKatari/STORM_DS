@@ -276,3 +276,46 @@
 - **MiniAudio и SoLoud (Микросекундный тактильный аудио-отклик интерфейса)**:
   - Интеграция ультра-легковесных аудио-движков MiniAudio / SoLoud с задержкой воспроизведения звука менее 5 миллисекунд.
   - Озвучивание ключевых взаимодействий: мягкий механический щелчок переключателей, футуристичный свист при смене вкладок, басовитый тон запуска игры, звуковое подтверждение шорткатов. Все звуковые сэмплы кэшируются в оперативной памяти для мгновенного отклика.
+
+---
+
+## 10. Золотые инварианты эмуляции и рендеринга (Неприкосновенные исправления)
+
+### Правило 1: Неприкосновенность конвейера AlphaBounce (`KAL*`, `KBO*` — DSiWare)
+Следующие механизмы обеспечивают 100% работоспособность графики, загрузки и сенсорного ввода в **AlphaBounce** и **КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ к удалению, отключению или регрессии**:
+1. **DSi DirectBoot Firmware Touch Calibration (`melonDS-android-lib/src/SPI.cpp` — `FirmwareMem::SetupDirectBoot()`)**:
+   - Цикл копирования пользовательских настроек прошивки (`UserSettings`) в `0x027FFC80` и `0x02FFFC80` обязан копировать все `0x74` байта (`for (u32 i = 0; i < 0x74; i += 4)`), включая `UpdateCounter` (`+0x70`) и `CRC16 Checksum` (`+0x72`). Урезание цикла до `0x70` ломает инициализацию калибровки тачскрина в DSiWare SDK (`SPI_TpInit`).
+2. **Чистые координаты TSC в DSi-режиме (`melonDS-android-lib/src/DSi_SPI_TSC.cpp`)**:
+   - В `DSi_TSC::SetTouchCoords()` при касании (`touching == true`) запрещено выставлять бит `0x8000` (`TouchX |= 0x8000; TouchY |= 0x8000;`), так как `0x8000` в 12-битных АЦП-регистрах TSC означает состояние «перо поднято» (`pen-up`). В `DSi_TSC::Write()` очистка `TouchX &= 0x7FFF; TouchY &= 0x7FFF;` при `DataPos == 1` должна выполняться безусловно.
+3. **Двунаправленная синхронизация зеркала NTR IPC с поддержкой JIT FastMem (`melonDS-android-lib/src/DSi.h`, `DSi.cpp`, `GPU.cpp`)**:
+   - Метод `DSi::SyncNtrIpcMirror()` (вызываемый на каждом сканлайне в `GPU::StartHBlank()`) через теневые буферы `NtrIpcShadowC80[32]` и `NtrIpcShadowF80[32]` синхронизирует области `0x027FFC80..0x027FFFCF` ↔ `0x02FFFC80..0x02FFFCFF` и `0x027FFF80..0x027FFFFF` ↔ `0x02FFFF80..0x02FFFFFF` при прямых записях через JIT FastMem в обход `DSi::ARM7Write16/32`.
+4. **Запись захвата в VRAM и VRAM Display для гибридных игр (`melonDS-android-lib/src/GPU2D_Soft.cpp`, `GPU3D_Vulkan.cpp`)**:
+   - В `SoftRenderer::DoCapture()` флаг `canUsePure3DStructuredCapture` обязан оставаться `false`, чтобы 16-битные пиксели `RGBA5551` всегда записывались в банки DS VRAM (`GPU.VRAM[vramBank]`) и взводился `HasLastDebugCapture3dSource` для вывода в `Display Mode 2 (VRAM Display)`.
+   - В `VulkanRenderer3D::BlitActiveBackend()` вызов `submitGraphicsCaptureExportForCurrentFrame()` и синхронизация `ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint` обязаны сохраняться.
+5. **Полноценное обновление буферов композитора в `CompositorMode::Precise` (`app/src/main/cpp/renderer/VulkanOutput.cpp`)**:
+   - В `VulkanOutput::updateCompositorPackedBuffers()` и `updateCompositorPackedBuffersFastPath()` ранний выход (`return`) допускается **только** при `VulkanRuntime::GetDebugView() != VulkanRuntime::DebugView::None`, и никогда по условию `GetCompositorMode() == CompositorMode::Precise`.
+
+
+### Правило 2: Инварианты 30 Гц чередования экранов и структурированного 2D/3D захвата (`Mario vs. DK: Minis March Again!`, `Legends of Exidia`, `Soul of Darkness`, `Anonymous Notes 1–4`)
+Для предотвращения мерцания 30 Гц, потери графики и перекрытия 3D-сцены чёрным 2D-слоем в играх с чередованием экранов и VRAM-захватом **строго запрещено нарушать следующие 8 инвариантов**:
+1. **Синхронизация фазы `screenSwap` по `FrontBufferScreenSwap[FrontBuffer]` (`app/src/main/cpp/MelonInstance.cpp`, `GPU3D.cpp`)**:
+   - На `VCount == 215` (`GPU3D::VCount215`) `RenderScreenSwapAt3D` обязан считывать `(NDS.PowerControl9 & (1u << 15)) != 0`, так как `VBlank IRQ` на `VCount == 192` уже выставил бит 15 `POWCNT1` для следующего видимого кадра (`VCount = 0..191`).
+   - В `MelonInstance.cpp` при формировании `VulkanFrameTailInputs tailInputs` в конце кадра (`VCount == 262`) поля `preparedFrameScreenSwap` и `packedFrameScreenSwap` обязаны передавать зафиксированное на `VCount == 191` значение `nds->GPU.GetFrontBufferScreenSwap(nds->GPU.FrontBuffer)` (а не `RenderScreenSwapAt3D` или `PowerControl9`, которые после `VBlank` уже переключены на следующий кадр и инвертированы на 180°).
+2. **Корректный выбор живого 3D-экрана (`Engine A`) в `liveSourceScreenSwap` (`app/src/main/cpp/renderer/VulkanOutput.cpp`)**:
+   - Поскольку `FullRegularComp7` и `RegularCaptureUses3d` маркируют захваченный экран (а не живой `Engine A`), при `asymmetricFullRegularComp7` живой 3D-экран равен `liveSourceScreenSwap = !topUsesFullRegularComp7;`, а при `topUsesCurrentCapture3d != bottomUsesCurrentCapture3d` равен `(topUsesVramCapture3d != bottomUsesVramCapture3d) ? topUsesVramCapture3d : !topUsesRegularCapture3d;`.
+3. **Запрет отбрасывания `pixel3D` в шейдерах композитора при `structured2DSlot && compMode == 7` (`VulkanCompositorShader.comp`, `VulkanCompositorCompatibilityShader.comp`, `VulkanCompositorShaderData.h`, `VulkanCompositorCompatibilityShaderData.h`)**:
+   - В блоке `else if (structured2DSlot)` (`(val3.a & 0x40) != 0`) условие вывода `pixel3D` обязано включать `compMode == 7`: `if (compMode <= 4 || compMode == 7 || belowIs3DSlot)` (иначе при отображении захваченного 3D через регулярный BG в `compMode == 7`, где маркер `0x40` хранится в `control.a`, а `below2D` равен `0`, шейдер отбрасывает `pixel3D` и выводит чёрный экран).
+   - Подстановка `capture3D` при `!pixel3DHasVisibleColor` в `compMode == 7 && structuredFullRegularCapture3d` должна выполняться на любом экране с `screenMatchesCapture3DSource && capture3DHasVisibleColor` (без блокировки по `(screenOwnsLive3D || forceLive3dCompMode7) && !screenHasPrevious3D`).
+4. **Запрет переноса `previousPlane0` и `protectedBlack` поверх 3D в `carryPreviousFullRegularComp7Overlay` и `carryPreviousTemporalOverlayPixels` (`app/src/main/cpp/MelonInstance.cpp`)**:
+   - Обе функции обязаны немедленно выходить (`return 0;`) при смене фазы чередования (`previousSnapshot.screenSwapLatched != lastSoftPackedFrameSnapshot.screenSwapLatched`).
+   - В `carryPreviousFullRegularComp7Overlay()` разрешается переносить только видимые (`packedPixelHasVisibleColor`) пиксели верхнего слоя (`previousStructuredAbove` из `previousPlane1`), и строго запрещено переносить `previousStructured2DOnly` (`previousPlane0`) или сплошной чёрный `previousProtectedBlack` в `plane1` поверх 3D.
+   - В `screenHasExplicitCompositedContent()` обязательно учитывать `StructuredSlotPixels`, `RegularCaptureUses3dLines` и `VramCaptureUses3dLines`, чтобы чистые 3D-экраны не перезаписывались старым 2D-кэшем в `shouldRepair*/shouldReplace*`.
+5. **Обязательное ожидание `FrameFence` и приоритет контекстов с `SubmittedPolygonCount > 0` при экспорте захвата (`melonDS-android-lib/src/GPU3D_Vulkan.cpp`)**:
+   - В `submitGraphicsCaptureExportForCurrentFrame()` флаг `PendingCaptureLineRequiresPrimaryFence` обязан быть `true` безусловно (так как `CommandBuffer` всегда отправляется с `FrameFence`).
+   - В `SetCaptureScreenSwapHint()` и `submitGraphicsCaptureExportForCurrentFrame()` выбор контекста обязан отдавать приоритет контекстам с `SubmittedPolygonCount > 0u`, а при отсутствии свежего рендера для текущей чётности (`!IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u)`) разрешать использование последнего валидного захвата в `GetLineActiveBackend`, `PrepareCaptureFrameActiveBackend`, `copyReadyCaptureLineToLineCache` и `restoreLastValidExactCaptureToLineCache`.
+6. **Сохранение `belowPlane` (`originalVal2`/`originalVal3`) без продвижения в `abovePlane` (`melonDS-android-lib/src/GPU2D_Soft.cpp`)**:
+   - В `StoreStructuredVulkan2DPixel()` и `StoreStructuredVulkan2DCapturePixel()`: при `slotInPlane0 || captureBackedSlotInPlane0` нижний слой `belowPlane` берётся из `originalVal2`; при `slotInPlane1 || captureBackedSlotInPlane1` — из `originalVal3`; при `slotInPlane2` — `belowPlane = 0u`. Строго запрещено продвигать `originalVal2` в `abovePlane` (`plane1`).
+7. **Запрет ложной пометки чистых 2D-захватов как 3D-слотов при пустом `_3DLine` (`melonDS-android-lib/src/GPU2D_Soft.cpp`)**:
+   - В `SoftRenderer::DoCapture()` установка `CaptureLineUses3d[line] = 1u` и запись 3D-слотов в `StructuredVulkan2DCapturePlanes` допускаются только при наличии на сканлайне хотя бы одного непрозрачного 3D-пикселя (`(_3DLine[i] >> 24u) != 0u`) или при `allowUnclassifiedExternal3DSlot`.
+8. **Профиль совместимости DSiWare Gameloft (`app/src/main/assets/vulkan_compat.json`)**:
+   - Семейство `gameloft_dsiware_exidia_sod` обязано включать все региональные коды *Legends of Exidia* (`KLE*`) и *Soul of Darkness* (`KSD*`, `KSK*`, включая `KSKE`, `KSKP`, `KSKJ`).

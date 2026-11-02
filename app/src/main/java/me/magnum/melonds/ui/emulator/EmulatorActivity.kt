@@ -1748,6 +1748,7 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.surfaceMain.visibility = View.VISIBLE
                             binding.viewLayoutControls.visibility = View.VISIBLE
                             backPressedCallback.isEnabled = true
+                            (frameRenderCoordinator as? me.magnum.melonds.ui.emulator.render.VulkanFrameRenderCoordinator)?.reattachPendingSurfaces()
                             scheduleStartupPresentationRefreshes()
                             if (
                                 !activeOverlays.hasActiveOverlays() &&
@@ -3239,6 +3240,7 @@ class EmulatorActivity : AppCompatActivity() {
                     return
                 }
 
+                (frameRenderCoordinator as? me.magnum.melonds.ui.emulator.render.VulkanFrameRenderCoordinator)?.reattachPendingSurfaces()
                 updateRendererScreenAreas()
                 presentation?.updateRendererScreenAreas()
 

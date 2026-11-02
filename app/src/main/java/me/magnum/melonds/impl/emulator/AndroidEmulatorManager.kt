@@ -1618,7 +1618,9 @@ class AndroidEmulatorManager(
     }
 
     private fun setupEmulator(emulatorConfiguration: EmulatorConfiguration, customVulkanDriverName: String? = null) {
+        runCatching { MelonEmulator.stopEmulation() }
         if (emulatorConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN) {
+            runCatching { me.magnum.melonds.impl.AdrenoVulkanDriverManager(context, settingsRepository).updateActiveDriverPipelineCachePath() }
             MelonDSAndroidInterface.configureVulkanDriver(
                 getVulkanDriverConfigurationForRom(customVulkanDriverName)
             )
@@ -1650,9 +1652,9 @@ class AndroidEmulatorManager(
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
             showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
-            fastForwardSpeedMultiplier = rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier,
-            frameLimitSpeedMultiplier = if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier,
-            arm9OverclockMultiplier = rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier,
+            fastForwardSpeedMultiplier = (rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier).let { if (it <= 0f) 1.0f else it },
+            frameLimitSpeedMultiplier = (if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier).let { if (it <= 0f) 1.0f else it },
+            arm9OverclockMultiplier = (rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier).coerceAtLeast(1),
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),

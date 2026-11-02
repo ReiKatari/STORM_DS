@@ -319,14 +319,35 @@ fun PauseMenuOverlay(
                     false
                 }
             },
-        contentAlignment = Alignment.BottomCenter,
+        contentAlignment = if (isLandscape) Alignment.Center else Alignment.BottomCenter,
     ) {
+        val displayedOptions = remember(pauseMenu.options, isExtendedPauseMenuEnabled, customizationVersion) {
+            store.getVisibleOrderedOptions(pauseMenu.options, isExtendedPauseMenuEnabled)
+        }
+        val gridColumns = if (isLandscape) {
+            when {
+                displayedOptions.size <= 9 -> 3
+                displayedOptions.size <= 12 -> 4
+                else -> 5
+            }
+        } else {
+            3
+        }
+        val panelMaxWidth = if (isLandscape) {
+            when (gridColumns) {
+                3 -> 480.dp
+                4 -> 560.dp
+                else -> 650.dp
+            }
+        } else {
+            460.dp
+        }
         Column(
             modifier = Modifier
-                .widthIn(max = if (isLandscape) 860.dp else 760.dp)
+                .widthIn(max = panelMaxWidth)
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(bottom = if (isLandscape) 6.dp else 12.dp)
+                .padding(bottom = if (isLandscape) 4.dp else 12.dp)
                 .focusProperties { canFocus = false }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -576,12 +597,12 @@ fun PauseMenuOverlay(
                             tint = colors.green,
                             modifier = Modifier.size(15.dp),
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             text = stringResource(R.string.quick_slot_carousel_title),
                             color = colors.text,
                             fontFamily = Manrope,
-                            fontSize = 12.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -589,34 +610,26 @@ fun PauseMenuOverlay(
                         )
                     }
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
                     Text(
                         text = activeQuickSlotLabel,
                         color = colors.green,
                         fontFamily = Manrope,
-                        fontSize = 11.5.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                     )
                 }
             }
 
-            val displayedOptions = remember(pauseMenu.options, isExtendedPauseMenuEnabled, customizationVersion) {
-                store.getVisibleOrderedOptions(pauseMenu.options, isExtendedPauseMenuEnabled)
-            }
-
-            val gridColumns = if (isLandscape) {
-                if (configuration.screenWidthDp >= 640) 5 else 4
-            } else {
-                3
-            }
+            val compactHeight = displayedOptions.size > 12
 
             // DuckStation-Style Compact Customizable Tile Grid (Zero Section Headers, Zero Scroll)
             LazyVerticalGrid(
                 columns = GridCells.Fixed(gridColumns),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = false)
@@ -633,6 +646,7 @@ fun PauseMenuOverlay(
                         icon = pauseOptionIcon(option),
                         badge = slowMoBadge,
                         isLandscape = isLandscape,
+                        compactHeight = compactHeight,
                         destructive = isDestructive(option),
                         focusRequester = if (option == displayedOptions.firstOrNull()) resumeFocusRequester else null,
                         onClick = {
@@ -646,7 +660,7 @@ fun PauseMenuOverlay(
                 }
             }
 
-            // Bottom Controls: Quick Slot (in Landscape) + Extended Pause Menu Toggle + Tile Customizer
+            // Bottom Controls: Back Button (in Landscape) + Quick Slot (in Landscape) + Extended Pause Menu Toggle + Tile Customizer
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -654,6 +668,13 @@ fun PauseMenuOverlay(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (isLandscape) {
+                    UnifiedBackButton(
+                        onClick = onResume,
+                        size = 38.dp,
+                        iconSize = 18.dp,
+                    )
+                }
                 if (rom != null && isLandscape) {
                     val activeQuickSlotLabel = if (activeQuickSlot in 1..8) {
                         stringResource(R.string.quick_slot_active_slot_header, activeQuickSlot)
@@ -773,11 +794,14 @@ fun PauseMenuOverlay(
                 }
             }
 
-            // Unified Bottom Center Back Arrow
-            UnifiedBackButton(
-                onClick = onResume,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
+            if (!isLandscape) {
+                Spacer(Modifier.height(4.dp))
+                // Unified Bottom Center Back Arrow
+                UnifiedBackButton(
+                    onClick = onResume,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
         }
 
         if (showCustomizer) {
@@ -811,6 +835,7 @@ private fun PauseOptionTile(
     icon: ImageVector,
     badge: String? = null,
     isLandscape: Boolean = false,
+    compactHeight: Boolean = false,
     destructive: Boolean = false,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
@@ -818,31 +843,37 @@ private fun PauseOptionTile(
     val colors = watermelon
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(13.dp)
+    val shape = RoundedCornerShape(14.dp)
 
     val bg = when {
         isFocused -> colors.surface3
-        destructive -> colors.red.copy(alpha = if (colors.isDark) 0.10f else 0.07f)
+        destructive -> androidx.compose.ui.graphics.lerp(colors.surface2, colors.red, if (colors.isDark) 0.16f else 0.12f)
         else -> colors.surface2
     }
     val border = when {
         isFocused -> colors.green
-        destructive -> colors.red.copy(alpha = 0.40f)
+        destructive -> colors.red.copy(alpha = if (colors.isDark) 0.45f else 0.55f)
         else -> colors.line
     }
     val iconColor = if (destructive) colors.red else colors.green
     val textColor = if (destructive) colors.red else colors.text
+    val tileHeight = when {
+        isLandscape && compactHeight -> 60.dp
+        isLandscape -> 66.dp
+        compactHeight -> 62.dp
+        else -> 68.dp
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (isLandscape) 52.dp else 60.dp)
+            .height(tileHeight)
             .clip(shape)
             .background(bg)
             .border(if (isFocused) 1.5.dp else 1.dp, border, shape)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
             .bouncingClickable(interactionSource = interactionSource, onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -854,15 +885,15 @@ private fun PauseOptionTile(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconColor,
-                modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                modifier = Modifier.size(if (compactHeight) 20.dp else 22.dp),
             )
-            Spacer(Modifier.height(if (isLandscape) 2.dp else 3.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = label,
                 color = textColor,
                 fontFamily = Manrope,
-                fontSize = if (isLandscape) 10.sp else 10.5.sp,
-                lineHeight = if (isLandscape) 11.5.sp else 12.sp,
+                fontSize = 11.sp,
+                lineHeight = 12.5.sp,
                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 maxLines = 2,

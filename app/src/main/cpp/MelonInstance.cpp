@@ -1543,8 +1543,8 @@ bool CopyCompositedFrameToScreenshot(
 
         for (int x = 0; x < kScreenshotScreenWidth; x++)
         {
-            destinationTopLine[x] = sourceTopLine[x * scale];
-            destinationBottomLine[x] = sourceBottomLine[x * scale];
+            destinationTopLine[x] = sourceTopLine[x * scale] | 0xFF000000;
+            destinationBottomLine[x] = sourceBottomLine[x * scale] | 0xFF000000;
         }
     }
 
@@ -3124,26 +3124,39 @@ bool MelonInstance::takeScreenshot()
         }
         return false;
     }
+    if (screenshotRenderer->takeScreenshot())
     {
-        int frontBuffer = nds->GPU.FrontBuffer;
-        if (!nds->GPU.Framebuffer[frontBuffer][0] || !nds->GPU.Framebuffer[frontBuffer][1])
-            return false;
-
-        u32* dst = screenshotRenderer->getScreenshot();
-        if (!dst)
-            return false;
-
-        const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
-        const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
-
-        for (int i = 0; i < 256 * 192; i++)
-        {
-            dst[i] = top[i] | 0xFF000000;
-            dst[256 * 192 + i] = bottom[i] | 0xFF000000;
-        }
         return true;
     }
-    return screenshotRenderer->takeScreenshot();
+
+    if (screenshotRenderer->hasCachedScreenshot())
+    {
+        return true;
+    }
+
+    if (nds != nullptr)
+    {
+        int frontBuffer = nds->GPU.FrontBuffer;
+        if (nds->GPU.Framebuffer[frontBuffer][0] && nds->GPU.Framebuffer[frontBuffer][1])
+        {
+            u32* dst = screenshotRenderer->getScreenshot();
+            if (dst)
+            {
+                const u32* top = nds->GPU.Framebuffer[frontBuffer][0].get();
+                const u32* bottom = nds->GPU.Framebuffer[frontBuffer][1].get();
+
+                for (int i = 0; i < 256 * 192; i++)
+                {
+                    dst[i] = top[i] | 0xFF000000;
+                    dst[256 * 192 + i] = bottom[i] | 0xFF000000;
+                }
+                screenshotRenderer->setHasValidCachedScreenshot(true);
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 void MelonInstance::loadCheats(std::list<Cheat> cheats)
@@ -5893,6 +5906,7 @@ bool MelonInstance::updateVulkanScreenshot(Frame* frame, int scale, bool clearOn
         return false;
     }
 
+    screenshotRenderer->setHasValidCachedScreenshot(true);
     return true;
 }
 
@@ -7568,7 +7582,8 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane1,
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
             const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta) {
-            if (!previousSnapshot.valid)
+            if (!previousSnapshot.valid
+                || previousSnapshot.screenSwapLatched != lastSoftPackedFrameSnapshot.screenSwapLatched)
                 return 0;
 
             const auto& previousPlane0 = topScreen ? previousSnapshot.packedTopPlane0 : previousSnapshot.packedBottomPlane0;
@@ -7633,16 +7648,12 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                         && (previousControlAlpha & 0x80u) != 0u
                         && packedControlMarksProtectedBlack2D(previousControl[index])
                         && packedPixelIsOpaqueBlack(previousPlane1[index]);
-                    const bool previousHasProtectedBlackOnly =
-                        (previousControlAlpha & 0x40u) == 0u
-                        && (previousControlAlpha & 0x80u) != 0u
-                        && packedControlMarksProtectedBlack2D(previousControl[index])
-                        && packedPixelIsOpaqueBlack(previousPlane0[index]);
+                    const bool previousHasProtectedBlackOnly = false;
                     if (captureBackedPartialClass0Only
-                        && (previousHasStructuredAbove || previousHasProtectedBlackAbove || previousHasProtectedBlackOnly)
+                        && (previousHasStructuredAbove || previousHasProtectedBlackAbove)
                         && currentIsStructuredSlot
                         && !currentHasUsableAbove
-                        && (!currentLive3DShouldOwnPixel || previousHasProtectedBlackAbove || previousHasProtectedBlackOnly))
+                        && !currentLive3DShouldOwnPixel)
                     {
                         plane1[index] = previousHasProtectedBlackOnly ? previousPlane0[index] : previousPlane1[index];
                         const u32 structuredAlpha = currentCompMode
@@ -7683,16 +7694,12 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                     if (currentHasExplicit2D
                         && (previousIsRealOverlay
                             || previousIsCaptureBackedComp4
-                            || previousComp7HadOverlayControl)
-                        && !previousHasProtectedBlackAbove
-                        && !previousHasProtectedBlackOnly)
+                            || previousComp7HadOverlayControl))
                     {
                         continue;
                     }
                     if (currentLive3DShouldOwnPixel
-                        && (previousIsRealOverlay || previousComp7HadOverlayControl)
-                        && !previousHasProtectedBlackAbove
-                        && !previousHasProtectedBlackOnly)
+                        && (previousIsRealOverlay || previousComp7HadOverlayControl))
                     {
                         continue;
                     }
@@ -7745,10 +7752,10 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane1,
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
             const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta) {
-            if (!previousSnapshot.valid)
+            if (!previousSnapshot.valid
+                || previousSnapshot.screenSwapLatched != lastSoftPackedFrameSnapshot.screenSwapLatched)
                 return 0;
 
-            const auto& previousPlane0 = topScreen ? previousSnapshot.packedTopPlane0 : previousSnapshot.packedBottomPlane0;
             const auto& previousPlane1 = topScreen ? previousSnapshot.packedTopPlane1 : previousSnapshot.packedBottomPlane1;
             const auto& previousControl = topScreen ? previousSnapshot.packedTopControl : previousSnapshot.packedBottomControl;
 
@@ -7776,36 +7783,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                         continue;
 
                     const u32 previousControlAlpha = previousControl[index] >> 24u;
-                    const u32 previousCompMode = previousControlAlpha & 0xFu;
                     const bool previousStructuredSlot = (previousControlAlpha & 0x40u) != 0u;
                     const bool previousStructuredAbove =
                         previousStructuredSlot
                         && (previousControlAlpha & 0x80u) != 0u;
-                    const bool previousStructured2DOnly =
-                        !previousStructuredSlot
-                        && (previousControlAlpha & 0x80u) != 0u;
-                    const bool previousProtectedBlack =
-                        (previousControlAlpha & 0x20u) != 0u;
 
                     u32 overlayPixel = 0u;
                     if (previousStructuredAbove
-                        && (packedPixelHasVisibleColor(previousPlane1[index])
-                            || (previousProtectedBlack && packedPixelIsOpaqueBlack(previousPlane1[index]))))
-                    {
-                        overlayPixel = previousPlane1[index];
-                    }
-                    else if (packedPixelHasVisibleColor(previousPlane1[index])
-                        || (previousProtectedBlack && packedPixelIsOpaqueBlack(previousPlane1[index])))
-                    {
-                        overlayPixel = previousPlane1[index];
-                    }
-                    else if (previousStructured2DOnly
-                        && (packedPixelHasVisibleColor(previousPlane0[index])
-                            || (previousProtectedBlack && packedPixelIsOpaqueBlack(previousPlane0[index]))))
-                    {
-                        overlayPixel = previousPlane0[index];
-                    }
-                    else if (previousCompMode == 7u
                         && packedPixelHasVisibleColor(previousPlane1[index]))
                     {
                         overlayPixel = previousPlane1[index];
@@ -7814,15 +7798,12 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
                     if (overlayPixel == 0u || overlayPixel == kPacked3dPlaceholder)
                         continue;
 
-                    const bool protectedBlack =
-                        previousProtectedBlack || packedPixelIsOpaqueBlack(overlayPixel);
                     plane1[index] = overlayPixel;
                     control[index] =
                         (control[index] & 0x00FFFFFFu)
                         | ((currentCompMode
                             | 0x40u
-                            | 0x80u
-                            | (protectedBlack ? 0x20u : 0u)) << 24u);
+                            | 0x80u) << 24u);
                     carriedLine = true;
                 }
 
@@ -8057,7 +8038,8 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             const bool currentTopHasExplicitCompositedContent =
                 screenHasExplicitCompositedContent(
                     lastSoftPackedFrameSnapshot.packedTopPlane0,
-                    lastSoftPackedFrameSnapshot.packedTopPlane1);
+                    lastSoftPackedFrameSnapshot.packedTopPlane1)
+                || screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.packedTopLineMeta);
             const bool cachedTopHasStructured2DOnlyContent =
                 screenHasStructured2DOnlyContent(cachedEngineATopPlane0, cachedEngineATopControl);
             const bool shouldRepairTopFromCachedEngineA = isInAlternatingMode
@@ -8087,7 +8069,8 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             const bool currentBottomHasExplicitContent =
                 screenHasExplicitCompositedContent(
                     lastSoftPackedFrameSnapshot.packedBottomPlane0,
-                    lastSoftPackedFrameSnapshot.packedBottomPlane1);
+                    lastSoftPackedFrameSnapshot.packedBottomPlane1)
+                || screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.packedBottomLineMeta);
             const bool cachedBottomHasStructured2DOnlyContent =
                 screenHasStructured2DOnlyContent(cachedEngineABottomPlane0, cachedEngineABottomControl);
             const bool shouldReplaceBottom = cachedEngineABottomValid
@@ -8134,7 +8117,8 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             const bool currentTopHasExplicitContent =
                 screenHasExplicitCompositedContent(
                     lastSoftPackedFrameSnapshot.packedTopPlane0,
-                    lastSoftPackedFrameSnapshot.packedTopPlane1);
+                    lastSoftPackedFrameSnapshot.packedTopPlane1)
+                || screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.packedTopLineMeta);
             const bool cachedTopHasStructured2DOnlyContent =
                 screenHasStructured2DOnlyContent(cachedEngineATopPlane0, cachedEngineATopControl);
             const bool shouldReplaceTop = cachedEngineATopValid
@@ -8159,7 +8143,8 @@ bool MelonInstance::latchSoftPackedFrameSnapshotCompatibility(
             const bool currentBottomHasExplicitCompositedContent =
                 screenHasExplicitCompositedContent(
                     lastSoftPackedFrameSnapshot.packedBottomPlane0,
-                    lastSoftPackedFrameSnapshot.packedBottomPlane1);
+                    lastSoftPackedFrameSnapshot.packedBottomPlane1)
+                || screenUses3dCaptureMeta(lastSoftPackedFrameSnapshot.packedBottomLineMeta);
             const bool cachedBottomHasStructured2DOnlyContent =
                 screenHasStructured2DOnlyContent(cachedEngineABottomPlane0, cachedEngineABottomControl);
             const bool shouldRepairBottomFromCachedEngineA = cachedEngineABottomValid
@@ -12051,7 +12036,8 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane1,
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
             const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta) {
-            if (!previousSnapshot.valid)
+            if (!previousSnapshot.valid
+                || previousSnapshot.screenSwapLatched != lastSoftPackedFrameSnapshot.screenSwapLatched)
                 return 0;
 
             const auto& previousPlane0 = topScreen ? previousSnapshot.packedTopPlane0 : previousSnapshot.packedBottomPlane0;
@@ -12116,16 +12102,12 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                         && (previousControlAlpha & 0x80u) != 0u
                         && packedControlMarksProtectedBlack2D(previousControl[index])
                         && packedPixelIsOpaqueBlack(previousPlane1[index]);
-                    const bool previousHasProtectedBlackOnly =
-                        (previousControlAlpha & 0x40u) == 0u
-                        && (previousControlAlpha & 0x80u) != 0u
-                        && packedControlMarksProtectedBlack2D(previousControl[index])
-                        && packedPixelIsOpaqueBlack(previousPlane0[index]);
+                    const bool previousHasProtectedBlackOnly = false;
                     if (captureBackedPartialClass0Only
-                        && (previousHasStructuredAbove || previousHasProtectedBlackAbove || previousHasProtectedBlackOnly)
+                        && (previousHasStructuredAbove || previousHasProtectedBlackAbove)
                         && currentIsStructuredSlot
                         && !currentHasUsableAbove
-                        && (!currentLive3DShouldOwnPixel || previousHasProtectedBlackAbove || previousHasProtectedBlackOnly))
+                        && !currentLive3DShouldOwnPixel)
                     {
                         plane1[index] = previousHasProtectedBlackOnly ? previousPlane0[index] : previousPlane1[index];
                         const u32 structuredAlpha = currentCompMode
@@ -12166,16 +12148,12 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                     if (currentHasExplicit2D
                         && (previousIsRealOverlay
                             || previousIsCaptureBackedComp4
-                            || previousComp7HadOverlayControl)
-                        && !previousHasProtectedBlackAbove
-                        && !previousHasProtectedBlackOnly)
+                            || previousComp7HadOverlayControl))
                     {
                         continue;
                     }
                     if (currentLive3DShouldOwnPixel
-                        && (previousIsRealOverlay || previousComp7HadOverlayControl)
-                        && !previousHasProtectedBlackAbove
-                        && !previousHasProtectedBlackOnly)
+                        && (previousIsRealOverlay || previousComp7HadOverlayControl))
                     {
                         continue;
                     }
@@ -12228,10 +12206,10 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& plane1,
             std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
             const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta) {
-            if (!previousSnapshot.valid)
+            if (!previousSnapshot.valid
+                || previousSnapshot.screenSwapLatched != lastSoftPackedFrameSnapshot.screenSwapLatched)
                 return 0;
 
-            const auto& previousPlane0 = topScreen ? previousSnapshot.packedTopPlane0 : previousSnapshot.packedBottomPlane0;
             const auto& previousPlane1 = topScreen ? previousSnapshot.packedTopPlane1 : previousSnapshot.packedBottomPlane1;
             const auto& previousControl = topScreen ? previousSnapshot.packedTopControl : previousSnapshot.packedBottomControl;
 
@@ -12259,36 +12237,13 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                         continue;
 
                     const u32 previousControlAlpha = previousControl[index] >> 24u;
-                    const u32 previousCompMode = previousControlAlpha & 0xFu;
                     const bool previousStructuredSlot = (previousControlAlpha & 0x40u) != 0u;
                     const bool previousStructuredAbove =
                         previousStructuredSlot
                         && (previousControlAlpha & 0x80u) != 0u;
-                    const bool previousStructured2DOnly =
-                        !previousStructuredSlot
-                        && (previousControlAlpha & 0x80u) != 0u;
-                    const bool previousProtectedBlack =
-                        (previousControlAlpha & 0x20u) != 0u;
 
                     u32 overlayPixel = 0u;
                     if (previousStructuredAbove
-                        && (packedPixelHasVisibleColor(previousPlane1[index])
-                            || (previousProtectedBlack && packedPixelIsOpaqueBlack(previousPlane1[index]))))
-                    {
-                        overlayPixel = previousPlane1[index];
-                    }
-                    else if (packedPixelHasVisibleColor(previousPlane1[index])
-                        || (previousProtectedBlack && packedPixelIsOpaqueBlack(previousPlane1[index])))
-                    {
-                        overlayPixel = previousPlane1[index];
-                    }
-                    else if (previousStructured2DOnly
-                        && (packedPixelHasVisibleColor(previousPlane0[index])
-                            || (previousProtectedBlack && packedPixelIsOpaqueBlack(previousPlane0[index]))))
-                    {
-                        overlayPixel = previousPlane0[index];
-                    }
-                    else if (previousCompMode == 7u
                         && packedPixelHasVisibleColor(previousPlane1[index]))
                     {
                         overlayPixel = previousPlane1[index];
@@ -12297,15 +12252,12 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
                     if (overlayPixel == 0u || overlayPixel == kPacked3dPlaceholder)
                         continue;
 
-                    const bool protectedBlack =
-                        previousProtectedBlack || packedPixelIsOpaqueBlack(overlayPixel);
                     plane1[index] = overlayPixel;
                     control[index] =
                         (control[index] & 0x00FFFFFFu)
                         | ((currentCompMode
                             | 0x40u
-                            | 0x80u
-                            | (protectedBlack ? 0x20u : 0u)) << 24u);
+                            | 0x80u) << 24u);
                     carriedLine = true;
                 }
 
@@ -12802,7 +12754,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
         && (exactTopLiveOwnerNormalizationApplied
             || exactAlternatingTopOwnedComp7Replay
             || exactProducerFollowsNormalizedConsumer);
-    if (false && exactPassiveBottomNormalization)
+    if (exactPassiveBottomNormalization)
     {
         lastSoftPackedFrameSnapshot.packedBottomPlane0.fill(0xFF000000u);
         lastSoftPackedFrameSnapshot.packedBottomPlane1.fill(0u);
@@ -12891,7 +12843,7 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
             exactDrainTopComp2Slot
             && exactDrainBottomComp7ProtectedBlack;
     }
-    if (false && exactBottomProtectedBlackDrainPayload)
+    if (exactBottomProtectedBlackDrainPayload)
         lastSoftPackedFrameSnapshot.packedBottomPlane0.fill(0xFF000000u);
 
     const bool exactBottomProtectedBlackProducerTuple =
@@ -13011,7 +12963,10 @@ bool MelonInstance::latchSoftPackedFrameSnapshotFastPath(
         auto screenHasExplicitCompositedContent =
             [&](const SoftPackedScreenStats& stats) {
                 return screenHasExplicitCurrentContent(stats.Plane0UsefulPixels)
-                    || screenHasExplicitCurrentContent(stats.Plane1UsefulPixels);
+                    || screenHasExplicitCurrentContent(stats.Plane1UsefulPixels)
+                    || screenHasExplicitCurrentContent(stats.StructuredSlotPixels)
+                    || stats.RegularCaptureUses3dLines != 0u
+                    || stats.VramCaptureUses3dLines != 0u;
             };
         auto screenUses3dCaptureMeta =
             [](const SoftPackedScreenStats& stats) {

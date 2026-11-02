@@ -85,7 +85,13 @@ void DSi_TSC::SetMode(u8 mode)
 
 void DSi_TSC::SetTouchCoords(u16 x, u16 y)
 {
-    if (TSCMode == 0x00) return TSC::SetTouchCoords(x, y);
+    if (TSCMode == 0x00)
+    {
+        TSC::SetTouchCoords(x, y);
+        if (NDS.ConsoleType == 1)
+            static_cast<DSi&>(NDS).SyncNtrIpcMirror();
+        return;
+    }
 
     TouchX = x;
     TouchY = y;
@@ -112,9 +118,6 @@ void DSi_TSC::SetTouchCoords(u16 x, u16 y)
         TouchX <<= 4;
         TouchY <<= 4;
 
-        TouchX |= 0x8000;
-        TouchY |= 0x8000;
-
         Bank3Regs[0x09] = 0x80;
         //Bank3Regs[0x09] |= 0x80;
         Bank3Regs[0x0E] &= ~0x01;
@@ -126,6 +129,9 @@ void DSi_TSC::SetTouchCoords(u16 x, u16 y)
         TouchX |= 0x8000;
         TouchY |= 0x8000;
     }
+
+    if (NDS.ConsoleType == 1)
+        static_cast<DSi&>(NDS).SyncNtrIpcMirror();
 }
 
 void DSi_TSC::Write(u8 val)
@@ -164,8 +170,7 @@ void DSi_TSC::Write(u8 val)
                 if (id & 0x01) Data = TouchX >> 8;
                 else           Data = TouchX & 0xFF;
 
-                if (Bank3Regs[0x0E] & 0x01)
-                    TouchX &= 0x7FFF;
+                TouchX &= 0x7FFF;
             }
             else if (id < 0x15)
             {
@@ -174,8 +179,7 @@ void DSi_TSC::Write(u8 val)
                 if (id & 0x01) Data = TouchY >> 8;
                 else           Data = TouchY & 0xFF;
 
-                if (Bank3Regs[0x0E] & 0x01)
-                    TouchY &= 0x7FFF; // checkme
+                TouchY &= 0x7FFF; // checkme
             }
             else
             {

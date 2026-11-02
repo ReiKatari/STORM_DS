@@ -144,6 +144,8 @@ void DSi::Reset()
     SPU.SetApplyBias(false);
     KeyInput |= (1 << (16+6));
     NtrIpcMirrorHack = false;
+    memset(NtrIpcShadowC80, 0, sizeof(NtrIpcShadowC80));
+    memset(NtrIpcShadowF80, 0, sizeof(NtrIpcShadowF80));
     if (auto* resetTsc = static_cast<DSi_TSC*>(SPI.GetTSC()))
         resetTsc->SetLegacyPenBitTracking(false);
     MapSharedWRAM(3);
@@ -212,6 +214,36 @@ std::unique_ptr<NDSCart::CartCommon> DSi::EjectCart()
     SetCartInserted(false);
 
     return oldcart;
+}
+
+void DSi::SyncNtrIpcMirror() noexcept
+{
+    if (!NtrIpcMirrorHack || MainRAM == nullptr)
+        return;
+
+    auto syncWindow = [&](u32 baseOffset, u32 (&shadow)[32]) noexcept {
+        for (u32 i = 0; i < 32; ++i)
+        {
+            const u32 offLow = (baseOffset + (i << 2)) & MainRAMMask;
+            const u32 offHigh = (offLow | 0x00800000u) & MainRAMMask;
+            u32& low = *reinterpret_cast<u32*>(&MainRAM[offLow]);
+            u32& high = *reinterpret_cast<u32*>(&MainRAM[offHigh]);
+            const u32 prev = shadow[i];
+            if (low != prev)
+            {
+                high = low;
+                shadow[i] = low;
+            }
+            else if (high != prev)
+            {
+                low = high;
+                shadow[i] = high;
+            }
+        }
+    };
+
+    syncWindow(0x007FFC80u, NtrIpcShadowC80);
+    syncWindow(0x007FFF80u, NtrIpcShadowF80);
 }
 
 void DSi::SetDSPHLE(bool hle)
@@ -1728,6 +1760,25 @@ void DSi::SetupDirectBoot()
     PowerControl9 = 0x820F;
     GPU.SetPowerCnt(PowerControl9);
 
+    if (NtrIpcMirrorHack && MainRAM != nullptr)
+    {
+        auto initWindow = [&](u32 baseOffset, u32 (&shadow)[32]) noexcept {
+            for (u32 i = 0; i < 32; ++i)
+            {
+                const u32 offLow = (baseOffset + (i << 2)) & MainRAMMask;
+                const u32 offHigh = (offLow | 0x00800000u) & MainRAMMask;
+                u32& low = *reinterpret_cast<u32*>(&MainRAM[offLow]);
+                u32& high = *reinterpret_cast<u32*>(&MainRAM[offHigh]);
+                const u32 val = (low != 0u) ? low : high;
+                low = val;
+                high = val;
+                shadow[i] = val;
+            }
+        };
+        initWindow(0x007FFC80u, NtrIpcShadowC80);
+        initWindow(0x007FFF80u, NtrIpcShadowF80);
+    }
+
     Log(LogLevel::Info,
         "DSi::SetupDirectBoot: Initialized CPU EntryPoints: ARM9.PC=0x%08X (R12/R14=0x%08X), ARM7.PC=0x%08X (R12/R14=0x%08X)\n",
         header.ARM9EntryAddress, header.ARM9EntryAddress,
@@ -2677,6 +2728,7 @@ void DSi::ARM9Write8(u32 addr, u8 val)
             {
                 *(u8*)&MainRAM[offset & MainRAMMask] = val;
                 *(u8*)&MainRAM[(offset | 0x00800000) & MainRAMMask] = val;
+                SyncNtrIpcMirror();
             }
         }
         return;
@@ -2779,6 +2831,7 @@ void DSi::ARM9Write16(u32 addr, u16 val)
             {
                 *(u16*)&MainRAM[offset & MainRAMMask] = val;
                 *(u16*)&MainRAM[(offset | 0x00800000) & MainRAMMask] = val;
+                SyncNtrIpcMirror();
             }
         }
         return;
@@ -2881,6 +2934,7 @@ void DSi::ARM9Write32(u32 addr, u32 val)
             {
                 *(u32*)&MainRAM[offset & MainRAMMask] = val;
                 *(u32*)&MainRAM[(offset | 0x00800000) & MainRAMMask] = val;
+                SyncNtrIpcMirror();
             }
         }
         return;
@@ -3202,6 +3256,7 @@ void DSi::ARM7Write8(u32 addr, u8 val)
             {
                 *(u8*)&NDS::MainRAM[offset & NDS::MainRAMMask] = val;
                 *(u8*)&NDS::MainRAM[(offset | 0x00800000) & NDS::MainRAMMask] = val;
+                SyncNtrIpcMirror();
             }
         }
         return;
@@ -3303,6 +3358,7 @@ void DSi::ARM7Write16(u32 addr, u16 val)
             {
                 *(u16*)&NDS::MainRAM[offset & NDS::MainRAMMask] = val;
                 *(u16*)&NDS::MainRAM[(offset | 0x00800000) & NDS::MainRAMMask] = val;
+                SyncNtrIpcMirror();
             }
         }
         return;
@@ -3404,6 +3460,7 @@ void DSi::ARM7Write32(u32 addr, u32 val)
             {
                 *(u32*)&NDS::MainRAM[offset & NDS::MainRAMMask] = val;
                 *(u32*)&NDS::MainRAM[(offset | 0x00800000) & NDS::MainRAMMask] = val;
+                SyncNtrIpcMirror();
             }
         }
         return;

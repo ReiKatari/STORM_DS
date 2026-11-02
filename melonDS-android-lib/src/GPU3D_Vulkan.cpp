@@ -97,7 +97,7 @@ using Platform::LogLevel;
 
 namespace
 {
-constexpr u32 kPipelineCacheFileVersion = 8;
+constexpr u32 kPipelineCacheFileVersion = 10;
 constexpr u32 kVulkanDiagnosticDisablePassiveRepeatCoverageExpand = 1u << 0u;
 constexpr float kTriangleAreaEpsilon = 0.000001f;
 constexpr float kTileOverlapEpsilon = 0.00001f;
@@ -2118,7 +2118,8 @@ u32* VulkanRenderer3D::GetLineCompatibilityBackend(int line)
         const auto readyCaptureMatchesHint = [&]() {
             return !exactCaptureOnly
                 || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint
+                || !IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u);
         };
 
         if (!HasCpuFrame && CaptureLineReady && ReadyCaptureLineData != nullptr && readyCaptureMatchesHint())
@@ -2219,61 +2220,44 @@ void VulkanRenderer3D::SetCaptureScreenSwapHint(bool screenSwap, u32 captureCnt,
         if (!candidate.SubmittedMetadataValid
             || candidate.GraphicsTarget.ColorImage == VK_NULL_HANDLE
             || !candidate.GraphicsTarget.Initialized
-            || candidate.SubmittedScreenSwap != screenSwap)
+            || candidate.SubmittedScreenSwap != screenSwap
+            || candidate.SubmittedPolygonCount == 0u)
         {
             continue;
         }
         if (best == nullptr || candidate.SubmitSequence > best->SubmitSequence)
             best = &candidate;
     }
-    if (!screenSwap
-        && captureCnt == 0x80330010u
-        && displayCnt == 0x000E115Du
-        && CurrentRenderScreenSwap == screenSwap
-        && best != nullptr
-        && best->SubmitSequence == GraphicsSubmitSequence
-        && best->SubmittedCaptureCnt == captureCnt
-        && best->SubmittedPolygonCount == 0u)
+    if (best == nullptr)
     {
-        RenderContext* adjacentLive = nullptr;
         for (RenderContext& candidate : activeRenderContexts())
         {
             if (!candidate.SubmittedMetadataValid
                 || candidate.GraphicsTarget.ColorImage == VK_NULL_HANDLE
                 || !candidate.GraphicsTarget.Initialized
-                || !candidate.SubmittedScreenSwap
-                || candidate.SubmittedCaptureCnt != captureCnt
                 || candidate.SubmittedPolygonCount == 0u
-                || candidate.SubmitSequence + 1u != best->SubmitSequence)
+                || candidate.SubmitSequence > GraphicsSubmitSequence
+                || (GraphicsSubmitSequence - candidate.SubmitSequence) > 2u)
             {
                 continue;
             }
-            adjacentLive = &candidate;
-            break;
+            if (best == nullptr || candidate.SubmitSequence > best->SubmitSequence)
+                best = &candidate;
         }
-        if (adjacentLive != nullptr)
-            best = adjacentLive;
     }
-    if (!IsParitySubmitFresh(screenSwap, 2u) && IsParitySubmitFresh(!screenSwap, 2u))
+    if (best == nullptr)
     {
-        RenderContext* live = nullptr;
         for (RenderContext& candidate : activeRenderContexts())
         {
             if (!candidate.SubmittedMetadataValid
                 || candidate.GraphicsTarget.ColorImage == VK_NULL_HANDLE
                 || !candidate.GraphicsTarget.Initialized
-                || candidate.SubmittedScreenSwap == screenSwap
-                || candidate.SubmittedPolygonCount == 0u)
+                || candidate.SubmittedScreenSwap != screenSwap)
             {
                 continue;
             }
-            if (live == nullptr || candidate.SubmitSequence > live->SubmitSequence)
-                live = &candidate;
-        }
-        if (live != nullptr && (best == nullptr || best->SubmittedPolygonCount == 0u
-                                || live->SubmitSequence > best->SubmitSequence))
-        {
-            best = live;
+            if (best == nullptr || candidate.SubmitSequence > best->SubmitSequence)
+                best = &candidate;
         }
     }
     if (best != nullptr)
@@ -2303,7 +2287,8 @@ void VulkanRenderer3D::PrepareCaptureFrameActiveBackend()
             const bool readyMatchesHint =
                 !exactCaptureOnly
                 || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint
+                || !IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u);
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             return;
         }
@@ -2339,7 +2324,8 @@ void VulkanRenderer3D::PrepareCaptureFrameActiveBackend()
         {
             const bool readyMatchesHint =
                 !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint
+                || !IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u);
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             if (HasCpuFrame)
                 return;
@@ -2385,7 +2371,8 @@ void VulkanRenderer3D::PrepareCaptureFrameCompatibilityBackend()
             const bool readyMatchesHint =
                 !exactCaptureOnly
                 || !HasCurrentCaptureScreenSwapHint
-                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint;
+                || ReadyCaptureLineScreenSwap == CurrentCaptureScreenSwapHint
+                || !IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u);
             HasCpuFrame = readyMatchesHint && copyReadyCaptureLineToLineCache();
             return;
         }
@@ -16109,28 +16096,21 @@ bool VulkanRenderer3D::submitGraphicsCaptureExportForCurrentFrame()
     }
     if (useFastPathCaptureSource && sourceContext == nullptr)
     {
-        const GraphicsRenderTarget* published = getPublishedGraphicsRenderTarget();
-        const bool publishedUsable = published != nullptr
-            ? (published->ColorImage != VK_NULL_HANDLE && published->Initialized)
-            : (ColorImage != VK_NULL_HANDLE && ColorImageInitialized);
-        if (!publishedUsable)
+        RenderContext* newest = nullptr;
+        for (RenderContext& candidate : activeRenderContexts())
         {
-            RenderContext* newest = nullptr;
-            for (RenderContext& candidate : activeRenderContexts())
+            if (!candidate.SubmittedMetadataValid
+                || candidate.GraphicsTarget.ColorImage == VK_NULL_HANDLE
+                || !candidate.GraphicsTarget.Initialized
+                || candidate.SubmittedPolygonCount == 0u)
             {
-                if (!candidate.SubmittedMetadataValid
-                    || candidate.GraphicsTarget.ColorImage == VK_NULL_HANDLE
-                    || !candidate.GraphicsTarget.Initialized
-                    || candidate.SubmittedPolygonCount == 0u)
-                {
-                    continue;
-                }
-                if (newest == nullptr || candidate.SubmitSequence > newest->SubmitSequence)
-                    newest = &candidate;
+                continue;
             }
-            if (newest != nullptr)
-                sourceContext = newest;
+            if (newest == nullptr || candidate.SubmitSequence > newest->SubmitSequence)
+                newest = &candidate;
         }
+        if (newest != nullptr)
+            sourceContext = newest;
     }
     const GraphicsRenderTarget* sourceTarget = useFastPathCaptureSource
         ? (sourceContext != nullptr
@@ -16421,23 +16401,12 @@ bool VulkanRenderer3D::submitGraphicsCaptureExportForCurrentFrame()
     CaptureLinePending = true;
     CaptureLineDataIsRgba8 = true;
     PendingCaptureLineBufferSlot = static_cast<int>(ActiveCaptureLineBufferSlot);
-    PendingCaptureLineRequiresPrimaryFence =
-        useFastPathCaptureSource
-        && HasCurrentCaptureScreenSwapHint
-        && ((CurrentCaptureScreenSwapHint
-                && CurrentCaptureCntHint == 0x80320000u
-                && (CurrentCaptureDisplayCntHint == 0x001A115Bu
-                    || CurrentCaptureDisplayCntHint == 0x001A135Bu))
-            || (!CurrentCaptureScreenSwapHint
-                && CurrentCaptureCntHint == 0x80330000u
-                && (CurrentCaptureDisplayCntHint == 0x0011115Bu
-                    || CurrentCaptureDisplayCntHint == 0x0011135Bu))
-            || (CurrentCaptureCntHint == 0x80330010u
-                && ((CurrentCaptureScreenSwapHint
-                        && CurrentCaptureDisplayCntHint == 0x000E135Du)
-                    || (!CurrentCaptureScreenSwapHint
-                        && CurrentCaptureDisplayCntHint == 0x000E115Du))));
-    PendingCaptureLineScreenSwap = CurrentRenderScreenSwap;
+    PendingCaptureLineRequiresPrimaryFence = true;
+    PendingCaptureLineScreenSwap = HasCurrentCaptureScreenSwapHint
+        ? CurrentCaptureScreenSwapHint
+        : ((useFastPathCaptureSource && sourceContext != nullptr)
+            ? sourceContext->SubmittedScreenSwap
+            : CurrentRenderScreenSwap);
     PendingCaptureLineIdentity = useFastPathCaptureSource
         ? sourceIdentity
         : CaptureSourceIdentity{};
@@ -20802,7 +20771,8 @@ bool VulkanRenderer3D::copyReadyCaptureLineToLineCache()
     }
     if (ActiveBackendMode == BackendMode::GraphicsHardware
         && HasCurrentCaptureScreenSwapHint
-        && ReadyCaptureLineScreenSwap != CurrentCaptureScreenSwapHint)
+        && ReadyCaptureLineScreenSwap != CurrentCaptureScreenSwapHint
+        && IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u))
     {
         CaptureLineReady = false;
         ReadyCaptureLineData = nullptr;
@@ -20895,7 +20865,8 @@ bool VulkanRenderer3D::restoreLastValidExactCaptureToLineCache()
     if (!HasLastValidExactCapture)
         return false;
     if (HasCurrentCaptureScreenSwapHint
-        && LastValidExactCaptureScreenSwap != CurrentCaptureScreenSwapHint)
+        && LastValidExactCaptureScreenSwap != CurrentCaptureScreenSwapHint
+        && IsParitySubmitFresh(CurrentCaptureScreenSwapHint, 2u))
     {
         return false;
     }
