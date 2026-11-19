@@ -39,12 +39,23 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         layoutsPreference.isInGameLocked = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_INPUT_LAYOUT, false)
         layoutsPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
 
+        val opacityPreference = findPreference<SeekBarPreference>("input_opacity")
+        opacityPreference?.let { opPref ->
+            opPref.summary = "${opPref.value}%"
+            opPref.setOnPreferenceChangeListener { _, newValue ->
+                val v = newValue as? Int ?: opPref.value
+                opPref.summary = "$v%"
+                true
+            }
+        }
+
         val supportsVibe = vibrator.supportsVibration()
         if (!supportsVibe) {
             touchVibratePreference.isVisible = false
             vibrationStrengthPreference.isVisible = false
         } else {
             vibrationStrengthPreference.isVisible = touchVibratePreference.isChecked
+            vibrationStrengthPreference.summary = "${vibrationStrengthPreference.value}%"
             touchVibratePreference.setOnPreferenceChangeListener { _, newValue ->
                 vibrationStrengthPreference.isVisible = (newValue as? Boolean) == true
                 true
@@ -53,6 +64,7 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         vibrationStrengthPreference.setOnPreferenceChangeListener { _, newValue ->
             val strength = newValue as Int
+            vibrationStrengthPreference.summary = "$strength%"
             vibrator.performTouchHapticFeedback(strength)
             true
         }
@@ -75,6 +87,10 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 "fr" -> "Mode gyroscope"
                 "zh" -> "陀螺仪模式"
                 "ja" -> "ジャイロモード"
+                "es" -> "Modo de giroscopio"
+                "it" -> "Modalità giroscopio"
+                "pt" -> "Modo do giroscópio"
+                "id" -> "Mode giroskop"
                 else -> "Gyroscope mode"
             }
             entries = when (lang) {
@@ -103,6 +119,26 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     "十字キー傾きステアリング (レース)",
                     "スロット2アナログセンサー"
                 )
+                "es" -> arrayOf(
+                    "Apuntado con lápiz táctil (FPS)",
+                    "Dirección por inclinación D-Pad (Carreras)",
+                    "Sensor analógico Slot-2"
+                )
+                "it" -> arrayOf(
+                    "Mira con stilo touch (FPS)",
+                    "Sterzo D-Pad con inclinazione (Corse)",
+                    "Sensore analogico Slot-2"
+                )
+                "pt" -> arrayOf(
+                    "Mira com caneta touch (FPS)",
+                    "Direção D-Pad por inclinação (Corrida)",
+                    "Sensor analógico Slot-2"
+                )
+                "id" -> arrayOf(
+                    "Bidikan stylus layar sentuh (FPS)",
+                    "Kemudi miring D-Pad (Balap)",
+                    "Sensor analog Slot-2"
+                )
                 else -> arrayOf(
                     "Touchscreen stylus aiming (FPS)",
                     "D-Pad tilt steering (Racing)",
@@ -115,7 +151,67 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
 
+        findPreference<Preference>("input_gamepad_tester")?.setOnPreferenceClickListener {
+            val deadzone = preferenceManager.sharedPreferences?.getInt("input_gamepad_analog_deadzone", 15)?.coerceIn(5, 40) ?: 15
+            me.magnum.melonds.ui.settings.dialogs.showGamepadTesterDialog(requireContext(), deadzone)
+            true
+        }
+
+        findPreference<SeekBarPreference>("input_gamepad_analog_deadzone")?.let { dzPref ->
+            dzPref.summary = getString(R.string.input_gamepad_analog_deadzone_summary, dzPref.value.coerceIn(5, 40))
+            dzPref.setOnPreferenceChangeListener { pref, newValue ->
+                val pct = (newValue as? Int)?.coerceIn(5, 40) ?: 15
+                pref.summary = getString(R.string.input_gamepad_analog_deadzone_summary, pct)
+                true
+            }
+        }
+
+        findPreference<SwitchPreference>("input_gyro_aiming_enabled")?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as? Boolean ?: false
+            preferenceManager.sharedPreferences?.edit()?.remove("pref_motion_gyro_enabled")?.apply()
+            listOf(
+                "pref_motion_gyro_mode",
+                "input_gyro_activation_mode",
+                "input_gyro_sensitivity_x",
+                "input_gyro_sensitivity_y",
+                "input_gyro_invert_x",
+                "input_gyro_invert_y",
+                "input_gyro_deadzone_x",
+                "input_gyro_deadzone_y",
+            ).forEach { key ->
+                findPreference<Preference>(key)?.isVisible = enabled
+            }
+            true
+        }
+        hideDependentsWhenInactive(
+            "input_gyro_aiming_enabled",
+            "pref_motion_gyro_mode",
+            "input_gyro_activation_mode",
+            "input_gyro_sensitivity_x",
+            "input_gyro_sensitivity_y",
+            "input_gyro_invert_x",
+            "input_gyro_invert_y",
+            "input_gyro_deadzone_x",
+            "input_gyro_deadzone_y",
+        )
+
         updateKeyMappingSummary()
+    }
+
+    override fun onDisplayPreferenceDialog(preference: Preference) {
+        if (preference.key == "button_color_theme" && preference is androidx.preference.ListPreference) {
+            val ctx = context ?: return
+            me.magnum.melonds.ui.settings.dialogs.showButtonColorThemePickerDialog(
+                context = ctx,
+                selectedValue = preference.value,
+            ) { selectedKey ->
+                if (preference.callChangeListener(selectedKey)) {
+                    preference.value = selectedKey
+                }
+            }
+            return
+        }
+        super.onDisplayPreferenceDialog(preference)
     }
 
     override fun onResume() {

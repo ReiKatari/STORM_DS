@@ -154,6 +154,12 @@ interface SettingsRepository {
     fun areRetroAchievementsActiveChallengeIndicatorsEnabled(): Boolean
     fun areRetroAchievementsProgressIndicatorsEnabled(): Boolean
     fun areRetroAchievementsLeaderboardIndicatorsEnabled(): Boolean
+    fun getRetroAchievementsNotificationPosition(): String
+    fun observeRetroAchievementsNotificationPosition(): Flow<String>
+    fun getRetroAchievementsNotificationStyle(): String
+    fun observeRetroAchievementsNotificationStyle(): Flow<String>
+    fun getRetroAchievementsNotificationSound(): String
+    fun observeRetroAchievementsNotificationSound(): Flow<String>
 
     fun areCheatsEnabled(): Boolean
     fun setCheatsEnabled(enabled: Boolean)
@@ -218,6 +224,9 @@ interface SettingsRepository {
     fun setVulkanSsaoEnabled(enabled: Boolean)
     fun getDisplayColorProfile(): Int
     fun setDisplayColorProfile(profile: Int)
+    fun getDisplayLcdGridMode(): Int
+    fun setDisplayLcdGridMode(mode: Int)
+    fun getActiveAiUpscalePresetName(): String?
     fun getHingeGapPixels(): Int
     fun setHingeGapPixels(pixels: Int)
     fun isExtendedPauseMenuEnabled(): Boolean

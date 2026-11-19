@@ -42,6 +42,12 @@
                 android:summary="@string/block_bios_download_summary"
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
+
+        <Preference
+                android:key="bios_health_check"
+                android:title="@string/bios_health_check_title"
+                android:summary="@string/bios_health_check_summary"
+                app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

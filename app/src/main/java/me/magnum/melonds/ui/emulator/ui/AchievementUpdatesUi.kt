@@ -12,11 +12,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,7 @@ import me.magnum.melonds.ui.emulator.ui.info.ServerCommunicationFailedUi
 import me.magnum.melonds.ui.emulator.ui.popup.AchievementPopupUi
 import me.magnum.melonds.ui.emulator.ui.popup.GameMasteredPopupUi
 import me.magnum.melonds.ui.emulator.ui.popup.RAIntegrationEventUi
+import me.magnum.melonds.ui.emulator.ui.popup.RetroAchievementsSoundPlayer
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RALeaderboard
 import java.net.URL
@@ -55,6 +58,12 @@ import java.net.URL
 fun AchievementUpdatesUi(
     viewModel: EmulatorViewModel,
 ) {
+    val notificationPosition by viewModel.raNotificationPosition.collectAsState()
+    val notificationStyle by viewModel.raNotificationStyle.collectAsState()
+    val notificationSound by viewModel.raNotificationSound.collectAsState()
+    val isBottom = notificationPosition == "bottom"
+    val isCompact = notificationStyle == "compact"
+
     val popupEventFlow = remember(viewModel) {
         val achievementsFlow = viewModel.achievementsEvent.mapNotNull {
             when (it) {
@@ -69,13 +78,18 @@ fun AchievementUpdatesUi(
 
     Box(Modifier.fillMaxWidth().displayCutoutPadding()) {
         AchievementUpdatesList(
-            modifier = Modifier.align(Alignment.TopStart).wrapContentSize(),
+            modifier = Modifier
+                .align(if (isBottom) Alignment.BottomStart else Alignment.TopStart)
+                .wrapContentSize(),
             achievementEventFlow = viewModel.achievementsEvent,
         )
 
         MainAchievementPopup(
             modifier = Modifier.fillMaxWidth(),
             popupEventFlow = popupEventFlow,
+            isCompact = isCompact,
+            isBottom = isBottom,
+            notificationSound = notificationSound,
         )
     }
 }
@@ -84,12 +98,17 @@ fun AchievementUpdatesUi(
 private fun MainAchievementPopup(
     modifier: Modifier = Modifier,
     popupEventFlow: Flow<PopupEvent>,
+    isCompact: Boolean = false,
+    isBottom: Boolean = false,
+    notificationSound: String = RetroAchievementsSoundPlayer.SOUND_CHIME,
 ) {
+    val currentSound by rememberUpdatedState(notificationSound)
+    val currentIsBottom by rememberUpdatedState(isBottom)
     var popupEvent by remember {
         mutableStateOf<PopupEvent?>(null)
     }
     var popupOffset by remember {
-        mutableFloatStateOf(-1f)
+        mutableFloatStateOf(if (isBottom) 1f else -1f)
     }
     var popupHeight by remember {
         mutableStateOf<Int?>(null)
@@ -97,9 +116,13 @@ private fun MainAchievementPopup(
 
     LaunchedEffect(popupEventFlow) {
         popupEventFlow.collect {
+            if (it is PopupEvent.AchievementUnlockPopup) {
+                RetroAchievementsSoundPlayer.play(currentSound)
+            }
+            val hiddenOffset = if (currentIsBottom) 1f else -1f
             popupEvent = it
             animate(
-                initialValue = -1f,
+                initialValue = hiddenOffset,
                 targetValue = 0f,
                 animationSpec = tween(easing = LinearEasing),
             ) { value, _ ->
@@ -108,7 +131,7 @@ private fun MainAchievementPopup(
             delay(5500)
             animate(
                 initialValue = 0f,
-                targetValue = -1f,
+                targetValue = hiddenOffset,
                 animationSpec = tween(easing = LinearEasing),
             ) { value, _ ->
                 popupOffset = value
@@ -119,30 +142,37 @@ private fun MainAchievementPopup(
 
     Box(modifier) {
         val currentPopupEvent = popupEvent
-        val modifier = Modifier
-            .align(Alignment.TopCenter)
+        val popupModifier = Modifier
+            .align(if (isBottom) Alignment.BottomCenter else Alignment.TopCenter)
             .offset {
-                val y = (popupOffset * (popupHeight ?: Int.MAX_VALUE)).dp
-                IntOffset(0, y.roundToPx())
+                val measuredH = popupHeight
+                val yPx = if (measuredH != null) {
+                    kotlin.math.round(popupOffset * measuredH).toInt()
+                } else {
+                    if (isBottom) 4000 else -4000
+                }
+                IntOffset(0, yPx)
             }
             .onSizeChanged { popupHeight = it.height }
 
         when (currentPopupEvent) {
             is PopupEvent.AchievementUnlockPopup -> {
                 AchievementPopupUi(
-                    modifier = modifier,
+                    modifier = popupModifier,
                     achievement = currentPopupEvent.achievement,
+                    isCompact = isCompact,
                 )
             }
             is PopupEvent.RAIntegrationPopup -> {
                 RAIntegrationEventUi(
-                    modifier = modifier,
+                    modifier = popupModifier,
                     event = currentPopupEvent.event,
+                    isCompact = isCompact,
                 )
             }
             is PopupEvent.GameMasteredPopup ->{
                 GameMasteredPopupUi(
-                    modifier = modifier,
+                    modifier = popupModifier,
                     masteryEvent = currentPopupEvent.event,
                 )
             }

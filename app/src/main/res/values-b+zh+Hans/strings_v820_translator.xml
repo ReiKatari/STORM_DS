@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_default_zone_title">默认翻译区域</string>
+    <string name="translator_default_zone_both">双屏幕</string>
+    <string name="translator_default_zone_top">上屏幕</string>
+    <string name="translator_default_zone_bottom">下屏幕</string>
+    <string name="translator_test_api_title">测试翻译与 API</string>
+    <string name="translator_test_api_summary">验证所选引擎、API 密钥和响应延迟</string>
+    <string name="translator_test_api_dialog_title">翻译与 API 测试</string>
+    <string name="translator_test_api_running">正在发送测试短语...</string>
+    <string name="translator_test_api_engine_label">引擎</string>
+    <string name="translator_test_api_status_label">状态</string>
+    <string name="translator_test_api_status_ok">正常</string>
+    <string name="translator_test_api_status_error">错误</string>
+    <string name="translator_test_api_latency_label">延迟</string>
+    <string name="translator_test_api_latency_value">%d 毫秒</string>
+    <string name="translator_test_api_original_label">原文</string>
+    <string name="translator_test_api_translated_label">译文</string>
+    <string name="translator_test_api_error_label">错误详情</string>
+    <string name="translator_test_api_retry">重新测试</string>
+    <string name="translator_test_api_lang_pair">%1$s -> %2$s</string>
+    <string name="translator_mlkit_models_title">ML Kit 离线模型</string>
+    <string name="translator_mlkit_models_summary_loading">正在检查已下载的语言包...</string>
+    <string name="translator_mlkit_models_summary">已下载语言包：%1$d / %2$d</string>
+    <string name="translator_mlkit_models_dialog_subtitle">管理设备端离线神经翻译包</string>
+    <string name="translator_mlkit_status_downloaded">已下载</string>
+    <string name="translator_mlkit_status_not_downloaded">未下载</string>
+    <string name="translator_mlkit_status_downloading">正在下载...</string>
+    <string name="translator_mlkit_status_deleting">正在删除...</string>
+    <string name="translator_mlkit_size_approx">~%d MB</string>
+    <string name="translator_mlkit_size_exact">%.1f MB</string>
+    <string name="translator_mlkit_download">下载</string>
+    <string name="translator_mlkit_delete">删除</string>
+    <string name="translator_mlkit_refresh">刷新</string>
+    <string name="translator_mlkit_action_error">模型操作失败：%s</string>
+    <string name="translator_mlkit_lang_ja">日语 (JA)</string>
+    <string name="translator_mlkit_lang_en">英语 (EN)</string>
+    <string name="translator_mlkit_lang_zh">中文 (ZH)</string>
+    <string name="translator_mlkit_lang_ko">韩语 (KO)</string>
+    <string name="translator_mlkit_lang_ru">俄语 (RU)</string>
+</resources>

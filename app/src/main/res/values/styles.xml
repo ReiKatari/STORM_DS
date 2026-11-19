@@ -195,9 +195,6 @@
 
     <style name="WatermelonAlertDialog" parent="ThemeOverlay.AppCompat.Dialog.Alert">
         <item name="android:windowBackground">@drawable/bg_watermelon_dialog</item>
-        <item name="colorAccent">?attr/colorAccent</item>
-        <item name="android:textColorPrimary">?android:attr/textColorPrimary</item>
-        <item name="android:textColorSecondary">?android:attr/textColorSecondary</item>
         <item name="android:windowTitleStyle">@style/WatermelonAlertDialog.Title</item>
         <item name="buttonBarPositiveButtonStyle">@style/WatermelonAlertDialog.Button</item>
         <item name="buttonBarNegativeButtonStyle">@style/WatermelonAlertDialog.Button</item>

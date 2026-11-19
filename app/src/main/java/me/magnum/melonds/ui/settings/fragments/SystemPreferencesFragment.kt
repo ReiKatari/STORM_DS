@@ -39,6 +39,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                 runCatching { settingsBackupManager.backupInternalLayout(uri) }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             AlertDialog.Builder(requireContext())
                                 .setMessage(R.string.internal_layout_backup_success)
                                 .setPositiveButton(android.R.string.ok, null)
@@ -47,6 +48,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                     }
                     .onFailure {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             Toast.makeText(requireContext(), R.string.internal_layout_backup_error, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -60,6 +62,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                 runCatching { settingsBackupManager.backupExternalLayout(uri) }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             AlertDialog.Builder(requireContext())
                                 .setMessage(R.string.external_layout_backup_success)
                                 .setPositiveButton(android.R.string.ok, null)
@@ -68,6 +71,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                     }
                     .onFailure {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             Toast.makeText(requireContext(), R.string.external_layout_backup_error, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -81,6 +85,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                 runCatching { settingsBackupManager.restoreInternalLayout(uri) }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             AlertDialog.Builder(requireContext())
                                 .setMessage(R.string.internal_layout_restore_success)
                                 .setPositiveButton(android.R.string.ok, null)
@@ -89,6 +94,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                     }
                     .onFailure {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             Toast.makeText(requireContext(), R.string.internal_layout_restore_error, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -102,6 +108,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                 runCatching { settingsBackupManager.restoreExternalLayout(uri) }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             AlertDialog.Builder(requireContext())
                                 .setMessage(R.string.external_layout_restore_success)
                                 .setPositiveButton(android.R.string.ok, null)
@@ -110,6 +117,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                     }
                     .onFailure {
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
                             Toast.makeText(requireContext(), R.string.external_layout_restore_error, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -162,6 +170,12 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             }
         }
 
+        val arm9OverclockPref = findPreference<ListPreference>("arm9_overclock")
+        if (arm9OverclockPref?.value == "3") {
+            arm9OverclockPref.value = "2"
+            sharedPrefs?.edit()?.putString("arm9_overclock", "2")?.apply()
+        }
+
         mirrorPreference?.setOnPreferenceChangeListener { _, newValue ->
             if (updatingMirrorPreference) {
                 return@setOnPreferenceChangeListener true
@@ -169,6 +183,11 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             if (newValue != true) {
                 preferenceManager.sharedPreferences?.edit()?.putBoolean("save_internal_config_as_file", false)?.apply()
                 return@setOnPreferenceChangeListener true
+            }
+
+            if (!settingsBackupManager.hasStorageAccess()) {
+                Toast.makeText(requireContext(), R.string.settings_mirror_no_storage_permission, Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
             }
 
             lifecycleScope.launch(Dispatchers.IO) {
@@ -244,16 +263,191 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         }
 
         val wfcServerPref = findPreference<ListPreference>("system_wfc_server")
-        val wfcCustomDnsPref = findPreference<Preference>("system_wfc_custom_dns")
+        val wfcCustomDnsPref = findPreference<androidx.preference.EditTextPreference>("system_wfc_custom_dns")
+        val wfcTestPref = findPreference<Preference>("system_wfc_test_connection")
         val updateCustomDnsVisibility = { serverVal: String? ->
             val isCustom = serverVal == "custom"
             wfcCustomDnsPref?.isVisible = isCustom
             wfcCustomDnsPref?.isEnabled = isCustom
+            val hasServer = !serverVal.isNullOrBlank() && serverVal != "none"
+            wfcTestPref?.isVisible = hasServer
+            wfcTestPref?.isEnabled = hasServer
         }
         updateCustomDnsVisibility(wfcServerPref?.value)
         wfcServerPref?.setOnPreferenceChangeListener { _, newValue ->
             updateCustomDnsVisibility(newValue as? String)
             true
+        }
+        wfcCustomDnsPref?.setOnPreferenceChangeListener { _, newValue ->
+            val candidate = (newValue as? String)?.trim().orEmpty()
+            if (!isValidIpv4(candidate)) {
+                Toast.makeText(requireContext(), R.string.wfc_custom_dns_invalid, Toast.LENGTH_SHORT).show()
+                false
+            } else {
+                true
+            }
+        }
+
+        wfcTestPref?.setOnPreferenceClickListener {
+            val serverMode = wfcServerPref?.value ?: "none"
+            val targetIp = when (serverMode) {
+                "wiimmfi" -> "167.235.229.36"
+                "altwfc" -> "172.104.88.237"
+                "kaeru" -> "178.62.43.212"
+                "custom" -> wfcCustomDnsPref?.text?.trim().orEmpty()
+                else -> ""
+            }
+            if (!isValidIpv4(targetIp)) {
+                Toast.makeText(requireContext(), R.string.wfc_custom_dns_invalid, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceClickListener true
+            }
+            wfcTestPref.isEnabled = false
+            wfcTestPref.summary = getString(R.string.wfc_test_running, targetIp)
+            lifecycleScope.launch(Dispatchers.IO) {
+                val testResult = testWfcDnsServer(targetIp)
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    wfcTestPref.isEnabled = true
+                    val msg = if (testResult.first) {
+                        getString(R.string.wfc_test_success, targetIp, testResult.second)
+                    } else {
+                        getString(R.string.wfc_test_failed, targetIp, testResult.third ?: "Timeout")
+                    }
+                    wfcTestPref.summary = msg
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                }
+            }
+            true
+        }
+
+        findPreference<Preference>("system_share_app_log")?.setOnPreferenceClickListener {
+            shareSystemLogFiles()
+            true
+        }
+    }
+
+    private fun testWfcDnsServer(ip: String): Triple<Boolean, Long, String?> {
+        val startNs = System.nanoTime()
+        // 1. Send a standard minimal UDP DNS A-record query to port 53 (exact protocol used by DS WFC)
+        val udpAttempt = runCatching {
+            val query = byteArrayOf(
+                0x13, 0x37, // Transaction ID
+                0x01, 0x00, // Standard query with recursion desired
+                0x00, 0x01, // 1 question
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                // conntest.nintendowifi.net
+                8, 'c'.code.toByte(), 'o'.code.toByte(), 'n'.code.toByte(), 'n'.code.toByte(),
+                't'.code.toByte(), 'e'.code.toByte(), 's'.code.toByte(), 't'.code.toByte(),
+                12, 'n'.code.toByte(), 'i'.code.toByte(), 'n'.code.toByte(), 't'.code.toByte(),
+                'e'.code.toByte(), 'n'.code.toByte(), 'd'.code.toByte(), 'o'.code.toByte(),
+                'w'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(), 'i'.code.toByte(),
+                3, 'n'.code.toByte(), 'e'.code.toByte(), 't'.code.toByte(),
+                0x00,
+                0x00, 0x01, // Type A
+                0x00, 0x01  // Class IN
+            )
+            java.net.DatagramSocket().use { socket ->
+                socket.soTimeout = 3000
+                val address = java.net.InetAddress.getByName(ip)
+                socket.send(java.net.DatagramPacket(query, query.size, address, 53))
+                val respBuf = ByteArray(512)
+                val respPacket = java.net.DatagramPacket(respBuf, respBuf.size)
+                socket.receive(respPacket)
+                respPacket.length >= 12
+            }
+        }
+        if (udpAttempt.getOrDefault(false)) {
+            val ms = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
+            return Triple(true, ms, null)
+        }
+        // 2. Fallback: TCP port 80 / 443 or ICMP reachability
+        val fallbackStart = System.nanoTime()
+        val tcpOk = runCatching {
+            java.net.Socket().use { sock ->
+                sock.connect(java.net.InetSocketAddress(ip, 80), 2500)
+                true
+            }
+        }.getOrDefault(false) || runCatching {
+            java.net.InetAddress.getByName(ip).isReachable(2500)
+        }.getOrDefault(false)
+
+        if (tcpOk) {
+            val ms = ((System.nanoTime() - fallbackStart) / 1_000_000L).coerceAtLeast(1L)
+            return Triple(true, ms, null)
+        }
+        val errMsg = udpAttempt.exceptionOrNull()?.localizedMessage ?: "Timeout"
+        return Triple(false, 0L, errMsg)
+    }
+
+    private fun shareSystemLogFiles() {
+        val ctx = context ?: return
+        val appContext = ctx.applicationContext
+        lifecycleScope.launch(Dispatchers.IO) {
+            val shareUri = runCatching {
+                val rootLogsDir = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs")
+                val appLogFile = java.io.File(rootLogsDir, "STORM_DS.log")
+                val infoFile = java.io.File(rootLogsDir, me.magnum.melonds.impl.StormDeviceSystemInfoReporter.INFO_FILE_NAME)
+
+                // Ensure fresh STORM_INFO.txt always exists
+                val freshInfoReport = runCatching {
+                    me.magnum.melonds.impl.StormDeviceSystemInfoReporter.saveUnifiedReport(appContext)
+                }.getOrNull()
+
+                val exportDir = java.io.File(appContext.cacheDir, "shared_logs").apply { mkdirs() }
+                val exportFile = java.io.File(exportDir, "STORM_DS_DIAGNOSTIC_LOG.txt")
+                exportFile.bufferedWriter(Charsets.UTF_8).use { writer ->
+                    writer.appendLine("===== STORM DS SYSTEM INFO (STORM_INFO.txt) =====")
+                    when {
+                        infoFile.exists() && infoFile.length() > 0 -> writer.appendLine(infoFile.readText(Charsets.UTF_8))
+                        !freshInfoReport.isNullOrBlank() -> writer.appendLine(freshInfoReport)
+                        else -> writer.appendLine("(No system info generated)")
+                    }
+                    if (appLogFile.exists() && appLogFile.length() > 0) {
+                        writer.appendLine()
+                        writer.appendLine("===== STORM DS APP LOG (STORM_DS.log, last 256 KB) =====")
+                        val maxTail = 256 * 1024L
+                        java.io.RandomAccessFile(appLogFile, "r").use { raf ->
+                            val len = raf.length()
+                            if (len > maxTail) raf.seek(len - maxTail)
+                            val bytes = ByteArray((len - raf.filePointer).toInt().coerceAtLeast(0))
+                            raf.readFully(bytes)
+                            writer.write(String(bytes, Charsets.UTF_8))
+                        }
+                    }
+                }
+                androidx.core.content.FileProvider.getUriForFile(
+                    appContext,
+                    "${appContext.packageName}.fileprovider",
+                    exportFile
+                )
+            }.getOrNull()
+
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                if (shareUri == null) {
+                    Toast.makeText(requireContext(), R.string.system_share_log_error, Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "STORM DS Log")
+                    putExtra(android.content.Intent.EXTRA_STREAM, shareUri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runCatching {
+                    startActivity(android.content.Intent.createChooser(shareIntent, getString(R.string.system_share_log_title)))
+                }.onFailure {
+                    Toast.makeText(requireContext(), R.string.system_share_log_error, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun isValidIpv4(value: String): Boolean {
+        val parts = value.split(".")
+        if (parts.size != 4) return false
+        return parts.all { part ->
+            part.isNotEmpty() && part.length <= 3 && part.all { it.isDigit() } && (part.toIntOrNull() in 0..255)
         }
     }
 

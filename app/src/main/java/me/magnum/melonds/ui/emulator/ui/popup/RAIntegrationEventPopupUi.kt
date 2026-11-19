@@ -12,7 +12,11 @@ import me.magnum.melonds.ui.emulator.model.RAIntegrationEvent
 import me.magnum.melonds.ui.theme.DarkWatermelonColors
 
 @Composable
-fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
+fun RAIntegrationEventUi(
+    modifier: Modifier,
+    event: RAIntegrationEvent,
+    isCompact: Boolean = false,
+) {
     val icon = event.icon?.toString()
     when (event) {
         is RAIntegrationEvent.Welcome -> {
@@ -26,6 +30,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                 subtitle = stringResource(
                     if (event.hardcore) R.string.ra_welcome_hardcore else R.string.ra_welcome_softcore,
                 ),
+                isCompact = isCompact,
             )
         }
         is RAIntegrationEvent.Loaded -> {
@@ -40,6 +45,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                     event.unlockedAchievements,
                     event.totalAchievements,
                 ),
+                isCompact = isCompact,
             )
         }
         is RAIntegrationEvent.LoadedNoAchievements -> {
@@ -50,6 +56,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                 eyebrow = stringResource(R.string.ra_now_playing),
                 title = stringResource(R.string.game_has_no_achievements),
                 subtitle = stringResource(R.string.ra_no_achievements),
+                isCompact = isCompact,
             )
         }
         is RAIntegrationEvent.Failed -> {
@@ -62,6 +69,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                 subtitle = stringResource(R.string.achievements_failed_load_tip),
                 subtitleMaxLines = 2,
                 accent = DarkWatermelonColors.red,
+                isCompact = isCompact,
             )
         }
         is RAIntegrationEvent.LoginExpired -> {
@@ -74,6 +82,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                 subtitle = stringResource(R.string.achievements_login_expired_tip),
                 subtitleMaxLines = 2,
                 accent = DarkWatermelonColors.red,
+                isCompact = isCompact,
             )
         }
         is RAIntegrationEvent.OfflineDisabledNoCache -> {
@@ -86,6 +95,7 @@ fun RAIntegrationEventUi(modifier: Modifier, event: RAIntegrationEvent) {
                 subtitle = stringResource(R.string.offline_ra_disabled_no_cache_message),
                 subtitleMaxLines = 2,
                 accent = DarkWatermelonColors.red,
+                isCompact = isCompact,
             )
         }
     }

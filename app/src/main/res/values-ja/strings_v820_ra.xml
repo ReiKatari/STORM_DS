@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ra_cat_notifications">実績通知</string>
+    <string name="ra_notification_position_title">通知の位置</string>
+    <string name="ra_notification_position_top">上部</string>
+    <string name="ra_notification_position_bottom">下部</string>
+    <string name="ra_notification_style_title">通知スタイル</string>
+    <string name="ra_notification_style_detailed">詳細</string>
+    <string name="ra_notification_style_compact">コンパクト</string>
+    <string name="ra_notification_sound_title">通知音</string>
+    <string name="ra_notification_sound_chime">クリスタルチャイム</string>
+    <string name="ra_notification_sound_fanfare">レトロファンファーレ</string>
+    <string name="ra_notification_sound_classic">システム音</string>
+    <string name="ra_notification_sound_none">無音</string>
+    <string name="ra_cat_sync_and_diagnostics">同期と診断</string>
+    <string name="ra_sync_pending_title">未送信の実績を今すぐ同期</string>
+    <string name="ra_sync_pending_summary_count">送信待ち: %1$d</string>
+    <string name="ra_sync_pending_summary_all_synced">すべての実績が同期済み</string>
+    <string name="ra_sync_pending_summary_login_required">同期するにはログインしてください</string>
+    <string name="ra_sync_pending_all_synced_toast">すべての実績はすでに同期されています</string>
+    <string name="ra_sync_pending_login_prompt">実績を同期するには RetroAchievements にログインしてください</string>
+    <string name="ra_sync_pending_in_progress">未送信の実績を同期しています...</string>
+    <string name="ra_sync_pending_result_success">%1$d 件の実績を同期しました</string>
+    <string name="ra_sync_pending_result_partial">送信成功: %1$d, 失敗: %2$d</string>
+    <string name="ra_sync_pending_result_title">同期結果</string>
+    <string name="ra_sync_pending_result_error_detail">エラー: %1$s</string>
+    <string name="ra_test_connection_title">RetroAchievements への接続をテスト</string>
+    <string name="ra_test_connection_summary">アカウント状態、HTTPS 遅延、プロキシモードを確認</string>
+    <string name="ra_test_connection_dialog_title">RetroAchievements 接続</string>
+    <string name="ra_test_connection_checking">接続をテストしています...</string>
+    <string name="ra_test_connection_retest">再テスト</string>
+    <string name="ra_test_connection_close">閉じる</string>
+    <string name="ra_test_connection_label_reachability">サーバー到達性</string>
+    <string name="ra_test_connection_label_account">アカウントとトークン</string>
+    <string name="ra_test_connection_label_proxy">接続モード</string>
+    <string name="ra_test_connection_reachable_fmt">接続可能 (%1$d ms)</string>
+    <string name="ra_test_connection_unreachable_fmt">接続不可: %1$s</string>
+    <string name="ra_test_connection_auth_ok_fmt">%1$s としてログイン中 (トークン有効)</string>
+    <string name="ra_test_connection_auth_expired_fmt">%1$s のセッション期限切れ</string>
+    <string name="ra_test_connection_auth_none">未ログイン</string>
+    <string name="ra_test_connection_proxy_direct">直接接続 (公式サーバー)</string>
+    <string name="ra_test_connection_proxy_active_fmt">プロキシ有効 (%1$s)</string>
+    <string name="ra_test_connection_proxy_unavailable">プロキシ選択済みですが無効です</string>
+</resources>

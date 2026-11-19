@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Servidor espejo de descarga</string>
+    <string name="cheats_mirror_auto">Auto (todos los espejos en orden)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">Espejo GitHub (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Buscar en la base de trucos</string>
+    <string name="cheats_search_database_summary">Buscar juegos importados por título o Game ID</string>
+    <string name="cheats_db_search_hint">Título del juego o Game ID (ej. Pokemon o CPUE)</string>
+    <string name="cheats_search_games_available">Juegos en la base: %1$d</string>
+    <string name="cheats_search_results_count">Resultados mostrados: %1$d</string>
+    <string name="cheats_search_cheats_count">Trucos: %1$d</string>
+    <string name="cheats_search_db_empty">La base de trucos está vacía. Descarga usrcheat.dat en línea o importa un archivo local.</string>
+    <string name="cheats_search_no_results">No se encontraron juegos que coincidan.</string>
+    <string name="cheats_clear_database_title">Limpiar base de trucos</string>
+    <string name="cheats_clear_database_summary">Eliminar todas las bases, juegos, carpetas y trucos importados</string>
+    <string name="cheats_clear_database_confirm_title">¿Limpiar la base de trucos?</string>
+    <string name="cheats_clear_database_confirm_message">Se eliminarán permanentemente todas las bases de trucos, juegos, carpetas y trucos importados. Esta acción no se puede deshacer.</string>
+    <string name="cheats_clear_database_confirm_action">Limpiar</string>
+    <string name="cheats_clear_database_success">Base de trucos limpiada</string>
+    <string name="cheats_db_status_loaded_with_date">Juegos: %1$d · Trucos: %2$d · Actualizado: %3$s</string>
+</resources>

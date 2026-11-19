@@ -11,6 +11,7 @@ class MicInputOboeCallback : public oboe::AudioStreamCallback {
 
 public:
     static std::atomic<bool> agcEnabled;
+    static std::atomic<float> noiseGateThreshold;
 
     s16* buffer;
     int bufferSize;

@@ -18,4 +18,7 @@ interface CheatFolderDao {
 
     @Query("DELETE FROM cheat_folder WHERE id NOT IN (SELECT DISTINCT cheat_folder_id FROM cheat)")
     suspend fun deleteEmptyFolders()
+
+    @Query("DELETE FROM cheat_folder")
+    suspend fun deleteAllCheatFolders()
 }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Зеркало загрузки</string>
+    <string name="cheats_mirror_auto">Авто (все зеркала по очереди)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">Зеркало GitHub (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Поиск по базе читов</string>
+    <string name="cheats_search_database_summary">Поиск игр по названию или коду Game ID</string>
+    <string name="cheats_db_search_hint">Название или код игры (напр. Pokemon или CPUE)</string>
+    <string name="cheats_search_games_available">Игр в базе: %1$d</string>
+    <string name="cheats_search_results_count">Найдено записей: %1$d</string>
+    <string name="cheats_search_cheats_count">Читов: %1$d</string>
+    <string name="cheats_search_db_empty">База читов пуста. Сначала скачайте usrcheat.dat онлайн или импортируйте локальный файл.</string>
+    <string name="cheats_search_no_results">По вашему запросу игры не найдены.</string>
+    <string name="cheats_clear_database_title">Очистить базу читов</string>
+    <string name="cheats_clear_database_summary">Удалить все импортированные базы, игры, папки и читы</string>
+    <string name="cheats_clear_database_confirm_title">Очистить базу читов?</string>
+    <string name="cheats_clear_database_confirm_message">Все импортированные базы читов, игры, папки и чит-коды будут безвозвратно удалены. Это действие нельзя отменить.</string>
+    <string name="cheats_clear_database_confirm_action">Очистить</string>
+    <string name="cheats_clear_database_success">База читов очищена</string>
+    <string name="cheats_db_status_loaded_with_date">Игр: %1$d · Читов: %2$d · Обновлено: %3$s</string>
+</resources>

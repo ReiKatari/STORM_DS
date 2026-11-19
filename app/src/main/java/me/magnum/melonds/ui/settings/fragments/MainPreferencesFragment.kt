@@ -113,7 +113,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         savePref?.let { pref ->
             val autoSave = prefs.getBoolean("auto_save_state_on_exit", false)
             val autoLoad = prefs.getBoolean("auto_load_state_on_launch", false)
-            val periodic = prefs.getBoolean("periodic_auto_save_enabled", false)
+            val periodic = (prefs.getString("periodic_auto_save_interval_minutes", "0")?.toIntOrNull() ?: 0) > 0
             val saveSummary = buildList {
                 if (autoSave) add(getString(R.string.v793_summary_autosave))
                 if (autoLoad) add(getString(R.string.v793_summary_autoload))
@@ -161,7 +161,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
                 val interpolation = prefs.getString("audio_interpolation", "none") ?: "none"
                 val interpLocalized = getLocalizedEntry(interpolation, R.array.audio_interpolation_values, R.array.audio_interpolation_options)
                 val interpStr = "${getString(R.string.audio_interpolation)}: $interpLocalized"
-                val micSource = prefs.getString("mic_source", "device") ?: "device"
+                val micSource = prefs.getString("mic_source", "blow") ?: "blow"
                 val micLocalized = getLocalizedEntry(micSource, R.array.mic_source_values, R.array.mic_source_options)
                 val micStr = if (micSource.equals("none", ignoreCase = true)) {
                     "${getString(R.string.microphone_source)}: $micLocalized"
@@ -174,8 +174,8 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
         // 7. Input (active layout, vibration, controller mapping)
         findPreference<Preference>("settings_home_input")?.let { pref ->
-            val haptic = prefs.getBoolean("input_touch_haptic_feedback_enabled", false)
-            val opacity = prefs.getInt("input_opacity", 100)
+            val haptic = prefs.getBoolean("input_touch_haptic_feedback_enabled", true)
+            val opacity = prefs.getInt("input_opacity", 50)
             val gyro = prefs.getBoolean("input_gyro_aiming_enabled", false)
             val hapticStr = "${getString(R.string.v793_summary_vibration)}: ${getString(if (haptic) R.string.on else R.string.off)}"
             val gyroStr = if (gyro) "${getString(R.string.v793_summary_gyro)}: ${getString(R.string.on)}" else null

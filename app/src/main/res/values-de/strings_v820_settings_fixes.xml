@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v820_rom_search_dirs_empty">Nicht ausgewählt</string>
+    <string name="v820_ra_covers_fallback_gametdb_and_icon">GameTDB oder ROM-Symbol</string>
+    <string name="v820_ra_covers_fallback_icon_only">ROM-Symbol</string>
+    <string name="v820_ra_covers_summary_signed_in">Verwendet zuerst RetroAchievements-Cover. Bei Nichtverfügbarkeit wird automatisch %1$s verwendet.</string>
+    <string name="v820_ra_covers_summary_not_signed_in">Verwendet RetroAchievements-Cover nach Anmeldung. Konto nicht angemeldet (aktuell Rückfall auf %1$s).</string>
+    <string name="v820_auto_load_ra_hardcore_notice">Deaktiviert, solange der RetroAchievements-Hardcore-Modus aktiv ist.</string>
+    <string name="v820_rewind_summary_enabled_fmt">Aktiviert (Intervall: %1$s, Puffer: %2$s)</string>
+    <string name="v820_rewind_summary_disabled">Deaktiviert</string>
+    <string name="v820_general_pause_menu_customize_hint">Reihenfolge und Sichtbarkeit der Schaltflächen werden direkt im Pausenmenü im Spiel angepasst. Diese Option setzt sie auf die Standardwerte zurück.</string>
+</resources>

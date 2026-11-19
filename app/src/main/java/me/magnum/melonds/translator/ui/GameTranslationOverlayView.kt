@@ -408,6 +408,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun reloadFloatingButtonPositionFromPrefs() {
+        if (width > 0 && height > 0) {
+            initFloatBtnPosition(width, height)
+            postInvalidate()
+        }
+    }
+
     private fun initFloatBtnPosition(w: Int, h: Int) {
         val halfW = floatBtnPanelWidth / 2f
         val halfH = floatBtnPanelHeight / 2f

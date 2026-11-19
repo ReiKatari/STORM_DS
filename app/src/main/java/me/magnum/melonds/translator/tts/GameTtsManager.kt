@@ -430,6 +430,9 @@ class GameTtsManager(private val context: Context) {
         activeReverb = null
     }
 
+    @Volatile
+    private var pendingNativeSpeechActions = mutableListOf<() -> Unit>()
+
     private fun initTts() {
         if (tts != null) return
         tts = TextToSpeech(context.applicationContext) { status ->
@@ -453,8 +456,21 @@ class GameTtsManager(private val context: Context) {
                         abandonAudioDucking()
                     }
                 })
+                val actionsToRun = synchronized(pendingNativeSpeechActions) {
+                    val copy = pendingNativeSpeechActions.toList()
+                    pendingNativeSpeechActions.clear()
+                    copy
+                }
+                if (actionsToRun.isNotEmpty()) {
+                    scope.launch(Dispatchers.Main) {
+                        actionsToRun.forEach { it.invoke() }
+                    }
+                }
             } else {
                 Log.w(TAG, "TextToSpeech init failed with code: $status")
+                synchronized(pendingNativeSpeechActions) {
+                    pendingNativeSpeechActions.clear()
+                }
             }
         }
     }
@@ -480,6 +496,7 @@ class GameTtsManager(private val context: Context) {
             "it" -> Locale.ITALIAN
             "ko" -> Locale.KOREAN
             "uk" -> Locale("uk")
+            "pt" -> Locale("pt", "BR")
             else -> Locale("ru")
         }
     }
@@ -665,7 +682,7 @@ class GameTtsManager(private val context: Context) {
         effectiveLang: String
     ): List<DialogueTurn> {
         val enginePref = preferences.getString(PREF_TRANSLATOR_TTS_VOICE_ENGINE, "neural_edge") ?: "neural_edge"
-        val modelPref = preferences.getString("translator_local_voice_model", "auto_multi") ?: "auto_multi"
+        val modelPref = preferences.getString("translator_local_voice_model", "auto_gender_neural") ?: "auto_gender_neural"
         val forcedPersona = getForcedManualPersona(enginePref, modelPref)
 
         // Split multi-speaker inline segments like "Бэтмен: Город под защитой. Лейтон: У каждой загадки есть разгадка!"
@@ -763,8 +780,16 @@ class GameTtsManager(private val context: Context) {
 
     private fun getForcedManualPersona(enginePref: String, modelPref: String): CharacterPersona? {
         if (enginePref == "single") return CharacterPersona.NARRATOR
-        if (modelPref == "auto_multi") return null
+        if (modelPref == "auto_multi" || modelPref == "auto_gender_neural" || modelPref == "system_offline_best") return null
         return when (modelPref) {
+            "edge_ru_svetlana", "edge_multi_ava" -> CharacterPersona.PROTAGONIST_FEMALE
+            "edge_ru_dmitry", "edge_multi_andrew" -> CharacterPersona.PROTAGONIST_MALE
+            "edge_multi_emma" -> CharacterPersona.YOUNG_GIRL
+            "edge_multi_brian" -> CharacterPersona.NARRATOR
+            "edge_multi_vivienne" -> CharacterPersona.ROYAL_QUEEN
+            "edge_multi_florian" -> CharacterPersona.GENTLEMAN_SCHOLAR
+            "edge_heroine_bright" -> CharacterPersona.CHEERFUL_FAIRY
+            "edge_villain_deep" -> CharacterPersona.HERO_DARK_VIGILANTE
             "piper_ru_dmitri_medium" -> CharacterPersona.PROTAGONIST_MALE
             "piper_ru_elena_medium" -> CharacterPersona.PROTAGONIST_FEMALE
             "piper_ru_hero" -> CharacterPersona.PROTAGONIST_MALE
@@ -1080,6 +1105,7 @@ class GameTtsManager(private val context: Context) {
             "it" -> if (isFemale) "it-IT-ElsaNeural" to "it-IT-ElsaNeural" else "it-IT-DiegoNeural" to "it-IT-DiegoNeural"
             "ko" -> if (isFemale) "ko-KR-SunHiNeural" to "ko-KR-SunHiNeural" else "ko-KR-InJoonNeural" to "ko-KR-InJoonNeural"
             "uk" -> if (isFemale) "uk-UA-PolinaNeural" to "uk-UA-PolinaNeural" else "uk-UA-OstapNeural" to "uk-UA-OstapNeural"
+            "pt" -> if (isFemale) "pt-BR-FranciscaNeural" to "pt-BR-FranciscaNeural" else "pt-BR-AntonioNeural" to "pt-BR-AntonioNeural"
             else -> {
                 if (isFemale) {
                     val f = listOf("en-US-JennyNeural", "en-US-AriaNeural", "en-US-AvaMultilingualNeural", "en-GB-SoniaNeural", "en-US-AnaNeural")
@@ -1296,19 +1322,30 @@ class GameTtsManager(private val context: Context) {
         isSingleMode: Boolean = false,
         queueAdd: Boolean = false
     ) {
+        val action = {
+            val locale = localeForCode(targetLang)
+            applyLanguage(locale)
+            val userPitchOffset = preferences.getInt(PREF_TRANSLATOR_VOICE_PITCH, 0).coerceIn(-20, 20)
+            val userPitchFactor = (1.0f + userPitchOffset * 0.015f).coerceIn(0.65f, 1.35f)
+            if (isSingleMode) {
+                tts?.setPitch(userPitchFactor)
+                tts?.setSpeechRate(baseSpeed)
+            } else {
+                applyPersonaVoice(persona, profile, baseSpeed, locale, pitchVariance, userPitchFactor)
+            }
+            val queueMode = if (queueAdd) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
+            tts?.speak(text, queueMode, null, "game_tts_multi_${System.nanoTime()}")
+            Unit
+        }
         if (tts == null || !isReady) {
+            synchronized(pendingNativeSpeechActions) {
+                if (!queueAdd) pendingNativeSpeechActions.clear()
+                pendingNativeSpeechActions.add(action)
+            }
             initTts()
+            return
         }
-        val locale = localeForCode(targetLang)
-        applyLanguage(locale)
-        if (isSingleMode) {
-            tts?.setPitch(1.0f)
-            tts?.setSpeechRate(baseSpeed)
-        } else {
-            applyPersonaVoice(persona, profile, baseSpeed, locale, pitchVariance)
-        }
-        val queueMode = if (queueAdd) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
-        tts?.speak(text, queueMode, null, "game_tts_multi_${System.nanoTime()}")
+        action()
     }
 
     private fun extractSpeakerAndDialogue(rawText: String): Pair<String, String> {
@@ -1401,7 +1438,8 @@ class GameTtsManager(private val context: Context) {
         profile: SpeakerVoiceProfile?,
         baseSpeed: Float,
         locale: Locale,
-        pitchVariance: Float = 1.0f
+        pitchVariance: Float = 1.0f,
+        userPitchFactor: Float = 1.0f
     ) {
         val isLangMatching = { v: Voice -> v.locale.language == locale.language }
         val langVoices = availableVoices.filter(isLangMatching)
@@ -1455,7 +1493,7 @@ class GameTtsManager(private val context: Context) {
         } catch (_: Throwable) {}
 
         val profilePitchFactor = profile?.timbrePitchMultiplier ?: persona.pitch
-        val adjustedPitch = (1.0f + (profilePitchFactor - 1.0f) * pitchVariance).coerceIn(0.35f, 2.0f)
+        val adjustedPitch = ((1.0f + (profilePitchFactor - 1.0f) * pitchVariance) * userPitchFactor).coerceIn(0.35f, 2.0f)
         val rateOffsetFactor = if (profile != null) (1.0f + profile.ratePercentOffset / 100f) else persona.rateMultiplier
         val adjustedRate = (baseSpeed * rateOffsetFactor).coerceIn(0.45f, 2.4f)
         tts?.setPitch(adjustedPitch)

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -15,12 +16,16 @@ import android.widget.Toast
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.*
 import me.magnum.melonds.R
+import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.translator.capture.*
 import me.magnum.melonds.translator.engine.*
 import me.magnum.melonds.translator.model.TranslationRegion
+import me.magnum.melonds.translator.model.TranslatorDefaultZone
 import me.magnum.melonds.translator.model.TranslatorEngineType
 import me.magnum.melonds.translator.model.TranslatorOverlayStyle
 import me.magnum.melonds.translator.model.TranslatorTriggerMode
+import me.magnum.melonds.ui.common.LayoutView
+import me.magnum.melonds.ui.emulator.RuntimeLayoutView
 import me.magnum.melonds.translator.ocr.GameTextRecognizer
 import me.magnum.melonds.translator.tts.GameTtsManager
 import me.magnum.melonds.translator.ui.GameTranslationOverlayView
@@ -58,6 +63,7 @@ class GameTranslatorManager(
         const val PREF_TRANSLATOR_CUSTOM_AI_KEY = "translator_custom_ai_key"
         const val PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT = "translator_custom_ai_endpoint"
         const val PREF_TRANSLATOR_CUSTOM_AI_MODEL = "translator_custom_ai_model"
+        const val PREF_TRANSLATOR_DEFAULT_ZONE = "translator_default_zone"
 
         private val sharedOkHttpClient: OkHttpClient by lazy {
             me.magnum.melonds.common.network.SharedOkHttpClient.instance.newBuilder()
@@ -115,25 +121,40 @@ class GameTranslatorManager(
         get() = preferences.getBoolean(PREF_TRANSLATOR_ENABLED, false)
 
     private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        when (key) {
-            PREF_TRANSLATOR_ENABLED,
-            PREF_TRANSLATOR_SHOW_FLOATING_BUTTON,
-            PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY,
-            PREF_TRANSLATOR_OVERLAY_STYLE,
-            PREF_TRANSLATOR_BUBBLE_OPACITY,
-            PREF_TRANSLATOR_FONT_SIZE_SCALE,
-            PREF_TRANSLATOR_TRIGGER_MODE -> {
+        when {
+            key == "translator_cache_clear_epoch" -> {
+                mainHandler.post {
+                    translationCache.clearAll()
+                    textRecognizer.clearCache()
+                    ocrContextGraph.clearDialogueHistory()
+                    lastTranslatedRawText = ""
+                    lastFrameDHash = 0L
+                    overlayView?.clearTranslations()
+                }
+            }
+            key == "pref_translator_float_btn_x_ratio" ||
+            key == "pref_translator_float_btn_y_ratio" ||
+            key == PREF_TRANSLATOR_SAVED_REGIONS ||
+            (key != null && key.startsWith("${PREF_TRANSLATOR_SAVED_REGIONS}_")) ||
+            key == PREF_TRANSLATOR_ENABLED ||
+            key == PREF_TRANSLATOR_SHOW_FLOATING_BUTTON ||
+            key == PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY ||
+            key == PREF_TRANSLATOR_OVERLAY_STYLE ||
+            key == PREF_TRANSLATOR_BUBBLE_OPACITY ||
+            key == PREF_TRANSLATOR_FONT_SIZE_SCALE ||
+            key == PREF_TRANSLATOR_TRIGGER_MODE -> {
                 mainHandler.post {
                     syncOverlaySettings()
                 }
             }
-            PREF_TRANSLATOR_ENGINE,
-            PREF_TRANSLATOR_DEEPL_KEY,
-            PREF_TRANSLATOR_CUSTOM_AI_KEY,
-            PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT,
-            PREF_TRANSLATOR_CUSTOM_AI_MODEL,
-            PREF_TRANSLATOR_SOURCE_LANG,
-            PREF_TRANSLATOR_TARGET_LANG -> {
+            key == PREF_TRANSLATOR_ENGINE ||
+            key == PREF_TRANSLATOR_DEEPL_KEY ||
+            key == PREF_TRANSLATOR_CUSTOM_AI_KEY ||
+            key == PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT ||
+            key == PREF_TRANSLATOR_CUSTOM_AI_MODEL ||
+            key == PREF_TRANSLATOR_SOURCE_LANG ||
+            key == PREF_TRANSLATOR_TARGET_LANG ||
+            key == PREF_TRANSLATOR_DEFAULT_ZONE -> {
                 mainHandler.post {
                     cachedEngine = null
                     cachedEngineType = null
@@ -221,6 +242,139 @@ class GameTranslatorManager(
         }
         overlayView?.setSavedRegions(regions)
         Log.i(TAG, "Saved ${regions.size} OCR regions under key [$perGameKey]")
+    }
+
+    @Volatile
+    private var explicitTopScreenRect: me.magnum.melonds.domain.model.Rect? = null
+    @Volatile
+    private var explicitBottomScreenRect: me.magnum.melonds.domain.model.Rect? = null
+    @Volatile
+    private var explicitSurfaceWidth: Int = 0
+    @Volatile
+    private var explicitSurfaceHeight: Int = 0
+
+    fun updateScreenRects(
+        topScreenRect: me.magnum.melonds.domain.model.Rect?,
+        bottomScreenRect: me.magnum.melonds.domain.model.Rect?,
+        surfaceWidth: Int = 0,
+        surfaceHeight: Int = 0,
+    ) {
+        explicitTopScreenRect = topScreenRect?.takeIf { it.width > 0 && it.height > 0 }
+        explicitBottomScreenRect = bottomScreenRect?.takeIf { it.width > 0 && it.height > 0 }
+        explicitSurfaceWidth = surfaceWidth
+        explicitSurfaceHeight = surfaceHeight
+    }
+
+    private fun resolveDefaultZoneRegion(zone: TranslatorDefaultZone, bitmap: Bitmap): TranslationRegion? {
+        if (zone == TranslatorDefaultZone.BOTH) return null
+
+        val halfRect = if (zone == TranslatorDefaultZone.TOP) {
+            RectF(0f, 0f, 1f, 0.5f)
+        } else {
+            RectF(0f, 0.5f, 1f, 1f)
+        }
+
+        // Native vertical-stacked DS framebuffer (256x384): top half = top screen, bottom half = bottom screen
+        if (bitmap.width == 256 && bitmap.height == 384) {
+            return TranslationRegion(
+                id = "default_zone_${zone.preferenceValue}",
+                rect = halfRect,
+                name = zone.preferenceValue
+            )
+        }
+
+        val bmpW = bitmap.width.toFloat().coerceAtLeast(1f)
+        val bmpH = bitmap.height.toFloat().coerceAtLeast(1f)
+        val bmpAspect = bmpW / bmpH
+
+        // Explicit screen rects supplied by EmulatorActivity (if matching captured surface aspect)
+        val expW = explicitSurfaceWidth.toFloat()
+        val expH = explicitSurfaceHeight.toFloat()
+        if (expW > 0f && expH > 0f && kotlin.math.abs(bmpAspect - (expW / expH)) < 0.08f) {
+            val chosenExplicit = if (zone == TranslatorDefaultZone.TOP) explicitTopScreenRect else explicitBottomScreenRect
+            if (chosenExplicit != null) {
+                normalizeScreenRect(chosenExplicit, expW, expH)?.let { rectF ->
+                    return TranslationRegion(
+                        id = "default_zone_${zone.preferenceValue}",
+                        rect = rectF,
+                        name = zone.preferenceValue
+                    )
+                }
+            }
+        }
+
+        // RuntimeLayoutView screen rects (covers PixelCopy captures matching the emulator surface)
+        val layoutView = runCatching {
+            activity.findViewById<LayoutView>(R.id.view_layout_controls)
+        }.getOrNull()
+        if (layoutView != null && layoutView.width > 0 && layoutView.height > 0) {
+            val layoutW = layoutView.width.toFloat()
+            val layoutH = layoutView.height.toFloat()
+            if (kotlin.math.abs(bmpAspect - (layoutW / layoutH)) < 0.08f) {
+                val swapped = (layoutView as? RuntimeLayoutView)?.areScreensSwapped() == true
+                val rawTop = layoutView.getLayoutComponentView(LayoutComponent.TOP_SCREEN)
+                    ?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val rawBottom = layoutView.getLayoutComponentView(LayoutComponent.BOTTOM_SCREEN)
+                    ?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                val topRect = if (swapped) rawBottom else rawTop
+                val bottomRect = if (swapped) rawTop else rawBottom
+
+                val chosen = if (zone == TranslatorDefaultZone.TOP) topRect else bottomRect
+                if (chosen != null) {
+                    normalizeScreenRect(chosen, layoutW, layoutH)?.let { rectF ->
+                        return TranslationRegion(
+                            id = "default_zone_${zone.preferenceValue}",
+                            rect = rectF,
+                            name = zone.preferenceValue
+                        )
+                    }
+                }
+
+                val hybridRect = layoutView.getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)
+                    ?.getRect()?.takeIf { it.width > 0 && it.height > 0 }
+                if (hybridRect != null) {
+                    val halfH = (hybridRect.height / 2).coerceAtLeast(1)
+                    val splitRect = if (zone == TranslatorDefaultZone.TOP) {
+                        me.magnum.melonds.domain.model.Rect(hybridRect.x, hybridRect.y, hybridRect.width, halfH)
+                    } else {
+                        me.magnum.melonds.domain.model.Rect(
+                            hybridRect.x,
+                            hybridRect.y + halfH,
+                            hybridRect.width,
+                            (hybridRect.height - halfH).coerceAtLeast(1)
+                        )
+                    }
+                    normalizeScreenRect(splitRect, layoutW, layoutH)?.let { rectF ->
+                        return TranslationRegion(
+                            id = "default_zone_${zone.preferenceValue}",
+                            rect = rectF,
+                            name = zone.preferenceValue
+                        )
+                    }
+                }
+            }
+        }
+
+        // Fallback when screen rects are not split (e.g. MediaProjection or single unsplit surface)
+        return TranslationRegion(
+            id = "default_zone_${zone.preferenceValue}",
+            rect = halfRect,
+            name = zone.preferenceValue
+        )
+    }
+
+    private fun normalizeScreenRect(
+        rect: me.magnum.melonds.domain.model.Rect,
+        containerW: Float,
+        containerH: Float,
+    ): RectF? {
+        if (containerW <= 0f || containerH <= 0f || rect.width <= 0 || rect.height <= 0) return null
+        val left = (rect.x / containerW).coerceIn(0f, 1f)
+        val top = (rect.y / containerH).coerceIn(0f, 1f)
+        val right = ((rect.x + rect.width) / containerW).coerceIn(0f, 1f)
+        val bottom = ((rect.y + rect.height) / containerH).coerceIn(0f, 1f)
+        if (right - left < 0.05f || bottom - top < 0.05f) return null
+        return RectF(left, top, right, bottom)
     }
 
     fun getSourceLang(): String {
@@ -362,6 +516,7 @@ class GameTranslatorManager(
         overlay.bubbleOpacity = preferences.getInt(PREF_TRANSLATOR_BUBBLE_OPACITY, 90) / 100f
         overlay.fontSizeScale = preferences.getInt(PREF_TRANSLATOR_FONT_SIZE_SCALE, 100) / 100f
 
+        overlay.reloadFloatingButtonPositionFromPrefs()
         val regions = loadRegionsForCurrentGame()
         overlay.setSavedRegions(regions)
 
@@ -721,18 +876,29 @@ class GameTranslatorManager(
                 val sourceLang = getSourceLang()
                 val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
 
+                val savedRegions = if (forceFullscreen) emptyList() else loadRegionsForCurrentGame()
+                val defaultZone = TranslatorDefaultZone.fromPreference(
+                    preferences.getString(PREF_TRANSLATOR_DEFAULT_ZONE, TranslatorDefaultZone.BOTH.preferenceValue)
+                )
+                val defaultZoneRegion = if (customOverrideRegions == null && savedRegions.isEmpty()) {
+                    resolveDefaultZoneRegion(defaultZone, bitmap)
+                } else {
+                    null
+                }
                 val customRegions = when {
                     customOverrideRegions != null -> customOverrideRegions
-                    forceFullscreen -> emptyList()
-                    else -> loadRegionsForCurrentGame()
+                    savedRegions.isNotEmpty() -> savedRegions
+                    defaultZoneRegion != null -> listOf(defaultZoneRegion)
+                    else -> emptyList()
                 }
+                val allowFullscreenFallback = customOverrideRegions == null && savedRegions.isNotEmpty()
 
                 var blocks = withTimeoutOrNull(8000) {
                     textRecognizer.recognizeTextBlocks(bitmap, sourceLang, customRegions)
                 } ?: emptyList()
 
-                // Fallback to fullscreen if custom regions returned 0 blocks
-                if (blocks.isEmpty() && customRegions.isNotEmpty()) {
+                // Fallback to fullscreen only for user-drawn ROI regions if they returned 0 blocks
+                if (blocks.isEmpty() && allowFullscreenFallback) {
                     Log.i(TAG, "Custom regions returned 0 blocks, executing fullscreen fallback...")
                     blocks = withTimeoutOrNull(8000) {
                         textRecognizer.recognizeTextBlocks(bitmap, sourceLang, emptyList())

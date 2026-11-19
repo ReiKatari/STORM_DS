@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ra_cat_notifications">Erfolgsbenachrichtigungen</string>
+    <string name="ra_notification_position_title">Benachrichtigungsposition</string>
+    <string name="ra_notification_position_top">Oben</string>
+    <string name="ra_notification_position_bottom">Unten</string>
+    <string name="ra_notification_style_title">Benachrichtigungsstil</string>
+    <string name="ra_notification_style_detailed">Ausführlich</string>
+    <string name="ra_notification_style_compact">Kompakt</string>
+    <string name="ra_notification_sound_title">Benachrichtigungston</string>
+    <string name="ra_notification_sound_chime">Kristallklang</string>
+    <string name="ra_notification_sound_fanfare">Retro-Fanfare</string>
+    <string name="ra_notification_sound_classic">Systemton</string>
+    <string name="ra_notification_sound_none">Lautlos</string>
+    <string name="ra_cat_sync_and_diagnostics">Synchronisierung und Diagnose</string>
+    <string name="ra_sync_pending_title">Ausstehende Erfolge synchronisieren</string>
+    <string name="ra_sync_pending_summary_count">Warten auf Übertragung: %1$d</string>
+    <string name="ra_sync_pending_summary_all_synced">Alle Erfolge synchronisiert</string>
+    <string name="ra_sync_pending_summary_login_required">Zum Synchronisieren anmelden</string>
+    <string name="ra_sync_pending_all_synced_toast">Alle Erfolge sind bereits synchronisiert</string>
+    <string name="ra_sync_pending_login_prompt">Bei RetroAchievements anmelden, um Erfolge zu synchronisieren</string>
+    <string name="ra_sync_pending_in_progress">Ausstehende Erfolge werden synchronisiert...</string>
+    <string name="ra_sync_pending_result_success">Synchronisierte Erfolge: %1$d</string>
+    <string name="ra_sync_pending_result_partial">Gesendet: %1$d, fehlgeschlagen: %2$d</string>
+    <string name="ra_sync_pending_result_title">Synchronisierungsergebnis</string>
+    <string name="ra_sync_pending_result_error_detail">Fehler: %1$s</string>
+    <string name="ra_test_connection_title">Verbindung zu RetroAchievements testen</string>
+    <string name="ra_test_connection_summary">Kontostatus, HTTPS-Latenz und Proxy-Modus prüfen</string>
+    <string name="ra_test_connection_dialog_title">RetroAchievements-Verbindung</string>
+    <string name="ra_test_connection_checking">Verbindung wird geprüft...</string>
+    <string name="ra_test_connection_retest">Erneut testen</string>
+    <string name="ra_test_connection_close">Schließen</string>
+    <string name="ra_test_connection_label_reachability">Server-Erreichbarkeit</string>
+    <string name="ra_test_connection_label_account">Konto und Token</string>
+    <string name="ra_test_connection_label_proxy">Verbindungsmodus</string>
+    <string name="ra_test_connection_reachable_fmt">Erreichbar (%1$d ms)</string>
+    <string name="ra_test_connection_unreachable_fmt">Nicht erreichbar: %1$s</string>
+    <string name="ra_test_connection_auth_ok_fmt">Angemeldet als %1$s (Token aktiv)</string>
+    <string name="ra_test_connection_auth_expired_fmt">Sitzung abgelaufen für %1$s</string>
+    <string name="ra_test_connection_auth_none">Nicht angemeldet</string>
+    <string name="ra_test_connection_proxy_direct">Direkt (offizieller Server)</string>
+    <string name="ra_test_connection_proxy_active_fmt">Proxy aktiv (%1$s)</string>
+    <string name="ra_test_connection_proxy_unavailable">Proxy ausgewählt, aber inaktiv</string>
+</resources>

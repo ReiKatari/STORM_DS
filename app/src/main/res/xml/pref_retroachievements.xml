@@ -17,6 +17,7 @@
         android:title="@string/enable_retroachievements"
         android:summary="@string/enable_retroachievements_summary"
         app:iconSpaceReserved="false"
+        app:dependency="ra_login"
         android:defaultValue="true" />
 
     <SwitchPreference
@@ -32,6 +33,7 @@
         android:title="@string/enable_rich_presence"
         android:summary="@string/rich_presence_summary"
         app:iconSpaceReserved="false"
+        app:dependency="ra_login"
         android:defaultValue="true" />
 
     <SwitchPreference
@@ -91,4 +93,53 @@
         app:iconSpaceReserved="false"
         app:dependency="ra_login"
         android:defaultValue="true" />
+
+    <PreferenceCategory
+        android:title="@string/ra_cat_notifications"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:key="ra_notification_position"
+            android:title="@string/ra_notification_position_title"
+            android:summary="%s"
+            android:entries="@array/ra_notification_position_options"
+            android:entryValues="@array/ra_notification_position_values"
+            android:defaultValue="top"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="ra_notification_style"
+            android:title="@string/ra_notification_style_title"
+            android:summary="%s"
+            android:entries="@array/ra_notification_style_options"
+            android:entryValues="@array/ra_notification_style_values"
+            android:defaultValue="detailed"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="ra_notification_sound"
+            android:title="@string/ra_notification_sound_title"
+            android:summary="%s"
+            android:entries="@array/ra_notification_sound_options"
+            android:entryValues="@array/ra_notification_sound_values"
+            android:defaultValue="chime"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/ra_cat_sync_and_diagnostics"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="ra_sync_pending_submissions"
+            android:title="@string/ra_sync_pending_title"
+            android:summary="@string/ra_sync_pending_summary_all_synced"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="ra_test_connection"
+            android:title="@string/ra_test_connection_title"
+            android:summary="@string/ra_test_connection_summary"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
 </PreferenceScreen>

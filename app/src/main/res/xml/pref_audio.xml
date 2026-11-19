@@ -75,6 +75,13 @@
                 android:dependency="sound_enabled"
                 app:iconSpaceReserved="false" />
 
+        <Preference
+                android:key="audio_dsp_test"
+                android:title="@string/audio_dsp_test_title"
+                android:summary="@string/audio_dsp_test_summary"
+                android:dependency="sound_enabled"
+                app:iconSpaceReserved="false" />
+
         <SwitchPreference
                 android:key="audio_soft_limiter_enabled"
                 android:title="@string/audio_soft_limiter_title"
@@ -137,5 +144,20 @@
                 android:summary="@string/mic_agc_noise_gate_summary"
                 app:iconSpaceReserved="false"
                 android:defaultValue="true" />
+
+        <SeekBarPreference
+                android:key="mic_noise_gate_threshold"
+                android:title="@string/mic_noise_gate_threshold_title"
+                android:dependency="mic_agc_noise_gate_enabled"
+                app:iconSpaceReserved="false"
+                app:showSeekBarValue="true"
+                android:defaultValue="25"
+                app:min="0"
+                android:max="100" />
+
+        <me.magnum.melonds.ui.settings.preferences.MicLevelMeterPreference
+                android:key="mic_vu_meter"
+                android:title="@string/mic_vu_meter_title"
+                app:iconSpaceReserved="false" />
     </PreferenceCategory>
 </PreferenceScreen>

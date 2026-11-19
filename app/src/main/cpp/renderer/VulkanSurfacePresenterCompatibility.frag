@@ -1706,6 +1706,40 @@ void runPresenterCore()
     outColor = composeScreenColor(pushConstants.drawMode == 2u);
 }
 
+float sampleSingleDepthPoint(vec2 uv, bool topScreen, bool screenOwns3D)
+{
+    int sx = int(clamp(uv.x * 256.0, 0.0, 255.0));
+    int sy = int(clamp((1.0 - uv.y) * 192.0, 0.0, 191.0));
+    Rgba6 v1 = unpackColor6(topScreen ? readTopPacked(sy, sx) : readBottomPacked(sy, sx));
+    Rgba6 v3 = unpackColor6(topScreen ? readTopPacked(sy, 512 + sx) : readBottomPacked(sy, 512 + sx));
+
+    int rW = int(max(pushConstants.rendererWidth, 1u));
+    int rH = int(max(pushConstants.rendererHeight, 1u));
+    int scaledX = int(clamp(uv.x * float(rW), 0.0, float(rW - 1)));
+    int scaledY = int(clamp((1.0 - uv.y) * float(rH), 0.0, float(rH - 1)));
+    vec4 raw3D = screenOwns3D
+        ? imageLoad(u3dImage, ivec2(scaledX, scaledY))
+        : (topScreen
+            ? imageLoad(u3dPreviousTopImage, ivec2(scaledX, scaledY))
+            : imageLoad(u3dPreviousBottomImage, ivec2(scaledX, scaledY)));
+
+    if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
+    {
+        return 0.85;
+    }
+    if (raw3D.a > 0.01)
+    {
+        float rawLuma = dot(raw3D.rgb, vec3(0.299, 0.587, 0.114));
+        float maxC = max(raw3D.r, max(raw3D.g, raw3D.b));
+        float minC = min(raw3D.r, min(raw3D.g, raw3D.b));
+        float chroma = maxC - minC;
+        float persp = clamp((1.0 - uv.y) * 0.58 + rawLuma * 0.27 + chroma * 0.22, 0.0, 1.0);
+        return mix(-0.32, 0.68, persp);
+    }
+    float luma = clamp((float(v1.r) * 0.299 + float(v1.g) * 0.587 + float(v1.b) * 0.114) * (1.0 / 63.0), 0.0, 1.0);
+    return mix(-0.78, -0.22, luma);
+}
+
 float estimateSceneDepthFactor(vec2 uv)
 {
     bool topScreen = (pushConstants.drawMode == 1u)
@@ -1714,32 +1748,17 @@ float estimateSceneDepthFactor(vec2 uv)
         || (pushConstants.drawMode == 7u)
         || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
             && ((pushConstants.drawMode & 1u) != 0u));
-    int sx = int(clamp(uv.x * 256.0, 0.0, 255.0));
-    int sy = int(clamp((1.0 - uv.y) * 192.0, 0.0, 191.0));
-    Rgba6 v1 = unpackColor6(topScreen ? readTopPacked(sy, sx) : readBottomPacked(sy, sx));
-    Rgba6 v3 = unpackColor6(topScreen ? readTopPacked(sy, 512 + sx) : readBottomPacked(sy, 512 + sx));
-
-    int scaledX = int(clamp(uv.x * float(max(pushConstants.rendererWidth, 1u)), 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
-    int scaledY = int(clamp((1.0 - uv.y) * float(max(pushConstants.rendererHeight, 1u)), 0.0, float(max(pushConstants.rendererHeight, 1u) - 1u)));
     bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
-    vec4 raw3D = screenOwns3D
-        ? imageLoad(u3dImage, ivec2(scaledX, scaledY))
-        : (topScreen
-            ? imageLoad(u3dPreviousTopImage, ivec2(scaledX, scaledY))
-            : imageLoad(u3dPreviousBottomImage, ivec2(scaledX, scaledY)));
 
-    float luma = clamp((float(v1.r) * 0.299 + float(v1.g) * 0.587 + float(v1.b) * 0.114) * (1.0 / 63.0), 0.0, 1.0);
-    if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
-    {
-        return 0.75;
-    }
-    if (raw3D.a > 0.01)
-    {
-        float rawLuma = dot(raw3D.rgb, vec3(0.299, 0.587, 0.114));
-        float persp = clamp((1.0 - uv.y) * 0.6 + rawLuma * 0.4, 0.0, 1.0);
-        return mix(-0.35, 0.50, persp);
-    }
-    return mix(-0.65, -0.15, luma);
+    vec2 stepUv = vec2(2.0 / 256.0, 2.0 / 192.0);
+    float dc = sampleSingleDepthPoint(uv, topScreen, screenOwns3D);
+    if (dc > 0.80)
+        return dc;
+    float dl = sampleSingleDepthPoint(clamp(uv - vec2(stepUv.x, 0.0), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
+    float dr = sampleSingleDepthPoint(clamp(uv + vec2(stepUv.x, 0.0), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
+    float du = sampleSingleDepthPoint(clamp(uv - vec2(0.0, stepUv.y), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
+    float dd = sampleSingleDepthPoint(clamp(uv + vec2(0.0, stepUv.y), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
+    return dc * 0.48 + (dl + dr + du + dd) * 0.13;
 }
 
 vec3 applyConsoleColorProfile(vec3 rgb, uint profile)
@@ -1768,24 +1787,65 @@ vec3 applyConsoleColorProfile(vec3 rgb, uint profile)
     return rgb;
 }
 
+vec3 applyLcdGridEffect(vec3 rgb, vec2 uv, uint lcdGridMode)
+{
+    if (lcdGridMode == 0u)
+        return rgb;
+    vec2 cellCoord = uv * vec2(256.0, 192.0);
+    vec2 fw = max(fwidth(cellCoord), vec2(0.0001));
+    float visibility = clamp(1.0 - max(fw.x, fw.y) * 1.45, 0.0, 1.0);
+    if (visibility <= 0.01)
+        return rgb;
+
+    vec2 cell = fract(cellCoord);
+    if (lcdGridMode == 1u)
+    {
+        float gx = smoothstep(0.0, 0.09, cell.x) * (1.0 - smoothstep(0.91, 1.0, cell.x));
+        float gy = smoothstep(0.0, 0.10, cell.y) * (1.0 - smoothstep(0.90, 1.0, cell.y));
+        float mask = mix(1.0, mix(0.76, 1.04, gx * gy), visibility);
+        return clamp(rgb * mask, 0.0, 1.0);
+    }
+    if (lcdGridMode == 2u)
+    {
+        float scan = mix(0.82, 1.05, smoothstep(0.0, 0.12, cell.y) * (1.0 - smoothstep(0.88, 1.0, cell.y)));
+        float sub = cell.x * 3.0;
+        vec3 triad = vec3(
+            0.90 + 0.18 * smoothstep(0.0, 0.35, sub) * (1.0 - smoothstep(0.65, 1.15, sub)),
+            0.90 + 0.18 * smoothstep(0.85, 1.35, sub) * (1.0 - smoothstep(1.65, 2.15, sub)),
+            0.90 + 0.18 * smoothstep(1.85, 2.35, sub) * (1.0 - smoothstep(2.65, 3.0, sub))
+        );
+        vec3 maskRgb = mix(vec3(1.0), triad * scan, visibility);
+        return clamp(rgb * maskRgb, 0.0, 1.0);
+    }
+    return rgb;
+}
+
 void main()
 {
     uint depthMode = (pushConstants.filtering >> 8u) & 0x7u;
     uint colorProfile = (pushConstants.filtering >> 11u) & 0x7u;
     float strengthNorm = float((pushConstants.filtering >> 14u) & 0x7Fu) * 0.01;
+    uint lcdGridMode = (pushConstants.filtering >> 21u) & 0x3u;
 
     vec2 baseUv = inFragUv;
+    vec2 gridUv = inFragUv;
     float depthFactor = 0.0;
     float sheen = 0.0;
+    float sbsDivider = 1.0;
     if (pushConstants.drawMode != 0u && depthMode != 0u)
     {
         if (depthMode == 1u)
         {
             float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
             float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
-            depthFactor = estimateSceneDepthFactor(inFragUv);
-            baseUv = clamp(inFragUv + vec2(tiltX, -tiltY) * depthFactor * (0.008 + 0.024 * strengthNorm), vec2(0.001), vec2(0.999));
-            sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.08 * strengthNorm, -0.04, 0.04) * max(depthFactor, 0.0);
+            vec2 parallaxVec = vec2(tiltX, -tiltY) * (0.010 + 0.030 * strengthNorm);
+            float d1 = estimateSceneDepthFactor(inFragUv);
+            vec2 uv1 = clamp(inFragUv + parallaxVec * d1, vec2(0.001), vec2(0.999));
+            float d2 = estimateSceneDepthFactor(uv1);
+            depthFactor = mix(d1, d2, 0.45);
+            baseUv = clamp(inFragUv + parallaxVec * depthFactor, vec2(0.001), vec2(0.999));
+            gridUv = baseUv;
+            sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.11 * strengthNorm, -0.055, 0.055) * max(depthFactor, 0.0);
         }
         else if (depthMode == 2u)
         {
@@ -1796,26 +1856,36 @@ void main()
             bool rightEye = inFragUv.x >= 0.5;
             float eyeSign = rightEye ? 1.0 : -1.0;
             vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
-            depthFactor = estimateSceneDepthFactor(sbsUv);
-            float shift = eyeSign * (0.003 + 0.014 * strengthNorm) * depthFactor;
-            baseUv = vec2(clamp(sbsUv.x + shift, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
+            float dispScale = eyeSign * (0.004 + 0.018 * strengthNorm);
+            float d1 = estimateSceneDepthFactor(sbsUv);
+            vec2 uv1 = vec2(clamp(sbsUv.x + dispScale * d1, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
+            float d2 = estimateSceneDepthFactor(uv1);
+            depthFactor = mix(d1, d2, 0.45);
+            baseUv = vec2(clamp(sbsUv.x + dispScale * depthFactor, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
+            gridUv = baseUv;
+            if (abs(inFragUv.x - 0.5) < 0.0018)
+                sbsDivider = 0.0;
         }
     }
 
     fragUv = baseUv;
     gAllowCarryStore = true;
     runPresenterCore();
-    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u))
+    if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u && lcdGridMode == 0u))
         return;
 
     vec4 finalColor = outColor;
     if (depthMode == 1u)
     {
-        finalColor.rgb = clamp(finalColor.rgb + vec3(sheen), 0.0, 1.0);
+        vec2 centered = (inFragUv - vec2(0.5)) * 2.0;
+        float vig = 1.0 - dot(centered, centered) * (0.045 * strengthNorm);
+        float fgBoost = 1.0 + max(depthFactor, 0.0) * 0.06 * strengthNorm;
+        finalColor.rgb = clamp(finalColor.rgb * vig * fgBoost + vec3(sheen), 0.0, 1.0);
     }
     else if (depthMode == 2u)
     {
-        float shiftPx = (0.8 + 3.5 * strengthNorm) * (depthFactor + 0.15);
+        float convergence = 0.12;
+        float shiftPx = (1.0 + 4.2 * strengthNorm) * (depthFactor - convergence);
         bool topScreen = (pushConstants.drawMode == 1u)
             || (pushConstants.drawMode == 2u)
             || (pushConstants.drawMode == 4u)
@@ -1827,22 +1897,31 @@ void main()
         int sxR = int(clamp(inFragUv.x * 256.0 + shiftPx, 0.0, 255.0));
         vec3 pL = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxL) : readBottomPacked(sy, sxL)));
         vec3 pR = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxR) : readBottomPacked(sy, sxR)));
-        int scY = int(clamp((1.0 - inFragUv.y) * float(max(pushConstants.rendererHeight, 1u)), 0.0, float(max(pushConstants.rendererHeight, 1u) - 1u)));
+        int rW = int(max(pushConstants.rendererWidth, 1u));
+        int rH = int(max(pushConstants.rendererHeight, 1u));
+        int scY = int(clamp((1.0 - inFragUv.y) * float(rH), 0.0, float(rH - 1)));
         float scScale = float(max(pushConstants.scale, 1u));
-        int scXL = int(clamp(inFragUv.x * float(max(pushConstants.rendererWidth, 1u)) - shiftPx * scScale, 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
-        int scXR = int(clamp(inFragUv.x * float(max(pushConstants.rendererWidth, 1u)) + shiftPx * scScale, 0.0, float(max(pushConstants.rendererWidth, 1u) - 1u)));
+        int scXL = int(clamp(inFragUv.x * float(rW) - shiftPx * scScale, 0.0, float(rW - 1)));
+        int scXR = int(clamp(inFragUv.x * float(rW) + shiftPx * scScale, 0.0, float(rW - 1)));
         bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
         vec4 r3L = screenOwns3D ? imageLoad(u3dImage, ivec2(scXL, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXL, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXL, scY)));
         vec4 r3R = screenOwns3D ? imageLoad(u3dImage, ivec2(scXR, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXR, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXR, scY)));
-        vec3 leftRgb = mix(finalColor.rgb, (r3L.a > 0.01) ? r3L.rgb : pL, 0.65);
-        vec3 rightRgb = mix(finalColor.rgb, (r3R.a > 0.01) ? r3R.rgb : pR, 0.65);
-        vec3 anaglyph;
-        anaglyph.r = clamp(dot(leftRgb, vec3(0.456, 0.500, 0.176)) + dot(rightRgb, vec3(-0.043, -0.088, -0.002)), 0.0, 1.0);
-        anaglyph.g = clamp(dot(leftRgb, vec3(-0.040, -0.038, -0.016)) + dot(rightRgb, vec3(0.378, 0.734, -0.018)), 0.0, 1.0);
-        anaglyph.b = clamp(dot(leftRgb, vec3(-0.015, -0.021, -0.005)) + dot(rightRgb, vec3(-0.072, -0.113, 1.226)), 0.0, 1.0);
-        finalColor = vec4(anaglyph, finalColor.a);
+        vec3 leftSrgb = mix(finalColor.rgb, (r3L.a > 0.01) ? r3L.rgb : pL, 0.80);
+        vec3 rightSrgb = mix(finalColor.rgb, (r3R.a > 0.01) ? r3R.rgb : pR, 0.80);
+        vec3 leftLin = pow(max(leftSrgb, vec3(0.0)), vec3(2.2));
+        vec3 rightLin = pow(max(rightSrgb, vec3(0.0)), vec3(2.2));
+        vec3 anaglyphLin;
+        anaglyphLin.r = clamp(dot(leftLin, vec3(0.4561, 0.50048, 0.17638)) + dot(rightLin, vec3(-0.04347, -0.08794, -0.00156)), 0.0, 1.0);
+        anaglyphLin.g = clamp(dot(leftLin, vec3(-0.04008, -0.03782, -0.01576)) + dot(rightLin, vec3(0.37848, 0.73364, -0.01845)), 0.0, 1.0);
+        anaglyphLin.b = clamp(dot(leftLin, vec3(-0.01522, -0.02059, -0.00547)) + dot(rightLin, vec3(-0.07215, -0.11296, 1.2264)), 0.0, 1.0);
+        finalColor = vec4(pow(anaglyphLin, vec3(1.0 / 2.2)), finalColor.a);
+    }
+    else if (depthMode == 3u)
+    {
+        finalColor.rgb *= sbsDivider;
     }
 
     finalColor.rgb = applyConsoleColorProfile(finalColor.rgb, colorProfile);
+    finalColor.rgb = applyLcdGridEffect(finalColor.rgb, gridUv, lcdGridMode);
     outColor = finalColor;
 }

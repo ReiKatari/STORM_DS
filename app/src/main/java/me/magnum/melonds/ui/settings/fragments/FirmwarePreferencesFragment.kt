@@ -22,7 +22,12 @@ class FirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFragment
         helper.bindPreferenceSummaryToValue(findPreference("firmware_settings_birthday"))
 
         val macPref = findPreference<Preference>("internal_mac_address")
-        helper.bindPreferenceSummaryToValue(macPref)
+        val prefs = preferenceManager.sharedPreferences
+        if (prefs?.getString("internal_mac_address", null).isNullOrBlank()) {
+            val defaultMac = me.magnum.melonds.domain.model.MacAddress.randomDsAddress().toString()
+            prefs?.edit()?.putString("internal_mac_address", defaultMac)?.apply()
+        }
+        macPref?.summary = prefs?.getString("internal_mac_address", null) ?: getString(R.string.not_set)
 
         macPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, newValue ->
             val macStr = (newValue as? String)?.trim() ?: return@OnPreferenceChangeListener false
@@ -31,8 +36,9 @@ class FirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFragment
                 false
             } else {
                 val formatted = formatMacAddress(macStr)
+                preferenceManager.sharedPreferences?.edit()?.putString("internal_mac_address", formatted)?.apply()
                 macPref.summary = formatted
-                true
+                false
             }
         }
 

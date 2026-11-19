@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.work.HiltWorker
+import androidx.preference.PreferenceManager
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
@@ -45,12 +46,30 @@ class CheatImportWorker @AssistedInject constructor(
         const val KEY_URI = "uri"
         const val KEY_PROGRESS_RELATIVE = "progress_relative"
         const val KEY_PROGRESS_ITEM = "progress_item"
+        const val PREF_CHEATS_DB_LAST_UPDATED_MS = "cheats_db_last_updated_ms"
 
         private const val NOTIFICATION_ID_CHEATS_IMPORT = 100
     }
 
+    private fun markDatabaseUpdated() {
+        PreferenceManager.getDefaultSharedPreferences(applicationContext)
+            .edit()
+            .putLong(PREF_CHEATS_DB_LAST_UPDATED_MS, System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun openInputStreamForUri(uri: Uri): InputStream? {
+        return if (uri.scheme == "file") {
+            val path = uri.path ?: return null
+            val file = java.io.File(path)
+            if (file.exists() && file.isFile) java.io.FileInputStream(file) else null
+        } else {
+            applicationContext.contentResolver.openInputStream(uri)
+        }
+    }
+
     override suspend fun doWork(): Result {
-        setForeground(createForegroundInfo(null, 0, true))
+        runCatching { setForeground(createForegroundInfo(null, 0, true)) }
 
         val uri = inputData.getString(KEY_URI)?.toUri() ?: return Result.failure()
 
@@ -64,13 +83,15 @@ class CheatImportWorker @AssistedInject constructor(
                 return Result.failure()
             }
 
-            val totalFileSize = applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
-                val length = it.length
-                if (length == AssetFileDescriptor.UNKNOWN_LENGTH) {
-                    null
-                } else {
-                    length
-                }
+            val totalFileSize = if (uri.scheme == "file") {
+                uri.path?.let { java.io.File(it).length().takeIf { len -> len > 0L } }
+            } else {
+                runCatching {
+                    applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+                        val length = it.length
+                        if (length == AssetFileDescriptor.UNKNOWN_LENGTH) null else length
+                    }
+                }.getOrNull()
             }
 
             val databaseExtension = databaseDocument.name?.substringAfterLast('.')?.lowercase()
@@ -99,7 +120,7 @@ class CheatImportWorker @AssistedInject constructor(
 
     private fun sniffParserFromStream(uri: Uri): CheatDatabaseParser? {
         return runCatching {
-            applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+            openInputStreamForUri(uri)?.use { stream ->
                 val header = ByteArray(16)
                 val read = stream.read(header)
                 if (read >= 12 && String(header, 0, 12, Charsets.US_ASCII).startsWith("R4 CheatCode")) {
@@ -115,7 +136,7 @@ class CheatImportWorker @AssistedInject constructor(
 
     private suspend fun parseZipDocument(uri: Uri) = suspendCoroutine { continuation ->
         try {
-            applicationContext.contentResolver.openInputStream(uri)?.use { rawIn ->
+            openInputStreamForUri(uri)?.use { rawIn ->
                 val zipIn = ZipInputStream(rawIn.buffered())
                 var entry = zipIn.nextEntry
                 var matchingEntryName: String? = null
@@ -157,6 +178,7 @@ class CheatImportWorker @AssistedInject constructor(
 
                         override fun onParseComplete() {
                             Log.i(TAG, "Completed zip cheat database parse: '$matchingEntryName'")
+                            markDatabaseUpdated()
                             continuation.resume(Result.success())
                         }
                     })
@@ -173,7 +195,7 @@ class CheatImportWorker @AssistedInject constructor(
 
     private suspend fun parseStreamDocument(uri: Uri, parser: CheatDatabaseParser, totalFileSize: Long?) = suspendCoroutine { continuation ->
         try {
-            applicationContext.contentResolver.openInputStream(uri)?.use {
+            openInputStreamForUri(uri)?.use {
                 val progressTrackerStream = ProgressTrackerInputStream(it)
                 parser.parseCheatDatabase(progressTrackerStream, object : CheatDatabaseParserListener {
                     override fun onDatabaseParseStart(databaseName: String): CheatDatabase = runBlocking {
@@ -201,6 +223,7 @@ class CheatImportWorker @AssistedInject constructor(
 
                     override fun onParseComplete() {
                         Log.i(TAG, "Completed direct cheat database parse with ${parser::class.simpleName}")
+                        markDatabaseUpdated()
                         continuation.resume(Result.success())
                     }
                 })

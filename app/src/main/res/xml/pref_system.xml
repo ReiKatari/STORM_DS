@@ -24,6 +24,12 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
+        <Preference
+                android:key="system_share_app_log"
+                android:title="@string/system_share_log_title"
+                android:summary="@string/system_share_log_summary"
+                app:iconSpaceReserved="false" />
+
         <SwitchPreference
                 android:key="save_internal_config_as_file"
                 android:title="@string/save_internal_config_as_file"
@@ -94,8 +100,13 @@
                 android:summary="@string/wfc_custom_dns_summary"
                 app:iconSpaceReserved="false"
                 app:useSimpleSummaryProvider="true"
-                android:defaultValue="178.62.43.212"
-                app:dependency="system_wfc_server" />
+                android:defaultValue="178.62.43.212" />
+
+        <Preference
+                android:key="system_wfc_test_connection"
+                android:title="@string/wfc_test_connection_title"
+                android:summary="@string/wfc_test_connection_summary"
+                app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

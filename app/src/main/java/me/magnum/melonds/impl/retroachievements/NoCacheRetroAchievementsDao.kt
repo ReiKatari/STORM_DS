@@ -118,6 +118,14 @@ class NoCacheRetroAchievementsDao(private val actualAchievementsDao: RetroAchiev
         return actualAchievementsDao.getPendingAchievementSubmissions()
     }
 
+    override fun observePendingAchievementSubmissionCount(): kotlinx.coroutines.flow.Flow<Int> {
+        return actualAchievementsDao.observePendingAchievementSubmissionCount()
+    }
+
+    override suspend fun getPendingAchievementSubmissionCount(): Int {
+        return actualAchievementsDao.getPendingAchievementSubmissionCount()
+    }
+
     override suspend fun removePendingAchievementSubmission(pendingAchievementSubmission: RAPendingAchievementSubmissionEntity) {
         actualAchievementsDao.removePendingAchievementSubmission(pendingAchievementSubmission)
     }

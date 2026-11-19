@@ -51,6 +51,14 @@ enum class DisplayColorProfile : int
     DsiXlIps = 3, // UTL-001 wide-viewing-angle warm IPS panel calibration
 };
 
+// Authentic Nintendo DS / DSi hardware LCD pixel grid overlay mode.
+enum class LcdGridMode : int
+{
+    Off = 0,
+    DsLiteGrid = 1,
+    DsiXlSubpixel = 2,
+};
+
 inline std::atomic<int> gCompositorMode{static_cast<int>(CompositorMode::Precise)};
 inline std::atomic<int> gDebugView{static_cast<int>(DebugView::None)};
 inline std::atomic<bool> gThickHighResEdges{false};
@@ -59,6 +67,7 @@ inline std::atomic<int> gDepth3DMode{static_cast<int>(Depth3DMode::Off)};
 inline std::atomic<int> gDepth3DStrength{50};
 inline std::atomic<bool> gSsaoEnabled{false};
 inline std::atomic<int> gDisplayColorProfile{static_cast<int>(DisplayColorProfile::Standard)};
+inline std::atomic<int> gLcdGridMode{static_cast<int>(LcdGridMode::Off)};
 inline std::atomic<int> gHingeGapPixels{0};
 inline std::atomic<int> gGyroTiltXQuantized{0};
 inline std::atomic<int> gGyroTiltYQuantized{0};
@@ -176,15 +185,28 @@ inline int GetGyroTiltYQuantized() noexcept
     return gGyroTiltYQuantized.load(std::memory_order_relaxed);
 }
 
+inline LcdGridMode GetLcdGridMode() noexcept
+{
+    const int value = gLcdGridMode.load(std::memory_order_relaxed);
+    return (value >= 0 && value <= 2) ? static_cast<LcdGridMode>(value) : LcdGridMode::Off;
+}
+
+inline void SetLcdGridMode(int mode) noexcept
+{
+    gLcdGridMode.store((mode >= 0 && mode <= 2) ? mode : 0, std::memory_order_relaxed);
+}
+
 inline uint32_t PackPresenterFilteringWord(uint32_t baseFiltering) noexcept
 {
     const uint32_t depthMode = static_cast<uint32_t>(GetDepth3DMode()) & 0x7u;
     const uint32_t colorProfile = static_cast<uint32_t>(GetDisplayColorProfile()) & 0x7u;
     const uint32_t strength = static_cast<uint32_t>(GetDepth3DStrength()) & 0x7Fu;
+    const uint32_t lcdGrid = static_cast<uint32_t>(GetLcdGridMode()) & 0x3u;
     return (baseFiltering & 0xFFu)
         | (depthMode << 8u)
         | (colorProfile << 11u)
-        | (strength << 14u);
+        | (strength << 14u)
+        | (lcdGrid << 21u);
 }
 
 inline uint32_t PackPresenterScreenSwapWord(uint32_t baseScreenSwap) noexcept

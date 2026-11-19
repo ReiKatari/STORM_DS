@@ -78,6 +78,21 @@
             android:title="@string/pref_cat_gamepads_sensors"
             app:iconSpaceReserved="false">
 
+        <Preference
+                android:key="input_gamepad_tester"
+                android:title="@string/input_gamepad_tester_title"
+                android:summary="@string/input_gamepad_tester_summary"
+                app:iconSpaceReserved="false" />
+
+        <SeekBarPreference
+                android:key="input_gamepad_analog_deadzone"
+                android:title="@string/input_gamepad_analog_deadzone_title"
+                app:iconSpaceReserved="false"
+                app:showSeekBarValue="true"
+                android:defaultValue="15"
+                app:min="5"
+                android:max="40" />
+
         <SwitchPreference
                 android:key="input_gyro_aiming_enabled"
                 android:title="@string/input_gyro_aiming_title"
@@ -90,6 +105,16 @@
                 android:title="@string/v780_gyro_mode_title"
                 android:dependency="input_gyro_aiming_enabled"
                 android:defaultValue="touch_aim"
+                app:useSimpleSummaryProvider="true"
+                app:iconSpaceReserved="false" />
+
+        <ListPreference
+                android:key="input_gyro_activation_mode"
+                android:title="@string/input_gyro_activation_mode_title"
+                android:dependency="input_gyro_aiming_enabled"
+                android:entries="@array/input_gyro_activation_mode_options"
+                android:entryValues="@array/input_gyro_activation_mode_values"
+                android:defaultValue="always"
                 app:useSimpleSummaryProvider="true"
                 app:iconSpaceReserved="false" />
 

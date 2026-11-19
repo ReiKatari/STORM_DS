@@ -6,6 +6,7 @@
 #define MIC_GAIN 10
 
 std::atomic<bool> MicInputOboeCallback::agcEnabled{true};
+std::atomic<float> MicInputOboeCallback::noiseGateThreshold{350.0f};
 
 MicInputOboeCallback::MicInputOboeCallback(int bufferSize, std::mutex& micBufferMutex, std::ostream* recordingStream) : bufferSize(bufferSize), micBufferMutex(micBufferMutex), _recordingStream(recordingStream) {
     this->buffer = new s16[bufferSize];
@@ -72,12 +73,13 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
                 envelope = envelope * 0.998f + absSample * 0.002f;
             }
 
-            // Noise gate: suppress ambient room noise below threshold
-            constexpr float NOISE_GATE_THRESHOLD = 350.0f;
+            // Noise gate: suppress ambient room noise below configurable threshold
+            const float gateThreshold = std::clamp(noiseGateThreshold.load(std::memory_order_relaxed), 0.0f, 1600.0f);
             float gate = 1.0f;
-            if (envelope < NOISE_GATE_THRESHOLD)
+            if (gateThreshold > 1.0f && envelope < gateThreshold)
             {
-                gate = std::max(0.0f, (envelope - 100.0f) / (NOISE_GATE_THRESHOLD - 100.0f));
+                const float kneeFloor = gateThreshold * 0.28f;
+                gate = std::clamp((envelope - kneeFloor) / std::max(gateThreshold - kneeFloor, 1.0f), 0.0f, 1.0f);
             }
 
             // Adaptive Gain Control (AGC): normalize voice & blow towards ~22000

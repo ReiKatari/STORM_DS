@@ -3,10 +3,45 @@ package me.magnum.melonds.ui.settings.fragments
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.view.ContextThemeWrapper
-import android.view.LayoutInflater
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.Icon
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -19,15 +54,19 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
-import me.magnum.melonds.databinding.DialogRetroachievementsLoginBinding
 import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.ui.common.LoadingDialog
+import me.magnum.melonds.ui.emulator.ui.popup.RetroAchievementsSoundPlayer
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.ui.settings.SettingsActivity
+import me.magnum.melonds.ui.settings.dialogs.SettingsDialogScaffold
 import me.magnum.melonds.ui.settings.flow.observeAsFlow
 import me.magnum.melonds.ui.settings.model.RetroAchievementsAccountState
 import me.magnum.melonds.ui.settings.preferences.RetroAchievementsProfilePreference
 import me.magnum.melonds.ui.settings.viewmodel.RetroAchievementsSettingsViewModel
+import me.magnum.melonds.ui.theme.AppThemeManager
+import me.magnum.melonds.ui.theme.SpaceGrotesk
+import me.magnum.melonds.ui.theme.WatermelonColors
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointSnapshot
 import javax.inject.Inject
@@ -51,8 +90,13 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         val hardcoreModePreference = findPreference<SwitchPreference>("ra_hardcore_enabled")!!
         hardcoreModePreference.summary = getString(R.string.v780_ra_hardcore_mode_detailed_summary)
         val richPresencePreference = findPreference<SwitchPreference>("ra_rich_presence")!!
+        retroAchievementsEnabledPreference.isVisible = false
+        richPresencePreference.isVisible = false
         val offlineBackendPreference = findPreference<ListPreference>("ra_offline_backend")!!
         val builtInOfflinePreference = findPreference<SwitchPreference>("ra_offline_softcore_enabled")!!
+        val notificationSoundPreference = findPreference<ListPreference>("ra_notification_sound")!!
+        val syncPendingPreference = findPreference<Preference>("ra_sync_pending_submissions")!!
+        val testConnectionPreference = findPreference<Preference>("ra_test_connection")!!
         val integrationPreferences = listOf(
             hardcoreModePreference,
             findPreference<SwitchPreference>("ra_unofficial_enabled")!!,
@@ -186,6 +230,7 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                     val isLoggedIn = state.isLoggedIn
                     val isRetroAchievementsEnabled = state.isRetroAchievementsEnabled
                     val isHardcoreEnabled = state.isHardcoreEnabled
+                    retroAchievementsEnabledPreference.isVisible = isLoggedIn
                     val integrationOptionsEnabled = isLoggedIn && isRetroAchievementsEnabled
                     integrationPreferences.forEach { preference ->
                         preference.isVisible = integrationOptionsEnabled
@@ -197,13 +242,24 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                     builtInOfflinePreference.isVisible = integrationOptionsEnabled && builtInEffective
                     richPresencePreference.isVisible =
                         integrationOptionsEnabled && !isHardcoreEnabled && builtInEffective
-                    offlineBackendPreference.summary = when (state.endpoint.hostSource) {
+                    val selectedIdx = offlineBackendPreference.findIndexOfValue(offlineBackendPreference.value)
+                    val selectedEntry = if (selectedIdx >= 0 && selectedIdx < offlineBackendPreference.entries.size) {
+                        offlineBackendPreference.entries[selectedIdx].toString()
+                    } else {
+                        null
+                    }
+                    val statusSummary = when (state.endpoint.hostSource) {
                         RetroAchievementsEndpointSnapshot.HostSource.OFFICIAL ->
                             getString(R.string.ra_offline_backend_summary)
                         RetroAchievementsEndpointSnapshot.HostSource.RA_OFFLINE_PROXY ->
                             getString(R.string.ra_offline_proxy_active_summary)
                         RetroAchievementsEndpointSnapshot.HostSource.RA_OFFLINE_PROXY_UNAVAILABLE ->
                             getString(R.string.ra_offline_proxy_not_active)
+                    }
+                    offlineBackendPreference.summary = if (selectedEntry != null) {
+                        "$selectedEntry - $statusSummary"
+                    } else {
+                        statusSummary
                     }
                 }
             }
@@ -230,6 +286,134 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                     Toast.makeText(requireContext(), R.string.retro_achievements_login_error_short, Toast.LENGTH_LONG).show()
                 }
             }
+        }
+
+        notificationSoundPreference.addOnPreferenceChangeListener { _, newValue ->
+            RetroAchievementsSoundPlayer.play(newValue as? String)
+            true
+        }
+
+        syncPendingPreference.setOnPreferenceClickListener {
+            val accountState = viewModel.accountState.value
+            val runtimeIdentityLocked = requireActivity().intent.getBooleanExtra(
+                SettingsActivity.KEY_RA_RUNTIME_IDENTITY_LOCKED,
+                false,
+            )
+            when (accountState) {
+                is RetroAchievementsAccountState.LoggedIn -> {
+                    if (viewModel.pendingSubmissionsCount.value == 0) {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.ra_sync_pending_all_synced_toast,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        viewModel.syncPendingSubmissions()
+                    }
+                }
+                is RetroAchievementsAccountState.LoginExpired -> {
+                    if (runtimeIdentityLocked) {
+                        showInGameAccountChangeBlockedDialog()
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.ra_sync_pending_login_prompt,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        showLoginDialog(accountState.existingUsername)
+                    }
+                }
+                RetroAchievementsAccountState.LoggedOut -> {
+                    if (runtimeIdentityLocked) {
+                        showInGameAccountChangeBlockedDialog()
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.ra_sync_pending_login_prompt,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        showLoginDialog(null)
+                    }
+                }
+                RetroAchievementsAccountState.Unknown -> {
+                    // Wait until state resolves
+                }
+            }
+            true
+        }
+
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    viewModel.accountState,
+                    viewModel.pendingSubmissionsCount,
+                    viewModel.syncingPending,
+                ) { accountState, pendingCount, syncing ->
+                    Triple(accountState, pendingCount, syncing)
+                }.collect { (accountState, pendingCount, syncing) ->
+                    syncPendingPreference.isEnabled = !syncing
+                    syncPendingPreference.summary = when {
+                        syncing -> getString(R.string.ra_sync_pending_in_progress)
+                        pendingCount > 0 -> getString(R.string.ra_sync_pending_summary_count, pendingCount)
+                        accountState !is RetroAchievementsAccountState.LoggedIn ->
+                            getString(R.string.ra_sync_pending_summary_login_required)
+                        else -> getString(R.string.ra_sync_pending_summary_all_synced)
+                    }
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.syncPendingResultEvent.collect { summary ->
+                    when {
+                        summary.totalCount == 0 -> {
+                            Toast.makeText(
+                                requireContext(),
+                                R.string.ra_sync_pending_all_synced_toast,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                        summary.failedCount == 0 -> {
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.ra_sync_pending_result_success, summary.succeededCount),
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                        else -> {
+                            val message = buildString {
+                                append(getString(R.string.ra_sync_pending_result_partial, summary.succeededCount, summary.failedCount))
+                                if (!summary.lastErrorMessage.isNullOrBlank()) {
+                                    append("\n\n")
+                                    append(getString(R.string.ra_sync_pending_result_error_detail, summary.lastErrorMessage))
+                                }
+                            }
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.ra_sync_pending_result_partial, summary.succeededCount, summary.failedCount),
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            val ctx = context ?: return@collect
+                            me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+                                me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent(
+                                    title = getString(R.string.ra_sync_pending_result_title),
+                                    message = message,
+                                    confirmText = getString(android.R.string.ok),
+                                    onConfirm = {},
+                                    onDismiss = dismiss,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        testConnectionPreference.setOnPreferenceClickListener {
+            showConnectionTestDialog()
+            viewModel.testConnection()
+            true
         }
     }
 
@@ -308,6 +492,227 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                 onConfirm = {},
                 onDismiss = dismiss,
             )
+        }
+    }
+
+    private fun showConnectionTestDialog() {
+        val ctx = context ?: return
+        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+            val composeContext = LocalContext.current
+            val colors = remember(composeContext) {
+                AppThemeManager.getCurrentWatermelonColors(composeContext)
+            }
+            val state by viewModel.connectionTestState.collectAsState()
+
+            val closeDialog = {
+                viewModel.resetConnectionTestState()
+                dismiss()
+            }
+
+            SettingsDialogScaffold(
+                title = stringResource(R.string.ra_test_connection_dialog_title),
+                icon = Icons.Filled.Wifi,
+                onDismiss = closeDialog,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    when (val current = state) {
+                        RetroAchievementsSettingsViewModel.RetroAchievementsConnectionTestState.Idle,
+                        RetroAchievementsSettingsViewModel.RetroAchievementsConnectionTestState.Testing -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 20.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    color = colors.green,
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(R.string.ra_test_connection_checking),
+                                    color = colors.text,
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                        is RetroAchievementsSettingsViewModel.RetroAchievementsConnectionTestState.Result -> {
+                            val reachabilityValue = if (current.isReachable) {
+                                stringResource(R.string.ra_test_connection_reachable_fmt, current.latencyMs ?: 0L)
+                            } else {
+                                stringResource(
+                                    R.string.ra_test_connection_unreachable_fmt,
+                                    current.reachabilityError ?: "Error",
+                                )
+                            }
+                            ConnectionDiagnosticRow(
+                                label = stringResource(R.string.ra_test_connection_label_reachability),
+                                value = "$reachabilityValue (${current.targetUrl})",
+                                statusIcon = if (current.isReachable) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                                statusColor = if (current.isReachable) colors.green else colors.red,
+                                colors = colors,
+                            )
+
+                            val (authText, authIcon, authColor) = when (val auth = current.authState) {
+                                is RetroAchievementsSettingsViewModel.AuthCheckState.Authenticated -> {
+                                    if (auth.hasToken) {
+                                        Triple(
+                                            stringResource(R.string.ra_test_connection_auth_ok_fmt, auth.username),
+                                            Icons.Filled.CheckCircle,
+                                            colors.green,
+                                        )
+                                    } else {
+                                        Triple(
+                                            stringResource(R.string.ra_test_connection_auth_expired_fmt, auth.username),
+                                            Icons.Filled.Warning,
+                                            WatermelonColors.gold,
+                                        )
+                                    }
+                                }
+                                is RetroAchievementsSettingsViewModel.AuthCheckState.Expired -> Triple(
+                                    stringResource(R.string.ra_test_connection_auth_expired_fmt, auth.username),
+                                    Icons.Filled.Warning,
+                                    WatermelonColors.gold,
+                                )
+                                RetroAchievementsSettingsViewModel.AuthCheckState.NotSignedIn -> Triple(
+                                    stringResource(R.string.ra_test_connection_auth_none),
+                                    Icons.Filled.Warning,
+                                    WatermelonColors.gold,
+                                )
+                            }
+                            ConnectionDiagnosticRow(
+                                label = stringResource(R.string.ra_test_connection_label_account),
+                                value = authText,
+                                statusIcon = authIcon,
+                                statusColor = authColor,
+                                colors = colors,
+                            )
+
+                            val (proxyText, proxyIcon, proxyColor) = when (val proxy = current.proxyStatus) {
+                                RetroAchievementsSettingsViewModel.ProxyCheckState.Direct -> Triple(
+                                    stringResource(R.string.ra_test_connection_proxy_direct),
+                                    Icons.Filled.CheckCircle,
+                                    colors.green,
+                                )
+                                is RetroAchievementsSettingsViewModel.ProxyCheckState.ProxyActive -> Triple(
+                                    stringResource(R.string.ra_test_connection_proxy_active_fmt, proxy.hostUrl),
+                                    Icons.Filled.CheckCircle,
+                                    colors.green,
+                                )
+                                RetroAchievementsSettingsViewModel.ProxyCheckState.ProxyUnavailable -> Triple(
+                                    stringResource(R.string.ra_test_connection_proxy_unavailable),
+                                    Icons.Filled.Warning,
+                                    WatermelonColors.gold,
+                                )
+                            }
+                            ConnectionDiagnosticRow(
+                                label = stringResource(R.string.ra_test_connection_label_proxy),
+                                value = proxyText,
+                                statusIcon = proxyIcon,
+                                statusColor = proxyColor,
+                                colors = colors,
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(colors.surface2)
+                                        .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                                        .clickable { viewModel.testConnection() }
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.ra_test_connection_retest),
+                                        color = colors.text,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(colors.green)
+                                        .clickable { closeDialog() }
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.ra_test_connection_close),
+                                        color = colors.bg,
+                                        fontFamily = SpaceGrotesk,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ConnectionDiagnosticRow(
+        label: String,
+        value: String,
+        statusIcon: ImageVector,
+        statusColor: Color,
+        colors: WatermelonColors,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.surface2)
+                .border(1.dp, colors.line, RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Icon(
+                imageVector = statusIcon,
+                contentDescription = null,
+                tint = statusColor,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    color = colors.text2,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = value,
+                    color = colors.text,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
     }
 

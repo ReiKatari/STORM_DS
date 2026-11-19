@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_default_zone_title">Zona terjemahan default</string>
+    <string name="translator_default_zone_both">Kedua layar</string>
+    <string name="translator_default_zone_top">Layar atas</string>
+    <string name="translator_default_zone_bottom">Layar bawah</string>
+    <string name="translator_test_api_title">Uji terjemahan dan API</string>
+    <string name="translator_test_api_summary">Periksa mesin yang dipilih, kunci API, dan latensi respons</string>
+    <string name="translator_test_api_dialog_title">Uji terjemahan dan API</string>
+    <string name="translator_test_api_running">Mengirim frasa uji...</string>
+    <string name="translator_test_api_engine_label">Mesin</string>
+    <string name="translator_test_api_status_label">Status</string>
+    <string name="translator_test_api_status_ok">OK</string>
+    <string name="translator_test_api_status_error">Galat</string>
+    <string name="translator_test_api_latency_label">Latensi</string>
+    <string name="translator_test_api_latency_value">%d ms</string>
+    <string name="translator_test_api_original_label">Teks asli</string>
+    <string name="translator_test_api_translated_label">Teks terjemahan</string>
+    <string name="translator_test_api_error_label">Detail galat</string>
+    <string name="translator_test_api_retry">Uji ulang</string>
+    <string name="translator_test_api_lang_pair">%1$s -> %2$s</string>
+    <string name="translator_mlkit_models_title">Model ML Kit offline</string>
+    <string name="translator_mlkit_models_summary_loading">Memeriksa paket bahasa yang diunduh...</string>
+    <string name="translator_mlkit_models_summary">Paket diunduh: %1$d dari %2$d</string>
+    <string name="translator_mlkit_models_dialog_subtitle">Kelola paket terjemahan neural di perangkat</string>
+    <string name="translator_mlkit_status_downloaded">Diunduh</string>
+    <string name="translator_mlkit_status_not_downloaded">Belum diunduh</string>
+    <string name="translator_mlkit_status_downloading">Mengunduh...</string>
+    <string name="translator_mlkit_status_deleting">Menghapus...</string>
+    <string name="translator_mlkit_size_approx">~%d MB</string>
+    <string name="translator_mlkit_size_exact">%.1f MB</string>
+    <string name="translator_mlkit_download">Unduh</string>
+    <string name="translator_mlkit_delete">Hapus</string>
+    <string name="translator_mlkit_refresh">Muat ulang</string>
+    <string name="translator_mlkit_action_error">Operasi model gagal: %s</string>
+    <string name="translator_mlkit_lang_ja">Jepang (JA)</string>
+    <string name="translator_mlkit_lang_en">Inggris (EN)</string>
+    <string name="translator_mlkit_lang_zh">Mandarin (ZH)</string>
+    <string name="translator_mlkit_lang_ko">Korea (KO)</string>
+    <string name="translator_mlkit_lang_ru">Rusia (RU)</string>
+</resources>

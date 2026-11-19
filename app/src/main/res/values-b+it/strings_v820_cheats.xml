@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Mirror di download</string>
+    <string name="cheats_mirror_auto">Auto (tutti i mirror in sequenza)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">Mirror GitHub (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Cerca nel database trucchi</string>
+    <string name="cheats_search_database_summary">Cerca giochi importati per titolo o Game ID</string>
+    <string name="cheats_db_search_hint">Titolo del gioco o Game ID (es. Pokemon o CPUE)</string>
+    <string name="cheats_search_games_available">Giochi nel database: %1$d</string>
+    <string name="cheats_search_results_count">Risultati mostrati: %1$d</string>
+    <string name="cheats_search_cheats_count">Trucchi: %1$d</string>
+    <string name="cheats_search_db_empty">Il database dei trucchi è vuoto. Scarica usrcheat.dat online o importa un file locale.</string>
+    <string name="cheats_search_no_results">Nessun gioco corrispondente trovato.</string>
+    <string name="cheats_clear_database_title">Svuota database trucchi</string>
+    <string name="cheats_clear_database_summary">Elimina tutti i database, giochi, cartelle e trucchi importati</string>
+    <string name="cheats_clear_database_confirm_title">Svuotare il database trucchi?</string>
+    <string name="cheats_clear_database_confirm_message">Tutti i database di trucchi, i giochi, le cartelle e i trucchi importati verranno eliminati definitivamente. Questa azione non può essere annullata.</string>
+    <string name="cheats_clear_database_confirm_action">Svuota</string>
+    <string name="cheats_clear_database_success">Database trucchi svuotato</string>
+    <string name="cheats_db_status_loaded_with_date">Giochi: %1$d · Trucchi: %2$d · Aggiornato: %3$s</string>
+</resources>

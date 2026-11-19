@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ra_cat_notifications">成就通知</string>
+    <string name="ra_notification_position_title">通知位置</string>
+    <string name="ra_notification_position_top">顶部</string>
+    <string name="ra_notification_position_bottom">底部</string>
+    <string name="ra_notification_style_title">通知样式</string>
+    <string name="ra_notification_style_detailed">详细</string>
+    <string name="ra_notification_style_compact">紧凑</string>
+    <string name="ra_notification_sound_title">通知音效</string>
+    <string name="ra_notification_sound_chime">水晶铃声</string>
+    <string name="ra_notification_sound_fanfare">复古号角</string>
+    <string name="ra_notification_sound_classic">系统提示音</string>
+    <string name="ra_notification_sound_none">静音</string>
+    <string name="ra_cat_sync_and_diagnostics">同步与诊断</string>
+    <string name="ra_sync_pending_title">立即同步待上传成就</string>
+    <string name="ra_sync_pending_summary_count">等待上传: %1$d</string>
+    <string name="ra_sync_pending_summary_all_synced">所有成就已同步</string>
+    <string name="ra_sync_pending_summary_login_required">登录后即可同步待上传成就</string>
+    <string name="ra_sync_pending_all_synced_toast">所有成就均已同步</string>
+    <string name="ra_sync_pending_login_prompt">请登录 RetroAchievements 以同步成就</string>
+    <string name="ra_sync_pending_in_progress">正在同步待上传成就...</string>
+    <string name="ra_sync_pending_result_success">已同步 %1$d 项成就</string>
+    <string name="ra_sync_pending_result_partial">成功: %1$d, 失败: %2$d</string>
+    <string name="ra_sync_pending_result_title">同步结果</string>
+    <string name="ra_sync_pending_result_error_detail">错误: %1$s</string>
+    <string name="ra_test_connection_title">测试 RetroAchievements 连接</string>
+    <string name="ra_test_connection_summary">检查账号状态、HTTPS 延迟与代理模式</string>
+    <string name="ra_test_connection_dialog_title">RetroAchievements 连接</string>
+    <string name="ra_test_connection_checking">正在测试连接...</string>
+    <string name="ra_test_connection_retest">重新测试</string>
+    <string name="ra_test_connection_close">关闭</string>
+    <string name="ra_test_connection_label_reachability">服务器连通性</string>
+    <string name="ra_test_connection_label_account">账号与令牌</string>
+    <string name="ra_test_connection_label_proxy">连接模式</string>
+    <string name="ra_test_connection_reachable_fmt">可访问 (%1$d ms)</string>
+    <string name="ra_test_connection_unreachable_fmt">不可访问: %1$s</string>
+    <string name="ra_test_connection_auth_ok_fmt">已登录 %1$s (令牌有效)</string>
+    <string name="ra_test_connection_auth_expired_fmt">%1$s 的会话已过期</string>
+    <string name="ra_test_connection_auth_none">未登录</string>
+    <string name="ra_test_connection_proxy_direct">直连 (官方服务器)</string>
+    <string name="ra_test_connection_proxy_active_fmt">代理已启用 (%1$s)</string>
+    <string name="ra_test_connection_proxy_unavailable">已选择代理，但未激活</string>
+</resources>

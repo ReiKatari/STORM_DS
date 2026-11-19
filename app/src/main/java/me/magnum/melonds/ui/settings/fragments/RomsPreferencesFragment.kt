@@ -5,12 +5,16 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.Preference
+import androidx.preference.PreferenceManager
 import androidx.preference.SeekBarPreference
+import androidx.preference.SwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,11 +23,13 @@ import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.domain.model.SizeUnit
+import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
 import me.magnum.melonds.ui.settings.viewmodel.RomPreferencesViewModel
+import me.magnum.melonds.utils.FileUtils
 import me.magnum.melonds.utils.SizeUtils
 import javax.inject.Inject
 import kotlin.math.pow
@@ -38,6 +44,11 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
     private lateinit var clearRomCachePreference: Preference
+    private var romSearchDirsPref: StoragePickerPreference? = null
+    private var gameTdbMasterPref: SwitchPreference? = null
+    private var gameTdb2dCoversPref: SwitchPreference? = null
+    private var gameTdb3dCoversPref: SwitchPreference? = null
+    private var raCoversPref: SwitchPreference? = null
 
     override fun getTitle() = getString(R.string.category_roms)
 
@@ -46,8 +57,16 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         val cacheSizePreference = findPreference<SeekBarPreference>("rom_cache_max_size")!!
         clearRomCachePreference = findPreference<Preference>("rom_cache_clear") ?: findPreference("clear_rom_cache")!!
 
-        helper.setupStoragePickerPreference(findPreference<StoragePickerPreference>("rom_search_dirs")!!) { uri, persistDirectory ->
-            handleSettingsMirror(uri, persistDirectory)
+        romSearchDirsPref = findPreference<StoragePickerPreference>("rom_search_dirs")
+        romSearchDirsPref?.let { dirsPref ->
+            helper.setupStoragePickerPreference(dirsPref) { uri, persistDirectory ->
+                handleSettingsMirror(uri, persistDirectory)
+            }
+            dirsPref.addOnPreferenceChangeListener { _, newValue ->
+                updateRomSearchDirsSummary(newValue as? Set<*>)
+                true
+            }
+            updateRomSearchDirsSummary()
         }
 
         updateMaxCacheSizePreferenceSummary(cacheSizePreference, cacheSizePreference.value)
@@ -56,9 +75,15 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             updateMaxCacheSizePreferenceSummary(preference as SeekBarPreference, newValue as Int)
             true
         }
-        val raCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_ra_covers_enabled")
-        val gameTdb2dCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_2d_covers_enabled")
-        val gameTdb3dCoversPref = findPreference<androidx.preference.SwitchPreference>("rom_gametdb_3d_covers_enabled")
+
+        gameTdbMasterPref = findPreference("rom_gametdb_covers_enabled")
+        gameTdb2dCoversPref = findPreference("rom_gametdb_2d_covers_enabled")
+        gameTdb3dCoversPref = findPreference("rom_gametdb_3d_covers_enabled")
+        raCoversPref = findPreference("rom_ra_covers_enabled")
+
+        setupCoverPreferences()
+        syncCoverPreferencesState()
+        updateRaCoversSummary()
 
         clearRomCachePreference.setOnPreferenceClickListener {
             AlertDialog.Builder(requireContext())
@@ -78,6 +103,134 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
             true
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateRomSearchDirsSummary()
+        syncCoverPreferencesState()
+        updateRaCoversSummary()
+    }
+
+    private fun setupCoverPreferences() {
+        gameTdbMasterPref?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            gameTdb2dCoversPref?.isVisible = enabled
+            gameTdb3dCoversPref?.isVisible = enabled
+            if (enabled) {
+                val has2d = gameTdb2dCoversPref?.isChecked == true
+                val has3d = gameTdb3dCoversPref?.isChecked == true
+                if (has2d && has3d) {
+                    gameTdb2dCoversPref?.isChecked = false
+                } else if (!has2d && !has3d) {
+                    gameTdb3dCoversPref?.isChecked = true
+                }
+            } else {
+                gameTdb2dCoversPref?.isChecked = false
+                gameTdb3dCoversPref?.isChecked = false
+            }
+            view?.post { if (isAdded) updateRaCoversSummary() }
+            true
+        }
+
+        gameTdb2dCoversPref?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            if (enabled) {
+                gameTdb3dCoversPref?.isChecked = false
+            } else if (gameTdb3dCoversPref?.isChecked != true) {
+                gameTdbMasterPref?.isChecked = false
+                gameTdb2dCoversPref?.isVisible = false
+                gameTdb3dCoversPref?.isVisible = false
+            }
+            view?.post { if (isAdded) updateRaCoversSummary() }
+            true
+        }
+
+        gameTdb3dCoversPref?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            if (enabled) {
+                gameTdb2dCoversPref?.isChecked = false
+            } else if (gameTdb2dCoversPref?.isChecked != true) {
+                gameTdbMasterPref?.isChecked = false
+                gameTdb2dCoversPref?.isVisible = false
+                gameTdb3dCoversPref?.isVisible = false
+            }
+            view?.post { if (isAdded) updateRaCoversSummary() }
+            true
+        }
+
+        raCoversPref?.setOnPreferenceChangeListener { _, _ ->
+            view?.post { if (isAdded) updateRaCoversSummary() }
+            true
+        }
+    }
+
+    private fun syncCoverPreferencesState() {
+        val master = gameTdbMasterPref ?: return
+        val pref2d = gameTdb2dCoversPref
+        val pref3d = gameTdb3dCoversPref
+
+        if (!master.isChecked && (pref2d?.isChecked == true || pref3d?.isChecked == true)) {
+            master.isChecked = true
+        }
+
+        val masterOn = master.isChecked
+        pref2d?.isVisible = masterOn
+        pref3d?.isVisible = masterOn
+        if (masterOn) {
+            val is2d = pref2d?.isChecked == true
+            val is3d = pref3d?.isChecked == true
+            if (is2d && is3d) {
+                pref2d?.isChecked = false
+            } else if (!is2d && !is3d) {
+                pref3d?.isChecked = true
+            }
+        }
+    }
+
+    private fun updateRomSearchDirsSummary(overrideDirs: Set<*>? = null) {
+        val pref = romSearchDirsPref ?: return
+        val ctx = context ?: return
+        val rawDirs = overrideDirs
+            ?: PreferenceManager.getDefaultSharedPreferences(ctx).getStringSet("rom_search_dirs", emptySet())
+            ?: emptySet<String>()
+        val names = rawDirs.mapNotNull { entry ->
+            val uriStr = entry as? String ?: return@mapNotNull null
+            val uri = uriStr.toUri()
+            val resolved = FileUtils.getAbsolutePathFromSAFUri(ctx, uri)
+                ?: DocumentFile.fromTreeUri(ctx, uri)?.name
+                ?: uri.lastPathSegment
+                ?: uriStr
+            val decoded = Uri.decode(resolved).trimEnd('/')
+            val folderName = decoded.substringAfterLast(':').substringAfterLast('/').ifBlank { decoded }
+            folderName.takeIf { it.isNotBlank() }
+        }
+        pref.summary = if (names.isEmpty()) {
+            getString(R.string.v820_rom_search_dirs_empty)
+        } else {
+            names.joinToString(", ")
+        }
+    }
+
+    private fun updateRaCoversSummary() {
+        val pref = raCoversPref ?: return
+        val ctx = context ?: return
+        val sp = PreferenceManager.getDefaultSharedPreferences(ctx)
+        val isRaSignedIn = !sp.getString("ra_username", null).isNullOrBlank() &&
+            !sp.getString("ra_token", null).isNullOrBlank()
+        val gameTdbEnabled = gameTdbMasterPref?.isChecked == true ||
+            gameTdb2dCoversPref?.isChecked == true ||
+            gameTdb3dCoversPref?.isChecked == true
+        val fallbackTarget = if (gameTdbEnabled) {
+            getString(R.string.v820_ra_covers_fallback_gametdb_and_icon)
+        } else {
+            getString(R.string.v820_ra_covers_fallback_icon_only)
+        }
+        pref.summary = if (isRaSignedIn) {
+            getString(R.string.v820_ra_covers_summary_signed_in, fallbackTarget)
+        } else {
+            getString(R.string.v820_ra_covers_summary_not_signed_in, fallbackTarget)
         }
     }
 

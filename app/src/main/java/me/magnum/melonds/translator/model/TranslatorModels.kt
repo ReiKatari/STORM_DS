@@ -37,6 +37,18 @@ enum class TranslatorOverlayStyle(val preferenceValue: String) {
     }
 }
 
+enum class TranslatorDefaultZone(val preferenceValue: String) {
+    BOTH("both"),
+    TOP("top"),
+    BOTTOM("bottom");
+
+    companion object {
+        fun fromPreference(value: String?): TranslatorDefaultZone {
+            return entries.firstOrNull { it.preferenceValue == value } ?: BOTH
+        }
+    }
+}
+
 data class TranslatedTextBlock(
     val originalText: String,
     var translatedText: String,

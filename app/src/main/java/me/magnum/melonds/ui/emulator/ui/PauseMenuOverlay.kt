@@ -265,6 +265,18 @@ fun PauseMenuOverlay(
     val store = remember(context) { PauseMenuCustomizationStore(context) }
     var showCustomizer by remember { mutableStateOf(false) }
     var customizationVersion by remember { mutableIntStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key.startsWith("pause_menu_")) {
+                customizationVersion++
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
 
     val batteryManager = remember(context) {
         context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager

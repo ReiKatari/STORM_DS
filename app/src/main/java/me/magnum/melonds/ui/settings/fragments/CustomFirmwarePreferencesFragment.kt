@@ -100,7 +100,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
         autoDownloadDsPreference?.setOnPreferenceClickListener {
             val (progressDialog, progressBar) = createDownloadProgressDialog(
                 title = getString(R.string.auto_download_ds_bios_title),
-                message = "Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, sd_card.bin..."
+                message = getString(R.string.bios_download_ds_progress)
             )
 
             lifecycleScope.launch {
@@ -109,23 +109,24 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                         progressBar.progress = progress
                     }
                 }
-                progressDialog.dismiss()
+                runCatching { if (progressDialog.isShowing) progressDialog.dismiss() }
+                if (!isAdded || activity == null) return@launch
                 if (result.isSuccess) {
                     val targetDir = result.getOrThrow()
                     val targetUri = Uri.fromFile(targetDir)
                     preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
                     findPreference<androidx.preference.SwitchPreference>("use_custom_bios")?.isChecked = true
                     dsBiosDirPreference.onDirectoryPicked(targetUri)
-                    dsBiosDirPreference.summary = targetDir.absolutePath
+                    updateBiosSummaries()
                     AlertDialog.Builder(requireContext())
-                        .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DS (bios7.bin, bios9.bin, firmware.bin, sd_card.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
+                        .setTitle(R.string.bios_download_success_title)
+                        .setMessage(getString(R.string.bios_download_ds_success_msg, targetDir.absolutePath))
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
                     AlertDialog.Builder(requireContext())
-                        .setTitle("Ошибка")
-                        .setMessage("Не удалось скачать файлы BIOS: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setTitle(R.string.bios_download_error_title)
+                        .setMessage(getString(R.string.bios_download_ds_error_msg, result.exceptionOrNull()?.localizedMessage.orEmpty()))
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 }
@@ -136,7 +137,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
         autoDownloadDsiPreference?.setOnPreferenceClickListener {
             val (progressDialog, progressBar) = createDownloadProgressDialog(
                 title = getString(R.string.auto_download_dsi_bios_title),
-                message = "Загрузка и настройка bios7.bin, bios9.bin, firmware.bin, nand.bin, sd_card.bin..."
+                message = getString(R.string.bios_download_dsi_progress)
             )
 
             lifecycleScope.launch {
@@ -145,33 +146,215 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                         progressBar.progress = progress
                     }
                 }
-                progressDialog.dismiss()
+                runCatching { if (progressDialog.isShowing) progressDialog.dismiss() }
+                if (!isAdded || activity == null) return@launch
                 if (result.isSuccess) {
                     val targetDir = result.getOrThrow()
                     val targetUri = Uri.fromFile(targetDir)
                     preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
                     findPreference<androidx.preference.SwitchPreference>("use_custom_bios")?.isChecked = true
                     dsiBiosDirPreference.onDirectoryPicked(targetUri)
-                    dsiBiosDirPreference.summary = targetDir.absolutePath
+                    updateBiosSummaries()
                     AlertDialog.Builder(requireContext())
-                        .setTitle("Успешно")
-                        .setMessage("Файлы BIOS DSi (bios7.bin, bios9.bin, firmware.bin, nand.bin, sd_card.bin) успешно скачаны и настроены!\n\nПапка: ${targetDir.absolutePath}")
+                        .setTitle(R.string.bios_download_success_title)
+                        .setMessage(getString(R.string.bios_download_dsi_success_msg, targetDir.absolutePath))
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 } else {
                     AlertDialog.Builder(requireContext())
-                        .setTitle("Ошибка")
-                        .setMessage("Не удалось скачать файлы BIOS DSi: ${result.exceptionOrNull()?.localizedMessage}")
+                        .setTitle(R.string.bios_download_error_title)
+                        .setMessage(getString(R.string.bios_download_dsi_error_msg, result.exceptionOrNull()?.localizedMessage.orEmpty()))
                         .setPositiveButton(R.string.ok, null)
                         .show()
                 }
             }
             true
         }
+
+        findPreference<androidx.preference.Preference>("bios_health_check")?.setOnPreferenceClickListener {
+            runBiosHealthCheck(
+                dsBiosDirPreference = dsBiosDirPreference,
+                dsiBiosDirPreference = dsiBiosDirPreference,
+                createDownloadProgressDialog = ::createDownloadProgressDialog,
+            )
+            true
+        }
+    }
+
+    private fun runBiosHealthCheck(
+        dsBiosDirPreference: BiosDirectoryPickerPreference,
+        dsiBiosDirPreference: BiosDirectoryPickerPreference,
+        createDownloadProgressDialog: (String, String) -> Pair<AlertDialog, android.widget.ProgressBar>,
+    ) {
+        val ctx = context ?: return
+        val appContext = ctx.applicationContext
+        val prefs = preferenceManager.sharedPreferences
+        val dsUri = prefs?.getStringSet("bios_dir", emptySet())?.firstOrNull()?.let { Uri.parse(it) }
+        val dsiUri = prefs?.getStringSet("dsi_bios_dir", emptySet())?.firstOrNull()?.let { Uri.parse(it) }
+        val blocked = prefs?.getBoolean("block_bios_download", false) ?: false
+
+        val loadingToast = android.widget.Toast.makeText(ctx, R.string.bios_health_check_running, android.widget.Toast.LENGTH_SHORT)
+        loadingToast.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            data class CheckRow(
+                val label: String,
+                val ok: Boolean,
+                val required: Boolean,
+                val detail: String,
+            )
+
+            fun resolveDirDoc(consoleType: ConsoleType, uri: Uri?): androidx.documentfile.provider.DocumentFile? {
+                val targetUri = uri ?: run {
+                    val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+                    val defaultDir = java.io.File(android.os.Environment.getExternalStorageDirectory().resolve("STORM DS"), subFolder)
+                    if (defaultDir.exists()) Uri.fromFile(defaultDir) else null
+                } ?: return null
+                return runCatching {
+                    if (targetUri.scheme == "file") {
+                        val f = java.io.File(Uri.decode(targetUri.path ?: ""))
+                        if (f.exists() && f.isDirectory) androidx.documentfile.provider.DocumentFile.fromFile(f) else null
+                    } else {
+                        androidx.documentfile.provider.DocumentFile.fromTreeUri(appContext, targetUri)
+                    }
+                }.getOrNull()
+            }
+
+            fun inspectFile(
+                dirDoc: androidx.documentfile.provider.DocumentFile?,
+                label: String,
+                exactSize: Long?,
+                minSize: Long,
+                required: Boolean,
+                vararg candidateNames: String,
+            ): CheckRow {
+                val doc = candidateNames.firstNotNullOfOrNull { name -> dirDoc?.findFile(name) }
+                if (doc == null) {
+                    return CheckRow(label, ok = !required, required = required, detail = getString(R.string.v793_bios_missing))
+                }
+                val sizeAndHash = runCatching {
+                    val digest = java.security.MessageDigest.getInstance("SHA-256")
+                    var total = 0L
+                    val buf = ByteArray(16384)
+                    val stream = if (doc.uri.scheme == "file") {
+                        java.io.FileInputStream(java.io.File(Uri.decode(doc.uri.path ?: "")))
+                    } else {
+                        appContext.contentResolver.openInputStream(doc.uri)
+                    }
+                    stream?.use { ins ->
+                        while (true) {
+                            val r = ins.read(buf)
+                            if (r <= 0) break
+                            total += r
+                            digest.update(buf, 0, r)
+                        }
+                    }
+                    val sha = digest.digest().take(6).joinToString("") { "%02x".format(it) }
+                    total to sha
+                }.getOrNull() ?: return CheckRow(label, ok = false, required = required, detail = "Read error")
+
+                val (len, shaShort) = sizeAndHash
+                val sizeOk = if (exactSize != null) len == exactSize else len >= minSize
+                val sizeText = if (len >= 1024L * 1024L) {
+                    String.format(java.util.Locale.US, "%.1f MB", len / (1024.0 * 1024.0))
+                } else {
+                    "${len / 1024L} KB"
+                }
+                val statusTag = if (sizeOk) "OK" else "SIZE MISMATCH"
+                return CheckRow(label, ok = sizeOk, required = required, detail = "$statusTag ($sizeText, sha256:$shaShort)")
+            }
+
+            val dsDir = resolveDirDoc(ConsoleType.DS, dsUri)
+            val dsiDir = resolveDirDoc(ConsoleType.DSi, dsiUri)
+
+            val dsRows = listOf(
+                inspectFile(dsDir, "DS bios7.bin", exactSize = 16384L, minSize = 16384L, required = true, "bios7.bin", "ds_bios7.bin", "arm7.bin"),
+                inspectFile(dsDir, "DS bios9.bin", exactSize = 4096L, minSize = 4096L, required = true, "bios9.bin", "ds_bios9.bin", "arm9.bin"),
+                inspectFile(dsDir, "DS firmware.bin", exactSize = null, minSize = 131072L, required = true, "firmware.bin", "ds_firmware.bin"),
+                inspectFile(dsDir, "DS sd_card.bin", exactSize = null, minSize = 1024L, required = false, "sd_card.bin", "dldi_sd_card.bin"),
+            )
+            val dsiRows = listOf(
+                inspectFile(dsiDir, "DSi bios7.bin", exactSize = 65536L, minSize = 65536L, required = true, "bios7.bin", "dsi_bios7.bin", "arm7.bin", "bios7i.bin"),
+                inspectFile(dsiDir, "DSi bios9.bin", exactSize = 65536L, minSize = 65536L, required = true, "bios9.bin", "dsi_bios9.bin", "arm9.bin", "bios9i.bin"),
+                inspectFile(dsiDir, "DSi firmware.bin", exactSize = null, minSize = 131072L, required = true, "firmware.bin", "dsi_firmware.bin"),
+                inspectFile(dsiDir, "DSi nand.bin", exactSize = null, minSize = 1024L * 1024L, required = true, "nand.bin", "dsi_nand.bin"),
+                inspectFile(dsiDir, "DSi sd_card.bin", exactSize = null, minSize = 1024L, required = false, "sd_card.bin", "dsi_sd_card.bin"),
+            )
+
+            val dsMissing = dsRows.any { it.required && !it.ok }
+            val dsiMissing = dsiRows.any { it.required && !it.ok }
+
+            val report = buildString {
+                if (!dsMissing && !dsiMissing) {
+                    appendLine(getString(R.string.bios_health_check_all_ok))
+                    appendLine()
+                }
+                appendLine("[Nintendo DS]")
+                dsRows.forEach { row ->
+                    val mark = if (row.ok) "✓" else if (row.required) "✕" else "•"
+                    appendLine("$mark ${row.label}: ${row.detail}")
+                }
+                appendLine()
+                appendLine("[Nintendo DSi]")
+                dsiRows.forEach { row ->
+                    val mark = if (row.ok) "✓" else if (row.required) "✕" else "•"
+                    appendLine("$mark ${row.label}: ${row.detail}")
+                }
+            }.trimEnd()
+
+            withContext(Dispatchers.Main) {
+                loadingToast.cancel()
+                if (!isAdded || activity == null) return@withContext
+                val builder = AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.bios_health_check_title)
+                    .setMessage(report)
+                    .setPositiveButton(R.string.ok, null)
+
+                if ((dsMissing || dsiMissing) && !blocked) {
+                    builder.setNeutralButton(R.string.bios_health_check_download_missing) { _, _ ->
+                        val (progressDialog, progressBar) = createDownloadProgressDialog(
+                            getString(R.string.bios_health_check_download_missing),
+                            getString(R.string.bios_health_check_running)
+                        )
+                        lifecycleScope.launch {
+                            var anySuccess = false
+                            if (dsMissing) {
+                                val res = biosDownloadManager.downloadAndSetupDsBios { p ->
+                                    activity?.runOnUiThread { progressBar.progress = if (dsiMissing) p / 2 else p }
+                                }
+                                if (res.isSuccess) {
+                                    anySuccess = true
+                                    dsBiosDirPreference.onDirectoryPicked(Uri.fromFile(res.getOrThrow()))
+                                }
+                            }
+                            if (dsiMissing) {
+                                val res = biosDownloadManager.downloadAndSetupDsiBios { p ->
+                                    activity?.runOnUiThread { progressBar.progress = if (dsMissing) 50 + p / 2 else p }
+                                }
+                                if (res.isSuccess) {
+                                    anySuccess = true
+                                    dsiBiosDirPreference.onDirectoryPicked(Uri.fromFile(res.getOrThrow()))
+                                }
+                            }
+                            runCatching { if (progressDialog.isShowing) progressDialog.dismiss() }
+                            if (anySuccess && isAdded) {
+                                preferenceManager.sharedPreferences?.edit()?.putBoolean("use_custom_bios", true)?.apply()
+                                findPreference<androidx.preference.SwitchPreference>("use_custom_bios")?.isChecked = true
+                                updateBiosSummaries()
+                            }
+                        }
+                    }
+                }
+                builder.show()
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        val blocked = findPreference<androidx.preference.SwitchPreference>("block_bios_download")?.isChecked ?: false
+        findPreference<androidx.preference.Preference>("auto_download_ds_bios")?.isVisible = !blocked
+        findPreference<androidx.preference.Preference>("auto_download_dsi_bios")?.isVisible = !blocked
         updateBiosSummaries()
     }
 

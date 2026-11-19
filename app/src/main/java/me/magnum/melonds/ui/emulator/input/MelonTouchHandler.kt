@@ -10,10 +10,12 @@ import me.magnum.melonds.domain.model.Point
 class MelonTouchHandler(
     var onLidStateChanged: ((Boolean) -> Unit)? = null,
     var onStartPressed: (() -> Unit)? = null,
+    var onShoulderButtonStateChanged: ((Input, Boolean) -> Unit)? = null,
 ) : IInputListener {
     var isLidClosed = false
         private set
     var turboMacrosEnabled = false
+    var turboFrequencyHz = 15
 
     private val handler = Handler(Looper.getMainLooper())
     private val lastPressTimeMs = mutableMapOf<Input, Long>()
@@ -26,6 +28,9 @@ class MelonTouchHandler(
             if (key == Input.START) {
                 onStartPressed?.invoke()
             }
+            if (key == Input.L || key == Input.R) {
+                onShoulderButtonStateChanged?.invoke(key, true)
+            }
             stopTurboFor(key)
             MelonEmulator.onInputDown(key)
             if (turboMacrosEnabled && key in TURBO_ELIGIBLE_INPUTS) {
@@ -33,6 +38,8 @@ class MelonTouchHandler(
                 val prev = lastPressTimeMs[key] ?: 0L
                 lastPressTimeMs[key] = now
                 if (now - prev in 30L..260L) {
+                    val hz = turboFrequencyHz.coerceIn(1, 60)
+                    val halfPeriodMs = (500L / hz).coerceAtLeast(16L)
                     var isDown = true
                     val runnable = object : Runnable {
                         override fun run() {
@@ -42,11 +49,11 @@ class MelonTouchHandler(
                             } else {
                                 MelonEmulator.onInputUp(key)
                             }
-                            handler.postDelayed(this, 33L)
+                            handler.postDelayed(this, halfPeriodMs)
                         }
                     }
                     activeTurboRunnables[key] = runnable
-                    handler.postDelayed(runnable, 33L)
+                    handler.postDelayed(runnable, halfPeriodMs)
                 }
             }
         }
@@ -54,6 +61,17 @@ class MelonTouchHandler(
 
     override fun onKeyReleased(key: Input) {
         if (key != Input.HINGE) {
+            if (key == Input.L || key == Input.R) {
+                onShoulderButtonStateChanged?.invoke(key, false)
+            }
+            stopTurboFor(key)
+            MelonEmulator.onInputUp(key)
+        }
+    }
+
+    fun stopAllTurbo() {
+        val activeKeys = activeTurboRunnables.keys.toList()
+        for (key in activeKeys) {
             stopTurboFor(key)
             MelonEmulator.onInputUp(key)
         }

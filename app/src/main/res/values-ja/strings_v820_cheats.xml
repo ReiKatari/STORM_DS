@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">ダウンロードミラー</string>
+    <string name="cheats_mirror_auto">自動（すべてのミラーを順に試行）</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">GitHub ミラー (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">チートデータベース検索</string>
+    <string name="cheats_search_database_summary">インポート済みのゲームをタイトルや Game ID で検索</string>
+    <string name="cheats_db_search_hint">ゲーム名または Game ID（例: Pokemon や CPUE）</string>
+    <string name="cheats_search_games_available">登録ゲーム数: %1$d</string>
+    <string name="cheats_search_results_count">表示件数: %1$d</string>
+    <string name="cheats_search_cheats_count">チート数: %1$d</string>
+    <string name="cheats_search_db_empty">チートデータベースは空です。オンラインで usrcheat.dat を取得するかローカルファイルをインポートしてください。</string>
+    <string name="cheats_search_no_results">一致するゲームが見つかりませんでした。</string>
+    <string name="cheats_clear_database_title">チートデータベースを消去</string>
+    <string name="cheats_clear_database_summary">インポート済みのデータベース、ゲーム、フォルダ、チートをすべて削除</string>
+    <string name="cheats_clear_database_confirm_title">チートデータベースを消去しますか？</string>
+    <string name="cheats_clear_database_confirm_message">インポートされたすべてのチートデータベース、ゲーム、フォルダ、チートが完全に削除されます。この操作は元に戻せません。</string>
+    <string name="cheats_clear_database_confirm_action">消去</string>
+    <string name="cheats_clear_database_success">チートデータベースを消去しました</string>
+    <string name="cheats_db_status_loaded_with_date">ゲーム: %1$d · チート: %2$d · 更新: %3$s</string>
+</resources>

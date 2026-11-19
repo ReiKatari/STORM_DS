@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v820_rom_search_dirs_empty">Non sélectionné</string>
+    <string name="v820_ra_covers_fallback_gametdb_and_icon">GameTDB ou icône ROM</string>
+    <string name="v820_ra_covers_fallback_icon_only">icône ROM</string>
+    <string name="v820_ra_covers_summary_signed_in">Utilise d\'abord les jaquettes RetroAchievements. Bascule automatiquement vers %1$s si indisponible.</string>
+    <string name="v820_ra_covers_summary_not_signed_in">Utilise les jaquettes RetroAchievements une fois connecté. Compte non connecté (repli actuel sur %1$s).</string>
+    <string name="v820_auto_load_ra_hardcore_notice">Désactivé lorsque le mode Hardcore RetroAchievements est actif.</string>
+    <string name="v820_rewind_summary_enabled_fmt">Activé (Intervalle : %1$s, Tampon : %2$s)</string>
+    <string name="v820_rewind_summary_disabled">Désactivé</string>
+    <string name="v820_general_pause_menu_customize_hint">L\'ordre et la visibilité des boutons se configurent directement dans le menu Pause en jeu. Cette option réinitialise les valeurs par défaut.</string>
+</resources>

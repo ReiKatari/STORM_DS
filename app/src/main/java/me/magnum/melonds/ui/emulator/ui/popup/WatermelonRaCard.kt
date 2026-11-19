@@ -46,8 +46,53 @@ fun WatermelonRaCard(
     subtitle: String = "",
     subtitleMaxLines: Int = 1,
     accent: Color = WatermelonColors.gold,
+    isCompact: Boolean = false,
 ) {
     val colors = DarkWatermelonColors
+    if (isCompact) {
+        val compactShape = RoundedCornerShape(10.dp)
+        Box(
+            modifier = modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .widthIn(max = 320.dp)
+                .shadow(8.dp, compactShape)
+                .clip(compactShape)
+                .background(colors.surface2)
+                .border(1.dp, accent.copy(alpha = 0.35f), compactShape),
+        ) {
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (iconUrl.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier.size(30.dp).clip(iconShape).background(accent.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(eyebrowIcon, null, tint = accent, modifier = Modifier.size(17.dp))
+                    }
+                } else {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(iconUrl)
+                            .crossfade(false)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier.size(30.dp).clip(iconShape),
+                    )
+                }
+
+                Text(
+                    text = title,
+                    color = colors.text,
+                    fontFamily = SpaceGrotesk,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp, end = 4.dp),
+                )
+            }
+        }
+        return
+    }
     val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = modifier

@@ -15,4 +15,9 @@ interface CheatDatabaseDao {
 
     @Query("DELETE FROM cheat_database WHERE name = :databaseName")
     suspend fun deleteCheatDatabase(databaseName: String)
+
+    @Query("DELETE FROM cheat_database WHERE id != :customDatabaseId")
+    suspend fun deleteAllImportedCheatDatabases(
+        customDatabaseId: Long = CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_ID,
+    )
 }

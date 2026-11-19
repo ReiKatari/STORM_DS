@@ -43,6 +43,16 @@
             app:dependency="translator_enabled" />
 
         <ListPreference
+            android:key="translator_default_zone"
+            android:title="@string/translator_default_zone_title"
+            android:entries="@array/translator_default_zone_options"
+            android:entryValues="@array/translator_default_zone_values"
+            android:defaultValue="both"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <ListPreference
             android:key="translator_trigger_mode"
             android:title="@string/translator_trigger_mode"
             android:entries="@array/translator_trigger_mode_options"
@@ -89,6 +99,20 @@
         <Preference
             android:key="pref_translator_clear_cache"
             android:title="@string/translator_clear_regions"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <Preference
+            android:key="translator_test_api"
+            android:title="@string/translator_test_api_title"
+            android:summary="@string/translator_test_api_summary"
+            app:iconSpaceReserved="false"
+            app:dependency="translator_enabled" />
+
+        <Preference
+            android:key="translator_mlkit_models"
+            android:title="@string/translator_mlkit_models_title"
+            android:summary="@string/translator_mlkit_models_summary_loading"
             app:iconSpaceReserved="false"
             app:dependency="translator_enabled" />
     </PreferenceCategory>
@@ -157,7 +181,7 @@
 
         <SeekBarPreference
             android:key="translator_tts_speed"
-            android:title="@string/category_translator_tts"
+            android:title="@string/translator_tts_speed_title"
             app:min="50"
             android:max="200"
             android:defaultValue="100"

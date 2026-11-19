@@ -1,5 +1,6 @@
 package me.magnum.melonds.database.daos
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -9,10 +10,20 @@ import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.database.entities.CheatFolderWithCheats
 import me.magnum.melonds.database.entities.GameEntity
 
+data class GameSearchProjection(
+    @ColumnInfo(name = "game_id") val gameId: Long,
+    @ColumnInfo(name = "game_name") val gameName: String,
+    @ColumnInfo(name = "game_code") val gameCode: String,
+    @ColumnInfo(name = "cheat_count") val cheatCount: Int,
+)
+
 @Dao
 interface GameDao {
     @Query("SELECT * FROM game")
     suspend fun getGames(): List<GameEntity>
+
+    @Query("SELECT COUNT(*) FROM game")
+    suspend fun getGameCount(): Int
 
     @Query("SELECT * FROM game WHERE id = :gameId")
     suspend fun getGame(gameId: Long): GameEntity?
@@ -44,4 +55,27 @@ interface GameDao {
 
     @Query("DELETE FROM game WHERE id NOT IN (SELECT DISTINCT game_id FROM cheat_folder)")
     suspend fun deleteEmptyGames()
+
+    @Query("DELETE FROM game")
+    suspend fun deleteAllGames()
+
+    @Query(
+        """
+        SELECT
+            game.id AS game_id,
+            game.name AS game_name,
+            game.game_code AS game_code,
+            COUNT(cheat.id) AS cheat_count
+        FROM game
+        LEFT JOIN cheat_folder ON game.id = cheat_folder.game_id
+        LEFT JOIN cheat ON cheat_folder.id = cheat.cheat_folder_id
+        WHERE :query = ''
+            OR game.name LIKE '%' || :query || '%'
+            OR game.game_code LIKE '%' || :query || '%'
+        GROUP BY game.id
+        ORDER BY game.name COLLATE NOCASE ASC
+        LIMIT :limit
+        """
+    )
+    suspend fun searchGamesWithCheatCount(query: String, limit: Int = 50): List<GameSearchProjection>
 }

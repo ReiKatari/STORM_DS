@@ -37,6 +37,7 @@ class MacAddressPreference(context: Context, attrs: AttributeSet?) : Preference(
     override fun onClick() {
         super.onClick()
         val initMac = getPersistedString(null)?.let { MacAddress.fromString(it) }?.takeIf { it.isValid() }
+            ?: MacAddress.randomDsAddress(random)
 
         showSettingsComposeDialog(context) { dismiss ->
             val colors = LocalWatermelonColors.current
@@ -44,7 +45,7 @@ class MacAddressPreference(context: Context, attrs: AttributeSet?) : Preference(
 
             SettingsDialogScaffold(
                 title = title?.toString() ?: stringResource(R.string.mac_address),
-                subtitle = "Сетевой адрес Nintendo DS Wi-Fi",
+                subtitle = stringResource(R.string.mac_address_dialog_subtitle),
                 icon = Icons.Filled.Wifi,
                 onDismiss = dismiss,
             ) {

@@ -502,13 +502,11 @@
     <string-array name="arm9_overclock_options">
         <item>@string/arm9_overclock_1x</item>
         <item>@string/arm9_overclock_2x</item>
-        <item>@string/arm9_overclock_3x</item>
         <item>@string/arm9_overclock_4x</item>
     </string-array>
     <string-array name="arm9_overclock_values">
         <item>1</item>
         <item>2</item>
-        <item>3</item>
         <item>4</item>
     </string-array>
 
@@ -577,5 +575,28 @@
         <item>5</item>
         <item>10</item>
         <item>15</item>
+    </string-array>
+
+
+    <string-array name="video_ds_lcd_grid_options">
+        <item>@string/video_ds_lcd_grid_off</item>
+        <item>@string/video_ds_lcd_grid_ds_lite</item>
+        <item>@string/video_ds_lcd_grid_dsi_xl</item>
+    </string-array>
+    <string-array name="video_ds_lcd_grid_values">
+        <item>off</item>
+        <item>ds_lite_grid</item>
+        <item>dsi_xl_subpixel</item>
+    </string-array>
+
+    <string-array name="input_gyro_activation_mode_options">
+        <item>@string/input_gyro_activation_always</item>
+        <item>@string/input_gyro_activation_hold_l</item>
+        <item>@string/input_gyro_activation_hold_r</item>
+    </string-array>
+    <string-array name="input_gyro_activation_mode_values">
+        <item>always</item>
+        <item>hold_l</item>
+        <item>hold_r</item>
     </string-array>
 </resources>

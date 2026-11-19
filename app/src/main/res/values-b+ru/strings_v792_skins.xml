@@ -22,6 +22,11 @@
         <item>New Nintendo 3DS XL (SNES Retro)</item>
         <item>New Nintendo 3DS XL (Hyrule Gold)</item>
         <item>Nintendo 3DS (Aqua Blue)</item>
+            <item>Nintendo DSi (Matte White)</item>
+        <item>Nintendo DS Lite (Metallic Silver)</item>
+        <item>New Nintendo 3DS XL (Majora\'s Mask Gold)</item>
+        <item>New Nintendo 3DS XL (Pikachu Yellow)</item>
+        <item>Nintendo Switch OLED (Tears of the Kingdom)</item>
     </string-array>
     <string-array name="console_skin_values_v792">
         <item>aurora_auto_theme</item>
@@ -45,5 +50,10 @@
         <item>n3ds_snes</item>
         <item>n3ds_hyrule</item>
         <item>n3ds_aqua</item>
+            <item>dsi_white</item>
+        <item>ds_lite_silver</item>
+        <item>n3ds_majoras_mask</item>
+        <item>n3ds_pikachu</item>
+        <item>switch_totk_oled</item>
     </string-array>
 </resources>

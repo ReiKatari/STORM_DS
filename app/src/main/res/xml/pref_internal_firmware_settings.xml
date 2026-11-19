@@ -22,8 +22,9 @@
     <ListPreference
             android:key="firmware_settings_language"
             android:title="@string/firmware_language"
-            android:summary="%s"
+            app:useSimpleSummaryProvider="true"
             app:iconSpaceReserved="false"
+            android:defaultValue="1"
             android:entries="@array/firmware_settings_language_options"
             android:entryValues="@array/firmware_settings_language_values" />
 

@@ -2,6 +2,7 @@ package me.magnum.melonds.impl
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -24,6 +25,7 @@ import me.magnum.melonds.database.entities.GameEntity
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatDatabase
 import me.magnum.melonds.domain.model.CheatFolder
+import me.magnum.melonds.domain.model.CheatGameSearchResult
 import me.magnum.melonds.domain.model.CheatImportProgress
 import me.magnum.melonds.domain.model.Game
 import me.magnum.melonds.domain.model.RomInfo
@@ -219,6 +221,27 @@ class RoomCheatsRepository(
         database.gameDao().deleteEmptyGames()
         database.cheatFolderDao().deleteEmptyFolders()
         settingsBackupManager.requestMirrorWrite()
+    }
+
+    override suspend fun clearAllCheatDatabases() {
+        database.withTransaction {
+            database.cheatDao().deleteAllCheats()
+            database.cheatFolderDao().deleteAllCheatFolders()
+            database.gameDao().deleteAllGames()
+            database.cheatDatabaseDao().deleteAllImportedCheatDatabases()
+        }
+        settingsBackupManager.requestMirrorWrite()
+    }
+
+    override suspend fun searchGames(query: String, limit: Int): List<CheatGameSearchResult> {
+        return database.gameDao().searchGamesWithCheatCount(query.trim(), limit).map { projection ->
+            CheatGameSearchResult(
+                gameId = projection.gameId,
+                gameName = projection.gameName,
+                gameCode = projection.gameCode,
+                cheatCount = projection.cheatCount,
+            )
+        }
     }
 
     override suspend fun addCheatDatabase(databaseName: String): CheatDatabase {

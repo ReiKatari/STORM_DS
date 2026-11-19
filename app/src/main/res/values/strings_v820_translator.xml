@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="translator_default_zone_options">
+        <item>@string/translator_default_zone_both</item>
+        <item>@string/translator_default_zone_top</item>
+        <item>@string/translator_default_zone_bottom</item>
+    </string-array>
+    <string-array name="translator_default_zone_values">
+        <item>both</item>
+        <item>top</item>
+        <item>bottom</item>
+    </string-array>
+    <string name="translator_default_zone_title">Default translation zone</string>
+    <string name="translator_default_zone_both">Both screens</string>
+    <string name="translator_default_zone_top">Top screen</string>
+    <string name="translator_default_zone_bottom">Bottom screen</string>
+    <string name="translator_test_api_title">Test translation and API</string>
+    <string name="translator_test_api_summary">Verify the selected engine, API key, and response latency</string>
+    <string name="translator_test_api_dialog_title">Translation and API test</string>
+    <string name="translator_test_api_running">Sending test phrase...</string>
+    <string name="translator_test_api_engine_label">Engine</string>
+    <string name="translator_test_api_status_label">Status</string>
+    <string name="translator_test_api_status_ok">OK</string>
+    <string name="translator_test_api_status_error">Error</string>
+    <string name="translator_test_api_latency_label">Latency</string>
+    <string name="translator_test_api_latency_value">%d ms</string>
+    <string name="translator_test_api_original_label">Original text</string>
+    <string name="translator_test_api_translated_label">Translated text</string>
+    <string name="translator_test_api_error_label">Error details</string>
+    <string name="translator_test_api_retry">Run test again</string>
+    <string name="translator_test_api_lang_pair">%1$s -> %2$s</string>
+    <string name="translator_mlkit_models_title">Offline ML Kit models</string>
+    <string name="translator_mlkit_models_summary_loading">Checking downloaded language packs...</string>
+    <string name="translator_mlkit_models_summary">Downloaded packs: %1$d of %2$d</string>
+    <string name="translator_mlkit_models_dialog_subtitle">Manage on-device neural translation packages</string>
+    <string name="translator_mlkit_status_downloaded">Downloaded</string>
+    <string name="translator_mlkit_status_not_downloaded">Not downloaded</string>
+    <string name="translator_mlkit_status_downloading">Downloading...</string>
+    <string name="translator_mlkit_status_deleting">Deleting...</string>
+    <string name="translator_mlkit_size_approx">~%d MB</string>
+    <string name="translator_mlkit_size_exact">%.1f MB</string>
+    <string name="translator_mlkit_download">Download</string>
+    <string name="translator_mlkit_delete">Delete</string>
+    <string name="translator_mlkit_refresh">Refresh</string>
+    <string name="translator_mlkit_action_error">Model operation failed: %s</string>
+    <string name="translator_mlkit_lang_ja">Japanese (JA)</string>
+    <string name="translator_mlkit_lang_en">English (EN)</string>
+    <string name="translator_mlkit_lang_zh">Chinese (ZH)</string>
+    <string name="translator_mlkit_lang_ko">Korean (KO)</string>
+    <string name="translator_mlkit_lang_ru">Russian (RU)</string>
+</resources>

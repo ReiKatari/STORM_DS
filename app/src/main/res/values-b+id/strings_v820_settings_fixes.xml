@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v820_rom_search_dirs_empty">Belum dipilih</string>
+    <string name="v820_ra_covers_fallback_gametdb_and_icon">GameTDB atau ikon ROM</string>
+    <string name="v820_ra_covers_fallback_icon_only">ikon ROM</string>
+    <string name="v820_ra_covers_summary_signed_in">Mengutamakan sampul RetroAchievements. Otomatis beralih ke %1$s jika tidak tersedia.</string>
+    <string name="v820_ra_covers_summary_not_signed_in">Menggunakan sampul RetroAchievements setelah masuk. Akun belum masuk (saat ini beralih ke %1$s).</string>
+    <string name="v820_auto_load_ra_hardcore_notice">Dinonaktifkan saat mode Hardcore RetroAchievements aktif.</string>
+    <string name="v820_rewind_summary_enabled_fmt">Aktif (Interval: %1$s, Buffer: %2$s)</string>
+    <string name="v820_rewind_summary_disabled">Nonaktif</string>
+    <string name="v820_general_pause_menu_customize_hint">Urutan dan visibilitas tombol diatur langsung di dalam Menu Jeda saat bermain. Opsi ini mengembalikannya ke bawaan.</string>
+</resources>

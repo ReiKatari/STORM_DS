@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="translator_default_zone_title">Зона перевода по умолчанию</string>
+    <string name="translator_default_zone_both">Оба экрана</string>
+    <string name="translator_default_zone_top">Верхний экран</string>
+    <string name="translator_default_zone_bottom">Нижний экран</string>
+    <string name="translator_test_api_title">Тест перевода и API</string>
+    <string name="translator_test_api_summary">Проверить выбранный движок, ключ API и время отклика</string>
+    <string name="translator_test_api_dialog_title">Тест перевода и API</string>
+    <string name="translator_test_api_running">Отправка тестовой фразы...</string>
+    <string name="translator_test_api_engine_label">Движок</string>
+    <string name="translator_test_api_status_label">Статус</string>
+    <string name="translator_test_api_status_ok">ОК</string>
+    <string name="translator_test_api_status_error">Ошибка</string>
+    <string name="translator_test_api_latency_label">Задержка</string>
+    <string name="translator_test_api_latency_value">%d мс</string>
+    <string name="translator_test_api_original_label">Исходный текст</string>
+    <string name="translator_test_api_translated_label">Переведённый текст</string>
+    <string name="translator_test_api_error_label">Подробности ошибки</string>
+    <string name="translator_test_api_retry">Повторить тест</string>
+    <string name="translator_test_api_lang_pair">%1$s -> %2$s</string>
+    <string name="translator_mlkit_models_title">Офлайн-модели ML Kit</string>
+    <string name="translator_mlkit_models_summary_loading">Проверка загруженных языковых пакетов...</string>
+    <string name="translator_mlkit_models_summary">Загружено пакетов: %1$d из %2$d</string>
+    <string name="translator_mlkit_models_dialog_subtitle">Управление офлайн-пакетами нейросетевого перевода</string>
+    <string name="translator_mlkit_status_downloaded">Загружено</string>
+    <string name="translator_mlkit_status_not_downloaded">Не загружено</string>
+    <string name="translator_mlkit_status_downloading">Загрузка...</string>
+    <string name="translator_mlkit_status_deleting">Удаление...</string>
+    <string name="translator_mlkit_size_approx">~%d МБ</string>
+    <string name="translator_mlkit_size_exact">%.1f МБ</string>
+    <string name="translator_mlkit_download">Скачать</string>
+    <string name="translator_mlkit_delete">Удалить</string>
+    <string name="translator_mlkit_refresh">Обновить</string>
+    <string name="translator_mlkit_action_error">Ошибка операции с моделью: %s</string>
+    <string name="translator_mlkit_lang_ja">Японский (JA)</string>
+    <string name="translator_mlkit_lang_en">Английский (EN)</string>
+    <string name="translator_mlkit_lang_zh">Китайский (ZH)</string>
+    <string name="translator_mlkit_lang_ko">Корейский (KO)</string>
+    <string name="translator_mlkit_lang_ru">Русский (RU)</string>
+</resources>

@@ -105,6 +105,12 @@ abstract class RetroAchievementsDao {
     @Query("SELECT * FROM ra_pending_achievement_award")
     abstract suspend fun getPendingAchievementSubmissions(): List<RAPendingAchievementSubmissionEntity>
 
+    @Query("SELECT COUNT(*) FROM ra_pending_achievement_award")
+    abstract fun observePendingAchievementSubmissionCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM ra_pending_achievement_award")
+    abstract suspend fun getPendingAchievementSubmissionCount(): Int
+
     @Delete
     abstract suspend fun removePendingAchievementSubmission(pendingAchievementSubmission: RAPendingAchievementSubmissionEntity)
 

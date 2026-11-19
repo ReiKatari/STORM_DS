@@ -36,9 +36,21 @@ class BiosDownloadManager @Inject constructor(
         )
     }
 
+    private fun isBiosDownloadBlocked(): Boolean {
+        return runCatching {
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean("block_bios_download", false)
+        }.getOrDefault(false)
+    }
+
     suspend fun downloadAndSetupDsBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (isBiosDownloadBlocked()) {
+            return@withContext Result.failure(
+                IllegalStateException(context.getString(me.magnum.melonds.R.string.bios_download_blocked_error))
+            )
+        }
         val rootDsDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/ds")
         val stagingDir = File(context.cacheDir, "staging_ds_bios_${System.currentTimeMillis()}").apply { mkdirs() }
         val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
@@ -94,6 +106,11 @@ class BiosDownloadManager @Inject constructor(
     suspend fun downloadAndSetupDsiBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (isBiosDownloadBlocked()) {
+            return@withContext Result.failure(
+                IllegalStateException(context.getString(me.magnum.melonds.R.string.bios_download_blocked_error))
+            )
+        }
         val rootDsiDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/dsi")
         val existingValidNand = File(rootDsiDir, "nand.bin").takeIf { isValidNandFile(it) }
         val stagingDir = File(context.cacheDir, "staging_dsi_bios_${System.currentTimeMillis()}").apply { mkdirs() }

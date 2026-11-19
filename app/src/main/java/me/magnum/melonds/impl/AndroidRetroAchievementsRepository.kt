@@ -27,6 +27,7 @@ import me.magnum.melonds.database.entities.retroachievements.RAGameHashEntity
 import me.magnum.melonds.database.entities.retroachievements.RAGameSetMetadata
 import me.magnum.melonds.database.entities.retroachievements.RAPendingAchievementSubmissionEntity
 import me.magnum.melonds.database.entities.retroachievements.RAUserAchievementEntity
+import me.magnum.melonds.domain.model.retroachievements.PendingAchievementsSyncSummary
 import me.magnum.melonds.domain.model.retroachievements.RAAchievementSetSummary
 import me.magnum.melonds.domain.model.retroachievements.RAGameSummary
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeUserAchievement
@@ -437,6 +438,84 @@ class AndroidRetroAchievementsRepository(
         return Result.success(Unit)
     }
 
+    override fun observePendingAchievementSubmissionsCount() =
+        retroAchievementsDao.observePendingAchievementSubmissionCount()
+
+    override suspend fun syncPendingAchievementsWithReport(): PendingAchievementsSyncSummary = withContext(Dispatchers.IO) {
+        val pending = retroAchievementsDao.getPendingAchievementSubmissions()
+        if (pending.isEmpty()) {
+            return@withContext PendingAchievementsSyncSummary(
+                totalCount = 0,
+                succeededCount = 0,
+                failedCount = 0,
+            )
+        }
+
+        if (endpointProvider.currentSnapshot().apiUrl == null) {
+            return@withContext PendingAchievementsSyncSummary(
+                totalCount = pending.size,
+                succeededCount = 0,
+                failedCount = pending.size,
+                lastErrorMessage = "RAOfflineProxy is not active",
+            )
+        }
+
+        var succeededCount = 0
+        var failedCount = 0
+        var discardedHardcoreCount = 0
+        var lastErrorMessage: String? = null
+
+        pending.forEach { item ->
+            if (item.forHardcoreMode) {
+                retroAchievementsDao.removePendingAchievementSubmission(item)
+                discardedHardcoreCount++
+                logRaTrace(
+                    "pending_award_hardcore_discarded",
+                    "achievement_id" to item.achievementId,
+                    "game_id" to item.gameId,
+                    "hardcore" to true,
+                )
+                return@forEach
+            }
+
+            val submissionResult = submitAchievementAward(
+                achievementId = item.achievementId,
+                gameId = RAGameId(item.gameId),
+                forHardcoreMode = item.forHardcoreMode,
+                awardTimestampEpochMs = item.createdAtEpochMs,
+            )
+            if (submissionResult.isSuccess) {
+                retroAchievementsDao.removePendingAchievementSubmission(item)
+                succeededCount++
+                logRaTrace(
+                    "pending_award_manual_sync_success",
+                    "achievement_id" to item.achievementId,
+                    "game_id" to item.gameId,
+                )
+            } else {
+                failedCount++
+                val error = submissionResult.exceptionOrNull()
+                lastErrorMessage = error?.localizedMessage?.takeIf { it.isNotBlank() }
+                    ?: error?.javaClass?.simpleName
+                    ?: "Unknown error"
+                logRaTrace(
+                    "pending_award_manual_sync_failed",
+                    "achievement_id" to item.achievementId,
+                    "game_id" to item.gameId,
+                    "error" to (error?.javaClass?.simpleName ?: "Unknown"),
+                )
+            }
+        }
+
+        PendingAchievementsSyncSummary(
+            totalCount = pending.size,
+            succeededCount = succeededCount,
+            failedCount = failedCount,
+            discardedHardcoreCount = discardedHardcoreCount,
+            lastErrorMessage = lastErrorMessage,
+        )
+    }
+
     override suspend fun getLeaderboard(leaderboardId: Long): RALeaderboard? {
         return retroAchievementsDao.getLeaderboard(leaderboardId)?.mapToModel()
     }
@@ -643,7 +722,7 @@ class AndroidRetroAchievementsRepository(
                     achievementId = achievementId,
                     gameId = gameId.id,
                     forHardcoreMode = false,
-                    createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+                    createdAtEpochMs = awardTimestampEpochMs ?: Clock.System.now().toEpochMilliseconds(),
                 )
                 retroAchievementsDao.addPendingAchievementSubmission(pendingAchievementSubmissionEntity)
                 logRaSubmission(

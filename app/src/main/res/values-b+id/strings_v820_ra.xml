@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ra_cat_notifications">Notifikasi pencapaian</string>
+    <string name="ra_notification_position_title">Posisi notifikasi</string>
+    <string name="ra_notification_position_top">Atas</string>
+    <string name="ra_notification_position_bottom">Bawah</string>
+    <string name="ra_notification_style_title">Gaya notifikasi</string>
+    <string name="ra_notification_style_detailed">Terperinci</string>
+    <string name="ra_notification_style_compact">Ringkas</string>
+    <string name="ra_notification_sound_title">Suara notifikasi</string>
+    <string name="ra_notification_sound_chime">Dentang kristal</string>
+    <string name="ra_notification_sound_fanfare">Fanfare retro</string>
+    <string name="ra_notification_sound_classic">Nada sistem</string>
+    <string name="ra_notification_sound_none">Senyap</string>
+    <string name="ra_cat_sync_and_diagnostics">Sinkronisasi dan diagnostik</string>
+    <string name="ra_sync_pending_title">Sinkronkan pencapaian tertunda</string>
+    <string name="ra_sync_pending_summary_count">Menunggu pengiriman: %1$d</string>
+    <string name="ra_sync_pending_summary_all_synced">Semua pencapaian tersinkronisasi</string>
+    <string name="ra_sync_pending_summary_login_required">Masuk untuk menyinkronkan</string>
+    <string name="ra_sync_pending_all_synced_toast">Semua pencapaian sudah tersinkronisasi</string>
+    <string name="ra_sync_pending_login_prompt">Masuk ke RetroAchievements untuk menyinkronkan pencapaian</string>
+    <string name="ra_sync_pending_in_progress">Menyinkronkan pencapaian tertunda...</string>
+    <string name="ra_sync_pending_result_success">Pencapaian tersinkronisasi: %1$d</string>
+    <string name="ra_sync_pending_result_partial">Terkirim: %1$d, gagal: %2$d</string>
+    <string name="ra_sync_pending_result_title">Hasil sinkronisasi</string>
+    <string name="ra_sync_pending_result_error_detail">Kesalahan: %1$s</string>
+    <string name="ra_test_connection_title">Uji koneksi ke RetroAchievements</string>
+    <string name="ra_test_connection_summary">Periksa status akun, latensi HTTPS, dan mode proksi</string>
+    <string name="ra_test_connection_dialog_title">Koneksi RetroAchievements</string>
+    <string name="ra_test_connection_checking">Menguji koneksi...</string>
+    <string name="ra_test_connection_retest">Uji ulang</string>
+    <string name="ra_test_connection_close">Tutup</string>
+    <string name="ra_test_connection_label_reachability">Keterjangkauan server</string>
+    <string name="ra_test_connection_label_account">Akun dan token</string>
+    <string name="ra_test_connection_label_proxy">Mode koneksi</string>
+    <string name="ra_test_connection_reachable_fmt">Terjangkau (%1$d ms)</string>
+    <string name="ra_test_connection_unreachable_fmt">Tidak terjangkau: %1$s</string>
+    <string name="ra_test_connection_auth_ok_fmt">Masuk sebagai %1$s (token aktif)</string>
+    <string name="ra_test_connection_auth_expired_fmt">Sesi kedaluwarsa untuk %1$s</string>
+    <string name="ra_test_connection_auth_none">Belum masuk</string>
+    <string name="ra_test_connection_proxy_direct">Langsung (server resmi)</string>
+    <string name="ra_test_connection_proxy_active_fmt">Proksi aktif (%1$s)</string>
+    <string name="ra_test_connection_proxy_unavailable">Proksi dipilih, tetapi tidak aktif</string>
+</resources>

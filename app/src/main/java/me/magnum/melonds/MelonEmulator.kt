@@ -247,6 +247,9 @@ object MelonEmulator {
     external fun setDisplayColorProfile(profile: Int)
 
     @JvmStatic
+    external fun setDisplayLcdGridMode(mode: Int)
+
+    @JvmStatic
     external fun setHingeGapPixels(pixels: Int)
 
     @JvmStatic
@@ -281,6 +284,9 @@ object MelonEmulator {
 
     @JvmStatic
     external fun setMicrophoneAgcEnabled(enabled: Boolean)
+
+    @JvmStatic
+    external fun setMicrophoneNoiseGateThreshold(thresholdPercent: Int)
 
     @JvmStatic
     external fun setVulkanPipelineCacheFile(filePath: String)

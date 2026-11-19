@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v820_rom_search_dirs_empty">未選択</string>
+    <string name="v820_ra_covers_fallback_gametdb_and_icon">GameTDB または ROM アイコン</string>
+    <string name="v820_ra_covers_fallback_icon_only">ROM アイコン</string>
+    <string name="v820_ra_covers_summary_signed_in">RetroAchievements のカバー画像を優先します。利用できない場合は自動的に %1$s を使用します。</string>
+    <string name="v820_ra_covers_summary_not_signed_in">ログイン後に RetroAchievements のカバー画像を使用します。未ログインです（現在は %1$s を使用）。</string>
+    <string name="v820_auto_load_ra_hardcore_notice">RetroAchievements ハードコアモードが有効な間は無効になります。</string>
+    <string name="v820_rewind_summary_enabled_fmt">有効（間隔: %1$s、バッファ: %2$s）</string>
+    <string name="v820_rewind_summary_disabled">無効</string>
+    <string name="v820_general_pause_menu_customize_hint">ボタンの並び順と表示設定はゲーム内のポーズメニューから直接変更できます。この項目は設定を初期状態にリセットします。</string>
+</resources>

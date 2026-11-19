@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="cheats_download_mirror_options">
+        <item>@string/cheats_mirror_auto</item>
+        <item>@string/cheats_mirror_github_raw</item>
+        <item>@string/cheats_mirror_jsdelivr</item>
+        <item>@string/cheats_mirror_ghproxy</item>
+    </string-array>
+    <string-array name="cheats_download_mirror_values" translatable="false">
+        <item>auto</item>
+        <item>github_raw</item>
+        <item>jsdelivr</item>
+        <item>ghproxy</item>
+    </string-array>
+    <string name="cheats_download_mirror_title">Download mirror</string>
+    <string name="cheats_mirror_auto">Auto (all mirrors in order)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">GitHub Mirror (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Search cheat database</string>
+    <string name="cheats_search_database_summary">Browse imported games by title or Game ID</string>
+    <string name="cheats_db_search_hint">Game title or Game ID (e.g. Pokemon or CPUE)</string>
+    <string name="cheats_search_games_available">Games in database: %1$d</string>
+    <string name="cheats_search_results_count">Results shown: %1$d</string>
+    <string name="cheats_search_cheats_count">Cheats: %1$d</string>
+    <string name="cheats_search_db_empty">The cheat database is empty. Download usrcheat.dat online or import a local file first.</string>
+    <string name="cheats_search_no_results">No games matched your query.</string>
+    <string name="cheats_clear_database_title">Clear cheat database</string>
+    <string name="cheats_clear_database_summary">Delete all imported databases, games, folders and cheats</string>
+    <string name="cheats_clear_database_confirm_title">Clear cheat database?</string>
+    <string name="cheats_clear_database_confirm_message">All imported cheat databases, games, folders and cheats will be permanently deleted. This action cannot be undone.</string>
+    <string name="cheats_clear_database_confirm_action">Clear</string>
+    <string name="cheats_clear_database_success">Cheat database cleared</string>
+    <string name="cheats_db_status_loaded_with_date">Games: %1$d · Cheats: %2$d · Updated: %3$s</string>
+</resources>

@@ -62,7 +62,7 @@
                 app:iconSpaceReserved="false"
                 android:entries="@array/video_vulkan_compositor_mode_options"
                 android:entryValues="@array/video_vulkan_compositor_mode_values"
-                android:defaultValue="hybrid" />
+                android:defaultValue="precise" />
 
         <SwitchPreferenceCompat
                 android:key="video_vulkan_compat_autoselect"
@@ -117,6 +117,15 @@
                 android:entries="@array/video_ds_color_profile_options"
                 android:entryValues="@array/video_ds_color_profile_values"
                 android:defaultValue="standard" />
+
+        <ListPreference
+                android:key="video_ds_lcd_grid"
+                android:title="@string/video_ds_lcd_grid_title"
+                android:summary="%s"
+                app:iconSpaceReserved="false"
+                android:entries="@array/video_ds_lcd_grid_options"
+                android:entryValues="@array/video_ds_lcd_grid_values"
+                android:defaultValue="off" />
 
         <ListPreference
                 android:key="video_ds_hinge_gap"
@@ -248,6 +257,13 @@
                 android:summary="@string/video_oled_battery_saver_summary"
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
+
+        <SwitchPreference
+                android:key="video_low_battery_saver"
+                android:title="@string/video_low_battery_saver_title"
+                android:summary="@string/video_low_battery_saver_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -270,6 +286,16 @@
                 android:entryValues="@array/console_skin_values_v792"
                 android:defaultValue="aurora_auto_theme"
                 android:dependency="video_console_skin_enabled" />
+
+        <SeekBarPreference
+                android:key="video_console_skin_brightness"
+                android:title="@string/video_console_skin_brightness_title"
+                android:dependency="video_console_skin_enabled"
+                app:iconSpaceReserved="false"
+                android:defaultValue="100"
+                app:min="30"
+                android:max="100"
+                app:showSeekBarValue="true" />
 
         <ListPreference
                 android:key="fps_counter_position"
@@ -322,7 +348,6 @@
         <me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
                 android:key="dsi_camera_static_image"
                 android:title="@string/dsi_camera_image"
-                android:dependency="dsi_camera_source"
                 app:iconSpaceReserved="false"
                 app:type="file"
                 app:permissions="read"

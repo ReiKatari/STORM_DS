@@ -6,6 +6,7 @@ import me.magnum.melonds.common.cheats.jusrcheat.JusrcheatRepository
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatDatabase
 import me.magnum.melonds.domain.model.CheatFolder
+import me.magnum.melonds.domain.model.CheatGameSearchResult
 import me.magnum.melonds.domain.model.CheatImportProgress
 import me.magnum.melonds.domain.model.Game
 import me.magnum.melonds.domain.model.RomInfo
@@ -20,6 +21,8 @@ interface CheatsRepository {
     suspend fun updateCheatsStatus(cheats: List<Cheat>)
     suspend fun addCheatFolder(folderName: String, game: Game)
     suspend fun deleteCheatDatabaseIfExists(databaseName: String)
+    suspend fun clearAllCheatDatabases()
+    suspend fun searchGames(query: String, limit: Int = 50): List<CheatGameSearchResult>
     suspend fun addCheatDatabase(databaseName: String): CheatDatabase
     suspend fun addGameCheats(game: Game): Game
     suspend fun addCheat(folder: CheatFolder, cheat: Cheat)

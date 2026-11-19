@@ -24,11 +24,17 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private var micSourcePreference: ListPreference? = null
     private var audioLatencyPreference: ListPreference? = null
     private var agcNoiseGatePreference: SwitchPreference? = null
+    private var micNoiseGateThresholdPreference: SeekBarPreference? = null
+    private var micVuMeterPreference: me.magnum.melonds.ui.settings.preferences.MicLevelMeterPreference? = null
+    @Volatile private var activeTestTrack: android.media.AudioTrack? = null
+    private var activeTestThread: Thread? = null
 
     private val microphonePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            micSourcePreference?.value = MicSource.DEVICE.name.lowercase()
-            micSourcePreference?.let { updateMicSourceSummary(it, MicSource.DEVICE.name.lowercase()) }
+            val deviceVal = MicSource.DEVICE.name.lowercase()
+            micSourcePreference?.value = deviceVal
+            micSourcePreference?.let { updateMicSourceSummary(it, deviceVal) }
+            refreshAudioVisibility(micSourceOverride = deviceVal)
         }
     }
 
@@ -40,13 +46,41 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         micSourcePreference = findPreference("mic_source")
         audioLatencyPreference = findPreference("audio_latency")
         agcNoiseGatePreference = findPreference("mic_agc_noise_gate_enabled")
+        micNoiseGateThresholdPreference = findPreference("mic_noise_gate_threshold")
+        micVuMeterPreference = findPreference("mic_vu_meter")
 
         agcNoiseGatePreference?.let { pref ->
             MelonEmulator.setMicrophoneAgcEnabled(pref.isChecked)
             pref.setOnPreferenceChangeListener { _, newValue ->
                 val enabled = newValue as? Boolean ?: true
                 MelonEmulator.setMicrophoneAgcEnabled(enabled)
+                val threshold = micNoiseGateThresholdPreference?.value ?: 25
+                micVuMeterPreference?.setGateSettings(enabled, threshold)
+                refreshAudioVisibility(agcEnabledOverride = enabled)
                 true
+            }
+        }
+
+        micNoiseGateThresholdPreference?.let { pref ->
+            val initVal = pref.value.coerceIn(0, 100)
+            pref.summary = getString(R.string.mic_noise_gate_threshold_summary, initVal)
+            MelonEmulator.setMicrophoneNoiseGateThreshold(initVal)
+            pref.setOnPreferenceChangeListener { _, newValue ->
+                val pct = (newValue as? Int)?.coerceIn(0, 100) ?: 25
+                pref.summary = getString(R.string.mic_noise_gate_threshold_summary, pct)
+                MelonEmulator.setMicrophoneNoiseGateThreshold(pct)
+                micVuMeterPreference?.setGateSettings(agcNoiseGatePreference?.isChecked ?: true, pct)
+                true
+            }
+        }
+
+        micVuMeterPreference?.apply {
+            setGateSettings(
+                enabled = agcNoiseGatePreference?.isChecked ?: true,
+                thresholdPercent = micNoiseGateThresholdPreference?.value ?: 25,
+            )
+            onPermissionRequired = {
+                requestMicrophonePermission(false)
             }
         }
 
@@ -69,12 +103,17 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         micSourcePreference?.let { micPref ->
             updateMicSourceSummary(micPref, micPref.value)
             micPref.setOnPreferenceChangeListener { _, newValue ->
-                val newMicSource = enumValueOfIgnoreCase<MicSource>(newValue as String)
+                val newValStr = newValue as String
+                val newMicSource = enumValueOfIgnoreCase<MicSource>(newValStr)
                 if (newMicSource == MicSource.DEVICE && !requireContext().isMicrophonePermissionGranted()) {
                     requestMicrophonePermission(false)
                     false
                 } else {
-                    updateMicSourceSummary(micPref, newValue as? String)
+                    if (newMicSource != MicSource.DEVICE) {
+                        micVuMeterPreference?.stopListening()
+                    }
+                    updateMicSourceSummary(micPref, newValStr)
+                    refreshAudioVisibility(micSourceOverride = newValStr)
                     true
                 }
             }
@@ -85,7 +124,22 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
-        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency", "audio_dsp_preset", "audio_soft_limiter_enabled", "audio_bass_boost_enabled", "audio_bass_boost_strength", "audio_spatial_audio_enabled", "audio_reverb_enabled")
+        findPreference<Preference>("audio_dsp_test")?.setOnPreferenceClickListener {
+            playAudioDspTestChord()
+            true
+        }
+
+        findPreference<SwitchPreference>("sound_enabled")?.setOnPreferenceChangeListener { _, newValue ->
+            refreshAudioVisibility(soundEnabledOverride = newValue as? Boolean)
+            true
+        }
+
+        findPreference<SwitchPreference>("audio_bass_boost_enabled")?.setOnPreferenceChangeListener { _, newValue ->
+            refreshAudioVisibility(bassBoostEnabledOverride = newValue as? Boolean)
+            true
+        }
+
+        refreshAudioVisibility()
     }
 
     override fun onResume() {
@@ -93,6 +147,222 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         micSourcePreference?.let { updateMicSourceSummary(it, it.value) }
         audioLatencyPreference?.let { updateAudioLatencySummary(it, it.value) }
         agcNoiseGatePreference?.let { MelonEmulator.setMicrophoneAgcEnabled(it.isChecked) }
+        micNoiseGateThresholdPreference?.let {
+            MelonEmulator.setMicrophoneNoiseGateThreshold(it.value.coerceIn(0, 100))
+            micVuMeterPreference?.setGateSettings(agcNoiseGatePreference?.isChecked ?: true, it.value.coerceIn(0, 100))
+        }
+        refreshAudioVisibility()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        micVuMeterPreference?.stopListening()
+        stopAudioDspTestChord()
+    }
+
+    private fun stopAudioDspTestChord() {
+        activeTestThread?.interrupt()
+        activeTestThread = null
+        runCatching {
+            activeTestTrack?.pause()
+            activeTestTrack?.flush()
+            activeTestTrack?.stop()
+            activeTestTrack?.release()
+        }
+        activeTestTrack = null
+    }
+
+    private fun playAudioDspTestChord() {
+        stopAudioDspTestChord()
+        val prefs = preferenceManager.sharedPreferences ?: return
+        val volumeRaw = prefs.getInt("volume", 256).coerceIn(0, 512)
+        val volumeGain = (volumeRaw / 256.0f).coerceIn(0f, 2.0f)
+        val softLimiter = prefs.getBoolean("audio_soft_limiter_enabled", true)
+        val bassBoost = prefs.getBoolean("audio_bass_boost_enabled", false)
+        val bassStrength = prefs.getInt("audio_bass_boost_strength", 5).coerceIn(1, 10)
+        val spatial = prefs.getBoolean("audio_spatial_audio_enabled", false)
+        val reverb = prefs.getBoolean("audio_reverb_enabled", false)
+
+        Toast.makeText(requireContext(), R.string.audio_dsp_test_playing, Toast.LENGTH_SHORT).show()
+
+        val thread = Thread({
+            val sampleRate = 48000
+            val durationSec = 1.35f
+            val totalFrames = (sampleRate * durationSec).toInt()
+            val pcm = ShortArray(totalFrames * 2)
+
+            // Crisp DS-style arpeggiated chime (C4, E4, G4, B4, D5) + warm 82.4Hz bass foundation
+            val noteFreqs = floatArrayOf(261.63f, 329.63f, 392.00f, 493.88f, 587.33f)
+            val noteStarts = floatArrayOf(0.00f, 0.09f, 0.18f, 0.27f, 0.36f)
+            val notePans = floatArrayOf(-0.45f, -0.20f, 0.05f, 0.28f, 0.50f)
+
+            val reverbDelayL = IntArray(4096)
+            val reverbDelayR = IntArray(4813)
+            var revIdxL = 0
+            var revIdxR = 0
+            var bassLpL = 0f
+            var bassLpR = 0f
+            val bassAlpha = 0.022f // ~170 Hz low-pass for bass shelf boost
+
+            for (i in 0 until totalFrames) {
+                val t = i.toFloat() / sampleRate.toFloat()
+                var left = 0f
+                var right = 0f
+
+                // Warm low-end fundamental so Bass Boost difference is immediately audible
+                val bassEnv = kotlin.math.exp(-t * 2.4f) * (1f - kotlin.math.exp(-t * 45f))
+                val bassSig = (kotlin.math.sin(2.0 * kotlin.math.PI * 82.41 * t).toFloat() * 0.26f +
+                    kotlin.math.sin(2.0 * kotlin.math.PI * 164.81 * t).toFloat() * 0.12f) * bassEnv
+                left += bassSig
+                right += bassSig
+
+                for (n in noteFreqs.indices) {
+                    val dt = t - noteStarts[n]
+                    if (dt >= 0f) {
+                        val env = kotlin.math.exp(-dt * 4.2f) * (1f - kotlin.math.exp(-dt * 120f))
+                        val f = noteFreqs[n].toDouble()
+                        val tone = (kotlin.math.sin(2.0 * kotlin.math.PI * f * dt).toFloat() * 0.65f +
+                            kotlin.math.sin(2.0 * kotlin.math.PI * f * 2.0 * dt).toFloat() * 0.22f +
+                            kotlin.math.sin(2.0 * kotlin.math.PI * f * 3.0 * dt).toFloat() * 0.08f) * env * 0.28f
+                        val pan = notePans[n]
+                        left += tone * (1f - pan * 0.5f)
+                        right += tone * (1f + pan * 0.5f)
+                    }
+                }
+
+                // Bass boost low-shelf filter
+                if (bassBoost) {
+                    bassLpL += bassAlpha * (left - bassLpL)
+                    bassLpR += bassAlpha * (right - bassLpR)
+                    val boostGain = 0.25f * bassStrength
+                    left += bassLpL * boostGain
+                    right += bassLpR * boostGain
+                }
+
+                // Mid/Side stereo spatial widening
+                if (spatial) {
+                    val mid = (left + right) * 0.5f
+                    val side = (left - right) * 0.5f * 1.65f
+                    left = mid + side
+                    right = mid - side
+                }
+
+                // Dual comb-tap stereo reverb
+                if (reverb) {
+                    val dL = reverbDelayL[revIdxL] / 32768f
+                    val dR = reverbDelayR[revIdxR] / 32768f
+                    val outL = left + dL * 0.42f + dR * 0.16f
+                    val outR = right + dR * 0.42f + dL * 0.16f
+                    reverbDelayL[revIdxL] = ((left + dL * 0.46f).coerceIn(-1f, 1f) * 32767f).toInt()
+                    reverbDelayR[revIdxR] = ((right + dR * 0.46f).coerceIn(-1f, 1f) * 32767f).toInt()
+                    revIdxL = (revIdxL + 1) % reverbDelayL.size
+                    revIdxR = (revIdxR + 1) % reverbDelayR.size
+                    left = outL
+                    right = outR
+                }
+
+                // Master volume + soft tanh limiter
+                left *= volumeGain
+                right *= volumeGain
+                if (softLimiter) {
+                    left = kotlin.math.tanh(left.toDouble()).toFloat()
+                    right = kotlin.math.tanh(right.toDouble()).toFloat()
+                } else {
+                    left = left.coerceIn(-1f, 1f)
+                    right = right.coerceIn(-1f, 1f)
+                }
+
+                pcm[i * 2] = (left * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+                pcm[i * 2 + 1] = (right * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+            }
+
+            try {
+                val attrs = android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_GAME)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = android.media.AudioFormat.Builder()
+                    .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_STEREO)
+                    .build()
+                val track = android.media.AudioTrack.Builder()
+                    .setAudioAttributes(attrs)
+                    .setAudioFormat(format)
+                    .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(pcm.size * 2)
+                    .build()
+                activeTestTrack = track
+                track.write(pcm, 0, pcm.size)
+                track.play()
+                Thread.sleep((durationSec * 1000L).toLong() + 120L)
+                runCatching {
+                    track.stop()
+                    track.release()
+                }
+                if (activeTestTrack === track) {
+                    activeTestTrack = null
+                }
+            } catch (_: Throwable) {
+                // Interrupted or audio device unavailable
+            }
+        }, "StormAudioDspTest").apply {
+            isDaemon = true
+            start()
+        }
+        activeTestThread = thread
+    }
+
+    private fun refreshAudioVisibility(
+        soundEnabledOverride: Boolean? = null,
+        bassBoostEnabledOverride: Boolean? = null,
+        micSourceOverride: String? = null,
+        agcEnabledOverride: Boolean? = null,
+    ) {
+        val soundOn = soundEnabledOverride ?: (findPreference<SwitchPreference>("sound_enabled")?.isChecked ?: true)
+        val bassOn = bassBoostEnabledOverride ?: (findPreference<SwitchPreference>("audio_bass_boost_enabled")?.isChecked ?: false)
+        val micVal = micSourceOverride ?: micSourcePreference?.value ?: "blow"
+        val agcOn = agcEnabledOverride ?: (agcNoiseGatePreference?.isChecked ?: true)
+
+        listOf(
+            "audio_mute_on_fast_forward",
+            "audio_interpolation",
+            "audio_bitrate",
+            "volume",
+            "audio_latency",
+            "audio_dsp_preset",
+            "audio_dsp_test",
+            "audio_soft_limiter_enabled",
+            "audio_bass_boost_enabled",
+            "audio_spatial_audio_enabled",
+            "audio_reverb_enabled",
+        ).forEach { key ->
+            findPreference<Preference>(key)?.isVisible = soundOn
+        }
+
+        findPreference<Preference>("audio_bass_boost_strength")?.let { pref ->
+            val showStrength = soundOn && bassOn
+            pref.isVisible = showStrength
+            pref.isEnabled = showStrength
+        }
+
+        val isDeviceMic = micVal.equals("device", ignoreCase = true)
+        agcNoiseGatePreference?.let { pref ->
+            pref.isVisible = isDeviceMic
+            pref.isEnabled = isDeviceMic
+        }
+        micNoiseGateThresholdPreference?.let { pref ->
+            val showThreshold = isDeviceMic && agcOn
+            pref.isVisible = showThreshold
+            pref.isEnabled = showThreshold
+        }
+        micVuMeterPreference?.let { pref ->
+            pref.isVisible = isDeviceMic
+            pref.isEnabled = isDeviceMic
+            if (!isDeviceMic) {
+                pref.stopListening()
+            }
+        }
     }
 
     private fun updateAudioLatencySummary(pref: ListPreference, value: String?) {
@@ -118,7 +388,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             } else {
                 getString(R.string.v780_mic_permission_required)
             }
-            pref.summary = "$entry — $status"
+            pref.summary = "$entry - $status"
         } else {
             pref.summary = entry
         }
@@ -149,19 +419,30 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun showAudioDspPresetDialog() {
-        val options = arrayOf(
+        val ctx = context ?: return
+        val options = listOf<CharSequence>(
             getString(R.string.v794_audio_preset_studio),
             getString(R.string.v794_audio_preset_cyber_bass),
             getString(R.string.v794_audio_preset_spatial_3d),
             getString(R.string.v794_audio_preset_night_mode)
         )
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.v794_audio_dsp_preset_title)
-            .setItems(options) { _, which ->
-                applyAudioDspPreset(which, options[which])
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        val values = listOf<CharSequence>("0", "1", "2", "3")
+        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+            me.magnum.melonds.ui.settings.dialogs.SettingsChoiceDialogContent(
+                title = getString(R.string.v794_audio_dsp_preset_title),
+                subtitle = getString(R.string.v794_audio_dsp_preset_summary),
+                options = options,
+                values = values,
+                selectedValue = null,
+                onSelect = { chosen ->
+                    val idx = chosen.toIntOrNull() ?: return@SettingsChoiceDialogContent
+                    if (idx in options.indices) {
+                        applyAudioDspPreset(idx, options[idx].toString())
+                    }
+                },
+                onDismiss = dismiss,
+            )
+        }
     }
 
     private fun applyAudioDspPreset(presetIndex: Int, presetTitle: String) {
@@ -203,12 +484,17 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             else -> return
         }
 
+        val nightVolume: Int? = if (presetIndex == 3) 166 else null
+
         preferenceManager.sharedPreferences?.edit()?.apply {
             putBoolean("audio_soft_limiter_enabled", softLimit)
             putBoolean("audio_bass_boost_enabled", bassBoost)
             putInt("audio_bass_boost_strength", bassStrength)
             putBoolean("audio_spatial_audio_enabled", spatial)
             putBoolean("audio_reverb_enabled", reverb)
+            if (nightVolume != null) {
+                putInt("volume", nightVolume)
+            }
             apply()
         }
 
@@ -217,6 +503,13 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<SeekBarPreference>("audio_bass_boost_strength")?.value = bassStrength
         findPreference<SwitchPreference>("audio_spatial_audio_enabled")?.isChecked = spatial
         findPreference<SwitchPreference>("audio_reverb_enabled")?.isChecked = reverb
+        if (nightVolume != null) {
+            findPreference<SeekBarPreference>("volume")?.let { volPref ->
+                volPref.value = nightVolume
+                updateVolumePreferenceSummary(volPref, nightVolume)
+            }
+        }
+        refreshAudioVisibility(bassBoostEnabledOverride = bassBoost)
 
         Toast.makeText(requireContext(), getString(R.string.v794_audio_preset_applied, presetTitle), Toast.LENGTH_SHORT).show()
     }

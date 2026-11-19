@@ -29,6 +29,7 @@
             android:entries="@array/update_channel_options"
             android:entryValues="@array/update_channel_values"
             android:defaultValue="stable"
+            android:dependency="github_check_for_updates"
             app:iconSpaceReserved="false"
             app:dependency="github_check_for_updates" />
     </PreferenceCategory>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">下载镜像源</string>
+    <string name="cheats_mirror_auto">自动（按顺序尝试所有镜像）</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">GitHub 镜像 (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">搜索金手指数据库</string>
+    <string name="cheats_search_database_summary">按游戏名称或 Game ID 搜索已导入的游戏</string>
+    <string name="cheats_db_search_hint">游戏名称或 Game ID（例如 Pokemon 或 CPUE）</string>
+    <string name="cheats_search_games_available">数据库中的游戏：%1$d</string>
+    <string name="cheats_search_results_count">显示结果：%1$d</string>
+    <string name="cheats_search_cheats_count">金手指：%1$d</string>
+    <string name="cheats_search_db_empty">金手指数据库为空。请先在线下载 usrcheat.dat 或导入本地文件。</string>
+    <string name="cheats_search_no_results">未找到匹配的游戏。</string>
+    <string name="cheats_clear_database_title">清空金手指数据库</string>
+    <string name="cheats_clear_database_summary">删除所有已导入的数据库、游戏、文件夹和金手指</string>
+    <string name="cheats_clear_database_confirm_title">清空金手指数据库？</string>
+    <string name="cheats_clear_database_confirm_message">所有已导入的金手指数据库、游戏、文件夹和金手指将被永久删除。此操作无法撤销。</string>
+    <string name="cheats_clear_database_confirm_action">清空</string>
+    <string name="cheats_clear_database_success">金手指数据库已清空</string>
+    <string name="cheats_db_status_loaded_with_date">游戏：%1$d · 金手指：%2$d · 更新：%3$s</string>
+</resources>

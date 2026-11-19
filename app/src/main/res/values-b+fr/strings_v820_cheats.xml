@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Miroir de téléchargement</string>
+    <string name="cheats_mirror_auto">Auto (tous les miroirs dans l\'ordre)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">Miroir GitHub (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Rechercher dans la base de codes</string>
+    <string name="cheats_search_database_summary">Rechercher les jeux importés par titre ou Game ID</string>
+    <string name="cheats_db_search_hint">Titre du jeu ou Game ID (ex. Pokemon ou CPUE)</string>
+    <string name="cheats_search_games_available">Jeux dans la base : %1$d</string>
+    <string name="cheats_search_results_count">Résultats affichés : %1$d</string>
+    <string name="cheats_search_cheats_count">Codes : %1$d</string>
+    <string name="cheats_search_db_empty">La base de codes est vide. Téléchargez usrcheat.dat en ligne ou importez un fichier local.</string>
+    <string name="cheats_search_no_results">Aucun jeu ne correspond à votre recherche.</string>
+    <string name="cheats_clear_database_title">Vider la base de codes</string>
+    <string name="cheats_clear_database_summary">Supprimer toutes les bases, jeux, dossiers et codes importés</string>
+    <string name="cheats_clear_database_confirm_title">Vider la base de codes ?</string>
+    <string name="cheats_clear_database_confirm_message">Toutes les bases de codes, jeux, dossiers et codes importés seront définitivement supprimés. Cette action est irréversible.</string>
+    <string name="cheats_clear_database_confirm_action">Vider</string>
+    <string name="cheats_clear_database_success">Base de codes vidée</string>
+    <string name="cheats_db_status_loaded_with_date">Jeux : %1$d · Codes : %2$d · Mis à jour : %3$s</string>
+</resources>

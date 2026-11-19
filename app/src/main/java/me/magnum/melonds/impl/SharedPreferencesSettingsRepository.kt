@@ -750,7 +750,7 @@ class SharedPreferencesSettingsRepository(
                 preferences.getString("firmware_settings_nickname", "Player")!!,
                 preferences.getString("firmware_settings_message", "Hello!")!!,
                 effectiveLanguage,
-                preferences.getInt("firmware_settings_colour", 0),
+                preferences.getInt("firmware_settings_colour", 0).coerceIn(0, 15),
                 birthday.second,
                 birthday.first,
                 randomizeMacAddress,
@@ -766,7 +766,7 @@ class SharedPreferencesSettingsRepository(
         if (!hasAnyBios) {
             return false
         }
-        return preferences.getBoolean("use_custom_bios", true)
+        return preferences.getBoolean("use_custom_bios", false)
     }
 
     override fun getDsiWareBootMode(): me.magnum.melonds.domain.model.dsinand.DSiWareBootMode {
@@ -2065,6 +2065,36 @@ class SharedPreferencesSettingsRepository(
         return preferences.getBoolean("ra_leaderboard_indicators", true)
     }
 
+    override fun getRetroAchievementsNotificationPosition(): String {
+        return preferences.getString("ra_notification_position", "top") ?: "top"
+    }
+
+    override fun observeRetroAchievementsNotificationPosition(): Flow<String> {
+        return getOrCreatePreferenceSharedFlow("ra_notification_position") {
+            getRetroAchievementsNotificationPosition()
+        }
+    }
+
+    override fun getRetroAchievementsNotificationStyle(): String {
+        return preferences.getString("ra_notification_style", "detailed") ?: "detailed"
+    }
+
+    override fun observeRetroAchievementsNotificationStyle(): Flow<String> {
+        return getOrCreatePreferenceSharedFlow("ra_notification_style") {
+            getRetroAchievementsNotificationStyle()
+        }
+    }
+
+    override fun getRetroAchievementsNotificationSound(): String {
+        return preferences.getString("ra_notification_sound", "chime") ?: "chime"
+    }
+
+    override fun observeRetroAchievementsNotificationSound(): Flow<String> {
+        return getOrCreatePreferenceSharedFlow("ra_notification_sound") {
+            getRetroAchievementsNotificationSound()
+        }
+    }
+
     override fun areCheatsEnabled(): Boolean {
         if (!preferences.getBoolean("cheats_enabled_default_migrated_801", false)) {
             preferences.edit()
@@ -2281,6 +2311,9 @@ class SharedPreferencesSettingsRepository(
             "video_ds_color_profile" -> {
                 runCatching { MelonEmulator.setDisplayColorProfile(getDisplayColorProfile()) }
             }
+            "video_ds_lcd_grid" -> {
+                runCatching { MelonEmulator.setDisplayLcdGridMode(getDisplayLcdGridMode()) }
+            }
             "video_ds_hinge_gap" -> {
                 runCatching { MelonEmulator.setHingeGapPixels(getHingeGapPixels()) }
             }
@@ -2456,7 +2489,11 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getArm9Overclock(): Int {
-        return preferences.getString("arm9_overclock", "1")?.toIntOrNull() ?: 1
+        return when (preferences.getString("arm9_overclock", "1")?.toIntOrNull() ?: 1) {
+            4 -> 4
+            2, 3 -> 2
+            else -> 1
+        }
     }
 
     override fun isGameTdbCoversEnabled(): Boolean {
@@ -2632,6 +2669,32 @@ class SharedPreferencesSettingsRepository(
         runCatching { MelonEmulator.setDisplayColorProfile(profile) }
     }
 
+    override fun getDisplayLcdGridMode(): Int {
+        return when (preferences.getString("video_ds_lcd_grid", "off")?.lowercase()) {
+            "ds_lite_grid" -> 1
+            "dsi_xl_subpixel" -> 2
+            else -> 0
+        }
+    }
+
+    override fun setDisplayLcdGridMode(mode: Int) {
+        val str = when (mode) {
+            1 -> "ds_lite_grid"
+            2 -> "dsi_xl_subpixel"
+            else -> "off"
+        }
+        preferences.edit { putString("video_ds_lcd_grid", str) }
+        runCatching { MelonEmulator.setDisplayLcdGridMode(mode) }
+    }
+
+    override fun getActiveAiUpscalePresetName(): String? {
+        val sourcePref = preferences.getString("video_retroarch_shader_source", null)
+        val rootUri = preferences.getStringSet("video_retroarch_shader_root", null)?.firstOrNull()?.toUri()
+        val root = resolveRetroArchShaderRoot(sourcePref, rootUri) ?: return null
+        val scale = preferences.getString("video_ai_upscale_scale", "4x") ?: "4x"
+        return findAiUpscalePreset(root, scale)?.substringAfterLast('/')
+    }
+
     override fun getHingeGapPixels(): Int {
         return preferences.getString("video_ds_hinge_gap", "0")?.toIntOrNull()?.coerceIn(0, 200) ?: 0
     }
@@ -2678,6 +2741,7 @@ class SharedPreferencesSettingsRepository(
             MelonEmulator.setVulkanDepth3DStrength(getVulkan3dDepthStrength())
             MelonEmulator.setVulkanSsaoEnabled(isVulkanSsaoEnabled())
             MelonEmulator.setDisplayColorProfile(getDisplayColorProfile())
+            MelonEmulator.setDisplayLcdGridMode(getDisplayLcdGridMode())
             MelonEmulator.setHingeGapPixels(getHingeGapPixels())
         }
     }

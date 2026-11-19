@@ -4,7 +4,8 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceManager
+import androidx.preference.SwitchPreference
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -27,15 +28,30 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
+    private var useRomDirPref: SwitchPreference? = null
+    private var sramDirPref: StoragePickerPreference? = null
+    private var autoLoadStatePref: SwitchPreference? = null
+
     override fun getTitle() = getString(R.string.category_save_files)
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_save_files, rootKey)
-        findPreference<StoragePickerPreference>("sram_dir")?.let { pref ->
+        useRomDirPref = findPreference("use_rom_dir")
+        sramDirPref = findPreference("sram_dir")
+        autoLoadStatePref = findPreference("auto_load_state_on_launch")
+
+        sramDirPref?.let { pref ->
             helper.bindPreferenceSummaryToValue(pref)
             helper.setupStoragePickerPreference(pref) { uri, persistDirectory ->
                 handleSettingsMirror(uri, persistDirectory)
             }
+        }
+        syncSramDirVisibility(useRomDirPref?.isChecked ?: false)
+        useRomDirPref?.addOnPreferenceChangeListener { _, newValue ->
+            if (newValue is Boolean) {
+                syncSramDirVisibility(newValue)
+            }
+            true
         }
 
         val customDirPref = findPreference<StoragePickerPreference>("save_state_custom_dir")
@@ -57,6 +73,31 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
 
         findPreference<androidx.preference.ListPreference>("periodic_auto_save_interval_minutes")?.let { pref ->
             helper.bindPreferenceSummaryToValue(pref)
+        }
+
+        updateAutoLoadStateSummary()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncSramDirVisibility(useRomDirPref?.isChecked ?: false)
+        updateAutoLoadStateSummary()
+    }
+
+    private fun syncSramDirVisibility(useRomDir: Boolean) {
+        sramDirPref?.isVisible = !useRomDir
+    }
+
+    private fun updateAutoLoadStateSummary() {
+        val pref = autoLoadStatePref ?: return
+        val ctx = context ?: return
+        val baseSummary = getString(R.string.auto_load_state_on_launch_summary)
+        val hardcoreEnabled = PreferenceManager.getDefaultSharedPreferences(ctx)
+            .getBoolean("ra_hardcore_enabled", false)
+        pref.summary = if (hardcoreEnabled) {
+            "$baseSummary\n${getString(R.string.v820_auto_load_ra_hardcore_notice)}"
+        } else {
+            baseSummary
         }
     }
 

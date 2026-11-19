@@ -87,6 +87,8 @@ class SettingsBackupManager @Inject constructor(
         preferences.registerOnSharedPreferenceChangeListener(this)
     }
 
+    fun hasStorageAccess(): Boolean = hasStorageReadAccess()
+
     private fun hasStorageReadAccess(): Boolean {
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             android.os.Environment.isExternalStorageManager()
@@ -752,29 +754,47 @@ class SettingsBackupManager @Inject constructor(
     }
 
     private fun backupUnifiedLayout(treeUri: Uri, fileName: String) {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+            ?: throw java.io.IOException("Unable to access selected backup folder")
 
         val storageLayoutsFile = File(getStorageSettingsDir(), LAYOUTS_FILE)
-        val layoutsText = storageLayoutsFile
-            .takeIf { it.exists() }
+        val internalLayoutsFile = File(context.filesDir, LAYOUTS_FILE)
+        val sourceFile = listOf(storageLayoutsFile, internalLayoutsFile).firstOrNull { it.isFile && it.length() > 0L }
+        val layoutsText = sourceFile
             ?.let { runCatching { it.readText() }.getOrNull() }
             ?: "[]"
-        val layouts = runCatching { JSONArray(layoutsText) }.getOrNull() ?: return
+        val layouts = runCatching { JSONArray(layoutsText) }.getOrNull()
+            ?: throw java.io.IOException("Invalid layouts data")
 
-        val dest = root.findFile(fileName) ?: root.createFile("*/*", fileName) ?: return
-        context.contentResolver.openOutputStream(dest.uri)?.use { out ->
+        val dest = root.findFile(fileName) ?: root.createFile("application/json", fileName)
+            ?: throw java.io.IOException("Unable to create $fileName in selected folder")
+        val output = context.contentResolver.openOutputStream(dest.uri, "wt")
+            ?: context.contentResolver.openOutputStream(dest.uri)
+            ?: throw java.io.IOException("Unable to open output stream for $fileName")
+        output.use { out ->
             out.writer().use { it.write(layouts.toString()) }
         }
     }
 
     private fun restoreUnifiedLayout(treeUri: Uri, fileName: String) {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
-        val src = root.findFile(fileName) ?: return
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+            ?: throw java.io.IOException("Unable to access selected restore folder")
+        val src = root.findFile(fileName)
+            ?: throw java.io.FileNotFoundException("Backup file $fileName not found in selected folder")
 
-        val layouts = context.contentResolver.openInputStream(src.uri)?.use { input ->
-            runCatching { JSONArray(input.reader().readText()) }.getOrNull()
-        } ?: return
-        writeTextAtomically(File(getStorageSettingsDir(), LAYOUTS_FILE), layouts.toString())
+        val input = context.contentResolver.openInputStream(src.uri)
+            ?: throw java.io.IOException("Unable to read $fileName")
+        val layouts = input.use { stream ->
+            runCatching { JSONArray(stream.reader().readText()) }.getOrNull()
+        } ?: throw java.io.IOException("Invalid JSON format in $fileName")
+
+        val serialized = layouts.toString()
+        val storageDir = getStorageSettingsDir()
+        if (hasStorageReadAccess()) {
+            writeTextAtomically(File(storageDir, LAYOUTS_FILE), serialized)
+        } else {
+            writeTextAtomically(File(context.filesDir, LAYOUTS_FILE), serialized)
+        }
     }
 
     data class SettingSnapshot(

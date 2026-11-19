@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Espelho de download</string>
+    <string name="cheats_mirror_auto">Automático (todos os espelhos em ordem)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">Espelho GitHub (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Pesquisar no banco de trapaças</string>
+    <string name="cheats_search_database_summary">Buscar jogos importados por título ou Game ID</string>
+    <string name="cheats_db_search_hint">Título do jogo ou Game ID (ex. Pokemon ou CPUE)</string>
+    <string name="cheats_search_games_available">Jogos no banco: %1$d</string>
+    <string name="cheats_search_results_count">Resultados exibidos: %1$d</string>
+    <string name="cheats_search_cheats_count">Trapaças: %1$d</string>
+    <string name="cheats_search_db_empty">O banco de trapaças está vazio. Baixe usrcheat.dat online ou importe um arquivo local.</string>
+    <string name="cheats_search_no_results">Nenhum jogo encontrado para sua busca.</string>
+    <string name="cheats_clear_database_title">Limpar banco de trapaças</string>
+    <string name="cheats_clear_database_summary">Excluir todos os bancos, jogos, pastas e trapaças importados</string>
+    <string name="cheats_clear_database_confirm_title">Limpar banco de trapaças?</string>
+    <string name="cheats_clear_database_confirm_message">Todos os bancos de trapaças, jogos, pastas e trapaças importados serão excluídos permanentemente. Esta ação não pode ser desfeita.</string>
+    <string name="cheats_clear_database_confirm_action">Limpar</string>
+    <string name="cheats_clear_database_success">Banco de trapaças limpo</string>
+    <string name="cheats_db_status_loaded_with_date">Jogos: %1$d · Trapaças: %2$d · Atualizado: %3$s</string>
+</resources>

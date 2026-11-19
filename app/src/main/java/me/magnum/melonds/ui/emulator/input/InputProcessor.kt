@@ -129,6 +129,14 @@ class InputProcessor(
         return PreferenceManager.getDefaultSharedPreferences(ctx).getBoolean("input_chord_hotkeys_enabled", true)
     }
 
+    private fun getGamepadAnalogDeadzone(): Float {
+        val ctx = getAppContext() ?: return 0.15f
+        val pct = PreferenceManager.getDefaultSharedPreferences(ctx)
+            .getInt("input_gamepad_analog_deadzone", 15)
+            .coerceIn(5, 40)
+        return pct / 100f
+    }
+
     private fun getTurboFrequencyHz(): Int {
         val ctx = getAppContext() ?: return 15
         val freqStr = PreferenceManager.getDefaultSharedPreferences(ctx).getString("input_turbo_frequency_hz", "15") ?: "15"
@@ -246,6 +254,7 @@ class InputProcessor(
         if (isControllerMotionEvent(motionEvent)) {
             val slot2Handled = processSlot2AnalogFromMotionEvent(motionEvent)
 
+            val analogDeadzone = getGamepadAnalogDeadzone()
             val deviceAxis = axisStates.filterKeys { it.deviceId == null || it.deviceId == motionEvent.deviceId }
             deviceAxis.forEach {
                 val axis = it.key
@@ -256,8 +265,10 @@ class InputProcessor(
                     InputConfig.Assignment.Axis.Direction.POSITIVE -> newValue.coerceAtLeast(0f)
                     InputConfig.Assignment.Axis.Direction.NEGATIVE -> newValue.coerceAtMost(0f)
                 }
+                val isHatAxis = axis.axisCode == MotionEvent.AXIS_HAT_X || axis.axisCode == MotionEvent.AXIS_HAT_Y
+                val threshold = if (isHatAxis) 0.5f else maxOf(analogDeadzone, 0.15f)
 
-                if (axisState.shouldToggleFor(newValue = clampedValue)) {
+                if (axisState.shouldToggleFor(newValue = clampedValue, threshold = threshold)) {
                     resolveAxisInput(axis.axisCode, axis.direction)?.let { input ->
                         if (axisState.active) {
                             axisState.active = false
@@ -494,7 +505,7 @@ class InputProcessor(
             return false
         }
 
-        val deadzone = slot2Mapping.normalizedDeadzone()
+        val deadzone = maxOf(slot2Mapping.normalizedDeadzone(), getGamepadAnalogDeadzone())
         val rawAnalogX = resolveSlot2AxisValue(
             motionEvent = motionEvent,
             preferredAxisCode = slot2Mapping.axisXCode,
@@ -573,11 +584,13 @@ class InputProcessor(
         var value: Float,
         var active: Boolean,
     ) {
-        fun shouldToggleFor(newValue: Float): Boolean {
+        fun shouldToggleFor(newValue: Float, threshold: Float = 0.5f): Boolean {
+            val activateAt = threshold.coerceIn(0.05f, 0.90f)
+            val releaseAt = (activateAt * 0.80f).coerceAtLeast(0.04f)
             return if (active) {
-                newValue.absoluteValue < 0.5f
+                newValue.absoluteValue < releaseAt
             } else {
-                newValue.absoluteValue >= 0.5f
+                newValue.absoluteValue >= activateAt
             }
         }
     }

@@ -250,8 +250,9 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         }
                     }
 
-                    // Extract embedded BIOS files ONLY if user hasn't configured custom BIOS paths
+                    // Extract embedded BIOS files ONLY if user hasn't blocked BIOS downloads and hasn't configured custom BIOS paths
                     val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                    val isBiosDownloadBlocked = prefs.getBoolean("block_bios_download", false)
                     val currentDs = prefs.getStringSet("bios_dir", null)?.firstOrNull()
                     val currentDsi = prefs.getStringSet("dsi_bios_dir", null)?.firstOrNull()
 
@@ -266,7 +267,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                             !currentDsi.contains("STORM%20DS/bios") &&
                             !currentDsi.contains("STORM DS/bios")
 
-                    if (!isCustomDs && !isCustomDsi && (currentDs == null || currentDsi == null)) {
+                    if (!isBiosDownloadBlocked && !isCustomDs && !isCustomDsi && (currentDs == null || currentDsi == null)) {
                         dsDir.mkdirs()
                         dsiDir.mkdirs()
                         biosDir.mkdirs()
@@ -405,6 +406,10 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                 UriFileHandler(this, uriHandler),
                 settingsRepository.getVulkanDriverConfiguration(applicationInfo.nativeLibraryDir),
             )
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+            MelonEmulator.setMicrophoneAgcEnabled(prefs.getBoolean("mic_agc_noise_gate_enabled", true))
+            MelonEmulator.setMicrophoneNoiseGateThreshold(prefs.getInt("mic_noise_gate_threshold", 25))
+            MelonEmulator.setMuteOnFastForwardEnabled(settingsRepository.isMuteOnFastForwardEnabled())
         }
     }
 

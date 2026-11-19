@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Download-Mirror</string>
+    <string name="cheats_mirror_auto">Auto (alle Mirrors der Reihe nach)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">GitHub Mirror (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Cheat-Datenbank durchsuchen</string>
+    <string name="cheats_search_database_summary">Importierte Spiele nach Titel oder Game ID suchen</string>
+    <string name="cheats_db_search_hint">Spieltitel oder Game ID (z. B. Pokemon oder CPUE)</string>
+    <string name="cheats_search_games_available">Spiele in Datenbank: %1$d</string>
+    <string name="cheats_search_results_count">Angezeigte Treffer: %1$d</string>
+    <string name="cheats_search_cheats_count">Cheats: %1$d</string>
+    <string name="cheats_search_db_empty">Die Cheat-Datenbank ist leer. Laden Sie usrcheat.dat online herunter oder importieren Sie eine Datei.</string>
+    <string name="cheats_search_no_results">Keine passenden Spiele gefunden.</string>
+    <string name="cheats_clear_database_title">Cheat-Datenbank leeren</string>
+    <string name="cheats_clear_database_summary">Alle importierten Datenbanken, Spiele, Ordner und Cheats löschen</string>
+    <string name="cheats_clear_database_confirm_title">Cheat-Datenbank leeren?</string>
+    <string name="cheats_clear_database_confirm_message">Alle importierten Cheat-Datenbanken, Spiele, Ordner und Cheats werden dauerhaft gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.</string>
+    <string name="cheats_clear_database_confirm_action">Leeren</string>
+    <string name="cheats_clear_database_success">Cheat-Datenbank geleert</string>
+    <string name="cheats_db_status_loaded_with_date">Spiele: %1$d · Cheats: %2$d · Aktualisiert: %3$s</string>
+</resources>

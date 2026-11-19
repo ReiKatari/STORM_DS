@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cheats_download_mirror_title">Mirror unduhan</string>
+    <string name="cheats_mirror_auto">Otomatis (semua mirror berurutan)</string>
+    <string name="cheats_mirror_github_raw">GitHub (DeadSkullzJr)</string>
+    <string name="cheats_mirror_jsdelivr">jsDelivr CDN</string>
+    <string name="cheats_mirror_ghproxy">Mirror GitHub (ghfast/gh-proxy)</string>
+    <string name="cheats_search_database_title">Cari basis data cheat</string>
+    <string name="cheats_search_database_summary">Cari game yang diimpor berdasarkan judul atau Game ID</string>
+    <string name="cheats_db_search_hint">Judul game atau Game ID (mis. Pokemon atau CPUE)</string>
+    <string name="cheats_search_games_available">Game di basis data: %1$d</string>
+    <string name="cheats_search_results_count">Hasil ditampilkan: %1$d</string>
+    <string name="cheats_search_cheats_count">Cheat: %1$d</string>
+    <string name="cheats_search_db_empty">Basis data cheat kosong. Unduh usrcheat.dat secara online atau impor file lokal terlebih dahulu.</string>
+    <string name="cheats_search_no_results">Tidak ada game yang cocok dengan pencarian Anda.</string>
+    <string name="cheats_clear_database_title">Hapus basis data cheat</string>
+    <string name="cheats_clear_database_summary">Hapus semua basis data, game, folder, dan cheat yang diimpor</string>
+    <string name="cheats_clear_database_confirm_title">Hapus basis data cheat?</string>
+    <string name="cheats_clear_database_confirm_message">Semua basis data cheat, game, folder, dan cheat yang diimpor akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.</string>
+    <string name="cheats_clear_database_confirm_action">Hapus</string>
+    <string name="cheats_clear_database_success">Basis data cheat dihapus</string>
+    <string name="cheats_db_status_loaded_with_date">Game: %1$d · Cheat: %2$d · Diperbarui: %3$s</string>
+</resources>

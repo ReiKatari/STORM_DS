@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v820_rom_search_dirs_empty">Не выбрано</string>
+    <string name="v820_ra_covers_fallback_gametdb_and_icon">GameTDB или иконка ROM</string>
+    <string name="v820_ra_covers_fallback_icon_only">иконка ROM</string>
+    <string name="v820_ra_covers_summary_signed_in">Сначала используются обложки RetroAchievements. При отсутствии обложки автоматически подставляется %1$s.</string>
+    <string name="v820_ra_covers_summary_not_signed_in">Используются обложки RetroAchievements после входа в аккаунт. Вход не выполнен (сейчас используется %1$s).</string>
+    <string name="v820_auto_load_ra_hardcore_notice">Отключено, пока активен хардкорный режим RetroAchievements.</string>
+    <string name="v820_rewind_summary_enabled_fmt">Включено (Интервал: %1$s, Буфер: %2$s)</string>
+    <string name="v820_rewind_summary_disabled">Отключено</string>
+    <string name="v820_general_pause_menu_customize_hint">Порядок и видимость кнопок настраиваются прямо внутри меню паузы во время игры. Этот пункт сбрасывает их к значениям по умолчанию.</string>
+</resources>

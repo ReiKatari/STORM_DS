@@ -2731,6 +2731,12 @@ Java_me_magnum_melonds_MelonEmulator_setDisplayColorProfile(JNIEnv*, jclass, jin
 }
 
 JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setDisplayLcdGridMode(JNIEnv*, jclass, jint mode)
+{
+    MelonDSAndroid::VulkanRuntime::SetLcdGridMode(static_cast<int>(mode));
+}
+
+JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setHingeGapPixels(JNIEnv*, jclass, jint pixels)
 {
     MelonDSAndroid::VulkanRuntime::SetHingeGapPixels(static_cast<int>(pixels));
@@ -2931,6 +2937,13 @@ JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setMicrophoneAgcEnabled(JNIEnv*, jclass, jboolean enabled)
 {
     MicInputOboeCallback::agcEnabled.store(enabled == JNI_TRUE, std::memory_order_relaxed);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setMicrophoneNoiseGateThreshold(JNIEnv*, jclass, jint thresholdPercent)
+{
+    const float pct = std::clamp(static_cast<float>(thresholdPercent), 0.0f, 100.0f);
+    MicInputOboeCallback::noiseGateThreshold.store(pct * 14.0f, std::memory_order_relaxed);
 }
 
 JNIEXPORT void JNICALL

@@ -75,6 +75,7 @@ fun WatermelonAchievementCard(
     isInOfflineLedger: Boolean,
     onClick: () -> Unit,
     onFocused: (AchievementUiModel) -> Unit = {},
+    isCompact: Boolean = false,
 ) {
     val colors = watermelon
     val achievement = achievementModel.actualAchievement()
@@ -93,13 +94,16 @@ fun WatermelonAchievementCard(
             .background(if (isFocused) colors.surface3 else colors.surface2)
             .let { if (isFocused) it.border(2.dp, colors.red, shape) else it }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 11.dp),
+            .padding(
+                horizontal = if (isCompact) 10.dp else 13.dp,
+                vertical = if (isCompact) 7.dp else 11.dp,
+            ),
     ) {
         AchievementBadge(
             badgeUrl = if (unlocked) achievement.badgeUrlUnlocked.toString() else achievement.badgeUrlLocked.toString(),
-            size = 42.dp,
+            size = if (isCompact) 34.dp else 42.dp,
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(if (isCompact) 10.dp else 12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -130,7 +134,7 @@ fun WatermelonAchievementCard(
                 color = colors.text3,
                 fontSize = 11.5.sp,
                 lineHeight = 16.sp,
-                maxLines = 2,
+                maxLines = if (isCompact) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )

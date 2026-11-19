@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -476,6 +477,27 @@ class EmulatorViewModel @Inject constructor(
 
     private val _achievementsEvent = MutableSharedFlow<RAEventUi>(extraBufferCapacity = 100, onBufferOverflow = BufferOverflow.SUSPEND)
     val achievementsEvent = _achievementsEvent.asSharedFlow()
+
+    val raNotificationPosition: StateFlow<String> = settingsRepository.observeRetroAchievementsNotificationPosition()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = settingsRepository.getRetroAchievementsNotificationPosition(),
+        )
+
+    val raNotificationStyle: StateFlow<String> = settingsRepository.observeRetroAchievementsNotificationStyle()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = settingsRepository.getRetroAchievementsNotificationStyle(),
+        )
+
+    val raNotificationSound: StateFlow<String> = settingsRepository.observeRetroAchievementsNotificationSound()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = settingsRepository.getRetroAchievementsNotificationSound(),
+        )
 
     private val _currentFps = MutableStateFlow<Int?>(null)
     val currentFps = _currentFps.asStateFlow()

@@ -1,6 +1,7 @@
 package me.magnum.melonds.domain.repositories
 
 import kotlinx.coroutines.flow.Flow
+import me.magnum.melonds.domain.model.retroachievements.PendingAchievementsSyncSummary
 import me.magnum.melonds.domain.model.retroachievements.RAAchievementSetSummary
 import me.magnum.melonds.domain.model.retroachievements.RAGameSummary
 import me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievementBucketEntry
@@ -60,6 +61,8 @@ interface RetroAchievementsRepository {
         expectedAuthentication: RAUserAuth.Authenticated,
     ): Result<RAAwardAchievementResponse>
     suspend fun submitPendingAchievements(): Result<Unit>
+    fun observePendingAchievementSubmissionsCount(): Flow<Int>
+    suspend fun syncPendingAchievementsWithReport(): PendingAchievementsSyncSummary
     suspend fun getLeaderboard(leaderboardId: Long): RALeaderboard?
     suspend fun getLeaderboardRanking(leaderboardId: Long, firstEntry: Int = 1, count: Int = 25): Result<RALeaderboardRanking>
     suspend fun submitLeaderboardEntry(leaderboardId: Long, value: Int): Result<RASubmitLeaderboardEntryResponse>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v820_rom_search_dirs_empty">未选择</string>
+    <string name="v820_ra_covers_fallback_gametdb_and_icon">GameTDB 或 ROM 图标</string>
+    <string name="v820_ra_covers_fallback_icon_only">ROM 图标</string>
+    <string name="v820_ra_covers_summary_signed_in">优先使用 RetroAchievements 封面。不可用时自动回退到 %1$s。</string>
+    <string name="v820_ra_covers_summary_not_signed_in">登录账号后使用 RetroAchievements 封面。当前未登录（目前回退到 %1$s）。</string>
+    <string name="v820_auto_load_ra_hardcore_notice">RetroAchievements 硬核模式启用时此项已禁用。</string>
+    <string name="v820_rewind_summary_enabled_fmt">已启用（间隔：%1$s，缓冲：%2$s）</string>
+    <string name="v820_rewind_summary_disabled">已禁用</string>
+    <string name="v820_general_pause_menu_customize_hint">按钮顺序和可见性可在游戏内暂停菜单中直接自定义。此选项会将其重置为默认设置。</string>
+</resources>

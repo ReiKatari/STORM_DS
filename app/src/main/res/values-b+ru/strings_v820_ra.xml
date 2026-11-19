@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ra_cat_notifications">Уведомления о достижениях</string>
+    <string name="ra_notification_position_title">Позиция уведомлений</string>
+    <string name="ra_notification_position_top">Сверху</string>
+    <string name="ra_notification_position_bottom">Снизу</string>
+    <string name="ra_notification_style_title">Стиль уведомлений</string>
+    <string name="ra_notification_style_detailed">Подробный</string>
+    <string name="ra_notification_style_compact">Компактный</string>
+    <string name="ra_notification_sound_title">Звук уведомления</string>
+    <string name="ra_notification_sound_chime">Кристальный звон</string>
+    <string name="ra_notification_sound_fanfare">Ретро-фанфара</string>
+    <string name="ra_notification_sound_classic">Системный сигнал</string>
+    <string name="ra_notification_sound_none">Без звука</string>
+    <string name="ra_cat_sync_and_diagnostics">Синхронизация и диагностика</string>
+    <string name="ra_sync_pending_title">Синхронизировать отложенные достижения</string>
+    <string name="ra_sync_pending_summary_count">Ожидают отправки: %1$d</string>
+    <string name="ra_sync_pending_summary_all_synced">Все достижения синхронизированы</string>
+    <string name="ra_sync_pending_summary_login_required">Войдите в аккаунт для синхронизации</string>
+    <string name="ra_sync_pending_all_synced_toast">Все достижения уже синхронизированы</string>
+    <string name="ra_sync_pending_login_prompt">Войдите в RetroAchievements для синхронизации достижений</string>
+    <string name="ra_sync_pending_in_progress">Синхронизация отложенных достижений...</string>
+    <string name="ra_sync_pending_result_success">Синхронизировано достижений: %1$d</string>
+    <string name="ra_sync_pending_result_partial">Отправлено: %1$d, ошибок: %2$d</string>
+    <string name="ra_sync_pending_result_title">Результат синхронизации</string>
+    <string name="ra_sync_pending_result_error_detail">Ошибка: %1$s</string>
+    <string name="ra_test_connection_title">Проверить подключение к RetroAchievements</string>
+    <string name="ra_test_connection_summary">Проверить статус аккаунта, задержку HTTPS и режим прокси</string>
+    <string name="ra_test_connection_dialog_title">Подключение к RetroAchievements</string>
+    <string name="ra_test_connection_checking">Проверка подключения...</string>
+    <string name="ra_test_connection_retest">Повторить</string>
+    <string name="ra_test_connection_close">Закрыть</string>
+    <string name="ra_test_connection_label_reachability">Доступность сервера</string>
+    <string name="ra_test_connection_label_account">Аккаунт и токен</string>
+    <string name="ra_test_connection_label_proxy">Режим подключения</string>
+    <string name="ra_test_connection_reachable_fmt">Доступен (%1$d мс)</string>
+    <string name="ra_test_connection_unreachable_fmt">Недоступен: %1$s</string>
+    <string name="ra_test_connection_auth_ok_fmt">Выполнен вход: %1$s (токен активен)</string>
+    <string name="ra_test_connection_auth_expired_fmt">Сессия истекла (%1$s)</string>
+    <string name="ra_test_connection_auth_none">Вход не выполнен</string>
+    <string name="ra_test_connection_proxy_direct">Прямое подключение (Direct)</string>
+    <string name="ra_test_connection_proxy_active_fmt">Прокси активен (%1$s)</string>
+    <string name="ra_test_connection_proxy_unavailable">Прокси выбран, но не активен</string>
+</resources>

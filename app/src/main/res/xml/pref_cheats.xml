@@ -15,9 +15,30 @@
             android:summary="@string/cheats_download_online_summary"
             app:iconSpaceReserved="false" />
 
+    <ListPreference
+            android:key="cheats_download_mirror"
+            android:title="@string/cheats_download_mirror_title"
+            android:entries="@array/cheats_download_mirror_options"
+            android:entryValues="@array/cheats_download_mirror_values"
+            android:defaultValue="auto"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
     <Preference
             android:key="cheats_import"
             android:title="@string/import_cheats"
             android:summary="@string/import_cheats_summary"
+            app:iconSpaceReserved="false" />
+
+    <Preference
+            android:key="cheats_search_database"
+            android:title="@string/cheats_search_database_title"
+            android:summary="@string/cheats_search_database_summary"
+            app:iconSpaceReserved="false" />
+
+    <Preference
+            android:key="cheats_clear_database"
+            android:title="@string/cheats_clear_database_title"
+            android:summary="@string/cheats_clear_database_summary"
             app:iconSpaceReserved="false" />
 </PreferenceScreen>

@@ -218,9 +218,10 @@ fun RomCheatsUi(
             // 2. Try online mirror download of full usrcheat.dat
             var downloaded = false
             val candidateUrls = listOf(
-                "https://raw.githubusercontent.com/ahezard/nds-rom-info/master/usrcheat.dat",
-                "https://raw.githubusercontent.com/DeadlyFoez/Usercheat-Database/master/usrcheat.dat",
-                "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/Nintendo%20-%20Nintendo%20DS/Pokemon%20-%20HeartGold%20Version%20(USA).cht"
+                "https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
+                "https://ghfast.top/https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
+                "https://gh-proxy.com/https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
+                "https://ghproxy.net/https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
             )
 
             val client = OkHttpClient.Builder()

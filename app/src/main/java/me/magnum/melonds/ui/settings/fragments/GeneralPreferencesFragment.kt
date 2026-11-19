@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.History
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -21,6 +24,9 @@ import me.magnum.melonds.extensions.isSustainedPerformanceModeAvailable
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.dialogs.SettingsChoiceDialogContent
+import me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent
+import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -93,6 +99,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         runCatching { setPreferencesFromResource(R.xml.pref_general, rootKey) }
         runCatching { addPreferencesFromResource(R.xml.pref_general_updates) }
+        hideDependentsWhenInactive("github_check_for_updates", "github_update_channel")
 
         findPreference<Preference>("manual_check_updates")?.setOnPreferenceClickListener {
             me.magnum.melonds.ui.settings.ManualUpdateChecker.checkNow(requireContext())
@@ -207,27 +214,22 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             }
             true
         }
-                // Manage pause submenu
-        findPreference<Preference>("manage_pause_menu")?.let { pref ->
+        // Manage pause submenu
+        updateManagePauseMenuSummary()
+        findPreference<Preference>("manage_pause_menu")?.setOnPreferenceClickListener {
             val store = me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore(requireContext())
-            val hiddenCount = store.getHiddenItems().size
-            val hasCustom = store.getCustomOrder().isNotEmpty()
-            val orderStr = getString(if (hasCustom) R.string.v793_general_order_custom else R.string.v793_general_order_default)
-            pref.summary = getString(R.string.v793_general_pause_summary_fmt, hiddenCount, orderStr)
-            pref.setOnPreferenceClickListener {
-                AlertDialog.Builder(requireContext())
-                    .setTitle(R.string.v792_general_pause_menu_title)
-                    .setMessage(R.string.v792_general_pause_menu_reset_confirm)
-                    .setPositiveButton(R.string.v792_pause_reset_defaults) { _, _ ->
-                        store.resetToDefaults()
-                        val defaultOrderStr = getString(R.string.v793_general_order_default)
-                        pref.summary = getString(R.string.v793_general_pause_summary_fmt, 0, defaultOrderStr)
-                        Toast.makeText(requireContext(), R.string.v792_general_pause_menu_reset_done, Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
-                true
-            }
+            val message = "${getString(R.string.v792_general_pause_menu_reset_confirm)}\n\n${getString(R.string.v820_general_pause_menu_customize_hint)}"
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.v792_general_pause_menu_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.v792_pause_reset_defaults) { _, _ ->
+                    store.resetToDefaults()
+                    updateManagePauseMenuSummary()
+                    Toast.makeText(requireContext(), R.string.v792_general_pause_menu_reset_done, Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            true
         }
 
         findPreference<Preference>("manage_setting_snapshots")?.setOnPreferenceClickListener {
@@ -248,56 +250,84 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
     }
 
+    private fun updateManagePauseMenuSummary() {
+        val pref = findPreference<Preference>("manage_pause_menu") ?: return
+        val ctx = context ?: return
+        val store = me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore(ctx)
+        val hiddenCount = store.getHiddenItems().size
+        val hasCustom = store.getCustomOrder().isNotEmpty()
+        val orderStr = getString(if (hasCustom) R.string.v793_general_order_custom else R.string.v793_general_order_default)
+        pref.summary = getString(R.string.v793_general_pause_summary_fmt, hiddenCount, orderStr)
+    }
+
     private fun showSnapshotsDialog() {
         lifecycleScope.launch(Dispatchers.IO) {
             val snapshots = settingsBackupManager.listSnapshots()
             withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                val ctx = context ?: return@withContext
                 val createLabel = getString(R.string.v793_general_snapshot_create_now)
-                val items = mutableListOf(createLabel)
-                snapshots.forEach { snap ->
+                val options = mutableListOf<CharSequence>(createLabel)
+                val values = mutableListOf<CharSequence>("__create__")
+                snapshots.forEachIndexed { index, snap ->
                     val reasonLabel = when (snap.reason) {
                         "auto" -> getString(R.string.v793_general_snapshot_auto_before_import)
                         else -> getString(R.string.v793_general_snapshot_manual)
                     }
-                    items.add("📦 ${snap.displayDate} — $reasonLabel")
+                    options.add("📦 ${snap.displayDate} - $reasonLabel")
+                    values.add(index.toString())
                 }
 
-                AlertDialog.Builder(requireContext())
-                    .setTitle(R.string.manage_setting_snapshots)
-                    .setItems(items.toTypedArray()) { _, which ->
-                        if (which == 0) {
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                val created = settingsBackupManager.createSnapshot("manual")
-                                withContext(Dispatchers.Main) {
-                                    val msg = if (created != null) {
-                                        getString(R.string.v793_general_snapshot_saved_fmt, created.displayDate)
-                                    } else {
-                                        getString(R.string.settings_backup_error)
+                showSettingsComposeDialog(ctx) { dismiss ->
+                    SettingsChoiceDialogContent(
+                        title = getString(R.string.manage_setting_snapshots),
+                        subtitle = getString(R.string.manage_setting_snapshots_summary),
+                        icon = Icons.Filled.History,
+                        options = options,
+                        values = values,
+                        selectedValue = null,
+                        onSelect = { chosen ->
+                            if (chosen == "__create__") {
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    val created = settingsBackupManager.createSnapshot("manual")
+                                    withContext(Dispatchers.Main) {
+                                        val safeCtx = context ?: return@withContext
+                                        val msg = if (created != null) {
+                                            getString(R.string.v793_general_snapshot_saved_fmt, created.displayDate)
+                                        } else {
+                                            getString(R.string.settings_backup_error)
+                                        }
+                                        Toast.makeText(safeCtx, msg, Toast.LENGTH_SHORT).show()
                                     }
-                                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
                                 }
-                            }
-                        } else {
-                            val selected = snapshots.getOrNull(which - 1) ?: return@setItems
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                val ok = settingsBackupManager.restoreSnapshot(selected)
-                                withContext(Dispatchers.Main) {
-                                    if (ok) {
-                                        AlertDialog.Builder(requireContext())
-                                            .setMessage(R.string.settings_restore_success)
-                                            .setPositiveButton(android.R.string.ok) { _, _ ->
-                                                activity?.recreate()
+                            } else {
+                                val index = chosen.toIntOrNull() ?: return@SettingsChoiceDialogContent
+                                val selected = snapshots.getOrNull(index) ?: return@SettingsChoiceDialogContent
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    val ok = settingsBackupManager.restoreSnapshot(selected)
+                                    withContext(Dispatchers.Main) {
+                                        val safeCtx = context ?: return@withContext
+                                        if (ok) {
+                                            showSettingsComposeDialog(safeCtx) { confirmDismiss ->
+                                                SettingsConfirmDialogContent(
+                                                    title = getString(R.string.manage_setting_snapshots),
+                                                    message = getString(R.string.settings_restore_success),
+                                                    confirmText = getString(android.R.string.ok),
+                                                    icon = Icons.Filled.CheckCircle,
+                                                    onConfirm = { activity?.recreate() },
+                                                    onDismiss = confirmDismiss,
+                                                )
                                             }
-                                            .show()
-                                    } else {
-                                        Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(safeCtx, R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             }
-                        }
-                    }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
+                        },
+                        onDismiss = dismiss,
+                    )
+                }
             }
         }
     }
@@ -345,18 +375,23 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         super.onResume()
         updateRewindSummary()
         updateFrameLimitSpeedPreferenceState()
+        updateManagePauseMenuSummary()
+        findPreference<Preference>("github_update_channel")?.isVisible =
+            findPreference<SwitchPreference>("github_check_for_updates")?.isChecked ?: true
     }
 
     private fun updateRewindSummary() {
         val pref = rewindPreference ?: return
-        val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val sp = PreferenceManager.getDefaultSharedPreferences(requireContext())
         val isEnabled = sp.getBoolean("enable_rewind", false)
         val period = sp.getInt("rewind_period", 10)
         val window = sp.getInt("rewind_window", 6) * 10
         pref.summary = if (isEnabled) {
-            "Включено (Интервал: ${period}с, Буфер: ${window}с)"
+            val periodStr = getString(R.string.seconds_short, period)
+            val windowStr = getString(R.string.seconds_short, window)
+            getString(R.string.v820_rewind_summary_enabled_fmt, periodStr, windowStr)
         } else {
-            "Отключено"
+            getString(R.string.v820_rewind_summary_disabled)
         }
     }
 
@@ -393,7 +428,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.0.2").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.2.0").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 

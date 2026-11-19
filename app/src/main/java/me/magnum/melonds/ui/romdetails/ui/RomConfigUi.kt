@@ -416,13 +416,13 @@ private fun Content(
 
         if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.rom_config_overclock_arm9)) {
-            val arm9Label = when (romConfig.arm9Overclock) {
+            val normalizedArm9 = if (romConfig.arm9Overclock == 3) 2 else romConfig.arm9Overclock
+            val arm9Label = when (normalizedArm9) {
                 null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
                 1 -> "1x (67 MHz)"
                 2 -> "2x (133 MHz)"
-                3 -> "3x (200 MHz)"
                 4 -> "4x (268 MHz)"
-                else -> "${romConfig.arm9Overclock}x"
+                else -> "${normalizedArm9}x"
             }
             ConfigRow(
                 title = stringResource(R.string.rom_config_overclock_arm9),
@@ -431,18 +431,17 @@ private fun Content(
                 onClick = {
                     arm9OverclockDialogState.show(
                         title = context.getString(R.string.rom_config_overclock_arm9),
-                        items = listOf(null, 1, 2, 3, 4),
+                        items = listOf(null, 1, 2, 4),
                         labelOf = {
                             when (it) {
                                 null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
                                 1 -> "1x (67 MHz)"
                                 2 -> "2x (133 MHz)"
-                                3 -> "3x (200 MHz)"
                                 4 -> "4x (268 MHz)"
                                 else -> "${it}x"
                             }
                         },
-                        selected = romConfig.arm9Overclock,
+                        selected = normalizedArm9,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.Arm9OverclockUpdate(it)) },
                     )
                 },

@@ -60,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -228,6 +229,17 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityEmulatorBinding
+    private var lowBatteryReceiverRegistered = false
+    private var isLowBatteryPowerSaverActive = false
+    private var lowBatterySavedScale: Int? = null
+    private var lowBatterySavedSsao: Boolean? = null
+    private var activeGyroActivationMode: String = "always"
+    private val lowBatteryReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Intent.ACTION_BATTERY_CHANGED) return
+            handleBatteryStatusIntent(intent)
+        }
+    }
     private val viewModel: EmulatorViewModel by viewModels(
         extrasProducer = {
             val extras = MutableCreationExtras(defaultViewModelCreationExtras)
@@ -527,6 +539,7 @@ class EmulatorActivity : AppCompatActivity() {
         setupFpsCounter()
         setupResolutionHud()
         setupConsoleSkin()
+        isExtendedPauseMenuState.value = settingsRepository.isExtendedPauseMenuEnabled()
         me.magnum.melonds.ui.common.views.ButtonThemeManager.init(this)
         binding.viewLayoutControls.invalidateInputControlViews()
         ViewCompat.requestApplyInsets(binding.root)
@@ -645,6 +658,7 @@ class EmulatorActivity : AppCompatActivity() {
     private val saveStatesOverlayState = mutableStateOf<SaveStatesOverlayData?>(null)
     private val isLidClosedState = mutableStateOf(false)
     private val consoleSkinAreasState = mutableStateOf<ScreenPresentationAreas?>(null)
+    private val consoleSkinSurfaceSizeState = mutableStateOf(0 to 0)
     private val consoleSkinEnabledState = mutableStateOf(false)
     private val consoleSkinThemeState = mutableStateOf(me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.AURORA_AUTO_THEME)
     private val activeSlot2AddonState = mutableStateOf(0)
@@ -770,19 +784,32 @@ class EmulatorActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var elapsedMs = 0L
+                var lastIntervalMinutes = viewModel.getPeriodicAutoSaveIntervalMinutes()
                 while (isActive) {
                     val intervalMinutes = viewModel.getPeriodicAutoSaveIntervalMinutes()
+                    if (intervalMinutes != lastIntervalMinutes) {
+                        lastIntervalMinutes = intervalMinutes
+                        elapsedMs = 0L
+                    }
                     if (intervalMinutes > 0) {
-                        delay(intervalMinutes * 60 * 1000L)
-                        if (
-                            pauseMenuState.value == null &&
-                            !activeOverlays.hasActiveOverlays() &&
-                            viewModel.emulatorState.value is EmulatorState.RunningRom
-                        ) {
-                            viewModel.doPeriodicAutoSave()
+                        val targetMs = intervalMinutes * 60_000L
+                        val stepMs = 5_000L
+                        delay(stepMs)
+                        elapsedMs += stepMs
+                        if (elapsedMs >= targetMs) {
+                            elapsedMs = 0L
+                            if (
+                                pauseMenuState.value == null &&
+                                !activeOverlays.hasActiveOverlays() &&
+                                viewModel.emulatorState.value is EmulatorState.RunningRom
+                            ) {
+                                viewModel.doPeriodicAutoSave()
+                            }
                         }
                     } else {
-                        delay(10000L)
+                        elapsedMs = 0L
+                        delay(5_000L)
                     }
                 }
             }
@@ -854,13 +881,22 @@ class EmulatorActivity : AppCompatActivity() {
 
         binding.layoutConsoleSkin.isClickable = false
         binding.layoutConsoleSkin.isFocusable = false
+        binding.layoutConsoleSkin.setViewCompositionStrategy(
+            androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
         binding.layoutConsoleSkin.setContent {
             if (consoleSkinEnabledState.value) {
                 val areas = consoleSkinAreasState.value
+                val (surfW, surfH) = consoleSkinSurfaceSizeState.value
                 me.magnum.melonds.ui.emulator.skin.ConsoleSkinFullFrame(
                     skinTheme = consoleSkinThemeState.value,
                     topScreenRect = areas?.topScreenRect,
-                    bottomScreenRect = areas?.bottomScreenRect
+                    bottomScreenRect = areas?.bottomScreenRect,
+                    hybridTopScreenRect = areas?.hybridTopScreenRect,
+                    hybridBottomScreenRect = areas?.hybridBottomScreenRect,
+                    surfaceWidth = surfW,
+                    surfaceHeight = surfH,
+                    modifier = androidx.compose.ui.Modifier.fillMaxSize(),
                 )
             }
         }
@@ -896,6 +932,47 @@ class EmulatorActivity : AppCompatActivity() {
                     )
                 }
 
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.raNotificationPosition.collect { position ->
+                    val isBottom = position == "bottom"
+                    val root = binding.layoutRoot
+                    listOf(R.id.rewind_hidden, R.id.rewind_visible).forEach { setId ->
+                        root.getConstraintSet(setId)?.let { cs ->
+                            if (isBottom) {
+                                cs.clear(R.id.layout_achievement, androidx.constraintlayout.widget.ConstraintSet.TOP)
+                                cs.connect(
+                                    R.id.layout_achievement,
+                                    androidx.constraintlayout.widget.ConstraintSet.BOTTOM,
+                                    androidx.constraintlayout.widget.ConstraintSet.PARENT_ID,
+                                    androidx.constraintlayout.widget.ConstraintSet.BOTTOM,
+                                )
+                            } else {
+                                cs.clear(R.id.layout_achievement, androidx.constraintlayout.widget.ConstraintSet.BOTTOM)
+                                cs.connect(
+                                    R.id.layout_achievement,
+                                    androidx.constraintlayout.widget.ConstraintSet.TOP,
+                                    androidx.constraintlayout.widget.ConstraintSet.PARENT_ID,
+                                    androidx.constraintlayout.widget.ConstraintSet.TOP,
+                                )
+                            }
+                        }
+                    }
+                    (binding.layoutAchievement.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams)?.let { lp ->
+                        if (isBottom) {
+                            lp.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+                            lp.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                        } else {
+                            lp.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+                            lp.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                        }
+                        binding.layoutAchievement.layoutParams = lp
+                    }
+                    binding.layoutAchievement.requestLayout()
+                }
             }
         }
 
@@ -2294,6 +2371,7 @@ class EmulatorActivity : AppCompatActivity() {
         setupFpsCounter()
         setupResolutionHud()
         setupConsoleSkin()
+        isExtendedPauseMenuState.value = settingsRepository.isExtendedPauseMenuEnabled()
         me.magnum.melonds.ui.common.views.ButtonThemeManager.init(this)
         binding.viewLayoutControls.invalidateInputControlViews()
         choreographerFrameRenderer.startRendering()
@@ -2305,13 +2383,26 @@ class EmulatorActivity : AppCompatActivity() {
         }
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         melonTouchHandler.turboMacrosEnabled = prefs.getBoolean("input_turbo_macros_enabled", false)
-        val gyroEnabled = prefs.getBoolean("input_gyro_aiming_enabled", false) || prefs.getBoolean("pref_motion_gyro_enabled", false)
+        melonTouchHandler.turboFrequencyHz = prefs.getString("input_turbo_frequency_hz", "15")?.toIntOrNull()?.coerceIn(1, 60) ?: 15
+        if (!prefs.contains("input_gyro_aiming_enabled") && prefs.contains("pref_motion_gyro_enabled")) {
+            val legacyGyro = prefs.getBoolean("pref_motion_gyro_enabled", false)
+            prefs.edit().putBoolean("input_gyro_aiming_enabled", legacyGyro).remove("pref_motion_gyro_enabled").apply()
+        }
+        val gyroEnabled = prefs.getBoolean("input_gyro_aiming_enabled", false)
         val gyroMicEnabled = prefs.getBoolean("input_gyro_mic_enabled", false)
         val threeDParallaxActive = settingsRepository.getVulkan3dDepthMode() == 1
         motionSensorManager.shakeMicEnabled = gyroMicEnabled
         motionSensorManager.threeDParallaxEnabled = threeDParallaxActive
         motionSensorManager.motionPakEnabled = activeSlot2AddonState.value == 4
         motionSensorManager.solarSensorAutoEnabled = solarSensorOverrideLevel < 0
+        activeGyroActivationMode = prefs.getString("input_gyro_activation_mode", "always") ?: "always"
+        melonTouchHandler.onShoulderButtonStateChanged = { key, pressed ->
+            when (activeGyroActivationMode) {
+                "hold_l" -> if (key == me.magnum.melonds.domain.model.Input.L) motionSensorManager.isAimButtonPressed = pressed
+                "hold_r" -> if (key == me.magnum.melonds.domain.model.Input.R) motionSensorManager.isAimButtonPressed = pressed
+                else -> Unit
+            }
+        }
         if (gyroEnabled) {
             val modeStr = prefs.getString("pref_motion_gyro_mode", "touch_aim")
             motionSensorManager.gyroMode = when (modeStr) {
@@ -2319,6 +2410,9 @@ class EmulatorActivity : AppCompatActivity() {
                 "slot2_analog" -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.SLOT2_ANALOG
                 else -> me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.TOUCH_AIM
             }
+            val requireHold = activeGyroActivationMode == "hold_l" || activeGyroActivationMode == "hold_r"
+            motionSensorManager.gyroAimButtonRequired = requireHold
+            motionSensorManager.isAimButtonPressed = !requireHold
             val sensX = prefs.getInt("input_gyro_sensitivity_x", prefs.getInt("pref_motion_gyro_sensitivity_x", 125))
             val sensY = prefs.getInt("input_gyro_sensitivity_y", prefs.getInt("pref_motion_gyro_sensitivity_y", 125))
             motionSensorManager.gyroSensitivityX = sensX / 100f
@@ -2332,12 +2426,15 @@ class EmulatorActivity : AppCompatActivity() {
             motionSensorManager.startListening()
         } else {
             motionSensorManager.gyroMode = me.magnum.melonds.ui.emulator.input.MotionSensorManager.GyroMode.OFF
+            motionSensorManager.gyroAimButtonRequired = false
+            motionSensorManager.isAimButtonPressed = false
             if (gyroMicEnabled || threeDParallaxActive || motionSensorManager.motionPakEnabled || motionSensorManager.solarSensorAutoEnabled || motionSensorManager.pedometerAutoEnabled) {
                 motionSensorManager.startListening()
             } else {
                 motionSensorManager.stopListening()
             }
         }
+        registerLowBatteryMonitor()
 
         if (
             !activeOverlays.hasActiveOverlays() &&
@@ -2818,7 +2915,15 @@ class EmulatorActivity : AppCompatActivity() {
             return
         }
         val areas = resolveMainScreenPresentationAreas()
+        val surfSize = resolveActiveMainSurfaceSize()
+        consoleSkinSurfaceSizeState.value = surfSize
         consoleSkinAreasState.value = areas
+        translatorManager.updateScreenRects(
+            areas.topScreenRect,
+            areas.bottomScreenRect,
+            surfSize.first,
+            surfSize.second,
+        )
         if (areas.hybridTopScreenRect != null && areas.hybridBottomScreenRect != null) {
             val hRect = Rect(
                 areas.hybridTopScreenRect.x,
@@ -3099,9 +3204,9 @@ class EmulatorActivity : AppCompatActivity() {
                         val isSkin = isConsoleSkinActive()
                         val density = resources.displayMetrics.density
                         if (isSkin) {
-                            val topInsetPx = (24f * density).roundToInt()
+                            val topInsetPx = (28f * density).roundToInt()
                             val sideInsetPx = (6f * density).roundToInt()
-                            val hingeGapPx = (22f * density).roundToInt()
+                            val hingeGapPx = (24f * density).roundToInt()
                             val availableWidth = (surfaceW - 2 * sideInsetPx).coerceAtLeast(100)
                             var sWidth = availableWidth
                             var sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
@@ -3130,10 +3235,17 @@ class EmulatorActivity : AppCompatActivity() {
                         val upper = if (upperIsTop) rTop else rBottom
                         val lower = if (upperIsTop) rBottom else rTop
                         val currentGap = lower.y - upper.bottom
-                        if (upper.y < 20f * density || currentGap < 20f * density) {
-                            val topInsetPx = (24f * density).roundToInt()
+                        val isDefaultFlushPortrait = rawTop == null || rawBottom == null || (
+                            upper.x <= 8 &&
+                            upper.width >= surfaceW - 16 &&
+                            lower.width >= surfaceW - 16 &&
+                            upper.y <= (12f * density).roundToInt() &&
+                            kotlin.math.abs(currentGap) <= (8f * density).roundToInt()
+                        )
+                        if (isDefaultFlushPortrait && (upper.y < 24f * density || currentGap < 22f * density)) {
+                            val topInsetPx = (28f * density).roundToInt()
                             val sideInsetPx = (6f * density).roundToInt()
-                            val hingeGapPx = (22f * density).roundToInt()
+                            val hingeGapPx = (24f * density).roundToInt()
                             val availableWidth = (surfaceW - 2 * sideInsetPx).coerceAtLeast(100)
                             var sWidth = availableWidth
                             var sHeight = (sWidth / me.magnum.melonds.domain.model.consoleAspectRatio).toInt()
@@ -3180,9 +3292,10 @@ class EmulatorActivity : AppCompatActivity() {
                 val lower = if (upperIsTop) baseBottomRect else baseTopRect
                 if (lower.y >= upper.bottom - 8) {
                     val halfGap = hingeGapPx / 2
-                    val shiftUp = minOf(halfGap, upper.y.coerceAtLeast(0))
+                    val minTopY = if (isConsoleSkinActive()) (28f * resources.displayMetrics.density).roundToInt() else 0
+                    val shiftUp = minOf(halfGap, (upper.y - minTopY).coerceAtLeast(0))
                     val maxY = (surfaceH - lower.height).coerceAtLeast(0)
-                    val shiftDown = minOf(hingeGapPx - halfGap, (maxY - lower.y).coerceAtLeast(0))
+                    val shiftDown = minOf(hingeGapPx - shiftUp, (maxY - lower.y).coerceAtLeast(0))
                     val newUpper = Rect(upper.x, upper.y - shiftUp, upper.width, upper.height)
                     val newLower = Rect(lower.x, lower.y + shiftDown, lower.width, lower.height)
                     if (upperIsTop) {
@@ -3798,6 +3911,7 @@ class EmulatorActivity : AppCompatActivity() {
                         val chosenKey = skinValues.getOrElse(which - 1) { "aurora_auto_theme" }
                         prefs.edit()
                             .putBoolean("video_console_skin_enabled", true)
+                            .putBoolean("video_oled_battery_saver", false)
                             .putString("video_console_skin_type", chosenKey)
                             .apply()
                     }
@@ -3891,18 +4005,38 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     private fun setupConsoleSkin() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        val oledBatterySaver = prefs.getBoolean("video_oled_battery_saver", false)
-        if (oledBatterySaver) {
-            binding.layoutRoot.setBackgroundColor(android.graphics.Color.BLACK)
-            window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
-        }
         val skinEnabled = isConsoleSkinActive()
+        val oledBatterySaver = prefs.getBoolean("video_oled_battery_saver", false) && !skinEnabled
+        val bgColor = if (oledBatterySaver) {
+            android.graphics.Color.BLACK
+        } else {
+            me.magnum.melonds.ui.theme.AppThemeManager.getCurrentWatermelonColors(this).bg.toArgb()
+        }
+        binding.layoutRoot.setBackgroundColor(bgColor)
+        window.decorView.setBackgroundColor(bgColor)
         val skinType = prefs.getString("video_console_skin_type", "aurora_auto_theme") ?: "aurora_auto_theme"
         consoleSkinThemeState.value = me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.fromKey(skinType)
         consoleSkinEnabledState.value = skinEnabled
         binding.layoutConsoleSkin.visibility = if (skinEnabled) View.VISIBLE else View.GONE
+        if (skinEnabled) {
+            binding.layoutConsoleSkin.requestLayout()
+            binding.layoutConsoleSkin.invalidate()
+            if (consoleSkinAreasState.value == null) {
+                binding.layoutConsoleSkin.post {
+                    if (!isClosingEmulator && !isFrameRenderCoordinatorStopped) {
+                        updateRendererScreenAreas()
+                    }
+                }
+            }
+        }
         val shiftPx = (14f * resources.displayMetrics.density).toInt()
         binding.viewLayoutControls.applyConsoleSkinButtonShift(skinEnabled, shiftPx)
+        runCatching {
+            MelonEmulator.setMicrophoneAgcEnabled(prefs.getBoolean("mic_agc_noise_gate_enabled", true))
+            MelonEmulator.setMicrophoneNoiseGateThreshold(prefs.getInt("mic_noise_gate_threshold", 25))
+            MelonEmulator.setDisplayLcdGridMode(settingsRepository.getDisplayLcdGridMode())
+            MelonEmulator.setMuteOnFastForwardEnabled(viewModel.isMuteOnFastForwardEnabled())
+        }
     }
 
     private fun romSettingsMenuLabel(title: String, value: String): String {
@@ -6101,13 +6235,94 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         viewModel.setSystemOrientation(orientation)
     }
 
+    private fun registerLowBatteryMonitor() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val enabled = prefs.getBoolean("video_low_battery_saver", false)
+        if (!enabled) {
+            unregisterLowBatteryMonitor()
+            restoreLowBatteryPowerSaverIfNeeded(showToast = false)
+            return
+        }
+        if (!lowBatteryReceiverRegistered) {
+            val sticky = runCatching {
+                registerReceiver(lowBatteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            }.getOrNull()
+            lowBatteryReceiverRegistered = true
+            if (sticky != null) {
+                handleBatteryStatusIntent(sticky)
+            }
+        }
+    }
+
+    private fun unregisterLowBatteryMonitor() {
+        if (lowBatteryReceiverRegistered) {
+            runCatching { unregisterReceiver(lowBatteryReceiver) }
+            lowBatteryReceiverRegistered = false
+        }
+    }
+
+    private fun handleBatteryStatusIntent(intent: Intent) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (!prefs.getBoolean("video_low_battery_saver", false)) {
+            restoreLowBatteryPowerSaverIfNeeded(showToast = false)
+            return
+        }
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+        val pct = if (level >= 0) (level * 100) / scale else 100
+        val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        val isCharging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == android.os.BatteryManager.BATTERY_STATUS_FULL
+
+        if (!isCharging && pct in 1..19) {
+            if (!isLowBatteryPowerSaverActive) {
+                val curScale = viewModel.runtimeRendererConfiguration.value?.resolutionScaling
+                    ?: prefs.getString("video_internal_resolution", "2")?.toIntOrNull()
+                    ?: 2
+                val curSsao = settingsRepository.isVulkanSsaoEnabled()
+                lowBatterySavedScale = curScale
+                lowBatterySavedSsao = curSsao
+                isLowBatteryPowerSaverActive = true
+
+                val targetScale = minOf(curScale, 2).coerceAtLeast(1)
+                if (targetScale < curScale) {
+                    viewModel.updateRuntimeResolutionScaling(targetScale)
+                }
+                if (curSsao) {
+                    runCatching { MelonEmulator.setVulkanSsaoEnabled(false) }
+                }
+                Toast.makeText(this, R.string.video_low_battery_activated_toast, Toast.LENGTH_LONG).show()
+            }
+        } else if (isCharging || pct >= 25) {
+            restoreLowBatteryPowerSaverIfNeeded(showToast = true)
+        }
+    }
+
+    private fun restoreLowBatteryPowerSaverIfNeeded(showToast: Boolean) {
+        if (!isLowBatteryPowerSaverActive) return
+        isLowBatteryPowerSaverActive = false
+        lowBatterySavedScale?.let { savedScale ->
+            viewModel.updateRuntimeResolutionScaling(savedScale)
+        }
+        lowBatterySavedSsao?.let { savedSsao ->
+            runCatching { MelonEmulator.setVulkanSsaoEnabled(savedSsao) }
+        }
+        lowBatterySavedScale = null
+        lowBatterySavedSsao = null
+        if (showToast) {
+            Toast.makeText(this, R.string.video_low_battery_restored_toast, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        unregisterLowBatteryMonitor()
         peripheralSensorBridge.stopAll()
         motionSensorManager.stopListening()
         cancelStartupPresentationRefreshes()
         stopShaderDiagnosticsPolling()
         frontendInputHandler.clearFastForwardHold()
+        melonTouchHandler.stopAllTurbo()
         enableScreenTimeOut()
         choreographerFrameRenderer.stopRendering()
         if (!isClosingEmulator && !isFinishing) {

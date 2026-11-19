@@ -235,6 +235,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 "video_vulkan_3d_depth_strength",
                 "video_vulkan_ssao",
                 "video_ds_color_profile",
+                "video_ds_lcd_grid",
             ).forEach { key -> findPreference<Preference>(key)?.let { add(it) } }
         }
 
@@ -250,7 +251,31 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             val on = newValue as Boolean
             findPreference<Preference>("video_renderer_debug_bgobj_enabled")?.isVisible = on
             findPreference<Preference>("video_renderer_debug_latch_trace_enabled")?.isVisible = on
+            findPreference<Preference>("video_debug_3d_clear_magenta")?.isVisible = on
             true
+        }
+        findPreference<ListPreference>("video_vulkan_compositor_mode")?.let { compPref ->
+            if (compPref.value.isNullOrBlank() || compPref.value.equals("hybrid", ignoreCase = true)) {
+                compPref.value = "precise"
+                preferenceManager.sharedPreferences?.edit()?.putString("video_vulkan_compositor_mode", "precise")?.apply()
+            }
+            updateListPreferenceSummary(compPref)
+        }
+        findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let { depthPref ->
+            if (depthPref.value.equals("anaglyph_depth", ignoreCase = true)) {
+                depthPref.value = "off"
+                preferenceManager.sharedPreferences?.edit()?.putString("video_vulkan_3d_depth_mode", "off")?.apply()
+            }
+            updateListPreferenceSummary(depthPref)
+            depthPref.setOnPreferenceChangeListener { _, newValue ->
+                val modeVal = (newValue as? String)?.lowercase() ?: "off"
+                val isDepthActive = depthPref.isVisible && modeVal != "off"
+                findPreference<Preference>("video_vulkan_3d_depth_strength")?.let { strengthPref ->
+                    strengthPref.isVisible = isDepthActive
+                    strengthPref.isEnabled = isDepthActive
+                }
+                true
+            }
         }
         findPreference<SwitchPreference>("video_conservative_coverage_enabled")?.setOnPreferenceChangeListener { _, newValue ->
             val on = newValue as Boolean
@@ -448,8 +473,22 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     retroArchShaderClearHistoryPreference = retroArchShaderClearHistoryPreference,
                 )
             }
+            findPreference<Preference>("video_ai_upscale_scale")?.let { scalePref ->
+                scalePref.isVisible = enabled
+                scalePref.isEnabled = enabled
+            }
+            if (enabled) {
+                promptAiShaderInstallIfMissing()
+            }
+            view?.post { updateAiUpscaleSummary() }
             true
         }
+
+        findPreference<ListPreference>("video_ai_upscale_scale")?.setOnPreferenceChangeListener { _, _ ->
+            view?.post { updateAiUpscaleSummary() }
+            true
+        }
+        updateAiUpscaleSummary()
 
         videoFilteringPreference.setOnPreferenceChangeListener { _, newValue ->
             val newFilteringValue = newValue as String
@@ -457,6 +496,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != aiSelected) {
                 aiUpscaleSwitch.isChecked = aiSelected
                 preferenceManager.sharedPreferences?.edit()?.putBoolean("video_ai_upscale_enabled", aiSelected)?.apply()
+            }
+            findPreference<Preference>("video_ai_upscale_scale")?.let { scalePref ->
+                scalePref.isVisible = aiSelected
+                scalePref.isEnabled = aiSelected
             }
             updateShaderPickerPreferences(
                 renderer = enumValueOfIgnoreCase(rendererPreference.value),
@@ -496,6 +539,40 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 }
                 helper.bindPreferenceSummaryToValue(consoleSkinTypePref)
             }
+            val skinBrightnessPref = findPreference<androidx.preference.SeekBarPreference>("video_console_skin_brightness")
+            if (skinBrightnessPref != null) {
+                skinBrightnessPref.summary = getString(R.string.video_console_skin_brightness_summary, skinBrightnessPref.value)
+                skinBrightnessPref.setOnPreferenceChangeListener { pref, newValue ->
+                    val pct = (newValue as? Int)?.coerceIn(30, 100) ?: 100
+                    pref.summary = getString(R.string.video_console_skin_brightness_summary, pct)
+                    true
+                }
+            }
+            hideDependentsWhenInactive("video_console_skin_enabled", "video_console_skin_type", "video_console_skin_brightness")
+            val skinSwitch = findPreference<SwitchPreference>("video_console_skin_enabled")
+            val oledSwitch = findPreference<SwitchPreference>("video_oled_battery_saver")
+            if (skinSwitch != null && oledSwitch != null) {
+                val existingSkinListener = skinSwitch.onPreferenceChangeListener
+                skinSwitch.setOnPreferenceChangeListener { pref, newValue ->
+                    val ok = existingSkinListener?.onPreferenceChange(pref, newValue) ?: true
+                    if (ok && (newValue as? Boolean) == true && oledSwitch.isChecked) {
+                        oledSwitch.isChecked = false
+                        preferenceManager.sharedPreferences?.edit()?.putBoolean("video_oled_battery_saver", false)?.apply()
+                    }
+                    ok
+                }
+                val existingOledListener = oledSwitch.onPreferenceChangeListener
+                oledSwitch.setOnPreferenceChangeListener { pref, newValue ->
+                    val ok = existingOledListener?.onPreferenceChange(pref, newValue) ?: true
+                    if (ok && (newValue as? Boolean) == true && skinSwitch.isChecked) {
+                        skinSwitch.isChecked = false
+                        preferenceManager.sharedPreferences?.edit()?.putBoolean("video_console_skin_enabled", false)?.apply()
+                        findPreference<Preference>("video_console_skin_type")?.isVisible = false
+                        findPreference<Preference>("video_console_skin_brightness")?.isVisible = false
+                    }
+                    ok
+                }
+            }
         }
         if (fpsCounterPref != null && resolutionHudPref != null) {
             helper.bindPreferenceSummaryToValue(fpsCounterPref)
@@ -506,6 +583,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 if (newPos != "hidden" && newPos == resolutionHudPref.value) {
                     val fallback = if (newPos == "top_left") "top_right" else "top_left"
                     resolutionHudPref.value = fallback
+                    updateListPreferenceSummary(resolutionHudPref)
                     Toast.makeText(requireContext(), getString(R.string.video_prefs_resolution_position_changed), Toast.LENGTH_SHORT).show()
                 }
                 true
@@ -516,6 +594,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 if (newPos != "hidden" && newPos == fpsCounterPref.value) {
                     val fallback = if (newPos == "top_left") "top_right" else "top_left"
                     fpsCounterPref.value = fallback
+                    updateListPreferenceSummary(fpsCounterPref)
                     Toast.makeText(requireContext(), getString(R.string.video_prefs_fps_position_changed), Toast.LENGTH_SHORT).show()
                 }
                 true
@@ -725,6 +804,21 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onDisplayPreferenceDialog(preference: Preference) {
         if (preference.key == "video_retroarch_shader_preset") {
             showRetroArchPresetBrowserDialog(preference as ListPreference)
+            return
+        }
+        if (preference.key == "video_console_skin_type" && preference is ListPreference) {
+            val ctx = context ?: return
+            val brightness = preferenceManager.sharedPreferences?.getInt("video_console_skin_brightness", 100) ?: 100
+            me.magnum.melonds.ui.emulator.skin.showConsoleSkinPickerDialog(
+                context = ctx,
+                selectedValue = preference.value,
+                brightnessPercent = brightness,
+            ) { selectedKey ->
+                if (preference.callChangeListener(selectedKey)) {
+                    preference.value = selectedKey
+                    updateListPreferenceSummary(preference)
+                }
+            }
             return
         }
 
@@ -1157,7 +1251,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private fun refreshConditionalVideoVisibility() {
         val debugSwitch = findPreference<SwitchPreference>("video_renderer_debug_tools_enabled")
         val debugOn = debugSwitch?.isVisible == true && debugSwitch.isChecked
-        listOf("video_renderer_debug_bgobj_enabled", "video_renderer_debug_latch_trace_enabled").forEach {
+        listOf(
+            "video_renderer_debug_bgobj_enabled",
+            "video_renderer_debug_latch_trace_enabled",
+            "video_debug_3d_clear_magenta",
+        ).forEach {
             findPreference<Preference>(it)?.isVisible = debugOn
         }
 
@@ -1170,6 +1268,19 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             "video_conservative_coverage_depth_bias",
         ).forEach {
             findPreference<Preference>(it)?.isVisible = coverageOn
+        }
+
+        val depthModePref = findPreference<ListPreference>("video_vulkan_3d_depth_mode")
+        val depthActive = depthModePref?.isVisible == true && !depthModePref.value.equals("off", ignoreCase = true)
+        findPreference<Preference>("video_vulkan_3d_depth_strength")?.let { strengthPref ->
+            strengthPref.isVisible = depthActive
+            strengthPref.isEnabled = depthActive
+        }
+
+        val aiUpscaleOn = findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked == true
+        findPreference<Preference>("video_ai_upscale_scale")?.let { scalePref ->
+            scalePref.isVisible = aiUpscaleOn
+            scalePref.isEnabled = aiUpscaleOn
         }
     }
 
@@ -1215,9 +1326,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             aiSwitch.summary = getString(R.string.video_ai_upscale_summary)
         }
 
-        findPreference<Preference>("video_ai_upscale_scale")?.let { aiUpscalePref ->
-            aiUpscalePref.isEnabled = true
-            aiUpscalePref.summary = "%s"
+        findPreference<ListPreference>("video_ai_upscale_scale")?.let { aiUpscalePref ->
+            val aiEnabled = findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked == true
+            aiUpscalePref.isVisible = aiEnabled
+            aiUpscalePref.isEnabled = aiEnabled
+            updateListPreferenceSummary(aiUpscalePref)
         }
 
         updateShaderPickerPreferences(
@@ -1621,6 +1734,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                                 updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = false)
                             }
                             refreshShaderPreferenceVisibility()
+                            updateAiUpscaleSummary()
                         }
                         WorkInfo.State.FAILED -> {
                             dismissShaderInstallProgressDialog()
@@ -2176,20 +2290,72 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
     }
 
+    private fun updateListPreferenceSummary(pref: ListPreference) {
+        val idx = pref.findIndexOfValue(pref.value)
+        if (idx >= 0 && idx < pref.entries.size) {
+            pref.summary = pref.entries[idx]
+        }
+    }
+
+    private fun updateAiUpscaleSummary() {
+        val aiPref = findPreference<SwitchPreference>("video_ai_upscale_enabled") ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val activePreset = runCatching { settingsRepository.getActiveAiUpscalePresetName() }.getOrNull()
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                val baseSummary = getString(R.string.video_ai_upscale_summary)
+                aiPref.summary = when {
+                    !activePreset.isNullOrBlank() ->
+                        "$baseSummary\n${getString(R.string.video_ai_upscale_active_preset, activePreset)}"
+                    aiPref.isChecked ->
+                        getString(R.string.video_ai_upscale_no_library)
+                    else ->
+                        "$baseSummary\n${getString(R.string.video_ai_upscale_no_library)}"
+                }
+            }
+        }
+    }
+
+    private fun promptAiShaderInstallIfMissing() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val activePreset = runCatching { settingsRepository.getActiveAiUpscalePresetName() }.getOrNull()
+            if (!activePreset.isNullOrBlank()) return@launch
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.video_ai_upscale_install_prompt_title)
+                    .setMessage(R.string.video_ai_upscale_install_prompt_msg)
+                    .setPositiveButton(R.string.video_ai_upscale_install_action) { _, _ ->
+                        startShaderInstall()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+        }
+    }
+
     private fun resetVideoEnhancements() {
+        val defaultFiltering = VideoFiltering.QUILEZ.name.lowercase()
         preferenceManager.sharedPreferences?.edit()?.apply {
             putString("video_internal_resolution", "2")
-            putString("video_filtering", VideoFiltering.NONE.name.lowercase())
+            putString("video_filtering", defaultFiltering)
             remove("video_retroarch_shader_preset")
             putBoolean("video_ai_upscale_enabled", false)
             putBoolean("video_widescreen_3d", false)
             putBoolean("video_60fps_patch", false)
             putBoolean("video_drs_enabled", false)
             putBoolean("video_hd_textures_enabled", false)
+            putBoolean("video_oled_battery_saver", false)
+            putBoolean("video_low_battery_saver", false)
+            putString("video_vulkan_compositor_mode", "precise")
+            putBoolean("video_vulkan_compat_autoselect", true)
             putString("video_vulkan_3d_depth_mode", "off")
-            putString("video_vulkan_3d_depth_strength", "25")
+            putString("video_vulkan_3d_depth_strength", "50")
             putBoolean("video_vulkan_ssao", false)
             putBoolean("video_vulkan_thick_edges", false)
+            putString("video_ds_color_profile", "standard")
+            putString("video_ds_lcd_grid", "off")
+            putString("video_ds_hinge_gap", "0")
             putBoolean("video_vulkan_fastpath_enabled", false)
             putBoolean("video_renderer_debug_tools_enabled", false)
             putBoolean("video_renderer_debug_bgobj_enabled", false)
@@ -2204,8 +2370,8 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             updateInternalResolutionSummary(it)
         }
         findPreference<ListPreference>("video_filtering")?.let {
-            it.value = VideoFiltering.NONE.name.lowercase()
-            it.summary = "%s"
+            it.value = defaultFiltering
+            updateListPreferenceSummary(it)
         }
         findPreference<ListPreference>("video_retroarch_shader_preset")?.let {
             it.value = null
@@ -2216,16 +2382,35 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<androidx.preference.TwoStatePreference>("video_60fps_patch")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_drs_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_hd_textures_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_oled_battery_saver")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_low_battery_saver")?.isChecked = false
+        findPreference<ListPreference>("video_vulkan_compositor_mode")?.let {
+            it.value = "precise"
+            updateListPreferenceSummary(it)
+        }
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_compat_autoselect")?.isChecked = true
         findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let {
             it.value = "off"
-            it.summary = "%s"
+            updateListPreferenceSummary(it)
         }
         findPreference<ListPreference>("video_vulkan_3d_depth_strength")?.let {
-            it.value = "25"
-            it.summary = "%s"
+            it.value = "50"
+            updateListPreferenceSummary(it)
         }
         findPreference<androidx.preference.TwoStatePreference>("video_vulkan_ssao")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_vulkan_thick_edges")?.isChecked = false
+        findPreference<ListPreference>("video_ds_color_profile")?.let {
+            it.value = "standard"
+            updateListPreferenceSummary(it)
+        }
+        findPreference<ListPreference>("video_ds_lcd_grid")?.let {
+            it.value = "off"
+            updateListPreferenceSummary(it)
+        }
+        findPreference<ListPreference>("video_ds_hinge_gap")?.let {
+            it.value = "0"
+            updateListPreferenceSummary(it)
+        }
         findPreference<InGameLockedSwitchPreference>("video_vulkan_fastpath_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_tools_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_bgobj_enabled")?.isChecked = false
@@ -2233,22 +2418,55 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<androidx.preference.TwoStatePreference>("video_conservative_coverage_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_debug_3d_clear_magenta")?.isChecked = false
 
+        val rendererPref = findPreference<ListPreference>("video_renderer")
+        if (rendererPref != null && ::shaderRootPreference.isInitialized && ::shaderPresetPreference.isInitialized) {
+            updateShaderPickerPreferences(
+                renderer = enumValueOfIgnoreCase(rendererPref.value),
+                filteringValue = defaultFiltering,
+                retroArchShaderRootPreference = shaderRootPreference,
+                retroArchShaderPresetPreference = shaderPresetPreference,
+                retroArchShaderParametersPreference = findPreference("video_retroarch_shader_parameters"),
+                retroArchShaderClearHistoryPreference = findPreference("video_retroarch_shader_clear_history"),
+            )
+        }
+        refreshConditionalVideoVisibility()
+
         Toast.makeText(requireContext(), R.string.v780_video_reset_enhancements_success, Toast.LENGTH_SHORT).show()
     }
 
     private fun showVideoQuickProfileDialog() {
-        val options = arrayOf(
+        val ctx = context ?: return
+        val options = listOf<CharSequence>(
             getString(R.string.v794_video_preset_performance),
             getString(R.string.v794_video_preset_balanced),
             getString(R.string.v794_video_preset_ultra)
         )
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.v794_video_quick_profile_title)
-            .setItems(options) { _, which ->
-                applyVideoQuickProfile(which, options[which])
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        val values = listOf<CharSequence>("0", "1", "2")
+        val prefs = preferenceManager.sharedPreferences
+        val curRes = prefs?.getString("video_internal_resolution", "2") ?: "2"
+        val curSsao = prefs?.getBoolean("video_vulkan_ssao", false) ?: false
+        val selectedValue = when {
+            curRes == "1" -> "0"
+            curRes == "4" && curSsao -> "2"
+            curRes == "2" && !curSsao -> "1"
+            else -> null
+        }
+        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+            me.magnum.melonds.ui.settings.dialogs.SettingsChoiceDialogContent(
+                title = getString(R.string.v794_video_quick_profile_title),
+                subtitle = getString(R.string.v794_video_quick_profile_summary),
+                options = options,
+                values = values,
+                selectedValue = selectedValue,
+                onSelect = { chosen ->
+                    val idx = chosen.toIntOrNull() ?: return@SettingsChoiceDialogContent
+                    if (idx in options.indices) {
+                        applyVideoQuickProfile(idx, options[idx].toString())
+                    }
+                },
+                onDismiss = dismiss,
+            )
+        }
     }
 
     private fun applyVideoQuickProfile(presetIndex: Int, presetTitle: String) {
@@ -2259,25 +2477,23 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             else -> "2"
         }
         val filteringValue = when (presetIndex) {
-            0 -> "none"
-            1 -> "linear"
-            2 -> "linear"
-            else -> "linear"
+            0 -> VideoFiltering.NONE.name.lowercase()
+            1 -> VideoFiltering.QUILEZ.name.lowercase()
+            2 -> VideoFiltering.QUILEZ.name.lowercase()
+            else -> VideoFiltering.QUILEZ.name.lowercase()
         }
         val threaded = true
-        val fastpath = true
         val ssao = presetIndex == 2
-        val depthMode = if (presetIndex == 2) "anaglyph_depth" else null
+        val thickEdges = presetIndex == 2
 
         preferenceManager.sharedPreferences?.edit()?.apply {
             putString("video_internal_resolution", resValue)
             putBoolean("enable_threaded_rendering", threaded)
             putString("video_filtering", filteringValue)
-            putBoolean("video_vulkan_fastpath_enabled", fastpath)
+            putBoolean("video_ai_upscale_enabled", false)
             putBoolean("video_vulkan_ssao", ssao)
-            if (depthMode != null) {
-                putString("video_vulkan_3d_depth_mode", depthMode)
-            }
+            putBoolean("video_vulkan_thick_edges", thickEdges)
+            putString("video_vulkan_3d_depth_mode", "off")
             apply()
         }
 
@@ -2288,18 +2504,28 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<androidx.preference.TwoStatePreference>("enable_threaded_rendering")?.isChecked = threaded
         findPreference<ListPreference>("video_filtering")?.let {
             it.value = filteringValue
-            val idx = it.findIndexOfValue(filteringValue)
-            it.summary = if (idx >= 0 && idx < it.entries.size) it.entries[idx] else filteringValue
+            updateListPreferenceSummary(it)
         }
-        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_fastpath_enabled")?.isChecked = fastpath
+        findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_vulkan_ssao")?.isChecked = ssao
-        if (depthMode != null) {
-            findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let {
-                it.value = depthMode
-                val idx = it.findIndexOfValue(depthMode)
-                it.summary = if (idx >= 0 && idx < it.entries.size) it.entries[idx] else depthMode
-            }
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_thick_edges")?.isChecked = thickEdges
+        findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let {
+            it.value = "off"
+            updateListPreferenceSummary(it)
         }
+
+        val rendererPref = findPreference<ListPreference>("video_renderer")
+        if (rendererPref != null && ::shaderRootPreference.isInitialized && ::shaderPresetPreference.isInitialized) {
+            updateShaderPickerPreferences(
+                renderer = enumValueOfIgnoreCase(rendererPref.value),
+                filteringValue = filteringValue,
+                retroArchShaderRootPreference = shaderRootPreference,
+                retroArchShaderPresetPreference = shaderPresetPreference,
+                retroArchShaderParametersPreference = findPreference("video_retroarch_shader_parameters"),
+                retroArchShaderClearHistoryPreference = findPreference("video_retroarch_shader_clear_history"),
+            )
+        }
+        refreshConditionalVideoVisibility()
 
         Toast.makeText(requireContext(), getString(R.string.v794_video_preset_applied, presetTitle), Toast.LENGTH_SHORT).show()
     }

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ra_cat_notifications">Achievement notifications</string>
+    <string name="ra_notification_position_title">Notification position</string>
+    <string name="ra_notification_position_top">Top</string>
+    <string name="ra_notification_position_bottom">Bottom</string>
+    <string name="ra_notification_style_title">Notification style</string>
+    <string name="ra_notification_style_detailed">Detailed</string>
+    <string name="ra_notification_style_compact">Compact</string>
+    <string name="ra_notification_sound_title">Notification sound</string>
+    <string name="ra_notification_sound_chime">Crystal chime</string>
+    <string name="ra_notification_sound_fanfare">Retro fanfare</string>
+    <string name="ra_notification_sound_classic">System tone</string>
+    <string name="ra_notification_sound_none">Silent</string>
+    <string name="ra_cat_sync_and_diagnostics">Sync and diagnostics</string>
+    <string name="ra_sync_pending_title">Sync pending achievements</string>
+    <string name="ra_sync_pending_summary_count">Pending upload: %1$d</string>
+    <string name="ra_sync_pending_summary_all_synced">All achievements synced</string>
+    <string name="ra_sync_pending_summary_login_required">Log in to sync pending achievements</string>
+    <string name="ra_sync_pending_all_synced_toast">All achievements are already synced</string>
+    <string name="ra_sync_pending_login_prompt">Log in to RetroAchievements to sync pending achievements</string>
+    <string name="ra_sync_pending_in_progress">Syncing pending achievements...</string>
+    <string name="ra_sync_pending_result_success">Synced %1$d achievement(s)</string>
+    <string name="ra_sync_pending_result_partial">Synced: %1$d, failed: %2$d</string>
+    <string name="ra_sync_pending_result_title">Sync result</string>
+    <string name="ra_sync_pending_result_error_detail">Error: %1$s</string>
+    <string name="ra_test_connection_title">Test connection to RetroAchievements</string>
+    <string name="ra_test_connection_summary">Check account status, HTTPS latency and proxy mode</string>
+    <string name="ra_test_connection_dialog_title">RetroAchievements connection</string>
+    <string name="ra_test_connection_checking">Testing connection...</string>
+    <string name="ra_test_connection_retest">Retest</string>
+    <string name="ra_test_connection_close">Close</string>
+    <string name="ra_test_connection_label_reachability">Server reachability</string>
+    <string name="ra_test_connection_label_account">Account and token</string>
+    <string name="ra_test_connection_label_proxy">Connection mode</string>
+    <string name="ra_test_connection_reachable_fmt">Reachable (%1$d ms)</string>
+    <string name="ra_test_connection_unreachable_fmt">Unreachable: %1$s</string>
+    <string name="ra_test_connection_auth_ok_fmt">Signed in as %1$s (token active)</string>
+    <string name="ra_test_connection_auth_expired_fmt">Session expired for %1$s</string>
+    <string name="ra_test_connection_auth_none">Not signed in</string>
+    <string name="ra_test_connection_proxy_direct">Direct (official server)</string>
+    <string name="ra_test_connection_proxy_active_fmt">Proxy active (%1$s)</string>
+    <string name="ra_test_connection_proxy_unavailable">Proxy selected, but inactive</string>
+
+    <string-array name="ra_notification_position_options">
+        <item>@string/ra_notification_position_top</item>
+        <item>@string/ra_notification_position_bottom</item>
+    </string-array>
+    <string-array name="ra_notification_position_values" translatable="false">
+        <item>top</item>
+        <item>bottom</item>
+    </string-array>
+
+    <string-array name="ra_notification_style_options">
+        <item>@string/ra_notification_style_detailed</item>
+        <item>@string/ra_notification_style_compact</item>
+    </string-array>
+    <string-array name="ra_notification_style_values" translatable="false">
+        <item>detailed</item>
+        <item>compact</item>
+    </string-array>
+
+    <string-array name="ra_notification_sound_options">
+        <item>@string/ra_notification_sound_chime</item>
+        <item>@string/ra_notification_sound_fanfare</item>
+        <item>@string/ra_notification_sound_classic</item>
+        <item>@string/ra_notification_sound_none</item>
+    </string-array>
+    <string-array name="ra_notification_sound_values" translatable="false">
+        <item>chime</item>
+        <item>fanfare</item>
+        <item>classic</item>
+        <item>none</item>
+    </string-array>
+</resources>

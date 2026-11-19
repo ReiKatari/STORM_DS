@@ -32,7 +32,8 @@ import me.magnum.melonds.ui.theme.LocalWatermelonColors
 
 class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : Preference(context, attrs) {
     companion object {
-        private val extendedColorList = listOf(
+        // Authentic 16 Nintendo DS hardware firmware favorite colors (4-bit index 0..15)
+        private val dsHardwareColorList = listOf(
             0x61829A, // 0: GRAY
             0xBA4900, // 1: BROWN
             0xFB0018, // 2: RED
@@ -49,14 +50,6 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
             0x8A00D3, // 13: PURPLE
             0xD300EB, // 14: VIOLET
             0xFB0092, // 15: FUCHSIA
-            0xFFFFFF, // 16: WHITE
-            0x121418, // 17: OBSIDIAN BLACK
-            0x00E5FF, // 18: CYBER CYAN
-            0xFFD700, // 19: PURE GOLD
-            0xE0115F, // 20: RUBY CRIMSON
-            0x00E676, // 21: BRIGHT EMERALD
-            0xFF6E40, // 22: SUNSET CORAL
-            0x651FFF  // 23: ELECTRIC INDIGO
         )
     }
 
@@ -68,32 +61,32 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
 
     override fun onClick() {
         super.onClick()
-        val currentColour = getPersistedInt(0)
+        val currentColour = getPersistedInt(0).coerceIn(0, dsHardwareColorList.lastIndex)
 
         showSettingsComposeDialog(context) { dismiss ->
             var selected by remember { mutableIntStateOf(currentColour) }
 
             SettingsDialogScaffold(
                 title = title?.toString() ?: stringResource(R.string.firmware_favourite_colour),
-                subtitle = "Цвет профиля Nintendo DS",
+                subtitle = stringResource(R.string.firmware_colour_dialog_subtitle),
                 icon = Icons.Filled.Palette,
                 onDismiss = dismiss,
             ) {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(6),
+                    columns = GridCells.Fixed(4),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    itemsIndexed(extendedColorList) { index, colorInt ->
+                    itemsIndexed(dsHardwareColorList) { index, colorInt ->
                         val color = Color((0xFF000000 or colorInt.toLong()).toInt())
                         val isSelected = index == selected
 
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(48.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(color)
                                 .border(
@@ -115,7 +108,7 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
-                                    tint = if (colorInt == 0xFFFFFF) Color.Black else Color.White,
+                                    tint = if (index == 5 || index == 6) Color.Black else Color.White,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -127,7 +120,8 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
     }
 
     private fun updateSelectedColour(selectedColour: Int) {
-        val colorRgb = extendedColorList.getOrNull(selectedColour) ?: extendedColorList[0]
+        val safeIndex = selectedColour.coerceIn(0, dsHardwareColorList.lastIndex)
+        val colorRgb = dsHardwareColorList[safeIndex]
         val colourWithAlpha = (0xFF000000 or colorRgb.toLong())
         if (::viewSelectedColour.isInitialized) {
             viewSelectedColour.setBackgroundColor(colourWithAlpha.toInt())
@@ -137,6 +131,6 @@ class FirmwareColourPickerPreference(context: Context, attrs: AttributeSet?) : P
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
         viewSelectedColour = holder.findViewById(R.id.viewSelectedColour)
-        updateSelectedColour(getPersistedInt(0))
+        updateSelectedColour(getPersistedInt(0).coerceIn(0, dsHardwareColorList.lastIndex))
     }
 }
